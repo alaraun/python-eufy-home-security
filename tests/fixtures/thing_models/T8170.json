@@ -1,0 +1,176 @@
+{
+  "cases": [
+    {
+      "identifier": "open_live_stream",
+      "payload": {
+        "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+        "userId": "0123456789abcdef0123456789abcdef01234567",
+        "entryType": 0,
+        "cameraType": 0,
+        "streamType": 0
+      },
+      "device": {
+        "device_sn": "T8170P2000054321",
+        "parent_sn": "T8170P2000054321",
+        "device_channel": 0,
+        "main_sw_version": "3.3.5.4"
+      },
+      "p2p": {
+        "cmd": 1700,
+        "subCmd": 1000,
+        "timeout": 15000,
+        "params": {
+          "cmd": 1000,
+          "mChannel": 0,
+          "account_id": "0123456789abcdef0123456789abcdef01234567",
+          "mValueStrSub": "0123456789abcdef0123456789abcdef01234567",
+          "mValue3": 0,
+          "mValue5": 0,
+          "restore": 0,
+          "video_type": 12,
+          "encryptkey": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+          "entrytype": 0,
+          "accountId": "0123456789abcdef0123456789abcdef01234567",
+          "camera_type": 0,
+          "ivalue": 1,
+          "extValue": 1000,
+          "streamtype": 0
+        },
+        "rtcSendRoute": 1
+      }
+    },
+    {
+      "identifier": "close_live_stream",
+      "payload": 0,
+      "device": {
+        "device_sn": "T8170P2000054321",
+        "parent_sn": "T8170P2000054321",
+        "device_channel": 0,
+        "main_sw_version": "3.3.5.4"
+      },
+      "p2p": {
+        "cmd": 1004,
+        "rtcSendRoute": 1
+      }
+    },
+    {
+      "identifier": "query_preset_positions",
+      "payload": 0,
+      "device": {
+        "device_sn": "T8170P2000054321",
+        "parent_sn": "T8170P2000054321",
+        "device_channel": 0,
+        "main_sw_version": "3.3.5.4"
+      },
+      "p2p": {
+        "cmd": 1700,
+        "subCmd": 6034,
+        "notifyCmd": 1351,
+        "resultFrom": 1,
+        "params": {
+          "value": 0
+        },
+        "parsePayloadAction": "query_preset_positions_parse_payload",
+        "payloadFrom": "mapOf"
+      }
+    },
+    {
+      "identifier": "set_ptz_cruise_preview",
+      "payload": 1,
+      "device": {
+        "device_sn": "T8170P2000054321",
+        "parent_sn": "T8170P2000054321",
+        "device_channel": 0,
+        "main_sw_version": "3.3.5.4"
+      },
+      "p2p": {
+        "cmd": 1700,
+        "subCmd": 6035,
+        "params": {
+          "value": 1
+        }
+      }
+    },
+    {
+      "identifier": "get_preset_position_pic",
+      "payload": 1,
+      "device": {
+        "device_sn": "T8170P2000054321",
+        "parent_sn": "T8170P2000054321",
+        "device_channel": 0,
+        "main_sw_version": "3.3.5.4"
+      },
+      "p2p": {
+        "cmd": 1700,
+        "subCmd": 6097,
+        "notifyCmd": 1351,
+        "resultFrom": 1,
+        "dropSameRequest": false,
+        "condition": {
+          "index": "1"
+        },
+        "params": {
+          "value": 1
+        },
+        "parsePayloadAction": "get_preset_position_pic_parse_payload",
+        "payloadFrom": "mapOf"
+      }
+    },
+    {
+      "identifier": "ptz_action_control",
+      "payload": {
+        "cmdType": 1,
+        "rotateType": 2,
+        "zoom": 1
+      },
+      "device": {
+        "device_sn": "T8170P2000054321",
+        "parent_sn": "T8170P2000054321",
+        "device_channel": 0,
+        "main_sw_version": "3.3.5.4"
+      },
+      "p2p": {
+        "cmd": 1700,
+        "subCmd": 6030,
+        "params": {
+          "cmd_type": 1,
+          "rotate_type": 2,
+          "zoom": 1,
+          "ivalue": -1
+        }
+      }
+    },
+    {
+      "identifier": "set_picture_zoom",
+      "payload": {
+        "dstZoom": 2.5,
+        "orgZoom": 0
+      },
+      "device": {
+        "device_sn": "T8170P2000054321",
+        "parent_sn": "T8170P2000054321",
+        "device_channel": 0,
+        "main_sw_version": "3.3.5.4"
+      },
+      "p2p": {
+        "cmd": 1350,
+        "subCmd": 6203,
+        "params": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0,
+          "offset": false,
+          "orgZoom": 0,
+          "dstZoom": 2.5
+        }
+      }
+    }
+  ],
+  "handler": {
+    "large_version": 283,
+    "plugin_path_date": "2026/08/31",
+    "sha256": "fe537104b8fa74069d08da96087e58d60bfd1098a25d844c5d0417a5c335f6af"
+  },
+  "product_code": "T8170"
+}

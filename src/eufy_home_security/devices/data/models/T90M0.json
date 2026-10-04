@@ -1,0 +1,187 @@
+{
+ "product_code": "T90M0",
+ "schema_version": 2,
+ "settings": {
+  "automation_config": {
+   "access": "ro",
+   "default": "{\"trigger\":[],\"action\":[]}",
+   "kind": "string",
+   "read": null
+  },
+  "automation_detect_motion_trigger": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "100",
+   "kind": "string",
+   "read": null
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_to_hb_connect_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "notification_jump_to_mode_page": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_alarm_timeout": {
+   "access": "ro",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null
+  },
+  "sensor_disassemble_status": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_is_low_power": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_motion_detection_sensitivity_level": {
+   "access": "rw",
+   "control": "select",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "0": "4m",
+    "1": "6m",
+    "2": "8m"
+   },
+   "page": "SensorMotionTestMode",
+   "read": {
+    "map": null,
+    "param": 1609
+   },
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1609,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1609,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "sensor_motion_pet_setting": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 61010
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 61010,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 61010,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "sensor_motion_trigger_time": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T90M0Handle.mix.js",
+  "handler_date": "2026-01-30",
+  "td_version": 80
+ }
+}

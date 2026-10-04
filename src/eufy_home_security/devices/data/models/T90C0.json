@@ -1,0 +1,36 @@
+{
+ "product_code": "T90C0",
+ "schema_version": 2,
+ "settings": {
+  "battery_value": {
+   "access": "ro",
+   "default": "100",
+   "kind": "string",
+   "read": null
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T90C0Handle.mix.js",
+  "handler_date": "2026-01-30",
+  "td_version": 34
+ }
+}

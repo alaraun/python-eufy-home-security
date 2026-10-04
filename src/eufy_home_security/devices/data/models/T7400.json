@@ -1,0 +1,332 @@
+{
+ "product_code": "T7400",
+ "schema_version": 2,
+ "settings": {
+  "ai_empower": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "charging_status": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "cloud_storage_support_trail": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "detection_type_set": {
+   "access": "ro",
+   "default": 6,
+   "kind": "enum",
+   "labels": {
+    "5": "Human Only",
+    "6": "All Motions"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    5,
+    6
+   ]
+  },
+  "detection_type_set__v1": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle",
+    "3": "Pet",
+    "4": "All Other Motions"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "variant_of": "detection_type_set"
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_charging_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null
+  },
+  "device_is_battery_device": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_name": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "device_serial_number": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_storage_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud"
+   },
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "device_text_event_data_type": {
+   "access": "ro",
+   "default": "2",
+   "kind": "other",
+   "read": null
+  },
+  "device_wifi_name": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "ip_address": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_ble": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "mac_address": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "montion_detection_ui_show_type": {
+   "access": "ro",
+   "default": "{\"HB3+AI\": 1}",
+   "kind": "string",
+   "read": null
+  },
+  "motion_detection_status": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  },
+  "motion_stop_end_early": {
+   "access": "ro",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "page": "CustomizeRecording",
+   "read": null
+  },
+  "nightvision_type": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  },
+  "notification_type": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Most Efficient",
+    "1": "Full Effect",
+    "2": "Include Thumbnail"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2
+   ]
+  },
+  "power_manager_mode": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Optimal battery life",
+    "1": "Optimal surveillance",
+    "3": "Custom recording"
+   },
+   "note": "no handler write path",
+   "page": "MotionDetection",
+   "read": null,
+   "values": [
+    0,
+    1,
+    3
+   ]
+  },
+  "power_source_mode": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "default:0": "default:0"
+   },
+   "read": null,
+   "values": [
+    "default:0"
+   ]
+  },
+  "smart_lock_add_fingerprint_nums": {
+   "access": "ro",
+   "default": "8",
+   "kind": "other",
+   "read": null
+  },
+  "smart_lock_calibrate_ui_show_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "smart_lock_night_vision_optimization": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  },
+  "smart_lock_onoff_status": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "time_format_set": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "12-hour",
+    "1": "24-hour"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "trigger_interval_time": {
+   "access": "ro",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
+   "default": 5,
+   "kind": "range",
+   "max": 60,
+   "min": 5,
+   "note": "no handler write path",
+   "page": "CustomizeRecording",
+   "read": null,
+   "step": 1
+  },
+  "watermark_set": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T7400Handle.mix.js",
+  "handler_date": "2026-01-19",
+  "td_version": 35
+ }
+}

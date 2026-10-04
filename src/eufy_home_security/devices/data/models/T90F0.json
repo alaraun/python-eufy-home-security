@@ -1,0 +1,240 @@
+{
+ "product_code": "T90F0",
+ "schema_version": 2,
+ "settings": {
+  "automation_config": {
+   "access": "ro",
+   "default": "{\"trigger\":[8,10],\"action\":[]}",
+   "kind": "string",
+   "read": null
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "100",
+   "kind": "string",
+   "read": null
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_to_hb_connect_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "ignore_set_alarm": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "notification_jump_to_mode_page": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_alarm_timeout": {
+   "access": "rw",
+   "control": "select",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "0": "1 min",
+    "1": "5 min",
+    "2": "10 min",
+    "3": "15 min"
+   },
+   "read": {
+    "map": {
+     "300": 1,
+     "60": 0,
+     "600": 2,
+     "900": 3
+    },
+    "param": 61006
+   },
+   "values": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 61006,
+    "params": {
+     "value": {
+      "$map": {
+       "0": 60,
+       "1": 300,
+       "2": 600,
+       "3": 900
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 61006,
+     "paramValue": {
+      "$map": {
+       "0": "60",
+       "1": "300",
+       "2": "600",
+       "3": "900"
+      }
+     }
+    }
+   }
+  },
+  "sensor_is_low_power": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_low_temperature_alarm_threshold": {
+   "access": "ro",
+   "default": 4,
+   "kind": "enum",
+   "labels": {
+    "0": "32°F",
+    "1": "33°F",
+    "2": "35°F",
+    "3": "37°F",
+    "4": "40°F"
+   },
+   "note": "handler ignores the value",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  "sensor_not_disturb_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 1828
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1828,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1828,
+     "paramValue": "$v:int"
+    }
+   }
+  },
+  "sensor_temperature_low_status": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_water_status": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "set_alarm_type": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Sound only",
+    "3": "HomeBase alarm"
+   },
+   "note": "handler ignores the value",
+   "read": null,
+   "values": [
+    0,
+    3
+   ]
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T90F0Handle.mix.js",
+  "handler_date": "2026-01-30",
+  "td_version": 77
+ }
+}

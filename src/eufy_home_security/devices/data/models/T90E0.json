@@ -1,0 +1,218 @@
+{
+ "product_code": "T90E0",
+ "schema_version": 2,
+ "settings": {
+  "alarm_volume_value": {
+   "access": "rw",
+   "control": "slider",
+   "default": 0,
+   "kind": "range",
+   "max": 26,
+   "min": 1,
+   "read": {
+    "map": null,
+    "param": 1508
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1508,
+    "params": {
+     "channel": "$channel",
+     "volume": "$v"
+    },
+    "update": {
+     "cmd": 1508,
+     "needUpdate": true,
+     "paramValue": "$v"
+    }
+   }
+  },
+  "automation_config": {
+   "access": "ro",
+   "default": "{\"trigger\":[6,7],\"action\":[]}",
+   "kind": "string",
+   "read": null
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "100",
+   "kind": "string",
+   "read": null
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_alarm_sound_type": {
+   "access": "rw",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "None",
+    "1": "Water",
+    "2": "Classics",
+    "3": "Light",
+    "4": "Ding"
+   },
+   "read": {
+    "map": null,
+    "param": 1507
+   },
+   "values": [
+    4,
+    3,
+    2,
+    1,
+    0
+   ],
+   "write": {
+    "cmd": 1507,
+    "params": {
+     "msgType": 10,
+     "mValue": "$v",
+     "mValueStr": "",
+     "mValueStrSub": " "
+    },
+    "update": {
+     "cmd": 1507,
+     "needUpdate": true,
+     "paramValue": "$v"
+    }
+   }
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_to_hb_connect_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "notification_jump_to_mode_page": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_disassemble_status": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_door_bypass_status": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_door_daily_check_status_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "page": "OpenStatusAlert",
+   "read": null
+  },
+  "sensor_door_open_status_alert_config": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "10": "10 min",
+    "15": "15 min",
+    "30": "30 min",
+    "5": "5 min",
+    "60": "60 min"
+   },
+   "note": "handler ignores the value",
+   "page": "OpenStatusAlert",
+   "read": null,
+   "values": [
+    5,
+    10,
+    15,
+    30,
+    60
+   ]
+  },
+  "sensor_door_status": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_is_low_power": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T90E0Handle.mix.js",
+  "handler_date": "2026-03-02",
+  "td_version": 86
+ }
+}

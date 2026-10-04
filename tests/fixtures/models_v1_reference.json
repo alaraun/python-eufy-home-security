@@ -1,0 +1,2067 @@
+{
+ "description": "Recorded handler recipes of the v1 wire templates and the hardware-proven rows, frozen as data: each row is the handler's cmd/subCmd/params for one payload in one device context, serials slotted to $device_sn/$station_sn.",
+ "format": 1,
+ "hardware": [
+  {
+   "command_id": 6016,
+   "identifier": "ai_tracking_status",
+   "payloads": [
+    0,
+    1
+   ],
+   "product_code": "T8170",
+   "wire_values": [
+    0,
+    1
+   ]
+  },
+  {
+   "command_id": 6012,
+   "identifier": "audio_recording_on_off",
+   "payloads": [
+    0,
+    1
+   ],
+   "product_code": "T8170",
+   "wire_values": [
+    0,
+    1
+   ]
+  },
+  {
+   "command_id": 6070,
+   "identifier": "detection_sensitivity",
+   "payloads": [
+    2,
+    5
+   ],
+   "product_code": "T8170",
+   "wire_values": [
+    3,
+    6
+   ]
+  },
+  {
+   "command_id": 6248,
+   "identifier": "disable_ptz_turn_switch",
+   "payloads": [
+    0,
+    1
+   ],
+   "product_code": "T8170",
+   "wire_values": [
+    0,
+    1
+   ]
+  },
+  {
+   "command_id": 6014,
+   "identifier": "led_on_off",
+   "payloads": [
+    0,
+    1
+   ],
+   "product_code": "T8170",
+   "wire_values": [
+    0,
+    1
+   ]
+  },
+  {
+   "command_id": 2730,
+   "identifier": "live_streaming_resolution",
+   "payloads": [
+    1,
+    2
+   ],
+   "product_code": "T8170",
+   "wire_values": [
+    2,
+    3
+   ]
+  },
+  {
+   "command_id": 6040,
+   "identifier": "motion_detection_status",
+   "payloads": [
+    0,
+    1
+   ],
+   "product_code": "T8170",
+   "wire_values": [
+    0,
+    1
+   ]
+  },
+  {
+   "command_id": 1277,
+   "identifier": "nightvision_type",
+   "payloads": [
+    1,
+    2
+   ],
+   "product_code": "T8170",
+   "wire_values": [
+    1,
+    2
+   ]
+  },
+  {
+   "command_id": 1400,
+   "identifier": "spotlight_switch",
+   "payloads": [
+    0,
+    1
+   ],
+   "product_code": "T8170",
+   "wire_values": [
+    0,
+    1
+   ]
+  }
+ ],
+ "rows": [
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "alarm_volume_value",
+   "payload": 1,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1235,
+    "params": {
+     "volume": 1
+    }
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "alarm_volume_value",
+   "payload": 1,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1235,
+    "params": {
+     "volume": 1
+    }
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "alarm_volume_value",
+   "payload": 13,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1235,
+    "params": {
+     "volume": 13
+    }
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "alarm_volume_value",
+   "payload": 16,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1235,
+    "params": {
+     "volume": 16
+    }
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "alarm_volume_value",
+   "payload": 26,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1235,
+    "params": {
+     "volume": 26
+    }
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "device_cross_cam_assistance_switch",
+   "payload": 0,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 1069
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_assistance_switch",
+   "payload": 0,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 1069
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_assistance_switch",
+   "payload": 1,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 1069
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "device_cross_cam_interval",
+   "payload": 0,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 120
+    },
+    "subCmd": 1070
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_interval",
+   "payload": 0,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 120
+    },
+    "subCmd": 1070
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_interval",
+   "payload": 1,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 180
+    },
+    "subCmd": 1070
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_interval",
+   "payload": 2,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 240
+    },
+    "subCmd": 1070
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_interval",
+   "payload": 3,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 300
+    },
+    "subCmd": 1070
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_interval",
+   "payload": 4,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 600
+    },
+    "subCmd": 1070
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_interval",
+   "payload": 5,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 900
+    },
+    "subCmd": 1070
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_interval",
+   "payload": 6,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 1800
+    },
+    "subCmd": 1070
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "device_cross_cam_tracking_swtich",
+   "payload": 0,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 1065
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_tracking_swtich",
+   "payload": 0,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 1065
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_cross_cam_tracking_swtich",
+   "payload": 1,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 1065
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "device_silent_ota_switch",
+   "payload": 0,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "enable": 0
+    },
+    "subCmd": 6287
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_silent_ota_switch",
+   "payload": 0,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "enable": 0
+    },
+    "subCmd": 6287
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "device_silent_ota_switch",
+   "payload": 1,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "enable": 1
+    },
+    "subCmd": 6287
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "hb_keypad_is_password_set",
+   "payload": 0,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 1670
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "hb_keypad_is_password_set",
+   "payload": 0,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 1670
+   }
+  },
+  {
+   "channel": 255,
+   "context": "standalone",
+   "identifier": "hb_keypad_is_password_set",
+   "payload": 1,
+   "product_code": "T8030",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 1670
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "device_silent_ota_switch",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "enable": 0
+    },
+    "subCmd": 6287
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "device_silent_ota_switch",
+   "payload": 1,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "enable": 1
+    },
+    "subCmd": 6287
+   }
+  },
+  {
+   "channel": 3,
+   "context": "child",
+   "identifier": "device_silent_ota_switch",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "enable": 0
+    },
+    "subCmd": 6287
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "hb_connect_nas_storage_type",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40004,
+     "type": 0
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "hb_connect_nas_storage_type",
+   "payload": 1,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40004,
+     "type": 1
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 3,
+   "context": "child",
+   "identifier": "hb_connect_nas_storage_type",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40004,
+     "type": 0
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "hb_connect_nas_switch",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40003,
+     "type": 0
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "hb_connect_nas_switch",
+   "payload": 1,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40003,
+     "type": 1
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 3,
+   "context": "child",
+   "identifier": "hb_connect_nas_switch",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40003,
+     "type": 0
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "live_streaming_resolution",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1705,
+    "params": {
+     "quality": 5
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "live_streaming_resolution",
+   "payload": 10,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1705,
+    "params": {
+     "quality": 8
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "live_streaming_resolution",
+   "payload": 4,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1705,
+    "params": {
+     "quality": 10
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "live_streaming_resolution",
+   "payload": 8,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1705,
+    "params": {
+     "quality": 6
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "live_streaming_resolution",
+   "payload": 9,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1705,
+    "params": {
+     "quality": 7
+    }
+   }
+  },
+  {
+   "channel": 3,
+   "context": "child",
+   "identifier": "live_streaming_resolution",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1705,
+    "params": {
+     "quality": 5
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "nightvision_type",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 1,
+     "night_sion": 0
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "nightvision_type",
+   "payload": 1,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 1,
+     "night_sion": 1
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "nightvision_type",
+   "payload": 2,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 1,
+     "night_sion": 2
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 3,
+   "context": "child",
+   "identifier": "nightvision_type",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 3,
+     "night_sion": 0
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "nightvision_type_new",
+   "payload": 100,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 1,
+     "night_sion": 0
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "nightvision_type_new",
+   "payload": 102,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 1,
+     "night_sion": 1
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "nightvision_type_new",
+   "payload": 103,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 1,
+     "night_sion": 2
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 3,
+   "context": "child",
+   "identifier": "nightvision_type_new",
+   "payload": 100,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 3,
+     "night_sion": 0
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "speaker_volume",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1230,
+    "params": {
+     "volume": 90
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "speaker_volume",
+   "payload": 1,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1230,
+    "params": {
+     "volume": 95
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "speaker_volume",
+   "payload": 2,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1230,
+    "params": {
+     "volume": 100
+    }
+   }
+  },
+  {
+   "channel": 3,
+   "context": "child",
+   "identifier": "speaker_volume",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1230,
+    "params": {
+     "volume": 90
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "watermark_set",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1214,
+    "params": {
+     "value": 0
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "watermark_set",
+   "payload": 1,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1214,
+    "params": {
+     "value": 1
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "watermark_set",
+   "payload": 2,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1214,
+    "params": {
+     "value": 2
+    }
+   }
+  },
+  {
+   "channel": 3,
+   "context": "child",
+   "identifier": "watermark_set",
+   "payload": 0,
+   "product_code": "T8160",
+   "recipe": {
+    "cmd": 1214,
+    "params": {
+     "value": 0
+    }
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "ai_tracking_status",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 6016
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "ai_tracking_status",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 6016
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "ai_tracking_status",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 6016
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "audio_recording_on_off",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "enable": 0
+    },
+    "subCmd": 6012
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "audio_recording_on_off",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "enable": 1
+    },
+    "subCmd": 6012
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "audio_recording_on_off",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "enable": 0
+    },
+    "subCmd": 6012
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 2
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity",
+   "payload": 2,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 3
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity",
+   "payload": 3,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 4
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity",
+   "payload": 4,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 5
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity",
+   "payload": 5,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 6
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity",
+   "payload": 6,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 7
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "detection_sensitivity",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity_test_mode",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity_test_mode",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 2
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity_test_mode",
+   "payload": 2,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 3
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity_test_mode",
+   "payload": 3,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 4
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity_test_mode",
+   "payload": 4,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 5
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity_test_mode",
+   "payload": 5,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 6
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_sensitivity_test_mode",
+   "payload": 6,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 7
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "detection_sensitivity_test_mode",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 6070
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_type_set",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 3,
+     "channel": 0
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_type_set",
+   "payload": 2,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 4,
+     "channel": 0
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_type_set",
+   "payload": 4,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 32768,
+     "channel": 0
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "detection_type_set",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 3,
+     "channel": 3
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_type_set__v2",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 196608,
+     "channel": 0
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_type_set__v2",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 3,
+     "channel": 0
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_type_set__v2",
+   "payload": 2,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 4,
+     "channel": 0
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_type_set__v2",
+   "payload": 3,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 8,
+     "channel": 0
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_type_set__v2",
+   "payload": 4,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 32768,
+     "channel": 0
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "detection_type_set__v2",
+   "payload": 7,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 262144,
+     "channel": 0
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "detection_type_set__v2",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "ai_detect_type": 196608,
+     "channel": 3
+    },
+    "subCmd": 1298
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "device_multiple_bridge_mode",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 60013
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "device_multiple_bridge_mode",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 60013
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "device_multiple_bridge_mode",
+   "payload": 2,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 2
+    },
+    "subCmd": 60013
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "device_multiple_bridge_mode",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 60013
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "device_silent_ota_switch",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "enable": 0
+    },
+    "subCmd": 6287
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "device_silent_ota_switch",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "enable": 1
+    },
+    "subCmd": 6287
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "device_silent_ota_switch",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "enable": 0
+    },
+    "subCmd": 6287
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "disable_ptz_turn_switch",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "PrivacyZoneSwitch": 0
+    },
+    "subCmd": 6248
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "disable_ptz_turn_switch",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "PrivacyZoneSwitch": 1
+    },
+    "subCmd": 6248
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "disable_ptz_turn_switch",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "PrivacyZoneSwitch": 0
+    },
+    "subCmd": 6248
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "hb_connect_nas_storage_type",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40004,
+     "type": 0
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "hb_connect_nas_storage_type",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40004,
+     "type": 1
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "hb_connect_nas_storage_type",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40004,
+     "type": 0
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "hb_connect_nas_switch",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40003,
+     "type": 0
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "hb_connect_nas_switch",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40003,
+     "type": 1
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "hb_connect_nas_switch",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "cmd": 40003,
+     "type": 0
+    },
+    "subCmd": 1310
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "led_on_off",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 6014
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "led_on_off",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 6014
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "led_on_off",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 6014
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "live_streaming_resolution",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 0,
+     "mode": 0,
+     "primary_view": 0,
+     "quality": 0
+    },
+    "subCmd": 2730
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "live_streaming_resolution",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 0,
+     "mode": 0,
+     "primary_view": 0,
+     "quality": 3
+    },
+    "subCmd": 2730
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "live_streaming_resolution",
+   "payload": 2,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 0,
+     "mode": 0,
+     "primary_view": 0,
+     "quality": 2
+    },
+    "subCmd": 2730
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "live_streaming_resolution",
+   "payload": 6,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 0,
+     "mode": 0,
+     "primary_view": 0,
+     "quality": 1
+    },
+    "subCmd": 2730
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "live_streaming_resolution",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 3,
+     "mode": 0,
+     "primary_view": 0,
+     "quality": 0
+    },
+    "subCmd": 2730
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "motion_detection_status",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "status": 0
+    },
+    "subCmd": 6040
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "motion_detection_status",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "status": 1
+    },
+    "subCmd": 6040
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "motion_detection_status",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "status": 0
+    },
+    "subCmd": 6040
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "nas_stream_switch",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1145,
+    "params": {
+     "value": 0
+    }
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "nas_stream_switch",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1145,
+    "params": {
+     "value": 1
+    }
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "nas_stream_switch",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1145,
+    "params": {
+     "value": 0
+    }
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "nightvision_type",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 0,
+     "night_sion": 0
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "nightvision_type",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 0,
+     "night_sion": 1
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "nightvision_type",
+   "payload": 2,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 0,
+     "night_sion": 2
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "nightvision_type",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 3,
+     "night_sion": 0
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "nightvision_type_new",
+   "payload": 100,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 0,
+     "night_sion": 0
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "nightvision_type_new",
+   "payload": 102,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 0,
+     "night_sion": 1
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "nightvision_type_new",
+   "payload": 103,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 0,
+     "night_sion": 2
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "nightvision_type_new",
+   "payload": 100,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "channel": 3,
+     "night_sion": 0
+    },
+    "subCmd": 1277
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "spotlight_switch",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "open": 0,
+     "time": 60,
+     "type": 2,
+     "value": 0
+    },
+    "subCmd": 1400
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "spotlight_switch",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "open": 1,
+     "time": 60,
+     "type": 2,
+     "value": 1
+    },
+    "subCmd": 1400
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "spotlight_switch",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1700,
+    "params": {
+     "open": 0,
+     "time": 60,
+     "type": 2,
+     "value": 0
+    },
+    "subCmd": 1400
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "time_format_set",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1253,
+    "params": {
+     "timeSystem": 0
+    }
+   }
+  },
+  {
+   "channel": 0,
+   "context": "standalone",
+   "identifier": "time_format_set",
+   "payload": 1,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1253,
+    "params": {
+     "timeSystem": 1
+    }
+   }
+  },
+  {
+   "channel": 3,
+   "context": "standalone",
+   "identifier": "time_format_set",
+   "payload": 0,
+   "product_code": "T8170",
+   "recipe": {
+    "cmd": 1253,
+    "params": {
+     "timeSystem": 0
+    }
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "sensor_motion_pet_setting",
+   "payload": 0,
+   "product_code": "T8910",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 61010
+   }
+  },
+  {
+   "channel": 1,
+   "context": "child",
+   "identifier": "sensor_motion_pet_setting",
+   "payload": 1,
+   "product_code": "T8910",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 1
+    },
+    "subCmd": 61010
+   }
+  },
+  {
+   "channel": 3,
+   "context": "child",
+   "identifier": "sensor_motion_pet_setting",
+   "payload": 0,
+   "product_code": "T8910",
+   "recipe": {
+    "cmd": 1350,
+    "params": {
+     "value": 0
+    },
+    "subCmd": 61010
+   }
+  }
+ ]
+}

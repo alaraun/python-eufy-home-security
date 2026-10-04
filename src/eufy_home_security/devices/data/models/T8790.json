@@ -1,0 +1,761 @@
+{
+ "product_code": "T8790",
+ "schema_version": 2,
+ "settings": {
+  "ai_empower": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null
+  },
+  "audio_recording_on_off": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "no handler write path",
+   "page": "SettingsHome",
+   "read": null
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "camera_on_off": {
+   "access": "ro",
+   "default": "1",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "charging_status": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "cloud_storage_support_trail": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "detection_type_set": {
+   "access": "rw",
+   "control": "select",
+   "default": 5,
+   "kind": "enum",
+   "labels": {
+    "5": "Human Only",
+    "6": "All Motions"
+   },
+   "read": {
+    "map": {
+     "0": 5,
+     "2": 6
+    },
+    "param": 6071
+   },
+   "values": [
+    5,
+    6
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6071,
+    "params": {
+     "value": {
+      "$map": {
+       "5": 0,
+       "6": 2
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6071,
+     "paramValue": {
+      "$map": {
+       "5": "0",
+       "6": "2"
+      }
+     }
+    }
+   }
+  },
+  "detection_type_set__v1": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "extUpdates": [
+     {
+      "cmd": 1298,
+      "paramValue": "$v:str"
+     }
+    ]
+   }
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_charging_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null
+  },
+  "device_is_battery_device": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_serial_number": {
+   "access": "ro",
+   "default": "-",
+   "kind": "string",
+   "read": null
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_storage_type": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud",
+    "2": "NAS"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2
+   ]
+  },
+  "device_wifi_name": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "firmware_sub_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "firmware_sub_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "hb_connect_is_connected": {
+   "access": "ro",
+   "default": "{parentSn:\"\",connected:false}",
+   "kind": "string",
+   "read": null
+  },
+  "hb_connect_support_version": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "ip_address": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "led_on_off": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  },
+  "live_bottom_hor_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Record",
+    "1": "Screenshot",
+    "2": "Speaker",
+    "4": "Sound"
+   },
+   "read": null,
+   "values": [
+    1,
+    2,
+    4,
+    0
+   ]
+  },
+  "live_bottom_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Record",
+    "1": "Screenshot",
+    "10": "Event",
+    "2": "Speaker",
+    "4": "Sound",
+    "8": "Auto Night Vision"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    4,
+    8,
+    10
+   ]
+  },
+  "live_streaming_resolution": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "1": "3K HD",
+    "10": "High",
+    "2": "Full HD(1080P)",
+    "3": "HD",
+    "4": "4K Ultra",
+    "5": "2K HD",
+    "6": "720P",
+    "7": "360P",
+    "8": "Low",
+    "9": "Middle"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ]
+  },
+  "live_support_full": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_long_time_watch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_mute": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_record": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_screenshot": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "live_top_hor_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Alarm",
+    "1": "Setting"
+   },
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "live_top_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Alarm",
+    "1": "Setting"
+   },
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "mac_address": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "microphone_on_off": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  },
+  "montion_detection_ui_show_type": {
+   "access": "ro",
+   "default": "{\"HB3+AI\":1,\"HB3\":1,\"SINGLE\":1}",
+   "kind": "string",
+   "read": null
+  },
+  "motion_detection_status": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 6040
+   },
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6040,
+    "params": {
+     "status": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6040,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "motion_stop_end_early": {
+   "access": "ro",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
+   "default": false,
+   "kind": "bool",
+   "note": "no handler write path",
+   "page": "CustomizeRecording",
+   "read": null
+  },
+  "nightvision_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Off",
+    "1": "Black",
+    "10": "Infrared",
+    "2": "Color",
+    "3": "Auto Night Vision",
+    "4": "On infrared",
+    "5": "Optimal Infrared",
+    "6": "Infrared Night Vision",
+    "7": "Default",
+    "8": "Daylike",
+    "9": "Spotlights"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ]
+  },
+  "notification_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Most Efficient",
+    "1": "Full Effect",
+    "2": "Include Thumbnail"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2
+   ]
+  },
+  "power_manager_mode": {
+   "access": "ro",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "0": "Optimal battery life",
+    "1": "Optimal surveillance",
+    "2": "Balanced surveillance",
+    "3": "Custom recording"
+   },
+   "note": "no handler write path",
+   "page": "MotionDetection",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "power_source_mode": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Not charging",
+    "1": "USB charging",
+    "12": "External and built-in solar charging",
+    "2": "Not charging",
+    "3": "AC charging (doorbell)",
+    "4": "Built-in solar charging",
+    "5": "USB and built-in solar charging",
+    "8": "External solar panel"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    8,
+    12
+   ]
+  },
+  "record_resolution": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "1": "3K HD",
+    "10": "High",
+    "11": "Storage Saver(1080P)",
+    "2": "Full HD(1080P)",
+    "3": "HD",
+    "4": "4K Ultra",
+    "5": "2K HD",
+    "6": "720P",
+    "7": "360P",
+    "8": "Low",
+    "9": "Middle"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+   ]
+  },
+  "set_alarm_type": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Sound only"
+   },
+   "read": null,
+   "values": [
+    0
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1201,
+    "params": {
+     "channel": 0,
+     "type": 4,
+     "time_out": 0,
+     "user_name": ""
+    }
+   }
+  },
+  "set_alarm_type__v1": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Sound only",
+    "3": "HomeBase alarm"
+   },
+   "note": "handler ignores the value",
+   "read": null,
+   "values": [
+    0,
+    3
+   ],
+   "variant_of": "set_alarm_type"
+  },
+  "smart_lock_onoff_status": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "speaker_on_off": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  },
+  "speaker_volume": {
+   "access": "ro",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "0": "High",
+    "1": "Medium",
+    "2": "Low"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    2,
+    1,
+    0
+   ]
+  },
+  "support_video_codec": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "H264",
+    "1": "H265"
+   },
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "time_format_set": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "12-hour",
+    "1": "24-hour"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "timezone_set": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "trigger_interval_time": {
+   "access": "ro",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
+   "default": 60,
+   "kind": "range",
+   "max": 120,
+   "min": 10,
+   "note": "no handler write path",
+   "page": "CustomizeRecording",
+   "read": null,
+   "step": 1,
+   "unit": "d"
+  },
+  "video_camera_count": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "video_clip_length": {
+   "access": "ro",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
+   "default": 60,
+   "kind": "range",
+   "max": 120,
+   "min": 10,
+   "note": "no handler write path",
+   "page": "CustomizeRecording",
+   "read": null,
+   "step": 1,
+   "unit": "d"
+  },
+  "video_intercom_audio_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "video_intercom_duplex": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "watermark_set": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Off",
+    "1": "Timestamp",
+    "2": "Timestamp and logo"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2
+   ]
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T8790Handle.mix.js",
+  "handler_date": "2026-05-12",
+  "td_version": 46
+ }
+}

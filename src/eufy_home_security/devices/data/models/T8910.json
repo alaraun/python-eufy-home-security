@@ -1,0 +1,153 @@
+{
+ "product_code": "T8910",
+ "schema_version": 2,
+ "settings": {
+  "battery_low_threshold": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "read": {
+    "map": null,
+    "param": 1217
+   },
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_is_low_power": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_motion_detection_sensitivity_level": {
+   "access": "rw",
+   "control": "select",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "0": "1",
+    "1": "2",
+    "2": "3",
+    "3": "4",
+    "4": "5"
+   },
+   "note": "round trip does not return the written value",
+   "page": "SensorMotionTestMode",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "write": {
+    "cmd": 1609,
+    "params": {
+     "value": {
+      "$map": {
+       "0": 0,
+       "1": 1,
+       "2": 2,
+       "3": 1,
+       "4": 1
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1609,
+     "paramValue": {
+      "$map": {
+       "0": "0",
+       "1": "1",
+       "2": "2",
+       "3": "1",
+       "4": "1"
+      }
+     }
+    }
+   }
+  },
+  "sensor_motion_pet_setting": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 61010
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 61010,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 61010,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "sensor_motion_trigger_time": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T8910Handle.mix.js",
+  "handler_date": "2025-08-27",
+  "td_version": 48
+ }
+}

@@ -1,0 +1,319 @@
+{
+ "product_code": "T6010",
+ "schema_version": 2,
+ "settings": {
+  "change_wifi_is_support": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_cleaning_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_custody_time": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_disinfection_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_disinfection_time": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_dry_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_dry_time": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_existing_filter_screen": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_fault_status": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_filter_detection_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_filter_element_status": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Present",
+    "1": "Not present",
+    "2": "Illegal"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2
+   ]
+  },
+  "device_filter_element_total_count": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_filter_element_used_count": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_filter_last_time": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "device_mute_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "page": "BottleWasherSettingScreen",
+   "read": null
+  },
+  "device_name": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "device_notification_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  },
+  "device_running_status": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_silent_ota_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_storage_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "page": "BottleWasherSettingScreen",
+   "read": null
+  },
+  "device_temperature_format_set": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Celsius",
+    "1": "Fahrenheit"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "device_wash_remaining_time": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_wash_temperature": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_wash_total_time": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_wifi_name": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "default": "-55",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  },
+  "device_work_mode": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "device_work_status": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "page": "BottleWasherHomeScreen",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "firmware_sub_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "firmware_sub_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "hide_share_device_feature": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "hide_share_your_thoughts": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "ip_address": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "is_support_ble": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_mqtt": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_silent_ota_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "mac_address": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "sdk_model_config": {
+   "access": "ro",
+   "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"bleOnline\":true,\"syncHeartBeat\":true}}",
+   "kind": "string",
+   "read": null
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T6010Handle.mix.js",
+  "handler_date": "2026-06-25",
+  "td_version": 103
+ }
+}

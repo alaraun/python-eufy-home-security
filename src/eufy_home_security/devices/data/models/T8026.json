@@ -1,0 +1,405 @@
+{
+ "product_code": "T8026",
+ "schema_version": 2,
+ "settings": {
+  "add_device_model_config": {
+   "access": "ro",
+   "default": "{\"routeConfigForDeviceSetup\":{\"steps\":[{\"props\":{},\"route\":\"SignalTestScreen\"},{\"props\":{},\"route\":\"WorksAsIndoorChime\"}]}}",
+   "kind": "string",
+   "read": null
+  },
+  "alarm_tones_mode": {
+   "access": "rw",
+   "kind": "other",
+   "read": {
+    "map": null,
+    "param": 1281
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1281,
+    "params": {
+     "type": "$v"
+    },
+    "update": {
+     "cmd": 1281,
+     "needUpdate": true,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "alarm_volume_value": {
+   "access": "rw",
+   "control": "slider",
+   "default": 63,
+   "kind": "range",
+   "max": 63,
+   "min": 1,
+   "read": {
+    "map": null,
+    "param": 1235
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1235,
+    "params": {
+     "volume": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1235,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "arming_cust_mode_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "arming_geofence_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "arming_modedetail_alarm_rules": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "arming_modedetail_devices_rules": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "arming_schedule_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "arming_selected_mode": {
+   "access": "rw",
+   "kind": "other",
+   "read": null,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1224,
+    "params": "$v",
+    "update": {
+     "needUpdate": true,
+     "cmd": 1224,
+     "paramValue": null
+    }
+   }
+  },
+  "arming_support_arm_delay": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_arming": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_custom_mode": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_geofence": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_off_mode": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_privacy": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_query_working_mode": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_show_user_name": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "change_wifi_is_support": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_has_buzzer": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_not_disturb_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "device_serial_number": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "device_silent_ota_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 6287
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6287,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6287,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_sync_data_on_repetor": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "device_wifi_name": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "get_storage_status": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "ignore_no_sd_card_alarm": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "ip_address": {
+   "access": "ro",
+   "kind": "string",
+   "name": "IP Address",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_silent_ota_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "led_on_off": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "name": "Status LED",
+   "read": {
+    "map": null,
+    "param": 6014
+   },
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6014,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6014,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "mac_address": {
+   "access": "ro",
+   "kind": "string",
+   "name": "MAC Address",
+   "read": null
+  },
+  "notification_alarm_delay_value": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "prompt_volume_value": {
+   "access": "rw",
+   "control": "slider",
+   "default": 13,
+   "kind": "range",
+   "max": 26,
+   "min": 1,
+   "read": {
+    "map": null,
+    "param": 1292
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1292,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "cmd": 1292,
+     "needUpdate": true,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "setting_model_config": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "switching_notification": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 64,
+    "1": 16,
+    "2": 32,
+    "3": 128
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Switch modes by schedule",
+    "1": "Switch modes from app",
+    "2": "Switch modes by geofencing",
+    "3": "Switch modes from Keypad"
+   },
+   "read": {
+    "map": null,
+    "param": 1283
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1283,
+    "params": {
+     "arm_push_mode": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1283,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "timezone_set": {
+   "access": "rw",
+   "control": "select",
+   "domain": "timezone",
+   "kind": "string",
+   "read": {
+    "map": null,
+    "param": 1215
+   },
+   "write": {
+    "cmd": 1215,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1215,
+     "paramValue": "$v"
+    }
+   }
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T8026Handle.mix.js",
+  "handler_date": "2026-04-21",
+  "td_version": 40
+ }
+}

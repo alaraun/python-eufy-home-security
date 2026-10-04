@@ -1,0 +1,45 @@
+# Changelog
+
+All notable changes to this project. The project follows
+[Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
+API. From 0.1.0 on, release-please writes the entries from the conventional commits.
+
+## 0.1.0
+
+The first public release: an asyncio client for eufy Security that works on the local
+network and uses the eufy cloud only for login, keys and push.
+
+### Local network
+
+- Discovery and the encrypted P2P session to a HomeBase 3 (T8030) and to a standalone
+  battery camera (T8170), including waking a sleeping camera.
+- Guard mode: read, set and follow, confirmed by the station's own report.
+- State from the station: battery, signal, firmware, storage, charging and online
+  state, with change events.
+- Live video and audio (HEVC + AAC) shared by several viewers, still images at full
+  resolution, stored recordings (played back or downloaded as a clip) and event stills.
+- Pan/tilt, presets and picture zoom on the T8170; per-mode alarm actions and delays.
+
+### Settings
+
+- Settings for 107 eufy products, generated from the eufy app's own thing descriptions
+  and handlers: values, labels, units, the control to show, and how each is written
+  and read back.
+
+### Cloud and push
+
+- `eufy_mega` login with the e-mailed code or a captcha, a session cache that survives
+  restarts, the device list and the per-station keys.
+- Push events over FCM, merged with the local session's events.
+- Firmware-update notices.
+- Protection against the cloud's limits: a login budget, hold-offs after throttling,
+  and no automatic re-login after another client takes over the session.
+
+### Tools
+
+- The `eufy-security` command line: status, guard mode, settings, live video,
+  recordings, events and more.
+- `eufy_home_security.testing`: a fake station and a fake cloud for end-to-end tests of
+  a consumer such as a Home Assistant integration.
+- Support graded as data: each model and capability is *verified* on hardware,
+  *declared* from the eufy app, or *unknown*, with its source.

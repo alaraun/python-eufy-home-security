@@ -1,0 +1,190 @@
+{
+ "product_code": "T90G0",
+ "schema_version": 2,
+ "settings": {
+  "automation_config": {
+   "access": "ro",
+   "default": "{\"trigger\":[11],\"action\":[]}",
+   "kind": "string",
+   "read": null
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "100",
+   "kind": "string",
+   "read": null
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_to_hb_connect_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "ignore_set_alarm": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "notification_jump_to_mode_page": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_alarm_timeout": {
+   "access": "ro",
+   "kind": "other",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "sensor_disassemble_status": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_grass_detection_sensitivity_level": {
+   "access": "rw",
+   "control": "select",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "0": "Low",
+    "1": "Medium",
+    "2": "High"
+   },
+   "read": {
+    "map": null,
+    "param": 1876
+   },
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1876,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1876,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "sensor_grass_last_break_time": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "sensor_grass_testing_break_event": {
+   "access": "ro",
+   "kind": "bool",
+   "page": "GlassBreakReadyToTest",
+   "read": null
+  },
+  "sensor_is_low_power": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "set_alarm_type": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Sound only",
+    "1": "Light only",
+    "2": "Sound and light",
+    "3": "HomeBase alarm"
+   },
+   "note": "handler ignores the value",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3
+   ]
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T90G0Handle.mix.js",
+  "handler_date": "2026-03-31",
+  "td_version": 54
+ }
+}

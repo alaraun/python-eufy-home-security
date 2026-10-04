@@ -1,0 +1,120 @@
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "eufy-home-security"
+version = "0.1.0"
+description = "Asyncio client for eufy Security: local P2P to the HomeBase, the eufy cloud, and push events."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Alar Aun" }]
+requires-python = ">=3.13"
+keywords = ["eufy", "eufy-security", "eufycam", "homebase", "home-assistant", "asyncio", "p2p"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Framework :: AsyncIO",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Home Automation",
+  "Typing :: Typed",
+]
+# Lower bounds only, never caps: Home Assistant pins exact versions of all of
+# these, and an upper bound here would make the integration unresolvable.
+dependencies = [
+  "aiohttp>=3.11",
+  "cryptography>=44",
+  "firebase-messaging>=0.4",
+  "protobuf>=5",
+]
+
+[project.scripts]
+eufy-security = "eufy_home_security.cli:main"
+
+[project.urls]
+Source = "https://github.com/alaraun/python-eufy-home-security"
+Issues = "https://github.com/alaraun/python-eufy-home-security/issues"
+Changelog = "https://github.com/alaraun/python-eufy-home-security/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/alaraun/python-eufy-home-security/tree/main/docs"
+Funding = "https://ko-fi.com/alaraun"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4",
+  "pytest-asyncio>=1.2",
+  "pytest-cov>=6",
+  "pytest-timeout>=2.3",
+  "hypothesis>=6.130",
+  "aioresponses>=0.7.8",
+  "mypy>=1.17",
+  "ruff>=0.13",
+  "prek>=0.2",
+]
+
+[tool.uv.build-backend]
+module-name = "eufy_home_security"
+# The sdist is the wheel's build input plus CHANGELOG; tests and docs need the repository
+# (vendor corpus, scripts/, git), so they are not shipped.
+source-include = ["CHANGELOG.md"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = [".work", ".planning"]  # planning notes: their code blocks are prose, not source
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "UP", "B", "SIM", "C4", "RUF", "ASYNC", "PT", "RET",
+  "LOG", "G", "S", "N", "PERF", "FURB", "DTZ", "T20", "PL",
+]
+ignore = [
+  "PLR2004",  # protocol code is full of magic numbers; they are named where it helps
+  "PLR0911", "PLR0912", "PLR0913", "PLR0915",
+  "S311",     # random is never used for crypto here; os.urandom/secrets are
+  "E501",     # the formatter owns line length
+  "ASYNC109", # explicit per-call `timeout=` is the API Home Assistant callers expect
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S603", "PLR2004", "T20", "N802", "ASYNC110"]
+"src/eufy_home_security/cli/**" = ["T20"]
+"scripts/**" = ["T20", "S603", "S607"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["firebase_messaging.*", "aioresponses.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+timeout = 30
+xfail_strict = true
+markers = ["live: talks to a real station or the eufy cloud (opt-in: -m live, needs EUFY_LIVE=1)"]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["eufy_home_security"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]

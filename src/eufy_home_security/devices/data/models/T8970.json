@@ -1,0 +1,132 @@
+{
+ "product_code": "T8970",
+ "schema_version": 2,
+ "settings": {
+  "audio_alert_volume": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Low",
+    "1": "High"
+   },
+   "read": {
+    "map": {
+     "0": 0,
+     "5": 1
+    },
+    "param": 1825
+   },
+   "values": [
+    0,
+    1
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1825,
+    "params": {
+     "volume": {
+      "$map": {
+       "0": 0,
+       "1": 5
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1825,
+     "paramValue": {
+      "$map": {
+       "0": "0",
+       "1": "5"
+      }
+     }
+    }
+   }
+  },
+  "battery_low_threshold": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "read": {
+    "map": null,
+    "param": 1217
+   },
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "sensor_is_low_power": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "set_alarm_type": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T8970Handle.mix.js",
+  "handler_date": "2025-08-27",
+  "td_version": 39
+ }
+}

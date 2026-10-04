@@ -1,0 +1,1145 @@
+{
+ "product_code": "T8N00",
+ "schema_version": 2,
+ "settings": {
+  "accessory_ota_status": {
+   "access": "ro",
+   "kind": "other",
+   "read": null
+  },
+  "ai_card_device_list": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "ai_card_feature_switch": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "page": "ComputeCardAIFeatureScreen",
+   "read": null,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 61507,
+    "params": "$v",
+    "update": {
+     "needUpdate": true,
+     "cmd": 61507,
+     "paramValue": "[]"
+    }
+   }
+  },
+  "ai_support_service": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "aic_child_protection": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "aic_family_arrival_reminder": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "aic_invasion_prevention": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "page": "ComputeCardAddScreen",
+   "read": null
+  },
+  "aic_night_mode_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "aic_package_protection": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "aic_scene_mode": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "aic_stranger_prevention": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "aic_travel_mode_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "aic_vehicle_protection": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "aic_vehicle_protection_image_list": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "aic_visitor_reminder": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "alarm_tones_mode": {
+   "access": "rw",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "1": "Alarm Tone1",
+    "2": "Alarm Tone2"
+   },
+   "read": {
+    "map": null,
+    "param": 1281
+   },
+   "values": [
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1281,
+    "params": {
+     "type": "$v"
+    },
+    "update": {
+     "cmd": 1281,
+     "needUpdate": true,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "alarm_volume_value": {
+   "access": "rw",
+   "control": "slider",
+   "default": 16,
+   "kind": "range",
+   "max": 26,
+   "min": 1,
+   "read": {
+    "map": null,
+    "param": 1235
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1235,
+    "params": {
+     "volume": "$v"
+    },
+    "update": {
+     "cmd": 1235,
+     "needUpdate": true,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "arming_cust_mode_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "arming_get_alarm_away_mode": {
+   "access": "ro",
+   "kind": "string",
+   "name": "Away Mode",
+   "read": null
+  },
+  "arming_get_alarm_custom1_mode": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "arming_get_alarm_custom2_mode": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "arming_get_alarm_custom3_mode": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "arming_get_alarm_disarm_mode": {
+   "access": "ro",
+   "kind": "string",
+   "name": "Disarm Mode",
+   "read": null
+  },
+  "arming_get_alarm_home_mode": {
+   "access": "ro",
+   "kind": "string",
+   "name": "Home Mode",
+   "read": null
+  },
+  "arming_jump_to_platform_setting_page": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_keypad_set_cus_model": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "page": "CUSButton",
+   "read": null
+  },
+  "arming_modedetail_alarm_rules": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "arming_modedetail_devices_rules": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "arming_schedule_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "arming_selected_mode": {
+   "access": "rw",
+   "control": "slider",
+   "default": 2,
+   "kind": "range",
+   "max": 100,
+   "min": -1,
+   "read": null,
+   "step": 1,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1224,
+    "params": "$v",
+    "update": {
+     "needUpdate": true,
+     "cmd": 1224,
+     "paramValue": null
+    }
+   }
+  },
+  "arming_support_arming": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_custom_mode": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_geofence": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_off_mode": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_privacy": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_query_working_mode": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_show_user_name": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_working_mode": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "audio_alert_volume": {
+   "access": "ro",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "0": "Low",
+    "1": "Medium",
+    "2": "High"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2
+   ]
+  },
+  "auto_ota_upgrade_scheduled_time": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "page": "NVRFirmwareUpdateScreen",
+   "read": null
+  },
+  "auto_ota_upgrade_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 9223
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 9223,
+    "params": {
+     "auto_update_enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 9223,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "bind_ai_card_info": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "database_synchronize": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_agree_ai_terms_switch": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "device_continuous_recording_time": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "All time",
+    "1": "Schedule"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "device_cpu_info": {
+   "access": "ro",
+   "kind": "string",
+   "page": "NVRAboutDevice",
+   "read": null
+  },
+  "device_cross_cam_assistance_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 1069
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1069,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1069,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_cross_cam_group": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "device_cross_cam_interval": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "2 min",
+    "1": "3 min",
+    "2": "4 min",
+    "3": "5 min",
+    "4": "10 min",
+    "5": "15 min",
+    "6": "30 min"
+   },
+   "read": {
+    "map": {
+     "120": 0,
+     "180": 1,
+     "1800": 6,
+     "240": 2,
+     "300": 3,
+     "600": 4,
+     "900": 5
+    },
+    "param": 1070
+   },
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1070,
+    "params": {
+     "value": {
+      "$map": {
+       "0": 120,
+       "1": 180,
+       "2": 240,
+       "3": 300,
+       "4": 600,
+       "5": 900,
+       "6": 1800
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1070,
+     "paramValue": {
+      "$map": {
+       "0": 120,
+       "1": 180,
+       "2": 240,
+       "3": 300,
+       "4": 600,
+       "5": 900,
+       "6": 1800
+      }
+     }
+    }
+   }
+  },
+  "device_cross_cam_list": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "device_cross_cam_tracking_swtich": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 1065
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1065,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1065,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_current_temerature": {
+   "access": "ro",
+   "kind": "string",
+   "page": "NVRAboutDevice",
+   "read": null
+  },
+  "device_date_format_set": {
+   "access": "rw",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "MM-DD-YYYY",
+    "1": "YYYY-MM-DD",
+    "2": "DD-MM-YYYY"
+   },
+   "read": {
+    "map": null,
+    "param": 6469
+   },
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6469,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6469,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_enhance_my_ai_agent_switch": {
+   "access": "ro",
+   "kind": "other",
+   "page": "ComputeCardHomeScreen",
+   "read": null
+  },
+  "device_has_buzzer": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "device_house_area_locations": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler expects a structured value",
+   "read": null
+  },
+  "device_is_battery_device": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "device_linkage_mode": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler rejects the probed values",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_motion_detection": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_serial_number": {
+   "access": "ro",
+   "default": "-",
+   "kind": "string",
+   "read": null
+  },
+  "device_silent_ota_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 6287
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6287,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6287,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_storage_medium": {
+   "access": "ro",
+   "default": "[1]",
+   "kind": "string",
+   "read": null
+  },
+  "device_storage_type": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "values": [
+    0
+   ]
+  },
+  "device_temperature_format_set": {
+   "access": "rw",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "Celsius",
+    "1": "Fahrenheit"
+   },
+   "read": {
+    "map": null,
+    "param": 7003
+   },
+   "values": [
+    0,
+    1
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 7003,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 7003,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "general_account_init_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "general_device_plugin_type": {
+   "access": "ro",
+   "kind": "other",
+   "read": null
+  },
+  "hb_aic_feature_available": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "hb_connect_storage_type": {
+   "access": "rw",
+   "kind": "other",
+   "read": {
+    "map": null,
+    "param": 3103
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 3103,
+    "params": {
+     "type": "$v"
+    },
+    "update": {
+     "cmd": 3103,
+     "needUpdate": true,
+     "paramValue": "$v"
+    }
+   }
+  },
+  "hb_set_dangerous_event_status": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler expects a structured value",
+   "read": null
+  },
+  "home_card_show_video_playback": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "inserted_ai_card_info": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "ip_address": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "name": "IP Address",
+   "read": null
+  },
+  "is_connect_webrtc": {
+   "access": "ro",
+   "default": "2",
+   "kind": "other",
+   "read": null
+  },
+  "is_device_ready_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_familiar_face": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_professional_alarm": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_professional_cross_camera": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_professional_guard": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_silent_ota_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_webrtc": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "mac_address": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "name": "MAC Address",
+   "read": null
+  },
+  "model_config": {
+   "access": "ro",
+   "default": "{\"GoAnywhere\":1, \"SwipePanTilt\":1}",
+   "kind": "string",
+   "page": "IPCRecordingQualityScreen",
+   "read": null
+  },
+  "notification_alarm_delay_value": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "notification_ignore_switch": {
+   "access": "rw",
+   "bit": 256,
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "name": "Ignore Notifications",
+   "read": {
+    "map": null,
+    "param": 1283
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1283,
+    "params": {
+     "arm_push_mode": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1283,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "nvr_get_device_volume": {
+   "access": "ro",
+   "kind": "string",
+   "page": "NVRPairedDevice",
+   "read": null
+  },
+  "nvr_motion_detection": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "playback_play_speed": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "2x",
+    "1": "4x",
+    "2": "8x",
+    "3": "16x"
+   },
+   "note": "handler ignores the value",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "prompt_volume_value": {
+   "access": "rw",
+   "control": "slider",
+   "default": 16,
+   "kind": "range",
+   "max": 26,
+   "min": 1,
+   "read": {
+    "map": null,
+    "param": 1292
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1292,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "cmd": 1292,
+     "needUpdate": true,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "query_event_list_cmd": {
+   "access": "ro",
+   "default": "10011",
+   "kind": "other",
+   "read": null
+  },
+  "set_person_activity_status": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "setting_current_connection_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "setting_model_config": {
+   "access": "ro",
+   "default": "{\"config\":{\"hb_migration_supported_list\":{\"T8010\":{\"T8170\":\"3.3.0.0\",\"T8410P5\":\"3.3.1.8\",\"T8224\":\"3.4.4.8\",\"T8162\":\"3.1.1.3\",\"T8416\":\"1.5.5.0\",\"T8214\":\"3.2.1.2\",\"T8425\":\"1.6.0.6\",\"T8426\":\"1.1.9.2\",\"T8417\":\"1.2.0.6\",\"T8213\":\"0.1.9.2\",\"T8223\":\"3.3.4.8\",\"T8210P33\":\"3.0.8.2\",\"T8210P34\":\"3.0.8.2\",\"T8210P64\":\"3.0.8.2\",\"T8222\":\"4.2.8\",\"T8161\":\"3.4.3.0\",\"T8160P0\":\"3.2.4.8\",\"T8160P1\":\"3.2.4.8\",\"T8160P2\":\"3.2.4.8\",\"T8160T2\":\"3.2.4.8\",\"T8160T3\":\"1.6.2.4\",\"T8142T7\":\"3.0.5.7\",\"T8113T7\":\"3.0.6.4\",\"T8140P7\":\"3.0.7.2\",\"T8171\":\"1.1.6.2\",\"T8134P2\":\"3.3.2.2\",\"T813452\":\"3.3.2.2\",\"T8B00511\":\"3.3.2.2\",\"T8114\":\"0.0.0.0\",\"T8144\":\"1.0.3.9\",\"T8172\":\"0.0.0.0\",\"T8173\":\"0.0.0.0\",\"T8170T2\":\"3.2.6.6\",\"T817052\":\"3.2.6.6\",\"T817053\":\"1.0.0.9\",\"T821452\":\"1.0.1.6\"},\"T8030\":{\"T8170\":\"3.3.0.0\",\"T8410P5\":\"3.3.1.8\",\"T8224\":\"3.4.4.8\",\"T8162\":\"3.1.1.3\",\"T8416\":\"1.5.5.0\",\"T8214\":\"3.2.1.2\",\"T8425\":\"1.6.0.6\",\"T8426\":\"1.1.9.2\",\"T8417\":\"1.2.0.6\",\"T8213\":\"0.1.9.2\",\"T8223\":\"3.3.4.8\",\"T8210P33\":\"3.0.8.2\",\"T8210P34\":\"3.0.8.2\",\"T8210P64\":\"3.0.8.2\",\"T8222\":\"4.2.8\",\"T8161\":\"3.4.3.0\",\"T8160P0\":\"3.2.4.8\",\"T8160P1\":\"3.2.4.8\",\"T8160P2\":\"3.2.4.8\",\"T8160T2\":\"3.2.4.8\",\"T8160T3\":\"1.6.2.4\",\"T8142T7\":\"3.0.5.7\",\"T8113T7\":\"3.0.6.4\",\"T8140P7\":\"3.0.7.2\",\"T8171\":\"1.1.6.2\",\"T8134P2\":\"3.3.2.2\",\"T813452\":\"3.3.2.2\",\"T8B00511\":\"3.3.2.2\",\"T8114\":\"0.0.0.0\",\"T8144\":\"1.0.3.9\",\"T8172\":\"0.0.0.0\",\"T8173\":\"0.0.0.0\",\"T8170T2\":\"3.2.6.6\",\"T817052\":\"3.2.6.6\",\"T817053\":\"1.0.0.9\",\"T821452\":\"1.0.1.6\"}},\"currentHbMinVersion\":\"1.3.0.8\",\"isNeedCurrentHbMinVersion\":true}}",
+   "kind": "string",
+   "read": null
+  },
+  "subnet_mask": {
+   "access": "ro",
+   "kind": "string",
+   "page": "SelectHomeBaseConnection",
+   "read": null
+  },
+  "support_multiple_live_stream": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "support_smart_search_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "switching_notification": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 64,
+    "1": 16,
+    "2": 32
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Switch modes by schedule",
+    "1": "Switch modes from app",
+    "2": "Switch modes by geofencing"
+   },
+   "read": {
+    "map": null,
+    "param": 1283
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1283,
+    "params": {
+     "arm_push_mode": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1283,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "system_maintenance": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "system_notification_master_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "page": "NVRSystemNotification",
+   "read": {
+    "map": null,
+    "param": 9216
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 9216,
+    "params": {
+     "message_enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 9216,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "system_switching_notification": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Emerg",
+    "1": "Update",
+    "2": "Admin",
+    "3": "Device",
+    "4": "User"
+   },
+   "note": "handler rejects some values",
+   "page": "NVRSystemNotification",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  "time_format_set": {
+   "access": "rw",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "12-hour",
+    "1": "24-hour"
+   },
+   "read": {
+    "map": null,
+    "param": 1253
+   },
+   "values": [
+    0,
+    1
+   ],
+   "write": {
+    "cmd": 1253,
+    "params": {
+     "timeSystem": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1253,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "timezone_set": {
+   "access": "rw",
+   "control": "select",
+   "default": "0",
+   "domain": "timezone",
+   "kind": "string",
+   "read": {
+    "map": null,
+    "param": 1215
+   },
+   "write": {
+    "cmd": 1215,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1215,
+     "paramValue": "$v"
+    }
+   }
+  },
+  "working_mode_value": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "EU",
+    "1": "US"
+   },
+   "read": {
+    "map": {
+     "EU": 0,
+     "US": 1
+    },
+    "param": 1296
+   },
+   "values": [
+    0,
+    1
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1296,
+    "params": {
+     "countrycode": {
+      "$map": {
+       "0": "EU",
+       "1": "US"
+      }
+     }
+    },
+    "update": {
+     "cmd": 1296,
+     "needUpdate": true,
+     "paramValue": {
+      "$map": {
+       "0": "EU",
+       "1": "US"
+      }
+     }
+    }
+   }
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T8N00Handle.mix.js",
+  "handler_date": "2026-08-27",
+  "td_version": 243
+ }
+}

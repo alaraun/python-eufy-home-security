@@ -1,0 +1,1069 @@
+{
+ "product_code": "T8200X",
+ "schema_version": 2,
+ "settings": {
+  "activityzone_config": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "normalized": "1",
+    "panNum": "0",
+    "polyNum": "2",
+    "positionNum": "0",
+    "sideNum": "6",
+    "zoneHeight": "720",
+    "zoneWidth": "1280"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "values": [
+    "sideNum",
+    "normalized",
+    "polyNum",
+    "panNum",
+    "positionNum",
+    "zoneWidth",
+    "zoneHeight"
+   ]
+  },
+  "arming_cust_mode_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "arming_modedetail_devices_rules": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "arming_schedule_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "arming_selected_mode": {
+   "access": "rw",
+   "kind": "other",
+   "read": null,
+   "write": {
+    "cmd": 1224,
+    "params": "$v",
+    "update": {
+     "needUpdate": true,
+     "cmd": 1224,
+     "paramValue": null
+    }
+   }
+  },
+  "arming_support_arm_delay": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_arming": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_custom_mode": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_geofence": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_off_mode": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_query_working_mode": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_show_user_name": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "audio_recording_on_off": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "page": "SettingsHome",
+   "read": {
+    "map": null,
+    "param": 6012
+   },
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6012,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6012,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "audio_settings_chimes_alert_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 2015
+   },
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1006,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2015,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "camera_on_off": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "charging_status": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "detection_sensitivity": {
+   "access": "rw",
+   "control": "slider",
+   "default": 3,
+   "kind": "range",
+   "max": 5,
+   "min": 1,
+   "read": null,
+   "step": 1,
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6070,
+    "params": {
+     "value": "$v"
+    },
+    "extUpdates": [
+     {
+      "cmd": 6070,
+      "paramValue": "$v:str"
+     },
+     {
+      "cmd": 1276,
+      "paramValue": "$v:str"
+     }
+    ]
+   }
+  },
+  "detection_type_set": {
+   "access": "rw",
+   "control": "select",
+   "default": 5,
+   "kind": "enum",
+   "labels": {
+    "5": "Human Only",
+    "6": "All Motions"
+   },
+   "note": "round trip does not return the written value",
+   "read": null,
+   "values": [
+    5,
+    6
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6071,
+    "params": {
+     "value": {
+      "$map": {
+       "5": 0,
+       "6": 2
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6071,
+     "paramValue": {
+      "$map": {
+       "5": "0",
+       "6": "2"
+      }
+     }
+    }
+   }
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_audio_ringtone_volume": {
+   "access": "rw",
+   "control": "slider",
+   "default": 80,
+   "kind": "range",
+   "max": 100,
+   "min": 0,
+   "read": {
+    "map": null,
+    "param": 2022
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1012,
+    "params": {
+     "volume": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2022,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_chime_to_add_chime_setting_flag": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_power_supply_mode": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "device_serial_number": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "device_silent_ota_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 6287
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6287,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6287,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_snooze_time": {
+   "access": "rw",
+   "control": "select",
+   "default": -1,
+   "kind": "enum",
+   "labels": {
+    "": "",
+    "-1": "Off",
+    "0": "30 min",
+    "1": "1 hour",
+    "2": "2 hours",
+    "3": "6 hours",
+    "4": "12 hours"
+   },
+   "note": "round trip does not return the written value",
+   "read": null,
+   "values": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    4,
+    ""
+   ],
+   "write": {
+    "cmd": 1271,
+    "params": {
+     "snooze_time": {
+      "$map": {
+       "-1": 0,
+       "0": 1800,
+       "1": 3600,
+       "2": 7200,
+       "3": 21600,
+       "4": 43200,
+       "": null
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1271,
+     "paramValue": {
+      "$map": {
+       "-1": "eyJzbm9vemVfdGltZSI6MH0=",
+       "0": "eyJzbm9vemVfdGltZSI6MTgwMH0=",
+       "1": "eyJzbm9vemVfdGltZSI6MzYwMH0=",
+       "2": "eyJzbm9vemVfdGltZSI6NzIwMH0=",
+       "3": "eyJzbm9vemVfdGltZSI6MjE2MDB9",
+       "4": "eyJzbm9vemVfdGltZSI6NDMyMDB9",
+       "": "eyJzbm9vemVfdGltZSI6dW5kZWZpbmVkfQ=="
+      }
+     }
+    }
+   }
+  },
+  "device_snooze_time_extra_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Motion notify onoff",
+    "1": "Chime onoff"
+   },
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "device_status": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_name": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "get_storage_status": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "ip_address": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_silent_ota_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "led_on_off": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 1026
+   },
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1026,
+    "params": {
+     "status": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1026,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "live_bottom_hor_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Record",
+    "1": "Screenshot",
+    "15": "Reply",
+    "2": "Speaker",
+    "4": "Sound"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    15,
+    4
+   ]
+  },
+  "live_bottom_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Record",
+    "1": "Screenshot",
+    "15": "Reply",
+    "2": "Speaker",
+    "4": "Sound"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    15,
+    4
+   ]
+  },
+  "live_streaming_resolution": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "10": "High",
+    "8": "Low",
+    "9": "Medium"
+   },
+   "read": {
+    "map": {
+     "0": 0,
+     "1": 8,
+     "2": 9,
+     "3": 10
+    },
+    "param": 2031
+   },
+   "values": [
+    0,
+    8,
+    9,
+    10
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1020,
+    "params": {
+     "quality": {
+      "$map": {
+       "0": 0,
+       "8": 1,
+       "9": 2,
+       "10": 3
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2031,
+     "paramValue": {
+      "$map": {
+       "0": "0",
+       "8": "1",
+       "9": "2",
+       "10": "3"
+      }
+     }
+    }
+   }
+  },
+  "live_support_full": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_mute": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_record": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_screenshot": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "live_top_hor_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "1": "Setting"
+   },
+   "read": null,
+   "values": [
+    1
+   ]
+  },
+  "live_top_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "1": "Setting"
+   },
+   "read": null,
+   "values": [
+    1
+   ]
+  },
+  "mac_address": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "motion_detection_status": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 6040
+   },
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6040,
+    "params": {
+     "status": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6040,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "nightvision_type": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1013,
+    "params": {
+     "value": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2002,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "notification_jump_to": {
+   "access": "rw",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "History event",
+    "1": "Live view"
+   },
+   "read": null,
+   "values": [
+    0,
+    1
+   ],
+   "write": {
+    "http": {
+     "path": "v3/app/upload_devs_params",
+     "method": "post",
+     "domain": "eufy_security",
+     "body": {
+      "device_sn": "$device_sn",
+      "station_sn": "$station_sn",
+      "params": [
+       {
+        "param_type": 2038,
+        "param_value": {
+         "$map": {
+          "0": "1",
+          "1": "2"
+         }
+        }
+       }
+      ]
+     },
+     "update": {
+      "needUpdate": true,
+      "cmd": 2038,
+      "paramValue": {
+       "$map": {
+        "0": "1",
+        "1": "2"
+       }
+      }
+     }
+    }
+   },
+   "write_standalone": {
+    "http": {
+     "path": "v3/app/upload_devs_params",
+     "method": "post",
+     "domain": "eufy_security",
+     "body": {
+      "device_sn": "$device_sn",
+      "station_sn": "$device_sn",
+      "params": [
+       {
+        "param_type": 2038,
+        "param_value": {
+         "$map": {
+          "0": "1",
+          "1": "2"
+         }
+        }
+       }
+      ]
+     },
+     "update": {
+      "needUpdate": true,
+      "cmd": 2038,
+      "paramValue": {
+       "$map": {
+        "0": "1",
+        "1": "2"
+       }
+      }
+     }
+    }
+   }
+  },
+  "notification_motion_alert": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Default",
+    "1": "Silent",
+    "2": "Bell",
+    "3": "Change",
+    "4": "Ding",
+    "5": "Notify",
+    "6": "Security",
+    "7": "Success",
+    "8": "Type"
+   },
+   "page": "SettingsHome",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ]
+  },
+  "notification_motion_onoff": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "handler rejects the probed values",
+   "page": "SettingsHome",
+   "read": null
+  },
+  "notification_ring_alert": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Default",
+    "1": "Silent",
+    "2": "Beacon",
+    "3": "Chord",
+    "4": "Christmas",
+    "5": "Circuit",
+    "6": "Clock",
+    "7": "Ding",
+    "8": "Hillside",
+    "9": "Presto"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ]
+  },
+  "notification_ring_onoff": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "handler rejects the probed values",
+   "page": "SettingsHome",
+   "read": null
+  },
+  "notification_type": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Most Efficient",
+    "1": "Full Effect",
+    "2": "Include Thumbnail"
+   },
+   "note": "round trip does not return the written value",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6020,
+    "params": {
+     "style": {
+      "$map": {
+       "0": 1,
+       "1": 3,
+       "2": 2
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6020,
+     "paramValue": {
+      "$map": {
+       "0": 1,
+       "1": 3,
+       "2": 2
+      }
+     }
+    }
+   }
+  },
+  "power_source_mode": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Not charging",
+    "1": "USB charging",
+    "12": "External and built-in solar charging",
+    "2": "Not charging",
+    "3": "AC charging (doorbell)",
+    "4": "Built-in solar charging",
+    "5": "USB and built-in solar charging",
+    "8": "External solar panel"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    8,
+    12
+   ]
+  },
+  "record_resolution": {
+   "access": "ro",
+   "default": 12,
+   "kind": "enum",
+   "labels": {
+    "12": "2K HD(2048*1536)",
+    "13": "Full HD(1600*1200)"
+   },
+   "note": "handler ignores the value",
+   "read": null,
+   "values": [
+    12,
+    13
+   ]
+  },
+  "reset_device_mode": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "speaker_volume": {
+   "access": "rw",
+   "control": "slider",
+   "default": 80,
+   "kind": "range",
+   "max": 100,
+   "min": 0,
+   "read": {
+    "map": null,
+    "param": 2003
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1230,
+    "params": {
+     "volume": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2003,
+     "paramValue": "$v:str"
+    },
+    "extUpdates": [
+     {
+      "cmd": 1230,
+      "paramValue": "$v:str"
+     },
+     {
+      "cmd": 2003,
+      "paramValue": "$v:str"
+     }
+    ]
+   }
+  },
+  "support_video_codec": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "H264",
+    "1": "H265"
+   },
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "time_format_set": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "12-hour",
+    "1": "24-hour"
+   },
+   "read": {
+    "map": null,
+    "param": 1253
+   },
+   "values": [
+    0,
+    1
+   ],
+   "write": {
+    "cmd": 1253,
+    "params": {
+     "timeSystem": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1253,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "timezone_set": {
+   "access": "rw",
+   "control": "select",
+   "default": "0",
+   "domain": "timezone",
+   "kind": "string",
+   "read": {
+    "map": null,
+    "param": 1215
+   },
+   "write": {
+    "cmd": 1215,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1215,
+     "paramValue": "$v"
+    }
+   }
+  },
+  "video_camera_count": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "video_intercom_audio_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "video_intercom_duplex": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "video_quality_hdr_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 2029
+   },
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1019,
+    "params": {
+     "status": null
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2029,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "watermark_set": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 1214
+   },
+   "write": {
+    "cmd": 1214,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1214,
+     "paramValue": "$v:str"
+    }
+   }
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T8200XHandle.mix.js",
+  "handler_date": "2026-04-21",
+  "td_version": 77
+ }
+}

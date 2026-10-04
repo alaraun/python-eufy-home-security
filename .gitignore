@@ -1,0 +1,25 @@
+# scratch workspace: its own private git repo, never part of this one
+/.work/
+# GSD planning notes: private working record, never pushed
+/.planning/
+
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# never commit real captures or credentials
+*.pcap
+*.pcapng
+.eufy.credentials
+*.credentials.json
+CLAUDE.md

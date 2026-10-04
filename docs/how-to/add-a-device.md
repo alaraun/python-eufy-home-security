@@ -1,0 +1,125 @@
+# Add or verify a device
+
+Support is data in `src/eufy_home_security/devices/`. Adding hardware means adding
+entries with honest evidence, never special-casing a model in code. Models and
+capabilities carry a support grade; settings come from the generated per-model files
+and carry none.
+
+| File | Holds |
+|---|---|
+| `support.py` | `Support` (`verified` / `declared` / `unknown`) and `Evidence(support, source, note)` |
+| `types.py` | `DeviceModel` per serial prefix (`T8030`), its `DeviceKind` and cloud `device_type` |
+| `capabilities.py` | `DeviceProfile`: which `Capability` a model has, with evidence each, its readable params and kind markers |
+| `data/models/<PN>.json` | The model's settings, generated from the vendor's thing description and handler ([models-schema.md](../reference/models-schema.md)) |
+| `settings.py` | `Scope`, `SettingUnit` and the per-mode delays and action masks of the mode tables |
+| `command_types.py` | Command/parameter names from the app's `CommandType` enum (maintained by hand from the app) |
+
+## What the statuses mean
+
+A model (`DeviceModel`) and each capability of a profile carry `Evidence`:
+
+- **verified** — proven on real hardware: a live capture, or a live write followed
+  by a read-back that shows the value. Say where in `source`, e.g.
+  `"live write+read-back, T8030 HomeBase 3 fw 3.8.7.4 + T8160 eufyCam 3"`.
+- **declared** — present in the app's own code or enums, not yet proven.
+- **unknown** — seen but not understood, or known not to work.
+
+Never put a serial number, account id or address in `source` or `note`.
+
+## 0. Start from the app's recipes
+
+The eufy app knows a model through two files it downloads per product code: a thing
+description (its actions, properties and events) and a handler script that turns each
+action into a wire recipe ([thing-models.md](../reference/thing-models.md)). Read them
+first; they are *declared* evidence:
+
+```
+uv run python scripts/thing_models.py fetch --store <cache.json> --out <dir> --product-code T8XXX
+uv run python scripts/thing_models.py recipe --cache <dir> T8XXX <identifier> '<payload json>'
+```
+
+For an action the library should support, add a builder to `devices/recipes.py`, a
+case to the script's `CASES`, regenerate the goldens (`goldens`) and the inventory
+(`inventory`), and let `tests/devices/test_recipe_goldens.py` hold the builder to the
+handler. Then prove it on hardware (step 4). Keep the handler scripts out of the repo.
+
+## 1. The model
+
+Add a `DeviceModel` to the `_register(...)` call in `types.py`:
+
+```python
+(
+    DeviceModel(
+        model="T8XXX",  # serial prefix (5 characters)
+        name="eufyCam …",
+        kind=DeviceKind.CAMERA,
+        cloud_device_type=None,  # only if a source states it
+        evidence=Evidence(Support.DECLARED, "eufy app SnConstants"),
+    ),
+)
+```
+
+Registering a prefix twice raises at import. A model without a profile falls back
+to the per-kind profile in `FALLBACK_PROFILES`, where everything is `unknown` — so
+new hardware degrades honestly instead of pretending.
+
+## 2. The profile
+
+Add a `DeviceProfile` in `capabilities.py`: the capabilities with their evidence,
+named readable params (e.g. `{"battery": 1101, "wifi_rssi": 1142}`) and, if the
+model has them, `kind_markers`. Register it in `_register(_profiles, …)`. Its settings
+come from the model's file (step 3), not from the profile.
+
+## 3. Settings
+
+A model's settings are not written by hand: `scripts/gen_models.py` generates
+`devices/data/models/<PN>.json` from the vendor's thing description and handler
+([models-schema.md](../reference/models-schema.md)); a new product code gets its file
+by fetching its thing model and regenerating
+([regenerate-models.md](regenerate-models.md)). Until then the client lists the
+model's settings read-only from the cloud. `Station.async_set_setting()` returns the
+`CommandOutcome` of the send; the next parameter dump shows whether the value held.
+
+## 4. Verify on hardware
+
+With a station on your LAN:
+
+```
+eufy-security settings --model T8XXX         # the model's settings
+eufy-security coverage                       # does this unit report its model's settings?
+eufy-security status --raw                   # every param, before
+eufy-security set <key> <value> --device <serial>
+eufy-security status --raw                   # after: does the param move?
+```
+
+Only when the write lands **and** reads back, record it in
+[hardware-verification.md](../reference/hardware-verification.md) with the model and firmware,
+and note related params that moved too.
+
+Run `coverage` on a device that is `online`, and read what it says carefully:
+
+- **Listed but not reported** is a lead, not a verdict. The dump is not every
+  parameter the station holds — the cloud's snapshot carries some it never serves — so
+  a setting can exist and still be absent.
+- **Reported but read nowhere** never means "add a setting". Blocks carry families the
+  device cannot own (a eufyCam 3 reports doorbell-chime parameters), and the hub mirrors
+  its alarm delays onto every channel. A setting comes only from the model's thing
+  description; prove it here.
+
+See [reference/source-of-truth.md](../reference/source-of-truth.md).
+
+## 5. Tests and the matrix
+
+- Add expectations to `tests/devices/` (the model file's schema is checked
+  automatically).
+- Regenerate the support matrix and commit it with the change:
+
+```
+uv run python scripts/gen_device_matrix.py
+uv run pytest tests/devices
+```
+
+CI fails if `docs/reference/devices.md` is stale.
+
+Open the pull request with the device template (`?template=new_device.md` on the
+new-pull-request URL): it asks for the model, firmware and the evidence per grade.

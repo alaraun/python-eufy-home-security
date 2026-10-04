@@ -1,0 +1,61 @@
+{
+  "cases": [
+    {
+      "identifier": "open_live_stream",
+      "payload": {
+        "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+        "userId": "0123456789abcdef0123456789abcdef01234567",
+        "entryType": 0,
+        "cameraType": 0,
+        "streamType": 0
+      },
+      "device": {
+        "device_sn": "T8160P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 1,
+        "main_sw_version": "3.8.7.4"
+      },
+      "p2p": {
+        "cmd": 1350,
+        "subCmd": 1003,
+        "timeout": 15000,
+        "params": {
+          "cmd": 1003,
+          "mChannel": 1,
+          "account_id": "0123456789abcdef0123456789abcdef01234567",
+          "mValue3": 1003,
+          "mValueStrSub": "0123456789abcdef0123456789abcdef01234567",
+          "mValue5": 0,
+          "payload": {
+            "streamtype": 0,
+            "camera_type": 0,
+            "entrytype": 0,
+            "accountId": "0123456789abcdef0123456789abcdef01234567",
+            "chn_list": [],
+            "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"
+          }
+        }
+      }
+    },
+    {
+      "identifier": "close_live_stream",
+      "payload": 0,
+      "device": {
+        "device_sn": "T8160P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 1,
+        "main_sw_version": "3.8.7.4"
+      },
+      "p2p": {
+        "cmd": 1004,
+        "rtcSendRoute": 1
+      }
+    }
+  ],
+  "handler": {
+    "large_version": 119,
+    "plugin_path_date": "2026/07/15",
+    "sha256": "e972fb659c262be91a599401d2bd9b88b4602d27533373d927fc9655c7706041"
+  },
+  "product_code": "T8160"
+}

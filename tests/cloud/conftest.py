@@ -1,0 +1,299 @@
+"""A synthetic MegaCrypto server for the cloud tests.
+
+Every fixture is built by encrypting synthetic plaintext with a freshly generated
+server key pair — no captured ciphertext, no real identifiers. :class:`FakeMega`
+registers aioresponses callbacks that speak the real envelope: it decrypts the
+client's key-exchange public key, runs the same ECDH, and encrypts its replies
+under the derived shared key, exactly as the live gateway does.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import inspect
+import json
+from collections.abc import Callable, Mapping
+from typing import Any, cast
+
+import aiohttp
+import pytest
+from aioresponses import CallbackResult
+from cryptography.hazmat.primitives.asymmetric import ec
+
+# aioresponses 0.7.9 builds a ClientResponse without the `stream_writer` argument
+# that aiohttp 3.14 made a required keyword-only. Give it a default so the pinned
+# pair works together; harmless once aioresponses catches up.
+if "stream_writer" in inspect.signature(aiohttp.ClientResponse.__init__).parameters:
+    _orig_response_init = aiohttp.ClientResponse.__init__
+
+    class _StubStreamWriter:
+        output_size = 0
+
+    def _patched_response_init(
+        self: Any, *args: Any, stream_writer: Any = None, **kwargs: Any
+    ) -> None:
+        writer = stream_writer or _StubStreamWriter()
+        _orig_response_init(self, *args, stream_writer=cast(Any, writer), **kwargs)
+
+    aiohttp.ClientResponse.__init__ = _patched_response_init  # type: ignore[method-assign]
+
+from eufy_home_security.cloud import const, crypto
+from eufy_home_security.storage import MemoryStore, SessionCache
+from eufy_home_security.testing import SYNTHETIC
+
+FAKE_OWNER_ID = "fedcba9876543210fedcba9876543210fedcba98"
+FAKE_AUTH_TOKEN = "auth-token-0123456789abcdef"
+FAKE_ECC_KEY = "ab" * 32
+
+
+def _url(host: str, path: str) -> str:
+    return f"https://{host}{path}"
+
+
+class FakeMega:
+    """Stateful fake of both MegaCrypto realms, driven by aioresponses callbacks."""
+
+    def __init__(self, region: str = "eu") -> None:
+        self.region = region
+        self._server_key = ec.generate_private_key(ec.SECP256R1())
+        self._shared: dict[str, str] = {}  # key_ident -> shared_key hex
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        # Test-controlled behaviour:
+        self.login_code = 0
+        self.login_data: dict[str, Any] = {
+            "auth_token": FAKE_AUTH_TOKEN,
+            "ap_cloud_user_id": SYNTHETIC.account_id,
+            "mega_domain": f"mega-{region}-pr.eufy.com",
+        }
+        self.login_extra: dict[str, Any] = {}
+        self.devices: list[dict[str, Any]] = []
+        # get_things_list: the thing descriptions the fake knows; a request is answered
+        # with those whose ``profile.product_code`` it names (unknown codes omitted).
+        self.things: list[dict[str, Any]] = []
+        # Endpoint ("devices", "ciphers", "push") -> a body code its next call answers
+        # with instead of success, e.g. {"devices": 401}.
+        self.code_once: dict[str, int] = {}
+        # Endpoint -> the raw decrypted ``data`` its success carries instead of the default.
+        self.data_override: dict[str, Any] = {}
+        # Endpoint -> a function of the shared key returning the raw body its next call
+        # answers with (malformed-response tests).
+        self.body_once: dict[str, Callable[[str], str]] = {}
+        # Endpoint -> (HTTP status, headers) its next call answers with.
+        self.status_once: dict[str, tuple[int, dict[str, str]]] = {}
+        # Endpoint -> (HTTP status, JSON body) each of its next calls answers with, in
+        # order (the gateway's non-200 answers carry a body code, e.g. 463 / 4404).
+        self.error_bodies: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+        # Seconds every reply is delayed, so concurrent calls really interleave (a
+        # synchronous callback completes a mocked request without yielding).
+        self.latency = 0.0
+        # Endpoint ("login", "devices", "push" …) -> a delay overriding ``latency``.
+        self.slow: dict[str, float] = {}
+        self.cipher_objects: list[dict[str, Any]] | None = None
+        self.dsk_objects: list[dict[str, Any]] | None = None
+        # get_rom_version: None → the OTA "up to date" error object (code 20004 in data);
+        # a dict → returned as the RomVersionData.
+        self.rom_version_data: dict[str, Any] | None = None
+        self.captcha = {"captcha_id": "cap-123", "item": "aGVsbG8="}
+        self._login_calls = 0
+
+    # ── registration on an aioresponses mock ─────────────────────────────────
+
+    def _delayed(self, endpoint: str, callback: Callable[..., CallbackResult]) -> Any:
+        async def cb(url: str, **kwargs: Any) -> CallbackResult:
+            if delay := self.slow.get(endpoint, self.latency):
+                await asyncio.sleep(delay)
+            return callback(url, **kwargs)
+
+        return cb
+
+    def install(self, mock: Any) -> None:
+        openapi = const.cluster_host("openapi", self.region)
+        passport = const.cluster_host("passport", self.region)
+        house = const.cluster_host("house", self.region)
+        push = const.cluster_host("push", self.region)
+        sec = const.security_host(self.region)
+        mock.post(
+            _url(openapi, const.KEY_EXCHANGE_PATH),
+            callback=self._delayed("exchange", self._exchange(const.MEGA_PRESET_KEY)),
+            repeat=True,
+        )
+        mock.post(
+            _url(sec, const.SECURITY_KEY_EXCHANGE_PATH),
+            callback=self._delayed("exchange", self._exchange(const.SECURITY_PRESET_KEY)),
+            repeat=True,
+        )
+        mock.post(
+            _url(passport, const.LOGIN_PATH),
+            callback=self._delayed("login", self._login),
+            repeat=True,
+        )
+        mock.post(
+            _url(passport, const.CAPTCHA_PATH),
+            callback=self._delayed("captcha", self._captcha),
+            repeat=True,
+        )
+        mock.post(
+            _url(house, const.DEVICES_PATH),
+            callback=self._delayed("devices", self._device_list),
+            repeat=True,
+        )
+        mock.post(
+            _url(sec, const.CIPHERS_PATH),
+            callback=self._delayed("ciphers", self._get_ciphers),
+            repeat=True,
+        )
+        mock.post(
+            _url(const.cluster_host("devicerelation", self.region), const.DSK_KEYS_PATH),
+            callback=self._delayed("dsk", self._get_dsk),
+            repeat=True,
+        )
+        mock.post(
+            _url(push, const.PUSH_TOKEN_PATH),
+            callback=self._delayed("push", self._push_token),
+            repeat=True,
+        )
+        mock.post(
+            _url(const.cluster_host("ota", self.region), const.OTA_ROM_PATH),
+            callback=self._delayed("ota", self._get_rom_version),
+            repeat=True,
+        )
+        mock.post(
+            _url(const.cluster_host("things", self.region), const.THINGS_PATH),
+            callback=self._delayed("things", self._things),
+            repeat=True,
+        )
+
+    @property
+    def login_calls(self) -> int:
+        return self._login_calls
+
+    @property
+    def things_calls(self) -> int:
+        return sum(1 for name, _ in self.calls if name == "things")
+
+    # ── helpers ──────────────────────────────────────────────────────────────
+
+    def _ident(self, kwargs: dict[str, Any]) -> str:
+        return str(kwargs["headers"]["x-key-ident"])
+
+    def _shared_for(self, kwargs: dict[str, Any]) -> str:
+        return self._shared[self._ident(kwargs)]
+
+    def _decrypt_body(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        raw = kwargs["data"]
+        text = raw.decode() if isinstance(raw, bytes) else str(raw)
+        obj = json.loads(crypto.body_decrypt(text, self._shared_for(kwargs)))
+        assert isinstance(obj, Mapping)
+        return dict(obj)
+
+    def _failure_once(self, endpoint: str, kwargs: dict[str, Any]) -> CallbackResult | None:
+        if queued := self.error_bodies.get(endpoint):
+            status_code, error_body = queued.pop(0)
+            return CallbackResult(status=status_code, body=json.dumps(error_body))
+        if (status := self.status_once.pop(endpoint, None)) is not None:
+            return CallbackResult(status=status[0], headers=status[1], body="")
+        if (body := self.body_once.pop(endpoint, None)) is not None:
+            return CallbackResult(status=200, body=body(self._shared_for(kwargs)))
+        code = self.code_once.pop(endpoint, None)
+        if code is None:
+            return None
+        return CallbackResult(status=200, body=json.dumps({"code": code, "msg": "error"}))
+
+    def _reply(self, shared: str, code: int, data: Any, **extra: Any) -> CallbackResult:
+        body: dict[str, Any] = {"code": code, "msg": "ok" if code == 0 else "error", **extra}
+        if data is not None:
+            body["data"] = crypto.body_encrypt(json.dumps(data), shared)
+        return CallbackResult(status=200, body=json.dumps(body))
+
+    # ── endpoint callbacks ───────────────────────────────────────────────────
+
+    def _exchange(self, preset: str) -> Any:
+        def cb(url: str, **kwargs: Any) -> CallbackResult:
+            body = json.loads(kwargs["data"])
+            client_pub = crypto.preset_decrypt(body["client_public_key"], preset)
+            client_key = crypto.load_public_key(client_pub)
+            shared = self._server_key.exchange(ec.ECDH(), client_key).hex()
+            self._shared[self._ident(kwargs)] = shared
+            server_pub = crypto.public_key_hex(self._server_key)
+            data = {"server_public_key": crypto.preset_encrypt(server_pub, preset)}
+            return CallbackResult(status=200, body=json.dumps({"code": 0, "data": data}))
+
+        return cb
+
+    def _login(self, url: str, **kwargs: Any) -> CallbackResult:
+        self._login_calls += 1
+        shared = self._shared_for(kwargs)
+        payload = self._decrypt_body(kwargs)
+        self.calls.append(("login", payload))
+        if failure := self._failure_once("login", kwargs):
+            return failure
+        if self.login_code:
+            return CallbackResult(
+                status=200,
+                body=json.dumps({"code": self.login_code, "msg": "challenge", **self.login_extra}),
+            )
+        return self._reply(shared, 0, self.login_data)
+
+    def _captcha(self, url: str, **kwargs: Any) -> CallbackResult:
+        return self._reply(self._shared_for(kwargs), 0, self.captcha)
+
+    def _device_list(self, url: str, **kwargs: Any) -> CallbackResult:
+        self.calls.append(("devices", self._decrypt_body(kwargs)))
+        if failure := self._failure_once("devices", kwargs):
+            return failure
+        data = self.data_override.get("devices", {"devices": self.devices})
+        return self._reply(self._shared_for(kwargs), 0, data)
+
+    def _get_ciphers(self, url: str, **kwargs: Any) -> CallbackResult:
+        shared = self._shared_for(kwargs)
+        payload = self._decrypt_body(kwargs)
+        self.calls.append(("ciphers", payload))
+        if failure := self._failure_once("ciphers", kwargs):
+            return failure
+        if self.cipher_objects is None:
+            return self._reply(shared, 0, None)  # empty success
+        return self._reply(shared, 0, self.cipher_objects)
+
+    def _get_dsk(self, url: str, **kwargs: Any) -> CallbackResult:
+        shared = self._shared_for(kwargs)
+        self.calls.append(("dsk", self._decrypt_body(kwargs)))
+        if failure := self._failure_once("dsk", kwargs):
+            return failure
+        if self.dsk_objects is None:
+            return self._reply(shared, 0, {"device_dsks": []})
+        return self._reply(shared, 0, {"device_dsks": self.dsk_objects})
+
+    def _push_token(self, url: str, **kwargs: Any) -> CallbackResult:
+        self.calls.append(("push", self._decrypt_body(kwargs)))
+        if failure := self._failure_once("push", kwargs):
+            return failure
+        return self._reply(self._shared_for(kwargs), 0, None)  # a bare code 0, as live
+
+    def _get_rom_version(self, url: str, **kwargs: Any) -> CallbackResult:
+        shared = self._shared_for(kwargs)
+        self.calls.append(("ota", self._decrypt_body(kwargs)))
+        if failure := self._failure_once("ota", kwargs):
+            return failure
+        if self.rom_version_data is None:  # up to date: code-0 envelope, 20004 in the data
+            reason = f"error: code = {const.OTA_NO_UPGRADE_CODE} reason =  message = "
+            return self._reply(shared, 0, {"reason": reason})
+        return self._reply(shared, 0, self.rom_version_data)
+
+    def _things(self, url: str, **kwargs: Any) -> CallbackResult:
+        payload = self._decrypt_body(kwargs)
+        self.calls.append(("things", payload))
+        if failure := self._failure_once("things", kwargs):
+            return failure
+        codes = set(payload.get("product_codes", []))
+        default = {"things_list": [t for t in self.things if t["profile"]["product_code"] in codes]}
+        return self._reply(self._shared_for(kwargs), 0, self.data_override.get("things", default))
+
+
+@pytest.fixture
+def fake_mega() -> FakeMega:
+    return FakeMega()
+
+
+@pytest.fixture
+def cache() -> SessionCache:
+    return SessionCache(MemoryStore(), SYNTHETIC.email)

@@ -1,0 +1,1608 @@
+{
+ "product_code": "T85V0",
+ "schema_version": 2,
+ "settings": {
+  "activityzone_config": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "normalized": "1",
+    "panNum": "1",
+    "polyNum": "2",
+    "positionNum": "0",
+    "sideNum": "6",
+    "zoneHeight": "720",
+    "zoneWidth": "1280"
+   },
+   "note": "handler rejects the probed values",
+   "read": null,
+   "values": [
+    "sideNum",
+    "normalized",
+    "polyNum",
+    "panNum",
+    "positionNum",
+    "zoneWidth",
+    "zoneHeight"
+   ]
+  },
+  "ai_empower": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null
+  },
+  "arming_cust_mode_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "arming_modedetail_alarm_rules": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "arming_modedetail_devices_rules": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "arming_schedule_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "arming_selected_mode": {
+   "access": "rw",
+   "kind": "other",
+   "read": null,
+   "write": {
+    "cmd": 1224,
+    "params": "$v",
+    "update": {
+     "needUpdate": true,
+     "cmd": 1224,
+     "paramValue": null
+    }
+   }
+  },
+  "arming_support_arm_delay": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_arming": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_custom_mode": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_geofence": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_off_mode": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_query_working_mode": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "arming_support_show_user_name": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "audio_recording_on_off": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "page": "SettingsHome",
+   "read": {
+    "map": null,
+    "param": 6012
+   },
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6012,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6012,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "automation_config": {
+   "access": "ro",
+   "default": "{\"trigger\":[0,1,2,12],\"action\":[3]}",
+   "kind": "string",
+   "read": null
+  },
+  "automation_detect_trigger_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Human Detection",
+    "4": "Detected motion"
+   },
+   "read": null,
+   "values": [
+    0,
+    4
+   ]
+  },
+  "automation_detect_trigger_type__v1": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Human Detection",
+    "1": "Pet",
+    "2": "Vehicle",
+    "4": "Detected motion"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    4
+   ],
+   "variant_of": "automation_detect_trigger_type"
+  },
+  "backup_battery_level": {
+   "access": "ro",
+   "default": " 4",
+   "kind": "other",
+   "read": null
+  },
+  "backup_battery_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "page": "SLPowerDuoPowerSupplySystemScreen",
+   "read": null
+  },
+  "battery_level": {
+   "access": "ro",
+   "default": " 4",
+   "kind": "other",
+   "read": null
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "camera_on_off": {
+   "access": "ro",
+   "default": "1",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "cloud_storage_support_trail": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "detection_loitering_detection_length": {
+   "access": "ro",
+   "default": 20,
+   "kind": "range",
+   "max": 60,
+   "min": 15,
+   "note": "handler rejects the probed values",
+   "read": null,
+   "step": 5
+  },
+  "detection_loitering_detection_range": {
+   "access": "ro",
+   "default": 6,
+   "kind": "range",
+   "max": 10,
+   "min": 2,
+   "note": "handler rejects the probed values",
+   "read": null,
+   "step": 2
+  },
+  "detection_loitering_detection_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "handler rejects the probed values",
+   "read": null
+  },
+  "detection_radar_mode": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Standard",
+    "1": "Advanced",
+    "2": "Automatic"
+   },
+   "note": "handler ignores the value",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2
+   ]
+  },
+  "detection_radar_sensitivity_advanced": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "detection_radar_sensitivity_standard": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "detection_type_set": {
+   "access": "rw",
+   "control": "select",
+   "default": 6,
+   "kind": "enum",
+   "labels": {
+    "5": "Human Only",
+    "6": "All Motions"
+   },
+   "read": null,
+   "values": [
+    5,
+    6
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": {
+      "$map": {
+       "5": 3,
+       "6": 32771
+      }
+     },
+     "channel": "$channel"
+    },
+    "extUpdates": [
+     {
+      "cmd": 1298,
+      "paramValue": {
+       "$map": {
+        "5": "3",
+        "6": "32771"
+       }
+      }
+     }
+    ]
+   }
+  },
+  "detection_type_set__v1": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "extUpdates": [
+     {
+      "cmd": 1298,
+      "paramValue": "$v:str"
+     }
+    ]
+   }
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null
+  },
+  "device_audio_ringtone_volume": {
+   "access": "rw",
+   "control": "slider",
+   "default": 0,
+   "kind": "range",
+   "max": 100,
+   "min": 0,
+   "read": {
+    "map": null,
+    "param": 2022
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1708,
+    "params": {
+     "volume": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2022,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_back_screen_connect_status": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "device_backup_battery_type": {
+   "access": "ro",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "0": "Lithium Battery",
+    "1": "Dry Battery"
+   },
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "device_charging_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null
+  },
+  "device_chime_minibase_chime_setting": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler rejects the probed values",
+   "read": null
+  },
+  "device_is_battery_device": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "device_live_view_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 6491
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6491,
+    "params": {
+     "auto_up": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6491,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_loitering_detection_response": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_multiple_bridge_style": {
+   "access": "ro",
+   "default": "v1",
+   "kind": "string",
+   "read": null
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_radar_rain_level": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_rain_mode": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 2732,
+    "params": {
+     "pvm_rainny_switch": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2732,
+     "paramValue": "$v:str"
+    }
+   },
+   "write_standalone": {
+    "payload": {
+     "$map": {
+      "false": "{\"pvm_rainny_switch\":0}",
+      "true": "{\"pvm_rainny_switch\":1}"
+     }
+    },
+    "type": "json",
+    "needAck": false,
+    "mqttCmdCode": 9,
+    "cmd": 2732,
+    "timeout": 15,
+    "update": {
+     "needUpdate": true,
+     "cmd": 2732,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_serial_number": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "device_silent_ota_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 6287
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6287,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6287,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_snooze_time": {
+   "access": "rw",
+   "control": "select",
+   "default": -1,
+   "kind": "enum",
+   "labels": {
+    "-1": "Off",
+    "0": "30 min",
+    "1": "1 hour",
+    "2": "2 hours",
+    "3": "6 hours",
+    "4": "12 hours"
+   },
+   "read": {
+    "map": {
+     "eyJzbm9vemVfdGltZSI6MH0=": -1,
+     "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
+     "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
+     "eyJzbm9vemVfdGltZSI6MzYwMH0=": 1,
+     "eyJzbm9vemVfdGltZSI6NDMyMDB9": 4,
+     "eyJzbm9vemVfdGltZSI6NzIwMH0=": 2
+    },
+    "param": 1271
+   },
+   "values": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "write": {
+    "cmd": 1271,
+    "params": {
+     "snooze_time": {
+      "$map": {
+       "-1": 0,
+       "0": 1800,
+       "1": 3600,
+       "2": 7200,
+       "3": 21600,
+       "4": 43200
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1271,
+     "paramValue": {
+      "$map": {
+       "-1": "eyJzbm9vemVfdGltZSI6MH0=",
+       "0": "eyJzbm9vemVfdGltZSI6MTgwMH0=",
+       "1": "eyJzbm9vemVfdGltZSI6MzYwMH0=",
+       "2": "eyJzbm9vemVfdGltZSI6NzIwMH0=",
+       "3": "eyJzbm9vemVfdGltZSI6MjE2MDB9",
+       "4": "eyJzbm9vemVfdGltZSI6NDMyMDB9"
+      }
+     }
+    }
+   }
+  },
+  "device_snooze_time_extra_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Motion notify onoff"
+   },
+   "read": null,
+   "values": [
+    0
+   ]
+  },
+  "device_snooze_time_extra_type__v1": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Motion notify onoff",
+    "2": "HomeBase onoff"
+   },
+   "read": null,
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_snooze_time_extra_type"
+  },
+  "device_snooze_time_extra_type__v2": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Motion notify onoff",
+    "1": "Chime onoff",
+    "2": "HomeBase onoff"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "variant_of": "device_snooze_time_extra_type"
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_storage_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "values": [
+    0
+   ]
+  },
+  "device_text_event_data_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "device_wifi_name": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "page": "AboutDevice",
+   "read": null
+  },
+  "hb_connect_is_connected": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "hb_connect_support_version": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "ip_address": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_live_entry_open_smart_lock": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_mqtt": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_multiple_bridge": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "is_support_multiple_bridge__v1": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "variant_of": "is_support_multiple_bridge"
+  },
+  "is_support_silent_ota_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "led_on_off": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 6014
+   },
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6014,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6014,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "live_bottom_hor_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Record",
+    "1": "Screenshot",
+    "15": "Reply",
+    "2": "Speaker",
+    "4": "Sound"
+   },
+   "read": null,
+   "values": [
+    15,
+    0,
+    4,
+    1,
+    2
+   ]
+  },
+  "live_bottom_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Record",
+    "1": "Screenshot",
+    "15": "Reply",
+    "2": "Speaker",
+    "4": "Sound"
+   },
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    15,
+    4
+   ]
+  },
+  "live_streaming_resolution": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "10": "High",
+    "8": "Low",
+    "9": "Medium"
+   },
+   "note": "round trip does not return the written value",
+   "read": null,
+   "values": [
+    0,
+    10,
+    9,
+    8
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 2730,
+    "params": {
+     "quality": {
+      "$map": {
+       "0": 0,
+       "10": 3,
+       "9": 2,
+       "8": 1
+      }
+     },
+     "mode": 0,
+     "primary_view": 0,
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2730,
+     "paramValue": {
+      "$map": {
+       "0": "eyJtb2RlXzAiOnsicXVhbGl0eSI6MH19",
+       "10": "eyJtb2RlXzAiOnsicXVhbGl0eSI6M319",
+       "9": "eyJtb2RlXzAiOnsicXVhbGl0eSI6Mn19",
+       "8": "eyJtb2RlXzAiOnsicXVhbGl0eSI6MX19"
+      }
+     }
+    }
+   }
+  },
+  "live_support_full": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_long_time_watch": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_mute": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_record": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "live_support_screenshot": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "live_top_hor_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "1": "Setting"
+   },
+   "read": null,
+   "values": [
+    1
+   ]
+  },
+  "live_top_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "1": "Setting"
+   },
+   "read": null,
+   "values": [
+    1
+   ]
+  },
+  "mac_address": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null
+  },
+  "microphone_on_off": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 1240
+   },
+   "write": {
+    "cmd": 1240,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1240,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "montion_detection_ui_show_type": {
+   "access": "ro",
+   "default": "{\"HB3+AI\": 1}",
+   "kind": "string",
+   "read": null
+  },
+  "motion_detection_leaving_detection_reactions": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "motion_detection_leaving_detection_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "handler rejects the probed values",
+   "read": null
+  },
+  "motion_detection_status": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 6040
+   },
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6040,
+    "params": {
+     "status": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6040,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "motion_stop_end_early": {
+   "access": "ro",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "page": "CustomizeRecording",
+   "read": null
+  },
+  "nightvision_type": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 1277
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1277,
+    "params": {
+     "night_sion": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1277,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "nightvision_type_new": {
+   "access": "rw",
+   "control": "select",
+   "default": 100,
+   "kind": "enum",
+   "labels": {
+    "100": "Off",
+    "102": "Infrared"
+   },
+   "read": {
+    "map": {
+     "0": 100,
+     "1": 102
+    },
+    "param": 1277
+   },
+   "values": [
+    100,
+    102
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1277,
+    "params": {
+     "night_sion": {
+      "$map": {
+       "100": 0,
+       "102": 1
+      }
+     },
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1277,
+     "paramValue": {
+      "$map": {
+       "100": "0",
+       "102": "1"
+      }
+     }
+    }
+   }
+  },
+  "notification_motion_onoff": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "handler rejects the probed values",
+   "page": "SettingsHome",
+   "read": null
+  },
+  "notification_ring_onoff": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "handler rejects the probed values",
+   "page": "SettingsHome",
+   "read": null
+  },
+  "notification_type": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Most Efficient",
+    "1": "Full Effect",
+    "2": "Include Thumbnail"
+   },
+   "read": {
+    "map": {
+     "1": 0,
+     "2": 2,
+     "3": 1
+    },
+    "param": 6020
+   },
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6020,
+    "params": {
+     "value": {
+      "$map": {
+       "0": 1,
+       "1": 3,
+       "2": 2
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6020,
+     "paramValue": {
+      "$map": {
+       "0": "1",
+       "1": "3",
+       "2": "2"
+      }
+     }
+    }
+   }
+  },
+  "p2p_ping_timeout": {
+   "access": "ro",
+   "default": "60",
+   "kind": "other",
+   "read": null
+  },
+  "player_model_config": {
+   "access": "ro",
+   "default": "{\"style\": {\"nightvision_type\": \"v1\"}, \"position\": {\"Live\": [\"event_device_setting#C#1\", \"live_stream_mute#E#1\", \"play_quickresponse#F#1\", \"media_record#F#2\", \"event_device_intercom#F#3\", \"lock_unlock#F#4\", \"media_screenshot#G#1\", \"nightvision_type#G#2\", \"live_streaming_resolution#G#3\"]}}",
+   "kind": "string",
+   "read": null
+  },
+  "power_manager_mode": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Optimal battery life",
+    "1": "Balanced surveillance",
+    "2": "Optimal surveillance",
+    "3": "Custom recording"
+   },
+   "note": "no handler write path",
+   "page": "MotionDetection",
+   "read": null,
+   "values": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "power_source_mode": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "default:0": "default:0"
+   },
+   "read": null,
+   "values": [
+    "default:0"
+   ]
+  },
+  "quickresponse_show_config": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null
+  },
+  "record_resolution": {
+   "access": "rw",
+   "control": "select",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "2": "Full HD(1080P)",
+    "5": "2K HD"
+   },
+   "note": "round trip does not return the written value",
+   "read": null,
+   "values": [
+    5,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 2731,
+    "params": {
+     "quality": {
+      "$map": {
+       "5": 3,
+       "2": 2
+      }
+     },
+     "mode": 0,
+     "primary_view": 0,
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2731,
+     "paramValue": "e30="
+    }
+   }
+  },
+  "smart_lock_auto_lock_type": {
+   "access": "ro",
+   "default": "3",
+   "kind": "other",
+   "read": null
+  },
+  "smart_lock_calibrate_ui_show_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "smart_lock_connect_to_wifi_bridge": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "smart_lock_get_event_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "smart_lock_integrate_with_doorbell_or_camera": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "smart_lock_is_support_new_schedule_ui": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "smart_lock_is_support_one_time_user": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "smart_lock_is_support_temporary_pw": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "smart_lock_lock_sound_switch": {
+   "access": "ro",
+   "default": "true",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "smart_lock_lock_sound_volume": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null
+  },
+  "smart_lock_night_vision_open_direction": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null
+  },
+  "smart_lock_night_vision_optimization": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  },
+  "smart_lock_no_recording_while_unlocked": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "page": "PowerManager",
+   "read": null
+  },
+  "smart_lock_notification_locked_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "note": "standalone: no handler write path; round trip does not return the written value",
+   "read": null,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1919,
+    "params": {
+     "mode": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1919,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "smart_lock_notification_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "smart_lock_notification_unlocked_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "handler ignores the value",
+   "read": null
+  },
+  "smart_lock_one_touch_locking_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "smart_lock_onoff_status": {
+   "access": "ro",
+   "kind": "string",
+   "read": null
+  },
+  "smart_lock_rain_mode_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null
+  },
+  "smart_lock_scramble_password_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "smart_lock_set_back_screen": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null
+  },
+  "smart_lock_set_setting_params": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler rejects the probed values",
+   "read": null
+  },
+  "smart_lock_set_timezone": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "standalone: no handler write path",
+   "read": null,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1931,
+    "params": "$v"
+   }
+  },
+  "smart_lock_setting_manage_access": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null
+  },
+  "speaker_on_off": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 1241
+   },
+   "write": {
+    "cmd": 1241,
+    "params": {
+     "enable": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1241,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "speaker_volume": {
+   "access": "rw",
+   "control": "slider",
+   "default": 80,
+   "kind": "range",
+   "max": 100,
+   "min": 1,
+   "read": {
+    "map": null,
+    "param": 1230
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1230,
+    "params": {
+     "volume": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1230,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "support_video_codec": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "H264",
+    "1": "H265"
+   },
+   "read": null,
+   "values": [
+    0,
+    1
+   ]
+  },
+  "time_format_set": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "12-hour",
+    "1": "24-hour"
+   },
+   "read": {
+    "map": null,
+    "param": 1253
+   },
+   "values": [
+    0,
+    1
+   ],
+   "write": {
+    "cmd": 1253,
+    "params": {
+     "timeSystem": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1253,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "timezone_set": {
+   "access": "rw",
+   "control": "select",
+   "default": "0",
+   "domain": "timezone",
+   "kind": "string",
+   "read": {
+    "map": null,
+    "param": 1215
+   },
+   "write": {
+    "cmd": 1215,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1215,
+     "paramValue": "$v"
+    }
+   }
+  },
+  "trigger_interval_time": {
+   "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
+   "control": "slider",
+   "default": 5,
+   "kind": "range",
+   "max": 60,
+   "min": 5,
+   "page": "CustomizeRecording",
+   "read": {
+    "map": null,
+    "param": 1250
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1250,
+    "params": {
+     "interval": "$v",
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1250,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "video_camera_count": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null
+  },
+  "video_clip_length": {
+   "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
+   "control": "slider",
+   "default": 60,
+   "kind": "range",
+   "max": 120,
+   "min": 5,
+   "page": "CustomizeRecording",
+   "read": {
+    "map": null,
+    "param": 1249
+   },
+   "step": 1,
+   "write": {
+    "cmd": 1249,
+    "params": {
+     "duration": "$v",
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1249,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "video_intercom_audio_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "video_intercom_duplex": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null
+  },
+  "video_quality_hdr_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 9208
+   },
+   "write": {
+    "cmd": 1350,
+    "subCmd": 9208,
+    "params": {
+     "hdr": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 9208,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "watermark_set": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "handler ignores the value",
+   "read": null
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T85V0Handle.mix.js",
+  "handler_date": "2026-08-06",
+  "td_version": 84
+ }
+}
