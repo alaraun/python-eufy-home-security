@@ -29,10 +29,7 @@ from typing import Any
 from ..exceptions import ProtocolError, UnsupportedError
 from ..models import STATION_CHANNEL, GuardMode
 from . import crypto
-from ._json import (
-    _JSON,
-    loads_json,
-)
+from ._json import loads_json, raw_decode_json
 from .params import GUARD_MODE_PARAM
 from .xzyh import Frame, FrameCipher, FrameType, encode_frame
 
@@ -550,8 +547,8 @@ def decode_json_payload(plain: bytes) -> dict[str, Any] | None:
     too deep).
     """
     try:
-        obj, _ = _JSON.raw_decode(plain.decode("utf-8", "replace"))
-    except (ValueError, RecursionError):
+        obj, _ = raw_decode_json(plain.decode("utf-8", "replace"))
+    except ValueError:
         return None
     return obj if isinstance(obj, dict) else None
 

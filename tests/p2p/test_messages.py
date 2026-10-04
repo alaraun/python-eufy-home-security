@@ -196,6 +196,13 @@ def test_json_decoders_reject_non_finite_numbers_and_deep_nesting() -> None:
     with pytest.raises(ProtocolError):
         _json.loads_json(deep)
     assert messages.decode_database_rows({"data": "[" * 100_000}) == []
+    limit = _json.MAX_JSON_DEPTH
+    assert _json.loads_json("[" * limit + "]" * limit) is not None
+    with pytest.raises(ProtocolError):
+        _json.loads_json("[" * (limit + 1) + "]" * (limit + 1))
+    # brackets inside strings do not count
+    nested_text = "[{" * 1000 + '"]'
+    assert _json.loads_json(json.dumps({"k": nested_text})) == {"k": nested_text}
     assert _json.loads_json(' {"a": [1]} ') == {"a": [1]}
     with pytest.raises(ProtocolError):
         _json.loads_json('{"a":1} trailing')
