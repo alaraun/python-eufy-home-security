@@ -4,6 +4,18 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.2.0](https://github.com/alaraun/python-eufy-home-security/compare/v0.1.0...v0.2.0) (2026-10-04)
+
+
+### Features
+
+* eufy-home-security 0.1.0, an asyncio client for eufy Security ([6a0586c](https://github.com/alaraun/python-eufy-home-security/commit/6a0586cb88766975b500e3e95666d07788f4199a))
+
+
+### Bug Fixes
+
+* bound JSON nesting depth explicitly ([98ce6a6](https://github.com/alaraun/python-eufy-home-security/commit/98ce6a632bc96bada4291e46bda1a1ce63e3dd55))
+
 ## 0.1.0
 
 The first public release: an asyncio client for eufy Security that works on the local
