@@ -26,6 +26,7 @@ def test_the_sdist_holds_only_the_build_inputs() -> None:
         f"{STEM}/",
         f"{STEM}/PKG-INFO",
         f"{STEM}/pyproject.toml",
+        f"{STEM}/pyproject.toml.orig",
         f"{STEM}/LICENSE",
         f"{STEM}/src/eufy_home_security/__init__.py",
     ]
@@ -34,6 +35,7 @@ def test_the_sdist_holds_only_the_build_inputs() -> None:
         f"{STEM}/docs/README.md",
         f"{STEM}/.work/notes.md",
         f"{STEM}/src/eufy_home_security/__pycache__/x.cpython-313.pyc",
+        f"{STEM}/src/eufy_home_security/x.py.orig",
         "other-0.1.0/pyproject.toml",
     ]
     assert script.unexpected_sdist_members(allowed + rejected, STEM) == rejected

@@ -11,9 +11,10 @@
         {
           "type": "toml",
           "path": "uv.lock",
-          "jsonpath": "$.package[?(@.name=='eufy-home-security')].version"
+          "jsonpath": "$.package[?(@.name.value=='eufy-home-security')].version"
         }
-      ]
+      ],
+      "include-component-in-tag": false
     }
   }
 }

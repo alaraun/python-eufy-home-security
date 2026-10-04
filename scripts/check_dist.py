@@ -30,6 +30,9 @@ MODULE = "eufy_home_security"
 SCRIPT = "eufy-security"
 # Top-level sdist entries: the build inputs and the files a redistributor needs.
 SDIST_TOP = frozenset({"PKG-INFO", "pyproject.toml", "README.md", "LICENSE", "CHANGELOG.md", "src"})
+# uv_build 0.12 writes a normalised pyproject.toml into the sdist and keeps the source
+# file as pyproject.toml.orig; a build input, not junk.
+SDIST_EXTRA = frozenset({"pyproject.toml.orig"})
 WHEEL_REQUIRED = (
     f"{MODULE}/py.typed",
     f"{MODULE}/devices/data/models/T8160.json",
@@ -63,8 +66,8 @@ def unexpected_sdist_members(names: Iterable[str], stem: str) -> list[str]:
         if name.rstrip("/") != stem
         and (
             not name.startswith(f"{stem}/")
-            or name.removeprefix(f"{stem}/").split("/")[0] not in SDIST_TOP
-            or _junk(name)
+            or name.removeprefix(f"{stem}/").split("/")[0] not in SDIST_TOP | SDIST_EXTRA
+            or (_junk(name) and name.removeprefix(f"{stem}/") not in SDIST_EXTRA)
         )
     ]
 

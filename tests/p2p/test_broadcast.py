@@ -14,6 +14,11 @@ from eufy_home_security.p2p.media import MediaFrame, MediaKind, VideoCodec
 from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
 
 
+def _ended_by_resize(broadcast: StreamBroadcast) -> bool:
+    """Read the flag afresh: mypy keeps it narrowed from an earlier assert."""
+    return broadcast.ended_by_resize
+
+
 def video(*, keyframe: bool = False, ms: int = 1000, size: int = 40) -> MediaFrame:
     return MediaFrame(
         MediaKind.VIDEO,
@@ -249,7 +254,7 @@ async def test_a_resize_grace_keeps_the_camera_open_for_a_reconnect() -> None:
     second = await asyncio.wait_for(drain(broadcast, 2), 2)
     assert second[0] == broadcast.header, "the reconnect starts at the new size's keyframe"
     assert opens == 1, "no second open, so no wake"
-    assert not broadcast.ended_by_resize
+    assert not _ended_by_resize(broadcast), "a new subscriber clears it"
     await broadcast.aclose()
     assert stream.closed
 

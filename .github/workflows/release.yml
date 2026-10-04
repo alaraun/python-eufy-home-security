@@ -76,3 +76,23 @@ jobs:
       # Uploads the verified files unchanged and signs PEP 740 attestations for them (default
       # on); `uv publish` would only upload attestations some other step had produced.
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  # A tag release gets its GitHub release here (release-please makes its own); release-please
+  # finds the next release's starting point by that release.
+  github-release:
+    needs: publish
+    if: ${{ !cancelled() && github.ref_type == 'tag' && needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Release notes from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          awk -v v="## ${TAG#v}" '$0 == v {on = 1; next} /^## / && on {exit} on' CHANGELOG.md > notes.md
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md

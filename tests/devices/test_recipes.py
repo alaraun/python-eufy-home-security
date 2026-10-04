@@ -150,7 +150,9 @@ def test_set_picture_zoom_is_the_handlers_1350_6203_with_no_window() -> None:
         "subCmd": 6203,
         "params": {"x": 0, "y": 0, "w": 0, "h": 0, "offset": False, "orgZoom": 0, "dstZoom": 2},
     }
-    assert set_picture_zoom(2.5).params["dstZoom"] == 2.5
+    params = set_picture_zoom(2.5).params
+    assert params is not None
+    assert params["dstZoom"] == 2.5
 
 
 def test_pan_tilt_directions_are_the_cameras() -> None:
