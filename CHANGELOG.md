@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.1.1](https://github.com/alaraun/python-eufy-home-security/compare/v0.1.0...v0.1.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* name the device channel in the subheader of 1350 commands ([#7](https://github.com/alaraun/python-eufy-home-security/issues/7)) ([9925351](https://github.com/alaraun/python-eufy-home-security/commit/9925351036e43fe324b6654a21338397d7a7c121))
+
 ## 0.1.0
 
 The first public release: an asyncio client for eufy Security that works on the local
