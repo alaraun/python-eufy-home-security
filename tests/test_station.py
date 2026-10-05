@@ -1942,7 +1942,9 @@ async def test_set_zoom_sends_6203_and_the_echo_sets_the_zoom(
     await standalone_station.async_set_zoom("T8170P2000054321", 2.5)
 
     assert fake.zoom_writes == [2.5]
-    body = next(o for o in reversed(fake.received) if o.get("cmd") == 6203)
+    index, body = next(
+        (i, o) for i, o in reversed(list(enumerate(fake.received))) if o.get("cmd") == 6203
+    )
     assert body["payload"] == {
         "x": 0,
         "y": 0,
@@ -1952,6 +1954,9 @@ async def test_set_zoom_sends_6203_and_the_echo_sets_the_zoom(
         "orgZoom": 0,
         "dstZoom": 2.5,
     }
+    # A standalone camera is channel 0, so its subheader byte stays 0.
+    assert body["mChannel"] == 0
+    assert fake.received_header_channels[index] == 0
     await _until(lambda: standalone_station.zoom("T8170P2000054321") == 2.5)
     zooms = [e for e in events if isinstance(e, ZoomChanged)]
     assert zooms == [
