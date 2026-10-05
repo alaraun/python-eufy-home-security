@@ -1573,6 +1573,10 @@ class StationSession:
     ) -> CommandOutcome:
         """Send a GCM ``DeviceMsgBean`` command and report how far it got.
 
+        The frame's subheader names ``channel`` (0 for the station, 255), as the app's
+        does for a device: a HomeBase passes the command on to a paired Wi-Fi camera
+        only then.
+
         ``APPLIED`` needs a 0x0547 reply naming ``command`` with a zero code; a
         non-zero code raises :class:`CommandRejectedError`. ``DELIVERED`` means the
         station acknowledged the datagram (and usually sent receipt code 0, "taken off
@@ -1604,6 +1608,7 @@ class StationSession:
             transaction=str(int(time.time() * 1000)),
         )
         receipt = asyncio.Event()
+        header = _command_header_channel(channel)
 
         def match(inbound: Inbound) -> bool | None:
             if inbound.type == FrameType.CMD_TRANSFER and (code := inbound.receipt()) is not None:
@@ -1628,7 +1633,7 @@ class StationSession:
             )
             waiter = self._add_waiter(match)
             try:
-                indices = [self._send_gcm(body)]
+                indices = [self._send_gcm(body, dev_type=header)]
                 started = time.monotonic()
                 await _wait_any(waiter.future, receipt, min(COMMAND_RESEND_AFTER, timeout))
                 if not waiter.future.done() and not receipt.is_set() and not self._acked(indices):
@@ -1639,7 +1644,7 @@ class StationSession:
                         self._param(command, channel).label,
                         COMMAND_RESEND_AFTER,
                     )
-                    indices.append(self._send_gcm(body))
+                    indices.append(self._send_gcm(body, dev_type=header))
                 await asyncio.wait(
                     {waiter.future}, timeout=max(started + timeout - time.monotonic(), 0.0)
                 )
@@ -4092,6 +4097,17 @@ def _session_budget(value: object) -> int:
             f"{STATION_SESSION_LIMIT}, not {value!r}"
         )
     return value
+
+
+def _command_header_channel(channel: int) -> int:
+    """The subheader channel (byte 2) of a 1350 command to ``channel``: the device's
+    channel, 0 for the station (255).
+
+    A HomeBase passes a command on to a paired Wi-Fi camera (a T8170) only when the
+    header names its channel; with 0 it answers receipt -108 (see
+    docs/protocol/p2p-transport.md).
+    """
+    return 0 if channel == STATION_CHANNEL else channel
 
 
 def _receipt_error(command: int, code: int) -> CommandRejectedError:

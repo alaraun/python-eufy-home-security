@@ -1660,7 +1660,8 @@ preset and switch presets while it runs:
 zoom)` with `MIN_ZOOM` ≤ `zoom` ≤ `MAX_ZOOM` (1 and 12, exported), and `zoom(device_sn)`,
 the zoom the camera last reported. The camera reports it after every write, go-to and
 live open, and the library emits `ZoomChanged(station_sn, device_sn, zoom)` when it
-differs, so the entity follows the camera rather than what was last sent.
+differs, so the entity follows the camera rather than what was last sent. It works the
+same for a standalone T8170 and for one paired to a HomeBase 3.
 
 - **Zoom is for the running view.** It lasts while the camera is awake and watched: a
   go-to sets the slot's own stored zoom, and a reopened view or the idle return (~7 s)

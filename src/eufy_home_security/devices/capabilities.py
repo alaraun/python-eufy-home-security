@@ -286,7 +286,8 @@ _T8170 = DeviceProfile(
             ),
             Capability.PTZ_ZOOM: Evidence(
                 Support.VERIFIED,
-                f"live picture zoom 1-12 (6203) with its echo, measured in the stream, {_T8170_SOLO}",
+                f"live picture zoom 1-12 (6203) with its echo, measured in the stream, {_T8170_SOLO}; "
+                "4x and 8x also paired to a HomeBase 3 fw 3.8.7.4",
                 "the library accepts 1-12; the camera caps near 14x; single view only; a go-to, "
                 "the idle return or a reopened view resets it to 1x",
             ),
