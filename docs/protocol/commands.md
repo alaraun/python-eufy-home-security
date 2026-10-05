@@ -793,7 +793,8 @@ that slot by itself after any manual turn, preset capture or tracking, once it g
 (verified: turned to another preset, it was back at the default after a 90 s sleep).
 
 **Picture zoom** is a **1350** `DeviceMsgBean` too (`CMD_TRANSFER`, cmd 6203
-`COMMAND_DUAL_CAMERA_ZOOM`, the handler's `set_picture_zoom`, on channel 0): `payload
+`COMMAND_DUAL_CAMERA_ZOOM`, the handler's `set_picture_zoom`, on the camera's channel, which
+subheader byte 2 names as well): `payload
 {"x": 0, "y": 0, "w": 0, "h": 0, "offset": false, "orgZoom": 0, "dstZoom": <zoom>}`, the
 centre zoom (`offset` true zooms into the x/y/w/h window instead; not used). `dstZoom` is
 the factor, a float. The camera receipts it and echoes the payload in a 1351 notify
@@ -809,6 +810,11 @@ mean 1x **[verified, T8170]**:
 - The zoom does not last: a go-to sets the slot's own stored zoom, and a reopened view
   and the idle return are at 1x.
 - The handler's thing description offers it only in single view (6243 = 0).
+- Behind a HomeBase 3 the same command reaches a paired T8170 when subheader byte 2
+  names the camera's channel ([p2p-transport.md](p2p-transport.md#subheader)); the camera
+  echoes it on that channel and zooms as standalone (`dstZoom` 4 → 3.95x, 8 → about
+  7.7x). With byte 2 at 0 the HomeBase answers receipt −108 **[verified, T8170 behind a
+  HomeBase 3]**.
 - A 6030 step with `zoom` 1 turns the camera the same angle at any picture zoom, so the
   view moves as many times further as the picture is zoomed; the app's pad sends the
   picture's zoom there for a finer step.

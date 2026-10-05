@@ -1942,7 +1942,9 @@ async def test_set_zoom_sends_6203_and_the_echo_sets_the_zoom(
     await standalone_station.async_set_zoom("T8170P2000054321", 2.5)
 
     assert fake.zoom_writes == [2.5]
-    body = next(o for o in reversed(fake.received) if o.get("cmd") == 6203)
+    index, body = next(
+        (i, o) for i, o in reversed(list(enumerate(fake.received))) if o.get("cmd") == 6203
+    )
     assert body["payload"] == {
         "x": 0,
         "y": 0,
@@ -1952,6 +1954,9 @@ async def test_set_zoom_sends_6203_and_the_echo_sets_the_zoom(
         "orgZoom": 0,
         "dstZoom": 2.5,
     }
+    # A standalone camera is channel 0, so its subheader byte stays 0.
+    assert body["mChannel"] == 0
+    assert fake.received_header_channels[index] == 0
     await _until(lambda: standalone_station.zoom("T8170P2000054321") == 2.5)
     zooms = [e for e in events if isinstance(e, ZoomChanged)]
     assert zooms == [
@@ -2017,6 +2022,57 @@ async def test_set_zoom_unsupported(station: Station, fake: FakeStation) -> None
     with pytest.raises(UnsupportedError):
         await station.async_set_zoom(SYNTHETIC.camera_sn, 2)
     assert fake.zoom_writes == []
+
+
+PAIRED_PTZ = CloudDevice(
+    device_sn="T8170P2000054321",
+    device_type=48,
+    name="PTZ",
+    station_sn=SYNTHETIC.station_sn,
+    channel=2,
+)
+
+
+@pytest.fixture
+async def paired_ptz(fake: FakeStation) -> AsyncIterator[Station]:
+    """A T8030 with a T8170 paired on channel 2, which it passes 1350 commands on to only
+    under that subheader channel."""
+    fake.params[2] = fake.params.pop(0)
+    fake.relayed_channels = {2}
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    st = Station(STATION, session, sub_devices=[PAIRED_PTZ])
+    await st.async_update()
+    yield st
+    await st.async_close()
+
+
+async def test_set_zoom_of_a_paired_camera_names_its_channel_in_the_subheader(
+    paired_ptz: Station, fake: FakeStation
+) -> None:
+    await paired_ptz.async_set_zoom(PAIRED_PTZ.device_sn, 4)
+
+    assert fake.zoom_writes == [4]
+    assert fake.received_header_channels[-1] == 2
+    await _until(lambda: paired_ptz.zoom(PAIRED_PTZ.device_sn) == 4.0)
+
+
+async def test_set_zoom_of_a_paired_camera_under_subheader_0_is_not_handled(
+    paired_ptz: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The HomeBase answers -108 and the camera never sees the zoom."""
+    monkeypatch.setattr(session_module, "_command_header_channel", lambda channel: 0)
+
+    with pytest.raises(CommandUnsupportedError):
+        await paired_ptz.async_set_zoom(PAIRED_PTZ.device_sn, 4)
+
+    assert fake.zoom_writes == []
+    assert paired_ptz.zoom(PAIRED_PTZ.device_sn) is None
 
 
 async def test_set_zoom_refused_in_dual_view(

@@ -51,7 +51,7 @@ from eufy_home_security.exceptions import (
     StationUnreachableError,
     UnsupportedError,
 )
-from eufy_home_security.models import GuardMode
+from eufy_home_security.models import STATION_CHANNEL, GuardMode
 from eufy_home_security.p2p import transport as transport_module
 from eufy_home_security.p2p.did import Did, static_key
 from eufy_home_security.p2p.media import (
@@ -828,6 +828,22 @@ async def test_setting_without_reply_is_delivered_not_applied(station: FakeStati
     assert outcome is CommandOutcome.DELIVERED
     assert applied is CommandOutcome.APPLIED
     assert [o["cmd"] for o in station.received] == [1277, 1277]  # never resent
+
+
+@pytest.mark.parametrize(("channel", "header"), [(0, 0), (1, 1), (STATION_CHANNEL, 0)])
+async def test_a_command_names_its_device_channel_in_the_subheader(
+    station: FakeStation, channel: int, header: int
+) -> None:
+    """Byte 2 of a 1350 command carries the device's channel; a station-wide one keeps 0."""
+    station.reply_to_settings = True
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_send_command(
+            1277, channel=channel, payload={"night_sion": 1, "channel": channel}
+        )
+    finally:
+        await session.async_close()
+    assert station.received_header_channels == [header]
 
 
 async def test_a_late_not_handled_receipt_is_awaited_and_raised(

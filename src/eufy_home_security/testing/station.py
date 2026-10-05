@@ -290,6 +290,8 @@ class FakeStation:
     """The cipher of the answer to a storage query: ECB, as the live station answered
     on a fresh session (a pushed record, :meth:`send_storage`, is GCM by default)."""
     received: list[dict[str, Any]] = field(default_factory=list)
+    received_header_channels: list[int] = field(default_factory=list)
+    """The subheader channel (byte 2) of each command in :attr:`received`, in step."""
     ecb_received: list[tuple[int, int, int]] = field(default_factory=list)
     mode_tables_received: list[dict[str, Any]] = field(default_factory=list)
     """Every 1255 mode-table body, in arrival order (whatever its account id)."""
@@ -330,6 +332,11 @@ class FakeStation:
     ``DOWNLOAD_CANCEL`` (1051) and the ``GET_*`` commands."""
     rejection_delay: float = 0.0
     """Seconds before a -108 receipt (the real station: 11 to 17 s)."""
+    relayed_channels: set[int] = field(default_factory=set)
+    """Channels of paired Wi-Fi cameras (a T8170) the station passes a 1350 command on to
+    only when the subheader names the channel; under another subheader channel the
+    command gets receipt -108 after :attr:`rejection_delay` and nothing else, as a
+    HomeBase 3 answers a header-0 picture zoom (6203) for its T8170."""
     playback_end_delay: float | None = 0.05
     """Seconds after a recording's last frame before its end-of-playback frame (the real
     station: about 0.5 s); None sends none."""
@@ -566,7 +573,11 @@ class FakeStation:
                 if obj is None:
                     return  # not a JSON command: the real station ignores it too
                 self.received.append(obj)
-                if obj.get("cmd") in self.unhandled_commands:
+                self.received_header_channels.append(subheader[2])
+                target = obj.get("mChannel")
+                if obj.get("cmd") in self.unhandled_commands or (
+                    target in self.relayed_channels and subheader[2] != target
+                ):
                     self.send_receipt(
                         FrameType.CMD_TRANSFER, RECEIPT_NOT_HANDLED, delay=self.rejection_delay
                     )
