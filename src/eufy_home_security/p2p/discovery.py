@@ -17,11 +17,11 @@ from dataclasses import dataclass
 
 from .._logging import Address, HexDump, wire_logger
 from ..exceptions import CommunicationError, ProtocolError
+from . import pppp
 from .did import Did
 from .pppp import (
     BROADCAST,
     DISCOVERY_PORT,
-    LAN_DISCOVERY_TIMEOUT,
     MsgType,
     decode_packet,
     encode_packet,
@@ -74,12 +74,13 @@ class _DiscoveryProtocol(asyncio.DatagramProtocol):
 
 async def discover_stations(
     *,
-    timeout: float = LAN_DISCOVERY_TIMEOUT,
+    timeout: float | None = None,
     port: int = DISCOVERY_PORT,
     target: str = BROADCAST,
     local_port: int = 0,
 ) -> list[DiscoveredStation]:
-    """Search the LAN for ``timeout`` seconds and return every station that answered.
+    """Search the LAN for ``timeout`` seconds (None: :data:`~.pppp.LAN_DISCOVERY_TIMEOUT`,
+    read at call time) and return every station that answered.
 
     ``target`` is the broadcast address, or one station's address to probe it
     alone. ``local_port`` pins the local UDP port for a firewall (0 = ephemeral).
@@ -87,6 +88,8 @@ async def discover_stations(
     no station answered and sending the search failed (e.g. no route to
     ``target``).
     """
+    if timeout is None:
+        timeout = pppp.LAN_DISCOVERY_TIMEOUT
     loop = asyncio.get_running_loop()
     protocol = _DiscoveryProtocol()
     try:

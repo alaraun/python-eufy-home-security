@@ -363,7 +363,7 @@ class StreamBroadcast:
         return len(self._taps)
 
     async def async_capture(
-        self, seconds: float, write: ClipWriter, *, start_timeout: float = CAPTURE_START_TIMEOUT
+        self, seconds: float, write: ClipWriter, *, start_timeout: float | None = None
     ) -> MediaClip:
         """Write ``seconds`` of the live stream, from its next keyframe, as one MPEG-TS clip.
 
@@ -377,7 +377,8 @@ class StreamBroadcast:
         next keyframe rather than stalling the stream.
 
         A stream that ends, or stops delivering, before ``seconds`` returns what it got
-        with ``ended_early``; the camera is given ``start_timeout`` beyond ``seconds``
+        with ``ended_early``; the camera is given ``start_timeout`` (None:
+        :data:`CAPTURE_START_TIMEOUT`, read at call time) beyond ``seconds``
         to deliver it all. Raises the open's error (:attr:`error`), or
         :class:`~..exceptions.DeviceTimeoutError` when no keyframe arrived, and
         ``ValueError`` for ``seconds`` that is not a positive finite number.
@@ -391,7 +392,8 @@ class StreamBroadcast:
                 self._end_grace()
                 self._ended_by_resize = False
             self._ensure_pump()
-            deadline = asyncio.get_running_loop().time() + seconds + start_timeout
+            extra = CAPTURE_START_TIMEOUT if start_timeout is None else start_timeout
+            deadline = asyncio.get_running_loop().time() + seconds + extra
             muxer, reached = await mux_frames(
                 tap.frames(deadline), write, max_ms=round(seconds * 1000)
             )

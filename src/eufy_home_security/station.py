@@ -131,6 +131,7 @@ from .models import (
     GuardMode,
 )
 from .network import LanPath, lan_path_for
+from .p2p import session as p2p_session
 from .p2p._json import json_int
 from .p2p.clip import ClipWriter, MediaClip
 from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
@@ -145,7 +146,6 @@ from .p2p.params import (
     standalone_aliases,
 )
 from .p2p.session import (
-    COMMAND_TIMEOUT,
     CommandOutcome,
     MediaStream,
     RecipeReply,
@@ -1603,7 +1603,7 @@ class Station:
         """The bytes of :meth:`async_fetch_still`, whatever their format."""
         return await self.session.async_fetch_image(path)
 
-    async def async_fetch_still(self, path: str, *, timeout: float = 12.0) -> Still:
+    async def async_fetch_still(self, path: str, *, timeout: float | None = None) -> Still:
         """Download a still (an event's ``thumb_path`` or ``crop_path``) with its format.
 
         Check ``is_image`` before showing it: obfuscated stills are returned, not raised.
@@ -1734,7 +1734,9 @@ class Station:
             first_frame_timeout=first_frame_timeout,
         )
 
-    async def async_event_thumbnail(self, event: SecurityEvent, *, timeout: float = 12.0) -> Still:
+    async def async_event_thumbnail(
+        self, event: SecurityEvent, *, timeout: float | None = None
+    ) -> Still:
         """An event's thumbnail (the 640x360 still the app lists), with its format.
 
         The push's own ``thumb_path`` when it carried one bound to the event;
@@ -1756,6 +1758,7 @@ class Station:
         event's; :class:`~.exceptions.RecordNotFoundError` when it is older (not
         written yet: retry once, later) or newer (a later detection replaced it).
         """
+        timeout = p2p_session.STILL_FETCH_TIMEOUT if timeout is None else timeout
         self._require_own_event(event)
         if self.session.standalone and event.thumb_path is None:
             return await self._standalone_event_still(event, timeout=timeout)
@@ -2579,7 +2582,7 @@ class Station:
         sns = list(device_sns) if device_sns is not None else [d.device_sn for d in self.devices]
         return await self.session.async_query_events(sns, start_date, end_date, **kwargs)
 
-    async def async_get_storage(self, *, timeout: float = COMMAND_TIMEOUT) -> StorageInfo:
+    async def async_get_storage(self, *, timeout: float | None = None) -> StorageInfo:
         """Read the storage record: internal disk, external disk and eMMC figures.
 
         Read-only (the app's HDD screen). On a standalone camera (a T8170), which does

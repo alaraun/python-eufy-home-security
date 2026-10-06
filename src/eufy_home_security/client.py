@@ -64,7 +64,7 @@ from .identity import StationClaims, is_device_serial
 from .inclusion import Reach, StationChoice
 from .models import GuardMode
 from .network import LanPath, check_local_ports, lan_address, lan_path_for, with_discovery
-from .p2p.pppp import BROADCAST, DISCOVERY_PORT, LAN_DISCOVERY_TIMEOUT
+from .p2p.pppp import BROADCAST, DISCOVERY_PORT
 from .p2p.session import (
     DEFAULT_STATION_SESSIONS,
     CredentialProvider,
@@ -762,7 +762,7 @@ class EufySecurity:
         return self._station_hosts.get(device.device_sn) or lan_address(device.local_ip)
 
     async def async_station_choices(
-        self, *, timeout: float = LAN_DISCOVERY_TIMEOUT, port: int = DISCOVERY_PORT
+        self, *, timeout: float | None = None, port: int = DISCOVERY_PORT
     ) -> list[StationChoice]:
         """Every station on the account, with its reach after one LAN probe.
 
@@ -791,7 +791,7 @@ class EufySecurity:
         ]
 
     async def async_probe_lan(
-        self, *, timeout: float = LAN_DISCOVERY_TIMEOUT, port: int = DISCOVERY_PORT
+        self, *, timeout: float | None = None, port: int = DISCOVERY_PORT
     ) -> list[LanPath]:
         """Each built station's :class:`LanPath`, with one LAN discovery folded in.
 
@@ -820,7 +820,7 @@ class EufySecurity:
         paths: list[LanPath],
         devices: list[CloudDevice],
         *,
-        timeout: float,
+        timeout: float | None,
         port: int,
     ) -> list[LanPath]:
         """``paths`` (one per device, same order) with one discovery folded in.
