@@ -14,6 +14,8 @@ branch maps onto one decision a caller (Home Assistant, in practice) has to make
 * :class:`ProtocolError` — bytes arrived that do not decode (a bug, or a firmware
   change worth reporting).
 * :class:`CommandError` — the station received a command and did not apply it.
+* :class:`RecordNotFoundError` — no such record or media; its subclass
+  :class:`StillNotWrittenError` means not yet (ask again later).
 """
 
 from __future__ import annotations
@@ -303,9 +305,23 @@ class ModelDataError(EufySecurityError):
 class RecordNotFoundError(EufySecurityError):
     """The station's event database has no such record, or the record lacks the media asked for.
 
-    Not permanent: the station writes a record's thumbnail when the clip is saved, so
-    a lookup right after a detection may succeed a little later.
+    Final for the request as made (a later event's still replaced the event's, another
+    camera's row, nothing in the window) unless it is a :class:`StillNotWrittenError`.
     """
+
+
+class StillNotWrittenError(RecordNotFoundError):
+    """The device has not written the event's row or still yet: ask again later.
+
+    Raised right after a detection: a HomeBase event's history row is missing or has
+    no thumbnail yet, or a standalone device's newest still is older than the event.
+    ``offset`` is that still's time minus the event's, in seconds (None for a
+    HomeBase row).
+    """
+
+    def __init__(self, message: str, *, offset: float | None = None) -> None:
+        self.offset = offset
+        super().__init__(message)
 
 
 class CommandUnsupportedError(CommandRejectedError, UnsupportedError):

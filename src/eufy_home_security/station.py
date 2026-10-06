@@ -91,6 +91,7 @@ from .exceptions import (
     EufySecurityError,
     PresetSlotsFullError,
     RecordNotFoundError,
+    StillNotWrittenError,
     UnsupportedError,
 )
 from .images import (
@@ -1776,8 +1777,10 @@ class Station:
                 and row.device_sn != event.device_sn
             ):
                 outcome = "another camera's"
-            elif not is_station_media_path(row.thumb_path, STILL_SUFFIX):
+            elif not row.thumb_path:
                 outcome = "no thumbnail yet"
+            elif not is_station_media_path(row.thumb_path, STILL_SUFFIX):
+                outcome = "no valid thumbnail path"
             else:
                 outcome = "found"
             _LOGGER.debug(
@@ -1786,8 +1789,10 @@ class Station:
                 outcome,
                 time.monotonic() - started,
             )
-            if outcome != "found":
+            if outcome in ("none", "no thumbnail yet"):
                 # No record id in the message: consumers log it.
+                raise StillNotWrittenError(f"the event's history record: {outcome}")
+            if outcome != "found":
                 raise RecordNotFoundError(f"the event's history record: {outcome}")
             path = cast(str, cast(HistoryRecord, row).thumb_path)
         return await self.async_fetch_still(path, timeout=timeout)
@@ -1935,7 +1940,7 @@ class Station:
             time.monotonic() - started,
         )
         if offset < early:
-            raise RecordNotFoundError("the event's still is not written yet")
+            raise StillNotWrittenError("the event's still is not written yet", offset=offset)
         if offset > late:
             raise RecordNotFoundError("a later event's still replaced the event's")
         return await self.async_fetch_still(path, timeout=timeout)

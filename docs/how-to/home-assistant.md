@@ -545,8 +545,10 @@ push and across reconnects, so the integration never de-duplicates:
   own record (`record_id`), so an earlier event's thumbnail or crop never leaks in;
   for the thumbnail call `await station.async_event_thumbnail(event)`: it takes the
   bound `thumb_path`, or finds the event's history row by `record_id` in one query.
-  A `RecordNotFoundError` right after a detection is normal (the row comes later; see
-  [Camera images](#camera-images)): retry once, later, rather than in a loop.
+  A `StillNotWrittenError` (a `RecordNotFoundError`) right after a detection is normal:
+  the row, or its thumbnail, comes later (see [Camera images](#camera-images)); retry
+  once, later, rather than in a loop. Any other `RecordNotFoundError` is final (another
+  camera's row, no valid thumbnail path).
   Its `timeout` bounds the query and the fetch each, and neither holds up an arm
   while it waits for a reply, so no shortened timeout is needed. A record id whose
   first eight digits are no calendar day (a forged push) raises `UnsupportedError`
@@ -969,8 +971,10 @@ previous image on any failure. Never serve `video/hevc` as the camera image.
   `async_event_image(event, THUMBNAIL)` wakes it, reads its newest still and returns it
   only when the still's time lies within `STANDALONE_STILL_WINDOW` (2 s before to 30 s
   after) of the detection, read in the camera's own `timezone_set`. Otherwise
-  `RecordNotFoundError` ("not written yet": retry once, about 20 s later; "replaced": a
-  later detection's still, give up). On a T8170 the still was named 2 s after the
+  `StillNotWrittenError` when the newest still is older than the detection (retry once,
+  about 20 s later; `offset` is the still's time minus the detection's), a plain
+  `RecordNotFoundError` when a later detection's still replaced it or there is no dated
+  still (give up). On a T8170 the still was named 2 s after the
   trigger and the call took 2.5 s (one sample).
 - **A standalone camera's HD image:** a woken T8170 climbs 1280×720 → 1920×1080 →
   2880×1616 over about 8.5 s, so a plain `LIVE` image is its first rung (1280×720 in
@@ -985,7 +989,7 @@ previous image on any failure. Never serve `video/hevc` as the camera image.
 - A thumbnail that is still not a JPEG (V2 or V8, or a V1 still that did not decode)
   raises `UnsupportedError` from both calls; the lower-level `async_fetch_still`
   returns it labelled instead.
-- `RecordNotFoundError` from a detection's thumbnail right after the push is normal: in
+- `StillNotWrittenError` from a detection's thumbnail right after the push is normal: in
   one sample the event's history row was missing 3.8 s after the trigger and present
   (with its `thumb_path`) 42 s after. Show the trigger frame meanwhile, and retry the thumbnail
   once, later, not in a loop.
@@ -1720,6 +1724,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `KeyRejectedError` (a `HandshakeError`; in `ConnectionChanged.error`, `Station.last_error` or the `async_start()` result) | the station rejected a key that was already fetched again once. Not a reauth: raise a fixable repair issue whose fix calls `eufy.async_reset_key_refresh(serial)`, which allows one more fetch. Without it the library tries one fetch a day by itself |
 | `RefreshCooldownError` (a `RateLimitedError`, `code` 0) | the library's own spacing of key fetches, not a eufy throttle: no repair, just wait |
 | `CipherUnavailableError` (an `EmptyResponseError`; `cipher_id`, `owner_source`, `retry_after`) | the cloud has no key for the cipher the station named in its handshake, under the owner id asked (`owner_source`: `"member.admin_user_id"` or `"own user id"`). Not a reauth and not an outage of the station: the share or the station's binding needs the owner. Raise one non-fixable repair issue naming the station and `cipher_id`; clear it on `ConnectionChanged(connected=True)`. The library asks the same station and cipher again only after `retry_after` (an hour); until then every attempt raises this without a request. A reload of the entry asks once more |
+| `StillNotWrittenError` (a `RecordNotFoundError`; `offset`) | the device has not written the event's row or still yet: keep what is shown and ask once more later (about 20 s). A plain `RecordNotFoundError` is final for that event: no retry |
 | `KeyExchangeRefusedError` (a `CloudApiError`; `code` 4404 or 463, `status` 463) | the cloud gateway refused the client's key identity and a new key exchange did not restore it. Not a reauth and not a kick-out: no login was attempted and none helps by itself. Carry on from the cache and retry on the next interval; the library re-keys at each attempt. Raise a repair issue only if it persists (hours) |
 
 Errors that happen in the background (a key or owner-id refresh inside a running session,
