@@ -4,6 +4,15 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.2.0](https://github.com/alaraun/python-eufy-home-security/compare/v0.1.2...v0.2.0) (2026-10-06)
+
+
+### Features
+
+* list recordings from a chosen day, and ask an unanswered history page once more ([#15](https://github.com/alaraun/python-eufy-home-security/issues/15)) ([ef22ed1](https://github.com/alaraun/python-eufy-home-security/commit/ef22ed1274fc73f3d644dc478b8921dc5dd78d25))
+* read every hardware wait at call time; testing.short_timeouts ([#12](https://github.com/alaraun/python-eufy-home-security/issues/12)) ([054887a](https://github.com/alaraun/python-eufy-home-security/commit/054887a079d2c4f98a9748f29cc2362a21e78290))
+* StillNotWrittenError for an event still that is not written yet ([#13](https://github.com/alaraun/python-eufy-home-security/issues/13)) ([7dde1e4](https://github.com/alaraun/python-eufy-home-security/commit/7dde1e4b98c391cda0054cf51dacf4b6042a584d))
+
 ## [0.1.2](https://github.com/alaraun/python-eufy-home-security/compare/v0.1.1...v0.1.2) (2026-10-06)
 
 
