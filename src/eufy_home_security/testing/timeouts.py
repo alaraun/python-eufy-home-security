@@ -20,8 +20,8 @@ _PACKAGE = "eufy_home_security"
 
 SHORT_TIMEOUTS: Final[Mapping[str, tuple[str, Any]]] = {
     # name: (defining module, loopback value). Discovery spans one repeated search
-    # (a station ignores the first after a close); handshake and parameter query
-    # outlast one DRW retransmit (1.5 s). COMMAND_TIMEOUT does not: a test that drops
+    # (a station ignores the first after a close); handshake, parameter and database
+    # queries outlast one DRW retransmit (1.5 s). COMMAND_TIMEOUT does not: a test that drops
     # a command frame sets it per test.
     "DISCOVERY_ATTEMPTS": ("p2p.session", 1),
     "DISCOVERY_TIMEOUT": ("p2p.session", 2.5),
@@ -33,6 +33,7 @@ SHORT_TIMEOUTS: Final[Mapping[str, tuple[str, Any]]] = {
     "MODE_TABLE_READBACK_DELAY": ("p2p.session", 0.05),
     "RECONNECT_BACKOFF": ("p2p.session", (0.1,)),
     "STILL_FETCH_TIMEOUT": ("p2p.session", 1.0),
+    "HISTORY_QUERY_TIMEOUT": ("p2p.session", 2.5),
     "SD_INFO_TIMEOUT": ("p2p.session", 1.0),
     "MEDIA_LIVE_FIRST_FRAME_TIMEOUT": ("p2p.session", 2.0),
     "MEDIA_RECORDING_FIRST_FRAME_TIMEOUT": ("p2p.session", 2.0),

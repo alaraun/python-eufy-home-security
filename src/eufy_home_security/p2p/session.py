@@ -306,9 +306,10 @@ HISTORY_PAGE_SIZE = 50
 HISTORY_MAX_PAGES = 1000
 """Pages read for one day before giving up on a station that never runs out."""
 HISTORY_QUERY_TIMEOUT = 15.0
-"""Seconds one history query (10011) waits for its page. An idle HomeBase 3 answers within
-3 s; a busy one takes longer and sometimes leaves a query unanswered that it answers when
-asked again, so a listing asks a page once more after a timeout."""
+"""Seconds one station database query (a history page 10011, the event count 10013, an
+event list) waits for its answer. An idle HomeBase 3 answers a history page within 3 s; a
+busy one takes longer and sometimes leaves a query unanswered that it answers when asked
+again, so a listing asks a page once more after a timeout."""
 HISTORY_DATE_FORMAT = "%Y%m%d"
 STILL_LATE_REPLY_WINDOW = 30.0
 """After a 1308 request times out, the next 1308 reply within this many seconds is
@@ -2059,9 +2060,10 @@ class StationSession:
         *,
         count: int = 100,
         table: str = "history_record_info",
-        timeout: float = 15.0,
+        timeout: float | None = None,
     ) -> list[dict[str, Any]]:
         """List the station's own event records (dates are ``YYYYMMDD``)."""
+        timeout = _or(timeout, HISTORY_QUERY_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
         payload = database_query_payload(
@@ -2085,7 +2087,9 @@ class StationSession:
             )
         return cast(list[dict[str, Any]], rows)
 
-    async def async_event_summary(self, device_sn: str, *, timeout: float = 15.0) -> EventSummary:
+    async def async_event_summary(
+        self, device_sn: str, *, timeout: float | None = None
+    ) -> EventSummary:
         """How many events ``device_sn`` has and the path of its newest still (10013).
 
         The query a standalone device answers where it does not answer the history
@@ -2094,6 +2098,7 @@ class StationSession:
         so the query is resent every :data:`EVENT_COUNT_RESEND` seconds until
         answered or ``timeout``.
         """
+        timeout = _or(timeout, HISTORY_QUERY_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
 
