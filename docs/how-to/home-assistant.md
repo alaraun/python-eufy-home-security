@@ -1270,15 +1270,28 @@ record's `frame_num`), `ended_early` (a capture whose stream ended first), `comp
 #### The station's recordings
 
 - `await station.async_list_recordings(device_sn=None, *, days=2, since=None,
-  limit=None, before=None)`: the history rows with a recording, newest first, of one
-  camera or of every camera paired here; one history query per day and page, the
-  camera asleep. Pass `since` (the newest `started_at` already stored) for an
-  incremental sync. A standalone camera lists none.
+  limit=None, before=None, until=None, timeout=None)`: the history rows with a
+  recording, newest first, of one camera or of every camera paired here; one history
+  query per day and page, the camera asleep. Pass `since` (the newest `started_at`
+  already stored) for an incremental sync. A standalone camera lists none.
 - **A page for a list view:** `limit` stops the walk at that many rows, so only today
   (and the days back to the page's last row) are asked, not the whole window;
   `before=<the last row's record_id>` gives the next page, starting in that row's day.
   A page shorter than `limit` means the window holds no more; a full page may be
   followed by an empty one. Keep `days` as the window bound: no day before it is asked.
+- **Go to a day:** `until=<date>` lists that day's rows and older ones (host-local days,
+  like the window), combinable with `limit`; the next page is `before=<last record_id>`
+  as usual, and `before` wins when both are given. `days` still counts back from
+  today: an `until` before the window lists nothing, a day after today lists from
+  today. Size `days` to reach the chosen day (`(today - until).days + n`).
+- **Slow pages:** `timeout` bounds each history query (None:
+  `p2p.session.HISTORY_QUERY_TIMEOUT`, 15 s). An idle HomeBase 3 answers a query of
+  50 rows in 0.5-3 s (median 0.7 s); a busy one takes several seconds and sometimes
+  leaves a query unanswered that it answers when asked again. So a listing asks an
+  unanswered page once more with the same cursor (logged at INFO), and a late answer
+  to the first query is taken too; `DeviceTimeoutError` follows only when the second
+  query times out as well, so one page may take up to twice `timeout`. A single
+  `async_history_record` lookup is not resent.
 - `HistoryRecord` carries what a media browser needs: `video_path` (the validated
   `.zxvideo` path, else None), `started_at`/`ended_at` (aware, in the row's own UTC
   offset), `duration_s`, `frame_count`, `size_bytes`, `thumb_path`, `record_id`.

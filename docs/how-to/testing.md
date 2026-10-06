@@ -121,6 +121,7 @@ attempts. A test that meets such a wait on purpose shortens it.
 | CONN_INIT reply | `p2p.session.HANDSHAKE_TIMEOUT` | 2.5 s (outlasts one DRW retransmit, 1.5 s) |
 | command result; its late receipt | `p2p.session.COMMAND_TIMEOUT`, `COMMAND_RECEIPT_TIMEOUT` | 0.5 s, 1 s (shorter than a retransmit: a test that drops a command frame sets it itself) |
 | parameter dump | `p2p.session.PARAM_QUERY_TIMEOUT` | 2.5 s |
+| station database query (history page, event count, event list) | `p2p.session.HISTORY_QUERY_TIMEOUT` | 2.5 s (a history page is asked once more after a timeout, so it fails after twice that) |
 | guard-mode report, mode-table read-back | `p2p.session.MODE_REPORT_GRACE`, `MODE_TABLE_READBACK_DELAY` | 0.3 s, 0.05 s |
 | setting read-back retry | `station.READBACK_DELAY` | 0.05 s |
 | reconnect back-off | `p2p.session.RECONNECT_BACKOFF` | 0.1 s |
