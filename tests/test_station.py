@@ -256,8 +256,9 @@ async def test_a_shared_bit_write_keeps_the_other_bits(child: Station, fake: Fak
 
 
 async def test_a_shared_bit_write_without_the_current_mask_sends_nothing(
-    child: Station, fake: FakeStation
+    child: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(station_mod, "READBACK_DELAY", 0.0)
     fake.params[STATION_CHANNEL].pop(1283, None)
     sent = len(fake.received)
     with pytest.raises(CommandNotAppliedError, match="blind"):
@@ -1785,6 +1786,7 @@ async def test_a_standalone_cameras_writes_go_to_its_own_channel(
     assert fake.doorbell_payloads[-1] == {"commandType": 6014, "data": {"value": 1}}
     await standalone_station.async_set_setting("ptz_turn_speed", 3)  # speed 3 of 5
     assert fake.doorbell_payloads[-1]["data"]["value"] == 3
+    fake.reply_to_settings = True  # a result for the 1350 write, not the 6 s receipt wait
     await standalone_station.async_set_setting("nightvision_type", 2, channel=STATION_CHANNEL)
     assert fake.received[-1]["cmd"] == 1277
     assert fake.received[-1]["payload"] == {"channel": 0, "night_sion": 2}
@@ -1877,6 +1879,7 @@ async def test_async_preset_image_timeout(
 
     monkeypatch.setattr(session_mod, "MEDIA_PING_INTERVAL", 9999)
     monkeypatch.setattr(session_mod, "MEDIA_IDLE_TIMEOUT", 0.1)
+    monkeypatch.setattr(station_mod, "PRESET_STREAM_IDLE_SECONDS", 0.1)
     fake.live_ends_unpinged_after = 0.05
 
     with pytest.raises(DeviceTimeoutError):

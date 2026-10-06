@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import dataclasses
 import gc
 import json
 import logging
@@ -165,7 +164,7 @@ async def test_closing_during_a_start_leaves_no_supervisor_behind(
 
 
 async def test_an_unexpected_supervisor_error_retries_instead_of_stopping(
-    station: FakeStation, caplog: pytest.LogCaptureFixture
+    station: FakeStation, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A bug in the supervisor must degrade to a retry, not end supervision.
 
@@ -185,6 +184,7 @@ async def test_an_unexpected_supervisor_error_retries_instead_of_stopping(
             raise ValueError(msg)
 
     session.async_connect = exploding  # type: ignore[method-assign]
+    monkeypatch.setattr(session_module, "RECONNECT_BACKOFF", (0.05,))
     supervisor = asyncio.create_task(session._supervise(0.01, 0.01))
     try:
         with caplog.at_level(logging.ERROR):
@@ -519,12 +519,14 @@ async def test_ecb_only_parameter_dumps_time_out_naming_the_refusal(station: Fak
 
 @pytest.mark.parametrize("late", [0.3, 1.3])  # inside the settle, and just after the read
 async def test_late_sub_device_blocks_do_not_cue_a_reprobe(
-    station: FakeStation, late: float
+    station: FakeStation, late: float, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(session_module, "UNSOLICITED_REPROBE_DELAY", 0.5)
     station.sub_blocks_after = late
     session = make_session(station, Provider(station))
     try:
         await session.async_start(probe_every=600.0)
+        # A cued reprobe would run within the delay plus one 1 s supervisor tick.
         await asyncio.sleep(late + session_module.UNSOLICITED_REPROBE_DELAY + 1.5)
         assert (0, 1101) in session.params
     finally:
@@ -1541,8 +1543,12 @@ async def test_unanswered_probes_back_off_without_flapping(
     assert station.conn_inits <= 3  # one reconnect, then a long backoff — not a loop
 
 
-async def test_discovery_reply_from_another_station_is_ignored(station: FakeStation) -> None:
+async def test_discovery_reply_from_another_station_is_ignored(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Every station answers a broadcast; a session only adopts the reply carrying its own DID."""
+    monkeypatch.setattr(session_module, "DISCOVERY_ATTEMPTS", 1)
+    monkeypatch.setattr(session_module, "DISCOVERY_TIMEOUT", 1.0)
     other = StationSession(
         SYNTHETIC.station_sn,
         Provider(station),
@@ -2623,9 +2629,8 @@ async def test_session_run_recipe_timeout(
     )
     try:
         await session.async_start()
-        recipe = dataclasses.replace(query_preset_positions(), timeout=0.1)
         with pytest.raises(DeviceTimeoutError):
-            await session.async_run_recipe(recipe, channel=0)
+            await session.async_run_recipe(query_preset_positions(), channel=0, timeout=0.1)
     finally:
         await session.async_close()
 
