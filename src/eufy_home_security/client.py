@@ -668,8 +668,8 @@ class EufySecurity:
             await self._ensure_cache_loaded()
             if cipher_id is None:
                 cipher_id = cache.station_cipher_id(station_sn)
-            elif cipher_id != cache.station_cipher_id(station_sn):
-                # The station named another cipher: remember it for the next start.
+            elif cipher_id != cache.station_named_cipher_id(station_sn):
+                # Stored before the fetch, so a failed fetch keeps the id the station named.
                 cache.set_station_cipher_id(station_sn, cipher_id)
                 await cache.async_save()
             owner_age = cache.seconds_since_refresh("owner")

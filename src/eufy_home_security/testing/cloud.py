@@ -147,8 +147,10 @@ class FakeCloud:
 
     ``devices`` are raw device-list entries. ``owner_ids`` names each station's owner
     (sent as ``member.admin_user_id``; a station without one is the account's own).
-    ``cipher_keys`` holds each station's P2P ECC private key (hex); a station without
-    one gets the cloud's empty answer. ``login_error``, when set, is what a password
+    ``cipher_keys`` holds each station's P2P ECC private key (hex), served for every id
+    in ``cipher_ids_held`` (None: any id); a station without one, or a request naming
+    no held id, gets the cloud's empty answer. ``cipher_ids_requested`` records the
+    ids each ``get_ciphers`` request named, in order. ``login_error``, when set, is what a password
     login meets: a :class:`RateLimitedError` also starts the hold-off the real cloud
     answer would. ``calls`` records every request that reached the cloud: ``"login"``,
     ``"devices"``, ``"owner:<serial>"`` (a device-list request made to find a station's
@@ -177,6 +179,8 @@ class FakeCloud:
         default_factory=lambda: {SYNTHETIC.station_sn: SYNTHETIC.account_id}
     )
     cipher_keys: dict[str, str] = field(default_factory=dict)
+    cipher_ids_held: set[int] | None = None
+    cipher_ids_requested: list[int] = field(default_factory=list)
     login_error: EufySecurityError | None = None
     call_errors: list[EufySecurityError] = field(default_factory=list)
     dsk_keys: dict[str, str] = field(default_factory=dict)
@@ -240,10 +244,15 @@ class FakeCloud:
             serial = str(payload.get("station_sn"))
             self.calls.append(f"cipher:{redact_serial(serial)}")
             self._raise_call_error()
+            ids = [int(cid) for cid in payload["cipher_ids"]]
+            self.cipher_ids_requested.extend(ids)
             key = self.cipher_keys.get(serial)
-            if key is None:
+            held = [
+                cid for cid in ids if self.cipher_ids_held is None or cid in self.cipher_ids_held
+            ]
+            if key is None or not held:
                 return None
-            return [{"cipher_id": cid, "ecc_private_key": key} for cid in payload["cipher_ids"]]
+            return [{"cipher_id": cid, "ecc_private_key": key} for cid in held]
         if path == const.DSK_KEYS_PATH:
             serial = str(payload.get("station_sns", [""])[0])
             self.calls.append(f"dsk:{redact_serial(serial)}")
@@ -348,7 +357,9 @@ async def _async_warm(api: EufyCloudApi, cache: SessionCache, cloud: FakeCloud) 
             continue
         await api.async_get_station_owner_id(device.device_sn)
         if device.device_sn in cloud.cipher_keys:
-            await api.async_get_cipher_key(device.device_sn)
+            held = cloud.cipher_ids_held
+            for cipher_id in [const.CIPHER_ID_P2P] if held is None else sorted(held):
+                await api.async_get_cipher_key(device.device_sn, cipher_id)
     await cache.async_save()
 
 
@@ -357,10 +368,11 @@ def warm_store(*, email: str, cloud: FakeCloud) -> MemoryStore:
 
     Written by the library's own cache writers (a password login, the device list,
     each station's owner id and cipher key), so it keeps the real layout. Nothing is
-    recorded in ``cloud.calls``, and ``cloud.login_error`` is not applied.
+    recorded in ``cloud.calls`` or ``cloud.cipher_ids_requested``, and
+    ``cloud.login_error`` is not applied.
     """
     store = MemoryStore()
-    scratch = replace(cloud, login_error=None, calls=[])
+    scratch = replace(cloud, login_error=None, calls=[], cipher_ids_requested=[])
     cache = SessionCache(store, email)
     api = scratch.make_api(_no_http, cache, email, SYNTHETIC.password)
     _run_unsuspended(_async_warm(api, cache, scratch))

@@ -89,6 +89,7 @@ from ..events import (
 )
 from ..exceptions import (
     CameraWakeError,
+    CloudError,
     CommandNotAppliedError,
     CommandRejectedError,
     CommandUnsupportedError,
@@ -345,8 +346,8 @@ class WakeProvider(Protocol):
 class CredentialProvider(Protocol):
     """Supplies :class:`P2PCredentials`; ``refresh=True`` means the cached key failed.
 
-    ``cipher_id`` is the cipher the station named in its CONN_INIT; None before the
-    session has seen one, when the provider picks (the cipher this station named
+    ``cipher_id`` is the cipher the station named in its CONN_INIT: the session asks
+    after the handshake. None lets the provider pick (the cipher this station named
     last, else :data:`~..cloud.const.CIPHER_ID_P2P`).
     """
 
@@ -1285,7 +1286,9 @@ class StationSession:
     async def async_connect(self) -> None:
         """Connect and establish the encrypted session (no-op when already up).
 
-        A cipher key that no longer unwraps the station's challenge is re-fetched
+        The credentials are loaded after CONN_INIT, for the cipher the station names
+        there; a cloud error from that load ends the attempt. A cipher key that no
+        longer unwraps the station's challenge is re-fetched
         once through the credential provider (which enforces its own cooldown).
         Only a fetch that returned a key sets the stale-key latch; a failed fetch
         raises its own error and sets nothing. While the latch is set, a rejected key
@@ -1307,9 +1310,8 @@ class StationSession:
                 # that just connected for it.
                 self._last_used = time.monotonic()
                 return
-            creds = await self._load_credentials(refresh=False)
             try:
-                creds = await self._establish(creds)
+                creds = await self._establish(None)
             except HandshakeError as err:
                 creds = await self._refetch_rejected_key(err)
                 try:
@@ -3062,12 +3064,12 @@ class StationSession:
             register_secret_bytes(wake.dsk)
         return wake
 
-    async def _establish(self, creds: P2PCredentials) -> P2PCredentials:
+    async def _establish(self, creds: P2PCredentials | None) -> P2PCredentials:
         """Connect and unwrap the session key; returns the credentials that unwrapped it.
 
-        The station names its cipher in CONN_INIT. When that is not the cipher of
-        ``creds``, the named cipher's key is loaded (from the cache, else the cloud)
-        before the unwrap: a different cipher is not a stale key.
+        The station names its cipher in CONN_INIT. Without ``creds``, or when they are
+        another cipher's, the named cipher's credentials are loaded (from the cache,
+        else the cloud) before the unwrap: a different cipher is not a stale key.
         """
         self._teardown("reconnecting")
         # A closed UDP transport releases its socket on the next loop iteration; a
@@ -3167,6 +3169,9 @@ class StationSession:
             self._handshake_failures += 1
             self._teardown("handshake failed")
             raise
+        except CloudError:
+            self._teardown("no credentials for the cipher the station named")
+            raise
         except BaseException:
             self._teardown("handshake interrupted")
             raise
@@ -3179,7 +3184,7 @@ class StationSession:
         return creds
 
     async def _unwrap_conn_init(
-        self, payload: bytes, static: bytes, creds: P2PCredentials
+        self, payload: bytes, static: bytes, creds: P2PCredentials | None
     ) -> tuple[P2PCredentials, bytes]:
         """The credentials of the cipher CONN_INIT names, and the session key they unwrap."""
         named = conn_init_cipher_id(payload, static)
@@ -3190,7 +3195,9 @@ class StationSession:
             len(payload),
             named,
         )
-        if named != creds.cipher_id:
+        if creds is None:
+            creds = await self._load_credentials(refresh=False)
+        elif named != creds.cipher_id:
             _LOGGER.debug(
                 "%s: the station uses cipher %d, not %d; loading its key",
                 self._log_name,

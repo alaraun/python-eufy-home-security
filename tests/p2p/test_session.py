@@ -38,6 +38,7 @@ from eufy_home_security.events import (
 )
 from eufy_home_security.exceptions import (
     CameraWakeError,
+    CipherUnavailableError,
     CommandNotAppliedError,
     CommandRejectedError,
     CommandUnsupportedError,
@@ -568,7 +569,7 @@ async def test_unusable_did_is_not_a_handshake_failure(station: FakeStation) -> 
     finally:
         await session.async_close()
     assert not isinstance(info.value, HandshakeError)
-    assert provider.calls == [False]  # no cipher re-fetch: it cannot fix a serial/DID
+    assert provider.calls == []  # no credentials before CONN_INIT, no re-fetch after
     assert station.conn_inits == 0
 
 
@@ -1461,6 +1462,15 @@ async def test_station_off_at_start_is_reported_once_per_outage_and_picked_up_la
     session = make_session(fake, provider)
     events: list[Event] = []
     session.subscribe(events.append)
+    attempts = 0
+    establish = session._establish
+
+    async def counted(creds: P2PCredentials | None) -> P2PCredentials:
+        nonlocal attempts
+        attempts += 1
+        return await establish(creds)
+
+    monkeypatch.setattr(session, "_establish", counted)
 
     def changes() -> list[tuple[bool, DisconnectCause | None]]:
         return [(e.connected, e.cause) for e in events if isinstance(e, ConnectionChanged)]
@@ -1469,7 +1479,7 @@ async def test_station_off_at_start_is_reported_once_per_outage_and_picked_up_la
         with pytest.raises(StationUnreachableError):
             await session.async_start()
         assert session._supervisor is not None
-        await wait_until(lambda: len(provider.calls) >= 3, timeout=6.0)  # retried
+        await wait_until(lambda: attempts >= 3, timeout=6.0)  # retried
         first = changes()
         assert first == [(False, DisconnectCause.UNREACHABLE)]
         # the property is read into a local: an isinstance() on it would narrow it for
@@ -2278,7 +2288,7 @@ async def test_a_session_loads_the_key_of_the_cipher_the_station_names() -> None
     )
     try:
         await session.async_get_params()
-        assert calls == [(False, None), (False, 98)]
+        assert calls == [(False, 98)]  # asked after CONN_INIT: never for a guessed id
         assert session._key_refresh.retry_blocked_for() == 0
         calls.clear()
 
@@ -2296,6 +2306,34 @@ async def test_a_session_loads_the_key_of_the_cipher_the_station_names() -> None
             await session.async_get_params()
         assert calls == [(False, 98), (True, 98)]
 
+    finally:
+        await session.async_close()
+        station.stop()
+
+
+async def test_a_cloud_error_for_the_named_cipher_ends_the_attempt() -> None:
+    station = FakeStation(cipher_id=98)
+    await station.start()
+    calls: list[int | None] = []
+    error = CipherUnavailableError(
+        "no key", cipher_id=98, owner_source="member.admin_user_id", retry_after=60.0
+    )
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        calls.append(cipher_id)
+        raise error
+
+    session = StationSession(
+        SYNTHETIC.station_sn, provider, host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        with pytest.raises(CipherUnavailableError) as info:
+            await session.async_connect()
+        assert info.value is error
+        assert (station.conn_inits, calls) == (1, [98])
+        assert not session.connected
+        assert session._transport is None
+        assert session._key_refresh.retry_blocked_for() == 0  # not a rejected key
     finally:
         await session.async_close()
         station.stop()

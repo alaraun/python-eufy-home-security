@@ -54,12 +54,15 @@ async def test_warm_start_needs_no_cloud() -> None:
 ## Controlling the fakes
 
 - **Cloud answers.** `FakeCloud` fields are live: change `devices`, `owner_ids` or
-  `cipher_keys` between steps. Set `login_error` to the error a password login meets;
+  `cipher_keys` between steps. `cipher_ids_held` limits the cipher ids the cloud holds
+  a key for (None: any); a request for another id gets the empty answer, which the
+  library raises as `CipherUnavailableError`. Set `login_error` to the error a password login meets;
   a `RateLimitedError` (or `LoginLimitedError`) also starts the hold-off the real answer
   would, so `async_cloud_status()` reports it.
 - **Cloud requests.** `calls` lists each request that reached the cloud, in order:
   `"login"`, `"devices"`, `"owner:<serial>"`, `"cipher:<serial>"`, `"dsk:<serial>"`,
   `"push_token"`, `"things"`, with serials redacted. A cached answer adds nothing.
+  `cipher_ids_requested` lists the cipher ids those `get_ciphers` requests named.
 - **Cold or warm.** A `MemoryStore()` is a cold start (one login, one device list, one
   key per station); `warm_store(...)` is a restart. Reuse one store across two clients
   to test a restart with whatever the first client cached.
