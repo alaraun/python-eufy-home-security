@@ -168,7 +168,7 @@ Never post serials, credentials or captures from your home; see
 
 ```
 uv sync
-uv run pytest
+uv run pytest -n auto
 uv run ruff check && uv run ruff format --check
 uv run mypy
 ```

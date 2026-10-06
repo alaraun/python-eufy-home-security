@@ -10,14 +10,17 @@ uv run prek install             # optional: run the hooks on every commit
 ## The loop
 
 ```
-uv run pytest                   # unit + protocol tests (no hardware, no network)
+uv run pytest -n auto           # unit + protocol tests, one worker per core (no hardware, no network)
 uv run ruff check --fix && uv run ruff format
 uv run mypy                     # strict — keep it clean
 uv run prek run --all-files     # everything the hooks run
 ```
 
+`-n auto` runs the tests on parallel workers (pytest-xdist, work-stealing). Leave it
+out for a single test, `--pdb`, or the live tests.
+
 Live tests talk to a real station or the eufy cloud and are opt-in:
-`EUFY_LIVE=1 uv run pytest -m live`.
+`EUFY_LIVE=1 uv run pytest -m live`, without `-n`: they share one real station.
 
 ### The denylist check
 
