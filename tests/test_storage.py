@@ -347,18 +347,15 @@ async def test_save_before_load_merges_over_the_stored_document() -> None:
 def test_station_cipher_id_defaults_and_validation() -> None:
     cache = SessionCache(MemoryStore(), "test@test.com")
     assert cache.station_cipher_id("T123") == 40
+    assert cache.station_named_cipher_id("T123") is None
 
-    # Store some valid value
     cache.set_station_cipher_id("T123", 98)
-    assert cache.station_cipher_id("T123") == 98
+    assert (cache.station_cipher_id("T123"), cache.station_named_cipher_id("T123")) == (98, 98)
 
-    # Ignore non-int/bool stored value
-    cache.station("T123")["cipher_id"] = "invalid"
-    assert cache.station_cipher_id("T123") == 40
-
-    # Ignores bool
-    cache.station("T123")["cipher_id"] = True
-    assert cache.station_cipher_id("T123") == 40
+    for invalid in ("invalid", True):
+        cache.station("T123")["cipher_id"] = invalid
+        assert cache.station_cipher_id("T123") == 40
+        assert cache.station_named_cipher_id("T123") is None
 
 
 async def test_session_cache_presets_roundtrip() -> None:

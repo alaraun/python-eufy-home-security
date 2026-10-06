@@ -313,7 +313,8 @@ class SessionCache:
         The stored version, the sections present, which fields the cloud session and
         the push registration hold (names, never values), the number of cached devices,
         and per station (keyed by :func:`redact_serial`) whether the owner account id
-        and the P2P cipher key are cached, merged with ``station_details[serial]``. A
+        and the P2P cipher key are cached and whether the station named the cipher id
+        (``cipher_id_named``), merged with ``station_details[serial]``. A
         section not in :data:`CACHE_SECTIONS` is listed by name only. Never a password,
         token, key, openudid, user id, push credential, full serial, DID or IP.
         """
@@ -331,6 +332,7 @@ class SessionCache:
             stations[label] = {
                 "account_id_cached": _present(entry.get("account_id")),
                 "cipher_id": cipher_id,
+                "cipher_id_named": self.station_named_cipher_id(serial) is not None,
                 "cipher_cached": _present(ciphers.get(str(cipher_id))),
                 **details.get(serial, {}),
             }
@@ -435,8 +437,13 @@ class SessionCache:
 
     def station_cipher_id(self, serial: str) -> int:
         """The cipher ``serial`` named in its last CONN_INIT, else :data:`CIPHER_ID_P2P`."""
+        named = self.station_named_cipher_id(serial)
+        return CIPHER_ID_P2P if named is None else named
+
+    def station_named_cipher_id(self, serial: str) -> int | None:
+        """The cipher ``serial`` named in its last CONN_INIT, None before one was stored."""
         value = self.station(serial).get("cipher_id")
-        return value if isinstance(value, int) and not isinstance(value, bool) else CIPHER_ID_P2P
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
 
     def set_station_cipher_id(self, serial: str, cipher_id: int) -> None:
         self.station(serial)["cipher_id"] = cipher_id

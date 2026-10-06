@@ -148,6 +148,9 @@ SESSION_EXPIRY_MARGIN: Final = 3600.0
 # round trips against the cloud and may cost a login; repeated login failures lock
 # the account for 24 h. A P2P handshake failure asks for both, so both are throttled.
 FORCED_REFRESH_COOLDOWN: Final = 900.0
+#: After ``get_ciphers`` answered no key for a station's cipher, the same station and
+#: cipher are not asked again for this long (the answer does not change by retrying).
+CIPHER_UNAVAILABLE_BACKOFF: Final = 3600.0
 # While a station's re-fetched key is still rejected (the key-refresh latch), at most
 # one automatic refresh per this window.
 KEY_REFRESH_SLOW_RETRY: Final = 24 * 3600.0

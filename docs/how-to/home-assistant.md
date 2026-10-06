@@ -1719,6 +1719,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `CameraWakeError` (a `CommandRejectedError` and a `CommunicationError`; `code` -204, -203 or -205) | the station could not wake the camera: not a station outage, no `UpdateFailed`. From a live view, answer 503 and let the session's wake backoff (`retry_after`) decide when the next attempt goes out; from a button or service action, `raise HomeAssistantError` ("the camera did not wake") |
 | `KeyRejectedError` (a `HandshakeError`; in `ConnectionChanged.error`, `Station.last_error` or the `async_start()` result) | the station rejected a key that was already fetched again once. Not a reauth: raise a fixable repair issue whose fix calls `eufy.async_reset_key_refresh(serial)`, which allows one more fetch. Without it the library tries one fetch a day by itself |
 | `RefreshCooldownError` (a `RateLimitedError`, `code` 0) | the library's own spacing of key fetches, not a eufy throttle: no repair, just wait |
+| `CipherUnavailableError` (an `EmptyResponseError`; `cipher_id`, `owner_source`, `retry_after`) | the cloud has no key for the cipher the station named in its handshake, under the owner id asked (`owner_source`: `"member.admin_user_id"` or `"own user id"`). Not a reauth and not an outage of the station: the share or the station's binding needs the owner. Raise one non-fixable repair issue naming the station and `cipher_id`; clear it on `ConnectionChanged(connected=True)`. The library asks the same station and cipher again only after `retry_after` (an hour); until then every attempt raises this without a request. A reload of the entry asks once more |
 | `KeyExchangeRefusedError` (a `CloudApiError`; `code` 4404 or 463, `status` 463) | the cloud gateway refused the client's key identity and a new key exchange did not restore it. Not a reauth and not a kick-out: no login was attempted and none helps by itself. Carry on from the cache and retry on the next interval; the library re-keys at each attempt. Raise a repair issue only if it persists (hours) |
 
 Errors that happen in the background (a key or owner-id refresh inside a running session,
@@ -1731,6 +1732,7 @@ arrive on `eufy.subscribe` instead:
 | `CloudProblem(error=SessionReplacedError)` | the replaced repair issue, as in the table above |
 | `CloudProblem(error=LoginLimitedError / RateLimitedError)` | the limited repair issue, using `error.retry_after` |
 | `CloudProblem(error=KeyExchangeRefusedError)` | as in the table above: retry later, a repair issue only if it persists |
+| `CloudProblem(error=CipherUnavailableError)` | the repair issue of the table above |
 | `CredentialsRefreshed(station_sn, cipher, owner_id, login)` | a persistent, non-fixable repair issue telling the user a key or owner id was fetched (and whether it cost a login) |
 | `ConnectionChanged(connected=True)` | clear that station's repair issues |
 
@@ -1924,8 +1926,10 @@ async def async_get_config_entry_diagnostics(hass, entry):
 
 - `async_cache_summary()` reports which cache sections and secrets are present (never
   their values), the `CloudStatus` (login need, hold-offs, login budget) and, per
-  station, whether the owner id is cached, `cipher_id` (the cipher the station uses) and
-  `cipher_cached` (whether its key is), and the key-refresh latch state.
+  station, whether the owner id is cached, `cipher_id` (the cipher the station uses),
+  `cipher_id_named` (whether the station named it in a handshake; false means `cipher_id`
+  is the default 40 and no handshake has completed), `cipher_cached` (whether its key
+  is), and the key-refresh latch state.
 - `CloudDevice.as_redacted_dict()` gives a device without its DID, IP or owner id (only
   whether each is present) and with redacted serials.
 - Put any other serial through `redact_serial` (exported from the package root).

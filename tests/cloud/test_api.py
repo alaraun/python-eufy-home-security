@@ -19,6 +19,7 @@ from eufy_home_security.cloud.api import EufyCloudApi, _check_owner_id, _Identit
 from eufy_home_security.cloud.status import LoginNeed
 from eufy_home_security.exceptions import (
     AuthenticationError,
+    CipherUnavailableError,
     CloudApiError,
     CommunicationError,
     EmptyResponseError,
@@ -809,8 +810,36 @@ async def test_cipher_fetch_uses_the_owner_id_and_caches(
     assert cipher_body["station_sn"] == SYNTHETIC.station_sn
 
 
-async def test_empty_cipher_success_is_an_empty_response_error(
-    fake_mega: FakeMega, cache: SessionCache
+@pytest.mark.parametrize(
+    ("member", "source"),
+    [
+        ({"member": {"admin_user_id": FAKE_OWNER_ID}}, "member.admin_user_id"),
+        ({}, "own user id"),
+    ],
+)
+async def test_empty_cipher_success_is_a_cipher_unavailable_error(
+    fake_mega: FakeMega, cache: SessionCache, member: dict[str, Any], source: str
+) -> None:
+    fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 18, **member}]
+    fake_mega.cipher_objects = None  # code 0, no data
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(CipherUnavailableError) as info:
+                await api.async_get_cipher_key(SYNTHETIC.station_sn, 98)
+    err = info.value
+    assert isinstance(err, EmptyResponseError)
+    assert (err.code, err.cipher_id, err.owner_source) == (0, 98, source)
+    assert err.retry_after == const.CIPHER_UNAVAILABLE_BACKOFF
+    assert "cipher 98" in str(err)
+    assert source in str(err)
+    assert "belongs to the station owner" not in str(err)
+
+
+async def test_an_empty_cipher_answer_is_not_asked_again_during_the_back_off(
+    fake_mega: FakeMega, cache: SessionCache, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_mega.devices = [
         {
@@ -819,14 +848,35 @@ async def test_empty_cipher_success_is_an_empty_response_error(
             "member": {"admin_user_id": FAKE_OWNER_ID},
         },
     ]
-    fake_mega.cipher_objects = None  # code 0, no data — the "wrong user_id" answer
+    fake_mega.cipher_objects = None
+
+    def cipher_requests() -> list[list[int]]:
+        return [payload["cipher_ids"] for name, payload in fake_mega.calls if name == "ciphers"]
+
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             api = _api(session, cache)
             await api.async_login()
-            with pytest.raises(EmptyResponseError):
-                await api.async_get_cipher_key(SYNTHETIC.station_sn)
+            with pytest.raises(CipherUnavailableError):
+                await api.async_get_cipher_key(SYNTHETIC.station_sn, 98)
+            for refresh in (False, True):
+                with pytest.raises(CipherUnavailableError) as info:
+                    await api.async_get_cipher_key(SYNTHETIC.station_sn, 98, refresh=refresh)
+                assert 0 < info.value.retry_after <= const.CIPHER_UNAVAILABLE_BACKOFF
+                assert info.value.owner_source == "member.admin_user_id"
+            assert cipher_requests() == [[98]]
+
+            # Another cipher id of the same station is still asked.
+            fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": FAKE_ECC_KEY}]
+            assert await api.async_get_cipher_key(SYNTHETIC.station_sn, 40) == FAKE_ECC_KEY
+            assert cipher_requests() == [[98], [40]]
+
+            # Once the back-off has passed, the id is asked again.
+            monkeypatch.setattr(const, "CIPHER_UNAVAILABLE_BACKOFF", 0.0)
+            fake_mega.cipher_objects = [{"cipher_id": 98, "ecc_private_key": FAKE_ECC_KEY}]
+            assert await api.async_get_cipher_key(SYNTHETIC.station_sn, 98) == FAKE_ECC_KEY
+            assert cipher_requests() == [[98], [40], [98]]
 
 
 async def test_cipher_refresh_honours_the_cooldown(

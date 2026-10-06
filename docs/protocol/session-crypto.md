@@ -71,10 +71,13 @@ session    = PKCS7-unpad(AES-128-CBC-decrypt(aes_key, iv, ct))   # 32 printable 
 - **The station chooses the cipher [verified].** `cipher_id` is 40 on a HomeBase 3
   (fw 3.8.7.4) and 98 on a T8170 standalone camera (fw 3.3.5.4), on the same account.
   The id is readable before any cloud key is needed (only the static key), so it tells
-  which cipher to fetch ([cloud.md](cloud.md)). The library reads it first
-  (`crypto.conn_init_cipher_id`), loads that cipher's key when the credentials it holds
-  are another cipher's (not a stale key: no re-fetch latch), and remembers the id per
-  station in the cache (`stations.<serial>.cipher_id`) for the next start.
+  which cipher to fetch ([cloud.md](cloud.md)). The library loads no credentials before
+  the reply: it reads the id (`crypto.conn_init_cipher_id`), stores it per station
+  (`stations.<serial>.cipher_id`), then loads that cipher's key from the cache, else the
+  cloud. A cipher other than the one of the credentials held is not a stale key (no
+  re-fetch latch). The eufy app does the same **[declared: app]**: it fetches a key only
+  when the station's `APP_CMD_GATEWAYINFO` (1100) callback names the id, caches it per
+  owner id and cipher id, and preloads nothing.
 - An HMAC mismatch, or a key that is not 32 printable bytes, means the cached key of
   that cipher no longer matches the station. Re-fetch it **once**. No other signal
   tells a stale key apart from a dead link.

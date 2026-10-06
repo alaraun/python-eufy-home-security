@@ -42,6 +42,7 @@ from eufy_home_security.events import (
 )
 from eufy_home_security.exceptions import (
     AuthenticationError,
+    CipherUnavailableError,
     CloudError,
     CommunicationError,
     EufySecurityError,
@@ -1450,14 +1451,10 @@ async def test_stations_start_concurrently_and_one_failure_does_not_hold_up_anot
     changes = [(e.station_sn, e.connected) for e in events if isinstance(e, ConnectionChanged)]
     # The reachable station came up before the unreachable one's discovery gave up.
     assert changes.index((up.serial, True)) < changes.index((OTHER_STATION_SN, False))
-    # One login and one device list for both; one cipher fetch per station.
+    # One login and one device list for both; a cipher fetch only for the station that
+    # answered CONN_INIT.
     assert sorted(cloud.calls) == sorted(
-        [
-            "login",
-            "devices",
-            "things",
-            *(f"cipher:{redact_serial(s)}" for s in (up.serial, down.serial)),
-        ]
+        ["login", "devices", "things", f"cipher:{redact_serial(up.serial)}"]
     )
 
 
@@ -1518,7 +1515,87 @@ async def test_the_credential_provider_remembers_the_cipher_a_station_names() ->
         summary = await eufy.async_cache_summary()
         station = summary["stations"][redact_serial(SYNTHETIC.station_sn)]
         assert (station["cipher_id"], station["cipher_cached"]) == (98, True)
+        assert station["cipher_id_named"] is True
         assert "cipher_40_cached" not in station
+
+
+async def test_the_credential_provider_stores_a_named_default_cipher() -> None:
+    cloud = FakeCloud(
+        owner_ids={SYNTHETIC.station_sn: OWNER_ID}, cipher_keys={SYNTHETIC.station_sn: "aa" * 32}
+    )
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        await eufy.async_login()
+        provider = eufy._credential_provider(SYNTHETIC.station_sn)
+        await provider(refresh=False, cipher_id=None)  # the provider's own pick
+        assert eufy.cache.station_named_cipher_id(SYNTHETIC.station_sn) is None
+        await provider(refresh=False, cipher_id=40)  # named by the station
+        assert eufy.cache.station_named_cipher_id(SYNTHETIC.station_sn) == 40
+        summary = await eufy.async_cache_summary()
+        assert summary["stations"][redact_serial(SYNTHETIC.station_sn)]["cipher_id_named"]
+
+
+async def test_a_station_connects_with_the_cipher_it_names_and_no_other_is_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(session_module, "RECONNECT_BACKOFF", (0.05,))
+    fake = FakeStation(cipher_id=98)
+    await fake.start()
+    cloud = FakeCloud.for_stations(fake, cipher_ids_held={98})  # this owner has no cipher 40
+    store = warm_store(email=SYNTHETIC.email, cloud=replace(cloud, cipher_keys={}))
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email,
+        store=store,
+        cloud=cloud,
+        stations={fake.serial: fake},
+        include={fake.serial: Reach.LOCAL},
+    )
+    try:
+        await eufy.async_discover()
+        assert await eufy.async_start(push=False) == {}
+        await wait_for(lambda: eufy.stations[fake.serial].connected)
+        assert cloud.cipher_ids_requested == [98]
+        assert eufy.cache.station_named_cipher_id(fake.serial) == 98
+    finally:
+        await eufy.async_close()
+        fake.stop()
+
+
+async def test_no_key_for_the_named_cipher_is_one_cloud_problem_and_no_fetch_storm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(session_module, "RECONNECT_BACKOFF", (0.05,))
+    fake = FakeStation(cipher_id=98, account_id=OWNER_ID)  # owned by another account
+    await fake.start()
+    cloud = replace(FakeCloud.for_stations(fake), cipher_keys={})  # the cloud has no key
+    store = warm_store(email=SYNTHETIC.email, cloud=cloud)
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email,
+        store=store,
+        cloud=cloud,
+        stations={fake.serial: fake},
+        include={fake.serial: Reach.LOCAL},
+    )
+    events: list[Event] = []
+    eufy.subscribe(events.append)
+    try:
+        await eufy.async_discover()
+        errors = await eufy.async_start(push=False)
+        error = errors[fake.serial]
+        assert isinstance(error, CipherUnavailableError)
+        assert (error.cipher_id, error.owner_source) == (98, "member.admin_user_id")
+        assert eufy.cache.station_named_cipher_id(fake.serial) == 98  # kept despite the failure
+
+        inits = fake.conn_inits
+        await wait_for(lambda: fake.conn_inits >= inits + 3)  # the supervisor retried
+        assert cloud.cipher_ids_requested == [98]  # once: the retries were refused locally
+        problems = [e for e in events if isinstance(e, CloudProblem)]
+        assert [type(p.error) for p in problems] == [CipherUnavailableError]
+        changes = [e for e in events if isinstance(e, ConnectionChanged)]
+        assert {e.cause for e in changes} <= {DisconnectCause.CREDENTIALS_UNAVAILABLE}
+    finally:
+        await eufy.async_close()
+        fake.stop()
 
 
 async def test_discover_builds_a_standalone_station_that_reads_its_one_block() -> None:

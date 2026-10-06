@@ -53,6 +53,32 @@ class EmptyResponseError(CloudApiError):
     """
 
 
+class CipherUnavailableError(EmptyResponseError):
+    """The cloud holds no key for the cipher a station named, under the owner id asked.
+
+    ``get_ciphers`` answered success with no data for ``cipher_id`` under the owner id
+    asked: ``owner_source`` is ``"own user id"`` when that is this account's own id,
+    else ``"member.admin_user_id"`` (another account owns the station). Retrying
+    does not change that answer, so the same station and cipher are not asked again
+    for ``retry_after`` seconds: until then this is raised without a request. Not a
+    reauth; the share or the station binding needs a human.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        cipher_id: int,
+        owner_source: str,
+        retry_after: float,
+        endpoint: str = "",
+    ) -> None:
+        self.cipher_id = cipher_id
+        self.owner_source = owner_source
+        self.retry_after = retry_after
+        super().__init__(0, message, endpoint=endpoint)
+
+
 class KeyExchangeRefusedError(CloudApiError):
     """The cloud gateway refused this client's key identity, and a new one did not help.
 

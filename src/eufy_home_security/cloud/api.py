@@ -35,6 +35,7 @@ from .._logging import (
 )
 from ..exceptions import (
     AuthenticationError,
+    CipherUnavailableError,
     CloudApiError,
     CommunicationError,
     EmptyResponseError,
@@ -148,6 +149,9 @@ class EufyCloudApi:
         self._region_override = region
         self._identity: _Identity | None = None
         self._login_lock = asyncio.Lock()
+        self._cipher_unavailable: dict[tuple[str, int], tuple[float, str]] = {}
+        """(monotonic time, owner id source) of the last empty ``get_ciphers`` answer per
+        (station, cipher id), for the back-off."""
 
     # ── public properties ────────────────────────────────────────────────────
 
@@ -884,6 +888,10 @@ class EufyCloudApi:
         ``refresh`` honours the per-station refresh cooldown: called again inside it
         for the same station, it raises :class:`RefreshCooldownError` (``code`` 0) rather
         than risk a login-shaped fetch that could lock the account.
+
+        An empty answer raises :class:`CipherUnavailableError`; for
+        :data:`~.const.CIPHER_UNAVAILABLE_BACKOFF` after it, the same station and cipher
+        raise it again without a request (``refresh`` included).
         """
         if not refresh:
             cached = self._cache.cipher_key(station_sn, cipher_id)
@@ -895,7 +903,8 @@ class EufyCloudApi:
                     Secret(cached),
                 )
                 return cached
-        else:
+        self._raise_if_cipher_unavailable(station_sn, cipher_id)
+        if refresh:
             left = self._cipher_cooldown_left(station_sn)
             if left:
                 _LOGGER.debug("cipher refresh refused locally: cooldown, %.0fs left", left)
@@ -907,7 +916,11 @@ class EufyCloudApi:
             await self._cache.async_save()
 
         owner = await self.async_get_station_owner_id(station_sn)
-        key = await self._fetch_cipher(station_sn, cipher_id, owner)
+        try:
+            key = await self._fetch_cipher(station_sn, cipher_id, owner)
+        except CipherUnavailableError as err:
+            self._cipher_unavailable[(station_sn, cipher_id)] = (time.monotonic(), err.owner_source)
+            raise
         _LOGGER.debug(
             "cipher %d for %s fetched: ecc_private_key %s",
             cipher_id,
@@ -943,12 +956,17 @@ class EufyCloudApi:
 
         data = await self._with_session(fetch)
         if not data:
-            # code 0 with no data is the "wrong user_id" answer: the cipher belongs
-            # to the station owner, and a shared member must name that owner.
-            raise EmptyResponseError(
-                _SUCCESS,
-                f"no cipher for {redact_serial(station_sn)} under {redact(owner_user_id)} "
-                "— it belongs to the station owner",
+            # code 0 with no data: no key for this cipher id under this user id (a
+            # member's own id instead of the owner's, or an id the owner lacks).
+            source = "own user id" if owner_user_id == self.user_id else "member.admin_user_id"
+            backoff = const.CIPHER_UNAVAILABLE_BACKOFF
+            raise CipherUnavailableError(
+                f"the cloud has no key for cipher {cipher_id} of {redact_serial(station_sn)} "
+                f"under owner id {redact(owner_user_id)} ({source}); "
+                f"not asked again for {backoff:.0f}s",
+                cipher_id=cipher_id,
+                owner_source=source,
+                retry_after=backoff,
                 endpoint=const.CIPHERS_PATH,
             )
         items = (
@@ -1108,6 +1126,27 @@ class EufyCloudApi:
                 f"already; next allowed in {left:.0f}s",
                 retry_after=left,
             )
+
+    def _raise_if_cipher_unavailable(self, station_sn: str, cipher_id: int) -> None:
+        """Re-raise the empty answer for this station and cipher while its back-off runs."""
+        key = (station_sn, cipher_id)
+        last = self._cipher_unavailable.get(key)
+        if last is None:
+            return
+        since, source = last
+        left = const.CIPHER_UNAVAILABLE_BACKOFF - (time.monotonic() - since)
+        if left <= 0:
+            del self._cipher_unavailable[key]
+            return
+        _LOGGER.debug("cipher %d refused locally: no key last time, %.0fs left", cipher_id, left)
+        raise CipherUnavailableError(
+            f"the cloud had no key for cipher {cipher_id} of {redact_serial(station_sn)} "
+            f"under the owner id ({source}); not asked again for {left:.0f}s",
+            cipher_id=cipher_id,
+            owner_source=source,
+            retry_after=left,
+            endpoint=const.CIPHERS_PATH,
+        )
 
     def _cipher_cooldown_left(self, station_sn: str) -> float:
         """Seconds left on ``station_sn``'s forced cipher-refresh cooldown; 0.0 when none."""
