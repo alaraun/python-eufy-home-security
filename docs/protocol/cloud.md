@@ -164,18 +164,27 @@ sharing changes, so cache it per station. A station event push also carries the 
 Only `ecc_private_key` is used. The RSA PEM comes back lowercased by the server and
 cannot be used **[verified]**.
 
-| body `user_id` | answer **[verified]** |
+| request | answer **[verified]** |
 |---|---|
-| the station owner's | the cipher object |
-| a shared member's own id | `HTTP 200`, `code 0 "Succeed."`, **no `data`** |
+| the owner's user id, an id the owner holds | the cipher object |
+| the owner's user id, an id the owner does not hold (41) | `HTTP 200`, `code 0 "Succeed."`, **no `data`** |
+| a shared member's own user id | `HTTP 200`, `code 0 "Succeed."`, **no `data`** |
 | any, on a eufy.com-realm identity | `HTTP 200`, `code 463` |
+
+The empty answer does not tell "wrong user id" from "no such cipher under this owner".
+The library raises `CipherUnavailableError` for it (with the cipher id and whether the
+user id asked was the account's own or `member.admin_user_id`) and does not ask the
+same station and cipher again for an hour (`CIPHER_UNAVAILABLE_BACKOFF`).
 
 The key belongs to the **cipher id under the owner**, not to the serial **[verified]**:
 asked for ids 0–400 with each serial on one account (a HomeBase 3, a T8170, two T8160
 and a T8910), the cloud served the same ids (13, 40, 98, 155, 212) with the same
 `ecc_private_key` per id every time; 13 and 212 carry an empty one. Which id a station
-uses is named in its CONN_INIT: 40 on the HomeBase 3, 98 on the T8170. Owner and members
-get the same key **[verified]**. Whether a key changes when a station is re-bound is
+uses is named in its CONN_INIT: 40 on the HomeBase 3, 98 on the T8170. Fetch only that
+id, after the CONN_INIT reply: the eufy app does the same **[declared: app]**
+([session-crypto.md](session-crypto.md)). Whether other owners hold the same ids is
+**[open]** (one owner's table is known). Owner and members get the same key
+**[verified]**. Whether a key changes when a station is re-bound is
 **[open]**. The station gives no
 signal for a stale key except that CONN_INIT fails to unwrap
 ([session-crypto.md](session-crypto.md)). On that failure, re-fetch once, then stop.
