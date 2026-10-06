@@ -44,6 +44,7 @@ from eufy_home_security.exceptions import (
     LiveStreamLimitError,
     PresetSlotsFullError,
     RecordNotFoundError,
+    StillNotWrittenError,
     UnsupportedError,
 )
 from eufy_home_security.images import HEVC_CONTENT_TYPE, JPEG_CONTENT_TYPE, CameraImage, ImageSource
@@ -557,22 +558,23 @@ async def test_event_thumbnail_reports_record_not_found(
             "thumb_path": "/zx/t.mp4",
         },
     ]
-    for record_id in (
-        20260916 * HISTORY_RECORD_COUNTER + 41,  # missing
-        20260916 * HISTORY_RECORD_COUNTER + 42,  # wrong device
-        20260916 * HISTORY_RECORD_COUNTER + 43,  # no thumb_path
-        20260916 * HISTORY_RECORD_COUNTER + 44,  # invalid path
-        20260916 * HISTORY_RECORD_COUNTER + 45,  # path traversal
-        20260916 * HISTORY_RECORD_COUNTER + 46,  # not .jpg
+    for counter, not_yet in (
+        (41, True),  # missing: the row comes later
+        (42, False),  # wrong device
+        (43, True),  # no thumb_path: the still comes later
+        (44, False),  # invalid path
+        (45, False),  # path traversal
+        (46, False),  # not .jpg
     ):
         event = SecurityEvent(
             source=EventSource.P2P,
             station_sn=SYNTHETIC.station_sn,
             device_sn=SYNTHETIC.camera_sn,
-            record_id=record_id,
+            record_id=20260916 * HISTORY_RECORD_COUNTER + counter,
         )
-        with pytest.raises(RecordNotFoundError):
+        with pytest.raises(RecordNotFoundError) as info:
             await station.async_event_thumbnail(event)
+        assert isinstance(info.value, StillNotWrittenError) is not_yet, counter
     assert not [o for o in fake.received if o["cmd"] == 1308]  # no still was fetched
 
 
@@ -2701,8 +2703,12 @@ async def test_a_standalone_detection_gets_its_own_still(
         assert cam_img.data == image
         assert cam_img.content_type == JPEG_CONTENT_TYPE
     else:
-        with pytest.raises(RecordNotFoundError, match=outcome):
+        with pytest.raises(RecordNotFoundError, match=outcome) as info:
             await standalone_station.async_event_image(event, ImageSource.THUMBNAIL)
+        # Only a still older than the event is "ask again later".
+        assert isinstance(info.value, StillNotWrittenError) is (outcome == "not written yet")
+        if isinstance(info.value, StillNotWrittenError):
+            assert info.value.offset == pytest.approx(still_after, abs=1.0)
 
 
 async def test_a_standalone_detection_still_is_read_in_the_device_zone(

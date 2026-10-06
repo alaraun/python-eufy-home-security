@@ -73,6 +73,7 @@ if TYPE_CHECKING:
         RefreshCooldownError,
         SessionReplacedError,
         StationUnreachableError,
+        StillNotWrittenError,
         UnsupportedError,
     )
     from .identity import StationClaims, entity_unique_id
@@ -187,6 +188,7 @@ _EXPORTS: dict[str, str] = {
             "RefreshCooldownError",
             "SessionReplacedError",
             "StationUnreachableError",
+            "StillNotWrittenError",
             "UnsupportedError",
         ),
         "exceptions",
@@ -337,6 +339,7 @@ __all__ = [
     "StationUnreachableError",
     "Still",
     "StillFormat",
+    "StillNotWrittenError",
     "StorageChanged",
     "StorageInfo",
     "StorageMedium",
