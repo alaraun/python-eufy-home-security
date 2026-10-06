@@ -123,7 +123,9 @@ def test_light_modules_do_not_load_the_heavy_dependencies(
     assert out == "", f"{module} loaded {out}"
 
 
-def test_release_config_bumps_minor_before_one_point_oh() -> None:
-    """A breaking change bumps the minor, not the major, while the version is 0.x."""
+def test_release_config_bumps_conservatively_before_one_point_oh() -> None:
+    """While the version is 0.x a breaking change bumps the minor and a feature the patch."""
     config = json.loads((ROOT / "release-please-config.json").read_text("utf-8"))
-    assert config["packages"]["."]["bump-minor-pre-major"] is True
+    package = config["packages"]["."]
+    assert package["bump-minor-pre-major"] is True
+    assert package["bump-patch-for-minor-pre-major"] is True
