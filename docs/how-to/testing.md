@@ -92,7 +92,43 @@ async def test_warm_start_needs_no_cloud() -> None:
 
 ## Timing
 
-A station session waits for discovery with its production timeouts. A test that
-expects a station to stay unreachable should shorten them first, as the library's
-own tests do by lowering `DISCOVERY_ATTEMPTS` and `DISCOVERY_TIMEOUT` in
-`eufy_home_security.p2p.session`.
+The library's waits are sized for real hardware: a command the station does not
+answer takes `COMMAND_TIMEOUT` (6 s), an unreachable station three 6 s discovery
+attempts. A test that meets such a wait on purpose shortens it.
+
+- **All at once:** `testing.short_timeouts()` is a context manager that sets every wait
+  in `testing.timeouts.SHORT_TIMEOUTS` to a loopback value and restores them on exit;
+  keyword arguments override single values by name. The library's own suite passes with
+  it applied to every test. As a fixture:
+
+  ```python
+  @pytest.fixture
+  def short():
+      with short_timeouts():
+          yield
+  ```
+
+- **One at a time:** `monkeypatch.setattr` on the module that defines the constant
+  (`eufy_home_security.p2p.session.COMMAND_TIMEOUT`, `…p2p.pppp.LAN_DISCOVERY_TIMEOUT`,
+  `…p2p.broadcast.CAPTURE_START_TIMEOUT`, `…station.READBACK_DELAY`), never on a name
+  imported elsewhere. Every call with a `timeout=None` default reads its constant there
+  at call time, also when a caller such as `Station.async_set_guard_mode` passes no
+  timeout.
+
+| wait | constant | shortened by `short_timeouts` |
+|---|---|---|
+| discovery attempts, each | `p2p.session.DISCOVERY_ATTEMPTS`, `DISCOVERY_TIMEOUT` | 1 × 2.5 s (a station ignores the first search after a close) |
+| CONN_INIT reply | `p2p.session.HANDSHAKE_TIMEOUT` | 2.5 s (outlasts one DRW retransmit, 1.5 s) |
+| command result; its late receipt | `p2p.session.COMMAND_TIMEOUT`, `COMMAND_RECEIPT_TIMEOUT` | 0.5 s, 1 s (shorter than a retransmit: a test that drops a command frame sets it itself) |
+| parameter dump | `p2p.session.PARAM_QUERY_TIMEOUT` | 2.5 s |
+| guard-mode report, mode-table read-back | `p2p.session.MODE_REPORT_GRACE`, `MODE_TABLE_READBACK_DELAY` | 0.3 s, 0.05 s |
+| setting read-back retry | `station.READBACK_DELAY` | 0.05 s |
+| reconnect back-off | `p2p.session.RECONNECT_BACKOFF` | 0.1 s |
+| still download, SD info | `p2p.session.STILL_FETCH_TIMEOUT`, `SD_INFO_TIMEOUT` | 1 s |
+| first live / recording frame | `p2p.session.MEDIA_LIVE_FIRST_FRAME_TIMEOUT`, `MEDIA_RECORDING_FIRST_FRAME_TIMEOUT` | 2 s |
+| preset image stream idle, capture start | `station.PRESET_STREAM_IDLE_SECONDS`, `p2p.broadcast.CAPTURE_START_TIMEOUT` | 1 s, 2 s |
+| LAN search (`async_probe_lan`, `async_station_choices`) | `p2p.pppp.LAN_DISCOVERY_TIMEOUT` | 0.5 s |
+
+Not shortened, because a test observes their length: `PARAM_SETTLE` (sub-device blocks
+following a dump), `MEDIA_IDLE_TIMEOUT`, `MEDIA_DRAIN_MAX` (a stopped stream's leftover
+frames), the probe schedule, and the reprobe and idle-close delays. Set them per test.

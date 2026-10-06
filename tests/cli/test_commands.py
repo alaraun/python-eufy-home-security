@@ -121,7 +121,7 @@ def _bound_client(port: int) -> type[client_module.EufySecurity]:
 
     class Bound(client_module.EufySecurity):
         async def async_probe_lan(
-            self, *, timeout: float = 2.0, port: int = DISCOVERY_PORT
+            self, *, timeout: float | None = None, port: int = DISCOVERY_PORT
         ) -> list[LanPath]:
             return await super().async_probe_lan(timeout=0.5, port=discovery_port)
 

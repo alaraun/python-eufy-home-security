@@ -202,6 +202,10 @@ OP_LOCK_WAIT_LOG = 0.05
 DISCOVERY_TIMEOUT = 6.0
 HANDSHAKE_TIMEOUT = 6.0
 COMMAND_TIMEOUT = 6.0
+PARAM_QUERY_TIMEOUT = 8.0
+"""A parameter dump's wait for the station's own block."""
+STILL_FETCH_TIMEOUT = 12.0
+"""A still (1308) download's wait."""
 COMMAND_RESEND_AFTER = 1.5
 COMMAND_RECEIPT_TIMEOUT = 20.0
 """How long after sending a command acknowledged without a result waits for its receipt.
@@ -1382,7 +1386,7 @@ class StationSession:
     # ── requests ─────────────────────────────────────────────────────────────
 
     async def async_get_params(
-        self, *, timeout: float = 8.0, expect_channels: Iterable[int] | None = None
+        self, *, timeout: float | None = None, expect_channels: Iterable[int] | None = None
     ) -> ParamDump:
         """Read every parameter of the station and its sub-devices (pure read).
 
@@ -1396,6 +1400,7 @@ class StationSession:
         ECB-ciphered dumps are refused (see :meth:`_decode_json`); a timeout while
         such dumps arrived says so.
         """
+        timeout = _or(timeout, PARAM_QUERY_TIMEOUT)
         await self.async_connect()
         dump = ParamDump()
         channels = self._expect_channels if expect_channels is None else expect_channels
@@ -1451,7 +1456,7 @@ class StationSession:
         return dump
 
     async def async_set_guard_mode(
-        self, mode: GuardMode, *, timeout: float = COMMAND_TIMEOUT
+        self, mode: GuardMode, *, timeout: float | None = None
     ) -> GuardMode | int:
         """Arm or disarm; returns the mode the station reports it applied.
 
@@ -1476,6 +1481,7 @@ class StationSession:
         :attr:`GuardMode.OFF` is report-only and raises :class:`UnsupportedError`
         before anything is sent: disarm with :attr:`GuardMode.DISARMED`.
         """
+        timeout = _or(timeout, COMMAND_TIMEOUT)
         if mode is GuardMode.OFF:
             raise UnsupportedError("guard mode OFF (6) is report-only; disarm with DISARMED (63)")
         await self.async_connect()
@@ -1571,7 +1577,7 @@ class StationSession:
         channel: int = STATION_CHANNEL,
         value3: int = 0,
         payload: Mapping[str, Any] | Sequence[Any] | None = None,
-        timeout: float = COMMAND_TIMEOUT,
+        timeout: float | None = None,
     ) -> CommandOutcome:
         """Send a GCM ``DeviceMsgBean`` command and report how far it got.
 
@@ -1599,6 +1605,7 @@ class StationSession:
         until its receipt) can still have its receipt arrive now. Those are taken
         (code 0), so the effect is at most a skipped resend.
         """
+        timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
         body = device_msg(
@@ -1679,7 +1686,7 @@ class StationSession:
         raise DeviceTimeoutError(f"no reply from the station within {timeout:.0f}s")
 
     async def async_set_mode_table(
-        self, table: ModeTable, *, verify: bool = True, timeout: float = COMMAND_TIMEOUT
+        self, table: ModeTable, *, verify: bool = True, timeout: float | None = None
     ) -> None:
         """Write one guard mode's whole action table (``SET_ALL_ACTION``, 1255) and
         confirm it by reading the parameters back.
@@ -1695,6 +1702,7 @@ class StationSession:
         ``UnsupportedError`` for a table whose delays cannot be expressed (before
         anything is sent). ``verify=False`` skips the read-back.
         """
+        timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
         body = table.encode(creds.account_id)
@@ -1766,7 +1774,7 @@ class StationSession:
         recipe: Recipe,
         *,
         channel: int = 0,
-        timeout: float = COMMAND_TIMEOUT,
+        timeout: float | None = None,
     ) -> RecipeReply:
         """Send a handler recipe (:mod:`~..devices.recipes`) and wait for its answer.
 
@@ -1783,6 +1791,7 @@ class StationSession:
         receipts it and sends no result, so it returns ``DELIVERED`` after ``timeout``
         (confirm by read-back).
         """
+        timeout = _or(timeout, COMMAND_TIMEOUT)
         if recipe.cmd == RecipeCommand.SET_PAYLOAD and recipe.sub_cmd is not None:
             outcome = await self.async_send_command(
                 recipe.sub_cmd,
@@ -1838,7 +1847,7 @@ class StationSession:
         value: int,
         *,
         channel: int = STATION_CHANNEL,
-        timeout: float = COMMAND_TIMEOUT,
+        timeout: float | None = None,
     ) -> None:
         """Send a legacy scalar setting (frame type = command id, AES-ECB body).
 
@@ -1847,6 +1856,7 @@ class StationSession:
         result came back. A ``channel`` or account id the frame cannot carry raises
         :class:`ValueError` before anything is sent, like any out-of-domain argument.
         """
+        timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
         key = self._require_static_key()
@@ -1908,7 +1918,7 @@ class StationSession:
         value: str,
         *,
         channel: int = STATION_CHANNEL,
-        timeout: float = COMMAND_TIMEOUT,
+        timeout: float | None = None,
     ) -> None:
         """Send a string setting the way the app does (its set-with-string handler).
 
@@ -1919,6 +1929,7 @@ class StationSession:
         :class:`DeviceTimeoutError`. A receipt is not a read-back. A value, account id or
         ``channel`` the body cannot carry raises ``ValueError`` before anything is sent.
         """
+        timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
         body = string_command_body(value, creds.account_id, channel=channel)
@@ -1948,7 +1959,7 @@ class StationSession:
         _LOGGER.debug("%s: string cmd %d receipt %d", self._log_name, command, code)
         _raise_for_code(command, code)
 
-    async def async_get_storage(self, *, timeout: float = COMMAND_TIMEOUT) -> StorageInfo:
+    async def async_get_storage(self, *, timeout: float | None = None) -> StorageInfo:
         """Read the station's storage record (``1307`` / ``11001``): disk and eMMC figures.
 
         Read-only. The reply carries no correlation id, so a record the station sends
@@ -1963,6 +1974,7 @@ class StationSession:
         session asked for, and disk figures are not security state. Records nobody here
         asked for are kept only under GCM.
         """
+        timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
         body = device_msg(
@@ -1990,7 +2002,7 @@ class StationSession:
             )
         return cast(StorageInfo, info)
 
-    async def async_get_sd_info(self, *, timeout: float = SD_INFO_TIMEOUT) -> StorageInfo:
+    async def async_get_sd_info(self, *, timeout: float | None = None) -> StorageInfo:
         """A standalone camera's built-in eMMC, via ``SDINFO_EX`` (``1144``).
 
         The query a standalone device answers where it does not answer the HomeBase
@@ -2004,6 +2016,7 @@ class StationSession:
         event-count query), so it is resent every :data:`SD_INFO_RESEND` seconds until
         answered or ``timeout``; raises :class:`DeviceTimeoutError` when nothing does.
         """
+        timeout = _or(timeout, SD_INFO_TIMEOUT)
         await self.async_connect()
 
         def match(inbound: Inbound) -> StorageInfo | None:
@@ -2274,11 +2287,11 @@ class StationSession:
             )
         return cast(tuple[list[HistoryRecord], int | None], result)
 
-    async def async_fetch_image(self, path: str, *, timeout: float = 12.0) -> bytes:
+    async def async_fetch_image(self, path: str, *, timeout: float | None = None) -> bytes:
         """The bytes of :meth:`async_fetch_still`, whatever their format."""
         return (await self.async_fetch_still(path, timeout=timeout)).data
 
-    async def async_fetch_still(self, path: str, *, timeout: float = 12.0) -> Still:
+    async def async_fetch_still(self, path: str, *, timeout: float | None = None) -> Still:
         """Download one still (``thumb_path`` / ``crop_path``) off the station's disk.
 
         The result carries its :class:`~.media.StillFormat`. A V1 still is decoded with
@@ -2289,6 +2302,7 @@ class StationSession:
         :class:`ProtocolError`. A reply that arrives after its request timed out is
         discarded, never returned for a later request.
         """
+        timeout = _or(timeout, STILL_FETCH_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
         body = device_msg(
