@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.1.2](https://github.com/alaraun/python-eufy-home-security/compare/v0.1.1...v0.1.2) (2026-10-06)
+
+
+### Bug Fixes
+
+* fetch the cipher key the station names, after CONN_INIT ([#9](https://github.com/alaraun/python-eufy-home-security/issues/9)) ([a2af4fb](https://github.com/alaraun/python-eufy-home-security/commit/a2af4fb55fd5a5dbc4ff1299d83ca1d7f0e10c5f))
+
 ## [0.1.1](https://github.com/alaraun/python-eufy-home-security/compare/v0.1.0...v0.1.1) (2026-10-05)
 
 
