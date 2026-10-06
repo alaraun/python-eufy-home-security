@@ -2131,6 +2131,77 @@ async def test_history_query_out_of_lock_allows_concurrent_arm(
         await session.async_close()
 
 
+def _history_sends(
+    session: StationSession, monkeypatch: pytest.MonkeyPatch, fate: list[str]
+) -> list[bytes]:
+    """Route history queries by ``fate`` in order ("drop", "late", then "pass" for the
+    rest); return every history query sent."""
+    send = session._send_gcm
+    sent: list[bytes] = []
+
+    def route(plaintext: bytes, **kwargs: Any) -> int:
+        if b"start_id" not in plaintext:
+            return send(plaintext, **kwargs)
+        sent.append(plaintext)
+        how = fate[len(sent) - 1] if len(sent) <= len(fate) else "pass"
+        if how == "drop":
+            return 1
+        if how == "late":
+            asyncio.get_running_loop().call_later(0.4, lambda: send(plaintext, **kwargs))
+            return 1
+        return send(plaintext, **kwargs)
+
+    monkeypatch.setattr(session, "_send_gcm", route)
+    return sent
+
+
+async def test_an_unanswered_history_page_is_asked_once_more(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    station.rows = [_history_row("20260916", n) for n in range(1, 4)]
+    session = make_session(station, Provider(station))
+    sent = _history_sends(session, monkeypatch, ["drop"])
+    try:
+        history = await session.async_list_history("20260916", timeout=0.3)
+    finally:
+        await session.async_close()
+    assert [r.record_id % 100_000 for r in history] == [3, 2, 1]
+    assert len(sent) == 2
+    assert len(station.history_queries) == 1  # the second query's answer is the one used
+
+
+async def test_a_late_answer_to_the_first_history_query_answers_the_second(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    station.rows = [_history_row("20260916", 7)]
+    session = make_session(station, Provider(station))
+    sent = _history_sends(session, monkeypatch, ["late", "drop"])
+    try:
+        history = await session.async_list_history("20260916", timeout=0.3)
+    finally:
+        await session.async_close()
+    assert [r.record_id % 100_000 for r in history] == [7]
+    assert len(sent) == 2
+
+
+async def test_a_history_page_unanswered_twice_times_out_after_the_default(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The per-query default is read at call time; a single-row lookup is not resent."""
+    monkeypatch.setattr(session_mod, "HISTORY_QUERY_TIMEOUT", 0.2)
+    session = make_session(station, Provider(station))
+    sent = _history_sends(session, monkeypatch, ["drop"] * 3)
+    try:
+        with pytest.raises(DeviceTimeoutError):
+            await session.async_list_history("20260916")
+        assert len(sent) == 2
+        with pytest.raises(DeviceTimeoutError):
+            await session.async_history_record(2026091600042)
+        assert len(sent) == 3
+    finally:
+        await session.async_close()
+
+
 async def test_request_rejects_resend_with_send_only_under_lock(station: FakeStation) -> None:
     session = make_session(station, Provider(station))
     with pytest.raises(ValueError, match="resent"):

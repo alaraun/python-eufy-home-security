@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
+from typing import Any
 
 import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.events import HistoryRecord
-from eufy_home_security.exceptions import UnsupportedError
+from eufy_home_security.exceptions import DeviceTimeoutError, UnsupportedError
 from eufy_home_security.p2p.messages import HISTORY_RECORD_COUNTER
 from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
@@ -164,6 +166,85 @@ async def test_a_recordings_page_pages_a_busy_day_only_until_the_limit(
     page = await station.async_list_recordings(SYNTHETIC.camera_sn, limit=5)
     assert [r.record_id % HISTORY_RECORD_COUNTER for r in page] == [109, 108, 107, 106, 105]
     assert len(fake.history_queries) == 1  # one page of 50 held them
+
+
+@pytest.fixture
+def four_days(fake: FakeStation) -> list[datetime]:
+    """Today and the three days before it (host-local), two camera rows on each."""
+    today = datetime.now().astimezone()
+    days = [today - timedelta(days=n) for n in range(4)]
+    fake.rows = [
+        _row(d, c, SYNTHETIC.camera_sn)
+        for n, d in enumerate(days)
+        for c in (20 - 2 * n, 19 - 2 * n)
+    ]
+    return days
+
+
+def _counters(rows: list[HistoryRecord]) -> list[int]:
+    return [r.record_id % HISTORY_RECORD_COUNTER for r in rows]
+
+
+def _asked(fake: FakeStation) -> list[str]:
+    asked = [q["start_date"] for q in fake.history_queries]
+    fake.history_queries.clear()
+    return asked
+
+
+async def test_recordings_until_a_day_list_that_day_and_older(
+    station: Station, fake: FakeStation, four_days: list[datetime]
+) -> None:
+    rows = await station.async_list_recordings(days=4, until=four_days[1].date())
+    assert _counters(rows) == [18, 17, 16, 15, 14, 13]
+    assert _asked(fake) == [d.strftime("%Y%m%d") for d in four_days[1:]]
+
+    page = await station.async_list_recordings(days=4, until=four_days[1], limit=3)
+    assert _counters(page) == [18, 17, 16]  # a datetime counts as its day
+    assert _asked(fake) == [four_days[1].strftime("%Y%m%d"), four_days[2].strftime("%Y%m%d")]
+
+
+async def test_recordings_before_wins_over_until(
+    station: Station, fake: FakeStation, four_days: list[datetime]
+) -> None:
+    newest = four_days[0].strftime("%Y%m%d")
+    before = int(newest) * HISTORY_RECORD_COUNTER + 20
+    rows = await station.async_list_recordings(
+        days=4, limit=2, before=before, until=four_days[2].date()
+    )
+    assert _counters(rows) == [19, 18]
+    assert _asked(fake)[0] == newest
+
+
+async def test_recordings_until_outside_the_window(
+    station: Station, fake: FakeStation, four_days: list[datetime]
+) -> None:
+    """``days`` counts from today: an ``until`` before the window lists nothing; a day
+    after today lists from today."""
+    assert await station.async_list_recordings(days=2, until=four_days[2].date()) == []
+    assert _asked(fake) == []
+    later = (four_days[0] + timedelta(days=3)).date()
+    rows = await station.async_list_recordings(days=1, until=later)
+    assert _counters(rows) == [20, 19]
+    assert _asked(fake) == [four_days[0].strftime("%Y%m%d")]
+
+
+async def test_recordings_timeout_bounds_each_history_query(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    send = station.session._send_gcm
+    asked: list[bytes] = []
+
+    def drop_history(plaintext: bytes, **kwargs: Any) -> int:
+        if b"start_id" not in plaintext:
+            return send(plaintext, **kwargs)
+        asked.append(plaintext)
+        return 1
+
+    monkeypatch.setattr(station.session, "_send_gcm", drop_history)
+    async with asyncio.timeout(3.0):  # the default would wait 15 s per query
+        with pytest.raises(DeviceTimeoutError):
+            await station.async_list_recordings(timeout=0.2)
+    assert len(asked) == 2  # the page asked once more, then the error
 
 
 def test_a_recording_settles_once_its_end_is_quiet() -> None:

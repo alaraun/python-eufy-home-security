@@ -10,7 +10,7 @@ import logging
 import time
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta, tzinfo
+from datetime import date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -2634,6 +2634,8 @@ class Station:
         since: datetime | None = None,
         limit: int | None = None,
         before: int | None = None,
+        until: date | None = None,
+        timeout: float | None = None,
     ) -> list[HistoryRecord]:
         """The recordings on the station's disk, newest first: the history rows with a
         valid :attr:`~.events.HistoryRecord.video_path`, of ``device_sn`` (None: every
@@ -2648,9 +2650,16 @@ class Station:
         the days (and pages) up to the last row are asked; ``before`` (the
         ``record_id`` of the previous page's last row) starts below that row, in its
         day. A page shorter than ``limit`` means the window holds no more; a full page
-        may be followed by an empty one. Raises :class:`ValueError`, before anything is
-        sent, for ``days`` or ``limit`` below 1 and a ``before`` that carries no day
-        (:func:`~.p2p.messages.record_id_day`).
+        may be followed by an empty one. ``until`` starts the walk at that day: its rows
+        and older ones (a later day counts as today; a ``datetime`` as its host-local
+        day). ``days`` still counts back from today, so an ``until`` before the window
+        lists nothing. ``before`` wins over ``until``. Raises :class:`ValueError`,
+        before anything is sent, for ``days`` or ``limit`` below 1 and a ``before``
+        that carries no day (:func:`~.p2p.messages.record_id_day`).
+
+        ``timeout`` bounds each history query (None:
+        :data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`); an unanswered one is asked once
+        more, then :class:`~.exceptions.DeviceTimeoutError` is raised.
 
         A detection's row exists while its clip still records: download a row once
         :meth:`recording_settled` says so.
@@ -2671,7 +2680,13 @@ class Station:
         first = today - timedelta(days=days - 1)
         if since is not None:
             first = max(first, since.astimezone().date())
-        last = today if cursor_day is None else min(today, cursor_day)
+        if cursor_day is not None:
+            last = min(today, cursor_day)
+        elif until is not None:
+            until_day = until.astimezone().date() if isinstance(until, datetime) else until
+            last = min(today, until_day)
+        else:
+            last = today
         if first > last:
             return []
 
@@ -2693,6 +2708,7 @@ class Station:
             count=limit,
             before=before if cursor_day is not None and cursor_day <= last else None,
             keep=wanted,
+            timeout=timeout,
         )
 
     @staticmethod

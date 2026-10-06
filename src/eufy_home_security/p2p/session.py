@@ -305,6 +305,10 @@ HISTORY_PAGE_SIZE = 50
 """Records per history page (the app asks 30, then 50)."""
 HISTORY_MAX_PAGES = 1000
 """Pages read for one day before giving up on a station that never runs out."""
+HISTORY_QUERY_TIMEOUT = 15.0
+"""Seconds one history query (10011) waits for its page. An idle HomeBase 3 answers within
+3 s; a busy one takes longer and sometimes leaves a query unanswered that it answers when
+asked again, so a listing asks a page once more after a timeout."""
 HISTORY_DATE_FORMAT = "%Y%m%d"
 STILL_LATE_REPLY_WINDOW = 30.0
 """After a 1308 request times out, the next 1308 reply within this many seconds is
@@ -2146,7 +2150,7 @@ class StationSession:
         before: int | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
         page_size: int = HISTORY_PAGE_SIZE,
-        timeout: float = 15.0,
+        timeout: float | None = None,
     ) -> list[HistoryRecord]:
         """History records across all devices from ``start_date`` to ``end_date``, newest first.
 
@@ -2163,7 +2167,10 @@ class StationSession:
         ``record_id`` until a page comes back short. The station answers a query
         with the rows of a single day only, so a multi-day window asked in one
         query misses every day after the first; a day with more rows than one page
-        is cut short without the paging. Raises :class:`ValueError`, before sending,
+        is cut short without the paging. ``timeout`` bounds each query (None:
+        :data:`HISTORY_QUERY_TIMEOUT`); a query left unanswered is sent once more with
+        the same cursor, and :class:`DeviceTimeoutError` is raised when that one times
+        out too. Raises :class:`ValueError`, before sending,
         for a malformed date, a start after the end, a ``before`` that carries no day,
         or a ``page_size`` below 2 (a page repeats the cursor row, so a page of 1
         cannot move).
@@ -2197,12 +2204,13 @@ class StationSession:
         return records
 
     async def async_history_record(
-        self, record_id: int, *, timeout: float = 15.0
+        self, record_id: int, *, timeout: float | None = None
     ) -> HistoryRecord | None:
         """The history row of one ``record_id``, or None when the station has none.
 
-        One query: the record's day comes from the id (``YYYYMMDD`` and a five-digit
-        counter), and a page asked from ``start_id`` starts with that row. Raises
+        One query, not resent (``timeout`` None: :data:`HISTORY_QUERY_TIMEOUT`): the
+        record's day comes from the id (``YYYYMMDD`` and a five-digit counter), and a
+        page asked from ``start_id`` starts with that row. Raises
         :class:`ValueError`, before sending, for an id that carries no valid day
         (check it with :func:`~.messages.record_id_day`).
         """
@@ -2220,7 +2228,7 @@ class StationSession:
         start_id: int | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
         page_size: int,
-        timeout: float,
+        timeout: float | None,
     ) -> None:
         """Add one day's records to ``records``, page by page, until the day or ``count``
         runs out; ``seen`` holds the ``record_id`` values already met. With
@@ -2230,7 +2238,7 @@ class StationSession:
         if start_id:
             seen.add(start_id)  # the first page starts with the cursor row
         for _ in range(HISTORY_MAX_PAGES):
-            page, oldest = await self._history_page(day, cursor, page_size, timeout)
+            page, oldest = await self._history_page(day, cursor, page_size, timeout, resend=True)
             fresh = [r for r in page if not r.record_id or r.record_id not in seen]
             seen.update(r.record_id for r in fresh)
             records.extend(r for r in fresh if keep is None or keep(r))
@@ -2247,20 +2255,37 @@ class StationSession:
         )
 
     async def _history_page(
-        self, day: date, start_id: int, page_size: int, timeout: float
+        self,
+        day: date,
+        start_id: int,
+        page_size: int,
+        timeout: float | None,
+        *,
+        resend: bool = False,
     ) -> tuple[list[HistoryRecord], int | None]:
-        """One page of a day's history and the cursor for the next (its oldest ``record_id``)."""
+        """One page of a day's history and the cursor for the next (its oldest ``record_id``).
+
+        ``resend``: after a timeout, ask the same page once more; a late reply to the
+        first query answers the second as well.
+        """
+        timeout = HISTORY_QUERY_TIMEOUT if timeout is None else timeout
         await self.async_connect()
         creds = self._require_creds()
-        transaction = str(int(time.time() * 1000))
-        payload = history_query_payload(
-            day.strftime(HISTORY_DATE_FORMAT),
-            (day + timedelta(days=1)).strftime(HISTORY_DATE_FORMAT),
-            count=page_size,
-            start_id=start_id,
-            transaction=transaction,
-        )
-        body = device_msg(creds.account_id, CMD_DATABASE, payload, channel=STATION_CHANNEL)
+        sent: set[str] = set()
+
+        def send() -> None:
+            transaction = str(int(time.time() * 1000))
+            sent.add(transaction)
+            payload = history_query_payload(
+                day.strftime(HISTORY_DATE_FORMAT),
+                (day + timedelta(days=1)).strftime(HISTORY_DATE_FORMAT),
+                count=page_size,
+                start_id=start_id,
+                transaction=transaction,
+            )
+            self._send_gcm(
+                device_msg(creds.account_id, CMD_DATABASE, payload, channel=STATION_CHANNEL)
+            )
 
         def match(inbound: Inbound) -> tuple[list[HistoryRecord], int | None] | None:
             if inbound.type != FrameType.DB_SYNC or (obj := inbound.json()) is None:
@@ -2268,7 +2293,7 @@ class StationSession:
             if obj.get("cmd") != DB_QUERY_HISTORY:
                 return None
             echoed = obj.get("transaction")
-            if echoed is not None and str(echoed) != transaction:
+            if echoed is not None and str(echoed) not in sent:
                 return None  # another client's page: every session sees the replies
             page = [HistoryRecord.from_row(row) for row in flatten_history_rows(obj)]
             ids = [r.record_id for r in page if r.record_id]
@@ -2278,13 +2303,22 @@ class StationSession:
             return page, oldest
 
         async with self._history_lock:
-            result = await self._request(
-                lambda: self._send_gcm(body),
-                match,
-                timeout=timeout,
-                label="history query",
-                send_only_under_lock=True,
-            )
+            try:
+                result = await self._request(
+                    send, match, timeout=timeout, label="history query", send_only_under_lock=True
+                )
+            except DeviceTimeoutError:
+                if not resend:
+                    raise
+                _LOGGER.info(
+                    "%s: history query of %s unanswered within %.0fs; asking once more",
+                    self._log_name,
+                    day.isoformat(),
+                    timeout,
+                )
+                result = await self._request(
+                    send, match, timeout=timeout, label="history query", send_only_under_lock=True
+                )
         return cast(tuple[list[HistoryRecord], int | None], result)
 
     async def async_fetch_image(self, path: str, *, timeout: float | None = None) -> bytes:
