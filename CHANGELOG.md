@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.2.4](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.3...v0.2.4) (2026-10-07)
+
+
+### Features
+
+* a cipher key that does not parse is unusable, not rejected ([#23](https://github.com/alaraun/python-eufy-home-security/issues/23)) ([2a811eb](https://github.com/alaraun/python-eufy-home-security/commit/2a811eb426a4cac5ad2d8d5f6c2b2961b9526a7d))
+
 ## [0.2.3](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.2...v0.2.3) (2026-10-07)
 
 
