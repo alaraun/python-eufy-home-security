@@ -18,6 +18,7 @@ Support legend (models, capabilities and guard modes):
 | T8160 | eufyCam 3 (S330) | camera | 19 | verified | live settings write+read-back and media on T8030 HomeBase 3, camera fw 3.4.3.0 (device_type 19 is carried by live event pushes and matches the eufy app SnUtils type map) |
 | T8161 | eufyCam 3C | camera | 23 | declared | eufy app SnConstants CAMERA3C; eufy app SnUtils type map (23) |
 | T8170 | Battery SoloCam (T8170) | camera | 48 | declared | eufy app SnConstants BATTERY_SOLO_CAM_8170; eufy app SnUtils type map (48) (a standalone camera, its own station; the cloud device list reports device_type 48 and the parameter dump labels its block 48) |
+| T8410 | Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24) | camera | 31 | declared | eufy app SnConstants INDOOR_CAMERA_PT; eufy app SnUtils type map (31) (a standalone camera, its own station; a serial with '5' at index 6 is the app's separate product T8410C, with its own thing description and handler) |
 | T8910 | Outdoor motion sensor | sensor | 10 | unknown | cloud device list: a T8910 paired to a HomeBase 3 reports device_type 10; its battery is in the station's parameter dump (no eufy app source ties the prefix to a model; the name is inferred from the type) |
 
 Models without a profile below offer no capability (all *unknown*).
@@ -70,6 +71,29 @@ Kind markers (a block without a known serial): 1400, 1401
 | name | 1217 |
 | wifi_rssi | 1142 |
 
+## T8161 eufyCam 3C
+
+| capability | support | source |
+|---|---|---|
+| local_events | declared | the HomeBase's own P2P push (cmd 2037), a station command, not per model |
+| cloud_events | declared | app code relays detections over FCM |
+| snapshot_fetch | declared | the HomeBase's IMAGE_NOTIFY 1308 fetch, a station command, not per model |
+| live_keyframe | declared | T8161 handler open/close recipes equal the T8160's (1350/1003, 1350/1004); the live open is the HomeBase's 1003 (wakes a battery camera) |
+| live_stream | declared | T8161 handler open/close recipes equal the T8160's (1350/1003, 1350/1004); the live open is the HomeBase's 1003 |
+| recording_download | declared | the HomeBase's DOWNLOAD_VIDEO 1024, a station command, not per model |
+| settings_write | declared | the T8161 thing description and handler (its settings file) |
+| battery | declared | T8161 handler battery_value reads param 1101 |
+| rssi | declared | T8161 handler device_wifi_signal_strength reads param 1142 |
+
+Settings: rw 29 / ro 65, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-eufycam-3c)
+
+| parameter | id |
+|---|---|
+| battery | 1101 |
+| firmware | 7013 |
+| name | 1217 |
+| wifi_rssi | 1142 |
+
 ## T8170 Battery SoloCam (T8170)
 
 | capability | support | source |
@@ -85,6 +109,19 @@ Kind markers (a block without a known serial): 1400, 1401
 | ptz_zoom | verified | live picture zoom 1-12 (6203) with its echo, measured in the stream, T8170 Battery SoloCam, standalone, fw 3.3.5.4; 4x and 8x also paired to a HomeBase 3 fw 3.8.7.4 (the library accepts 1-12; the camera caps near 14x; single view only; a go-to, the idle return or a reopened view resets it to 1x) |
 
 Settings: rw 39 / ro 107, see [Settings of T8170 Battery SoloCam (T8170)](#settings-of-t8170-battery-solocam-t8170)
+
+| parameter | id |
+|---|---|
+
+## T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)
+
+| capability | support | source |
+|---|---|---|
+| live_keyframe | declared | T8410 handler open_live_stream: the 1700/1000 open without extValue, and a bare 1004 stop (reached over the RSA session variant, CONN_INIT version 1; not verified on hardware) |
+| live_stream | declared | T8410 handler open_live_stream: the 1700/1000 open without extValue, and a bare 1004 stop (reached over the RSA session variant, CONN_INIT version 1; not verified on hardware) |
+| ptz_control | declared | T8410 handler ptz_action_control: 1700/6030 with cmd_type and rotate_type only (no zoom, no ivalue) (one pan/tilt step only: the handler has no preset or picture-zoom actions; reached over the RSA session variant, CONN_INIT version 1; not verified on hardware) |
+
+Settings: rw 43 / ro 86, see [Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)](#settings-of-t8410-indoor-cam-2k-pan--tilt-solo-indoorcam-p24)
 
 | parameter | id |
 |---|---|
@@ -5530,7 +5567,7 @@ rw 39 / ro 80
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8410
+### Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)
 
 rw 43 / ro 86
 

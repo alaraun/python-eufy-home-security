@@ -1748,26 +1748,41 @@ def test_station_devices_hub_vs_standalone(
     assert on_demand_station.devices == (on_demand_station.device,)
 
 
-@pytest.fixture
-async def standalone_station(fake: FakeStation) -> AsyncIterator[Station]:
-    fake.serial = "T8170P2000054321"
-    fake.static_key = static_key("T8170P2000054321", fake.did)
+async def _standalone(fake: FakeStation, serial: str) -> Station:
+    """A standalone camera ``serial`` that is its own station, on ``fake``."""
+    fake.serial = serial
+    fake.static_key = static_key(serial, fake.did)
 
     async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
-    session = StationSession(
-        "T8170P2000054321", credentials, host="127.0.0.1", port=fake.discovery_port
-    )
+    session = StationSession(serial, credentials, host="127.0.0.1", port=fake.discovery_port)
     device = CloudDevice(
-        device_sn="T8170P2000054321",
+        device_sn=serial,
         device_type=18,
         name="PTZ",
         p2p_did=SYNTHETIC.did,
-        station_sn="T8170P2000054321",
+        station_sn=serial,
     )
     station = Station(device, session)
     await station.async_update()
+    return station
+
+
+@pytest.fixture
+async def standalone_station(fake: FakeStation) -> AsyncIterator[Station]:
+    station = await _standalone(fake, "T8170P2000054321")
+    yield station
+    await station.async_close()
+
+
+_T8410_SN = "T8410P2000054321"
+
+
+@pytest.fixture
+async def t8410_station(fake: FakeStation) -> AsyncIterator[Station]:
+    """A standalone T8410: pan/tilt without presets, its handler's own recipes."""
+    station = await _standalone(fake, _T8410_SN)
     yield station
     await station.async_close()
 
@@ -1928,6 +1943,56 @@ async def test_pan_tilt_sends_direction(standalone_station: Station, fake: FakeS
     assert fake.pan_tilts == [PanTilt.LEFT, PanTilt.UP]
     body = next(b for b in fake.doorbell_payloads if b.get("commandType") == 6030)
     assert body["data"] == {"cmd_type": 1, "rotate_type": 1, "zoom": 1, "ivalue": -1}
+
+
+async def test_a_t8410_pan_tilt_sends_its_handlers_bare_step(
+    t8410_station: Station, fake: FakeStation
+) -> None:
+    await t8410_station.async_pan_tilt(_T8410_SN, PanTilt.RIGHT, settle=0)
+
+    assert fake.pan_tilts == [PanTilt.RIGHT]
+    body = next(b for b in fake.doorbell_payloads if b.get("commandType") == 6030)
+    assert body["data"] == {"cmd_type": 1, "rotate_type": 2}
+
+
+async def test_a_t8410_live_open_leaves_out_ext_value(
+    t8410_station: Station, fake: FakeStation
+) -> None:
+    stream = await t8410_station.async_open_live(_T8410_SN)
+    async with stream:
+        await anext(aiter(stream))
+
+    (body,) = [b["data"] for b in fake.doorbell_payloads if b.get("commandType") == 1000]
+    assert "extValue" not in body
+    assert body["ivalue"] == 1
+    assert fake.live_opens == [0]
+
+
+async def test_a_t8170_live_open_keeps_ext_value(
+    standalone_station: Station, fake: FakeStation
+) -> None:
+    stream = await standalone_station.async_open_live("T8170P2000054321")
+    async with stream:
+        await anext(aiter(stream))
+
+    (body,) = [b["data"] for b in fake.doorbell_payloads if b.get("commandType") == 1000]
+    assert body["extValue"] == 1000
+
+
+async def test_a_t8410_refuses_every_slot_call_before_sending(
+    t8410_station: Station, fake: FakeStation
+) -> None:
+    """PTZ_CONTROL without PTZ_PRESETS: a slot store, delete or picture is refused."""
+    for call in (
+        t8410_station.async_store_preset(_T8410_SN, 1),
+        t8410_station.async_delete_preset(_T8410_SN, 1),
+        t8410_station.async_preset_picture(_T8410_SN, 1),
+        t8410_station.async_save_preset(_T8410_SN),
+    ):
+        with pytest.raises(UnsupportedError, match="presets"):
+            await call
+
+    assert fake.doorbell_payloads == []
 
 
 async def _until(condition: Callable[[], bool], timeout: float = 2.0) -> None:

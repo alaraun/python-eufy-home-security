@@ -2621,6 +2621,7 @@ class StationSession:
         first_frame_timeout: float | None = None,
         idle_timeout: float | None = None,
         wait: bool = False,
+        live_ext_value: bool = True,
     ) -> MediaStream:
         """Open a camera's live video and audio. This wakes a battery camera.
 
@@ -2637,14 +2638,19 @@ class StationSession:
         :data:`MEDIA_LIVE_FIRST_FRAME_TIMEOUT` and :data:`MEDIA_IDLE_TIMEOUT`.
 
         A standalone device (:attr:`standalone`) gets its handler's open, a 1700
-        frame with sub-command 1000, and a bare 1004 stop; a station's camera gets
-        the station's 1003 in a ``DeviceMsgBean`` and a 1004 naming the channel.
+        frame with sub-command 1000 (``extValue`` left out with ``live_ext_value``
+        False, see :class:`~..devices.recipes.HandlerVariant`), and a bare 1004 stop;
+        a station's camera gets the station's 1003 in a ``DeviceMsgBean`` and a 1004
+        naming the channel.
         """
         if self.standalone:
 
             def open_standalone(account_id: str, key_hex: str) -> tuple[int, bytes]:
                 recipe = open_live_stream_single(
-                    channel=channel, account_id=account_id, key_hex=key_hex
+                    channel=channel,
+                    account_id=account_id,
+                    key_hex=key_hex,
+                    ext_value=live_ext_value,
                 )
                 return recipe.cmd, recipe.plaintext()
 

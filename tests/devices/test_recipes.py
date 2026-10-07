@@ -1,6 +1,7 @@
 import pytest
 
 from eufy_home_security.devices.recipes import (
+    DEFAULT_VARIANT,
     MAX_PRESET_SLOTS,
     PARENT_CONNECT_TYPES,
     ConnectType,
@@ -14,6 +15,9 @@ from eufy_home_security.devices.recipes import (
     connect_type,
     free_preset_slot,
     goto_preset,
+    handler_variant,
+    open_live_stream_single,
+    pan_tilt,
     parse_preset_positions,
     ptz_rotate,
     query_preset_positions,
@@ -164,3 +168,41 @@ def test_pan_tilt_directions_are_the_cameras() -> None:
         ("UP", 3),
         ("DOWN", 4),
     ]
+
+
+@pytest.mark.parametrize(
+    ("product_code", "ext_value", "zoom_ivalue"),
+    [
+        ("T8410", False, False),
+        ("t8410c", False, True),
+        ("T8170", True, True),
+        ("T8160", True, True),
+        (None, True, True),
+    ],
+)
+def test_handler_variant_per_product(
+    product_code: str | None, ext_value: bool, zoom_ivalue: bool
+) -> None:
+    variant = handler_variant(product_code)
+    assert (variant.live_open_ext_value, variant.ptz_zoom_ivalue) == (ext_value, zoom_ivalue)
+
+
+def _live_open_keys(*, ext_value: bool) -> list[str]:
+    recipe = open_live_stream_single(channel=0, account_id="a", key_hex="00", ext_value=ext_value)
+    assert recipe.params is not None
+    return list(recipe.params)
+
+
+def test_the_t8410_live_open_leaves_out_ext_value_only() -> None:
+    default = _live_open_keys(ext_value=DEFAULT_VARIANT.live_open_ext_value)
+    t8410 = _live_open_keys(ext_value=handler_variant("T8410").live_open_ext_value)
+    assert default[-2:] == ["extValue", "streamtype"]
+    assert t8410 == [k for k in default if k != "extValue"]
+
+
+def test_the_t8410_pan_tilt_sends_cmd_and_rotate_type_only() -> None:
+    bare = pan_tilt(PanTilt.UP, zoom_ivalue=handler_variant("T8410").ptz_zoom_ivalue)
+    assert bare.plaintext() == b'{"commandType":6030,"data":{"cmd_type":1,"rotate_type":3}}'
+    for code in ("T8410C", "T8170"):
+        full = pan_tilt(PanTilt.UP, zoom_ivalue=handler_variant(code).ptz_zoom_ivalue)
+        assert full.params == {"cmd_type": 1, "rotate_type": 3, "zoom": 1, "ivalue": -1}

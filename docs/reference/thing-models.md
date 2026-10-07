@@ -90,6 +90,7 @@ Generated from the cached TDs and `CASES`; do not edit by hand.
 | T8030 | 174 | 2026/09/04 | 54 | 75 | 6 |
 | T8160 | 119 | 2026/07/15 | 34 | 98 | 4 |
 | T8170 | 283 | 2026/08/31 | 70 | 148 | 7 |
+| T8410 | 159 | 2026/09/07 | 62 | 130 | 3 |
 | T8910 | 48 | 2025/08/27 | 7 | 11 | 1 |
 
 ### Recipes the library implements
@@ -105,5 +106,8 @@ Generated from the cached TDs and `CASES`; do not edit by hand.
 | T8170 | SINGLE | `set_picture_zoom` | `set_picture_zoom` | verified |  |
 | T8160 | HB3 | `open_live_stream` | — | declared | The library sends its own HomeBase live open, not this recipe. |
 | T8160 | HB3 | `close_live_stream` | `close_live_stream` | declared |  |
+| T8410 | SINGLE | `open_live_stream` | `open_live_stream_single` | declared | The T8410 variant: no `extValue`. |
+| T8410 | SINGLE | `close_live_stream` | `close_live_stream` | declared |  |
+| T8410 | SINGLE | `ptz_action_control` | `ptz_rotate` | declared | The T8410 variant: no `zoom`, no `ivalue`. |
 
 <!-- END GENERATED: scripts/thing_models.py inventory -->
