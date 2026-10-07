@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.2.2](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.1...v0.2.2) (2026-10-07)
+
+
+### Features
+
+* the RSA session variant and T8410/T8161 device profiles ([#19](https://github.com/alaraun/python-eufy-home-security/issues/19)) ([c8921d1](https://github.com/alaraun/python-eufy-home-security/commit/c8921d194e8cd54213bb6a385353fa4bd94b7189))
+
 ## [0.2.1](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.0...v0.2.1) (2026-10-07)
 
 
