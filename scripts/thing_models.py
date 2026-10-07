@@ -58,6 +58,14 @@ STANDALONE_T8170: Final[Mapping[str, Any]] = {
     "device_channel": 0,
     "main_sw_version": "3.3.5.4",
 }
+T8410_SN: Final = "T8410P2000054321"
+"""A synthetic standalone T8410 serial (index 6 is not '5', so not a T8410C)."""
+STANDALONE_T8410: Final[Mapping[str, Any]] = {
+    "device_sn": T8410_SN,
+    "parent_sn": T8410_SN,
+    "device_channel": 0,
+    "main_sw_version": "2.3.2.6",
+}
 HOMEBASE_T8160: Final[Mapping[str, Any]] = {
     "device_sn": SYNTHETIC.camera_sn,
     "parent_sn": SYNTHETIC.station_sn,
@@ -159,6 +167,29 @@ CASES: Final[tuple[Case, ...]] = (
         device=HOMEBASE_T8160,
         payload=0,
         builder="close_live_stream",
+    ),
+    Case(
+        product_code="T8410",
+        identifier="open_live_stream",
+        device=STANDALONE_T8410,
+        payload=LIVE_OPEN_PAYLOAD,
+        builder="open_live_stream_single",
+        note="The T8410 variant: no `extValue`.",
+    ),
+    Case(
+        product_code="T8410",
+        identifier="close_live_stream",
+        device=STANDALONE_T8410,
+        payload=0,
+        builder="close_live_stream",
+    ),
+    Case(
+        product_code="T8410",
+        identifier="ptz_action_control",
+        device=STANDALONE_T8410,
+        payload={"cmdType": 1, "rotateType": 2, "zoom": 1},
+        builder="ptz_rotate",
+        note="The T8410 variant: no `zoom`, no `ivalue`.",
     ),
 )
 

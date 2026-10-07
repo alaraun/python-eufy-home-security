@@ -55,7 +55,8 @@ class Capability(StrEnum):
     PTZ_PRESETS = "ptz_presets"
     """Pan/tilt preset slots: read them, turn the camera to one, take its live image."""
     PTZ_CONTROL = "ptz_control"
-    """Pan/tilt the camera by one step, and store or delete a preset slot (6030/6032/6033)."""
+    """Pan/tilt the camera by one step (6030); with :attr:`PTZ_PRESETS`, store or
+    delete a slot (6032/6033)."""
     PTZ_ZOOM = "ptz_zoom"
     """Zoom the picture (6203) and follow the zoom the camera reports."""
 
@@ -308,6 +309,90 @@ _T8170 = DeviceProfile(
     params=MappingProxyType({}),
 )
 
+_T8161_HANDLER = "T8161 handler"
+
+_T8161 = DeviceProfile(
+    model="T8161",
+    capabilities=MappingProxyType(
+        {
+            Capability.LOCAL_EVENTS: Evidence(
+                Support.DECLARED,
+                "the HomeBase's own P2P push (cmd 2037), a station command, not per model",
+            ),
+            Capability.CLOUD_EVENTS: Evidence(
+                Support.DECLARED, "app code relays detections over FCM"
+            ),
+            Capability.SNAPSHOT_FETCH: Evidence(
+                Support.DECLARED,
+                "the HomeBase's IMAGE_NOTIFY 1308 fetch, a station command, not per model",
+            ),
+            Capability.LIVE_KEYFRAME: Evidence(
+                Support.DECLARED,
+                f"{_T8161_HANDLER} open/close recipes equal the T8160's (1350/1003, "
+                "1350/1004); the live open is the HomeBase's 1003",
+                "wakes a battery camera",
+            ),
+            Capability.LIVE_STREAM: Evidence(
+                Support.DECLARED,
+                f"{_T8161_HANDLER} open/close recipes equal the T8160's (1350/1003, "
+                "1350/1004); the live open is the HomeBase's 1003",
+            ),
+            Capability.RECORDING_DOWNLOAD: Evidence(
+                Support.DECLARED,
+                "the HomeBase's DOWNLOAD_VIDEO 1024, a station command, not per model",
+            ),
+            Capability.SETTINGS_WRITE: Evidence(
+                Support.DECLARED, "the T8161 thing description and handler (its settings file)"
+            ),
+            Capability.BATTERY: Evidence(
+                Support.DECLARED, f"{_T8161_HANDLER} battery_value reads param 1101"
+            ),
+            Capability.RSSI: Evidence(
+                Support.DECLARED,
+                f"{_T8161_HANDLER} device_wifi_signal_strength reads param 1142",
+            ),
+        }
+    ),
+    params=MappingProxyType(
+        {
+            "battery": PARAM_BATTERY,
+            "wifi_rssi": PARAM_WIFI_RSSI,
+            "name": PARAM_DEVICE_NAME,
+            "firmware": PARAM_FIRMWARE,
+        }
+    ),
+)
+
+_T8410_RSA = "reached over the RSA session variant, CONN_INIT version 1; not verified on hardware"
+
+_T8410 = DeviceProfile(
+    model="T8410",
+    capabilities=MappingProxyType(
+        {
+            Capability.LIVE_KEYFRAME: Evidence(
+                Support.DECLARED,
+                "T8410 handler open_live_stream: the 1700/1000 open without extValue, "
+                "and a bare 1004 stop",
+                _T8410_RSA,
+            ),
+            Capability.LIVE_STREAM: Evidence(
+                Support.DECLARED,
+                "T8410 handler open_live_stream: the 1700/1000 open without extValue, "
+                "and a bare 1004 stop",
+                _T8410_RSA,
+            ),
+            Capability.PTZ_CONTROL: Evidence(
+                Support.DECLARED,
+                "T8410 handler ptz_action_control: 1700/6030 with cmd_type and rotate_type "
+                "only (no zoom, no ivalue)",
+                "one pan/tilt step only: the handler has no preset or picture-zoom actions; "
+                + _T8410_RSA,
+            ),
+        }
+    ),
+    params=MappingProxyType({}),
+)
+
 
 def _register(registry: dict[str, DeviceProfile], *profiles: DeviceProfile) -> None:
     for entry in profiles:
@@ -317,7 +402,7 @@ def _register(registry: dict[str, DeviceProfile], *profiles: DeviceProfile) -> N
 
 
 _profiles: dict[str, DeviceProfile] = {}
-_register(_profiles, _T8030, _T8160, _T8910, _T8170)
+_register(_profiles, _T8030, _T8160, _T8910, _T8170, _T8161, _T8410)
 
 PROFILES: Final[Mapping[str, DeviceProfile]] = MappingProxyType(_profiles)
 

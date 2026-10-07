@@ -85,9 +85,34 @@ def test_kind_markers_are_merged_per_kind_and_single_valued() -> None:
 
 
 def test_declared_model_without_profile_gets_fallback() -> None:
-    profile = profile_for_serial("T8161P0000000000")
-    assert profile is FALLBACK_PROFILES[DeviceKind.CAMERA]
+    profile = profile_for_serial("T8002P0000000000")
+    assert profile is FALLBACK_PROFILES[DeviceKind.STATION]
     assert not profile.params
+
+
+def test_the_t8161_profile_mirrors_the_t8160s_declared() -> None:
+    profile = profile_for_serial("T8161P0000000000")
+    assert profile is PROFILES["T8161"]
+    assert set(profile.capabilities) == set(PROFILES["T8160"].capabilities)
+    assert profile.params == PROFILES["T8160"].params
+    assert {e.support for e in profile.capabilities.values()} == {Support.DECLARED}
+    assert "T8161 handler" in profile.capabilities[Capability.LIVE_STREAM].source
+    assert not profile.kind_markers
+
+
+def test_the_t8410_profile_is_live_and_pan_tilt_without_presets_or_zoom() -> None:
+    profile = profile_for_serial("T8410P0000000000")
+    assert profile is PROFILES["T8410"]
+    assert {cap: e.support for cap, e in profile.capabilities.items()} == {
+        Capability.LIVE_KEYFRAME: Support.DECLARED,
+        Capability.LIVE_STREAM: Support.DECLARED,
+        Capability.PTZ_CONTROL: Support.DECLARED,
+    }
+    assert profile.support(Capability.PTZ_PRESETS) is Support.UNKNOWN
+    assert profile.support(Capability.PTZ_ZOOM) is Support.UNKNOWN
+    for evidence in profile.capabilities.values():
+        assert "T8410 handler" in evidence.source
+        assert "RSA session variant" in evidence.note
 
 
 def test_uncatalogued_serial_has_no_profile() -> None:

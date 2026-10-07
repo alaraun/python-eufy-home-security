@@ -2112,12 +2112,12 @@ async def test_history_query_out_of_lock_allows_concurrent_arm(
 ) -> None:
     station.reply_to_settings = True
     session = make_session(station, Provider(station))
-    send = session._send_gcm
+    send = session._send_secure
 
     def drop_history(plaintext: bytes, **kwargs: Any) -> int:
         return 1 if b"start_id" in plaintext else send(plaintext, **kwargs)
 
-    monkeypatch.setattr(session, "_send_gcm", drop_history)
+    monkeypatch.setattr(session, "_send_secure", drop_history)
     try:
         await session.async_get_params()
         query = asyncio.create_task(session.async_history_record(2026091600042, timeout=3.0))
@@ -2136,7 +2136,7 @@ def _history_sends(
 ) -> list[bytes]:
     """Route history queries by ``fate`` in order ("drop", "late", then "pass" for the
     rest); return every history query sent."""
-    send = session._send_gcm
+    send = session._send_secure
     sent: list[bytes] = []
 
     def route(plaintext: bytes, **kwargs: Any) -> int:
@@ -2151,7 +2151,7 @@ def _history_sends(
             return 1
         return send(plaintext, **kwargs)
 
-    monkeypatch.setattr(session, "_send_gcm", route)
+    monkeypatch.setattr(session, "_send_secure", route)
     return sent
 
 
@@ -3107,3 +3107,69 @@ async def test_async_get_sd_info_raises_timeout_on_no_answer(station: FakeStatio
             await session.async_get_sd_info(timeout=0.3)
     finally:
         await session.async_close()
+
+
+class RsaProvider:
+    """Credentials of a station answering the RSA CONN_INIT: its RSA key, or none."""
+
+    def __init__(self, station: FakeStation, *, rsa_key: bool = True) -> None:
+        self.station = station
+        self.rsa_key = rsa_key
+
+    async def __call__(self, *, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(
+            SYNTHETIC.account_id,
+            "user",
+            "",
+            rsa_private_key=self.station.rsa_private_key_pem if self.rsa_key else None,
+        )
+
+
+@pytest.mark.parametrize("encryption", [0, 1])
+async def test_an_rsa_conn_init_runs_the_session_under_its_aes_key(
+    station: FakeStation, encryption: int
+) -> None:
+    """Version 1: the RSA-wrapped 16-character key, then every frame AES-128-ECB under it.
+
+    The reply is read clear (encryption type 0) or ECB under the static key (1); the
+    fake decodes a client frame under the session key only when it is tagged type 2.
+    """
+    station.conn_init_version = 1
+    station.conn_init_encryption = encryption
+    station.reply_to_settings = True
+    session = StationSession(
+        SYNTHETIC.station_sn, RsaProvider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        await session.async_connect()
+        assert session.rsa_session
+        dump = await session.async_get_params()
+        outcome = await session.async_send_command(
+            1277, channel=0, payload={"night_sion": 1, "channel": 0}
+        )
+        stats = session.stats()
+    finally:
+        await session.async_close()
+    assert dump.station == station.params[STATION_CHANNEL]
+    assert outcome is CommandOutcome.APPLIED
+    assert [o["cmd"] for o in station.received] == [1277]
+    assert stats.receipts_by_code == {"0": 2}  # the query's and the command's, in clear
+    assert stats.dropped_undecodable == 0
+
+
+async def test_an_rsa_conn_init_without_an_rsa_key_fails_the_handshake(
+    station: FakeStation,
+) -> None:
+    station.conn_init_version = 1
+    session = StationSession(
+        SYNTHETIC.station_sn,
+        RsaProvider(station, rsa_key=False),
+        host="127.0.0.1",
+        port=station.discovery_port,
+    )
+    try:
+        with pytest.raises(HandshakeError, match="no RSA private key"):
+            await session.async_connect()
+    finally:
+        await session.async_close()
+    assert not session.rsa_session

@@ -1557,7 +1557,10 @@ gap to take a few seconds.
 #### Moving the camera, and editing its slots
 
 `PTZ_CONTROL` (a second profile capability, alongside `PTZ_PRESETS`) covers moving the
-camera and editing what its slots hold. `PanTilt`, `PresetPosition` and
+camera; with `PTZ_PRESETS` as well it covers editing what its slots hold. The T8410
+Indoor Cam 2K Pan & Tilt has `PTZ_CONTROL` without `PTZ_PRESETS` (declared): it offers
+`async_pan_tilt` only, and every slot call raises `UnsupportedError` before sending.
+`PanTilt`, `PresetPosition` and
 `MAX_PRESET_SLOTS` import from the package root
 (`from eufy_home_security import PanTilt`).
 

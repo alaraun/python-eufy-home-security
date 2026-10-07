@@ -1,12 +1,14 @@
 # Session crypto
 
-Three schemes, all verified against a live HomeBase 3:
+Three schemes, verified against a live HomeBase 3, and a fourth, the RSA session of
+a station whose CONN_INIT is not version 8 (a T8410), declared from the eufy app:
 
 | scheme | key | protects |
 |---|---|---|
 | AES-128-ECB | **static key** (serial + DID) | CONN_INIT, legacy scalar commands and results, ECB-tagged station frames |
 | ECIES (P-256 + HMAC-SHA256 KDF) | the `ecc_private_key` of the cipher CONN_INIT names (40 on a HomeBase 3, 98 on a T8170) | the session key inside CONN_INIT |
 | AES-256-GCM | **session key** (32 ASCII bytes) | JSON commands and GCM-tagged station frames, in both directions |
+| RSA-1024 PKCS#1 v1.5, then AES-128-ECB | the cipher's RSA `private_key`; then the 16-character key it carries | the RSA CONN_INIT; then every frame of that session |
 
 Media keyframes use a separate RSA/AES-128 scheme ([media.md](media.md)).
 
@@ -72,7 +74,7 @@ session    = PKCS7-unpad(AES-128-CBC-decrypt(aes_key, iv, ct))   # 32 printable 
   (fw 3.8.7.4) and 98 on a T8170 standalone camera (fw 3.3.5.4), on the same account.
   The id is readable before any cloud key is needed (only the static key), so it tells
   which cipher to fetch ([cloud.md](cloud.md)). The library loads no credentials before
-  the reply: it reads the id (`crypto.conn_init_cipher_id`), stores it per station
+  the reply: it reads the id (`crypto.parse_conn_init`), stores it per station
   (`stations.<serial>.cipher_id`), then loads that cipher's key from the cache, else the
   cloud. A cipher other than the one of the credentials held is not a stale key (no
   re-fetch latch). The eufy app does the same **[declared: app]**: it fetches a key only
@@ -81,6 +83,40 @@ session    = PKCS7-unpad(AES-128-CBC-decrypt(aes_key, iv, ct))   # 32 printable 
 - An HMAC mismatch, or a key that is not 32 printable bytes, means the cached key of
   that cipher no longer matches the station. Re-fetch it **once**. No other signal
   tells a stale key apart from a dead link.
+
+### Reply version and encryption type **[declared: app]**
+
+Two subheader bytes of the CONN_INIT reply select its handshake and its encryption:
+
+| byte | meaning | values |
+|---|---|---|
+| 0 | version | `08`: the ECIES handshake above and a GCM session; any other: the RSA handshake |
+| 3 | encryption type | `00`: clear; otherwise AES-128-ECB under the static key over whole blocks |
+
+A HomeBase 3 and a T8170 answer `08 xx FF 01` (144 bytes) **[verified]**. A T8410
+(fw 2.3.2.6) answers version `01` with 133 bytes (seen in a user debug log; byte 3 not logged).
+
+### RSA CONN_INIT **[declared: app]**
+
+```
+payload (after the encryption type is undone) =
+  cipher_id u32le ‖ RSA-1024 ciphertext (128 bytes) ‖ tail (a T8410: 1 byte)
+key = RSA-PKCS#1-v1.5-decrypt(private_key, ciphertext) up to its first NUL, first 16 bytes
+```
+
+- `private_key` is the same cipher's RSA key from `get_ciphers` (base64 PKCS#8, PEM armour
+  optional; [cloud.md](cloud.md)). The library keeps it beside `ecc_private_key`
+  (`stations.<serial>.rsa_ciphers`).
+- The 16 bytes are an AES-128 key. From then on **every** frame in both directions is
+  AES-128-ECB under it, zero-padded, subheader byte 3 = `02`; there is no GCM. A
+  client frame is `01 <seq> <dev_type> 02 <flag> 00`. Byte 3 = `01` is still the static
+  key, `00` a clear frame (a receipt).
+- A wrong RSA key decrypts to noise rather than failing (PKCS#1 implicit rejection);
+  the library takes a key that is not 16 printable bytes as a handshake failure.
+- Library code: `crypto.parse_conn_init`, `crypto.aes_key_from_conn_init`,
+  `StationSession.rsa_session`. Not observed on hardware: whether the T8410's reply is
+  clear (the 133 bytes only fit as clear: ECB needs whole blocks), and the shape of its
+  receipts.
 
 ### One session per connection **[verified]**
 

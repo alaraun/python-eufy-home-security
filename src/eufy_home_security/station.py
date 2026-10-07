@@ -45,6 +45,7 @@ from .devices.recipes import (
     delete_preset,
     free_preset_slot,
     goto_preset,
+    handler_variant,
     pan_tilt,
     parse_preset_positions,
     preset_picture,
@@ -1640,7 +1641,16 @@ class Station:
             slot_channel = self._stored_slot(device_sn, preset)
             self._refuse_while_capturing(device_sn)
             await self._ptz_recipe(goto_preset(preset), slot_channel)
-        return await self.session.async_open_live(ch, wait=wait, **kwargs)
+        return await self._session_live(ch, wait=wait, **kwargs)
+
+    async def _session_live(self, channel: int, **kwargs: Any) -> MediaStream:
+        """The session's live open on ``channel``, with the recipe variant of this
+        station's own product (a standalone device's handler, see
+        :func:`~.devices.recipes.handler_variant`)."""
+        variant = handler_variant(self._product_code(self.serial))
+        return await self.session.async_open_live(
+            channel, live_ext_value=variant.live_open_ext_value, **kwargs
+        )
 
     async def async_open_recording(
         self,
@@ -1683,7 +1693,7 @@ class Station:
         ch = self._media_channel(device_sn, channel)
         if recording is not None:
             return await self.session.async_trigger_frame(recording, ch, **kwargs)
-        stream = await self.session.async_open_live(ch, wait=wait, **kwargs)
+        stream = await self._session_live(ch, wait=wait, **kwargs)
         async with stream:
             return await _fresh_keyframe(stream)
 
@@ -2017,7 +2027,7 @@ class Station:
         full_resolution: bool = False,
     ) -> CameraImage:
         async def capture() -> CameraImage:
-            stream = await self.session.async_open_live(channel, wait=wait)
+            stream = await self._session_live(channel, wait=wait)
             async with stream:
                 if full_resolution:
                     held = SETTLE_STANDALONE if self.session.standalone else SETTLE_STATION
@@ -2178,7 +2188,8 @@ class Station:
         """
         channel = self._ptz_channel(device_sn)
         self._refuse_while_capturing(device_sn)
-        await self._ptz_recipe(pan_tilt(direction), channel)
+        variant = handler_variant(self._product_code(device_sn))
+        await self._ptz_recipe(pan_tilt(direction, zoom_ivalue=variant.ptz_zoom_ivalue), channel)
         await _settle(settle, PTZ_SETTLE_SECONDS)
 
     async def async_goto_preset(
@@ -2217,11 +2228,12 @@ class Station:
         :meth:`async_delete_preset` first. ``confirm`` sends the app's
         "set anyway?" answer.
 
-        Raises ``UnsupportedError`` for a model without pan/tilt control or a slot
-        outside the camera's range, and :class:`~.exceptions.DeviceBusyError` while a
-        capture holds the camera (the view is the capture's, not the one to keep);
-        nothing is sent for these.
+        Raises ``UnsupportedError`` for a model without pan/tilt control and presets
+        or a slot outside the camera's range, and :class:`~.exceptions.DeviceBusyError`
+        while a capture holds the camera (the view is the capture's, not the one to
+        keep); nothing is sent for these.
         """
+        self._preset_channel(device_sn)
         channel = self._ptz_channel(device_sn)
         self._check_slot(device_sn, preset)
         self._refuse_while_capturing(device_sn)
@@ -2327,8 +2339,10 @@ class Station:
 
         Raises :class:`~.exceptions.CommandNotAppliedError` when the read-back still
         shows the slot in use, and ``UnsupportedError`` for a model without pan/tilt
-        control or a slot outside the camera's range.
+        control and presets or a slot outside the camera's range; nothing is sent for
+        these.
         """
+        self._preset_channel(device_sn)
         channel = self._ptz_channel(device_sn)
         self._check_slot(device_sn, preset)
         await self._ptz_recipe(delete_preset(preset), channel)
@@ -2346,8 +2360,10 @@ class Station:
         The camera's own thumbnail of the slot, taken when the slot was stored — it
         shows the slot's view without turning the camera there. Wakes a battery camera
         but does not move it. Raises ``UnsupportedError`` for a model without pan/tilt
-        control or a slot outside the camera's range.
+        control and presets or a slot outside the camera's range; nothing is sent for
+        these.
         """
+        self._preset_channel(device_sn)
         channel = self._ptz_channel(device_sn)
         self._check_slot(device_sn, preset)
         reply = await self._ptz_recipe(preset_picture(preset), channel)
@@ -2448,7 +2464,7 @@ class Station:
         returned instead: a stream that ends first raises ``DeviceTimeoutError``.
         """
         deadline = time.monotonic() + settle
-        stream = await self.session.async_open_live(
+        stream = await self._session_live(
             channel, idle_timeout=max(PRESET_STREAM_IDLE_SECONDS, settle), wait=wait
         )
         async with stream:

@@ -180,8 +180,7 @@ class Recipe:
 
     def as_handler_dict(self) -> dict[str, Any]:
         """The recipe in the handler's own shape (the golden files' ``p2p`` object),
-        without the fields the library does not use (``parsePayloadAction``,
-        ``payloadFrom``, ``rtcSendRoute``, ``dropSameRequest``, ``condition``)."""
+        without the fields the library does not use (:data:`HANDLER_UNUSED_KEYS`)."""
         out: dict[str, Any] = {"cmd": self.cmd}
         if self.sub_cmd is not None:
             out["subCmd"] = self.sub_cmd
@@ -199,13 +198,52 @@ class Recipe:
 
 
 HANDLER_UNUSED_KEYS: Final = frozenset(
-    {"parsePayloadAction", "payloadFrom", "rtcSendRoute", "dropSameRequest", "condition"}
+    {
+        "parsePayloadAction",
+        "payloadFrom",
+        "rtcSendRoute",
+        "dropSameRequest",
+        "condition",
+        "handleErrorCode",
+    }
 )
 """Handler recipe keys the library does not act on: the JS result shaping, the WebRTC
-route, and the native request de-duplication."""
+route, the native request de-duplication, and ``handleErrorCode`` (the executor hands
+an error result back to the handler's JS to interpret)."""
 
 LIVE_OPEN_TIMEOUT: Final = 15.0
 """The handler's timeout for a live open (15000 ms)."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HandlerVariant:
+    """Where a product's handler departs from the T8170's recipes."""
+
+    live_open_ext_value: bool = True
+    """The standalone live open (1700/1000) carries ``extValue`` 1000."""
+    ptz_zoom_ivalue: bool = True
+    """A pan/tilt step (1700/6030) carries ``zoom`` and ``ivalue`` -1."""
+
+
+DEFAULT_VARIANT: Final = HandlerVariant()
+"""The T8170 handler's recipes, the library's default for every other product."""
+
+HANDLER_VARIANTS: Final[Mapping[str, HandlerVariant]] = MappingProxyType(
+    {
+        "T8410": HandlerVariant(live_open_ext_value=False, ptz_zoom_ivalue=False),
+        "T8410C": HandlerVariant(live_open_ext_value=False),
+    }
+)
+"""Per product code, the recipe variant its handler declares (declared from the
+T8410 and T8410C handlers' ``open_live_stream`` and ``ptz_action_control``)."""
+
+
+def handler_variant(product_code: str | None) -> HandlerVariant:
+    """The recipe variant of ``product_code``; :data:`DEFAULT_VARIANT` when none is
+    recorded or the code is unknown."""
+    if product_code is None:
+        return DEFAULT_VARIANT
+    return HANDLER_VARIANTS.get(product_code.strip().upper(), DEFAULT_VARIANT)
 
 
 def open_live_stream_single(
@@ -216,37 +254,39 @@ def open_live_stream_single(
     entry_type: int = 0,
     camera_type: int = 0,
     stream_type: int = 0,
+    ext_value: bool = True,
 ) -> Recipe:
     """Open live video on a standalone device (``openLiveStream1700``).
 
     ``key_hex`` is the RSA-1024 modulus of the stream key, ``account_id`` the
-    station owner's id. Verified on a T8170: the HomeBase's 1350/1003 open is taken
-    but never streams there.
+    station owner's id. ``ext_value`` False leaves out ``extValue``
+    (:attr:`HandlerVariant.live_open_ext_value`). Verified on a T8170: the
+    HomeBase's 1350/1003 open is taken but never streams there.
     """
+    params: dict[str, Any] = {
+        "cmd": int(SubCommand.SUB_CMD_START_LIVESTREAM),
+        "mChannel": channel,
+        "account_id": account_id,
+        "mValueStrSub": account_id,
+        "mValue3": 0,
+        "mValue5": 0,
+        "restore": 0,
+        "video_type": 12,
+        "encryptkey": key_hex,
+        "entrytype": entry_type,
+        "accountId": account_id,
+        "camera_type": camera_type,
+        "ivalue": 1,
+    }
+    if ext_value:
+        params["extValue"] = 1000
+    params["streamtype"] = stream_type
     return Recipe(
         identifier="open_live_stream",
         cmd=RecipeCommand.DOORBELL_PAYLOAD,
         sub_cmd=SubCommand.SUB_CMD_START_LIVESTREAM,
         timeout=LIVE_OPEN_TIMEOUT,
-        params=MappingProxyType(
-            {
-                "cmd": int(SubCommand.SUB_CMD_START_LIVESTREAM),
-                "mChannel": channel,
-                "account_id": account_id,
-                "mValueStrSub": account_id,
-                "mValue3": 0,
-                "mValue5": 0,
-                "restore": 0,
-                "video_type": 12,
-                "encryptkey": key_hex,
-                "entrytype": entry_type,
-                "accountId": account_id,
-                "camera_type": camera_type,
-                "ivalue": 1,
-                "extValue": 1000,
-                "streamtype": stream_type,
-            }
-        ),
+        params=MappingProxyType(params),
     )
 
 
@@ -358,32 +398,32 @@ def set_default_preset(index: int, *, confirm: bool = False) -> Recipe:
     )
 
 
-def ptz_rotate(*, cmd_type: int, rotate_type: int, zoom: float = 1.0) -> Recipe:
-    """Pan or tilt (``ptz_action_control``)."""
+def ptz_rotate(
+    *, cmd_type: int, rotate_type: int, zoom: float = 1.0, zoom_ivalue: bool = True
+) -> Recipe:
+    """Pan or tilt (``ptz_action_control``). ``zoom_ivalue`` False sends ``cmd_type``
+    and ``rotate_type`` only (:attr:`HandlerVariant.ptz_zoom_ivalue`)."""
+    params: dict[str, Any] = {"cmd_type": cmd_type, "rotate_type": rotate_type}
+    if zoom_ivalue:
+        params |= {"zoom": _js_number(zoom), "ivalue": -1}
     return Recipe(
         identifier="ptz_action_control",
         cmd=RecipeCommand.DOORBELL_PAYLOAD,
         sub_cmd=SubCommand.INDOOR_ROTATE,
-        params=MappingProxyType(
-            {
-                "cmd_type": cmd_type,
-                "rotate_type": rotate_type,
-                "zoom": _js_number(zoom),
-                "ivalue": -1,
-            }
-        ),
+        params=MappingProxyType(params),
     )
 
 
-def pan_tilt(direction: PanTilt, *, zoom: float = 1.0) -> Recipe:
+def pan_tilt(direction: PanTilt, *, zoom: float = 1.0, zoom_ivalue: bool = True) -> Recipe:
     """Move the camera one step in ``direction`` (the handler's ``ptz_action_control``).
 
     The recipe the app sends for a press on its pan/tilt pad: ``cmd_type`` 1,
-    ``rotate_type`` the direction, ``ivalue`` -1. Receipt only — the camera
+    ``rotate_type`` the direction, ``ivalue`` -1 (left out with ``zoom_ivalue``
+    False, as :func:`ptz_rotate`). Receipt only — the camera
     answers no result and holds the new position until it goes idle, when it
     returns to its default preset.
     """
-    return ptz_rotate(cmd_type=1, rotate_type=int(direction), zoom=zoom)
+    return ptz_rotate(cmd_type=1, rotate_type=int(direction), zoom=zoom, zoom_ivalue=zoom_ivalue)
 
 
 def store_preset(index: int, *, confirm: bool = False) -> Recipe:

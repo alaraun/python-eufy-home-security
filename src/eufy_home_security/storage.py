@@ -203,6 +203,7 @@ class SessionCache:
          "push": {...}, "replaced": {"at": <epoch s>},
          "devices": [{..., "cloud_region": "<region>"}, …],
          "stations": {"<serial>": {"account_id": "…", "ciphers": {"40": "…"}, "cipher_id": 40,
+                                   "rsa_ciphers": {"40": "…"},
                                    "refresh_attempts": {"cipher": <epoch s>},
                                    "key_refresh": <epoch s>,
                                    "dsk": {"key": "…", "expiration": <epoch s>},
@@ -439,8 +440,20 @@ class SessionCache:
     def set_cipher_key(self, serial: str, cipher_id: int, ecc_private_key: str) -> None:
         self.station(serial).setdefault("ciphers", {})[str(cipher_id)] = ecc_private_key
 
+    def rsa_cipher_key(self, serial: str, cipher_id: int) -> str | None:
+        """The cached RSA private key (the cloud's ``private_key``) of ``cipher_id`` for
+        ``serial``: what a station answering with the RSA CONN_INIT needs."""
+        value = self.station(serial).get("rsa_ciphers", {}).get(str(cipher_id))
+        return value if isinstance(value, str) and value else None
+
+    def set_rsa_cipher_key(self, serial: str, cipher_id: int, private_key: str) -> None:
+        self.station(serial).setdefault("rsa_ciphers", {})[str(cipher_id)] = private_key
+
     def drop_cipher_key(self, serial: str, cipher_id: int) -> None:
-        self.station(serial).get("ciphers", {}).pop(str(cipher_id), None)
+        """Forget both keys of ``cipher_id`` for ``serial``."""
+        station = self.station(serial)
+        station.get("ciphers", {}).pop(str(cipher_id), None)
+        station.get("rsa_ciphers", {}).pop(str(cipher_id), None)
 
     def dsk_key(self, serial: str) -> tuple[str, float] | None:
         """The cached device session key (DSK) and its expiration (epoch s) for

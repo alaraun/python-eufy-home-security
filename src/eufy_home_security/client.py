@@ -693,7 +693,7 @@ class EufySecurity:
             last_login = _last_login(cache)
             try:
                 account_id = await cloud.async_get_station_owner_id(station_sn, refresh=refresh)
-                key = await cloud.async_get_cipher_key(station_sn, cipher_id, refresh=refresh)
+                keys = await cloud.async_get_cipher_keys(station_sn, cipher_id, refresh=refresh)
             except CloudError as err:
                 self._cloud_failed(err, station_sn)
                 raise
@@ -709,19 +709,22 @@ class EufySecurity:
                     )
                 )
             _LOGGER.debug(
-                "%s: P2P credentials (refresh=%s): account_id %s, user_name %s, cipher %d key %s",
+                "%s: P2P credentials (refresh=%s): account_id %s, user_name %s, cipher %d key %s, "
+                "RSA key %s",
                 redact_serial(station_sn),
                 refresh,
                 Secret(account_id),
                 Identifier(cloud.user_name),
                 cipher_id,
-                Secret(key),
+                Secret(keys.ecc_private_key or ""),
+                "held" if keys.rsa_private_key else "none",
             )
             return P2PCredentials(
                 account_id=account_id,
                 user_name=cloud.user_name,
-                ecc_private_key=key,
+                ecc_private_key=keys.ecc_private_key or "",
                 cipher_id=cipher_id,
+                rsa_private_key=keys.rsa_private_key,
             )
 
         return provide

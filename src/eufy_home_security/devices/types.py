@@ -113,6 +113,18 @@ _register(
         ),
     ),
     DeviceModel(
+        model="T8410",
+        name="Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)",
+        kind=DeviceKind.CAMERA,
+        cloud_device_type=31,
+        evidence=Evidence(
+            Support.DECLARED,
+            f"{_APP_SN_CONSTANTS} INDOOR_CAMERA_PT; eufy app SnUtils type map (31)",
+            "a standalone camera, its own station; a serial with '5' at index 6 is the "
+            "app's separate product T8410C, with its own thing description and handler",
+        ),
+    ),
+    DeviceModel(
         model="T8010",
         name="HomeBase 2",
         kind=DeviceKind.STATION,

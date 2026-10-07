@@ -169,8 +169,11 @@ sharing changes, so cache it per station. A station event push also carries the 
 
 `data` decrypts to a list of
 `{cipher_id, ecc_private_key (P-256, 64 hex), private_key (RSA PEM), user_id}`.
-Only `ecc_private_key` is used. The RSA PEM comes back lowercased by the server and
-cannot be used **[verified]**.
+`ecc_private_key` unwraps the ECIES CONN_INIT; `private_key` the RSA one, which the
+app takes from this same response for a station whose CONN_INIT is not version 8
+**[declared: app]** ([session-crypto.md](session-crypto.md)). On a HomeBase 3's cipher
+40 the RSA PEM comes back lowercased by the server and cannot be used **[verified]**;
+whether an RSA station's cipher carries a usable one is not observed.
 
 | request | answer **[verified]** |
 |---|---|
@@ -283,7 +286,7 @@ per start.
 | account password | until the cloud rejects it | a lost session (expiry, cache layout change) logs in again unattended |
 | `key_ident`, `shared_key`, `auth_token`, logged-in `user_id` | until expiry, a session-expired answer, or a kick-out (26084 / HTTP 401, which also blocks automatic logins until a forced one) | a login per start hits 100028 |
 | per-station owner `admin_user_id` | until the sharing changes | every command needs it |
-| per-station `ecc_private_key` of the cipher the station names (`ciphers.<id>`), and that id (`cipher_id`) | until the station is re-bound | several round trips behind a WAF, and may cost a login |
+| per-station `ecc_private_key` of the cipher the station names (`ciphers.<id>`), its RSA `private_key` when served (`rsa_ciphers.<id>`), and that id (`cipher_id`) | until the station is re-bound | several round trips behind a WAF, and may cost a login |
 | FCM credentials and token | install-scoped | Google identity of the install ([events.md](events.md)) |
 
 Rules the library follows: at most one automatic re-login per call, and only on a

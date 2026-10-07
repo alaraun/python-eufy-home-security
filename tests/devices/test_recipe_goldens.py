@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from eufy_home_security.devices import recipes
-from eufy_home_security.devices.recipes import ConnectType, Recipe
+from eufy_home_security.devices.recipes import ConnectType, HandlerVariant, Recipe
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "thing_models"
 GOLDEN_FILES = sorted(FIXTURES.glob("*.json"))
@@ -22,7 +22,7 @@ GOLDEN_FILES = sorted(FIXTURES.glob("*.json"))
 type Case = dict[str, Any]
 
 
-def _open_live_stream(case: Case) -> Recipe:
+def _open_live_stream(case: Case, variant: HandlerVariant) -> Recipe:
     payload = case["payload"]
     return recipes.open_live_stream_single(
         channel=case["device"]["device_channel"],
@@ -31,26 +31,31 @@ def _open_live_stream(case: Case) -> Recipe:
         entry_type=payload["entryType"],
         camera_type=payload["cameraType"],
         stream_type=payload["streamType"],
+        ext_value=variant.live_open_ext_value,
     )
 
 
-def _ptz_rotate(case: Case) -> Recipe:
+def _ptz_rotate(case: Case, variant: HandlerVariant) -> Recipe:
     payload = case["payload"]
     return recipes.ptz_rotate(
-        cmd_type=payload["cmdType"], rotate_type=payload["rotateType"], zoom=payload["zoom"]
+        cmd_type=payload["cmdType"],
+        rotate_type=payload["rotateType"],
+        zoom=payload["zoom"],
+        zoom_ivalue=variant.ptz_zoom_ivalue,
     )
 
 
-BUILDERS: dict[str, Callable[[Case], Recipe]] = {
+BUILDERS: dict[str, Callable[[Case, HandlerVariant], Recipe]] = {
     "open_live_stream": _open_live_stream,
-    "close_live_stream": lambda case: recipes.close_live_stream(),
-    "query_preset_positions": lambda case: recipes.query_preset_positions(),
-    "set_ptz_cruise_preview": lambda case: recipes.goto_preset(case["payload"]),
-    "get_preset_position_pic": lambda case: recipes.preset_picture(case["payload"]),
+    "close_live_stream": lambda case, variant: recipes.close_live_stream(),
+    "query_preset_positions": lambda case, variant: recipes.query_preset_positions(),
+    "set_ptz_cruise_preview": lambda case, variant: recipes.goto_preset(case["payload"]),
+    "get_preset_position_pic": lambda case, variant: recipes.preset_picture(case["payload"]),
     "ptz_action_control": _ptz_rotate,
-    "set_picture_zoom": lambda case: recipes.set_picture_zoom(case["payload"]["dstZoom"]),
+    "set_picture_zoom": lambda case, variant: recipes.set_picture_zoom(case["payload"]["dstZoom"]),
 }
-"""Each identifier the library implements, called with a golden case's input."""
+"""Each identifier the library implements, called with a golden case's input and the
+product's :func:`~eufy_home_security.devices.recipes.handler_variant`."""
 
 
 def _connect_type(case: Case) -> ConnectType:
@@ -76,11 +81,11 @@ def _builder_params() -> Iterator[Any]:
         identifier = case["identifier"]
         if identifier not in BUILDERS or _is_homebase_live_open(case):
             continue
-        yield pytest.param(case, id=f"{product_code}-{identifier}")
+        yield pytest.param(product_code, case, id=f"{product_code}-{identifier}")
 
 
-def test_the_golden_files_for_the_t8170_and_the_homebase_t8160_are_present() -> None:
-    assert [path.name for path in GOLDEN_FILES] == ["T8160.json", "T8170.json"]
+def test_the_golden_files_for_the_t8170_t8410_and_the_homebase_t8160_are_present() -> None:
+    assert [path.name for path in GOLDEN_FILES] == ["T8160.json", "T8170.json", "T8410.json"]
 
 
 def test_every_golden_identifier_is_mapped_to_a_builder() -> None:
@@ -88,10 +93,11 @@ def test_every_golden_identifier_is_mapped_to_a_builder() -> None:
     assert unmapped == set()
 
 
-@pytest.mark.parametrize("case", list(_builder_params()))
-def test_the_builder_reproduces_the_handlers_recipe(case: Case) -> None:
+@pytest.mark.parametrize(("product_code", "case"), list(_builder_params()))
+def test_the_builder_reproduces_the_handlers_recipe(product_code: str, case: Case) -> None:
     expected = {k: v for k, v in case["p2p"].items() if k not in recipes.HANDLER_UNUSED_KEYS}
-    assert BUILDERS[case["identifier"]](case).as_handler_dict() == expected
+    variant = recipes.handler_variant(product_code)
+    assert BUILDERS[case["identifier"]](case, variant).as_handler_dict() == expected
 
 
 def test_the_handlers_homebase_live_open_is_the_1350_1003_frame_the_library_does_not_use() -> None:

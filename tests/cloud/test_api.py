@@ -15,7 +15,7 @@ from aioresponses import aioresponses
 
 from eufy_home_security._logging import set_secret_logging
 from eufy_home_security.cloud import const, crypto
-from eufy_home_security.cloud.api import EufyCloudApi, _check_owner_id, _Identity
+from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, _check_owner_id, _Identity
 from eufy_home_security.cloud.status import LoginNeed
 from eufy_home_security.exceptions import (
     AuthenticationError,
@@ -822,6 +822,29 @@ async def test_cipher_fetch_uses_the_owner_id_and_caches(
     cipher_body = next(payload for name, payload in fake_mega.calls if name == "ciphers")
     assert cipher_body["user_id"] == FAKE_OWNER_ID  # never the caller's own id
     assert cipher_body["station_sn"] == SYNTHETIC.station_sn
+
+
+async def test_cipher_fetch_keeps_the_rsa_private_key(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """``private_key`` is what an RSA CONN_INIT needs; a cipher may carry it alone."""
+    fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 31}]
+    fake_mega.cipher_objects = [{"cipher_id": 40, "private_key": "UlNBLWtleQ=="}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            keys = await api.async_get_cipher_keys(SYNTHETIC.station_sn)
+            calls_before = len(fake_mega.calls)
+            cached = await api.async_get_cipher_keys(SYNTHETIC.station_sn)
+            assert len(fake_mega.calls) == calls_before
+            with pytest.raises(EmptyResponseError):
+                await api.async_get_cipher_key(SYNTHETIC.station_sn)
+    assert keys == cached == CipherKeys(None, "UlNBLWtleQ==")
+    assert cache.rsa_cipher_key(SYNTHETIC.station_sn, 40) == "UlNBLWtleQ=="
+    cache.drop_cipher_key(SYNTHETIC.station_sn, 40)
+    assert cache.rsa_cipher_key(SYNTHETIC.station_sn, 40) is None
 
 
 @pytest.mark.parametrize(

@@ -32,6 +32,7 @@ def test_evidence_has_a_source() -> None:
         ("T8030P0000000000", "T8030", DeviceKind.STATION),
         ("T8160P0000000000", "T8160", DeviceKind.CAMERA),
         (" t8161p0000000000", "T8161", DeviceKind.CAMERA),
+        ("T8410P0000000000", "T8410", DeviceKind.CAMERA),
     ],
 )
 def test_model_for_serial(serial: str, model: str, kind: DeviceKind) -> None:
@@ -83,3 +84,13 @@ def test_t8170_in_models() -> None:
     assert model.cloud_device_type == 48
     assert model.evidence.support is Support.DECLARED
     assert ON_DEMAND_EVIDENCE.support is Support.DECLARED
+
+
+def test_the_t8410_is_the_apps_pan_tilt_indoor_cam_of_type_31() -> None:
+    found = model_for_serial("T8410P0000000000")
+    assert found is not None
+    assert found.name == "Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)"
+    assert found.cloud_device_type == 31
+    assert found.evidence.support is Support.DECLARED
+    assert "INDOOR_CAMERA_PT" in found.evidence.source
+    assert not connects_on_demand("T8410P0000000000")
