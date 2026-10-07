@@ -165,11 +165,26 @@ class AuthenticationError(CloudError):
     """The account credentials were rejected."""
 
 
+class SessionRejectedError(AuthenticationError):
+    """The cloud no longer accepts this session and one new login did not help.
+
+    HTTP 401 without the session-replaced code (26084), or a session-expired code,
+    met again right after a fresh login. ``code`` is the answer's body code (0 when
+    none). Not a takeover by another client: :class:`SessionReplacedError` is that.
+    """
+
+    def __init__(self, message: str, *, code: int = 0) -> None:
+        self.code = code
+        super().__init__(message)
+
+
 class LoginChallengeError(AuthenticationError):
     """Login needs a human answer: an e-mailed verification code or a captcha.
 
     Re-run the login with the answer; ``login_id`` must be carried across both
-    calls. ``captcha_image`` is a data URI when the challenge is a captcha.
+    calls (it may be empty). ``captcha_image`` is a data URI when the challenge is a
+    captcha. For a verification code the library has asked the cloud to e-mail one
+    (``code_requested``); False when the login answer gave it no session to ask with.
     ``region`` is the cloud region whose login asked; the answer goes there.
     """
 
@@ -182,8 +197,10 @@ class LoginChallengeError(AuthenticationError):
         captcha_image: str = "",
         code: int = 0,
         region: str = "",
+        code_requested: bool = False,
     ) -> None:
         self.kind = kind
+        self.code_requested = code_requested
         self.region = region
         self.login_id = login_id
         self.captcha_id = captcha_id

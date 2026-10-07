@@ -52,6 +52,7 @@ from ..exceptions import (
     ProtocolError,
     RateLimitedError,
     RefreshCooldownError,
+    SessionRejectedError,
     SessionReplacedError,
 )
 from ..storage import SessionCache
@@ -116,8 +117,15 @@ class _RekeyRequiredError(CloudApiError):
         super().__init__(code, message, endpoint=endpoint)
 
 
-class _SessionExpiredError(AuthenticationError):
+class _SessionExpiredError(SessionRejectedError):
     """The server no longer accepts the auth token (one re-login is allowed)."""
+
+
+def _two_step(data: object) -> int:
+    """``fa_info.step`` of a login answer: 26052 while two-step verification is pending."""
+    info = data.get("fa_info") if isinstance(data, Mapping) else None
+    step = info.get("step") if isinstance(info, Mapping) else None
+    return step if isinstance(step, int) and not isinstance(step, bool) else 0
 
 
 def _mapping(data: object, path: str) -> Mapping[str, Any]:
@@ -541,14 +549,18 @@ class EufyCloudApi:
             await self._raise_captcha_challenge(identity, code, self._extract_login_id(resp, data))
         if code in const.VERIFY_CODE_CODES:
             _LOGGER.info("%s login needs an e-mailed verification code (code %s)", region, code)
-            raise LoginChallengeError(
-                "verify_code",
-                login_id=self._extract_login_id(resp, data),
-                code=code,
-                region=region,
-            )
+            await self._raise_verify_code_challenge(identity, code, resp, data)
         if not data:
             raise EmptyResponseError(code, "login returned no data", endpoint=const.LOGIN_PATH)
+        step = _two_step(data)
+        if step in const.VERIFY_CODE_CODES:
+            # Code 0 with ``fa_info.step`` 26052: two-step verification is pending and
+            # the token in this answer is not a session yet.
+            self._challenge_region = region
+            _LOGGER.info(
+                "%s login needs an e-mailed verification code (fa_info step %s)", region, step
+            )
+            await self._raise_verify_code_challenge(identity, step, resp, data)
         if self._challenge_region == region:
             self._challenge_region = None
         self._store_session(identity, _mapping(data, const.LOGIN_PATH))
@@ -570,6 +582,46 @@ class EufyCloudApi:
         if callable(source):
             return await source(), "callable"
         raise AuthenticationError("no password: none was given and none is cached")
+
+    async def _raise_verify_code_challenge(
+        self, identity: _Identity, code: int, resp: Mapping[str, Any], data: object
+    ) -> NoReturn:
+        """Ask for the login code with the answer's pending token, then raise the challenge.
+
+        The pending token is used for this one request and never stored as a session.
+        """
+        requested = False
+        token = data.get("auth_token") if isinstance(data, Mapping) else None
+        if isinstance(token, str) and token:
+            user_id = data.get("user_id") if isinstance(data, Mapping) else None
+            pending = _Identity(
+                key_ident=identity.key_ident,
+                shared_key=identity.shared_key,
+                auth_token=token,
+                user_id=str(user_id) if user_id else None,
+                region=identity.region,
+            )
+            await self._call(
+                self._host("push", identity.region),
+                const.SEND_VERIFY_CODE_PATH,
+                {
+                    "transaction": str(int(time.time() * 1000)),
+                    "message_type": const.VERIFY_CODE_BY_EMAIL,
+                    "biz_type": const.VERIFY_CODE_BIZ_LOGIN,
+                    "captcha_id": "",
+                    "answer": "",
+                },
+                pending,
+            )
+            requested = True
+            _LOGGER.info("%s cloud asked to e-mail a login verification code", identity.region)
+        raise LoginChallengeError(
+            "verify_code",
+            login_id=self._extract_login_id(resp, data),
+            code=code,
+            region=identity.region,
+            code_requested=requested,
+        )
 
     async def _raise_captcha_challenge(self, identity: _Identity, code: int, login_id: str) -> None:
         cid, image = await self._fetch_captcha(identity)
@@ -1705,7 +1757,13 @@ class EufyCloudApi:
             )
         if status == const.HTTP_UNAUTHORIZED:
             body_code = _loose_code(text)
-            raise SessionReplacedError(
+            if body_code in const.SESSION_REPLACED_CODES:
+                raise SessionReplacedError(
+                    f"cloud request to {path} returned HTTP 401 (code {body_code})",
+                    code=body_code,
+                )
+            # Any other 401 body: the session is not usable, not taken over.
+            raise _SessionExpiredError(
                 f"cloud request to {path} returned HTTP 401 (code {body_code})",
                 code=body_code or status,
             )
@@ -1764,7 +1822,7 @@ class EufyCloudApi:
         if code in const.SESSION_REPLACED_CODES:
             raise SessionReplacedError(f"cloud session ended (code {code}): {msg}", code=code)
         if code in const.SESSION_EXPIRED_CODES:
-            raise _SessionExpiredError(f"cloud session expired (code {code}): {msg}")
+            raise _SessionExpiredError(f"cloud session expired (code {code}): {msg}", code=code)
         if code in const.AUTH_FAILURE_CODES:
             raise AuthenticationError(f"cloud rejected the credentials (code {code}): {msg}")
         raise CloudApiError(code, msg, endpoint=path)

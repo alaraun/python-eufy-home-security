@@ -111,6 +111,7 @@ repeatedly **[verified]**. Change it only against a capture of the app's own log
 | `ap_cloud_user_id` | the **logged-in** user's id. It feeds `gtoken`. It is **not** the P2P `account_id` for a shared member (see below). |
 | `mega_domain` / `domain` | the cluster's host base when present; empty on the answers seen |
 | `country_code` | echoes the request's `country` header (`US` on an EU-homed account); not the account's home |
+| `fa_info` | `{info, step}`: `step` 26052 while two-step verification is pending (see below), 0 otherwise **[verified: step 0]** |
 
 ## Login challenges
 
@@ -122,7 +123,15 @@ live account.
 | code(s) | challenge | re-submit with |
 |---|---|---|
 | 26052 `NEED_VERIFY_CODE` (26050 wrong, 26051/26167 expired, 26054 mismatch) | e-mailed code | `verify_code` and the `login_id` returned with the challenge (`LoginChallengeError.login_id`; pass it back as `async_login(login_id=…)`) |
+| code 0 with `fa_info.step` 26052 | two-step verification | as 26052: the answer's `auth_token` is not a session; it serves only to ask for the code (below) **[app; reported: the token's first request answers HTTP 401]** |
 | 100032 `LOGIN_NEED_CAPTCHA` (100033 wrong answer) | captcha | first `POST /passport/generate/captcha` (passport host), which returns `{captcha_id, item}` with `item` a base64 image, then re-submit with `captcha_id` and `answer` |
+
+**Asking for the code [app].** For a 26052 answer that carries an `auth_token`, the
+library sends `POST app-push-{region}-pr.eufy.com/app/sendmsg/verify_code` under that
+token, body `{transaction, message_type: 2 (e-mail; 1 SMS, 3 app push), biz_type: 1004
+(login), captcha_id: "", answer: ""}`, before raising `LoginChallengeError`
+(`code_requested`). The token is never stored. The answer is a new login with
+`verify_code` and `login_id` (empty when the challenge carried none).
 
 ## Device list
 
@@ -217,8 +226,8 @@ Whether a guest (`member_type` 0) is served is untested **[open]**.
 | group | codes (`cloud/const.py: CloudCode`) | client action |
 |---|---|---|
 | success | 0 | read `data` if present |
-| session expired | 401 | one re-login |
-| session replaced | 26084 `SESSION_REPLACED`, any HTTP 401 **[verified: HTTP 401 + 26084 after another client logged in]** | stop: never log in again automatically, or two clients on one account kick each other out into the login lock. The app logs out on it too. |
+| session expired | 401, or HTTP 401 with any body code but 26084 | one re-login; refused again: `SessionRejectedError` |
+| session replaced | 26084 `SESSION_REPLACED`, as body code or with HTTP 401 **[verified: HTTP 401 + 26084 after another client logged in]** | stop: never log in again automatically, or two clients on one account kick each other out into the login lock. The app logs out on it too. |
 | re-key | HTTP status 463, or body 463 `NEED_EXCHANGED_KEY` / 4404 `NEED_NEGOTIATE_KEY` under any status. Live: `HTTP 463 {"code":4404,"msg":"get identity error"}` on `get_devs_list`, starting 72 h after the session's key exchange on one account **[verified, one sample]** | a new key exchange on the login realm, then the same request with the **same auth token** under the new `key_ident` / shared key; no login. **[verified]**: this restored the device list on a session refused for 18 h. The app does the same (its HTTP-463 handler re-keys and retries). A second refusal is `KeyExchangeRefusedError`. On `get_ciphers` 463 also means a wrong-realm identity. |
 | signature / clock | 4416, 461 `TS_NOT_MATCH` | a client bug or clock skew, so do not retry blindly |
 | bad credentials | 22008, 26006, 26015, 26055, 26105, 26108 | stop and ask the user. Never log in again automatically: each failure counts toward the lock. |
@@ -284,14 +293,14 @@ per start.
 |---|---|---|
 | `openudid` | forever | a new value looks like a new device to the backend and orphans push registrations |
 | account password | until the cloud rejects it | a lost session (expiry, cache layout change) logs in again unattended |
-| `key_ident`, `shared_key`, `auth_token`, logged-in `user_id` | until expiry, a session-expired answer, or a kick-out (26084 / HTTP 401, which also blocks automatic logins until a forced one) | a login per start hits 100028 |
+| `key_ident`, `shared_key`, `auth_token`, logged-in `user_id` | until expiry, a session-expired answer, or a kick-out (26084, which also blocks automatic logins until a forced one) | a login per start hits 100028 |
 | per-station owner `admin_user_id` | until the sharing changes | every command needs it |
 | per-station `ecc_private_key` of the cipher the station names (`ciphers.<id>`), its RSA `private_key` when served (`rsa_ciphers.<id>`), and that id (`cipher_id`) | until the station is re-bound | several round trips behind a WAF, and may cost a login |
 | FCM credentials and token | install-scoped | Google identity of the install ([events.md](events.md)) |
 
 Rules the library follows: at most one automatic re-login per call, and only on a
 session-expired code — never on a re-key answer (a key exchange instead) and never
-after a kick-out (26084 / HTTP 401), which blocks automatic logins until a forced one;
+after a kick-out (26084), which blocks automatic logins until a forced one;
 concurrent calls share one login; a cooldown (15 min) on forced cipher re-fetches and,
 separately, on the forced device-list re-read behind an owner-id refresh (inside it
 the cached owner id is used); no retries on throttle or credential codes; no cloud

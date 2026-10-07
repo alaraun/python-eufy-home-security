@@ -30,13 +30,14 @@ from eufy_home_security.exceptions import (
     ProtocolError,
     RateLimitedError,
     RefreshCooldownError,
+    SessionRejectedError,
     SessionReplacedError,
 )
 from eufy_home_security.install import InstallState
 from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
-from .conftest import FAKE_AUTH_TOKEN, FAKE_ECC_KEY, FAKE_OWNER_ID, FakeMega
+from .conftest import FAKE_AUTH_TOKEN, FAKE_ECC_KEY, FAKE_OWNER_ID, FAKE_PENDING_TOKEN, FakeMega
 
 
 def _api(session: aiohttp.ClientSession, cache: SessionCache) -> EufyCloudApi:
@@ -202,6 +203,50 @@ async def test_verify_code_challenge(fake_mega: FakeMega, cache: SessionCache) -
                 await _api(session, cache).async_login()
     assert exc.value.kind == "verify_code"
     assert exc.value.login_id == "lid-42"
+    assert not exc.value.code_requested  # an answer without a token asks for nothing
+    assert fake_mega.code_requests == []
+
+
+async def test_a_pending_two_step_login_is_a_challenge_not_a_session(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """Code 0 with ``fa_info.step`` 26052: the code is asked for under the pending
+    token, nothing is stored, and the answer to the region that asked logs in."""
+    fake_mega.two_step = {"eu"}
+    fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 18}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            with pytest.raises(LoginChallengeError) as exc:
+                await api.async_login()
+            pending_session = dict(cache.cloud_session("eu"))
+            pending_password = cache.password
+            devices_before = sum(1 for name, _ in fake_mega.calls if name == "devices")
+            await api.async_login(verify_code="123456", login_id=exc.value.login_id)
+            devices = await api.async_get_devices()
+    challenge = exc.value
+    assert (challenge.kind, challenge.code, challenge.region) == ("verify_code", 26052, "eu")
+    assert challenge.code_requested
+    assert "auth_token" not in pending_session
+    assert pending_password is None
+    assert devices_before == 0
+    assert fake_mega.code_requests == [
+        (
+            FAKE_PENDING_TOKEN,
+            {
+                "transaction": fake_mega.code_requests[0][1]["transaction"],
+                "message_type": 2,
+                "biz_type": 1004,
+                "captcha_id": "",
+                "answer": "",
+            },
+        )
+    ]
+    answer = [p for name, p in fake_mega.calls if name == "login"][-1]
+    assert (answer["verify_code"], answer["login_id"]) == ("123456", "")
+    assert cache.cloud_session("eu")["auth_token"] == FAKE_AUTH_TOKEN
+    assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
 
 
 async def test_captcha_challenge_fetches_an_image(fake_mega: FakeMega, cache: SessionCache) -> None:
@@ -571,7 +616,8 @@ async def test_a_replaced_session_latches_until_a_forced_login(
             await api.async_login()
             await api.async_get_devices()  # a cached list must not hide the kick-out
             if answer == "HTTP 401":
-                fake_mega.status_once["devices"] = (401, {})
+                replaced = {"code": int(const.CloudCode.SESSION_REPLACED), "msg": "replaced"}
+                fake_mega.error_bodies["devices"] = [(401, replaced)]
             else:
                 fake_mega.code_once["devices"] = int(const.CloudCode.SESSION_REPLACED)
             with pytest.raises(SessionReplacedError):
@@ -986,6 +1032,31 @@ async def test_concurrent_calls_on_a_cold_cache_share_one_login(
             api = EufyCloudApi(session, cache, SYNTHETIC.email, slow_password, region="eu")
             await asyncio.gather(api.async_get_devices(), api.async_register_push_token("tok"))
     assert fake_mega.login_calls == 1
+
+
+@pytest.mark.parametrize("twice", [False, True])
+async def test_http_401_without_the_takeover_code_logs_in_once_and_never_latches(
+    fake_mega: FakeMega, cache: SessionCache, twice: bool
+) -> None:
+    """HTTP 401 with another body code is an unusable session: one re-login, then
+    :class:`SessionRejectedError`; the session-replaced latch stays clear."""
+    body = {"code": 401, "msg": "token: x, secret or user_id is empty"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            fake_mega.error_bodies["devices"] = [(401, body)] * (2 if twice else 1)
+            if twice:
+                with pytest.raises(SessionRejectedError) as exc:
+                    await api.async_get_devices(refresh=True)
+                assert exc.value.code == 401
+            else:
+                await api.async_get_devices(refresh=True)
+            replaced = api.session_replaced
+    assert not replaced
+    assert fake_mega.login_calls == 2
+    assert cache.password == SYNTHETIC.password
 
 
 async def test_concurrent_expiries_relogin_once(fake_mega: FakeMega, cache: SessionCache) -> None:
