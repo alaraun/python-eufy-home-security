@@ -28,6 +28,7 @@ from eufy_home_security.exceptions import (
     NoCachedSessionError,
     ProtocolError,
     RateLimitedError,
+    SessionRejectedError,
     SessionReplacedError,
 )
 from eufy_home_security.install import InstallState
@@ -249,7 +250,8 @@ async def test_a_replaced_session_latches_without_a_login(
         async with aiohttp.ClientSession() as session:
             api, cache = await _seeded(session, login_guard)
             if answer == "HTTP 401":
-                fake_mega.status_once["things"] = (401, {})
+                replaced = {"code": int(const.CloudCode.SESSION_REPLACED), "msg": "replaced"}
+                fake_mega.error_bodies["things"] = [(401, replaced)]
             else:
                 fake_mega.code_once["things"] = int(const.CloudCode.SESSION_REPLACED)
             with pytest.raises(SessionReplacedError):
@@ -261,6 +263,20 @@ async def test_a_replaced_session_latches_without_a_login(
             with pytest.raises(SessionReplacedError):
                 await api.async_get_thing_descriptions(["TX0001"])
             assert _sent(mock) == sent
+    assert fake_mega.login_calls == 1
+
+
+async def test_http_401_without_the_takeover_code_neither_latches_nor_logs_in(
+    fake_mega: FakeMega, login_guard: _LoginGuard
+) -> None:
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api, _cache = await _seeded(session, login_guard)
+            fake_mega.error_bodies["things"] = [(401, {"code": 401, "msg": "expired"})]
+            with pytest.raises(SessionRejectedError):
+                await api.async_get_thing_descriptions(["TX0001"])
+            assert api.session_replaced is False
     assert fake_mega.login_calls == 1
 
 

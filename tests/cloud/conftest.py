@@ -44,6 +44,7 @@ from eufy_home_security.testing import SYNTHETIC
 
 FAKE_OWNER_ID = "fedcba9876543210fedcba9876543210fedcba98"
 FAKE_AUTH_TOKEN = "auth-token-0123456789abcdef"
+FAKE_PENDING_TOKEN = "pending-token-0123456789"
 FAKE_ECC_KEY = "ab" * 32
 
 
@@ -76,6 +77,10 @@ class FakeMega:
             "mega_domain": f"mega-{region}-pr.eufy.com",
         }
         self.login_extra: dict[str, Any] = {}
+        # Regions whose login without a verify_code answers code 0 with ``fa_info.step`` 26052.
+        self.two_step: set[str] = set()
+        # The auth token of each ``sendmsg/verify_code`` request, with its body.
+        self.code_requests: list[tuple[str, dict[str, Any]]] = []
         self.devices: list[dict[str, Any]] = []
         # get_things_list: the thing descriptions the fake knows; a request is answered
         # with those whose ``profile.product_code`` it names (unknown codes omitted).
@@ -176,6 +181,11 @@ class FakeMega:
             repeat=True,
         )
         mock.post(
+            _url(push, const.SEND_VERIFY_CODE_PATH),
+            callback=self._delayed("sendmsg", self._send_verify_code, region),
+            repeat=True,
+        )
+        mock.post(
             _url(const.cluster_host("ota", region), const.OTA_ROM_PATH),
             callback=self._delayed("ota", self._get_rom_version, region),
             repeat=True,
@@ -255,7 +265,21 @@ class FakeMega:
                 status=200,
                 body=json.dumps({"code": code, "msg": "challenge", **self.login_extra}),
             )
-        return self._reply(shared, 0, self.login_data)
+        if region in self.two_step and not payload.get("verify_code"):
+            pending = {
+                **self.login_data,
+                "auth_token": FAKE_PENDING_TOKEN,
+                "fa_info": {"info": "use verify code for 2fa", "step": 26052},
+            }
+            return self._reply(shared, 0, pending)
+        return self._reply(shared, 0, {**self.login_data, "fa_info": {"info": "", "step": 0}})
+
+    def _send_verify_code(self, url: str, **kwargs: Any) -> CallbackResult:
+        payload = self._decrypt_body(kwargs)
+        self.code_requests.append((str(kwargs["headers"].get("x-auth-token")), payload))
+        if failure := self._failure_once("sendmsg", kwargs):
+            return failure
+        return self._reply(self._shared_for(kwargs), 0, None)
 
     def _captcha(self, url: str, **kwargs: Any) -> CallbackResult:
         return self._reply(self._shared_for(kwargs), 0, self.captcha)

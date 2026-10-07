@@ -82,6 +82,12 @@ KEY_EXCHANGE_PATH: Final = "/openapi/oauth/key/exchange"
 SECURITY_KEY_EXCHANGE_PATH: Final = "/v3/openapi/oauth/key/exchange"
 LOGIN_PATH: Final = "/passport/login"
 CAPTCHA_PATH: Final = "/passport/generate/captcha"
+SEND_VERIFY_CODE_PATH: Final = "/app/sendmsg/verify_code"
+"""Asks the cloud to send a login verification code (the push service's host)."""
+VERIFY_CODE_BIZ_LOGIN: Final = 1004
+"""``biz_type`` of a login (two-step verification) code."""
+VERIFY_CODE_BY_EMAIL: Final = 2
+"""``message_type`` that delivers the code by e-mail (1 SMS, 3 app push)."""
 DEVICES_PATH: Final = "/app/house/get_devs_list"
 CIPHERS_PATH: Final = "/v3/app/cipher/get_ciphers"
 DSK_KEYS_PATH: Final = "/app/devicerelation/get_dsk_keys"
@@ -279,7 +285,7 @@ THROTTLE_CODES: Final[Mapping[int, Throttle]] = {
 # HTTP 429 is a request throttle too; its Retry-After is honoured when longer.
 HTTP_TOO_MANY_REQUESTS: Final = 429
 # Another client's login ended this session: never log in again automatically.
-# HTTP 401 counts whatever the body says (the app logs out on it too).
+# As body code or with HTTP 401; HTTP 401 with any other body is a session expiry.
 SESSION_REPLACED_CODES: Final = frozenset({CloudCode.SESSION_REPLACED})
 HTTP_UNAUTHORIZED: Final = 401
 
