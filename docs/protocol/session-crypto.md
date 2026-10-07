@@ -96,7 +96,12 @@ Two subheader bytes of the CONN_INIT reply select its handshake and its encrypti
 A HomeBase 3 and a T8170 answer `08 xx FF 01` (144 bytes) **[verified]**. A T8410
 (fw 2.3.2.6) answers version `01` with 133 bytes (seen in a user debug log; byte 3 not logged).
 
-### RSA CONN_INIT **[declared: app]**
+### RSA CONN_INIT **[declared: app, legacy]**
+
+This is a **legacy** path. The current eufy app/SDK derives every station's session key
+from the cipher's `ecc_private_key` (ECIES, below) and no longer implements an RSA session
+path at all; only an old-firmware station whose CONN_INIT reply is not version 8 (e.g. a
+T8410 on fw 2.3.2.6) still needs it, decrypted with the cipher's cloud RSA `private_key`.
 
 ```
 payload (after the encryption type is undone) =
@@ -113,10 +118,17 @@ key = RSA-PKCS#1-v1.5-decrypt(private_key, ciphertext) up to its first NUL, firs
   key, `00` a clear frame (a receipt).
 - A wrong RSA key decrypts to noise rather than failing (PKCS#1 implicit rejection);
   the library takes a key that is not 16 printable bytes as a handshake failure.
+- A `private_key` whose bytes do not parse as a key at all is distinct from a wrong
+  key: the cloud serves the same bytes on every fetch, so re-fetching cannot help. The
+  library raises `CipherUnusableError` (cause `key_unusable`) without re-fetching and
+  without the stale-key latch, and retries only after a code change or the cached key
+  being dropped. On some accounts the cloud lowercases the base64 of `private_key`
+  ([cloud.md](cloud.md)), which lands here.
 - Library code: `crypto.parse_conn_init`, `crypto.aes_key_from_conn_init`,
-  `StationSession.rsa_session`. Not observed on hardware: whether the T8410's reply is
-  clear (the 133 bytes only fit as clear: ECB needs whole blocks), and the shape of its
-  receipts.
+  `crypto.load_rsa_private_key`, `StationSession.rsa_session`. Not observed on hardware:
+  whether the T8410's reply is clear (the 133 bytes only fit as clear: ECB needs whole
+  blocks), the shape of its receipts, and whether any account serves its `private_key`
+  with the case intact.
 
 ### One session per connection **[verified]**
 

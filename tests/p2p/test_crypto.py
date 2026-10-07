@@ -13,7 +13,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from eufy_home_security.cloud.const import CIPHER_ID_P2P
-from eufy_home_security.exceptions import HandshakeError, ProtocolError
+from eufy_home_security.exceptions import CipherUnusableError, HandshakeError, ProtocolError
 from eufy_home_security.p2p import crypto
 from eufy_home_security.p2p.did import static_key
 from eufy_home_security.testing import SYNTHETIC
@@ -206,17 +206,27 @@ def test_aes_key_from_conn_init_rejects_a_wrong_or_bad_key_and_a_short_block() -
     wrapped = priv.public_key().encrypt(b"0123456789abcdef", padding.PKCS1v15())
     with pytest.raises(HandshakeError):  # a decrypt error, or noise (implicit rejection)
         crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), other)
-    with pytest.raises(HandshakeError, match="does not parse"):
-        crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), "not base64!")
-    with pytest.raises(HandshakeError, match="not 128"):
+    # A wrong-but-valid key is a stale key, not an unusable one: still a plain HandshakeError.
+    with pytest.raises(HandshakeError) as noise:
+        crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), other)
+    assert not isinstance(noise.value, CipherUnusableError)
+    with pytest.raises(HandshakeError, match="not 128") as short:
         crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped[:100]), other)
+    assert not isinstance(short.value, CipherUnusableError)  # a protocol shape, not a bad key
+    # A key whose bytes do not parse is unusable (re-fetch cannot help); the cloud
+    # lowercases the base64 on some accounts, which lands here.
+    with pytest.raises(CipherUnusableError, match="does not parse") as bad:
+        crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), "not base64!")
+    assert bad.value.reason == "rsa_unparsable"
+    assert bad.value.cipher_id is None
     ecc = ec.generate_private_key(ec.SECP256R1()).private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption(),
     )
-    with pytest.raises(HandshakeError, match="not an RSA key"):
+    with pytest.raises(CipherUnusableError, match="not an RSA key") as wrong_type:
         crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), ecc.decode())
+    assert wrong_type.value.reason == "not_rsa"
 
 
 def test_gcm_helpers_require_a_32_byte_session_key() -> None:
