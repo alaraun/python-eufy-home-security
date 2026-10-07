@@ -88,6 +88,8 @@ _KEPT_ACROSS_VERSIONS = ("password", "throttle", "replaced")
 # What async_forget_account keeps: the throttle state, so removing and re-adding an
 # account cannot reset the cloud's limits (the install identity is kept separately).
 _KEPT_WHEN_FORGOTTEN = ("version", "account", "throttle")
+# Older layouts SessionCache migrates on load instead of dropping them.
+_MIGRATED_VERSIONS: Final = (1,)
 # Top-level section of the session-replaced latch.
 _REPLACED = "replaced"
 
@@ -166,7 +168,8 @@ class JsonFileStore:
 async def async_cached_account(store: Store) -> str | None:
     """The account (e-mail) whose session ``store`` holds, if it holds one."""
     doc = await store.async_load() or {}
-    account = doc.get("account") if doc.get("version") == CACHE_VERSION else None
+    readable = doc.get("version") in (CACHE_VERSION, *_MIGRATED_VERSIONS)
+    account = doc.get("account") if readable else None
     return account if isinstance(account, str) and account else None
 
 
@@ -195,7 +198,7 @@ class SessionCache:
 
     The document is namespaced so each subsystem owns its own section::
 
-        {"version": 1, "account": "<email, lower-case>", "openudid": "…", "password": "…",
+        {"version": 2, "account": "<email, lower-case>", "openudid": "…", "password": "…",
          "cloud": {"sessions": {"<region>": {...}}, "listed": {"<region>": {...}}},
          "push": {...}, "replaced": {"at": <epoch s>},
          "devices": [{..., "cloud_region": "<region>"}, …],
@@ -250,7 +253,7 @@ class SessionCache:
             doc["devices"] = _device_entries(doc["devices"])  # fields outside the allowlist go
         if not doc:
             _LOGGER.debug("session cache: nothing stored yet")
-        elif doc.get("version") == 1 and same_account:
+        elif doc.get("version") in _MIGRATED_VERSIONS and same_account:
             region = _migrate_v1(doc)
             _LOGGER.info(
                 "session cache: version 1 migrated; its session is the %s region's", region

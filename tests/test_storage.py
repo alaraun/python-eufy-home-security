@@ -315,6 +315,8 @@ async def test_cached_account_is_the_email_of_the_stored_session() -> None:
     assert await async_cached_account(store) == "user@example.com"
     await store.async_save({"version": 0, "account": "user@example.com"})
     assert await async_cached_account(store) is None  # an older layout is not trusted
+    await store.async_save({"version": 1, "account": "user@example.com"})
+    assert await async_cached_account(store) == "user@example.com"  # migrated on load
 
 
 async def test_corrupt_cache_file_is_moved_aside(tmp_path: Path) -> None:
