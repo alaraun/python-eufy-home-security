@@ -127,23 +127,49 @@ async def test_login_attempts_persist_and_leave_the_window() -> None:
     store = MemoryStore()
     cache = SessionCache(store, "user@example.com")
     await cache.async_load()
-    cache.section("throttle")["logins"] = [time.time() - 7200, "junk"]
-    cache.note_login(3600)
+    cache.section("throttle")["logins"] = {"eu": [time.time() - 7200, "junk"]}
+    cache.note_login(3600, "eu")
     await cache.async_save()
     reloaded = SessionCache(store, "user@example.com")
     await reloaded.async_load()
-    assert len(reloaded.recent_logins(3600)) == 1
-    assert len(reloaded.section("throttle")["logins"]) == 1  # the old one was dropped
+    assert len(reloaded.recent_logins(3600, "eu")) == 1
+    assert len(reloaded.section("throttle")["logins"]["eu"]) == 1  # the old one was dropped
+
+
+async def test_login_attempts_and_login_hold_offs_count_per_region() -> None:
+    cache = SessionCache(MemoryStore(), "user@example.com")
+    await cache.async_load()
+    cache.note_login(3600, "eu")
+    cache.note_login(3600, "eu")
+    cache.note_login(3600, "us")
+    assert (len(cache.recent_logins(3600, "eu")), len(cache.recent_logins(3600, "us"))) == (2, 1)
+    assert len(cache.recent_logins(3600)) == 3  # every region
+    cache.hold_off("login", 600, region="us")
+    assert cache.held_off_for("login", longest=86400, region="eu") is None
+    assert cache.held_off_for("login", longest=86400, region="us") is not None
+
+
+async def test_a_single_stored_login_record_counts_for_every_region() -> None:
+    cache = SessionCache(MemoryStore(), "user@example.com")
+    await cache.async_load()
+    now = time.time()
+    cache.section("throttle").update({"logins": [now - 60], "login": now + 600})
+    for region in ("eu", "us"):
+        assert cache.recent_logins(3600, region) == [now - 60]
+        assert cache.held_off_for("login", longest=86400, region=region) is not None
+    cache.note_login(3600, "eu")
+    assert len(cache.recent_logins(3600, "us")) == 1  # kept for the other region
+    assert len(cache.recent_logins(3600, "eu")) == 2
 
 
 async def test_future_login_stamps_neither_count_nor_persist() -> None:
     cache = SessionCache(MemoryStore(), "user@example.com")
     await cache.async_load()
     recent = time.time() - 60
-    cache.section("throttle")["logins"] = [recent, time.time() + 10 * 86400]  # clock jumped back
-    assert cache.recent_logins(3600) == [recent]
-    cache.note_login(3600)
-    stored = cache.section("throttle")["logins"]
+    cache.section("throttle")["logins"] = {"eu": [recent, time.time() + 10 * 86400]}  # clock
+    assert cache.recent_logins(3600, "eu") == [recent]
+    cache.note_login(3600, "eu")
+    stored = cache.section("throttle")["logins"]["eu"]
     assert len(stored) == 2
     assert stored[0] == recent
     assert stored[1] <= time.time()
@@ -152,7 +178,7 @@ async def test_future_login_stamps_neither_count_nor_persist() -> None:
 async def test_a_version_change_keeps_the_password_throttle_and_openudid() -> None:
     store = MemoryStore(
         {
-            "version": CACHE_VERSION - 1,
+            "version": CACHE_VERSION + 1,
             "account": "user@example.com",
             "openudid": "0123456789abcdef",
             "password": "secret",
@@ -174,6 +200,49 @@ async def test_a_version_change_keeps_the_password_throttle_and_openudid() -> No
     assert other.password is None  # never another account's password
     assert other.section("throttle") == {}
     assert other.openudid == "0123456789abcdef"
+
+
+@pytest.mark.parametrize(
+    ("cloud", "region"),
+    [
+        ({"region": "us", "mega_domain": "mega-eu-pr.eufy.com"}, "us"),  # the login's region
+        ({"mega_domain": "mega-us-pr.eufy.com"}, "us"),
+        ({"region": "xx"}, "eu"),
+    ],
+)
+async def test_version_1_moves_its_session_under_its_region(
+    cloud: dict[str, str], region: str
+) -> None:
+    session = {"auth_token": "t", "key_ident": "k", "shared_key": "s", "expires_at": 9e9}
+    store = MemoryStore(
+        {
+            "version": 1,
+            "account": "user@example.com",
+            "password": "secret",
+            "cloud": {**session, **cloud},
+            "devices": [{"device_sn": "T8030P2000012345"}],
+            "stations": {"T8030P2000012345": {"account_id": "owner"}},
+        }
+    )
+    cache = SessionCache(store, "user@example.com")
+    await cache.async_load()
+    stored = cache.cloud_sessions()[region]
+    assert {key: stored[key] for key in session} == session
+    assert set(cache.cloud_sessions()) == {region}
+    assert cache.cached_devices() == [{"device_sn": "T8030P2000012345", "cloud_region": region}]
+    assert cache.section("cloud")["listed"] == {region: {"devices": 1, "at": None}}
+    assert cache.station_account_id("T8030P2000012345") == "owner"
+    assert cache.password == "secret"
+
+
+async def test_version_1_without_devices_drops_the_empty_list() -> None:
+    store = MemoryStore(
+        {"version": 1, "account": "user@example.com", "cloud": {"auth_token": "t"}, "devices": []}
+    )
+    cache = SessionCache(store, "user@example.com")
+    await cache.async_load()
+    assert cache.cached_devices() is None  # the next fetch asks every region once
+    assert "listed" not in cache.section("cloud")
 
 
 async def test_the_replaced_latch_survives_a_cache_version_change(
@@ -246,6 +315,8 @@ async def test_cached_account_is_the_email_of_the_stored_session() -> None:
     assert await async_cached_account(store) == "user@example.com"
     await store.async_save({"version": 0, "account": "user@example.com"})
     assert await async_cached_account(store) is None  # an older layout is not trusted
+    await store.async_save({"version": 1, "account": "user@example.com"})
+    assert await async_cached_account(store) == "user@example.com"  # migrated on load
 
 
 async def test_corrupt_cache_file_is_moved_aside(tmp_path: Path) -> None:

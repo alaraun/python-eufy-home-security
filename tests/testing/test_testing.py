@@ -80,7 +80,27 @@ async def test_a_cold_start_records_each_cloud_request_redacted(fake: FakeStatio
         assert await eufy.async_start(push=False) == {}
     finally:
         await eufy.async_close()
-    assert cloud.calls == ["login", "devices", "things", "cipher:T8030***2345"]
+    # The first device list asks every region; one outside ``cloud.region`` is named.
+    assert cloud.calls == [
+        "login",
+        "login@us",
+        "devices",
+        "devices@us",
+        "things",
+        "cipher:T8030***2345",
+    ]
+
+
+async def test_a_region_lists_its_own_devices(fake: FakeStation) -> None:
+    cloud = FakeCloud.for_stations(fake, region="us")
+    eufy = client_for(fake, cloud, MemoryStore())
+    try:
+        await eufy.async_login()
+        stations = await eufy.async_discover()
+    finally:
+        await eufy.async_close()
+    assert {station.device.region for station in stations} == {"us"}
+    assert cloud.calls[:4] == ["login@eu", "login", "devices@eu", "devices"]
 
 
 async def test_a_login_error_is_raised_and_the_cloud_status_agrees(fake: FakeStation) -> None:

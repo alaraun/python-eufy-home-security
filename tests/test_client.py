@@ -153,7 +153,9 @@ class StubCloud:
     async def async_login(self, **kwargs: Any) -> None:
         self.logins.append(kwargs)
 
-    async def async_get_devices(self, *, refresh: bool = False) -> list[CloudDevice]:
+    async def async_get_devices(
+        self, *, refresh: bool = False, rescan_regions: bool = False
+    ) -> list[CloudDevice]:
         return [
             CloudDevice(
                 device_sn=SYNTHETIC.station_sn,
@@ -342,7 +344,9 @@ class BadSerialCloud(StubCloud):
     a product with no P2P id, and a camera paired to a station not on the list.
     """
 
-    async def async_get_devices(self, *, refresh: bool = False) -> list[CloudDevice]:
+    async def async_get_devices(
+        self, *, refresh: bool = False, rescan_regions: bool = False
+    ) -> list[CloudDevice]:
         devices = await super().async_get_devices(refresh=refresh)
         return [
             *devices,
@@ -1234,13 +1238,14 @@ async def test_cache_summary_is_json_safe_and_secret_free() -> None:
         _ECC_KEY,
         _FCM_TOKEN,
         doc["openudid"],
-        doc["cloud"]["auth_token"],
-        doc["cloud"]["shared_key"],
-        doc["cloud"]["key_ident"],
+        doc["cloud"]["sessions"]["eu"]["auth_token"],
+        doc["cloud"]["sessions"]["eu"]["shared_key"],
+        doc["cloud"]["sessions"]["eu"]["key_ident"],
     }
     # Every value the document holds, and every key that is not a field name the
     # summary may list (the serial keys), must stay out.
     field_names = set(CACHE_SECTIONS) | set(summary["cloud_fields"]) | set(summary["push_fields"])
+    field_names |= set().union(*summary["cloud_sessions"].values(), summary["cloud_sessions"])
     field_names |= {"at", "owner", "cipher", "ciphers", "account_id", "key_refresh", "logins"}
     field_names |= {"requests", "login", "refresh_attempts", "40", "gcm", "token", "android_id"}
     field_names |= set().union(*(set(d) for d in doc["devices"]))
@@ -1252,7 +1257,8 @@ async def test_cache_summary_is_json_safe_and_secret_free() -> None:
     assert summary["sections"] == sorted(CACHE_SECTIONS)
     assert summary["unclassified_sections"] == []
     assert summary["password_cached"] is True
-    assert "auth_token" in summary["cloud_fields"]
+    assert summary["cloud_fields"] == ["listed", "sessions"]
+    assert "auth_token" in summary["cloud_sessions"]["eu"]
     assert summary["push_fields"] == sorted(doc["push"])
     assert summary["device_count"] == len(doc["devices"])
     assert set(summary["stations"]) == {"T8030***2345", "T8030***4321"}
@@ -1266,7 +1272,9 @@ async def test_cache_summary_is_json_safe_and_secret_free() -> None:
     assert other["cipher_refresh_age"] is None
     status = summary["cloud_status"]
     assert status["login_need"] == "replaced"
-    assert status["logins_in_window"] == 1
+    assert status["logins_in_window"] == 2  # the first device list logs in to each region
+    assert status["regions"]["eu"]["devices"] == len(doc["devices"])
+    assert status["regions"]["us"]["suspended"] is True
     assert 0 < status["device_list_refresh_age"] < 120
     assert "stations" not in status
 
@@ -1451,10 +1459,17 @@ async def test_stations_start_concurrently_and_one_failure_does_not_hold_up_anot
     changes = [(e.station_sn, e.connected) for e in events if isinstance(e, ConnectionChanged)]
     # The reachable station came up before the unreachable one's discovery gave up.
     assert changes.index((up.serial, True)) < changes.index((OTHER_STATION_SN, False))
-    # One login and one device list for both; a cipher fetch only for the station that
-    # answered CONN_INIT.
+    # One login and one device list per region for both stations (the first list asks
+    # every region); a cipher fetch only for the station that answered CONN_INIT.
     assert sorted(cloud.calls) == sorted(
-        ["login", "devices", "things", f"cipher:{redact_serial(up.serial)}"]
+        [
+            "login",
+            "devices",
+            "login@us",
+            "devices@us",
+            "things",
+            f"cipher:{redact_serial(up.serial)}",
+        ]
     )
 
 
@@ -1797,7 +1812,9 @@ class FirmwareCloud(StubCloud):
         super().__init__(*args, **kwargs)
         self.checks: list[tuple[str, str, str]] = []
 
-    async def async_get_devices(self, *, refresh: bool = False) -> list[CloudDevice]:
+    async def async_get_devices(
+        self, *, refresh: bool = False, rescan_regions: bool = False
+    ) -> list[CloudDevice]:
         return [
             CloudDevice(
                 device_sn=SYNTHETIC.station_sn,
@@ -1936,12 +1953,12 @@ async def test_a_probe_rekeys_a_lapsed_identity_without_a_login() -> None:
         events: list[Event] = []
         eufy.subscribe(events.append)
         await eufy.async_probe_cloud_session()  # loads the cache
-        before = eufy.cache.section("cloud")["key_ident"]
+        before = eufy.cache.cloud_session("eu")["key_ident"]
         cloud.call_errors = [FakeCloud.refusal(463, 4404, "get identity error")]
         cloud.calls.clear()
         await eufy.async_probe_cloud_session()
         assert cloud.calls == ["devices", "devices"]  # refused, re-keyed, retried
-        assert eufy.cache.section("cloud")["key_ident"] != before
+        assert eufy.cache.cloud_session("eu")["key_ident"] != before
         assert _problems(events) == []
         await eufy.async_close()
 

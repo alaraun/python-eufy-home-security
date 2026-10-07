@@ -206,7 +206,7 @@ def test_status_json_is_serialisable_and_unredacted() -> None:
 
 def test_devices_listing() -> None:
     devices = [
-        CloudDevice(device_sn=SYNTHETIC.station_sn, device_type=18, name="Home Base"),
+        CloudDevice(device_sn=SYNTHETIC.station_sn, device_type=18, name="Home Base", region="us"),
         CloudDevice(
             device_sn=SYNTHETIC.camera_sn,
             device_type=19,
@@ -221,6 +221,8 @@ def test_devices_listing() -> None:
     assert "eufyCam 3" in text
     assert "T9999***0001" in text
     assert SYNTHETIC.station_sn not in text
+    assert text.splitlines()[0].split()[-1] == "REGION"
+    assert text.splitlines()[1].split()[-1] == "us"
 
 
 def test_discovered() -> None:

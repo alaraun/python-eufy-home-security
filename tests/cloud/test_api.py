@@ -40,7 +40,7 @@ from .conftest import FAKE_AUTH_TOKEN, FAKE_ECC_KEY, FAKE_OWNER_ID, FakeMega
 
 
 def _api(session: aiohttp.ClientSession, cache: SessionCache) -> EufyCloudApi:
-    return EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password)
+    return EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password, region="eu")
 
 
 def _devices_url(fake_mega: FakeMega) -> str:
@@ -58,8 +58,8 @@ async def test_login_happy_path_caches_session(fake_mega: FakeMega, cache: Sessi
             # A second login reuses the cached session — no new login round trip.
             await api.async_login()
     assert fake_mega.login_calls == 1
-    assert cache.section("cloud")["auth_token"]
-    assert cache.section("cloud")["mega_domain"] == "mega-eu-pr.eufy.com"
+    assert cache.cloud_session("eu")["auth_token"]
+    assert cache.cloud_session("eu")["mega_domain"] == "mega-eu-pr.eufy.com"
 
 
 async def test_password_callable_is_awaited_only_for_a_real_login(
@@ -75,7 +75,7 @@ async def test_password_callable_is_awaited_only_for_a_real_login(
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            api = EufyCloudApi(session, cache, SYNTHETIC.email, ask)
+            api = EufyCloudApi(session, cache, SYNTHETIC.email, ask, region="eu")
             await api.async_login()
             await api.async_login()  # cached: the password is not needed again
     assert fake_mega.login_calls == 1
@@ -99,7 +99,9 @@ async def test_a_cache_layout_change_logs_in_again_with_the_cached_password(
             upgraded = SessionCache(store, SYNTHETIC.email)
             await upgraded.async_load()
             assert upgraded.section("cloud") == {}
-            await EufyCloudApi(session, upgraded, SYNTHETIC.email, None).async_get_devices()
+            await EufyCloudApi(
+                session, upgraded, SYNTHETIC.email, None, region="eu"
+            ).async_get_devices()
     assert fake_mega.login_calls == 2  # one login cycle, nobody asked
 
 
@@ -110,7 +112,7 @@ async def test_without_a_password_or_a_cached_one_nothing_is_sent(
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             with pytest.raises(AuthenticationError, match="no password"):
-                await EufyCloudApi(session, cache, SYNTHETIC.email, None).async_login()
+                await EufyCloudApi(session, cache, SYNTHETIC.email, None, region="eu").async_login()
         assert not mock.requests
 
 
@@ -121,7 +123,9 @@ async def test_a_given_password_wins_over_the_cached_one_and_replaces_it(
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            await EufyCloudApi(session, cache, SYNTHETIC.email, "new-password").async_login()
+            await EufyCloudApi(
+                session, cache, SYNTHETIC.email, "new-password", region="eu"
+            ).async_login()
     assert cache.password == "new-password"
 
 
@@ -136,7 +140,7 @@ async def test_a_cached_password_spares_the_prompt(
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            await EufyCloudApi(session, cache, SYNTHETIC.email, ask).async_login()
+            await EufyCloudApi(session, cache, SYNTHETIC.email, ask, region="eu").async_login()
     assert fake_mega.login_calls == 1
 
 
@@ -153,7 +157,9 @@ async def test_a_rejected_cached_password_is_forgotten(
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             with pytest.raises(AuthenticationError):
-                await EufyCloudApi(session, cache, SYNTHETIC.email, given).async_login()
+                await EufyCloudApi(
+                    session, cache, SYNTHETIC.email, given, region="eu"
+                ).async_login()
     assert cache.password == kept
 
 
@@ -166,7 +172,7 @@ async def test_a_login_challenge_keeps_the_cached_password(
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             with pytest.raises(LoginChallengeError):
-                await EufyCloudApi(session, cache, SYNTHETIC.email, None).async_login()
+                await EufyCloudApi(session, cache, SYNTHETIC.email, None, region="eu").async_login()
     assert cache.password == SYNTHETIC.password
 
 
@@ -491,12 +497,12 @@ async def test_a_rekey_answer_runs_a_key_exchange_and_keeps_the_token(
         async with aiohttp.ClientSession() as session:
             api = _api(session, cache)
             await api.async_login()
-            old_ident = cache.section("cloud")["key_ident"]
+            old_ident = cache.cloud_session("eu")["key_ident"]
             fake_mega.error_bodies["devices"] = [answer]
             devices = await api.async_get_devices(refresh=True)
     assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
     assert fake_mega.login_calls == 1  # a re-key is never a login
-    cloud = cache.section("cloud")
+    cloud = cache.cloud_session("eu")
     assert cloud["key_ident"] != old_ident
     assert cloud["auth_token"] == FAKE_AUTH_TOKEN
 
@@ -572,7 +578,7 @@ async def test_a_replaced_session_latches_until_a_forced_login(
                 await api.async_get_devices(refresh=True)
             latched = api.session_replaced
             assert latched
-            assert "auth_token" not in cache.section("cloud")
+            assert "auth_token" not in cache.cloud_session("eu")
             assert cache.password == SYNTHETIC.password  # the credentials were never wrong
 
             # Nothing logs in again or reaches the cloud by itself, after a restart too.
@@ -736,8 +742,12 @@ async def test_a_request_throttle_holds_off_every_account_sharing_the_install(
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            a = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password, install=install)
-            b = EufyCloudApi(session, other, OTHER_EMAIL, SYNTHETIC.password, install=install)
+            a = EufyCloudApi(
+                session, cache, SYNTHETIC.email, SYNTHETIC.password, install=install, region="eu"
+            )
+            b = EufyCloudApi(
+                session, other, OTHER_EMAIL, SYNTHETIC.password, install=install, region="eu"
+            )
             await b.async_login()
             await b.async_get_station_owner_id(SYNTHETIC.station_sn)  # caches B's device list
             await a.async_login()
@@ -757,7 +767,7 @@ async def test_a_request_throttle_holds_off_every_account_sharing_the_install(
 
             # A restart: a new InstallState shares nothing, A's own store still holds off.
             restarted = EufyCloudApi(
-                session, other, OTHER_EMAIL, SYNTHETIC.password, install=InstallState()
+                session, other, OTHER_EMAIL, SYNTHETIC.password, install=InstallState(), region="eu"
             )
             await restarted.async_get_devices(refresh=True)
             assert _sent(mock) > sent
@@ -771,13 +781,17 @@ async def test_a_login_hold_off_is_not_shared_with_the_install(
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            a = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password, install=install)
+            a = EufyCloudApi(
+                session, cache, SYNTHETIC.email, SYNTHETIC.password, install=install, region="eu"
+            )
             fake_mega.login_code = int(const.CloudCode.PASSWORD_ERROR_MUCH)
             with pytest.raises(LoginLimitedError):
                 await a.async_login()
             fake_mega.login_code = 0
             other = SessionCache(MemoryStore(), OTHER_EMAIL)
-            b = EufyCloudApi(session, other, OTHER_EMAIL, SYNTHETIC.password, install=install)
+            b = EufyCloudApi(
+                session, other, OTHER_EMAIL, SYNTHETIC.password, install=install, region="eu"
+            )
             await b.async_login()
     assert install.request_held_off_for() is None
     assert fake_mega.login_calls == 2
@@ -933,7 +947,7 @@ async def test_login_is_persisted_to_the_store(fake_mega: FakeMega) -> None:
         async with aiohttp.ClientSession() as session:
             await _api(session, SessionCache(store, SYNTHETIC.email)).async_login()
     assert store.data is not None  # no explicit save: HA never unloads on shutdown
-    assert store.data["cloud"]["auth_token"] == FAKE_AUTH_TOKEN
+    assert store.data["cloud"]["sessions"]["eu"]["auth_token"] == FAKE_AUTH_TOKEN
 
 
 async def test_concurrent_calls_on_a_cold_cache_share_one_login(
@@ -946,7 +960,7 @@ async def test_concurrent_calls_on_a_cold_cache_share_one_login(
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            api = EufyCloudApi(session, cache, SYNTHETIC.email, slow_password)
+            api = EufyCloudApi(session, cache, SYNTHETIC.email, slow_password, region="eu")
             await asyncio.gather(api.async_get_devices(), api.async_register_push_token("tok"))
     assert fake_mega.login_calls == 1
 
@@ -1119,7 +1133,7 @@ def test_identity_repr_hides_the_key_and_token() -> None:
 
 
 def _warm_session(cache: SessionCache, *, expires_in: float) -> None:
-    cache.section("cloud").update(
+    cache.cloud_session("eu").update(
         {
             "auth_token": "old-token",
             "key_ident": "old-ident",
@@ -1152,7 +1166,7 @@ async def test_cloud_status_login_need_never_contacts_the_cloud(
         cache.set_replaced()
     with aioresponses() as mock:
         async with aiohttp.ClientSession() as session:
-            status = EufyCloudApi(session, cache, SYNTHETIC.email, None).cloud_status()
+            status = EufyCloudApi(session, cache, SYNTHETIC.email, None, region="eu").cloud_status()
         assert not mock.requests
     assert status.login_need is need
     assert status.password_cached is (cached_password is not None)
@@ -1256,12 +1270,12 @@ async def test_reauthenticate_logs_in_on_a_warm_cache_and_replaces_the_password(
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            api = EufyCloudApi(session, cache, SYNTHETIC.email, "old")
+            api = EufyCloudApi(session, cache, SYNTHETIC.email, "old", region="eu")
             await api.async_reauthenticate("new")
             await api.async_login()  # the new session is reused
     assert fake_mega.login_calls == 1
     assert cache.password == "new"
-    assert cache.section("cloud")["auth_token"] == FAKE_AUTH_TOKEN
+    assert cache.cloud_session("eu")["auth_token"] == FAKE_AUTH_TOKEN
     assert cache.key_refresh_outstanding(SYNTHETIC.station_sn) is None
     assert api._password == "new"  # a given password does not outlive the change
 
@@ -1274,13 +1288,13 @@ async def test_a_rejected_reauthentication_keeps_the_cached_password(
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            api = EufyCloudApi(session, cache, SYNTHETIC.email, None)
+            api = EufyCloudApi(session, cache, SYNTHETIC.email, None, region="eu")
             before = api.cloud_status().logins_in_window
             with pytest.raises(AuthenticationError):
                 await api.async_reauthenticate("new")
             assert api.cloud_status().logins_in_window == before + 1
     assert cache.password == "old"
-    assert cache.section("cloud")["auth_token"] == "old-token"
+    assert cache.cloud_session("eu")["auth_token"] == "old-token"
 
 
 async def test_reauthenticate_honours_the_login_budget(cache: SessionCache) -> None:
@@ -1289,9 +1303,9 @@ async def test_reauthenticate_honours_the_login_budget(cache: SessionCache) -> N
     with aioresponses() as mock:
         async with aiohttp.ClientSession() as session:
             with pytest.raises(LoginLimitedError):
-                await EufyCloudApi(session, cache, SYNTHETIC.email, None).async_reauthenticate(
-                    "new"
-                )
+                await EufyCloudApi(
+                    session, cache, SYNTHETIC.email, None, region="eu"
+                ).async_reauthenticate("new")
         assert not mock.requests
     assert cache.password == "old"
 
@@ -1304,7 +1318,7 @@ async def test_reauthenticate_respects_the_replaced_latch_unless_taking_over(
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            api = EufyCloudApi(session, cache, SYNTHETIC.email, None)
+            api = EufyCloudApi(session, cache, SYNTHETIC.email, None, region="eu")
             with pytest.raises(SessionReplacedError):
                 await api.async_reauthenticate("new")
             assert not mock.requests
@@ -1323,7 +1337,7 @@ async def test_a_reauthentication_challenge_stores_the_password_only_once_answer
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
-            api = EufyCloudApi(session, cache, SYNTHETIC.email, None)
+            api = EufyCloudApi(session, cache, SYNTHETIC.email, None, region="eu")
             with pytest.raises(LoginChallengeError) as caught:
                 await api.async_reauthenticate("new")
             assert cache.password == "old"

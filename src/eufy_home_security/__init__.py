@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from ._logging import redact, redact_serial, set_secret_logging, set_wire_logging
     from .client import EufySecurity, ModelStatus, SkippedDevice
     from .cloud.models import CloudDevice, FirmwareUpdate
-    from .cloud.status import CloudStatus, LoginNeed, StationRefreshStatus
+    from .cloud.status import CloudStatus, LoginNeed, RegionStatus, StationRefreshStatus
     from .devices.model_settings import Setting, SettingControl, SettingKind
     from .devices.recipes import MAX_PRESET_SLOTS, MAX_ZOOM, MIN_ZOOM, PanTilt, PresetPosition
     from .devices.settings import SettingUnit
@@ -115,7 +115,9 @@ _EXPORTS: dict[str, str] = {
     ),
     **dict.fromkeys(("EufySecurity", "ModelStatus", "SkippedDevice"), "client"),
     **dict.fromkeys(("CloudDevice", "FirmwareUpdate"), "cloud.models"),
-    **dict.fromkeys(("CloudStatus", "LoginNeed", "StationRefreshStatus"), "cloud.status"),
+    **dict.fromkeys(
+        ("CloudStatus", "LoginNeed", "RegionStatus", "StationRefreshStatus"), "cloud.status"
+    ),
     **dict.fromkeys(("Setting", "SettingControl", "SettingKind"), "devices.model_settings"),
     "SettingUnit": "devices.settings",
     **dict.fromkeys(
@@ -318,6 +320,7 @@ __all__ = [
     "Reach",
     "RecordNotFoundError",
     "RefreshCooldownError",
+    "RegionStatus",
     "RemoteStation",
     "ResizePolicy",
     "SecurityEvent",

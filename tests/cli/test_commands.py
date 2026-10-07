@@ -42,6 +42,7 @@ class StubCloud:
 
     emails: ClassVar[list[str]] = []
     device_refreshes: ClassVar[list[bool]] = []
+    rescans: ClassVar[list[bool]] = []
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.user_name = "user"
@@ -55,8 +56,11 @@ class StubCloud:
         if StubCloud.challenge is not None and not kwargs.get("verify_code"):
             raise StubCloud.challenge
 
-    async def async_get_devices(self, *, refresh: bool = False) -> list[CloudDevice]:
+    async def async_get_devices(
+        self, *, refresh: bool = False, rescan_regions: bool = False
+    ) -> list[CloudDevice]:
         StubCloud.device_refreshes.append(refresh)
+        StubCloud.rescans.append(rescan_regions)
         return [
             CloudDevice(
                 device_sn=SYNTHETIC.station_sn,
@@ -106,6 +110,7 @@ async def fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> AsyncIterator[
     CURRENT["station"] = station
     StubCloud.challenge = None
     StubCloud.device_refreshes = []
+    StubCloud.rescans = []
     monkeypatch.setattr(client_module, "EufyCloudApi", StubCloud)
     monkeypatch.setattr(fcm_module, "PushListener", StubPush)
     # The CLI passes the host only: bind every session and the LAN probe to the
@@ -125,8 +130,10 @@ def _bound_client(port: int) -> type[client_module.EufySecurity]:
         ) -> list[LanPath]:
             return await super().async_probe_lan(timeout=0.5, port=discovery_port)
 
-        async def async_discover(self, *, refresh: bool = False) -> list[Station]:
-            stations = await super().async_discover(refresh=refresh)
+        async def async_discover(
+            self, *, refresh: bool = False, rescan_regions: bool = False
+        ) -> list[Station]:
+            stations = await super().async_discover(refresh=refresh, rescan_regions=rescan_regions)
             for st in stations:
                 st.session._port = port
             return stations
@@ -166,7 +173,9 @@ async def test_status_human_json_raw(
 class ListedCloud(StubCloud):
     """The stub cloud with the camera on an unbundled product code the cloud describes."""
 
-    async def async_get_devices(self, *, refresh: bool = False) -> list[CloudDevice]:
+    async def async_get_devices(
+        self, *, refresh: bool = False, rescan_regions: bool = False
+    ) -> list[CloudDevice]:
         devices = await super().async_get_devices(refresh=refresh)
         return [
             replace(d, raw={"device_new_pn": "T9999"}) if d.device_sn == SYNTHETIC.camera_sn else d
@@ -343,6 +352,9 @@ async def test_status_reads_the_cached_device_list_then_devices_refreshes_it(
     StubCloud.device_refreshes = []
     assert await run(["devices"], tmp_path) == 0
     assert StubCloud.device_refreshes == [True]  # `devices` forces a fresh fetch
+    assert StubCloud.rescans[-1] is False
+    assert await run(["devices", "--rescan-regions"], tmp_path) == 0
+    assert StubCloud.rescans[-1] is True
 
 
 async def test_select_refreshing_refetches_once_when_a_named_station_is_not_cached() -> None:

@@ -30,13 +30,21 @@ from types import MappingProxyType
 from typing import Any, Final, Protocol, runtime_checkable
 
 from ._logging import redact_serial
-from .cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY, LOCKOUT_HOLD_OFF_SECONDS
-from .cloud.models import device_cache_entry
+from .cloud.const import (
+    CIPHER_ID_P2P,
+    DEFAULT_REGION,
+    KEY_REFRESH_SLOW_RETRY,
+    LOCKOUT_HOLD_OFF_SECONDS,
+    REGIONS,
+    region_from_mega_domain,
+)
+from .cloud.models import REGION_KEY, device_cache_entry
 from .devices.types import connects_on_demand
 
-CACHE_VERSION = 1
-#: The public name of :data:`CACHE_VERSION`. A change costs every install one
-#: unattended login (see :class:`SessionCache`), so a deploy can warn before it.
+CACHE_VERSION = 2
+#: The public name of :data:`CACHE_VERSION`. A change without a migration from the
+#: previous version costs every install one unattended login (see :class:`SessionCache`),
+#: so a deploy can warn before it. Version 1 is migrated.
 CACHE_LAYOUT_VERSION: Final = CACHE_VERSION
 
 #: How long :meth:`SessionCache.schedule_save` lets changes gather before it writes.
@@ -80,6 +88,8 @@ _KEPT_ACROSS_VERSIONS = ("password", "throttle", "replaced")
 # What async_forget_account keeps: the throttle state, so removing and re-adding an
 # account cannot reset the cloud's limits (the install identity is kept separately).
 _KEPT_WHEN_FORGOTTEN = ("version", "account", "throttle")
+# Older layouts SessionCache migrates on load instead of dropping them.
+_MIGRATED_VERSIONS: Final = (1,)
 # Top-level section of the session-replaced latch.
 _REPLACED = "replaced"
 
@@ -158,7 +168,8 @@ class JsonFileStore:
 async def async_cached_account(store: Store) -> str | None:
     """The account (e-mail) whose session ``store`` holds, if it holds one."""
     doc = await store.async_load() or {}
-    account = doc.get("account") if doc.get("version") == CACHE_VERSION else None
+    readable = doc.get("version") in (CACHE_VERSION, *_MIGRATED_VERSIONS)
+    account = doc.get("account") if readable else None
     return account if isinstance(account, str) and account else None
 
 
@@ -187,22 +198,25 @@ class SessionCache:
 
     The document is namespaced so each subsystem owns its own section::
 
-        {"version": 1, "account": "<email, lower-case>", "openudid": "…", "password": "…",
-         "cloud": {...}, "push": {...}, "replaced": {"at": <epoch s>},
-         "devices": [{...}, …],
+        {"version": 2, "account": "<email, lower-case>", "openudid": "…", "password": "…",
+         "cloud": {"sessions": {"<region>": {...}}, "listed": {"<region>": {...}}},
+         "push": {...}, "replaced": {"at": <epoch s>},
+         "devices": [{..., "cloud_region": "<region>"}, …],
          "stations": {"<serial>": {"account_id": "…", "ciphers": {"40": "…"}, "cipher_id": 40,
                                    "refresh_attempts": {"cipher": <epoch s>},
                                    "key_refresh": <epoch s>,
                                    "dsk": {"key": "…", "expiration": <epoch s>},
                                    "presets": {"<camera serial>": [{...}, …]}}},
          "refresh_attempts": {"owner": <epoch s>},
-         "throttle": {"requests": <epoch s>, "login": <epoch s>, "logins": [<epoch s>, …]}}
+         "throttle": {"requests": <epoch s>, "login": {"<region>": <epoch s>},
+                      "logins": {"<region>": [<epoch s>, …]}}}
 
     Everything except ``openudid`` is scoped to ``account``: loading the cache for a
     different account discards the account-scoped part, so one install can never
     reuse another account's session or keys. A document of another ``version`` keeps
     only ``openudid``, the password, the throttle state and the session-replaced
-    latch; the rest is fetched again.
+    latch; the rest is fetched again. Version 1 (one session, flat in ``cloud``) is
+    migrated: its session and devices belong to the region it was logged in to.
 
     The document holds the account password, the cloud session and each station's
     key: keep the store private.
@@ -239,6 +253,11 @@ class SessionCache:
             doc["devices"] = _device_entries(doc["devices"])  # fields outside the allowlist go
         if not doc:
             _LOGGER.debug("session cache: nothing stored yet")
+        elif doc.get("version") in _MIGRATED_VERSIONS and same_account:
+            region = _migrate_v1(doc)
+            _LOGGER.info(
+                "session cache: version 1 migrated; its session is the %s region's", region
+            )
         elif doc.get("version") != CACHE_VERSION or not same_account:
             kept = {k: doc[k] for k in _KEPT_ACROSS_VERSIONS if same_account and k in doc}
             if doc.get("openudid"):
@@ -344,6 +363,10 @@ class SessionCache:
             "unclassified_sections": sorted(key for key in doc if key not in CACHE_SECTIONS),
             "password_cached": self.password is not None,
             "cloud_fields": _present_fields(doc.get("cloud")),
+            "cloud_sessions": {
+                region: _present_fields(session)
+                for region, session in self.cloud_sessions().items()
+            },
             "push_fields": _present_fields(doc.get("push")),
             "device_count": len(devices) if isinstance(devices, list) else None,
             "stations": stations,
@@ -383,6 +406,18 @@ class SessionCache:
     def section(self, name: str) -> dict[str, Any]:
         """A mutable, subsystem-owned section (``"cloud"``, ``"push"`` …)."""
         return _subsection(self._doc, name)
+
+    def cloud_session(self, region: str) -> dict[str, Any]:
+        """The mutable cloud session section of ``region`` (``cloud.sessions.<region>``)."""
+        return _subsection(_subsection(self.section("cloud"), "sessions"), region)
+
+    def cloud_sessions(self) -> dict[str, dict[str, Any]]:
+        """Every stored region session by region, without creating a section."""
+        cloud = self._doc.get("cloud")
+        sessions = cloud.get("sessions") if isinstance(cloud, dict) else None
+        if not isinstance(sessions, dict):
+            return {}
+        return {r: s for r, s in sessions.items() if isinstance(s, dict)}
 
     def station(self, serial: str) -> dict[str, Any]:
         """The mutable per-station section."""
@@ -551,47 +586,115 @@ class SessionCache:
 
     # ── cloud throttle ───────────────────────────────────────────────────────
 
-    def held_off_for(self, kind: str, *, longest: float) -> float | None:
+    def held_off_for(self, kind: str, *, longest: float, region: str | None = None) -> float | None:
         """Seconds left on the ``kind`` hold-off (``"requests"``, ``"login"``), or None.
 
-        A stored time more than ``longest`` ahead cannot have been set by this
-        clock (it jumped back, or the document was edited) and is ignored rather
-        than allowed to block the cloud indefinitely.
+        A hold-off kept per region (``"login"``) is read for ``region``; a single stored
+        time applies to every region. A stored time more than ``longest`` ahead cannot
+        have been set by this clock (it jumped back, or the document was edited) and is
+        ignored rather than allowed to block the cloud indefinitely.
         """
         until = self.section("throttle").get(kind)
+        if isinstance(until, dict):
+            until = until.get(region) if region is not None else None
         if not isinstance(until, (int, float)) or isinstance(until, bool):
             return None
         left = until - time.time()
         return left if 0 < left <= longest else None
 
-    def hold_off(self, kind: str, seconds: float) -> None:
-        """Hold ``kind`` off for ``seconds`` from now; never shortens a longer hold-off."""
+    def hold_off(self, kind: str, seconds: float, *, region: str | None = None) -> None:
+        """Hold ``kind`` off for ``seconds`` from now (for ``region`` alone when given);
+        never shortens a longer hold-off."""
         section = self.section("throttle")
+        holder: dict[str, Any] = section
+        key = kind
+        if region is not None:
+            holder, key = _per_region(section, kind), region
         until = time.time() + seconds
-        current = section.get(kind)
+        current = holder.get(key)
         if isinstance(current, (int, float)) and not isinstance(current, bool):
             until = max(until, current)
-        section[kind] = until
+        holder[key] = until
 
-    def recent_logins(self, window: float) -> list[float]:
-        """Epoch times of the login attempts inside the last ``window`` seconds, oldest first.
+    def recent_logins(self, window: float, region: str | None = None) -> list[float]:
+        """Epoch times of the login attempts inside the last ``window`` seconds, oldest
+        first: those of ``region``, or of every region when None.
 
         As in :meth:`held_off_for`, a stamp more than ``LOCKOUT_HOLD_OFF_SECONDS``
         ahead cannot have been written by this clock and is ignored, so it cannot
-        fill the login budget.
+        fill the login budget. A single stored list counts for every region.
         """
         now = time.time()
         cutoff, latest = now - window, now + LOCKOUT_HOLD_OFF_SECONDS
         stored = self.section("throttle").get("logins")
+        if isinstance(stored, dict):
+            lists = [stored.get(region)] if region is not None else list(stored.values())
+        else:
+            lists = [stored]
         return sorted(
             float(at)
-            for at in (stored if isinstance(stored, list) else ())
+            for entries in lists
+            for at in (entries if isinstance(entries, list) else ())
             if isinstance(at, (int, float)) and not isinstance(at, bool) and cutoff < at <= latest
         )
 
-    def note_login(self, window: float) -> None:
-        """Record a login attempt now, forgetting those older than ``window`` or implausible."""
-        self.section("throttle")["logins"] = [*self.recent_logins(window), time.time()]
+    def note_login(self, window: float, region: str) -> None:
+        """Record a login attempt to ``region`` now, forgetting those older than ``window``
+        or implausible."""
+        recent = self.recent_logins(window, region)
+        _per_region(self.section("throttle"), "logins")[region] = [*recent, time.time()]
+
+
+# The cloud session fields version 1 kept flat in ``cloud``.
+_V1_SESSION_FIELDS: Final = (
+    "key_ident",
+    "shared_key",
+    "auth_token",
+    "user_id",
+    "expires_at",
+    "mega_domain",
+)
+
+
+def _migrate_v1(doc: dict[str, Any]) -> str:
+    """Rewrite a version-1 document in place; returns the region its session served.
+
+    The region is the one the session was logged in to (``cloud.region``), else the
+    one its ``mega_domain`` names, else :data:`DEFAULT_REGION`. The session moves to
+    ``cloud.sessions.<region>`` and every cached device is tagged with that region,
+    which counts as listed with them. An empty device list is dropped, so the next
+    fetch asks every region once.
+    """
+    cloud = doc.get("cloud")
+    cloud = cloud if isinstance(cloud, dict) else {}
+    stored = cloud.get("region")
+    region = (
+        stored
+        if stored in REGIONS
+        else region_from_mega_domain(cloud.get("mega_domain")) or DEFAULT_REGION
+    )
+    session = {key: cloud[key] for key in _V1_SESSION_FIELDS if key in cloud}
+    migrated: dict[str, Any] = {"sessions": {region: session}} if session else {}
+    devices = [e for e in doc.get("devices") or () if isinstance(e, dict)]
+    if devices:
+        for entry in devices:
+            entry.setdefault(REGION_KEY, region)
+        migrated["listed"] = {region: {"devices": len(devices), "at": None}}
+    else:
+        doc.pop("devices", None)
+    doc["cloud"] = migrated
+    return region
+
+
+def _per_region(section: dict[str, Any], key: str) -> dict[str, Any]:
+    """``section[key]`` as a per-region mapping; a single stored value becomes every
+    region's."""
+    value = section.get(key)
+    if not isinstance(value, dict):
+        value = section[key] = (
+            {} if value is None else {region: copy.deepcopy(value) for region in REGIONS}
+        )
+    return value
 
 
 def _device_entries(raw_devices: list[Any]) -> list[dict[str, Any]]:

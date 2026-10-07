@@ -51,6 +51,11 @@ _DSK_KEY = "0123456789abcdef0123456789abcdef"  # a synthetic device session key
 _DSK_TTL = 3600.0
 _IDENTS = itertools.count(1)  # every key exchange mints a new identity, as the cloud's
 
+# The region whose cluster the current request goes to.
+_request_region: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "eufy_testing_request_region", default=const.DEFAULT_REGION
+)
+
 # The station whose owner id is being looked up, so its device-list request is named.
 _owner_lookup: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "eufy_testing_owner_lookup", default=None
@@ -155,7 +160,12 @@ class FakeCloud:
     answer would. ``calls`` records every request that reached the cloud: ``"login"``,
     ``"devices"``, ``"owner:<serial>"`` (a device-list request made to find a station's
     owner), ``"cipher:<serial>"``, ``"dsk:<serial>"``, ``"push_token"``, ``"things"``,
-    with serials redacted.
+    with serials redacted. A request to a region other than ``region`` is recorded with
+    ``@<region>`` appended (``"login@us"``, ``"devices@us"``).
+
+    ``devices`` are listed by the ``region`` cluster; ``region_devices`` holds the
+    device list of each other region (a region not in it lists none). Every region
+    serves the same account (``user_id``), as the real clusters do.
 
     ``things`` holds the thing description per product code that ``get_things_list``
     returns (see :func:`thing_description`); a code not in it is omitted from the reply.
@@ -175,6 +185,10 @@ class FakeCloud:
     devices: list[dict[str, Any]] = field(
         default_factory=lambda: [station_device(), camera_device()]
     )
+    region: str = const.DEFAULT_REGION
+    """The region whose cluster lists ``devices``."""
+    region_devices: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    """The device list of each other region; a region not in it lists none."""
     owner_ids: dict[str, str] = field(
         default_factory=lambda: {SYNTHETIC.station_sn: SYNTHETIC.account_id}
     )
@@ -228,21 +242,30 @@ class FakeCloud:
 
     # ── answers ──────────────────────────────────────────────────────────────
 
+    def devices_of(self, region: str) -> list[dict[str, Any]]:
+        """The device list ``region``'s cluster answers."""
+        return self.devices if region == self.region else self.region_devices.get(region, [])
+
     async def _answer(self, api: _FakeCloudApi, path: str, payload: Mapping[str, Any]) -> Any:
+        region = _request_region.get()
+
+        def note(call: str) -> None:
+            self.calls.append(call if region == self.region else f"{call}@{region}")
+
         if path == const.LOGIN_PATH:
-            self.calls.append("login")
+            note("login")
             if self.login_error is not None:
                 await api.hold_off_for(self.login_error)
                 raise self.login_error
             return {"auth_token": _AUTH_TOKEN, "user_id": self.user_id}
         if path == const.DEVICES_PATH:
             owner_of = _owner_lookup.get()
-            self.calls.append(f"owner:{redact_serial(owner_of)}" if owner_of else "devices")
+            note(f"owner:{redact_serial(owner_of)}" if owner_of else "devices")
             self._raise_call_error()
-            return {"devices": [self._with_owner(d) for d in self.devices]}
+            return {"devices": [self._with_owner(d) for d in self.devices_of(region)]}
         if path == const.CIPHERS_PATH:
             serial = str(payload.get("station_sn"))
-            self.calls.append(f"cipher:{redact_serial(serial)}")
+            note(f"cipher:{redact_serial(serial)}")
             self._raise_call_error()
             ids = [int(cid) for cid in payload["cipher_ids"]]
             self.cipher_ids_requested.extend(ids)
@@ -255,16 +278,16 @@ class FakeCloud:
             return [{"cipher_id": cid, "ecc_private_key": key} for cid in held]
         if path == const.DSK_KEYS_PATH:
             serial = str(payload.get("station_sns", [""])[0])
-            self.calls.append(f"dsk:{redact_serial(serial)}")
+            note(f"dsk:{redact_serial(serial)}")
             self._raise_call_error()
             key = self.dsk_keys.get(serial, _DSK_KEY)
             return {"device_dsks": [{"dsk_key": key, "expiration": time.time() + _DSK_TTL}]}
         if path == const.PUSH_TOKEN_PATH:
-            self.calls.append("push_token")
+            note("push_token")
             self._raise_call_error()
             return None
         if path == const.THINGS_PATH:
-            self.calls.append("things")
+            note("things")
             codes = list(payload.get("product_codes") or [])
             self.things_requested.append(tuple(codes))
             if self.things_error is not None:
@@ -298,7 +321,11 @@ class _FakeCloudApi(EufyCloudApi):
         login = isinstance(error, LoginLimitedError)
         default = const.LOGIN_HOLD_OFF_SECONDS if login else const.REQUEST_HOLD_OFF_SECONDS
         seconds = min(error.retry_after or default, const.LOCKOUT_HOLD_OFF_SECONDS)
-        self._record_hold_off(login_only=login, seconds=seconds)
+        throttle = const.THROTTLE_CODES.get(error.code or 0)
+        per_region = throttle is not None and throttle.per_region
+        self._record_hold_off(
+            login_only=login, seconds=seconds, region=_request_region.get() if per_region else None
+        )
         await self._cache.async_save()
 
     async def async_get_station_owner_id(self, station_sn: str, *, refresh: bool = False) -> str:
@@ -328,7 +355,11 @@ class _FakeCloudApi(EufyCloudApi):
         auth: _Identity | None = None,
     ) -> tuple[int, dict[str, Any], Any]:
         self._raise_if_held_off(login=False)
-        data = await self._fake._answer(self, path, payload or {})
+        token = _request_region.set(identity.region)
+        try:
+            data = await self._fake._answer(self, path, payload or {})
+        finally:
+            _request_region.reset(token)
         return int(const.CloudCode.SUCCESS), {"code": 0, "data": data}, data
 
 
@@ -364,7 +395,10 @@ async def _async_warm(api: EufyCloudApi, cache: SessionCache, cloud: FakeCloud) 
 
 
 def warm_store(*, email: str, cloud: FakeCloud) -> MemoryStore:
-    """A store holding the cache document as after one login against ``cloud``.
+    """A store holding the cache document as after the first login against ``cloud``.
+
+    That login asks every region once: ``cloud.region`` lists ``cloud.devices``, and a
+    region listing none is suspended (see :class:`~..cloud.api.EufyCloudApi`).
 
     Written by the library's own cache writers (a password login, the device list,
     each station's owner id and cipher key), so it keeps the real layout. Nothing is

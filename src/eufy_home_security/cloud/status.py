@@ -9,7 +9,7 @@ cloud client.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 
@@ -44,6 +44,25 @@ class StationRefreshStatus:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class RegionStatus:
+    """One cloud region's session and device list, as the cache holds them."""
+
+    session_expires_in: float | None
+    """Seconds until this region's cached session expires (0.0 once past); None without one."""
+    devices: int | None
+    """Devices this region's last device list held; None when never listed."""
+    listed_age: float | None
+    """Seconds since this region's device list was last fetched; None when never."""
+    country_code: str | None
+    """The ``country_code`` of this region's last login answer, when it carried one."""
+    in_use: bool
+    """Whether the next device-list fetch asks this region."""
+    suspended: bool
+    """This region's last device list was empty: asked again only on a rescan, or on
+    every fetch with ``scan_regions``."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class CloudStatus:
     """The login, throttle and refresh state of one account, as the cache holds it.
 
@@ -53,9 +72,11 @@ class CloudStatus:
     """
 
     login_need: LoginNeed
+    """Over the regions in use: ``NONE`` only when each holds an unexpired session."""
     password_cached: bool
     session_expires_in: float | None
-    """Seconds until the cached session expires (0.0 once past); None without one."""
+    """Seconds until the first session of a region in use expires (0.0 once past); None
+    when none of them holds one."""
     request_hold_off: float | None
     """Seconds left on the hold-off that refuses every cloud call; None when none."""
     login_hold_off: float | None
@@ -70,3 +91,5 @@ class CloudStatus:
     """Seconds since a forced device-list / owner-id refresh (account-wide)."""
     stations: Mapping[str, StationRefreshStatus]
     """Per station serial the cache holds state for."""
+    regions: Mapping[str, RegionStatus] = field(default_factory=dict)
+    """Per cloud region (``eu``, ``us``)."""

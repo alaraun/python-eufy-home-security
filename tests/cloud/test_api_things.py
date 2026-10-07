@@ -95,13 +95,17 @@ async def _seeded(
     store = MemoryStore()
     first = SessionCache(store, SYNTHETIC.email)
     await first.async_load()
-    await EufyCloudApi(session, first, SYNTHETIC.email, SYNTHETIC.password).async_login()
+    await EufyCloudApi(
+        session, first, SYNTHETIC.email, SYNTHETIC.password, region="eu"
+    ).async_login()
     await first.async_save()
     cache = SessionCache(store, SYNTHETIC.email)
     if load:
         await cache.async_load()
     guard.armed = True
-    api = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password, install=install)
+    api = EufyCloudApi(
+        session, cache, SYNTHETIC.email, SYNTHETIC.password, install=install, region="eu"
+    )
     return api, cache
 
 
@@ -121,7 +125,7 @@ async def test_fetches_on_the_existing_session_without_a_login(
             else:  # the instance that logged in keeps its session in memory
                 cache = SessionCache(MemoryStore(), SYNTHETIC.email)
                 await cache.async_load()
-                api = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password)
+                api = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password, region="eu")
                 await api.async_login()
                 login_guard.armed = True
             things = await api.async_get_thing_descriptions(["TX0001", "TX9999"])
@@ -150,11 +154,11 @@ async def test_no_product_codes_sends_nothing(
 
 def _no_session(cache: SessionCache, install: InstallState) -> None:
     for key in ("auth_token", "key_ident", "shared_key", "expires_at"):
-        cache.section("cloud").pop(key, None)
+        cache.cloud_session("eu").pop(key, None)
 
 
 def _expired(cache: SessionCache, install: InstallState) -> None:
-    cache.section("cloud")["expires_at"] = time.time() + 10  # inside SESSION_EXPIRY_MARGIN
+    cache.cloud_session("eu")["expires_at"] = time.time() + 10  # inside SESSION_EXPIRY_MARGIN
 
 
 def _request_hold_off(cache: SessionCache, install: InstallState) -> None:
@@ -204,12 +208,12 @@ async def test_refused_locally_without_a_request_or_login(
             )
             if setup is not None:
                 setup(cache, install)
-            token = cache.section("cloud").get("auth_token")
+            token = cache.cloud_session("eu").get("auth_token")
             sent = _sent(mock)
             with pytest.raises(error):
                 await api.async_get_thing_descriptions(["TX0001"])
             assert _sent(mock) == sent
-            assert cache.section("cloud").get("auth_token") == token  # nothing dropped
+            assert cache.cloud_session("eu").get("auth_token") == token  # nothing dropped
     assert fake_mega.things_calls == 0
     assert fake_mega.login_calls == 1
     assert not issubclass(NoCachedSessionError, AuthenticationError)  # never a reauth
@@ -226,11 +230,11 @@ async def test_an_expired_or_rekey_answer_propagates_and_keeps_the_session(
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             api, cache = await _seeded(session, login_guard)
-            token = cache.section("cloud")["auth_token"]
+            token = cache.cloud_session("eu")["auth_token"]
             fake_mega.code_once["things"] = code
             with pytest.raises(CloudError):
                 await api.async_get_thing_descriptions(["TX0001"])
-            assert cache.section("cloud")["auth_token"] == token  # a guest never drops it
+            assert cache.cloud_session("eu")["auth_token"] == token  # a guest never drops it
             assert api.session_replaced is False
     assert fake_mega.things_calls == 1
     assert fake_mega.login_calls == 1
@@ -252,7 +256,7 @@ async def test_a_replaced_session_latches_without_a_login(
                 await api.async_get_thing_descriptions(["TX0001"])
             assert api.session_replaced is True
             # The one session mutation on this path, exactly as _with_session does it.
-            assert "auth_token" not in cache.section("cloud")
+            assert "auth_token" not in cache.cloud_session("eu")
             sent = _sent(mock)
             with pytest.raises(SessionReplacedError):
                 await api.async_get_thing_descriptions(["TX0001"])

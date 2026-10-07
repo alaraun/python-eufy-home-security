@@ -6,6 +6,7 @@ import argparse
 from collections.abc import Mapping
 from pathlib import Path
 
+from ..cloud.const import REGIONS
 from ..p2p.pppp import BROADCAST, DISCOVERY_PORT, LAN_DISCOVERY_TIMEOUT
 
 PROG = "eufy-security"
@@ -56,6 +57,12 @@ def _add_global_options(parser: argparse.ArgumentParser, *, suppress: bool) -> N
     )
     group.add_argument(
         "--country", default=default(""), help="account country code, e.g. DE (default: auto)"
+    )
+    group.add_argument(
+        "--region",
+        choices=REGIONS,
+        default=default(None),
+        help="use only this cloud region (default: every region that lists devices)",
     )
     group.add_argument(
         "--station",
@@ -155,7 +162,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     command("login", "log in (answering an e-mailed code or captcha) and cache the session")
-    command("devices", "list the account's devices and their catalog support")
+    devices = command("devices", "list the account's devices and their catalog support")
+    devices.add_argument(
+        "--rescan-regions",
+        action="store_true",
+        help="also ask the cloud regions that listed no devices last time",
+    )
     command("network", "each station's LAN path and what a firewall must allow")
 
     status = command("status", "station snapshot: guard mode, firmware, sub-devices")

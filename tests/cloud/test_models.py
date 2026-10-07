@@ -120,6 +120,7 @@ def test_redacted_dict_is_json_safe_and_carries_no_identifier() -> None:
             "local_ip": "192.0.2.10",
             "member": {"admin_user_id": owner, "member_type": 1},
             "main_sw_version": "3.8.7.4",
+            "cloud_region": "us",
         }
     )
     camera = CloudDevice.from_api(
@@ -153,6 +154,7 @@ def test_redacted_dict_is_json_safe_and_carries_no_identifier() -> None:
         "account_is_owner": False,
         "main_sw_version": "3.8.7.4",
         "sec_sw_version": None,
+        "region": "us",
         "has_p2p_did": True,
         "has_local_ip": True,
         "has_owner_user_id": True,
@@ -251,6 +253,7 @@ def test_cloud_params_no_params_key() -> None:
 # A get_devs_list entry: everything CloudDevice reads, plus the kind of thing it never
 # does (the member's contact details, radio MACs, MQTT/WebRTC details, cover images).
 _FULL_ENTRY = {
+    "cloud_region": "eu",
     "device_sn": "T8170P2000012345",
     "device_type": 48,
     "device_name": "SoloCam",
@@ -305,6 +308,7 @@ def test_device_cache_entry_keeps_exactly_what_the_model_reads() -> None:
         assert getattr(full, prop) == getattr(cached, prop), prop
     assert cached.raw["app_conn"] == _FULL_ENTRY["app_conn"]
     assert cached.raw["device_new_pn"] == _FULL_ENTRY["device_new_pn"]
+    assert cached.region == "eu"
 
 
 def test_device_cache_entry_drops_the_params_snapshot_unless_asked() -> None:
