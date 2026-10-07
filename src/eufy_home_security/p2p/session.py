@@ -89,6 +89,7 @@ from ..events import (
 )
 from ..exceptions import (
     CameraWakeError,
+    CipherUnusableError,
     CloudError,
     CommandNotAppliedError,
     CommandRejectedError,
@@ -1330,7 +1331,9 @@ class StationSession:
         raises :class:`KeyRejectedError` without fetching, until a handshake
         succeeds (which clears it), ``KEY_REFRESH_SLOW_RETRY`` passes (one more fetch),
         or the latch is released. A re-fetched key that is rejected too raises
-        :class:`KeyRejectedError`. After :meth:`async_close` every call raises
+        :class:`KeyRejectedError`. A key that does not parse at all raises
+        :class:`CipherUnusableError` without a re-fetch or latch (the cloud serves the
+        same bytes again). After :meth:`async_close` every call raises
         :class:`StationUnreachableError`: a closed session has no owner left to close
         it again.
         """
@@ -1347,10 +1350,18 @@ class StationSession:
                 return
             try:
                 creds = await self._establish(None)
+            except CipherUnusableError:
+                # The key cannot be used and the cloud serves the same bytes again;
+                # re-fetching is pointless and would set the stale-key latch. Let it
+                # propagate: the cipher is retried only after a library change or the
+                # cached key being dropped.
+                raise
             except HandshakeError as err:
                 creds = await self._refetch_rejected_key(err)
                 try:
                     creds = await self._establish(creds)
+                except CipherUnusableError:
+                    raise
                 except HandshakeError as again:
                     raise KeyRejectedError(
                         f"the station rejected the re-fetched cipher key too: {again}"
@@ -3270,6 +3281,11 @@ class StationSession:
             creds, conn_init, session_key = await self._unwrap_conn_init(
                 cast(Frame, payload), key, creds
             )
+        except CipherUnusableError as err:
+            _LOGGER.debug("%s: handshake failed: %s", self._log_name, err)
+            self._handshake_failures += 1
+            self._teardown("cipher key unusable")
+            raise
         except HandshakeError as err:
             _LOGGER.debug("%s: handshake failed: %s", self._log_name, err)
             self._handshake_failures += 1
@@ -3332,7 +3348,12 @@ class StationSession:
             return creds, conn_init, session_key_from_conn_init(conn_init, creds.ecc_private_key)
         if not creds.rsa_private_key:
             raise HandshakeError(f"no RSA private key held for cipher {named}")
-        return creds, conn_init, aes_key_from_conn_init(conn_init, creds.rsa_private_key)
+        try:
+            return creds, conn_init, aes_key_from_conn_init(conn_init, creds.rsa_private_key)
+        except CipherUnusableError as exc:
+            if exc.cipher_id is None:
+                exc.cipher_id = named
+            raise
 
     async def _refetch_rejected_key(self, err: HandshakeError) -> P2PCredentials:
         """Re-fetch the credentials after ``err``, unless the stale-key latch holds it back."""

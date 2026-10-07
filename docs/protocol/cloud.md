@@ -178,11 +178,20 @@ sharing changes, so cache it per station. A station event push also carries the 
 
 `data` decrypts to a list of
 `{cipher_id, ecc_private_key (P-256, 64 hex), private_key (RSA PEM), user_id}`.
-`ecc_private_key` unwraps the ECIES CONN_INIT; `private_key` the RSA one, which the
-app takes from this same response for a station whose CONN_INIT is not version 8
-**[declared: app]** ([session-crypto.md](session-crypto.md)). On a HomeBase 3's cipher
-40 the RSA PEM comes back lowercased by the server and cannot be used **[verified]**;
-whether an RSA station's cipher carries a usable one is not observed.
+`ecc_private_key` unwraps the ECIES CONN_INIT and is the root of the P2P session key for
+every station the current app supports **[declared: app]**
+([session-crypto.md](session-crypto.md)). The RSA `private_key` is a legacy field: the
+current app/SDK no longer reads it for the session (only a non-version-8 station would need
+it, and the RSA session path has been dropped). On a HomeBase 3's cipher 40 the RSA PEM
+comes back **lowercased by the server** and cannot be parsed **[verified]**: the base64
+body is lowercased, which destroys its case and is irreversible, so `load_rsa_private_key`
+fails and the library raises `CipherUnusableError`. Measured on two accounts (cipher 40)
+and reported for a user's standalone T8410 (cipher 202); the request body field name makes
+no difference (`station_sn` and `sn` return the same key), and the unversioned endpoint
+404s. The MegaCrypto decrypt is not the cause — mixed-case fields (device names) and
+`ecc_private_key` survive intact in the same response; only `private_key` is lowercased.
+No account has been seen to serve an RSA `private_key` with its case intact; whether the
+station owner (vs a shared member) is served one is not observed.
 
 | request | answer **[verified]** |
 |---|---|

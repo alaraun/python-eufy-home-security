@@ -33,6 +33,7 @@ from eufy_home_security.events import (
 )
 from eufy_home_security.exceptions import (
     AuthenticationError,
+    CipherUnusableError,
     CommunicationError,
     DeviceTimeoutError,
     EufySecurityError,
@@ -73,6 +74,10 @@ def test_push_changed_equality_ignores_the_error() -> None:
     [
         (HandshakeError("x"), DisconnectCause.KEY_REJECTED),
         (KeyRejectedError("x"), DisconnectCause.KEY_REJECTED),
+        (
+            CipherUnusableError("x", cipher_id=40, reason="rsa_unparsable"),
+            DisconnectCause.KEY_UNUSABLE,
+        ),
         (RateLimitedError(), DisconnectCause.CREDENTIALS_UNAVAILABLE),
         (RefreshCooldownError(), DisconnectCause.CREDENTIALS_UNAVAILABLE),
         (DeviceTimeoutError("x"), DisconnectCause.PROBE_UNANSWERED),

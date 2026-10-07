@@ -32,7 +32,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from ..exceptions import HandshakeError, ProtocolError
+from ..exceptions import CipherUnusableError, HandshakeError, ProtocolError
 
 #: Fixed GCM additional-authenticated-data.
 GCM_AAD = b"eufy security"
@@ -289,7 +289,9 @@ def load_rsa_private_key(text: str) -> rsa.RSAPrivateKey:
     """An RSA private key from the cloud's ``private_key``: base64 DER, with or without
     PEM armour and line breaks (the app strips both and reads PKCS#8).
 
-    Raises :class:`HandshakeError` when it does not parse as an RSA key.
+    Raises :class:`CipherUnusableError` when the bytes do not parse as an RSA key: the
+    cloud serves them unchanged on every fetch (it lowercases the base64 on some
+    accounts, which is unrecoverable), so re-fetching cannot cure it.
     """
     body = "".join(
         line.strip() for line in text.splitlines() if line.strip() and "-----" not in line
@@ -298,9 +300,11 @@ def load_rsa_private_key(text: str) -> rsa.RSAPrivateKey:
         der = base64.b64decode(body, validate=True)
         key = serialization.load_der_private_key(der, password=None)
     except (ValueError, TypeError, binascii.Error) as exc:
-        raise HandshakeError(f"the cipher's RSA private key does not parse: {exc}") from exc
+        raise CipherUnusableError(
+            f"the cipher's RSA private key does not parse: {exc}", reason="rsa_unparsable"
+        ) from exc
     if not isinstance(key, rsa.RSAPrivateKey):
-        raise HandshakeError("the cipher's private key is not an RSA key")
+        raise CipherUnusableError("the cipher's private key is not an RSA key", reason="not_rsa")
     return key
 
 

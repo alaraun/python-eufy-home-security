@@ -34,6 +34,7 @@ from ._logging import LogThrottle, redact_serial
 from .devices.recipes import PresetPosition
 from .devices.support import Evidence, Support
 from .exceptions import (
+    CipherUnusableError,
     CloudError,
     CommunicationError,
     DeviceTimeoutError,
@@ -833,6 +834,11 @@ class DisconnectCause(StrEnum):
     KEY_REJECTED = "key_rejected"
     """The session key did not unwrap with the cipher key (``HandshakeError``), or a
     re-fetched key was rejected too (``KeyRejectedError``)."""
+    KEY_UNUSABLE = "key_unusable"
+    """The cipher's key cannot be used at all — it does not parse (``CipherUnusableError``).
+    The cloud serves the same bytes on every fetch, so the library does not re-fetch it;
+    the station is not at fault. Distinct from ``KEY_REJECTED`` (a stale but well-formed
+    key)."""
     PROBE_UNANSWERED = "probe_unanswered"
     """The link came up but the parameter probe went unanswered."""
     STATION_CLOSED = "station_closed"
@@ -857,6 +863,8 @@ class DisconnectCause(StrEnum):
     @classmethod
     def for_error(cls, error: EufySecurityError) -> DisconnectCause:
         """The cause a connection failure maps to; never None (``PROTOCOL`` catches all)."""
+        if isinstance(error, CipherUnusableError):
+            return cls.KEY_UNUSABLE
         if isinstance(error, HandshakeError):
             return cls.KEY_REJECTED
         if isinstance(error, CloudError):

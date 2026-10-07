@@ -38,6 +38,7 @@ from eufy_home_security.events import (
 from eufy_home_security.exceptions import (
     CameraWakeError,
     CipherUnavailableError,
+    CipherUnusableError,
     CommandNotAppliedError,
     CommandRejectedError,
     CommandUnsupportedError,
@@ -3110,19 +3111,29 @@ async def test_async_get_sd_info_raises_timeout_on_no_answer(station: FakeStatio
 
 
 class RsaProvider:
-    """Credentials of a station answering the RSA CONN_INIT: its RSA key, or none."""
+    """Credentials of a station answering the RSA CONN_INIT: its RSA key, or none.
 
-    def __init__(self, station: FakeStation, *, rsa_key: bool = True) -> None:
+    ``bad_key`` serves an unparsable ``private_key`` (the cloud lowercases the base64
+    on some accounts); ``calls`` records each ``refresh`` flag asked.
+    """
+
+    def __init__(
+        self, station: FakeStation, *, rsa_key: bool = True, bad_key: bool = False
+    ) -> None:
         self.station = station
         self.rsa_key = rsa_key
+        self.bad_key = bad_key
+        self.calls: list[bool] = []
 
     async def __call__(self, *, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
-        return P2PCredentials(
-            SYNTHETIC.account_id,
-            "user",
-            "",
-            rsa_private_key=self.station.rsa_private_key_pem if self.rsa_key else None,
-        )
+        self.calls.append(refresh)
+        if not self.rsa_key:
+            rsa_key = None
+        elif self.bad_key:
+            rsa_key = self.station.rsa_private_key_pem.lower()  # lowercased = unparsable
+        else:
+            rsa_key = self.station.rsa_private_key_pem
+        return P2PCredentials(SYNTHETIC.account_id, "user", "", rsa_private_key=rsa_key)
 
 
 @pytest.mark.parametrize("encryption", [0, 1])
@@ -3173,3 +3184,36 @@ async def test_an_rsa_conn_init_without_an_rsa_key_fails_the_handshake(
     finally:
         await session.async_close()
     assert not session.rsa_session
+
+
+async def test_an_rsa_key_that_does_not_parse_is_unusable_not_rejected(
+    station: FakeStation,
+) -> None:
+    """A key that cannot be parsed raises CipherUnusableError, not KeyRejectedError:
+    no re-fetch (the cloud serves the same bytes), no stale-key latch; the cipher is
+    named on the error, and a reconnect fails the same way with no fetch latch set."""
+    station.conn_init_version = 1
+    provider = RsaProvider(station, bad_key=True)
+    latch = MemoryKeyRefreshLatch()
+    session = StationSession(
+        SYNTHETIC.station_sn,
+        provider,
+        host="127.0.0.1",
+        port=station.discovery_port,
+        key_refresh=latch,
+    )
+    try:
+        with pytest.raises(CipherUnusableError, match="does not parse") as first:
+            await session.async_connect()
+        assert first.value.cipher_id == station.cipher_id
+        assert first.value.reason == "rsa_unparsable"
+        assert provider.calls == [False]  # read once after CONN_INIT, never re-fetched
+        assert latch.retry_blocked_for() == 0.0  # and no latch was set
+
+        with pytest.raises(CipherUnusableError):  # a reconnect still fails, still no latch
+            await session.async_connect()
+        assert provider.calls == [False, False]
+        assert latch.retry_blocked_for() == 0.0
+        assert not session.rsa_session
+    finally:
+        await session.async_close()
