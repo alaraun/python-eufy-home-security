@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.2.3](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.2...v0.2.3) (2026-10-07)
+
+
+### Bug Fixes
+
+* a login pending two-step verification is a challenge, not a session ([#21](https://github.com/alaraun/python-eufy-home-security/issues/21)) ([6e0140e](https://github.com/alaraun/python-eufy-home-security/commit/6e0140ef3b9f7ebd73ecf5bb9852419b6c1f07ae))
+
 ## [0.2.2](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.1...v0.2.2) (2026-10-07)
 
 
