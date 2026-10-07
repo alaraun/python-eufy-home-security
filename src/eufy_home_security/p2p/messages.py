@@ -496,14 +496,16 @@ def encode_ecb_scalar_frame(
     *,
     channel: int = 255,
     seq: int = 0,
+    encryption: int = crypto.FRAME_STATIC_ECB,
 ) -> bytes:
     """Build a legacy ECB scalar command frame (frame type == the command id).
 
-    Layout: cleartext ``"XZYH" | type=cmd | len | 01 seq channel 01 00 00`` then an
-    AES-128-ECB body of ``[u32 channel]?[u32 value][char[128] account_id\\0]``. The
-    channel byte routes to the sub-device (255 = station); the account id in the
-    body is what the station authorises against. A command outside the scalar
-    handlers raises :class:`UnsupportedError` (the app never sends it this way).
+    Layout: cleartext ``"XZYH" | type=cmd | len | 01 seq channel <encryption> 00 00``
+    then an AES-128-ECB body of ``[u32 channel]?[u32 value][char[128] account_id\\0]``
+    under ``static_key`` (``encryption`` 1), or under an RSA session's key
+    (``encryption`` 2). The channel byte routes to the sub-device (255 = station); the
+    account id in the body is what the station authorises against. A command outside
+    the scalar handlers raises :class:`UnsupportedError` (the app never sends it this way).
 
     Raises :class:`ValueError` for a channel outside 0..50/255 or an account id
     that is not ASCII or does not fit the 128-byte NUL-terminated field.
@@ -533,7 +535,7 @@ def encode_ecb_scalar_frame(
     body = prefix + struct.pack("<I", value & 0xFFFFFFFF) + acct
     body += b"\x00" * (_ECB_ACCOUNT_LEN - len(acct))
     body_wire = crypto.ecb_encrypt(static_key, body)
-    subheader = bytes([FrameCipher.ECB, seq & 0xFF, channel, FrameCipher.ECB, 0x00, 0x00])
+    subheader = bytes([FrameCipher.ECB, seq & 0xFF, channel, encryption & 0xFF, 0x00, 0x00])
     return encode_frame(cmd, body_wire, subheader)
 
 
@@ -553,19 +555,24 @@ def decode_json_payload(plain: bytes) -> dict[str, Any] | None:
     return obj if isinstance(obj, dict) else None
 
 
-def decode_command_receipt(frame: Frame) -> int | None:
+def decode_command_receipt(frame: Frame, *, clear: bool = False) -> int | None:
     """The code of a command receipt, or None when ``frame`` is not one.
 
     The station answers every GCM frame it takes from channel 0 (a ``0x0546``
     command, the ``0x044F`` parameter query, a command-id frame) with one frame of
-    the request's own type on channel 0: GCM-tagged but **not ciphertext**, an
-    ``int32le`` code followed by zero bytes (:data:`RECEIPT_LENS`: 128 on a HomeBase 3,
-    32 on a standalone T8170). Check for it
-    before any decrypt attempt. It carries no command id, and the channel is the
-    caller's to check.
+    the request's own type on channel 0: GCM-tagged but **not ciphertext**
+    (encryption type 0, subheader byte 3), an ``int32le`` code followed by zero bytes
+    (:data:`RECEIPT_LENS`: 128 on a HomeBase 3, 32 on a standalone T8170). Check for
+    it before any decrypt attempt. With ``clear`` (an RSA session, whose frames carry
+    the ECB tag) any frame of encryption type 0 qualifies. It carries no command id,
+    and the channel is the caller's to check.
     """
     payload = frame.payload
-    if frame.cipher != FrameCipher.GCM or len(payload) not in RECEIPT_LENS or any(payload[4:]):
+    if clear:
+        tagged = len(frame.subheader) > 3 and frame.subheader[3] == crypto.FRAME_PLAIN
+    else:
+        tagged = frame.cipher == FrameCipher.GCM
+    if not tagged or len(payload) not in RECEIPT_LENS or any(payload[4:]):
         return None
     return int(struct.unpack_from("<i", payload, 0)[0])
 

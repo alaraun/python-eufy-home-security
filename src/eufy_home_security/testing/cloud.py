@@ -152,8 +152,9 @@ class FakeCloud:
 
     ``devices`` are raw device-list entries. ``owner_ids`` names each station's owner
     (sent as ``member.admin_user_id``; a station without one is the account's own).
-    ``cipher_keys`` holds each station's P2P ECC private key (hex), served for every id
-    in ``cipher_ids_held`` (None: any id); a station without one, or a request naming
+    ``cipher_keys`` holds each station's P2P ECC private key (hex) and
+    ``rsa_cipher_keys`` its RSA one (the cloud's ``private_key``), served for every id
+    in ``cipher_ids_held`` (None: any id); a station with neither, or a request naming
     no held id, gets the cloud's empty answer. ``cipher_ids_requested`` records the
     ids each ``get_ciphers`` request named, in order. ``login_error``, when set, is what a password
     login meets: a :class:`RateLimitedError` also starts the hold-off the real cloud
@@ -193,6 +194,7 @@ class FakeCloud:
         default_factory=lambda: {SYNTHETIC.station_sn: SYNTHETIC.account_id}
     )
     cipher_keys: dict[str, str] = field(default_factory=dict)
+    rsa_cipher_keys: dict[str, str] = field(default_factory=dict)
     cipher_ids_held: set[int] | None = None
     cipher_ids_requested: list[int] = field(default_factory=list)
     login_error: EufySecurityError | None = None
@@ -226,6 +228,7 @@ class FakeCloud:
             devices=devices,
             owner_ids={s.serial: s.account_id for s in stations},
             cipher_keys={s.serial: s.ecc_private_key_hex for s in stations},
+            rsa_cipher_keys={s.serial: s.rsa_private_key_pem for s in stations if s.rsa_session},
             **kwargs,
         )
 
@@ -269,13 +272,20 @@ class FakeCloud:
             self._raise_call_error()
             ids = [int(cid) for cid in payload["cipher_ids"]]
             self.cipher_ids_requested.extend(ids)
-            key = self.cipher_keys.get(serial)
+            keys = {
+                name: value
+                for name, value in (
+                    ("ecc_private_key", self.cipher_keys.get(serial)),
+                    ("private_key", self.rsa_cipher_keys.get(serial)),
+                )
+                if value is not None
+            }
             held = [
                 cid for cid in ids if self.cipher_ids_held is None or cid in self.cipher_ids_held
             ]
-            if key is None or not held:
+            if not keys or not held:
                 return None
-            return [{"cipher_id": cid, "ecc_private_key": key} for cid in held]
+            return [{"cipher_id": cid, **keys} for cid in held]
         if path == const.DSK_KEYS_PATH:
             serial = str(payload.get("station_sns", [""])[0])
             note(f"dsk:{redact_serial(serial)}")
@@ -387,10 +397,10 @@ async def _async_warm(api: EufyCloudApi, cache: SessionCache, cloud: FakeCloud) 
         if not device.is_station:
             continue
         await api.async_get_station_owner_id(device.device_sn)
-        if device.device_sn in cloud.cipher_keys:
+        if device.device_sn in cloud.cipher_keys or device.device_sn in cloud.rsa_cipher_keys:
             held = cloud.cipher_ids_held
             for cipher_id in [const.CIPHER_ID_P2P] if held is None else sorted(held):
-                await api.async_get_cipher_key(device.device_sn, cipher_id)
+                await api.async_get_cipher_keys(device.device_sn, cipher_id)
     await cache.async_save()
 
 

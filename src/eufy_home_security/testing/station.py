@@ -3,7 +3,8 @@
 It implements the station side of every exchange the session uses, with synthetic
 keys, so the real transport and session run end to end without hardware:
 discovery (answered from a separate "session" socket, like the real station),
-the ECIES CONN_INIT handshake, parameter dumps, arming, legacy ECB scalars, image
+the ECIES CONN_INIT handshake (or the RSA one, :attr:`FakeStation.conn_init_version`),
+parameter dumps, arming, legacy ECB scalars, image
 and database requests, the storage record (asked for or pushed with
 :meth:`FakeStation.send_storage`), mode-table writes (``SET_ALL_ACTION``, 1255),
 unsolicited camera pushes, and media streams (live and recordings) with the
@@ -28,6 +29,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -37,6 +39,10 @@ from ..devices.recipes import MAX_PRESET_SLOTS, ConnectType, connect_type
 from ..devices.types import model_for_serial
 from ..models import STATION_CHANNEL
 from ..p2p.crypto import (
+    CONN_INIT_ECC_VERSION,
+    FRAME_PLAIN,
+    FRAME_SESSION_ECB,
+    FRAME_STATIC_ECB,
     GCM_AAD,
     ecb_decrypt,
     ecb_encrypt,
@@ -77,6 +83,20 @@ from ..p2p.xzyh import FrameCipher, FrameType, StreamDecoder, encode_frame
 from .synthetic import SYNTHETIC
 
 SESSION_KEY = SYNTHETIC.session_key
+RSA_SESSION_KEY = SYNTHETIC.session_key[:16]
+"""The 16-character AES-128 key an RSA CONN_INIT carries."""
+_SESSION_FRAME_TYPES = frozenset(
+    {
+        FrameType.PARAM_NOTIFY,
+        CMD_SET_ALL_ACTION,
+        *STRING_CMDS,
+        FrameType.DOORBELL_PAYLOAD,
+        FrameType.STOP_REALTIME_MEDIA,
+        CMD_SD_INFO,
+        FrameType.CMD_TRANSFER,
+    }
+)
+"""Frame types a GCM session carries; on an RSA session the same go ECB under its key."""
 CHUNK = 180  # split outbound frames so reassembly is exercised
 
 # Clear HEVC: an Annex-B start code + VPS NAL header, > 257 bytes so it has a clear tail.
@@ -321,6 +341,13 @@ class FakeStation:
     one key whatever the id; the cloud fake serves that key under any id."""
     receipt_len: int = RECEIPT_LEN
     """A receipt's body length (a T8170: ``STANDALONE_RECEIPT_LEN``)."""
+    conn_init_version: int = CONN_INIT_ECC_VERSION
+    """The CONN_INIT reply's version (subheader byte 0). 8: the ECIES handshake and a GCM
+    session. Any other (1, as a T8410): the RSA handshake, then every frame either way is
+    AES-128-ECB under :data:`RSA_SESSION_KEY` (encryption type 2), receipts in clear."""
+    conn_init_encryption: int = FRAME_PLAIN
+    """The RSA CONN_INIT's encryption type (subheader byte 3): 0 clear, the 133 bytes the
+    app reads as is; otherwise ECB under the static key, padded to 144."""
     answer_conn_init: bool = True
     answer_params: bool = True
     params_cipher: int = FrameCipher.GCM
@@ -360,6 +387,7 @@ class FakeStation:
 
     def __post_init__(self) -> None:
         self.static_key = static_key(self.serial, self.did)
+        self._rsa_cipher_key: rsa.RSAPrivateKey | None = None
         self._peers: dict[tuple[str, int], _Peer] = {}
         self._discovery: asyncio.DatagramTransport | None = None
         self._session: asyncio.DatagramTransport | None = None
@@ -408,6 +436,31 @@ class FakeStation:
     @property
     def ecc_private_key_hex(self) -> str:
         return f"{self.ecc_private_key.private_numbers().private_value:064x}"
+
+    @property
+    def rsa_session(self) -> bool:
+        """Whether this station answers with the RSA CONN_INIT (:attr:`conn_init_version`)."""
+        return self.conn_init_version != CONN_INIT_ECC_VERSION
+
+    @property
+    def rsa_cipher_key(self) -> rsa.RSAPrivateKey:
+        """The RSA-1024 key of the cipher an RSA CONN_INIT names (made on first use)."""
+        if self._rsa_cipher_key is None:
+            # The size the station's 128-byte CONN_INIT block fixes.
+            self._rsa_cipher_key = rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=1024,  # noqa: S505
+            )
+        return self._rsa_cipher_key
+
+    @property
+    def rsa_private_key_pem(self) -> str:
+        """:attr:`rsa_cipher_key` as the cloud serves ``private_key``: PKCS#8 PEM."""
+        return self.rsa_cipher_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        ).decode()
 
     # ── sockets ──────────────────────────────────────────────────────────────
 
@@ -520,85 +573,113 @@ class FakeStation:
             return
         if ftype == FrameType.CONN_INIT:
             self.conn_inits += 1
-            if not self.answer_conn_init:
-                return
-            blob = ecies_encrypt(SESSION_KEY, self.ecc_private_key.public_key())
-            body = ecb_encrypt(self.static_key, struct.pack("<I", self.cipher_id) + blob)
-            self.send_frame(FrameType.CONN_INIT, body, cipher=FrameCipher.ECB)
-        elif subheader[0] == FrameCipher.GCM:
-            plain = gcm_decrypt_command(SESSION_KEY, payload)
-            if ftype == FrameType.PARAM_NOTIFY and plain == PARAM_QUERY_ALL:
-                self.param_queries += 1
-                for channel, command, value in self._late_writes:
-                    self.params.setdefault(channel, {})[command] = str(value)
-                self._late_writes.clear()
-                if not self.answer_params:
-                    return  # a deaf session: the link and handshake still work
-                # As the real station: a receipt (code 0) on the request channel first,
-                # then the dump on channel 2.
-                self.send_receipt(FrameType.PARAM_NOTIFY, RECEIPT_TAKEN, dev_type=0xFF)
-                self.send_param_dump(cipher=self.params_cipher)
-            elif ftype == CMD_SET_ALL_ACTION:
-                obj = decode_json_payload(plain)
-                if obj is None:
-                    return
-                self.mode_tables_received.append(obj)
-                self._on_mode_table(obj)
-            elif ftype in STRING_CMDS:
-                self._on_string_command(ftype, plain)
-            elif ftype == FrameType.DOORBELL_PAYLOAD:
-                obj = decode_json_payload(plain)
-                if obj is None:
-                    return
-                self.doorbell_payloads.append(obj)
-                code = self.doorbell_receipt_code()
-                self.send_receipt(FrameType.DOORBELL_PAYLOAD, code)
-                if code == RECEIPT_TAKEN:
-                    self._on_doorbell_payload(obj, subheader)
-            elif ftype == FrameType.STOP_REALTIME_MEDIA:
-                self.bare_stops += 1
-                self.send_receipt(FrameType.STOP_REALTIME_MEDIA, RECEIPT_TAKEN)
-                self._stop_live()
-            elif ftype == CMD_SD_INFO:
-                # A standalone eMMC query: answer with a frame of the same type on
-                # channel 0, three int32 (status, total, free), GCM-tagged but clear.
-                if self.sd_info is not None:
-                    body = struct.pack("<3i", *self.sd_info)
-                    subheader = bytes([FrameCipher.GCM, 0, 0, 0, 1, 0])
-                    self.send_frame(
-                        CMD_SD_INFO, body, cipher=FrameCipher.GCM, channel=0, subheader=subheader
-                    )
-            elif ftype == FrameType.CMD_TRANSFER:
-                obj = decode_json_payload(plain)
-                if obj is None:
-                    return  # not a JSON command: the real station ignores it too
-                self.received.append(obj)
-                self.received_header_channels.append(subheader[2])
-                target = obj.get("mChannel")
-                if obj.get("cmd") in self.unhandled_commands or (
-                    target in self.relayed_channels and subheader[2] != target
-                ):
-                    self.send_receipt(
-                        FrameType.CMD_TRANSFER, RECEIPT_NOT_HANDLED, delay=self.rejection_delay
-                    )
-                    return
-                if obj.get("cmd") == 1003 and self.live_open_receipt_code != RECEIPT_TAKEN:
-                    # As a HomeBase that cannot wake the camera: no queue receipt, one
-                    # failure receipt later, no stream.
-                    self.live_opens.append(subheader[2])
-                    self.send_receipt(
-                        FrameType.CMD_TRANSFER,
-                        self.live_open_receipt_code,
-                        delay=self.live_open_receipt_delay,
-                    )
-                    return
-                # Assumed for a foreign account_id too: the receipt is the queue's, and
-                # whether the real station sends one then is not known.
-                self.send_receipt(FrameType.CMD_TRANSFER, RECEIPT_TAKEN)
-                self._on_command(obj, subheader)
+            if self.answer_conn_init:
+                self._answer_conn_init()
+        elif subheader[0] == FrameCipher.GCM and not self.rsa_session:
+            self._on_session_frame(ftype, subheader, gcm_decrypt_command(SESSION_KEY, payload))
+        elif (
+            self.rsa_session
+            and subheader[0] == FrameCipher.ECB
+            and subheader[3] == FRAME_SESSION_ECB
+        ):
+            plain = ecb_decrypt(RSA_SESSION_KEY, payload)
+            if ftype in _SESSION_FRAME_TYPES:
+                self._on_session_frame(ftype, subheader, plain)
+            else:
+                self._on_ecb(ftype, subheader, plain)
         elif subheader[0] == FrameCipher.ECB:
             body = ecb_decrypt(self.static_key, payload)
             self._on_ecb(ftype, subheader, body)
+
+    def _answer_conn_init(self) -> None:
+        """The CONN_INIT reply: ECIES (version 8, ECB under the static key, encryption
+        type 1, as a HomeBase 3 sends it) or RSA (any other version)."""
+        cipher_id = struct.pack("<I", self.cipher_id)
+        if not self.rsa_session:
+            blob = ecies_encrypt(SESSION_KEY, self.ecc_private_key.public_key())
+            body = ecb_encrypt(self.static_key, cipher_id + blob)
+            subheader = bytes([CONN_INIT_ECC_VERSION, 0, 0xFF, FRAME_STATIC_ECB, 0, 0])
+        else:
+            wrapped = self.rsa_cipher_key.public_key().encrypt(RSA_SESSION_KEY, padding.PKCS1v15())
+            body = cipher_id + wrapped + b"\x00"
+            if self.conn_init_encryption != FRAME_PLAIN:
+                body = ecb_encrypt(self.static_key, body)
+            subheader = bytes([self.conn_init_version, 0, 0xFF, self.conn_init_encryption, 0, 0])
+        self.send_frame(
+            FrameType.CONN_INIT, body, cipher=subheader[0], channel=2, subheader=subheader
+        )
+
+    def _on_session_frame(self, ftype: int, subheader: bytes, plain: bytes) -> None:
+        """A client frame under the session's cipher (GCM, or an RSA session's ECB)."""
+        if ftype == FrameType.PARAM_NOTIFY and plain[: len(PARAM_QUERY_ALL)] == PARAM_QUERY_ALL:
+            self.param_queries += 1
+            for channel, command, value in self._late_writes:
+                self.params.setdefault(channel, {})[command] = str(value)
+            self._late_writes.clear()
+            if not self.answer_params:
+                return  # a deaf session: the link and handshake still work
+            # As the real station: a receipt (code 0) on the request channel first,
+            # then the dump on channel 2.
+            self.send_receipt(FrameType.PARAM_NOTIFY, RECEIPT_TAKEN, dev_type=0xFF)
+            self.send_param_dump(cipher=self.params_cipher)
+        elif ftype == CMD_SET_ALL_ACTION:
+            obj = decode_json_payload(plain)
+            if obj is None:
+                return
+            self.mode_tables_received.append(obj)
+            self._on_mode_table(obj)
+        elif ftype in STRING_CMDS:
+            self._on_string_command(ftype, plain)
+        elif ftype == FrameType.DOORBELL_PAYLOAD:
+            obj = decode_json_payload(plain)
+            if obj is None:
+                return
+            self.doorbell_payloads.append(obj)
+            code = self.doorbell_receipt_code()
+            self.send_receipt(FrameType.DOORBELL_PAYLOAD, code)
+            if code == RECEIPT_TAKEN:
+                self._on_doorbell_payload(obj, subheader)
+        elif ftype == FrameType.STOP_REALTIME_MEDIA:
+            self.bare_stops += 1
+            self.send_receipt(FrameType.STOP_REALTIME_MEDIA, RECEIPT_TAKEN)
+            self._stop_live()
+        elif ftype == CMD_SD_INFO:
+            # A standalone eMMC query: answer with a frame of the same type on
+            # channel 0, three int32 (status, total, free), GCM-tagged but clear.
+            if self.sd_info is not None:
+                body = struct.pack("<3i", *self.sd_info)
+                subheader = bytes([FrameCipher.GCM, 0, 0, 0, 1, 0])
+                self.send_frame(
+                    CMD_SD_INFO, body, cipher=FrameCipher.GCM, channel=0, subheader=subheader
+                )
+        elif ftype == FrameType.CMD_TRANSFER:
+            obj = decode_json_payload(plain)
+            if obj is None:
+                return  # not a JSON command: the real station ignores it too
+            self.received.append(obj)
+            self.received_header_channels.append(subheader[2])
+            target = obj.get("mChannel")
+            if obj.get("cmd") in self.unhandled_commands or (
+                target in self.relayed_channels and subheader[2] != target
+            ):
+                self.send_receipt(
+                    FrameType.CMD_TRANSFER, RECEIPT_NOT_HANDLED, delay=self.rejection_delay
+                )
+                return
+            if obj.get("cmd") == 1003 and self.live_open_receipt_code != RECEIPT_TAKEN:
+                # As a HomeBase that cannot wake the camera: no queue receipt, one
+                # failure receipt later, no stream.
+                self.live_opens.append(subheader[2])
+                self.send_receipt(
+                    FrameType.CMD_TRANSFER,
+                    self.live_open_receipt_code,
+                    delay=self.live_open_receipt_delay,
+                )
+                return
+            # Assumed for a foreign account_id too: the receipt is the queue's, and
+            # whether the real station sends one then is not known.
+            self.send_receipt(FrameType.CMD_TRANSFER, RECEIPT_TAKEN)
+            self._on_command(obj, subheader)
 
     def doorbell_receipt_code(self) -> int:
         """The code a 1700 receipt carries; override to reject one. A camera that is
@@ -968,7 +1049,10 @@ class FakeStation:
     def send_playback_end(self) -> None:
         """The end-of-playback frame: ``RECORD_PLAY_CTRL`` (0x0402), GCM-tagged, body ``= 2``."""
         body = struct.pack("<IB", PLAYBACK_ENDED, 0)
-        self.send_frame(FrameType.RECORD_PLAY_CTRL, body, cipher=FrameCipher.GCM, channel=2)
+        subheader = bytes([FrameCipher.GCM, 0, 0xFF, FrameCipher.GCM, 0, 0])
+        self.send_frame(
+            FrameType.RECORD_PLAY_CTRL, body, cipher=FrameCipher.GCM, channel=2, subheader=subheader
+        )
 
     def send_video(
         self,
@@ -1070,7 +1154,7 @@ class FakeStation:
         if cipher == FrameCipher.ECB:
             body = ecb_encrypt(self.static_key, plain)
         else:
-            body = _gcm_broadcast(SESSION_KEY, plain)
+            body = self._seal(plain)
         self.send_frame(ftype, body, cipher=cipher, channel=channel)
 
     def send_zoom_report(self, zoom: float) -> None:
@@ -1099,7 +1183,7 @@ class FakeStation:
         if cipher == FrameCipher.ECB:
             body = ecb_encrypt(self.static_key, struct.pack("<I", mode) + bytes(12))
         else:
-            body = _gcm_broadcast(SESSION_KEY, struct.pack("<Q", mode))
+            body = self._seal(struct.pack("<Q", mode))
         self.send_frame(FrameType.ALARM_MODE_NOTIFY, body, cipher=cipher, channel=2)
 
     def send_alarm_frame(
@@ -1111,9 +1195,15 @@ class FakeStation:
         if cipher == FrameCipher.ECB:
             body = ecb_encrypt(self.static_key, plain)
         else:
-            body = _gcm_broadcast(SESSION_KEY, plain)
+            body = self._seal(plain)
         subheader = bytes([cipher, 0, channel, 2, 0, 0])
         self.send_frame(ftype, body, cipher=cipher, channel=2, subheader=subheader)
+
+    def _seal(self, plain: bytes) -> bytes:
+        """A body under the session's cipher: GCM, or an RSA session's AES-128-ECB."""
+        if self.rsa_session:
+            return ecb_encrypt(RSA_SESSION_KEY, plain)
+        return _gcm_broadcast(SESSION_KEY, plain)
 
     def send_frame(
         self,
@@ -1124,6 +1214,14 @@ class FakeStation:
         channel: int = 0,
         subheader: bytes | None = None,
     ) -> None:
+        """Send one frame. On an RSA session a GCM-tagged frame goes out ECB-tagged:
+        encryption type 2 when its body is sealed (no ``subheader``), else 0 (clear)."""
+        if self.rsa_session and cipher == FrameCipher.GCM and ftype != FrameType.CONN_INIT:
+            if subheader is None:
+                subheader = bytes([FrameCipher.ECB, 0, 0xFF, FRAME_SESSION_ECB, 0, 0])
+            else:
+                subheader = bytes([FrameCipher.ECB, *subheader[1:3], FRAME_PLAIN, *subheader[4:]])
+            cipher = FrameCipher.ECB
         frame = encode_frame(ftype, payload, subheader or bytes([cipher, 0, 0xFF, cipher, 0, 0]))
         for peer in self._targets():
             for off in range(0, len(frame), CHUNK):

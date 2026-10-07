@@ -129,6 +129,20 @@ def _mapping(data: object, path: str) -> Mapping[str, Any]:
     return data
 
 
+@dataclass(frozen=True, slots=True)
+class CipherKeys:
+    """One station cipher's private keys as ``get_ciphers`` returns them, None when absent:
+    ``ecc_private_key`` (hex) unwraps an ECIES CONN_INIT, ``rsa_private_key`` (the
+    cloud's ``private_key``, base64 PKCS#8) an RSA one."""
+
+    ecc_private_key: str | None
+    rsa_private_key: str | None
+
+
+def _key_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
 class EufyCloudApi:
     """Async client for the eufy_mega ("eufy_security") cloud.
 
@@ -1028,6 +1042,24 @@ class EufyCloudApi:
     ) -> str:
         """The station cipher's ``ecc_private_key`` (hex), cached per station.
 
+        As :meth:`async_get_cipher_keys`; raises :class:`EmptyResponseError` when the
+        cipher has no ECC key.
+        """
+        keys = await self.async_get_cipher_keys(station_sn, cipher_id, refresh=refresh)
+        if not keys.ecc_private_key:
+            raise EmptyResponseError(
+                _SUCCESS,
+                f"cipher {cipher_id} for {redact_serial(station_sn)} carried no ecc_private_key",
+                endpoint=const.CIPHERS_PATH,
+            )
+        return keys.ecc_private_key
+
+    async def async_get_cipher_keys(
+        self, station_sn: str, cipher_id: int = const.CIPHER_ID_P2P, *, refresh: bool = False
+    ) -> CipherKeys:
+        """The station cipher's keys (``ecc_private_key`` and the RSA ``private_key``),
+        cached per station.
+
         ``refresh`` honours the per-station refresh cooldown: called again inside it
         for the same station, it raises :class:`RefreshCooldownError` (``code`` 0) rather
         than risk a login-shaped fetch that could lock the account.
@@ -1037,13 +1069,17 @@ class EufyCloudApi:
         raise it again without a request (``refresh`` included).
         """
         if not refresh:
-            cached = self._cache.cipher_key(station_sn, cipher_id)
-            if cached:
+            cached = CipherKeys(
+                self._cache.cipher_key(station_sn, cipher_id),
+                self._cache.rsa_cipher_key(station_sn, cipher_id),
+            )
+            if cached.ecc_private_key or cached.rsa_private_key:
                 _LOGGER.debug(
-                    "cipher %d for %s from the cache: %s",
+                    "cipher %d for %s from the cache: ecc_private_key %s, RSA key %s",
                     cipher_id,
                     redact_serial(station_sn),
-                    Secret(cached),
+                    Secret(cached.ecc_private_key or ""),
+                    "held" if cached.rsa_private_key else "none",
                 )
                 return cached
         self._raise_if_cipher_unavailable(station_sn, cipher_id)
@@ -1060,22 +1096,29 @@ class EufyCloudApi:
 
         owner = await self.async_get_station_owner_id(station_sn)
         try:
-            key = await self._fetch_cipher(station_sn, cipher_id, owner)
+            keys = await self._fetch_cipher(station_sn, cipher_id, owner)
         except CipherUnavailableError as err:
             self._cipher_unavailable[(station_sn, cipher_id)] = (time.monotonic(), err.owner_source)
             raise
         _LOGGER.debug(
-            "cipher %d for %s fetched: ecc_private_key %s",
+            "cipher %d for %s fetched: ecc_private_key %s, RSA key %s",
             cipher_id,
             redact_serial(station_sn),
-            Secret(key),
+            Secret(keys.ecc_private_key or ""),
+            "held" if keys.rsa_private_key else "none",
         )
-        self._cache.set_cipher_key(station_sn, cipher_id, key)
+        self._cache.drop_cipher_key(station_sn, cipher_id)
+        if keys.ecc_private_key:
+            self._cache.set_cipher_key(station_sn, cipher_id, keys.ecc_private_key)
+        if keys.rsa_private_key:
+            self._cache.set_rsa_cipher_key(station_sn, cipher_id, keys.rsa_private_key)
         await self._cache.async_save()
-        return key
+        return keys
 
-    async def _fetch_cipher(self, station_sn: str, cipher_id: int, owner_user_id: str) -> str:
-        """Run the security-realm key exchange and fetch one cipher's ecc key.
+    async def _fetch_cipher(
+        self, station_sn: str, cipher_id: int, owner_user_id: str
+    ) -> CipherKeys:
+        """Run the security-realm key exchange and fetch one cipher's keys.
 
         The exchange and the fetch share one session retry: a server-revoked token
         costs one re-login here, not an :class:`AuthenticationError` for days.
@@ -1123,12 +1166,14 @@ class EufyCloudApi:
             raise ProtocolError(f"cloud response to {const.CIPHERS_PATH} has no cipher list")
         for item in items:
             if isinstance(item, Mapping) and str(item.get("cipher_id")) == str(cipher_id):
-                key = item.get("ecc_private_key")
-                if isinstance(key, str) and key:
-                    return key
+                keys = CipherKeys(
+                    _key_text(item.get("ecc_private_key")), _key_text(item.get("private_key"))
+                )
+                if keys.ecc_private_key or keys.rsa_private_key:
+                    return keys
         raise EmptyResponseError(
             _SUCCESS,
-            f"cipher {cipher_id} for {redact_serial(station_sn)} carried no ecc_private_key",
+            f"cipher {cipher_id} for {redact_serial(station_sn)} carried no private key",
             endpoint=const.CIPHERS_PATH,
         )
 

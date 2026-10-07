@@ -20,7 +20,7 @@ from eufy_home_security import client as client_module
 from eufy_home_security import storage as storage_module
 from eufy_home_security._logging import LogThrottle, redact_serial
 from eufy_home_security.client import EufySecurity
-from eufy_home_security.cloud.api import EufyCloudApi, HttpSession
+from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices.model_settings import (
@@ -179,10 +179,10 @@ class StubCloud:
     async def async_get_station_owner_id(self, station_sn: str, *, refresh: bool = False) -> str:
         return SYNTHETIC.account_id
 
-    async def async_get_cipher_key(
+    async def async_get_cipher_keys(
         self, station_sn: str, cipher_id: int = 40, *, refresh: bool = False
-    ) -> str:
-        return "ab" * 32
+    ) -> CipherKeys:
+        return CipherKeys("ab" * 32, None)
 
     async def async_get_thing_descriptions(
         self, product_codes: Sequence[str]
@@ -724,14 +724,14 @@ class KeyRig:
                     self.cache.note_refresh("owner")  # the device list was re-read
                 return SYNTHETIC.account_id
 
-            async def async_get_cipher_key(
+            async def async_get_cipher_keys(
                 self, station_sn: str, cipher_id: int = 40, *, refresh: bool = False
-            ) -> str:
+            ) -> CipherKeys:
                 if refresh:
                     if rig.error is not None:
                         raise rig.error
                     rig.fetches += 1
-                return rig.fake.ecc_private_key_hex if rig.good else rig.wrong_key
+                return CipherKeys(rig.fake.ecc_private_key_hex if rig.good else rig.wrong_key, None)
 
         return RigCloud
 

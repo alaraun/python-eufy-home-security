@@ -1,6 +1,6 @@
 """Session crypto for the P2P command channel.
 
-Three schemes live here:
+Four schemes live here:
 
 * **AES-128-ECB** under the static serial key — the legacy scalar command path,
   and how the station wraps CONN_INIT and every ECB base->app notify.
@@ -11,19 +11,24 @@ Three schemes live here:
 * **ECIES** (P-256 + a custom HMAC-SHA256 KDF) — unwraps the session key from
   the CONN_INIT frame. The blob is ``eph_pub(33) ‖ iv(16) ‖ ct(16·k) ‖ tag(32)``
   and its true length is found by the HMAC tag; the ECDH is computed once.
+* **RSA-1024** (PKCS#1 v1.5) — the other CONN_INIT, selected by its version byte:
+  it carries a 16-character AES-128 key, and the session runs AES-128-ECB under it.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import hmac
 import os
 import struct
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -203,40 +208,122 @@ def ecies_encrypt(
     return eph_pub + iv + ct + tag
 
 
-def _conn_init_block(payload: bytes, static_key: bytes) -> tuple[int, bytes]:
-    """The cipher id and the ECIES blob (with its padding tail) of a CONN_INIT payload."""
-    try:
-        block = ecb_decrypt(static_key, payload)
-    except ProtocolError as exc:
-        raise HandshakeError(f"CONN_INIT ECB decrypt failed: {exc}") from exc
-    if len(block) < 4:
-        raise HandshakeError("CONN_INIT payload too short for a cipher id")
-    return struct.unpack_from("<I", block, 0)[0], block[4:]
+CONN_INIT_ECC_VERSION = 8
+"""The CONN_INIT reply version (subheader byte 0) of the ECIES handshake and its GCM
+session; the eufy app takes any other version as the RSA handshake."""
+CONN_INIT_ECC_BLOB_LEN = 129
+"""ECIES blob bytes the app unwraps after the cipher id: eph 33 + iv 16 + ct 48 + tag 32."""
+CONN_INIT_RSA_BLOB_LEN = 128
+"""RSA-1024 ciphertext bytes the app decrypts after the cipher id."""
+AES_SESSION_KEY_LEN = 16
+"""Length of the RSA handshake's session key: 16 ASCII characters, an AES-128 key."""
+FRAME_PLAIN = 0
+"""Subheader byte 3 (encryption type) of a frame whose payload is not encrypted."""
+FRAME_STATIC_ECB = 1
+"""Encryption type of an AES-128-ECB frame under the static key."""
+FRAME_SESSION_ECB = 2
+"""Encryption type of an AES-128-ECB frame under the RSA handshake's session key (the
+static key before it)."""
 
 
-def conn_init_cipher_id(payload: bytes, static_key: bytes) -> int:
-    """The cipher a CONN_INIT (0x044C) payload names: the station chooses it (40 on a
-    HomeBase 3, 98 on a T8170), and only the static key is needed to read it."""
-    return _conn_init_block(payload, static_key)[0]
+def frame_encryption(subheader: bytes) -> int | None:
+    """A frame's encryption type (subheader byte 3), or None when the subheader has none."""
+    return subheader[3] if len(subheader) > 3 else None
 
 
-def session_key_from_conn_init(
-    payload: bytes, static_key: bytes, ecc_private_key_hex: str, cipher_id: int
-) -> bytes:
-    """Recover the 32-byte ASCII session key from a CONN_INIT (0x044C) payload.
+@dataclass(frozen=True, slots=True)
+class ConnInit:
+    """A station's CONN_INIT (0x044C) reply, decrypted as the eufy app does.
 
-    ECB-decrypt under the static key, check that it names ``cipher_id`` (the cipher
-    ``ecc_private_key_hex`` belongs to), then ECIES-unwrap with that key. Any failure
-    raises :class:`HandshakeError` (the usual cause is a cipher key that no longer
-    matches the station).
+    ``version`` is subheader byte 0: :data:`CONN_INIT_ECC_VERSION` selects the ECIES
+    handshake, any other the RSA one. ``body`` is what follows the cipher id.
     """
-    named, blob = _conn_init_block(payload, static_key)
-    if named != cipher_id:
-        raise HandshakeError(f"CONN_INIT names cipher {named}, the key is cipher {cipher_id}")
+
+    version: int
+    cipher_id: int
+    body: bytes
+
+    @property
+    def rsa(self) -> bool:
+        """Whether this reply carries the RSA handshake (an AES-128-ECB session)."""
+        return self.version != CONN_INIT_ECC_VERSION
+
+
+def parse_conn_init(payload: bytes, subheader: bytes, static_key: bytes) -> ConnInit:
+    """The version, cipher id and key material of a CONN_INIT reply.
+
+    Encryption type 0 (subheader byte 3) is clear; any other is AES-128-ECB under the
+    static key over whole blocks, the payload zero-filled to the last one, as the app's
+    receive buffer is. Raises :class:`HandshakeError` when no cipher id fits.
+    """
+    if len(subheader) < 4:
+        raise HandshakeError("CONN_INIT reply without a subheader")
+    if frame_encryption(subheader) == FRAME_PLAIN:
+        plain = payload
+    else:
+        try:
+            plain = ecb_decrypt(static_key, payload + bytes(-len(payload) % 16))
+        except ProtocolError as exc:
+            raise HandshakeError(f"CONN_INIT ECB decrypt failed: {exc}") from exc
+    if len(plain) < 4:
+        raise HandshakeError("CONN_INIT payload too short for a cipher id")
+    return ConnInit(subheader[0], struct.unpack_from("<I", plain, 0)[0], plain[4:])
+
+
+def session_key_from_conn_init(conn_init: ConnInit, ecc_private_key_hex: str) -> bytes:
+    """The 32-byte ASCII GCM session key of an ECIES CONN_INIT, unwrapped with the
+    ``ecc_private_key`` of the cipher it names.
+
+    Any failure raises :class:`HandshakeError` (the usual cause is a cipher key that no
+    longer matches the station).
+    """
     try:
-        key = ecies_decrypt(blob, ecc_private_key_hex)
+        key = ecies_decrypt(conn_init.body, ecc_private_key_hex)
     except ProtocolError as exc:
         raise HandshakeError(f"CONN_INIT ECIES unwrap failed: {exc}") from exc
     if len(key) != SESSION_KEY_LEN or not all(32 <= b < 127 for b in key):
         raise HandshakeError("CONN_INIT unwrapped a key that is not 32 ASCII bytes")
     return key
+
+
+def load_rsa_private_key(text: str) -> rsa.RSAPrivateKey:
+    """An RSA private key from the cloud's ``private_key``: base64 DER, with or without
+    PEM armour and line breaks (the app strips both and reads PKCS#8).
+
+    Raises :class:`HandshakeError` when it does not parse as an RSA key.
+    """
+    body = "".join(
+        line.strip() for line in text.splitlines() if line.strip() and "-----" not in line
+    )
+    try:
+        der = base64.b64decode(body, validate=True)
+        key = serialization.load_der_private_key(der, password=None)
+    except (ValueError, TypeError, binascii.Error) as exc:
+        raise HandshakeError(f"the cipher's RSA private key does not parse: {exc}") from exc
+    if not isinstance(key, rsa.RSAPrivateKey):
+        raise HandshakeError("the cipher's private key is not an RSA key")
+    return key
+
+
+def aes_key_from_conn_init(conn_init: ConnInit, rsa_private_key: str) -> bytes:
+    """The 16-byte AES-128 session key of an RSA CONN_INIT.
+
+    RSA PKCS#1 v1.5 over the :data:`CONN_INIT_RSA_BLOB_LEN` bytes after the cipher id,
+    with the cipher's RSA ``private_key``; the key is the first 16 characters of the
+    plaintext, up to its first NUL (the app's string copy). Any failure raises
+    :class:`HandshakeError`, a wrong key included.
+    """
+    blob = conn_init.body[:CONN_INIT_RSA_BLOB_LEN]
+    if len(blob) != CONN_INIT_RSA_BLOB_LEN:
+        raise HandshakeError(f"RSA CONN_INIT carries {len(blob)} key bytes, not 128")
+    key = load_rsa_private_key(rsa_private_key)
+    try:
+        plain = key.decrypt(blob, padding.PKCS1v15())
+    except ValueError as exc:
+        raise HandshakeError(f"CONN_INIT RSA decrypt failed: {exc}") from exc
+    session = plain.split(b"\x00", 1)[0][:AES_SESSION_KEY_LEN]
+    # A wrong key decrypts to noise rather than failing (PKCS#1 implicit rejection);
+    # the station's key is 16 printable characters.
+    if len(session) != AES_SESSION_KEY_LEN or not all(32 <= b < 127 for b in session):
+        raise HandshakeError("CONN_INIT RSA plaintext holds no 16-character key")
+    return session

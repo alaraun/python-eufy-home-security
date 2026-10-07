@@ -109,11 +109,19 @@ from ._json import json_int
 from .alarm import ALARM_FRAME_VALUES, decode_alarm_frame
 from .clip import ClipWriter, MediaClip, mux_frames
 from .crypto import (
+    CONN_INIT_RSA_BLOB_LEN,
+    FRAME_PLAIN,
+    FRAME_SESSION_ECB,
+    FRAME_STATIC_ECB,
     GCM_SEQ_START,
-    conn_init_cipher_id,
+    ConnInit,
+    aes_key_from_conn_init,
     ecb_decrypt,
+    ecb_encrypt,
+    frame_encryption,
     gcm_decrypt_broadcast,
     gcm_encrypt_command,
+    parse_conn_init,
     session_key_from_conn_init,
 )
 from .did import Did, static_key
@@ -287,8 +295,9 @@ A differing ``file`` is counted in :attr:`StationSession.still_file_mismatches` 
 the reply is ignored (returned when off). A late reply to a timed-out request is
 matched to it by ``file``, or by order when the reply names none, and discarded
 (:data:`STILL_LATE_REPLY_WINDOW`)."""
-CONN_INIT_MIN_LEN = 140
-"""Smallest CONN_INIT payload worth unwrapping (eph key + IV + a block + tag + fields)."""
+CONN_INIT_MIN_LEN = 4 + CONN_INIT_RSA_BLOB_LEN
+"""Smallest CONN_INIT payload that holds a key: the cipher id and the 128-byte RSA
+ciphertext (the ECIES form needs 133, and a HomeBase 3 pads it to 144)."""
 CONN_INIT_MAX_LEN = 4096
 """Largest CONN_INIT payload accepted. A real one is a few hundred bytes; the ECIES
 unwrap searches candidate lengths on the event loop, so an oversized blob would stall
@@ -335,13 +344,16 @@ class P2PCredentials:
     ``account_id`` is the owner's user id (``member.admin_user_id``) — a shared
     member's own id is silently ignored by the station. ``ecc_private_key`` is the
     owner's private key of cipher ``cipher_id``, the cipher the station names in its
-    CONN_INIT (40 on a HomeBase 3, 98 on a T8170).
+    CONN_INIT (40 on a HomeBase 3, 98 on a T8170); empty when the cipher has none.
+    ``rsa_private_key`` is the same cipher's RSA key (the cloud's ``private_key``),
+    which a station answering with the RSA CONN_INIT needs; None when not held.
     """
 
     account_id: str
     user_name: str
     ecc_private_key: str
     cipher_id: int = CIPHER_ID_P2P
+    rsa_private_key: str | None = None
 
 
 class WakeProvider(Protocol):
@@ -525,8 +537,13 @@ class Inbound:
         return self._json
 
     def receipt(self) -> int | None:
-        """The code of a command receipt on the request channel (0); None for any other frame."""
-        return decode_command_receipt(self.frame) if self.channel == 0 else None
+        """The code of a command receipt on the request channel (0); None for any other frame.
+
+        On an RSA session a receipt is any clear frame (encryption type 0) of that shape.
+        """
+        if self.channel != 0:
+            return None
+        return decode_command_receipt(self.frame, clear=self._session.rsa_session)
 
     def alarm_mode(self) -> int | None:
         """The guard mode of a trusted 0x047F report, decoded at most once."""
@@ -885,6 +902,9 @@ class StationSession:
         self._did: Did | None = None
         self._static_key: bytes | None = None
         self._session_key: bytes | None = None
+        """The GCM session key of an ECIES handshake."""
+        self._aes_key: bytes | None = None
+        """The AES-128 session key of an RSA handshake: every frame is ECB under it."""
         self._decoders: dict[int, StreamDecoder] = {}
         self._gcm_seq = GCM_SEQ_START
         self._gcm_counter = 0
@@ -999,10 +1019,16 @@ class StationSession:
     @property
     def connected(self) -> bool:
         return (
-            self._session_key is not None
+            (self._session_key is not None or self._aes_key is not None)
             and self._transport is not None
             and self._transport.is_open
         )
+
+    @property
+    def rsa_session(self) -> bool:
+        """Whether the station answered the RSA CONN_INIT, so the session runs
+        AES-128-ECB under the key it carried instead of GCM."""
+        return self._aes_key is not None
 
     @property
     def max_sessions(self) -> int:
@@ -1425,7 +1451,7 @@ class StationSession:
             return dump if STATION_CHANNEL in dump.devices else None
 
         def send() -> None:
-            self._send_gcm(
+            self._send_secure(
                 PARAM_QUERY_ALL, frame_type=FrameType.PARAM_NOTIFY, dev_type=STATION_CHANNEL
             )
 
@@ -1521,7 +1547,7 @@ class StationSession:
             started = time.monotonic()
             self._arming_to = mode
             try:
-                indices = [self._send_gcm(body)]
+                indices = [self._send_secure(body)]
                 deadline = time.monotonic() + timeout
                 resent = False
                 while not waiter.future.done():
@@ -1536,7 +1562,7 @@ class StationSession:
                     await asyncio.wait({waiter.future}, timeout=step)
                     if not waiter.future.done() and not resent and applied_at is None:
                         _LOGGER.debug("%s: no answer to the arm yet; resending", self._log_name)
-                        indices.append(self._send_gcm(body))
+                        indices.append(self._send_secure(body))
                         resent = True
             finally:
                 self._arming_to = None
@@ -1647,7 +1673,7 @@ class StationSession:
             )
             waiter = self._add_waiter(match)
             try:
-                indices = [self._send_gcm(body, dev_type=header)]
+                indices = [self._send_secure(body, dev_type=header)]
                 started = time.monotonic()
                 await _wait_any(waiter.future, receipt, min(COMMAND_RESEND_AFTER, timeout))
                 if not waiter.future.done() and not receipt.is_set() and not self._acked(indices):
@@ -1658,7 +1684,7 @@ class StationSession:
                         self._param(command, channel).label,
                         COMMAND_RESEND_AFTER,
                     )
-                    indices.append(self._send_gcm(body, dev_type=header))
+                    indices.append(self._send_secure(body, dev_type=header))
                 await asyncio.wait(
                     {waiter.future}, timeout=max(started + timeout - time.monotonic(), 0.0)
                 )
@@ -1730,7 +1756,9 @@ class StationSession:
                 code = cast(
                     int,
                     await self._request(
-                        lambda: indices.append(self._send_gcm(body, frame_type=CMD_SET_ALL_ACTION)),
+                        lambda: indices.append(
+                            self._send_secure(body, frame_type=CMD_SET_ALL_ACTION)
+                        ),
                         match,
                         timeout=timeout,
                         label=f"cmd {CMD_SET_ALL_ACTION}",
@@ -1838,7 +1866,7 @@ class StationSession:
             channel,
         )
         reply = await self._request(
-            lambda: self._send_gcm(plaintext, frame_type=recipe.cmd, dev_type=channel),
+            lambda: self._send_secure(plaintext, frame_type=recipe.cmd, dev_type=channel),
             match,
             timeout=timeout,
             label=f"recipe {recipe.identifier}",
@@ -1865,17 +1893,30 @@ class StationSession:
         await self.async_connect()
         creds = self._require_creds()
         key = self._require_static_key()
+        encryption = FRAME_STATIC_ECB
+        if self._aes_key is not None:  # an RSA session: every command under its key
+            key, encryption = self._aes_key, FRAME_SESSION_ECB
 
         def match(inbound: Inbound) -> tuple[int, int | None] | None:
-            if inbound.type != command or len(inbound.frame.payload) < 4:
+            frame = inbound.frame
+            if inbound.type != command or len(frame.payload) < 4:
                 return None
-            return decode_ecb_scalar_result(inbound.frame.payload), inbound.frame.cipher
+            if self._session_ecb_frame(frame) and len(frame.payload) % 16 == 0:
+                plain = ecb_decrypt(cast(bytes, self._aes_key), frame.payload)
+                return decode_ecb_scalar_result(plain), frame.cipher
+            return decode_ecb_scalar_result(frame.payload), frame.cipher
 
         async with self._op("ECB command"):
             seq = self._ecb_seq
             self._ecb_seq = (seq + 1) & 0xFF
             frame = encode_ecb_scalar_frame(
-                key, command, value, creds.account_id, channel=channel, seq=seq
+                key,
+                command,
+                value,
+                creds.account_id,
+                channel=channel,
+                seq=seq,
+                encryption=encryption,
             )
             transport = self._require_transport()
             indices: list[int] = []
@@ -1952,7 +1993,7 @@ class StationSession:
                     int,
                     await self._request(
                         lambda: indices.append(
-                            self._send_gcm(body, frame_type=command, dev_type=STATION_CHANNEL)
+                            self._send_secure(body, frame_type=command, dev_type=STATION_CHANNEL)
                         ),
                         match,
                         timeout=timeout,
@@ -2003,7 +2044,7 @@ class StationSession:
 
         async with self._op("storage read"):
             info = await self._request(
-                lambda: self._send_gcm(body), match, timeout=timeout, label="storage query"
+                lambda: self._send_secure(body), match, timeout=timeout, label="storage query"
             )
         return cast(StorageInfo, info)
 
@@ -2042,7 +2083,7 @@ class StationSession:
                 remaining = deadline - time.monotonic()
                 try:
                     info = await self._request(
-                        lambda: self._send_gcm(b"", frame_type=CMD_SD_INFO),
+                        lambda: self._send_secure(b"", frame_type=CMD_SD_INFO),
                         match,
                         timeout=max(min(SD_INFO_RESEND, remaining), 0.1),
                         label="sd info query",
@@ -2083,7 +2124,7 @@ class StationSession:
 
         async with self._op("event query"):
             rows = await self._request(
-                lambda: self._send_gcm(body), match, timeout=timeout, label="event query"
+                lambda: self._send_secure(body), match, timeout=timeout, label="event query"
             )
         return cast(list[dict[str, Any]], rows)
 
@@ -2128,7 +2169,7 @@ class StationSession:
         def send() -> None:
             transaction = str(int(time.time() * 1000))
             payload = event_count_payload(transaction)
-            self._send_gcm(device_msg(creds.account_id, CMD_DATABASE, payload))
+            self._send_secure(device_msg(creds.account_id, CMD_DATABASE, payload))
 
         deadline = time.monotonic() + timeout
         async with self._op("event count"):
@@ -2288,7 +2329,7 @@ class StationSession:
                 start_id=start_id,
                 transaction=transaction,
             )
-            self._send_gcm(
+            self._send_secure(
                 device_msg(creds.account_id, CMD_DATABASE, payload, channel=STATION_CHANNEL)
             )
 
@@ -2358,7 +2399,7 @@ class StationSession:
             return decode_image_content(obj)
 
         def send() -> None:
-            self._send_gcm(body)
+            self._send_secure(body)
             _LOGGER.debug("%s: image fetch sent", self._log_name)
 
         started = time.monotonic()
@@ -2907,14 +2948,14 @@ class StationSession:
                 try:
                     if command == CMD_START_REALTIME_MEDIA:
                         # The station picks the live camera from the subheader, not the JSON.
-                        stream._open_index = self._send_gcm(
+                        stream._open_index = self._send_secure(
                             body,
                             frame_type=frame_type,
                             dev_type=channel,
                             flag=LIVE_OPEN_SUBHEADER_FLAG,
                         )
                     else:
-                        stream._open_index = self._send_gcm(body, frame_type=frame_type)
+                        stream._open_index = self._send_secure(body, frame_type=frame_type)
                 except BaseException:
                     self._set_media(None)
                     raise
@@ -3008,7 +3049,7 @@ class StationSession:
             _LOGGER.debug("%s: stopping media (cmd %d)", self._log_name, stream.command)
             frame_type, body = stream._stop_body()
             with contextlib.suppress(EufySecurityError):
-                self._send_gcm(body, frame_type=frame_type, dev_type=stream.channel)
+                self._send_secure(body, frame_type=frame_type, dev_type=stream.channel)
 
     def _take_media_reply(self, stream: MediaStream, inbound: Inbound) -> bool:
         """Whether ``inbound`` is the reply to ``stream``'s open (then it is consumed here)."""
@@ -3076,7 +3117,11 @@ class StationSession:
         an earlier playback's end can arrive just after the next open (it follows the
         last frame by about 0.5 s, the drain gap), before that stream's first keyframe.
         """
-        value = decode_record_play_ctrl(frame, self._session_key)
+        value = (
+            self._rsa_play_ctrl(frame)
+            if self.rsa_session
+            else decode_record_play_ctrl(frame, self._session_key)
+        )
         _LOGGER.debug("%s: playback control %s", self._log_name, value)
         if (
             value != PLAYBACK_ENDED
@@ -3188,7 +3233,7 @@ class StationSession:
             Secret(key),
         )
 
-        def match(inbound: Inbound) -> bytes | None:
+        def match(inbound: Inbound) -> Frame | None:
             if inbound.type != FrameType.CONN_INIT:
                 return None
             # Bound the blob before it reaches the ECIES unwrap. A real CONN_INIT is a
@@ -3197,7 +3242,7 @@ class StationSession:
             # race on the LAN — would stall every session and stream in the process.
             if not CONN_INIT_MIN_LEN <= len(inbound.frame.payload) <= CONN_INIT_MAX_LEN:
                 return None
-            return inbound.frame.payload
+            return inbound.frame
 
         try:
             payload = await self._request(
@@ -3216,7 +3261,9 @@ class StationSession:
             self._teardown("handshake interrupted")
             raise
         try:
-            creds, session_key = await self._unwrap_conn_init(cast(bytes, payload), key, creds)
+            creds, conn_init, session_key = await self._unwrap_conn_init(
+                cast(Frame, payload), key, creds
+            )
         except HandshakeError as err:
             _LOGGER.debug("%s: handshake failed: %s", self._log_name, err)
             self._handshake_failures += 1
@@ -3228,24 +3275,37 @@ class StationSession:
         except BaseException:
             self._teardown("handshake interrupted")
             raise
-        self._session_key = session_key
+        if conn_init.rsa:
+            self._aes_key = session_key
+        else:
+            self._session_key = session_key
         self._connects += 1
         self._creds = creds
         self._account_mismatch_reported = False  # a new connection may report it again
-        _LOGGER.debug("%s: GCM session key %s", self._log_name, Secret(self._session_key))
+        _LOGGER.debug(
+            "%s: %s session key %s",
+            self._log_name,
+            "AES-128-ECB" if conn_init.rsa else "GCM",
+            Secret(session_key),
+        )
         _LOGGER.info("%s: P2P session established via %s", self._log_name, Address(self._host))
         return creds
 
     async def _unwrap_conn_init(
-        self, payload: bytes, static: bytes, creds: P2PCredentials | None
-    ) -> tuple[P2PCredentials, bytes]:
-        """The credentials of the cipher CONN_INIT names, and the session key they unwrap."""
-        named = conn_init_cipher_id(payload, static)
+        self, frame: Frame, static: bytes, creds: P2PCredentials | None
+    ) -> tuple[P2PCredentials, ConnInit, bytes]:
+        """The credentials of the cipher CONN_INIT names, the parsed reply, and the
+        session key they unwrap: a 32-byte GCM key (version 8, ECIES) or a 16-byte
+        AES-128 key (any other version, RSA)."""
+        conn_init = parse_conn_init(frame.payload, frame.subheader, static)
+        named = conn_init.cipher_id
         self._cipher_id = named
         _LOGGER.debug(
-            "%s: CONN_INIT reply (%d bytes) names cipher %d",
+            "%s: CONN_INIT reply (%d bytes, version %d, encryption %s) names cipher %d",
             self._log_name,
-            len(payload),
+            len(frame.payload),
+            conn_init.version,
+            frame_encryption(frame.subheader),
             named,
         )
         if creds is None:
@@ -3258,7 +3318,15 @@ class StationSession:
                 creds.cipher_id,
             )
             creds = await self._load_credentials(refresh=False)
-        return creds, session_key_from_conn_init(payload, static, creds.ecc_private_key, named)
+        if creds.cipher_id != named:
+            raise HandshakeError(
+                f"CONN_INIT names cipher {named}, the key is cipher {creds.cipher_id}"
+            )
+        if not conn_init.rsa:
+            return creds, conn_init, session_key_from_conn_init(conn_init, creds.ecc_private_key)
+        if not creds.rsa_private_key:
+            raise HandshakeError(f"no RSA private key held for cipher {named}")
+        return creds, conn_init, aes_key_from_conn_init(conn_init, creds.rsa_private_key)
 
     async def _refetch_rejected_key(self, err: HandshakeError) -> P2PCredentials:
         """Re-fetch the credentials after ``err``, unless the stale-key latch holds it back."""
@@ -3281,13 +3349,14 @@ class StationSession:
     async def _load_credentials(self, *, refresh: bool) -> P2PCredentials:
         creds = await self._credentials(refresh=refresh, cipher_id=self._cipher_id)
         _LOGGER.debug(
-            "%s: credentials%s: owner account %s, user %s, cipher-%d private key %s",
+            "%s: credentials%s: owner account %s, user %s, cipher-%d private key %s, RSA key %s",
             self._log_name,
             " (re-fetched)" if refresh else "",
             Secret(creds.account_id),
             Secret(creds.user_name),
             creds.cipher_id,
             Secret(creds.ecc_private_key),
+            "held" if creds.rsa_private_key else "none",
         )
         return creds
 
@@ -3314,6 +3383,7 @@ class StationSession:
             self._retire_transport(self._transport)
             self._transport = None
         self._session_key = None
+        self._aes_key = None
         self._still_owed.clear()  # a late reply cannot cross into a new connection
         # A pending settle timer would otherwise fire _complete_dump on a dead link and
         # announce a completed dump assembled from whatever arrived before the drop.
@@ -3354,6 +3424,7 @@ class StationSession:
             self._retire_transport(self._transport)
         self._transport = None
         self._session_key = None
+        self._aes_key = None
         error = StationUnreachableError(str(exc))
         self._last_error_name = type(error).__name__
         self._fail_waiters(error)
@@ -3605,7 +3676,8 @@ class StationSession:
                     listener(obj, cipher)
                 except Exception:
                     _LOGGER.exception("%s: notify listener failed", self._log_name)
-            if cipher is FrameCipher.GCM and self._note_storage(obj):
+            trusted = cipher is FrameCipher.GCM or self._session_ecb_frame(inbound.frame)
+            if trusted and self._note_storage(obj):
                 return
             event = decode_camera_push(obj, station_sn=self.serial, frame_cipher=cipher)
             if event is not None:
@@ -3737,18 +3809,23 @@ class StationSession:
     def _handle_alarm(self, frame: Frame) -> None:
         """An alarm frame (tone, siren, light): cache its value per channel, emit
         :class:`ParamChanged` when it moved, and :class:`AlarmChanged` when a tone frame
-        starts or ends the alarm. Only GCM frames count (:meth:`_refuse_ecb_state`)."""
-        if (
-            self._refuse_ecb_state(frame)
-            or frame.cipher != FrameCipher.GCM
-            or self._session_key is None
-        ):
+        starts or ends the alarm. Only GCM frames, and an RSA session's frames under its
+        key, count (:meth:`_refuse_ecb_state`)."""
+        if self._refuse_ecb_state(frame):
             return
-        try:
-            plain = gcm_decrypt_broadcast(self._session_key, frame.payload)
-        except ProtocolError:
-            self._dropped_undecodable += 1
+        if self._session_ecb_frame(frame):
+            if len(frame.payload) % 16:
+                self._dropped_undecodable += 1
+                return
+            plain = ecb_decrypt(cast(bytes, self._aes_key), frame.payload)
+        elif frame.cipher != FrameCipher.GCM or self._session_key is None:
             return
+        else:
+            try:
+                plain = gcm_decrypt_broadcast(self._session_key, frame.payload)
+            except ProtocolError:
+                self._dropped_undecodable += 1
+                return
         alarm = decode_alarm_frame(frame, plain)
         if alarm is None:
             self._dropped_undecodable += 1
@@ -3895,18 +3972,21 @@ class StationSession:
         :meth:`_handle_alarm`, which all ask here. The static ECB key is
         derivable from the serial and DID alone, so once a session key exists, only
         GCM state is authenticated. ECB image replies, scalar results and camera
-        pushes are not state and still decode.
+        pushes are not state and still decode. On an RSA session, state under its
+        session key (encryption type 2) is the station's own and decodes; state under
+        the static key or in clear is refused.
         """
-        if (
-            frame.cipher != FrameCipher.ECB
-            or frame.type not in _STATE_FRAME_TYPES
-            or self._session_key is None
-        ):
+        if frame.cipher != FrameCipher.ECB or frame.type not in _STATE_FRAME_TYPES:
+            return False
+        if self._aes_key is not None:
+            if self._session_ecb_frame(frame):
+                return False
+        elif self._session_key is None:
             return False
         self.ecb_state_refused += 1
         if self._throttle.should_log(("ecb-state", frame.type)):
             _LOGGER.debug(
-                "%s: refusing ECB-ciphered state frame 0x%04x on a GCM session (%d refused)",
+                "%s: refusing static-key ECB state frame 0x%04x (%d refused)",
                 self._log_name,
                 frame.type,
                 self.ecb_state_refused,
@@ -3917,13 +3997,18 @@ class StationSession:
         if self._refuse_ecb_state(frame):
             return None
         return decode_alarm_mode_notify(
-            frame, static_key=self._static_key, session_key=self._session_key
+            frame, static_key=self._ecb_key(frame), session_key=self._session_key
         )
 
     def _decode_json(self, frame: Frame) -> dict[str, Any] | None:
         payload = frame.payload
         if self._refuse_ecb_state(frame):
             return None
+        if self._plain_rsa_frame(frame):
+            # An RSA session's clear frame (encryption type 0): a receipt, or JSON.
+            if decode_command_receipt(frame, clear=True) is not None:
+                return None
+            return self._counted_json(payload)
         if (
             frame.cipher == FrameCipher.ECB
             and frame.type in _CLEAR_REPLY_TYPES
@@ -3934,12 +4019,13 @@ class StationSession:
             # binds to its request by cmd, transaction or path.
             return self._counted_json(payload)
         if frame.cipher == FrameCipher.ECB:
-            if self._static_key is None:
+            key = self._ecb_key(frame)
+            if key is None:
                 return None
             if len(payload) < 16 or len(payload) % 16:
                 self._dropped_undecodable += 1
                 return None
-            return self._counted_json(ecb_decrypt(self._static_key, payload))
+            return self._counted_json(ecb_decrypt(key, payload))
         if frame.cipher == FrameCipher.GCM:
             if self._session_key is None or len(payload) < 29:
                 return None
@@ -4078,7 +4164,7 @@ class StationSession:
             self._remove_waiter(waiter)
         _raise_waiter_error(waiter)
 
-    def _send_gcm(
+    def _send_secure(
         self,
         plaintext: bytes,
         *,
@@ -4086,6 +4172,13 @@ class StationSession:
         dev_type: int = 0,
         flag: int = 0,
     ) -> int:
+        """Send ``plaintext`` under the session's cipher: GCM after an ECIES handshake,
+        AES-128-ECB under the session key after an RSA one (subheader
+        ``01 <seq> <dev_type> 02 <flag> 00``, as the app sends every command then)."""
+        if self._aes_key is not None:
+            return self._send_session_ecb(
+                plaintext, frame_type=frame_type, dev_type=dev_type, flag=flag
+            )
         key = self._session_key
         if key is None:
             raise StationUnreachableError("no P2P session")
@@ -4108,6 +4201,60 @@ class StationSession:
                 plaintext.hex() if obj is None else Payload(obj),
             )
         return self._require_transport().send_drw(0, frame)
+
+    def _send_session_ecb(
+        self, plaintext: bytes, *, frame_type: int, dev_type: int, flag: int
+    ) -> int:
+        """An RSA session's frame: AES-128-ECB under the session key, zero-padded."""
+        key = cast(bytes, self._aes_key)
+        seq = self._ecb_seq
+        self._ecb_seq = (seq + 1) & 0xFF
+        subheader = bytes(
+            [FrameCipher.ECB, seq, dev_type & 0xFF, FRAME_SESSION_ECB, flag & 0xFF, 0x00]
+        )
+        frame = encode_frame(frame_type, ecb_encrypt(key, plaintext), subheader)
+        if _WIRE.isEnabledFor(logging.DEBUG):
+            obj = decode_json_payload(plaintext)
+            _WIRE.debug(
+                "%s: tx session-ECB frame 0x%04x seq %d: %s",
+                self._log_name,
+                frame_type,
+                seq,
+                plaintext.hex() if obj is None else Payload(obj),
+            )
+        return self._require_transport().send_drw(0, frame)
+
+    def _ecb_key(self, frame: Frame) -> bytes | None:
+        """The key of an ECB-tagged station frame: the RSA session's key when its
+        encryption type (subheader byte 3) is 2, else the static key."""
+        if self._aes_key is not None and frame_encryption(frame.subheader) == FRAME_SESSION_ECB:
+            return self._aes_key
+        return self._static_key
+
+    def _rsa_play_ctrl(self, frame: Frame) -> int | None:
+        """An RSA session's end-of-playback value: the first ``u32le`` of a clear body,
+        or of one under its key."""
+        body = frame.payload
+        if self._session_ecb_frame(frame):
+            if not body or len(body) % 16:
+                return None
+            body = ecb_decrypt(cast(bytes, self._aes_key), body)
+        elif not self._plain_rsa_frame(frame):
+            return None
+        return int.from_bytes(body[:4], "little") if len(body) >= 4 else None
+
+    def _session_ecb_frame(self, frame: Frame) -> bool:
+        """Whether ``frame`` is ECB under an RSA session's key: authenticated by the key
+        only the cipher's owner could unwrap, unlike the static key."""
+        return (
+            self._aes_key is not None
+            and frame.cipher == FrameCipher.ECB
+            and frame_encryption(frame.subheader) == FRAME_SESSION_ECB
+        )
+
+    def _plain_rsa_frame(self, frame: Frame) -> bool:
+        """Whether ``frame`` is an RSA session's clear frame (encryption type 0)."""
+        return self._aes_key is not None and frame_encryption(frame.subheader) == FRAME_PLAIN
 
     def _unanswered_error(
         self, command: int, channel: int, indices: Sequence[int]

@@ -231,7 +231,7 @@ async def test_recordings_until_outside_the_window(
 async def test_recordings_timeout_bounds_each_history_query(
     station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    send = station.session._send_gcm
+    send = station.session._send_secure
     asked: list[bytes] = []
 
     def drop_history(plaintext: bytes, **kwargs: Any) -> int:
@@ -240,7 +240,7 @@ async def test_recordings_timeout_bounds_each_history_query(
         asked.append(plaintext)
         return 1
 
-    monkeypatch.setattr(station.session, "_send_gcm", drop_history)
+    monkeypatch.setattr(station.session, "_send_secure", drop_history)
     async with asyncio.timeout(3.0):  # the default would wait 15 s per query
         with pytest.raises(DeviceTimeoutError):
             await station.async_list_recordings(timeout=0.2)

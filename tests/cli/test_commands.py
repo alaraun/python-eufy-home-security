@@ -21,6 +21,7 @@ from eufy_home_security import client as client_module
 from eufy_home_security.cli import commands
 from eufy_home_security.cli.commands import Context, date_window, select_station
 from eufy_home_security.cli.config import UsageError, parse_args
+from eufy_home_security.cloud.api import CipherKeys
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.exceptions import LoginChallengeError
 from eufy_home_security.models import GuardMode
@@ -81,10 +82,10 @@ class StubCloud:
     async def async_get_station_owner_id(self, station_sn: str, *, refresh: bool = False) -> str:
         return SYNTHETIC.account_id
 
-    async def async_get_cipher_key(
+    async def async_get_cipher_keys(
         self, station_sn: str, cipher_id: int = 40, *, refresh: bool = False
-    ) -> str:
-        return CURRENT["station"].ecc_private_key_hex
+    ) -> CipherKeys:
+        return CipherKeys(CURRENT["station"].ecc_private_key_hex, None)
 
     async def async_get_thing_descriptions(
         self, product_codes: Sequence[str]
