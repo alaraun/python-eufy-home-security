@@ -10,6 +10,7 @@ under the derived shared key, exactly as the live gateway does.
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import json
 from collections.abc import Callable, Mapping
@@ -51,10 +52,19 @@ def _url(host: str, path: str) -> str:
 
 
 class FakeMega:
-    """Stateful fake of both MegaCrypto realms, driven by aioresponses callbacks."""
+    """Stateful fake of both MegaCrypto realms, driven by aioresponses callbacks.
+
+    It answers on every region's hosts with one account; ``devices`` are listed by
+    ``region``'s cluster, ``region_devices`` by the others (none when absent).
+    """
 
     def __init__(self, region: str = "eu") -> None:
         self.region = region
+        self.region_devices: dict[str, list[dict[str, Any]]] = {}
+        # Region -> the challenge code its logins answer with instead of ``login_code``.
+        self.region_login_code: dict[str, int] = {}
+        # (endpoint, region) of every request, in order.
+        self.region_calls: list[tuple[str, str]] = []
         self._server_key = ec.generate_private_key(ec.SECP256R1())
         self._shared: dict[str, str] = {}  # key_ident -> shared_key hex
         self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -98,68 +108,81 @@ class FakeMega:
 
     # ── registration on an aioresponses mock ─────────────────────────────────
 
-    def _delayed(self, endpoint: str, callback: Callable[..., CallbackResult]) -> Any:
+    def _delayed(
+        self, endpoint: str, callback: Callable[..., CallbackResult], region: str = ""
+    ) -> Any:
         async def cb(url: str, **kwargs: Any) -> CallbackResult:
+            self.region_calls.append((endpoint, region))
             if delay := self.slow.get(endpoint, self.latency):
                 await asyncio.sleep(delay)
             return callback(url, **kwargs)
 
         return cb
 
+    def logins_in(self, region: str) -> int:
+        """Login requests ``region``'s cluster received."""
+        return sum(1 for endpoint, r in self.region_calls if endpoint == "login" and r == region)
+
     def install(self, mock: Any) -> None:
-        openapi = const.cluster_host("openapi", self.region)
-        passport = const.cluster_host("passport", self.region)
-        house = const.cluster_host("house", self.region)
-        push = const.cluster_host("push", self.region)
-        sec = const.security_host(self.region)
+        for region in const.REGIONS:
+            self._install_region(mock, region)
+
+    def _install_region(self, mock: Any, region: str) -> None:
+        openapi = const.cluster_host("openapi", region)
+        passport = const.cluster_host("passport", region)
+        house = const.cluster_host("house", region)
+        push = const.cluster_host("push", region)
+        sec = const.security_host(region)
         mock.post(
             _url(openapi, const.KEY_EXCHANGE_PATH),
-            callback=self._delayed("exchange", self._exchange(const.MEGA_PRESET_KEY)),
+            callback=self._delayed("exchange", self._exchange(const.MEGA_PRESET_KEY), region),
             repeat=True,
         )
         mock.post(
             _url(sec, const.SECURITY_KEY_EXCHANGE_PATH),
-            callback=self._delayed("exchange", self._exchange(const.SECURITY_PRESET_KEY)),
+            callback=self._delayed("exchange", self._exchange(const.SECURITY_PRESET_KEY), region),
             repeat=True,
         )
         mock.post(
             _url(passport, const.LOGIN_PATH),
-            callback=self._delayed("login", self._login),
+            callback=self._delayed("login", functools.partial(self._login, region=region), region),
             repeat=True,
         )
         mock.post(
             _url(passport, const.CAPTCHA_PATH),
-            callback=self._delayed("captcha", self._captcha),
+            callback=self._delayed("captcha", self._captcha, region),
             repeat=True,
         )
         mock.post(
             _url(house, const.DEVICES_PATH),
-            callback=self._delayed("devices", self._device_list),
+            callback=self._delayed(
+                "devices", functools.partial(self._device_list, region=region), region
+            ),
             repeat=True,
         )
         mock.post(
             _url(sec, const.CIPHERS_PATH),
-            callback=self._delayed("ciphers", self._get_ciphers),
+            callback=self._delayed("ciphers", self._get_ciphers, region),
             repeat=True,
         )
         mock.post(
-            _url(const.cluster_host("devicerelation", self.region), const.DSK_KEYS_PATH),
-            callback=self._delayed("dsk", self._get_dsk),
+            _url(const.cluster_host("devicerelation", region), const.DSK_KEYS_PATH),
+            callback=self._delayed("dsk", self._get_dsk, region),
             repeat=True,
         )
         mock.post(
             _url(push, const.PUSH_TOKEN_PATH),
-            callback=self._delayed("push", self._push_token),
+            callback=self._delayed("push", self._push_token, region),
             repeat=True,
         )
         mock.post(
-            _url(const.cluster_host("ota", self.region), const.OTA_ROM_PATH),
-            callback=self._delayed("ota", self._get_rom_version),
+            _url(const.cluster_host("ota", region), const.OTA_ROM_PATH),
+            callback=self._delayed("ota", self._get_rom_version, region),
             repeat=True,
         )
         mock.post(
-            _url(const.cluster_host("things", self.region), const.THINGS_PATH),
-            callback=self._delayed("things", self._things),
+            _url(const.cluster_host("things", region), const.THINGS_PATH),
+            callback=self._delayed("things", self._things, region),
             repeat=True,
         )
 
@@ -220,27 +243,31 @@ class FakeMega:
 
         return cb
 
-    def _login(self, url: str, **kwargs: Any) -> CallbackResult:
+    def _login(self, url: str, *, region: str = "", **kwargs: Any) -> CallbackResult:
         self._login_calls += 1
         shared = self._shared_for(kwargs)
         payload = self._decrypt_body(kwargs)
         self.calls.append(("login", payload))
         if failure := self._failure_once("login", kwargs):
             return failure
-        if self.login_code:
+        if code := self.region_login_code.get(region, self.login_code):
             return CallbackResult(
                 status=200,
-                body=json.dumps({"code": self.login_code, "msg": "challenge", **self.login_extra}),
+                body=json.dumps({"code": code, "msg": "challenge", **self.login_extra}),
             )
         return self._reply(shared, 0, self.login_data)
 
     def _captcha(self, url: str, **kwargs: Any) -> CallbackResult:
         return self._reply(self._shared_for(kwargs), 0, self.captcha)
 
-    def _device_list(self, url: str, **kwargs: Any) -> CallbackResult:
+    def _device_list(self, url: str, *, region: str = "", **kwargs: Any) -> CallbackResult:
         self.calls.append(("devices", self._decrypt_body(kwargs)))
         if failure := self._failure_once("devices", kwargs):
             return failure
+        if region and region != self.region:
+            return self._reply(
+                self._shared_for(kwargs), 0, {"devices": self.region_devices.get(region)}
+            )
         data = self.data_override.get("devices", {"devices": self.devices})
         return self._reply(self._shared_for(kwargs), 0, data)
 

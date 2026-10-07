@@ -14,19 +14,26 @@ Code: `src/eufy_home_security/cloud/crypto.py` (pure primitives),
 | realm | host | used for |
 |---|---|---|
 | eufy.com ("basic") | `app-{service}-{region}-pr.eufy.com` | key exchange (`openapi`), login (`passport`), devices (`house`), push token (`push`), also `devicerelation`, `event`, `things` |
-| eufy_security | `security-app-{region}.eufylife.com` | `/v3/...`, and in particular `/v3/app/cipher/get_ciphers` |
+| eufy_security | `security-app-eu.eufylife.com` (`eu`), `security-app.eufylife.com` (`us`) | `/v3/...`, and in particular `/v3/app/cipher/get_ciphers` |
 
-- `region` is `eu` or `us`. Only `eu` is **[verified]**; `us` follows the same pattern **[app]**.
-- The login response carries the account's `mega_domain` (`mega-{region}-pr.eufy.com`),
-  and it is authoritative for the region. Every service host is that domain with
-  `mega-` replaced by `app-{service}-`. The app builds its hosts this way rather than
-  from a host table **[verified]**.
-- The library's `region` argument, when given, **overrides** everything: every host
-  (cluster and security realm) is built for it, and a cached `mega_domain` naming
-  another region is ignored. Without it the region comes from the cached
-  `mega_domain`, then the cached region, then `eu`.
-- If the region is unknown before login, `POST /passport/estimate_domain` with a
-  **plaintext** body `{"ab": "<country>", "mode": 1}` returns the product-domain map **[verified]**.
+- `region` is `eu` or `us`: the app's two production environments (`MegaEnvironment`
+  `EU_PR`, `US_PR`; the rest are QA) **[app]**. The US security-realm host carries no
+  region (`DEFAULT_SECURITY_CONFIG_DOMAIN`); `security-app-us.eufylife.com` does not
+  resolve.
+- Each region is its own cluster. A login on either succeeds for any account (code 0,
+  the same user id, `ab_code` = the `ab` sent, `country_code` and an empty `domain`
+  alike on both), but `get_devs_list` lists only the devices homed on that cluster; the
+  other answers `{"devices": null}` **[verified]**. A session on one cluster does not end
+  the other's **[verified]**. The library keeps a session per region and asks each
+  region for its devices (see [the guide](../how-to/home-assistant.md#cloud-regions)).
+- A login answer's `mega_domain` (`mega-{region}-pr.eufy.com`), when present, gives the
+  region's hosts: the domain with `mega-` replaced by `app-{service}-`, as the app builds
+  them **[app]**. The library uses it only for the region it names; the answers seen so far
+  carried none (`domain ""`).
+- The library's `region` argument pins every call to one region.
+- `POST /passport/estimate_domain` with a **plaintext** body `{"ab": "<country>", "mode":
+  1}` returns the product-domain map for a country **[verified]**. The library does not
+  use it: the account's country is not known to it.
 
 ## Request envelope (MegaCrypto)
 
@@ -102,7 +109,8 @@ repeatedly **[verified]**. Change it only against a capture of the app's own log
 |---|---|
 | `auth_token` | session token, valid for weeks (`token_expires_at` when present) |
 | `ap_cloud_user_id` | the **logged-in** user's id. It feeds `gtoken`. It is **not** the P2P `account_id` for a shared member (see below). |
-| `mega_domain` | authoritative region and host base |
+| `mega_domain` / `domain` | the cluster's host base when present; empty on the answers seen |
+| `country_code` | echoes the request's `country` header (`US` on an EU-homed account); not the account's home |
 
 ## Login challenges
 

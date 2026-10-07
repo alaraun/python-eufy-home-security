@@ -126,9 +126,12 @@ def render_devices(devices: Sequence[CloudDevice], *, show_serials: bool) -> str
             model.name if model else f"{device.device_sn[:5]} (not in catalog)",
             str(model.kind) if model else "",
             str(model.evidence.support) if model else "unknown",
+            device.region or "",
         )
 
-    rows: list[tuple[str, ...]] = [("NAME", "CHANNEL", "SERIAL", "MODEL", "KIND", "SUPPORT")]
+    rows: list[tuple[str, ...]] = [
+        ("NAME", "CHANNEL", "SERIAL", "MODEL", "KIND", "SUPPORT", "REGION")
+    ]
     for station in stations:
         rows.append(row(station, ""))
         rows.extend(row(child, "└ ") for child in children.get(station.device_sn, []))

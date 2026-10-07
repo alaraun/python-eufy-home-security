@@ -11,6 +11,11 @@ A throttling answer starts a persisted hold-off; until it ends every call (or, f
 login throttle, every login) is refused locally, and logins are capped per window.
 Concurrent callers share one login (a lock with a re-check inside it), and every
 change to the session is saved to the store at once.
+
+The cloud runs one cluster per region (``eu``, ``us``). A login on either succeeds
+for every account, but a cluster lists only the devices homed on it, so each region
+holds its own session, every device remembers the region that listed it, and every
+call about a device goes to that region.
 """
 
 from __future__ import annotations
@@ -52,8 +57,8 @@ from ..exceptions import (
 from ..storage import SessionCache
 from . import const, crypto
 from .const import DSK_REFRESH_MARGIN
-from .models import CloudDevice, FirmwareUpdate
-from .status import CloudStatus, LoginNeed, StationRefreshStatus
+from .models import REGION_KEY, CloudDevice, FirmwareUpdate
+from .status import CloudStatus, LoginNeed, RegionStatus, StationRefreshStatus
 
 if TYPE_CHECKING:
     import aiohttp
@@ -88,11 +93,14 @@ class _Identity:
     shared_key: str = field(repr=False)
     auth_token: str | None = field(default=None, repr=False)
     user_id: str | None = None
+    region: str = const.DEFAULT_REGION
+    """The region whose cluster minted this identity and accepts it."""
 
     def same_session(self, other: _Identity | None) -> bool:
         """Whether ``other`` is this login (a reload from the cache counts as the same)."""
         return (
             other is not None
+            and other.region == self.region
             and other.key_ident == self.key_ident
             and other.auth_token == self.auth_token
         )
@@ -125,7 +133,14 @@ class EufyCloudApi:
     """Async client for the eufy_mega ("eufy_security") cloud.
 
     The injected ``session`` and ``cache`` are never created here. Call
-    :meth:`async_login` before anything else (it reuses a cached session).
+    :meth:`async_login` before anything else (it reuses cached sessions).
+
+    ``region`` pins every call to that region's cluster. Without it, the first
+    device-list fetch asks every region; a region that lists no devices is then
+    *suspended*: no later fetch or login asks it again until a rescan
+    (``rescan_regions=True``) or, with ``scan_regions``, every fetch asks every region
+    (a device added on another region's cluster then appears; a region without a
+    usable session costs a login).
     """
 
     def __init__(
@@ -137,17 +152,25 @@ class EufyCloudApi:
         *,
         country: str = "",
         region: str | None = None,
+        scan_regions: bool = False,
         install: InstallState | None = None,
     ) -> None:
-        """``install`` shares a request hold-off with the other accounts of the process."""
+        """``install`` shares a request hold-off with the other accounts of the process.
+
+        ``region`` not in :data:`~.const.REGIONS`: ``ValueError``.
+        """
         self._session = session
         self._cache = cache
         self._install = install
         self._email = email.strip()
         self._password = password
         self._country = country or const.DEFAULT_COUNTRY
-        self._region_override = region
-        self._identity: _Identity | None = None
+        self._region_override = None if region is None else const.check_region(region)
+        self._scan_regions = scan_regions
+        self._identities: dict[str, _Identity] = {}
+        """The live session identity per region."""
+        self._challenge_region: str | None = None
+        """The region whose login raised the last unanswered challenge."""
         self._login_lock = asyncio.Lock()
         self._cipher_unavailable: dict[tuple[str, int], tuple[float, str]] = {}
         """(monotonic time, owner id source) of the last empty ``get_ciphers`` answer per
@@ -158,7 +181,7 @@ class EufyCloudApi:
     @property
     def user_id(self) -> str | None:
         """This account's own cloud user id, once logged in."""
-        return self._identity.user_id if self._identity else None
+        return next((i.user_id for i in self._identities.values() if i.user_id), None)
 
     @property
     def user_name(self) -> str:
@@ -172,38 +195,73 @@ class EufyCloudApi:
             session = self._session = session()
         return session
 
-    @property
-    def _region(self) -> str:
-        """The region every host is built for: an explicit override wins everywhere."""
-        cloud = self._cache.section("cloud")
-        cached = cloud.get("region")
-        return (
-            self._region_override
-            or const.region_from_mega_domain(self._cached_mega_domain)
-            or (cached if isinstance(cached, str) and cached else None)
-            or const.DEFAULT_REGION
-        )
+    # ── regions ──────────────────────────────────────────────────────────────
 
     @property
-    def _cached_mega_domain(self) -> str | None:
-        value = self._cache.section("cloud").get("mega_domain")
-        return value if isinstance(value, str) and value else None
+    def region(self) -> str:
+        """The account's first region: the override, else the first region holding
+        cached devices, else :data:`~.const.DEFAULT_REGION`. A forced login and a
+        reauthentication go there."""
+        if self._region_override:
+            return self._region_override
+        held = self.regions_with_devices()
+        return held[0] if held else const.DEFAULT_REGION
 
-    @property
-    def _mega_domain(self) -> str | None:
-        """The account's ``mega_domain`` for host building, unless an override contradicts it.
+    def _listings(self) -> dict[str, dict[str, Any]]:
+        """Each listed region's last device-list record (``devices``, ``at``)."""
+        listed = self._cache.section("cloud").get("listed")
+        if not isinstance(listed, dict):
+            return {}
+        return {r: v for r, v in listed.items() if r in const.REGIONS and isinstance(v, dict)}
 
-        With a region override, a cached domain naming another region (or none) is
-        ignored, so the cluster hosts and the security host always agree.
-        """
-        domain = self._cached_mega_domain
-        if (
-            domain
-            and self._region_override
-            and const.region_from_mega_domain(domain) != self._region_override
-        ):
-            return None
-        return domain
+    def regions_with_devices(self) -> list[str]:
+        """The regions whose last device list held devices, in :data:`~.const.REGIONS` order."""
+        listings = self._listings()
+        return [r for r in const.REGIONS if _count(listings.get(r, {}).get("devices"))]
+
+    def suspended_regions(self) -> list[str]:
+        """The regions whose last device list was empty: asked again only on a rescan."""
+        listings = self._listings()
+        return [
+            r for r in const.REGIONS if r in listings and not _count(listings[r].get("devices"))
+        ]
+
+    def regions_to_list(self, *, rescan: bool = False) -> list[str]:
+        """The regions the next device-list fetch asks: the override alone; every region
+        on a ``rescan`` or with ``scan_regions``; else every region not suspended."""
+        if self._region_override:
+            return [self._region_override]
+        if rescan or self._scan_regions:
+            return list(const.REGIONS)
+        suspended = self.suspended_regions()
+        return [r for r in const.REGIONS if r not in suspended]
+
+    def device_region(self, device_sn: str) -> str:
+        """The region serving ``device_sn``: the override, else the region that listed it,
+        else :attr:`region`."""
+        if self._region_override:
+            return self._region_override
+        for entry in self._cache.cached_devices() or ():
+            if entry.get("device_sn") == device_sn and entry.get(REGION_KEY) in const.REGIONS:
+                return str(entry[REGION_KEY])
+        return self.region
+
+    def _regions_in_service(self) -> list[str]:
+        """The regions whose devices this account serves: :attr:`region` before any
+        listing, none once every region is suspended."""
+        if self._region_override:
+            return [self._region_override]
+        if not self._listings():
+            return [self.region]
+        return self.regions_with_devices()
+
+    def _host(self, service: str, region: str) -> str:
+        """``service``'s host on ``region``'s cluster, from the session's ``mega_domain``
+        when that names the same region."""
+        domain = self._cache.cloud_sessions().get(region, {}).get("mega_domain")
+        if not (isinstance(domain, str) and const.region_from_mega_domain(domain) == region):
+            domain = None
+        return const.cluster_host(service, region, domain)
 
     # ── login ──────────────────────────────────────────────────────────────
 
@@ -216,10 +274,15 @@ class EufyCloudApi:
         login_id: str | None = None,
         force: bool = False,
     ) -> None:
-        """Establish a session, reusing the cached one unless expired or ``force``.
+        """Establish a session in every region the next device list asks, reusing cached ones.
+
+        ``force`` logs in to :attr:`region` even with a cached session; the other
+        regions log in only without a usable cached session.
 
         Raises :class:`LoginChallengeError` when the account needs an e-mailed code
-        or a captcha — re-call with the answer and the challenge's ``login_id`` —
+        or a captcha — re-call with the answer and the challenge's ``login_id``; the
+        answer goes to the region that asked (the challenge's ``region``) and the
+        other regions follow —
         :class:`AuthenticationError` on bad credentials,
         :class:`RateLimitedError` when throttled or locked, and
         :class:`SessionReplacedError` after another client took the session over
@@ -229,23 +292,31 @@ class EufyCloudApi:
         answering = bool(verify_code or (captcha_id and captcha_answer))
         async with self._login_lock:
             self._take_over_or_raise_if_replaced(force)
-            if not force and not answering and self._load_cached_session():
-                return
-            if answering:
-                _LOGGER.debug(
-                    "answering the login challenge (login_id %s, verify_code %s, captcha %s=%s)",
-                    login_id,
-                    Credential(verify_code),
-                    captcha_id,
-                    Credential(captcha_answer),
+            first: str | None = None
+            if answering or force:
+                first = (self._challenge_region if answering else None) or self.region
+                if answering:
+                    _LOGGER.debug(
+                        "answering the %s login challenge (login_id %s, verify_code %s, "
+                        "captcha %s=%s)",
+                        first,
+                        login_id,
+                        Credential(verify_code),
+                        captcha_id,
+                        Credential(captcha_answer),
+                    )
+                await self._do_login(
+                    first,
+                    verify_code=verify_code,
+                    captcha_id=captcha_id,
+                    captcha_answer=captcha_answer,
+                    login_id=login_id,
                 )
-            await self._do_login(
-                verify_code=verify_code,
-                captcha_id=captcha_id,
-                captcha_answer=captcha_answer,
-                login_id=login_id,
-            )
-            await self._release_after_take_over(force)
+                await self._release_after_take_over(force)
+            for region in self.regions_to_list():
+                if region == first or self._load_cached_session(region):
+                    continue
+                await self._do_login(region, verify_code=None, captcha_id=None, captcha_answer=None)
 
     async def async_reauthenticate(
         self,
@@ -257,9 +328,10 @@ class EufyCloudApi:
         login_id: str | None = None,
         take_over: bool = False,
     ) -> None:
-        """One real login with ``password``, whatever the cache holds.
+        """One real login to :attr:`region` with ``password``, whatever the cache holds.
 
-        Success replaces the session and the cached password, and releases every
+        A challenge answer goes to the region that asked. Success replaces that
+        region's session and the cached password, and releases every
         station's key-refresh latch. A rejection raises :class:`AuthenticationError`:
         the new password is not cached and the cached one is left as it was. Hold-offs
         and the login budget apply as in :meth:`async_login`, and so do login
@@ -270,9 +342,11 @@ class EufyCloudApi:
         """
         if not password:
             raise AuthenticationError("no password given to reauthenticate with")
+        answering = bool(verify_code or (captcha_id and captcha_answer))
         async with self._login_lock:
             self._take_over_or_raise_if_replaced(take_over)
             await self._do_login(
+                (self._challenge_region if answering else None) or self.region,
                 verify_code=verify_code,
                 captcha_id=captcha_id,
                 captcha_answer=captcha_answer,
@@ -315,9 +389,9 @@ class EufyCloudApi:
             if self._cache.clear_key_refresh(sn):
                 _LOGGER.debug("key-refresh latch released for %s", redact_serial(sn))
 
-    def _cached_session(self) -> tuple[str, str, str, float | None] | None:
-        """The cached ``(auth_token, key_ident, shared_key, expires_at)``, if complete."""
-        cloud = self._cache.section("cloud")
+    def _cached_session(self, region: str) -> tuple[str, str, str, float | None] | None:
+        """``region``'s cached ``(auth_token, key_ident, shared_key, expires_at)``, if complete."""
+        cloud = self._cache.cloud_sessions().get(region, {})
         token, key_ident, shared_key = (
             cloud.get("auth_token"),
             cloud.get("key_ident"),
@@ -340,39 +414,44 @@ class EufyCloudApi:
         """Whether a cached session is still used (not expired, or expiring within the margin)."""
         return expires is None or time.time() < expires - const.SESSION_EXPIRY_MARGIN
 
-    def _load_cached_session(self) -> bool:
-        cached = self._cached_session()
+    def _load_cached_session(self, region: str) -> bool:
+        """Make ``region``'s cached session live; whether it had a usable one."""
+        cached = self._cached_session(region)
         if cached is None:
-            _LOGGER.debug("no cloud session cached")
+            _LOGGER.debug("no %s cloud session cached", region)
             return False
         token, key_ident, shared_key, expires = cached
         if not self._session_usable(expires):
-            _LOGGER.debug("cached cloud session expired (or expires within the margin)")
+            _LOGGER.debug("cached %s cloud session expired (or expires within the margin)", region)
             return False
-        cloud = self._cache.section("cloud")
-        self._identity = _Identity(
+        cloud = self._cache.cloud_session(region)
+        user_id = cloud.get("user_id")
+        identity = self._identities[region] = _Identity(
             key_ident=key_ident,
             shared_key=shared_key,
             auth_token=token,
-            user_id=cloud.get("user_id") if isinstance(cloud.get("user_id"), str) else None,
+            user_id=user_id if isinstance(user_id, str) else None,
+            region=region,
         )
         _LOGGER.info(
-            "cloud session restored from the cache (user %s, token expires %s)",
-            redact(self._identity.user_id),
+            "%s cloud session restored from the cache (user %s, token expires %s)",
+            region,
+            redact(identity.user_id),
             _epoch(expires),
         )
         _LOGGER.debug(
-            "cached identity: key_ident %s, shared_key %s, auth_token %s, region %s, mega_domain %s",
+            "cached %s identity: key_ident %s, shared_key %s, auth_token %s, mega_domain %s",
+            region,
             Identifier(key_ident),
             Secret(shared_key),
             Secret(token),
-            self._region,
-            self._cached_mega_domain,
+            cloud.get("mega_domain"),
         )
         return True
 
     async def _do_login(
         self,
+        region: str,
         *,
         verify_code: str | None,
         captcha_id: str | None,
@@ -380,8 +459,11 @@ class EufyCloudApi:
         login_id: str | None = None,
         password: str | None = None,
     ) -> None:
-        """One password login (``password`` overrides every source). Callers hold ``_login_lock``."""
-        self._raise_if_held_off(login=True)
+        """One password login to ``region`` (``password`` overrides every source).
+
+        Callers hold ``_login_lock``.
+        """
+        self._raise_if_held_off(login=True, region=region)
         password, source = (
             (password, "reauthenticating") if password else await self._login_password()
         )
@@ -389,19 +471,18 @@ class EufyCloudApi:
             "logging in to the eufy cloud as %s (password %s, region %s)",
             Secret(self._email),
             source,
-            self._region,
+            region,
         )
         _LOGGER.debug(
             "login: password %s, openudid %s, %d login(s) in the budget window",
             Credential(password),
             Identifier(self._cache.openudid),
-            len(self._cache.recent_logins(const.LOGIN_BUDGET_WINDOW_SECONDS)),
+            len(self._cache.recent_logins(const.LOGIN_BUDGET_WINDOW_SECONDS, region)),
         )
         identity = await self._key_exchange(
-            const.cluster_host("openapi", self._region, self._mega_domain),
-            const.KEY_EXCHANGE_PATH,
-            const.MEGA_PRESET_KEY,
+            self._host("openapi", region), const.KEY_EXCHANGE_PATH, const.MEGA_PRESET_KEY
         )
+        identity.region = region
         wrapped = crypto.encrypt_login_password(password)
         _LOGGER.debug(
             "login: password wrapped under an ephemeral ECDH key (client public key %s, "
@@ -413,7 +494,7 @@ class EufyCloudApi:
         payload = {
             "email": self._email,
             "password": wrapped.encrypted,
-            "ab": self._region,
+            "ab": region,
             "client_secret_info": {"public_key": wrapped.client_public_key},
             "answer": captcha_answer or "",
             "captcha_id": captcha_id or "",
@@ -421,11 +502,11 @@ class EufyCloudApi:
             "login_id": login_id or "",
         }
         # Counted before it is sent: a login that times out may still have landed.
-        self._cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS)
+        self._cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, region)
         await self._cache.async_save()
         try:
             code, resp, data = await self._call(
-                const.cluster_host("passport", self._region, self._mega_domain),
+                self._host("passport", region),
                 const.LOGIN_PATH,
                 payload,
                 identity,
@@ -439,18 +520,23 @@ class EufyCloudApi:
                 self._cache.drop_password()
                 await self._cache.async_save()
             raise
+        if code in const.CAPTCHA_CODES or code in const.VERIFY_CODE_CODES:
+            self._challenge_region = region
         if code in const.CAPTCHA_CODES:
-            _LOGGER.info("login needs a captcha (code %s)", code)
+            _LOGGER.info("%s login needs a captcha (code %s)", region, code)
             await self._raise_captcha_challenge(identity, code, self._extract_login_id(resp, data))
         if code in const.VERIFY_CODE_CODES:
-            _LOGGER.info("login needs an e-mailed verification code (code %s)", code)
+            _LOGGER.info("%s login needs an e-mailed verification code (code %s)", region, code)
             raise LoginChallengeError(
                 "verify_code",
                 login_id=self._extract_login_id(resp, data),
                 code=code,
+                region=region,
             )
         if not data:
             raise EmptyResponseError(code, "login returned no data", endpoint=const.LOGIN_PATH)
+        if self._challenge_region == region:
+            self._challenge_region = None
         self._store_session(identity, _mapping(data, const.LOGIN_PATH))
         self._cache.set_password(password)
         await self._cache.async_save()
@@ -474,13 +560,18 @@ class EufyCloudApi:
     async def _raise_captcha_challenge(self, identity: _Identity, code: int, login_id: str) -> None:
         cid, image = await self._fetch_captcha(identity)
         raise LoginChallengeError(
-            "captcha", login_id=login_id, captcha_id=cid, captcha_image=image, code=code
+            "captcha",
+            login_id=login_id,
+            captcha_id=cid,
+            captcha_image=image,
+            code=code,
+            region=identity.region,
         )
 
     async def _fetch_captcha(self, identity: _Identity) -> tuple[str, str]:
         """Fetch a fresh captcha; returns ``(captcha_id, data-URI image)``."""
         _code, _resp, data = await self._call(
-            const.cluster_host("passport", self._region, self._mega_domain),
+            self._host("passport", identity.region),
             const.CAPTCHA_PATH,
             None,
             identity,
@@ -507,7 +598,8 @@ class EufyCloudApi:
         user_id = data.get("ap_cloud_user_id") or data.get("user_id")
         identity.auth_token = token
         identity.user_id = str(user_id) if user_id else None
-        self._identity = identity
+        region = identity.region
+        self._identities[region] = identity
 
         expires_at = data.get("token_expires_at")
         ttl = time.time() + const.DEFAULT_SESSION_TTL
@@ -518,8 +610,10 @@ class EufyCloudApi:
         ):
             ttl = float(expires_at)
         mega_domain = data.get("mega_domain") or data.get("domain")
+        country_code = data.get("country_code")
 
-        cloud = self._cache.section("cloud")
+        cloud = self._cache.cloud_session(region)
+        cloud.clear()
         cloud.update(
             {
                 "key_ident": identity.key_ident,
@@ -527,17 +621,19 @@ class EufyCloudApi:
                 "auth_token": token,
                 "user_id": identity.user_id,
                 "expires_at": ttl,
-                "region": self._region,
             }
         )
         if isinstance(mega_domain, str) and mega_domain:
             cloud["mega_domain"] = mega_domain
+        if isinstance(country_code, str) and country_code:
+            cloud["country_code"] = country_code
         _LOGGER.info(
-            "cloud login ok (user %s, token expires %s, mega_domain %s → region %s)",
+            "%s cloud login ok (user %s, token expires %s, mega_domain %r, country_code %r)",
+            region,
             redact(identity.user_id),
             _epoch(ttl),
             mega_domain,
-            self._region,
+            country_code,
         )
         _LOGGER.debug(
             "new session: key_ident %s, shared_key %s, auth_token %s",
@@ -552,11 +648,14 @@ class EufyCloudApi:
         Concurrent calls can all fail on the same expired token; only the first may
         drop it, or a later one would wipe the session the first just logged in.
         """
-        if not failed.same_session(self._identity):
+        region = failed.region
+        if not failed.same_session(self._identities.get(region)):
             return  # already dropped, or replaced by a newer login
-        _LOGGER.debug("dropping the cloud session (key_ident %s)", Identifier(failed.key_ident))
-        cloud = self._cache.section("cloud")
-        self._identity = None
+        _LOGGER.debug(
+            "dropping the %s cloud session (key_ident %s)", region, Identifier(failed.key_ident)
+        )
+        cloud = self._cache.cloud_session(region)
+        del self._identities[region]
         for key in ("auth_token", "key_ident", "shared_key", "expires_at"):
             cloud.pop(key, None)
         await self._cache.async_save()
@@ -575,7 +674,7 @@ class EufyCloudApi:
 
     async def _mark_replaced(self, failed: _Identity) -> None:
         """Latch the kick-out (persisted) and forget ``failed``, unless a newer login replaced it."""
-        if not failed.same_session(self._identity):
+        if not failed.same_session(self._identities.get(failed.region)):
             return
         self._cache.set_replaced()
         _LOGGER.warning(
@@ -584,25 +683,27 @@ class EufyCloudApi:
         )
         await self._drop_session_if_current(failed)
 
-    async def _ensure_session(self) -> _Identity:
+    async def _ensure_session(self, region: str) -> _Identity:
+        """``region``'s live session: the one held, the cached one, or a new login."""
         self._raise_if_replaced()
-        identity = self._identity
+        identity = self._identities.get(region)
         if identity is not None and identity.auth_token:
             return identity
         async with self._login_lock:
             self._raise_if_replaced()
             # Re-check: another task may have logged in while this one waited.
-            if not (self._identity and self._identity.auth_token) and not (
-                self._load_cached_session()
-            ):
-                await self._do_login(verify_code=None, captcha_id=None, captcha_answer=None)
-            identity = self._identity
+            identity = self._identities.get(region)
+            if not (identity and identity.auth_token) and not self._load_cached_session(region):
+                await self._do_login(region, verify_code=None, captcha_id=None, captcha_answer=None)
+            identity = self._identities.get(region)
         if identity is None:  # pragma: no cover — login raises rather than return
             raise AuthenticationError("no cloud session after login")
         return identity
 
-    async def _with_session[T](self, operation: Callable[[_Identity], Awaitable[T]]) -> T:
-        """Run ``operation`` on the session, retrying once for each recoverable refusal.
+    async def _with_session[T](
+        self, operation: Callable[[_Identity], Awaitable[T]], region: str
+    ) -> T:
+        """Run ``operation`` on ``region``'s session, retrying once for each recoverable refusal.
 
         A session-expired code costs one re-login. A re-key answer (HTTP 463, body 463 /
         4404: the gateway forgot the key identity) costs one new key exchange on the
@@ -610,7 +711,7 @@ class EufyCloudApi:
         :class:`KeyExchangeRefusedError`. A credential rejection, a throttle, a session
         another client took over, or any other failure propagates at once.
         """
-        identity = await self._ensure_session()
+        identity = await self._ensure_session(region)
         rekeyed = relogged = False
         while True:
             try:
@@ -631,7 +732,7 @@ class EufyCloudApi:
                 relogged = True
                 _LOGGER.info("cloud session no longer accepted (%s); logging in once more", err)
                 await self._drop_session_if_current(identity)
-                identity = await self._ensure_session()
+                identity = await self._ensure_session(region)
 
     async def _rekey(self, failed: _Identity, err: _RekeyRequiredError) -> _Identity:
         """A new key identity for the session of ``failed``, keeping its auth token.
@@ -640,8 +741,9 @@ class EufyCloudApi:
         same request again. Concurrent callers share one exchange; one that finds the
         session already replaced (re-keyed or logged in by another task) uses that.
         """
+        region = failed.region
         async with self._login_lock:
-            current = self._identity
+            current = self._identities.get(region)
             if current is not None and current.auth_token and not failed.same_session(current):
                 return current
             _LOGGER.info(
@@ -651,9 +753,7 @@ class EufyCloudApi:
             )
             try:
                 fresh = await self._key_exchange(
-                    const.cluster_host("openapi", self._region, self._mega_domain),
-                    const.KEY_EXCHANGE_PATH,
-                    const.MEGA_PRESET_KEY,
+                    self._host("openapi", region), const.KEY_EXCHANGE_PATH, const.MEGA_PRESET_KEY
                 )
             except _RekeyRequiredError as refused:
                 raise KeyExchangeRefusedError(
@@ -661,8 +761,9 @@ class EufyCloudApi:
                 ) from refused
             fresh.auth_token = failed.auth_token
             fresh.user_id = failed.user_id
-            self._identity = fresh
-            self._cache.section("cloud").update(
+            fresh.region = region
+            self._identities[region] = fresh
+            self._cache.cloud_session(region).update(
                 {"key_ident": fresh.key_ident, "shared_key": fresh.shared_key}
             )
             await self._cache.async_save()
@@ -670,23 +771,26 @@ class EufyCloudApi:
 
     # ── devices, owner id ────────────────────────────────────────────────────
 
-    async def async_get_devices(self, *, refresh: bool = False) -> list[CloudDevice]:
+    async def async_get_devices(
+        self, *, refresh: bool = False, rescan_regions: bool = False
+    ) -> list[CloudDevice]:
         """Every device on the account (``app/house/get_devs_list``), cached.
 
-        Returns the cached list unless ``refresh`` is set or nothing is cached. A
+        Returns the cached list unless ``refresh`` or ``rescan_regions`` is set or
+        nothing is cached (``rescan_regions``: see :meth:`async_fetch_devices`). A
         refresh that cannot reach the cloud (a network error or a throttle) falls back
         to the cache when there is one, so a Home Assistant restart during a cloud
         outage still comes up. A refusal from the cloud itself (a kick-out, a key
         identity a new key exchange did not restore, a credential or body-code error)
         always raises. :meth:`async_fetch_devices` never falls back.
         """
-        if not refresh:
+        if not (refresh or rescan_regions):
             cached = self._cache.cached_devices()
             if cached is not None:
                 _LOGGER.debug("device list from the cache (%d devices)", len(cached))
                 return [CloudDevice.from_api(d) for d in cached]
         try:
-            return await self.async_fetch_devices()
+            return await self.async_fetch_devices(rescan_regions=rescan_regions)
         except (CommunicationError, RateLimitedError) as err:
             cached = self._cache.cached_devices()
             if cached is None:
@@ -694,29 +798,64 @@ class EufyCloudApi:
             _LOGGER.warning("device list refresh failed (%s); using the cached list", err)
             return [CloudDevice.from_api(d) for d in cached]
 
-    async def async_fetch_devices(self) -> list[CloudDevice]:
-        """The device list fetched from the cloud now, cached; every failure raises."""
-        data = await self._authenticated_call(
-            const.cluster_host("house", self._region, self._mega_domain),
-            const.DEVICES_PATH,
-            {"device_sn": ""},
-        )
-        if isinstance(data, Mapping):
-            if "devices" not in data:
-                # Never let a malformed success overwrite a good cached list.
-                raise ProtocolError(f"cloud response to {const.DEVICES_PATH} has no devices")
-            raw = data["devices"]
-        else:
-            raw = data
-        if raw is None:
-            raw = []
-        if not isinstance(raw, list):
-            raise ProtocolError(f"cloud response to {const.DEVICES_PATH} has no device list")
-        entries = [d for d in raw if isinstance(d, Mapping)]
-        self._cache.set_devices([dict(d) for d in entries])
+    async def async_fetch_devices(self, *, rescan_regions: bool = False) -> list[CloudDevice]:
+        """The device list fetched from the cloud now, cached; every failure raises.
+
+        Asks each region of :meth:`regions_to_list` (``rescan_regions``: every region)
+        and tags each device with the region that listed it (:attr:`CloudDevice.region`;
+        a serial two regions list keeps the first region's entry). A region that lists
+        no devices is suspended. With every region suspended nothing is sent and the
+        cached (empty) list is returned. Nothing is cached unless every region asked
+        answered.
+        """
+        regions = self.regions_to_list(rescan=rescan_regions)
+        if not regions:
+            _LOGGER.info(
+                "device list not fetched: every region (%s) listed no devices last time; "
+                "a rescan asks them again",
+                ", ".join(const.REGIONS),
+            )
+            return [CloudDevice.from_api(d) for d in self._cache.cached_devices() or ()]
+        entries: list[dict[str, Any]] = []
+        counts: dict[str, int] = {}
+        listed_by: dict[str, str] = {}
+        for region in regions:
+            data = await self._authenticated_call(
+                self._host("house", region), const.DEVICES_PATH, {"device_sn": ""}, region=region
+            )
+            raw = _device_list(data)
+            counts[region] = len(raw)
+            _LOGGER.info("the %s region lists %d device(s)", region, len(raw))
+            for entry in raw:
+                serial = str(entry.get("device_sn") or "")
+                if serial and serial in listed_by:
+                    _LOGGER.warning(
+                        "%s is listed by the %s and the %s region; using the %s entry",
+                        redact_serial(serial),
+                        listed_by[serial],
+                        region,
+                        listed_by[serial],
+                    )
+                    continue
+                listed_by[serial] = region
+                entries.append({**entry, REGION_KEY: region})
+        self._cache.set_devices(entries)
+        listed = self._cache.section("cloud").setdefault("listed", {})
+        now = time.time()
+        for region, count in counts.items():
+            listed[region] = {"devices": count, "at": now}
         await self._cache.async_save()
+        empty = [region for region, count in counts.items() if not count]
+        if not entries:
+            _LOGGER.warning(
+                "the account lists no devices in the %s region(s); not asked again until a rescan",
+                ", ".join(regions),
+            )
+        elif empty:
+            _LOGGER.info(
+                "no devices in the %s region(s); not asked again until a rescan", ", ".join(empty)
+            )
         devices = [CloudDevice.from_api(d) for d in entries]
-        _LOGGER.debug("device list from the cloud: %d devices", len(devices))
         for device in devices:
             _LOGGER.debug("  %r", device)
         return devices
@@ -815,7 +954,8 @@ class EufyCloudApi:
             "invalid_dsks": {},
             "station_sns": [station_sn],
         }
-        host = const.cluster_host("devicerelation", self._region, self._mega_domain)
+        region = self.device_region(station_sn)
+        host = self._host("devicerelation", region)
 
         async def fetch(identity: _Identity) -> Any:
             _code, _resp, data = await self._call(
@@ -823,7 +963,7 @@ class EufyCloudApi:
             )
             return data
 
-        data = await self._with_session(fetch)
+        data = await self._with_session(fetch, region)
         items = _mapping(data, const.DSK_KEYS_PATH).get("device_dsks")
         if not isinstance(items, list):
             raise ProtocolError(f"cloud response to {const.DSK_KEYS_PATH} has no device_dsks list")
@@ -858,7 +998,8 @@ class EufyCloudApi:
         shares the account's throttle and one-re-login retry like every other; make it on
         a timer of the consumer's own choosing, never per start.
         """
-        host = const.cluster_host("ota", self._region, self._mega_domain)
+        region = self.device_region(device_sn)
+        host = self._host("ota", region)
         body = {
             "transaction": crypto.new_key_ident(),
             "current_version_name": current_version_name,
@@ -867,7 +1008,9 @@ class EufyCloudApi:
             "rom_version": rom_version,
             "sn": device_sn,
         }
-        data = await self._authenticated_call(host, const.OTA_ROM_PATH, body, expect_data=False)
+        data = await self._authenticated_call(
+            host, const.OTA_ROM_PATH, body, region=region, expect_data=False
+        )
         update = FirmwareUpdate.from_api(device_sn, data)
         _LOGGER.debug(
             "firmware for %s (%s at %s): %s",
@@ -943,10 +1086,12 @@ class EufyCloudApi:
             "station_sn": station_sn,
         }
 
+        region = self.device_region(station_sn)
+
         async def fetch(base: _Identity) -> Any:
             sec = await self._security_identity(base)
             _code, _resp, data = await self._call(
-                const.security_host(self._region),
+                const.security_host(region),
                 const.CIPHERS_PATH,
                 payload,
                 sec,
@@ -954,7 +1099,7 @@ class EufyCloudApi:
             )
             return data
 
-        data = await self._with_session(fetch)
+        data = await self._with_session(fetch, region)
         if not data:
             # code 0 with no data: no key for this cipher id under this user id (a
             # member's own id instead of the owner's, or an id the owner lacks).
@@ -993,13 +1138,14 @@ class EufyCloudApi:
             "security realm: key exchange on session key_ident %s", Identifier(base.key_ident)
         )
         sec = await self._key_exchange(
-            const.security_host(self._region),
+            const.security_host(base.region),
             const.SECURITY_KEY_EXCHANGE_PATH,
             const.SECURITY_PRESET_KEY,
             auth=base,
         )
         sec.auth_token = base.auth_token
         sec.user_id = base.user_id
+        sec.region = base.region
         return sec
 
     # ── push token ─────────────────────────────────────────────────────────
@@ -1007,17 +1153,21 @@ class EufyCloudApi:
     async def async_register_push_token(self, token: str) -> None:
         """Register an FCM token so the cloud pushes events to this install.
 
-        No platform field: FCM-vs-APNs is decided by the ``os-type: android`` header
+        Registered in every region whose device list holds devices (:attr:`region`
+        before any listing; nowhere once every region is suspended), in order; the first
+        failure raises. No platform field: FCM-vs-APNs is decided by the ``os-type: android`` header
         and the ordinary (openapi) identity this is signed under — never a
         security-realm one. There is no unregister endpoint; re-register on start.
         """
-        await self._authenticated_call(
-            const.cluster_host("push", self._region, self._mega_domain),
-            const.PUSH_TOKEN_PATH,
-            {"token": token, "is_notification_enable": True, "voip_token": token},
-            expect_data=False,  # success is a bare code 0
-        )
-        _LOGGER.debug("registered push token %s", Secret(token))
+        for region in self._regions_in_service():
+            await self._authenticated_call(
+                self._host("push", region),
+                const.PUSH_TOKEN_PATH,
+                {"token": token, "is_notification_enable": True, "voip_token": token},
+                region=region,
+                expect_data=False,  # success is a bare code 0
+            )
+            _LOGGER.debug("registered push token %s in the %s region", Secret(token), region)
 
     # ── thing descriptions ─────────────────────────────────────────────────
 
@@ -1026,7 +1176,7 @@ class EufyCloudApi:
     ) -> list[Mapping[str, Any]]:
         """The vendor thing descriptions of ``product_codes`` (``app/things/get_things_list``).
 
-        One signed POST on the session this client already holds or has cached.
+        One signed POST on the session of :attr:`region` this client holds or has cached.
         Returns the reply's ``things_list``; the cloud may omit codes it does not
         know, so the caller matches entries by ``profile.product_code``.
 
@@ -1045,18 +1195,19 @@ class EufyCloudApi:
         if not self._cache.loaded:
             raise NoCachedSessionError("session cache not loaded; not logging in")
         # The lock a login takes, so this read never races one; no I/O under it.
+        region = self.region
         async with self._login_lock:
             self._raise_if_replaced()
-            identity = self._identity
-            if not (identity and identity.auth_token) and self._load_cached_session():
-                identity = self._identity
+            identity = self._identities.get(region)
+            if not (identity and identity.auth_token) and self._load_cached_session(region):
+                identity = self._identities.get(region)
         if identity is None or not identity.auth_token:
             _LOGGER.debug("thing descriptions skipped: no usable cached cloud session")
             raise NoCachedSessionError("no usable cached cloud session; not logging in")
         body = {"product_codes": codes, "code_time_map": {}, "use_network_version": True}
         try:
             _code, _resp, data = await self._call(
-                const.cluster_host("things", self._region, self._mega_domain),
+                self._host("things", region),
                 const.THINGS_PATH,
                 body,
                 identity,
@@ -1074,9 +1225,10 @@ class EufyCloudApi:
 
     # ── throttle ─────────────────────────────────────────────────────────────
 
-    def _held_off(self, kind: str) -> float | None:
-        """Seconds left on this account's ``kind`` hold-off; requests also see the install's."""
-        own = self._cache.held_off_for(kind, longest=const.LOCKOUT_HOLD_OFF_SECONDS)
+    def _held_off(self, kind: str, region: str | None = None) -> float | None:
+        """Seconds left on this account's ``kind`` hold-off (a login hold-off is per
+        ``region``); requests also see the install's."""
+        own = self._cache.held_off_for(kind, longest=const.LOCKOUT_HOLD_OFF_SECONDS, region=region)
         shared = (
             self._install.request_held_off_for()
             if kind == "requests" and self._install is not None
@@ -1084,24 +1236,35 @@ class EufyCloudApi:
         )
         return max((left for left in (own, shared) if left is not None), default=None)
 
-    def _record_hold_off(self, *, login_only: bool, seconds: float) -> None:
-        """Start a hold-off in this account's cache (not saved) and, for requests, the install's."""
-        self._cache.hold_off("login" if login_only else "requests", seconds)
+    def _record_hold_off(
+        self, *, login_only: bool, seconds: float, region: str | None = None
+    ) -> None:
+        """Start a hold-off in this account's cache (not saved) and, for requests, the install's.
+
+        A login hold-off holds off ``region``'s logins (every region's when None).
+        """
+        if login_only:
+            for held in [region] if region is not None else const.REGIONS:
+                self._cache.hold_off("login", seconds, region=held)
+        else:
+            self._cache.hold_off("requests", seconds)
         if not login_only and self._install is not None:
             # A request limit may be the host's: every account of the install waits.
             self._install.hold_off_requests(seconds)
 
-    def _login_budget_wait(self) -> tuple[int, float | None]:
-        """Logins in the budget window, and seconds until the next is allowed if it is spent."""
+    def _login_budget_wait(self, region: str) -> tuple[int, float | None]:
+        """``region``'s logins in the budget window, and seconds until its next is allowed
+        if its budget is spent."""
         window = const.LOGIN_BUDGET_WINDOW_SECONDS
-        recent = self._cache.recent_logins(window)
+        recent = self._cache.recent_logins(window, region)
         if len(recent) < const.LOGIN_BUDGET:
             return len(recent), None
         # The next login is allowed once enough of the recent ones leave the window.
         return len(recent), max(recent[-const.LOGIN_BUDGET] + window - time.time(), 0.0)
 
-    def _raise_if_held_off(self, *, login: bool) -> None:
-        """Refuse locally while a hold-off runs, or a login once the budget is spent."""
+    def _raise_if_held_off(self, *, login: bool, region: str = const.DEFAULT_REGION) -> None:
+        """Refuse locally while a hold-off runs, or a login to ``region`` once its login
+        hold-off runs or its budget is spent."""
         left = self._held_off("requests")
         if left is not None:
             _LOGGER.debug("cloud call refused locally: request hold-off, %.0fs left", left)
@@ -1111,19 +1274,22 @@ class EufyCloudApi:
             )
         if not login:
             return
-        left = self._held_off("login")
+        left = self._held_off("login", region)
         if left is not None:
-            _LOGGER.debug("login refused locally: login hold-off, %.0fs left", left)
+            _LOGGER.debug("%s login refused locally: login hold-off, %.0fs left", region, left)
             raise LoginLimitedError(
-                f"holding off logins after the cloud refused one ({left:.0f}s left)",
+                f"holding off {region} logins after the cloud refused one ({left:.0f}s left)",
                 retry_after=left,
             )
-        count, left = self._login_budget_wait()
+        count, left = self._login_budget_wait(region)
         if left is not None:
-            _LOGGER.debug("login refused locally: budget of %d spent", const.LOGIN_BUDGET)
+            _LOGGER.debug(
+                "%s login refused locally: budget of %d spent", region, const.LOGIN_BUDGET
+            )
             raise LoginLimitedError(
-                f"{count} logins in the last {const.LOGIN_BUDGET_WINDOW_SECONDS / 3600:.0f} h "
-                f"already; next allowed in {left:.0f}s",
+                f"{count} {region} logins in the last "
+                f"{const.LOGIN_BUDGET_WINDOW_SECONDS / 3600:.0f} h already; "
+                f"next allowed in {left:.0f}s",
                 retry_after=left,
             )
 
@@ -1158,23 +1324,41 @@ class EufyCloudApi:
     def cloud_status(self) -> CloudStatus:
         """The login, throttle and refresh state as the cache holds it; never contacts the cloud.
 
-        A password counts as available when one is cached or a string was given; a
-        password callable is a prompt, so without either the need is
-        ``PASSWORD_REQUIRED``. The cache must be loaded.
+        The login need and the session expiry cover the regions the next device list
+        asks (:meth:`regions_to_list`). A password counts as available when one is
+        cached or a string was given; a password callable is a prompt, so without
+        either the need is ``PASSWORD_REQUIRED``. The cache must be loaded.
         """
-        cached = self._cached_session()
-        expires = cached[3] if cached else None
+        now = time.time()
+        in_use = self.regions_to_list()
+        sessions = {region: self._cached_session(region) for region in const.REGIONS}
+        expiries = [
+            cached[3]
+            for region in in_use
+            if (cached := sessions[region]) is not None and cached[3] is not None
+        ]
+        expires = min(expiries) if expiries else None
         if self.session_replaced:
             need = LoginNeed.REPLACED
-        elif cached is not None and self._session_usable(expires):
+        elif all(
+            (cached := sessions[region]) is not None and self._session_usable(cached[3])
+            for region in in_use
+        ):
             need = LoginNeed.NONE
         elif self._cache.password or (isinstance(self._password, str) and self._password):
             need = LoginNeed.CACHED_PASSWORD
         else:
             need = LoginNeed.PASSWORD_REQUIRED
-        now = time.time()
-        request_hold_off, login_hold_off = self._held_off("requests"), self._held_off("login")
-        count, budget_wait = self._login_budget_wait()
+        request_hold_off = self._held_off("requests")
+        login_hold_off = max(
+            (left for r in in_use if (left := self._held_off("login", r)) is not None),
+            default=None,
+        )
+        budget_wait = max(
+            (left for r in in_use if (left := self._login_budget_wait(r)[1]) is not None),
+            default=None,
+        )
+        count = len(self._cache.recent_logins(const.LOGIN_BUDGET_WINDOW_SECONDS))
         attempts = self._cache.recent_logins(math.inf)
         return CloudStatus(
             login_need=need,
@@ -1192,6 +1376,30 @@ class EufyCloudApi:
             last_login_attempt_age=now - attempts[-1] if attempts else None,
             device_list_refresh_age=self._cache.seconds_since_refresh("owner"),
             stations={sn: self._station_refresh_status(sn) for sn in self._cache.station_serials()},
+            regions={
+                region: self._region_status(region, sessions[region], in_use, now)
+                for region in const.REGIONS
+            },
+        )
+
+    def _region_status(
+        self,
+        region: str,
+        cached: tuple[str, str, str, float | None] | None,
+        in_use: list[str],
+        now: float,
+    ) -> RegionStatus:
+        listing = self._listings().get(region, {})
+        at = listing.get("at")
+        country = self._cache.cloud_sessions().get(region, {}).get("country_code")
+        expires = cached[3] if cached else None
+        return RegionStatus(
+            session_expires_in=None if expires is None else max(expires - now, 0.0),
+            devices=_count(listing.get("devices")) if listing else None,
+            listed_age=now - at if isinstance(at, (int, float)) and at else None,
+            country_code=country if isinstance(country, str) else None,
+            in_use=region in in_use,
+            suspended=region in self.suspended_regions(),
         )
 
     def _station_refresh_status(self, station_sn: str) -> StationRefreshStatus:
@@ -1211,20 +1419,30 @@ class EufyCloudApi:
         message: str,
         path: str,
         *,
+        region: str,
         retry_after: float | None = None,
     ) -> NoReturn:
-        """Record and persist the hold-off a throttling answer starts, then raise it."""
+        """Record and persist the hold-off a throttling answer starts, then raise it.
+
+        A per-region login throttle holds off logins to ``region``, the region that
+        answered it; another login throttle (a credential lock) every region's logins; a
+        request throttle every call.
+        """
         kind = "login" if throttle.login_only else "requests"
         seconds = min(max(throttle.seconds, retry_after or 0.0), const.LOCKOUT_HOLD_OFF_SECONDS)
-        self._record_hold_off(login_only=throttle.login_only, seconds=seconds)
+        self._record_hold_off(
+            login_only=throttle.login_only,
+            seconds=seconds,
+            region=region if throttle.per_region else None,
+        )
         await self._cache.async_save()
-        left = self._held_off(kind) or seconds
+        left = self._held_off(kind, region) or seconds
         _LOGGER.warning(
             "eufy cloud throttled %s (code %s: %s); no %s for %.0f min",
             path,
             code,
             message,
-            "logins" if throttle.login_only else "cloud calls",
+            f"{region} logins" if throttle.login_only else "cloud calls",
             left / 60,
         )
         error = LoginLimitedError if throttle.login_only else RateLimitedError
@@ -1237,9 +1455,16 @@ class EufyCloudApi:
     # ── envelope ─────────────────────────────────────────────────────────────
 
     async def _authenticated_call(
-        self, host: str, path: str, payload: Mapping[str, Any] | None, *, expect_data: bool = True
+        self,
+        host: str,
+        path: str,
+        payload: Mapping[str, Any] | None,
+        *,
+        region: str,
+        expect_data: bool = True,
     ) -> Any:
-        """A signed call with one automatic re-login on an expired-token or re-key code.
+        """A signed call on ``region``'s session, with one automatic re-login on an
+        expired-token or re-key code.
 
         ``expect_data=False`` for endpoints whose success is a bare ``code: 0``.
         """
@@ -1248,7 +1473,7 @@ class EufyCloudApi:
             _code, _resp, data = await self._call(host, path, payload, identity)
             return data
 
-        data = await self._with_session(call)
+        data = await self._with_session(call, region)
         if data is None and expect_data:
             raise EmptyResponseError(_SUCCESS, "response carried no data", endpoint=path)
         return data
@@ -1430,6 +1655,7 @@ class EufyCloudApi:
                 status,
                 "HTTP 429",
                 path,
+                region=identity.region,
                 retry_after=retry_after,
             )
         if status == const.HTTP_UNAUTHORIZED:
@@ -1467,7 +1693,7 @@ class EufyCloudApi:
             "← %s HTTP 200 code %s in %.0f ms: %s", path, code, _ms(started), Payload(parsed)
         )
         if (throttle := const.THROTTLE_CODES.get(code)) is not None:
-            await self._hold_off(throttle, code, _message(parsed), path)
+            await self._hold_off(throttle, code, _message(parsed), path, region=identity.region)
         self._raise_for_code(code, parsed, path)
         raise AssertionError("unreachable")  # pragma: no cover
 
@@ -1513,6 +1739,27 @@ def _check_owner_id(owner: str, station_sn: str) -> None:
             f"owner id for {redact_serial(station_sn)} is not printable ASCII of at most "
             f"{_ECB_ACCOUNT_LEN - 1} characters ({len(owner)} characters)"
         )
+
+
+def _device_list(data: object) -> list[Mapping[str, Any]]:
+    """The entries of a ``get_devs_list`` answer; ``ProtocolError`` for a malformed one.
+
+    A malformed success raises, so it never overwrites a good cached list.
+    """
+    if isinstance(data, Mapping):
+        if "devices" not in data:
+            raise ProtocolError(f"cloud response to {const.DEVICES_PATH} has no devices")
+        data = data["devices"]
+    if data is None:
+        return []
+    if not isinstance(data, list):
+        raise ProtocolError(f"cloud response to {const.DEVICES_PATH} has no device list")
+    return [entry for entry in data if isinstance(entry, Mapping)]
+
+
+def _count(value: object) -> int:
+    """A stored device count; 0 for anything else."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
 
 
 def _message(parsed: Mapping[str, Any]) -> str:

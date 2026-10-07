@@ -170,6 +170,7 @@ class LoginChallengeError(AuthenticationError):
 
     Re-run the login with the answer; ``login_id`` must be carried across both
     calls. ``captcha_image`` is a data URI when the challenge is a captcha.
+    ``region`` is the cloud region whose login asked; the answer goes there.
     """
 
     def __init__(
@@ -180,8 +181,10 @@ class LoginChallengeError(AuthenticationError):
         captcha_id: str = "",
         captcha_image: str = "",
         code: int = 0,
+        region: str = "",
     ) -> None:
         self.kind = kind
+        self.region = region
         self.login_id = login_id
         self.captcha_id = captcha_id
         self.captcha_image = captcha_image

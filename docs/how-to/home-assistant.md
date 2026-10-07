@@ -134,10 +134,11 @@ provides where it lives.
 |---|---|---|
 | `openudid` | this install's eufy device identity, minted once | never; the only part kept when the account changes |
 | `password` | the account password of the last successful login | on every successful login; dropped as soon as the cloud rejects it |
-| `cloud` | key ident, shared key, auth token, user id, expiry, region, `mega_domain` | on login: a miss, an expiry, or a session-expired answer. A re-key answer (HTTP 463) replaces only the key ident and shared key, by a key exchange, no login. A kick-out (26084 / HTTP 401) drops it |
+| `cloud.sessions.<region>` | per cloud region: key ident, shared key, auth token, user id, expiry, the login answer's `mega_domain` and `country_code` | on a login to that region: a miss, an expiry, or a session-expired answer. A re-key answer (HTTP 463) replaces only the key ident and shared key, by a key exchange, no login. A kick-out (26084 / HTTP 401) drops that region's session |
+| `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
 | `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), and the key-refresh latch | on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass |
-| `devices` | the `get_devs_list` entries, each reduced to the fields `CloudDevice` reads (serials, type, name, channel, DID, IP, firmware versions, `app_conn`, the product code `device_new_pn`, the member's `admin_user_id` and `member_type`); the cloud's `params` snapshot only for a device reached on demand. The member's e-mail and phone, MAC addresses and the rest never reach the store | only on `async_discover(refresh=True)`; an entry stored with more fields is reduced on load |
+| `devices` | the `get_devs_list` entries, each reduced to the fields `CloudDevice` reads (serials, type, name, channel, DID, IP, firmware versions, `app_conn`, the product code `device_new_pn`, the member's `admin_user_id` and `member_type`, and `cloud_region`, the region that listed it); the cloud's `params` snapshot only for a device reached on demand. The member's e-mail and phone, MAC addresses and the rest never reach the store | only on `async_discover(refresh=True)`; an entry stored with more fields is reduced on load |
 | `push` | FCM credentials, the registered token, recent push ids and guard-mode times | on push start; delivery state written at most 30 s after it changes, and on close |
 | `refresh_attempts` | when the owner id (account-wide) and each station's cipher key were last force-fetched | with those fetches |
 | `throttle` | hold-off end times (requests, logins) and recent login attempts | when the cloud throttles, and on every login |
@@ -152,6 +153,9 @@ A library update that changes the document's layout (its `version`) keeps `openu
 the password, the throttle state and the `replaced` latch, and drops the rest. The next cloud call logs in
 again with the cached password and fetches the device list and keys again. That is one
 login cycle, within the hold-off and the login budget, and nobody is asked for anything.
+Version 1 (one session, before regions) is migrated instead: its session and devices
+become the region it was logged in to, so the upgrade costs no login. A version-1 cache
+with an empty device list drops that list, so the next start asks every region once.
 
 Most of it is secret. The password and the auth token open the account, and a
 station's ECC key is enough to control that station from the LAN. So:
@@ -252,6 +256,45 @@ the integration is the device list:
   instead of `"cloud"`. Use that serial for its entities (ids come from serials), but
   expect a `DevicesChanged` once a refresh brings its cloud entry. A channel whose
   identity is ambiguous gets `serial=None`: build no entities for it.
+
+### Cloud regions
+
+The eufy cloud runs two clusters, `eu` and `us` (the app's production environments). A
+login on either succeeds for any account and answers the same user id, but each cluster
+lists only the devices homed on it: the other one answers an empty list, not an error.
+Nothing in the login answer names the home cluster. So the library keeps one session
+per region and remembers, per device, the region that listed it:
+
+- The first device list asks every region (a login each: two logins on a cold cache).
+  The login budget (3 per 6 h) and a login-count throttle (100028) are kept per region;
+  a credential lock (too many wrong passwords) holds off every region. This rests on
+  the logins of one region not counting against the other's limits, which no lockout
+  has tested. `async_login()` on a cold cache logs in to
+  every region the next device list asks, so a login challenge surfaces there; its
+  `LoginChallengeError.region` names the region, and the answer
+  (`async_login(verify_code=…, login_id=…)`) goes back to it.
+- A region that lists no devices is **suspended**: no later device list, login or push
+  registration asks it. It is asked again only when the user says so:
+  `async_discover(rescan_regions=True)` (one fetch that asks every region), or the
+  client option `EufySecurity(scan_regions=True)` (every device-list refresh asks every
+  region; a region whose session lapsed costs a login). With every region suspended a
+  refresh sends nothing and returns the cached, empty list. There is no automatic retry.
+- Every cloud call about a device goes to its region: cipher key, DSK, firmware check.
+  The push token is registered in every region that has devices.
+- `EufySecurity(region="eu" | "us")` pins the account to one region: only that region is
+  asked, rescans included.
+
+For the integration:
+
+| what | where | use |
+|---|---|---|
+| a device's region | `CloudDevice.region` (`station.device.region`, each sub-device's `CloudDevice`) | a diagnostic attribute; never part of an entity id |
+| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
+| rescan | `async_discover(rescan_regions=True)` | only on the user's request: the "refresh device list" button and the repair's fix. Timers and automatic refreshes pass `refresh=True` alone, so a suspended region is never retried by itself |
+| scan on every refresh | `EufySecurity(scan_regions=...)` | an options-flow switch, off by default |
+
+The login answer's `country_code` reads `US` on an EU-homed account too: it echoes the
+request's `country` header, not the account's home.
 
 ### Firmware updates
 

@@ -15,23 +15,32 @@ from typing import Final, NamedTuple
 
 # ── regions and hosts ────────────────────────────────────────────────────────
 
-REGIONS: Final = ("eu", "us")
+# The app's production clusters (``MegaEnvironment`` US_PR / EU_PR; the QA ones are
+# left out), each with its eufy_security realm gateway (the app's
+# ``DEFAULT_SECURITY_CONFIG_DOMAIN`` and ``…_EU``; the US one names no region). One
+# login serves one cluster, and each cluster lists only its own devices.
+_SECURITY_HOSTS: Final = {"eu": "security-app-eu.eufylife.com", "us": "security-app.eufylife.com"}
+REGIONS: Final = tuple(_SECURITY_HOSTS)
 DEFAULT_REGION: Final = "eu"
 
-# The account's ``mega_domain`` (from the login response) is the authoritative
-# region. Every service host is that domain with ``mega-`` swapped for
-# ``app-{service}-`` — which is how the app builds app-passport, app-house,
-# app-push and the rest without a literal host table.
+# A login answer may carry a ``mega_domain``; every service host of that cluster is
+# the domain with ``mega-`` swapped for ``app-{service}-``, which is how the app builds
+# app-passport, app-house, app-push and the rest without a literal host table.
 MEGA_DOMAIN_PREFIX: Final = "mega-"
+
+
+def check_region(region: str) -> str:
+    """``region`` if it names a cluster, else ``ValueError``."""
+    if region not in REGIONS:
+        raise ValueError(f"unknown region {region!r}; valid: {', '.join(REGIONS)}")
+    return region
 
 
 def cluster_host(service: str, region: str, mega_domain: str | None = None) -> str:
     """``app-{service}-{region}-pr.eufy.com``, or the account's own domain rewritten."""
     if mega_domain and mega_domain.startswith(MEGA_DOMAIN_PREFIX):
         return mega_domain.replace(MEGA_DOMAIN_PREFIX, f"app-{service}-", 1)
-    if region not in REGIONS:
-        raise ValueError(f"unknown region {region!r}; valid: {', '.join(REGIONS)}")
-    return f"app-{service}-{region}-pr.eufy.com"
+    return f"app-{service}-{check_region(region)}-pr.eufy.com"
 
 
 def region_from_mega_domain(mega_domain: str | None) -> str | None:
@@ -43,10 +52,8 @@ def region_from_mega_domain(mega_domain: str | None) -> str | None:
 
 
 def security_host(region: str) -> str:
-    """The eufy_security realm gateway (``/v3/...``). Only ``eu`` is live-verified."""
-    if region not in REGIONS:
-        raise ValueError(f"unknown region {region!r}; valid: {', '.join(REGIONS)}")
-    return f"security-app-{region}.eufylife.com"
+    """The eufy_security realm gateway (``/v3/...``) of ``region``'s cluster."""
+    return _SECURITY_HOSTS[check_region(region)]
 
 
 # ── MegaCrypto keys ──────────────────────────────────────────────────────────
@@ -252,6 +259,9 @@ class Throttle(NamedTuple):
 
     login_only: bool
     seconds: float
+    per_region: bool = False
+    """A login throttle that holds off only the region that answered it (a count of
+    logins); a credential lock holds off every region's logins."""
 
 
 # Throttling and account locks: hold off, never retry. A request throttle stops
@@ -259,7 +269,9 @@ class Throttle(NamedTuple):
 THROTTLE_CODES: Final[Mapping[int, Throttle]] = {
     CloudCode.API_REQUEST_LIMIT: Throttle(login_only=False, seconds=REQUEST_HOLD_OFF_SECONDS),
     CloudCode.REQUEST_TOO_FAST: Throttle(login_only=False, seconds=REQUEST_HOLD_OFF_SECONDS),
-    CloudCode.MAX_LOGIN_LIMIT: Throttle(login_only=True, seconds=LOGIN_HOLD_OFF_SECONDS),
+    CloudCode.MAX_LOGIN_LIMIT: Throttle(
+        login_only=True, seconds=LOGIN_HOLD_OFF_SECONDS, per_region=True
+    ),
     CloudCode.PASSWORD_ERROR_MUCH: Throttle(login_only=True, seconds=LOCKOUT_HOLD_OFF_SECONDS),
     CloudCode.PASSWORD_ERROR_5: Throttle(login_only=True, seconds=LOCKOUT_HOLD_OFF_SECONDS),
     CloudCode.VERIFY_CODE_MAX: Throttle(login_only=True, seconds=LOCKOUT_HOLD_OFF_SECONDS),

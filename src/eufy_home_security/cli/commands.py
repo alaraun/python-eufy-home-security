@@ -133,6 +133,7 @@ async def open_account(ctx: Context, *, station_sn: str | None = None) -> EufySe
         ctx.env.get(ENV_PASSWORD) or prompt_password,
         store=store,
         country=ctx.args.country,
+        region=ctx.args.region,
         station_hosts=hosts,
         local_ports=ports,
     )
@@ -307,7 +308,9 @@ async def cmd_network(ctx: Context) -> int:
 async def cmd_devices(ctx: Context) -> int:
     async with await open_account(ctx) as eufy:
         await eufy.async_login()
-        devices = await eufy.cloud.async_get_devices(refresh=True)
+        devices = await eufy.cloud.async_get_devices(
+            refresh=True, rescan_regions=ctx.args.rescan_regions
+        )
     print(render.render_devices(devices, show_serials=ctx.show_serials))
     return 0
 

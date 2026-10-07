@@ -181,6 +181,7 @@ class EufySecurity:
         store: Store,
         country: str = "",
         region: str | None = None,
+        scan_regions: bool = False,
         station_hosts: Mapping[str, str] | None = None,
         local_ports: Mapping[str, int] | None = None,
         claims: StationClaims | None = None,
@@ -193,6 +194,12 @@ class EufySecurity:
         _discovery_port: int | None = None,
     ) -> None:
         """``password`` may be None once a login has cached it (see ``SessionCache``).
+
+        ``region`` pins the account to one cloud region (``eu``, ``us``). Without it the
+        first device list asks every region and each device keeps the region that
+        listed it; a region that lists nothing is suspended until
+        ``async_discover(rescan_regions=True)``, or, with ``scan_regions``, every
+        device-list refresh asks every region (see :class:`EufyCloudApi`).
 
         ``email`` must look like an e-mail address (not empty, with an ``@``), else
         ``ValueError`` before anything is read or sent: a login with it would only
@@ -261,6 +268,7 @@ class EufySecurity:
             password,
             country=country,
             region=region,
+            scan_regions=scan_regions,
             install=install,
         )
         self._discovery_port = DISCOVERY_PORT if _discovery_port is None else _discovery_port
@@ -405,7 +413,8 @@ class EufySecurity:
         :func:`redact_serial`) whether its owner account id and its cipher key are cached,
         with that station's refresh ages from :meth:`async_cloud_status`.
         ``cloud_status`` holds the account-wide rest of it (login need, hold-offs,
-        login budget, refresh ages). Never a password, token, key, openudid, owner or
+        login budget, refresh ages, and per cloud region its session expiry, device
+        count, listing age, login ``country_code`` and whether it is suspended). Never a password, token, key, openudid, owner or
         user id, push credential, full serial, DID or IP. Never contacts the cloud.
         """
         status = await self.async_cloud_status()
@@ -418,6 +427,10 @@ class EufySecurity:
             f.name: getattr(status, f.name) for f in fields(status) if f.name != "stations"
         }
         cloud_status["login_need"] = status.login_need.value
+        cloud_status["regions"] = {
+            region: {f.name: getattr(state, f.name) for f in fields(state)}
+            for region, state in status.regions.items()
+        }
         summary["cloud_status"] = cloud_status
         return summary
 
@@ -467,18 +480,22 @@ class EufySecurity:
         if not self.cache.loaded:
             await self.cache.async_load()
 
-    async def async_discover(self, *, refresh: bool = False) -> list[Station]:
+    async def async_discover(
+        self, *, refresh: bool = False, rescan_regions: bool = False
+    ) -> list[Station]:
         """Build a :class:`Station` per HomeBase from the (cached) device list.
 
         ``refresh`` forces a fresh cloud fetch; otherwise the cached list is used
-        when there is one, so a warm start needs no cloud call at all. With
+        when there is one, so a warm start needs no cloud call at all.
+        ``rescan_regions`` fetches too and asks every cloud region, the suspended
+        ones included (see :meth:`EufyCloudApi.async_fetch_devices`). With
         ``claims``, only the stations this account wins are built; the others are
         listed in :attr:`stations_served_elsewhere`. Stations included as remote go to
         :attr:`remote_stations`; the returned list holds the local ones. Devices
         nothing can be built for are listed in :attr:`skipped_devices`.
         """
         await self._ensure_cache_loaded()
-        devices = await self.cloud.async_get_devices(refresh=refresh)
+        devices = await self.cloud.async_get_devices(refresh=refresh, rescan_regions=rescan_regions)
         candidates, children, self.skipped_devices = _group(devices)
         included = [d for d in candidates if self._reach(d.device_sn) is not None]
         if self._claims is None:
@@ -488,7 +505,7 @@ class EufySecurity:
         self.stations_served_elsewhere = tuple(d for d in included if d.device_sn not in served)
         self._not_served = frozenset(d.device_sn for d in candidates if d.device_sn not in served)
         await asyncio.to_thread(_load_settings, devices)
-        await self._async_scan_models(devices, refresh=refresh)
+        await self._async_scan_models(devices, refresh=refresh or rescan_regions)
         for device in candidates:
             serial = device.device_sn
             sub_devices = tuple(children.get(serial, ()))
@@ -989,7 +1006,8 @@ class EufySecurity:
         :class:`~.exceptions.RateLimitedError`, or :class:`~.exceptions.CommunicationError`
         when the cloud could not be reached. It costs a login only as every call does:
         once, and only when the cloud says the token expired; a lapsed key identity
-        costs a key exchange, never a login.
+        costs a key exchange, never a login. It asks the regions in use only; with every
+        region suspended it sends nothing.
         """
         await self._ensure_cache_loaded()
         try:

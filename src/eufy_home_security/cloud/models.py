@@ -123,6 +123,9 @@ class CloudDevice:
     """``member.member_type``: 0 guest, 1 admin, 2 owner. UI-level only."""
     main_sw_version: str | None = None
     sec_sw_version: str | None = None
+    region: str | None = None
+    """The cloud region (``eu``, ``us``) whose device list holds this device; every cloud
+    call about it goes to that region. None for an entry the library did not list."""
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     def __repr__(self) -> str:
@@ -132,7 +135,8 @@ class CloudDevice:
             f"device_type={self.device_type}, name={redact(self.name)!r}, "
             f"station_sn={redact_serial(self.station_sn)!r}, channel={self.channel}, "
             f"p2p_did={redact(self.p2p_did)!r}, local_ip={redact(self.local_ip)!r}, "
-            f"owner_user_id={redact(self.owner_user_id)!r}, member_type={self.member_type})"
+            f"owner_user_id={redact(self.owner_user_id)!r}, member_type={self.member_type}, "
+            f"region={self.region!r})"
         )
 
     def as_redacted_dict(self) -> dict[str, Any]:
@@ -153,6 +157,7 @@ class CloudDevice:
             "account_is_owner": self.account_is_owner,
             "main_sw_version": self.main_sw_version,
             "sec_sw_version": self.sec_sw_version,
+            "region": self.region,
             "has_p2p_did": self.p2p_did is not None,
             "has_local_ip": self.local_ip is not None,
             "has_owner_user_id": self.owner_user_id is not None,
@@ -280,9 +285,13 @@ class CloudDevice:
             member_type=_int_or_none(member.get("member_type")),
             main_sw_version=_str_or_none(data.get("main_sw_version")),
             sec_sw_version=_str_or_none(data.get("sec_sw_version")),
+            region=_str_or_none(data.get(REGION_KEY)),
             raw=MappingProxyType(dict(data)),
         )
 
+
+#: The key the library adds to each ``get_devs_list`` entry: the region that listed it.
+REGION_KEY: Final = "cloud_region"
 
 # What of a ``get_devs_list`` entry is worth persisting: exactly what CloudDevice reads
 # (:meth:`CloudDevice.from_api` and its properties) and the product code in ``raw``. The
@@ -301,6 +310,7 @@ CACHED_DEVICE_FIELDS: Final = (
     "sec_sw_version",
     "app_conn",  # rendezvous_servers: how a battery station is woken
     "device_new_pn",  # the product code that keys a model's settings
+    REGION_KEY,
 )
 CACHED_MEMBER_FIELDS: Final = ("admin_user_id", "member_type")
 CACHED_PARAM_FIELDS: Final = ("param_type", "param_value", "update_time")
