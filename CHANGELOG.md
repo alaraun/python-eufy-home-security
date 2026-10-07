@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.2.1](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.0...v0.2.1) (2026-10-07)
+
+
+### Features
+
+* find the account's devices in every cloud region ([#17](https://github.com/alaraun/python-eufy-home-security/issues/17)) ([f1bb721](https://github.com/alaraun/python-eufy-home-security/commit/f1bb721902cbe684ce4c70c67df74b60e46062c3))
+
 ## [0.2.0](https://github.com/alaraun/python-eufy-home-security/compare/v0.1.2...v0.2.0) (2026-10-06)
 
 
