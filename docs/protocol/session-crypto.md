@@ -86,8 +86,7 @@ session    = PKCS7-unpad(AES-128-CBC-decrypt(aes_key, iv, ct))   # 32 printable 
 
 ### Reply version and encryption type **[declared: app]**
 
-The app reads two subheader bytes of the CONN_INIT reply (`handleNotifyCommand`,
-`decryptNotifyData` in its media SDK):
+Two subheader bytes of the CONN_INIT reply select its handshake and its encryption:
 
 | byte | meaning | values |
 |---|---|---|

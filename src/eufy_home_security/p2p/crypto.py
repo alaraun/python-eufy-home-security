@@ -253,8 +253,7 @@ def parse_conn_init(payload: bytes, subheader: bytes, static_key: bytes) -> Conn
     """The version, cipher id and key material of a CONN_INIT reply.
 
     Encryption type 0 (subheader byte 3) is clear; any other is AES-128-ECB under the
-    static key over whole blocks, the payload zero-filled to the last one, as the app's
-    receive buffer is. Raises :class:`HandshakeError` when no cipher id fits.
+    static key over whole blocks, the payload zero-filled to the last one. Raises :class:`HandshakeError` when no cipher id fits.
     """
     if len(subheader) < 4:
         raise HandshakeError("CONN_INIT reply without a subheader")
@@ -310,7 +309,7 @@ def aes_key_from_conn_init(conn_init: ConnInit, rsa_private_key: str) -> bytes:
 
     RSA PKCS#1 v1.5 over the :data:`CONN_INIT_RSA_BLOB_LEN` bytes after the cipher id,
     with the cipher's RSA ``private_key``; the key is the first 16 characters of the
-    plaintext, up to its first NUL (the app's string copy). Any failure raises
+    plaintext, up to its first NUL. Any failure raises
     :class:`HandshakeError`, a wrong key included.
     """
     blob = conn_init.body[:CONN_INIT_RSA_BLOB_LEN]
