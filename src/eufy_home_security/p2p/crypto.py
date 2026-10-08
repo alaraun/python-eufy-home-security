@@ -41,6 +41,9 @@ GCM_SEQ_START = 0x01020304
 
 _ECIES_INFO = b"ECIES"
 _ECIES_MIN_LEN = 33 + 16 + 16 + 32  # eph + iv + one ct block + tag
+#: The ECIES blob of a version-8 CONN_INIT: eph + iv + three ct blocks + tag. Its tag
+#: covers exactly these bytes; what follows is the ECB padding tail.
+CONN_INIT_ECIES_LEN = 33 + 16 + 48 + 32
 
 
 # ── AES-128-ECB (static key) ──────────────────────────────────────────────────
@@ -72,7 +75,7 @@ def ecb_decrypt(key: bytes, ciphertext: bytes) -> bytes:
 
 # ── AES-256-GCM (session key) ─────────────────────────────────────────────────
 
-#: The session key is 32 ASCII bytes (AES-256).
+#: The session key is 32 bytes (AES-256), any byte values.
 SESSION_KEY_LEN = 32
 
 
@@ -270,18 +273,22 @@ def parse_conn_init(payload: bytes, subheader: bytes, static_key: bytes) -> Conn
 
 
 def session_key_from_conn_init(conn_init: ConnInit, ecc_private_key_hex: str) -> bytes:
-    """The 32-byte ASCII GCM session key of an ECIES CONN_INIT, unwrapped with the
+    """The 32-byte GCM session key of an ECIES CONN_INIT, unwrapped with the
     ``ecc_private_key`` of the cipher it names.
 
+    The blob is the first :data:`CONN_INIT_ECIES_LEN` bytes of the body. The key is used
+    as-is: a HomeBase 3 sends printable bytes, other stations need not.
     Any failure raises :class:`HandshakeError` (the usual cause is a cipher key that no
     longer matches the station).
     """
     try:
-        key = ecies_decrypt(conn_init.body, ecc_private_key_hex)
+        key = ecies_decrypt(conn_init.body, ecc_private_key_hex, blob_len=CONN_INIT_ECIES_LEN)
     except ProtocolError as exc:
         raise HandshakeError(f"CONN_INIT ECIES unwrap failed: {exc}") from exc
-    if len(key) != SESSION_KEY_LEN or not all(32 <= b < 127 for b in key):
-        raise HandshakeError("CONN_INIT unwrapped a key that is not 32 ASCII bytes")
+    if len(key) != SESSION_KEY_LEN:
+        raise HandshakeError(
+            f"CONN_INIT unwrapped a {len(key)}-byte key, expected {SESSION_KEY_LEN}"
+        )
     return key
 
 

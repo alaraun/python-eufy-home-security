@@ -3112,6 +3112,30 @@ async def test_async_get_sd_info_raises_timeout_on_no_answer(station: FakeStatio
         await session.async_close()
 
 
+async def test_a_session_key_that_is_not_printable_runs_the_gcm_session(
+    station: FakeStation,
+) -> None:
+    """Version 8 with 32 session-key bytes outside printable ASCII: the handshake takes
+    them as the GCM key, and commands and the parameter dump run under it."""
+    station.session_key = bytes(range(0xE0, 0x100))
+    station.reply_to_settings = True
+    session = make_session(station, Provider(station))
+    try:
+        dump = await session.async_get_params()
+        outcome = await session.async_send_command(
+            1277, channel=0, payload={"night_sion": 1, "channel": 0}
+        )
+        stats = session.stats()
+    finally:
+        await session.async_close()
+    assert not session.rsa_session
+    assert dump.station == station.params[STATION_CHANNEL]
+    assert outcome is CommandOutcome.APPLIED
+    assert [o["cmd"] for o in station.received] == [1277]
+    assert stats.handshake_failures == 0
+    assert stats.conn_init_version == 8
+
+
 class RsaProvider:
     """Credentials of a station answering the RSA CONN_INIT: its RSA key, or none.
 

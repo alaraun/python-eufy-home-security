@@ -161,6 +161,27 @@ def test_session_key_from_conn_init_recovers_the_key() -> None:
     assert crypto.session_key_from_conn_init(parsed, priv_hex) == session_key
 
 
+def test_session_key_from_conn_init_takes_a_key_that_is_not_printable() -> None:
+    """A version-8 session key is used as-is, whatever its byte values."""
+    static = static_key(SYNTHETIC.station_sn, SYNTHETIC.did)
+    session_key = bytes(range(0xF0, 0x100)) + bytes(range(16))
+    payload, priv_hex = _build_conn_init(session_key)
+    parsed = crypto.parse_conn_init(payload, _ECC_SUBHEADER, static)
+    assert crypto.session_key_from_conn_init(parsed, priv_hex) == session_key
+
+
+@pytest.mark.parametrize("length", [16, 33, 47])
+def test_session_key_from_conn_init_rejects_a_key_that_is_not_32_bytes(length: int) -> None:
+    """The tag covers a fixed 129-byte blob: a shorter key leaves no blob of that length,
+    a longer one unwraps to the wrong length; both fail the handshake."""
+    static = static_key(SYNTHETIC.station_sn, SYNTHETIC.did)
+    payload, priv_hex = _build_conn_init(b"k" * length)
+    parsed = crypto.parse_conn_init(payload, _ECC_SUBHEADER, static)
+    match = "33|47" if length > 32 else "unwrap failed"
+    with pytest.raises(HandshakeError, match=match):
+        crypto.session_key_from_conn_init(parsed, priv_hex)
+
+
 def test_session_key_from_conn_init_rejects_a_bad_key() -> None:
     static = static_key(SYNTHETIC.station_sn, SYNTHETIC.did)
     good, _ = _build_conn_init(bytes((65 + i % 26) for i in range(32)))

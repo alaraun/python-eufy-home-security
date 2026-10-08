@@ -336,6 +336,9 @@ class FakeStation:
     """Sessions the station holds at most (a HomeBase 3: 9, a T8170: 4); a session
     punched past it makes the station CLOSE the longest-open other one. None: no limit."""
     send_ready: bool = True
+    session_key: bytes = SESSION_KEY
+    """The GCM session key a version-8 CONN_INIT carries: 32 bytes, printable on a
+    HomeBase 3, not necessarily on other stations."""
     cipher_id: int = CIPHER_ID_P2P
     """The cipher CONN_INIT names (a HomeBase 3: 40; a T8170: 98). The fake unwraps with
     one key whatever the id; the cloud fake serves that key under any id."""
@@ -576,7 +579,7 @@ class FakeStation:
             if self.answer_conn_init:
                 self._answer_conn_init()
         elif subheader[0] == FrameCipher.GCM and not self.rsa_session:
-            self._on_session_frame(ftype, subheader, gcm_decrypt_command(SESSION_KEY, payload))
+            self._on_session_frame(ftype, subheader, gcm_decrypt_command(self.session_key, payload))
         elif (
             self.rsa_session
             and subheader[0] == FrameCipher.ECB
@@ -596,7 +599,7 @@ class FakeStation:
         type 1, as a HomeBase 3 sends it) or RSA (any other version)."""
         cipher_id = struct.pack("<I", self.cipher_id)
         if not self.rsa_session:
-            blob = ecies_encrypt(SESSION_KEY, self.ecc_private_key.public_key())
+            blob = ecies_encrypt(self.session_key, self.ecc_private_key.public_key())
             body = ecb_encrypt(self.static_key, cipher_id + blob)
             subheader = bytes([CONN_INIT_ECC_VERSION, 0, 0xFF, FRAME_STATIC_ECB, 0, 0])
         else:
@@ -1203,7 +1206,7 @@ class FakeStation:
         """A body under the session's cipher: GCM, or an RSA session's AES-128-ECB."""
         if self.rsa_session:
             return ecb_encrypt(RSA_SESSION_KEY, plain)
-        return _gcm_broadcast(SESSION_KEY, plain)
+        return _gcm_broadcast(self.session_key, plain)
 
     def send_frame(
         self,
