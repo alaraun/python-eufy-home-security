@@ -296,6 +296,42 @@ For the integration:
 The login answer's `country_code` reads `US` on an EU-homed account too: it echoes the
 request's `country` header, not the account's home.
 
+### Account report (diagnostics)
+
+`await eufy.async_account_report()` returns an `AccountReport` (`.as_dict()` is
+JSON-safe and secret-free: put it in the config entry's diagnostics download as it is).
+It answers "which devices does eufy list for this account, and could the library reach
+them", including devices the library does not serve:
+
+- `listings`: per region, how many entries each list answered (or its error): the
+  account-wide house device list the library serves (`house`), the house list
+  (`houses`), and the security realm's station and device lists
+  (`security_stations`, `security_devices`). `houses`: per house, its own device count
+  and this account's role.
+- `devices`: each device once, merged over every list that named it (`listed_by`), with
+  model, catalogue support grade, product code, the cloud's own model field, station
+  kind (`connect_type`), firmware and hardware versions, the parameter ids of the cloud
+  snapshot, the camera-info parameter (a version-8 hint), the cipher its station named
+  in its last CONN_INIT, and `served` (whether this client built a station for it; None
+  before a discovery).
+  A device listed by the security realm but not by `house` is one the library does not
+  serve.
+- `ciphers`: per station owner (`"own"`, `"owner 1"` …), the whole cipher table read in
+  one `get_ciphers` request: per cipher id whether the ECC key and the RSA key are
+  usable, the RSA key's letter case and size, and which stations named it.
+- Serials redacted; no user id, house id, DID, IP, name, key or parameter value (but
+  the camera-info one).
+
+It never logs in: it asks only regions whose session is held or cached
+(`regions_without_session` lists the rest), and the first throttle, kick-out or
+credential refusal ends it (`stopped`). It sends a few requests per region plus one per
+owner, on the account's shared throttle, and caches nothing: call it from the
+diagnostics download only, never on a timer. `ciphers=False` leaves the cipher sweep out.
+
+Each station's `stats()` (`SessionStats`) also carries `conn_init_version` (8: ECIES,
+anything else: the legacy RSA handshake) and the `cipher_id` it named, once a CONN_INIT
+reply arrived.
+
 ### Firmware updates
 
 `await eufy.async_firmware_updates()` asks the cloud OTA whether any device has a newer

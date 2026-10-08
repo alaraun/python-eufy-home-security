@@ -38,6 +38,8 @@ __all__ = [
     "camera_device",
     "enum_property",
     "range_property",
+    "security_device",
+    "security_station",
     "station_device",
     "thing_description",
     "warm_store",
@@ -92,6 +94,48 @@ def camera_device(
         "device_name": name,
         "parent_sn": station_sn,
         "device_channel": channel,
+    }
+
+
+def security_station(
+    serial: str = SYNTHETIC.station_sn,
+    *,
+    did: str = SYNTHETIC.did,
+    name: str = "Home Base",
+    params: Mapping[int, str] | None = None,
+) -> dict[str, Any]:
+    """A security-realm ``get_hub_list`` entry for a station: it names itself in
+    ``station_sn`` only, as the cloud's does."""
+    model = model_for_serial(serial)
+    return {
+        "station_sn": serial,
+        "station_name": name,
+        "device_type": model.cloud_device_type if model else 0,
+        "p2p_did": did,
+        "main_sw_version": "2.1.6.9h",
+        "main_hw_version": "P1",
+        "params": [
+            {"param_type": param, "param_value": value} for param, value in (params or {}).items()
+        ],
+    }
+
+
+def security_device(
+    serial: str = SYNTHETIC.camera_sn,
+    *,
+    station_sn: str = SYNTHETIC.station_sn,
+    channel: int = 0,
+    name: str = "Front",
+) -> dict[str, Any]:
+    """A security-realm ``get_devs_list`` entry for a device paired to ``station_sn``."""
+    model = model_for_serial(serial)
+    return {
+        "device_sn": serial,
+        "device_name": name,
+        "device_type": model.cloud_device_type if model else 0,
+        "station_sn": station_sn,
+        "device_channel": channel,
+        "main_sw_version": "2.0.7.6",
     }
 
 
@@ -168,6 +212,16 @@ class FakeCloud:
     device list of each other region (a region not in it lists none). Every region
     serves the same account (``user_id``), as the real clusters do.
 
+    ``houses`` are the ``house_infos`` the ``region`` cluster's house list answers, and
+    ``house_devices`` each house id's own device list (a ``get_devs_list`` naming a
+    ``house_id``). ``security_stations`` and ``security_devices`` are the raw entries of
+    the security realm's ``get_hub_list`` and ``get_devs_list`` in the ``region`` cluster
+    (see :func:`security_station`, :func:`security_device`); other regions list none of
+    these. ``cipher_records`` serves a cipher id the same keys for every station
+    (``ecc_private_key``, ``private_key``), ahead of the per-station keys. These requests
+    are recorded as ``"houses"``, ``"house:<house_id>"``, ``"security_stations"`` and
+    ``"security_devices"``.
+
     ``things`` holds the thing description per product code that ``get_things_list``
     returns (see :func:`thing_description`); a code not in it is omitted from the reply.
     ``things_error``, when set, is raised by every such request; it is independent of
@@ -196,6 +250,11 @@ class FakeCloud:
     cipher_keys: dict[str, str] = field(default_factory=dict)
     rsa_cipher_keys: dict[str, str] = field(default_factory=dict)
     cipher_ids_held: set[int] | None = None
+    cipher_records: dict[int, dict[str, str]] = field(default_factory=dict)
+    houses: list[dict[str, Any]] = field(default_factory=list)
+    house_devices: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    security_stations: list[dict[str, Any]] = field(default_factory=list)
+    security_devices: list[dict[str, Any]] = field(default_factory=list)
     cipher_ids_requested: list[int] = field(default_factory=list)
     login_error: EufySecurityError | None = None
     call_errors: list[EufySecurityError] = field(default_factory=list)
@@ -261,6 +320,26 @@ class FakeCloud:
                 await api.hold_off_for(self.login_error)
                 raise self.login_error
             return {"auth_token": _AUTH_TOKEN, "user_id": self.user_id}
+        if path == const.DEVICES_PATH and "house_id" in payload:
+            house_id = str(payload["house_id"])
+            note(f"house:{house_id}")
+            self._raise_call_error()
+            listed = self.house_devices.get(house_id, []) if region == self.region else []
+            return {"devices": [self._with_owner(d) for d in listed]}
+        if path == const.HOUSES_PATH:
+            note("houses")
+            self._raise_call_error()
+            return {"house_infos": list(self.houses) if region == self.region else []}
+        if path in {const.SECURITY_STATIONS_PATH, const.SECURITY_DEVICES_PATH}:
+            stations = path == const.SECURITY_STATIONS_PATH
+            note("security_stations" if stations else "security_devices")
+            self._raise_call_error()
+            if region != self.region:
+                return []
+            return [
+                self._with_owner(e, key="station_sn" if stations else "device_sn")
+                for e in (self.security_stations if stations else self.security_devices)
+            ]
         if path == const.DEVICES_PATH:
             owner_of = _owner_lookup.get()
             note(f"owner:{redact_serial(owner_of)}" if owner_of else "devices")
@@ -283,9 +362,14 @@ class FakeCloud:
             held = [
                 cid for cid in ids if self.cipher_ids_held is None or cid in self.cipher_ids_held
             ]
-            if not keys or not held:
-                return None
-            return [{"cipher_id": cid, **keys} for cid in held]
+            records = [
+                {"cipher_id": cid, **self.cipher_records[cid]}
+                if cid in self.cipher_records
+                else {"cipher_id": cid, **keys}
+                for cid in ids
+                if cid in self.cipher_records or (keys and cid in held)
+            ]
+            return records or None
         if path == const.DSK_KEYS_PATH:
             serial = str(payload.get("station_sns", [""])[0])
             note(f"dsk:{redact_serial(serial)}")
@@ -309,9 +393,9 @@ class FakeCloud:
         if self.call_errors:
             raise self.call_errors.pop(0)
 
-    def _with_owner(self, device: Mapping[str, Any]) -> dict[str, Any]:
+    def _with_owner(self, device: Mapping[str, Any], *, key: str = "device_sn") -> dict[str, Any]:
         entry = dict(device)
-        owner = self.owner_ids.get(str(entry.get("device_sn")))
+        owner = self.owner_ids.get(str(entry.get(key)))
         if owner is not None and owner != self.user_id:
             entry["member"] = {"admin_user_id": owner, "member_type": 1}
         return entry

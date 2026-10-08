@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from .devices.model_settings import Setting, SettingControl, SettingKind
     from .devices.recipes import MAX_PRESET_SLOTS, MAX_ZOOM, MIN_ZOOM, PanTilt, PresetPosition
     from .devices.settings import SettingUnit
+    from .diagnostics import AccountReport
     from .events import (
         AccountMismatch,
         AlarmChanged,
@@ -116,6 +117,7 @@ _EXPORTS: dict[str, str] = {
         ("redact", "redact_serial", "set_secret_logging", "set_wire_logging"), "_logging"
     ),
     **dict.fromkeys(("EufySecurity", "ModelStatus", "SkippedDevice"), "client"),
+    "AccountReport": "diagnostics",
     **dict.fromkeys(("CloudDevice", "FirmwareUpdate"), "cloud.models"),
     **dict.fromkeys(
         ("CloudStatus", "LoginNeed", "RegionStatus", "StationRefreshStatus"), "cloud.status"
@@ -250,6 +252,7 @@ __all__ = [
     "SETTLE_STATION",
     "STATION_SESSION_LIMIT",
     "AccountMismatch",
+    "AccountReport",
     "AlarmChanged",
     "AlarmPhase",
     "AlarmStopSource",

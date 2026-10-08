@@ -513,6 +513,11 @@ class SessionStats:
     media_slot_channel: int | None
     """The camera channel of the live stream holding this session's own media slot, or
     ``None`` when the slot is free or held by a recording/playback (no camera channel)."""
+    conn_init_version: int | None = None
+    """The version byte of the station's last CONN_INIT reply: :data:`~.crypto.CONN_INIT_ECC_VERSION`
+    for the ECIES handshake, any other value for the legacy RSA one; None before a reply."""
+    cipher_id: int | None = None
+    """The cipher the station named in its last CONN_INIT reply; None before a reply."""
 
 
 @dataclass(slots=True)
@@ -899,6 +904,7 @@ class StationSession:
         self._transport: PPPPTransport | None = None
         self._creds: P2PCredentials | None = None
         self._cipher_id: int | None = None
+        self._conn_init_version: int | None = None
         """The cipher the station named in its last CONN_INIT (None before one arrived)."""
         self._did: Did | None = None
         self._static_key: bytes | None = None
@@ -1315,6 +1321,8 @@ class StationSession:
             extra_live_sessions_open=len(self._extra_live),
             recording_downloads=self._recording_downloads,
             media_slot_channel=self.media_slot_channel,
+            conn_init_version=self._conn_init_version,
+            cipher_id=self._cipher_id,
         )
 
     # ── lifecycle ────────────────────────────────────────────────────────────
@@ -3322,6 +3330,7 @@ class StationSession:
         conn_init = parse_conn_init(frame.payload, frame.subheader, static)
         named = conn_init.cipher_id
         self._cipher_id = named
+        self._conn_init_version = conn_init.version
         _LOGGER.debug(
             "%s: CONN_INIT reply (%d bytes, version %d, encryption %s) names cipher %d",
             self._log_name,

@@ -89,6 +89,13 @@ VERIFY_CODE_BIZ_LOGIN: Final = 1004
 VERIFY_CODE_BY_EMAIL: Final = 2
 """``message_type`` that delivers the code by e-mail (1 SMS, 3 app push)."""
 DEVICES_PATH: Final = "/app/house/get_devs_list"
+HOUSES_PATH: Final = "/app/house/get_house_list"
+SECURITY_STATIONS_PATH: Final = "/v3/app/get_hub_list"
+"""The security realm's station list (the eufy Security app's binder service)."""
+SECURITY_DEVICES_PATH: Final = "/v3/app/get_devs_list"
+"""The security realm's device list; same body as :data:`SECURITY_STATIONS_PATH`."""
+SECURITY_LIST_PAGE: Final = 1000
+"""``num`` of a security-realm list request: the app asks page 0 with 1000 entries."""
 CIPHERS_PATH: Final = "/v3/app/cipher/get_ciphers"
 DSK_KEYS_PATH: Final = "/app/devicerelation/get_dsk_keys"
 PUSH_TOKEN_PATH: Final = "/app/push/register_push_token"  # noqa: S105 — a URL path, not a secret
@@ -144,6 +151,10 @@ DEFAULT_TIMEZONE: Final = "UTC"
 # The P2P command-channel cipher of a HomeBase: CONN_INIT names it, and its
 # ``ecc_private_key`` unwraps the session key.
 CIPHER_ID_P2P: Final = 40
+
+# The cipher ids one ``get_ciphers`` request asks to read an owner's whole cipher table:
+# the cloud answers only the ids the owner holds (seen: 13 to 212).
+CIPHER_ID_SWEEP: Final = range(401)
 
 # ── timing ───────────────────────────────────────────────────────────────────
 

@@ -36,6 +36,7 @@ from .devices.model_settings import (
 )
 from .devices.td import parse_thing_description, td_version
 from .devices.types import connects_on_demand
+from .diagnostics import AccountReport, async_account_report
 from .events import (
     AlarmChanged,
     AlarmTracker,
@@ -308,6 +309,7 @@ class EufySecurity:
         self.stations_served_elsewhere: tuple[CloudDevice, ...] = ()
         # Devices of the last device list that nothing is built for (see SkippedDevice).
         self.skipped_devices: tuple[SkippedDevice, ...] = ()
+        self._discovered = False
         # The model scan (_async_scan_models): read-only settings listed from the cloud
         # TD per unbundled product code.
         self._scanned = False
@@ -434,6 +436,23 @@ class EufySecurity:
         summary["cloud_status"] = cloud_status
         return summary
 
+    async def async_account_report(self, *, ciphers: bool = True) -> AccountReport:
+        """Every device each eufy list names, with firmware and cipher state, for
+        diagnostics: see :func:`~.diagnostics.async_account_report`.
+
+        Read-only and login-free: it asks only regions whose session is held or cached,
+        caches nothing and changes no station. ``ciphers`` adds one cipher-table sweep
+        per station owner. A few cloud requests per region: call it when a user asks
+        (a diagnostics download), not on a timer.
+        """
+        await self._ensure_cache_loaded()
+        served = (
+            frozenset(self.stations) | frozenset(self.remote_stations) if self._discovered else None
+        )
+        return await async_account_report(
+            self.cloud, self.cache, ciphers=ciphers, served_stations=served
+        )
+
     async def async_reauthenticate(
         self,
         password: str,
@@ -496,6 +515,7 @@ class EufySecurity:
         """
         await self._ensure_cache_loaded()
         devices = await self.cloud.async_get_devices(refresh=refresh, rescan_regions=rescan_regions)
+        self._discovered = True
         candidates, children, self.skipped_devices = _group(devices)
         included = [d for d in candidates if self._reach(d.device_sn) is not None]
         if self._claims is None:

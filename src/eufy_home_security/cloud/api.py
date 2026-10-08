@@ -27,6 +27,7 @@ import math
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, NoReturn
 
 from .._logging import (
@@ -58,7 +59,14 @@ from ..exceptions import (
 from ..storage import SessionCache
 from . import const, crypto
 from .const import DSK_REFRESH_MARGIN
-from .models import REGION_KEY, CloudDevice, FirmwareUpdate
+from .models import (
+    REGION_KEY,
+    CipherRecord,
+    CloudDevice,
+    CloudHouse,
+    FirmwareUpdate,
+    security_device_entry,
+)
 from .status import CloudStatus, LoginNeed, RegionStatus, StationRefreshStatus
 
 if TYPE_CHECKING:
@@ -76,6 +84,9 @@ _LOGGER = logging.getLogger(__name__)
 _WIRE = wire_logger("cloud")
 
 _SUCCESS: Final = int(const.CloudCode.SUCCESS)
+
+# The account-wide house device-list body (the house-scoped one names a ``house_id``).
+_ACCOUNT_DEVICES_BODY: Final[Mapping[str, Any]] = MappingProxyType({"device_sn": ""})
 
 type PasswordSource = str | Callable[[], Awaitable[str]]
 """The account password, or a coroutine function that produces it.
@@ -276,6 +287,19 @@ class EufyCloudApi:
         if not self._listings():
             return [self.region]
         return self.regions_with_devices()
+
+    def regions_with_session(self) -> list[str]:
+        """The regions a call can reach without a login: a session held or cached and
+        not expiring within the margin, in :data:`~.const.REGIONS` order."""
+        regions = []
+        for region in const.REGIONS:
+            held = self._identities.get(region)
+            cached = self._cached_session(region)
+            if (held is not None and held.auth_token) or (
+                cached is not None and self._session_usable(cached[3])
+            ):
+                regions.append(region)
+        return regions
 
     def _host(self, service: str, region: str) -> str:
         """``service``'s host on ``region``'s cluster, from the session's ``mega_domain``
@@ -749,8 +773,11 @@ class EufyCloudApi:
         )
         await self._drop_session_if_current(failed)
 
-    async def _ensure_session(self, region: str) -> _Identity:
-        """``region``'s live session: the one held, the cached one, or a new login."""
+    async def _ensure_session(self, region: str, *, login: bool = True) -> _Identity:
+        """``region``'s live session: the one held, the cached one, or a new login.
+
+        Without ``login``, no usable session raises :class:`NoCachedSessionError`.
+        """
         self._raise_if_replaced()
         identity = self._identities.get(region)
         if identity is not None and identity.auth_token:
@@ -760,6 +787,10 @@ class EufyCloudApi:
             # Re-check: another task may have logged in while this one waited.
             identity = self._identities.get(region)
             if not (identity and identity.auth_token) and not self._load_cached_session(region):
+                if not login:
+                    raise NoCachedSessionError(
+                        f"no usable {region} cloud session cached; not logging in"
+                    )
                 await self._do_login(region, verify_code=None, captcha_id=None, captcha_answer=None)
             identity = self._identities.get(region)
         if identity is None:  # pragma: no cover — login raises rather than return
@@ -767,7 +798,7 @@ class EufyCloudApi:
         return identity
 
     async def _with_session[T](
-        self, operation: Callable[[_Identity], Awaitable[T]], region: str
+        self, operation: Callable[[_Identity], Awaitable[T]], region: str, *, login: bool = True
     ) -> T:
         """Run ``operation`` on ``region``'s session, retrying once for each recoverable refusal.
 
@@ -776,8 +807,12 @@ class EufyCloudApi:
         same auth token, never a login, and a second refusal raises
         :class:`KeyExchangeRefusedError`. A credential rejection, a throttle, a session
         another client took over, or any other failure propagates at once.
+
+        Without ``login`` nothing logs in: no usable session raises
+        :class:`NoCachedSessionError`, and a session-expired code propagates with the
+        session left for the next ordinary call.
         """
-        identity = await self._ensure_session(region)
+        identity = await self._ensure_session(region, login=login)
         rekeyed = relogged = False
         while True:
             try:
@@ -793,7 +828,7 @@ class EufyCloudApi:
                 rekeyed = True
                 identity = await self._rekey(identity, err)
             except _SessionExpiredError as err:
-                if relogged:
+                if relogged or not login:
                     raise
                 relogged = True
                 _LOGGER.info("cloud session no longer accepted (%s); logging in once more", err)
@@ -886,10 +921,7 @@ class EufyCloudApi:
         counts: dict[str, int] = {}
         listed_by: dict[str, str] = {}
         for region in regions:
-            data = await self._authenticated_call(
-                self._host("house", region), const.DEVICES_PATH, {"device_sn": ""}, region=region
-            )
-            raw = _device_list(data)
+            raw = await self._house_entries(region, _ACCOUNT_DEVICES_BODY, login=True)
             counts[region] = len(raw)
             _LOGGER.info("the %s region lists %d device(s)", region, len(raw))
             for entry in raw:
@@ -925,6 +957,96 @@ class EufyCloudApi:
         for device in devices:
             _LOGGER.debug("  %r", device)
         return devices
+
+    async def _house_entries(
+        self, region: str, body: Mapping[str, Any], *, login: bool
+    ) -> list[Mapping[str, Any]]:
+        """The raw ``get_devs_list`` entries ``region`` answers ``body`` with."""
+        data = await self._authenticated_call(
+            self._host("house", region), const.DEVICES_PATH, dict(body), region=region, login=login
+        )
+        return _device_list(data)
+
+    async def async_list_house_devices(
+        self, region: str, house_id: str | None = None, *, login: bool = True
+    ) -> list[CloudDevice]:
+        """The house device list of ``region`` as the cloud answers it now; not cached.
+
+        ``house_id`` None asks the account-wide list :meth:`async_fetch_devices` reads
+        (body ``{"device_sn": ""}``); a house id asks that house in the app's body
+        (``house_id``, empty ``categories`` and ``add_pns``). Each device is tagged with
+        ``region``. Without ``login`` nothing logs in (see :meth:`_with_session`).
+        """
+        body: Mapping[str, Any] = (
+            _ACCOUNT_DEVICES_BODY
+            if house_id is None
+            else {"house_id": house_id, "categories": [], "add_pns": []}
+        )
+        raw = await self._house_entries(region, body, login=login)
+        return [CloudDevice.from_api({**entry, REGION_KEY: region}) for entry in raw]
+
+    async def async_list_houses(self, region: str, *, login: bool = True) -> list[CloudHouse]:
+        """The houses (homes) ``region`` lists for the account (``get_house_list``).
+
+        Not cached. Without ``login`` nothing logs in (see :meth:`_with_session`).
+        """
+        data = await self._authenticated_call(
+            self._host("house", region),
+            const.HOUSES_PATH,
+            {},
+            region=region,
+            login=login,
+            expect_data=False,
+        )
+        if data is None:
+            return []
+        houses = _mapping(data, const.HOUSES_PATH).get("house_infos") or []
+        if not isinstance(houses, list):
+            raise ProtocolError(f"cloud response to {const.HOUSES_PATH} has no house_infos list")
+        return [CloudHouse.from_api(h) for h in houses if isinstance(h, Mapping)]
+
+    async def async_list_security_devices(
+        self, region: str, *, stations: bool, login: bool = True
+    ) -> list[CloudDevice]:
+        """The security realm's station list (``stations``: ``get_hub_list``) or device
+        list (``get_devs_list``) of ``region``; not cached.
+
+        The lists the eufy Security app reads with the account's session on the
+        security realm; entries come back through :func:`~.models.security_device_entry`
+        (``source`` ``"security"``) tagged with ``region``. The request body is the
+        app's. Without ``login`` nothing logs in (see :meth:`_with_session`).
+        """
+        path = const.SECURITY_STATIONS_PATH if stations else const.SECURITY_DEVICES_PATH
+        body = {
+            "device_sn": "",
+            "station_sn": "",
+            "num": const.SECURITY_LIST_PAGE,
+            "page": 0,
+            "orderby": "",
+            "time_zone": round(time.localtime().tm_gmtoff * 1000),
+            "event_num_type": 1,
+            "transaction": crypto.new_key_ident(),
+        }
+
+        async def fetch(base: _Identity) -> Any:
+            sec = await self._security_identity(base)
+            _code, _resp, data = await self._call(
+                const.security_host(region), path, body, sec, category=True
+            )
+            return data
+
+        data = await self._with_session(fetch, region, login=login)
+        if data is None:
+            return []
+        if not isinstance(data, list):
+            raise ProtocolError(f"cloud response to {path} is not a list")
+        return [
+            CloudDevice.from_api(
+                {**security_device_entry(entry, station=stations), REGION_KEY: region}
+            )
+            for entry in data
+            if isinstance(entry, Mapping)
+        ]
 
     async def async_get_station_owner_id(self, station_sn: str, *, refresh: bool = False) -> str:
         """The owner id (``member.admin_user_id``) commands to ``station_sn`` must carry.
@@ -1170,31 +1292,10 @@ class EufyCloudApi:
     async def _fetch_cipher(
         self, station_sn: str, cipher_id: int, owner_user_id: str
     ) -> CipherKeys:
-        """Run the security-realm key exchange and fetch one cipher's keys.
-
-        The exchange and the fetch share one session retry: a server-revoked token
-        costs one re-login here, not an :class:`AuthenticationError` for days.
-        """
-        payload = {
-            "cipher_ids": [cipher_id],
-            "user_id": owner_user_id,
-            "station_sn": station_sn,
-        }
-
-        region = self.device_region(station_sn)
-
-        async def fetch(base: _Identity) -> Any:
-            sec = await self._security_identity(base)
-            _code, _resp, data = await self._call(
-                const.security_host(region),
-                const.CIPHERS_PATH,
-                payload,
-                sec,
-                category=True,
-            )
-            return data
-
-        data = await self._with_session(fetch, region)
+        """Fetch one cipher's keys (see :meth:`_cipher_answer`)."""
+        data = await self._cipher_answer(
+            station_sn, [cipher_id], owner_user_id, self.device_region(station_sn), login=True
+        )
         if not data:
             # code 0 with no data: no key for this cipher id under this user id (a
             # member's own id instead of the owner's, or an id the owner lacks).
@@ -1209,14 +1310,7 @@ class EufyCloudApi:
                 retry_after=backoff,
                 endpoint=const.CIPHERS_PATH,
             )
-        items = (
-            data
-            if isinstance(data, list)
-            else _mapping(data, const.CIPHERS_PATH).get("ciphers", [data])
-        )
-        if not isinstance(items, list):
-            raise ProtocolError(f"cloud response to {const.CIPHERS_PATH} has no cipher list")
-        for item in items:
+        for item in _cipher_items(data):
             if isinstance(item, Mapping) and str(item.get("cipher_id")) == str(cipher_id):
                 keys = CipherKeys(
                     _key_text(item.get("ecc_private_key")), _key_text(item.get("private_key"))
@@ -1228,6 +1322,71 @@ class EufyCloudApi:
             f"cipher {cipher_id} for {redact_serial(station_sn)} carried no private key",
             endpoint=const.CIPHERS_PATH,
         )
+
+    async def _cipher_answer(
+        self,
+        station_sn: str,
+        cipher_ids: Sequence[int],
+        owner_user_id: str,
+        region: str,
+        *,
+        login: bool,
+    ) -> Any:
+        """``get_ciphers``' ``data`` for ``cipher_ids`` under ``owner_user_id``.
+
+        The security-realm key exchange and the fetch share one session retry: a
+        server-revoked token costs one re-login (``login``), not an
+        :class:`AuthenticationError` for days.
+        """
+        payload = {
+            "cipher_ids": list(cipher_ids),
+            "user_id": owner_user_id,
+            "station_sn": station_sn,
+        }
+
+        async def fetch(base: _Identity) -> Any:
+            sec = await self._security_identity(base)
+            _code, _resp, data = await self._call(
+                const.security_host(region),
+                const.CIPHERS_PATH,
+                payload,
+                sec,
+                category=True,
+            )
+            return data
+
+        return await self._with_session(fetch, region, login=login)
+
+    async def async_list_ciphers(
+        self,
+        station_sn: str,
+        owner_user_id: str,
+        cipher_ids: Sequence[int] = const.CIPHER_ID_SWEEP,
+        *,
+        region: str | None = None,
+        login: bool = True,
+    ) -> list[CipherRecord]:
+        """The cipher records ``owner_user_id`` holds among ``cipher_ids``; not cached.
+
+        One ``get_ciphers`` request, named for ``station_sn`` (the key belongs to the
+        cipher id under the owner, so any station of that owner reads the same table).
+        The default asks :data:`~.const.CIPHER_ID_SWEEP`, the whole table. An empty
+        answer is an empty list, not :class:`CipherUnavailableError`. ``region``
+        defaults to the station's (:meth:`device_region`). Without ``login`` nothing
+        logs in (see :meth:`_with_session`). The keys are secrets: never log or persist
+        a record, report :meth:`CipherRecord.check_rsa` and ``ecc_state`` instead.
+        """
+        data = await self._cipher_answer(
+            station_sn,
+            cipher_ids,
+            owner_user_id,
+            region or self.device_region(station_sn),
+            login=login,
+        )
+        if not data:
+            return []
+        records = (CipherRecord.from_api(item) for item in _cipher_items(data))
+        return [record for record in records if record is not None]
 
     async def _security_identity(self, base: _Identity) -> _Identity:
         """Mint an eufy_security-realm identity on the session ``base``."""
@@ -1559,9 +1718,10 @@ class EufyCloudApi:
         *,
         region: str,
         expect_data: bool = True,
+        login: bool = True,
     ) -> Any:
         """A signed call on ``region``'s session, with one automatic re-login on an
-        expired-token or re-key code.
+        expired-token or re-key code (``login``: see :meth:`_with_session`).
 
         ``expect_data=False`` for endpoints whose success is a bare ``code: 0``.
         """
@@ -1570,7 +1730,7 @@ class EufyCloudApi:
             _code, _resp, data = await self._call(host, path, payload, identity)
             return data
 
-        data = await self._with_session(call, region)
+        data = await self._with_session(call, region, login=login)
         if data is None and expect_data:
             raise EmptyResponseError(_SUCCESS, "response carried no data", endpoint=path)
         return data
@@ -1842,6 +2002,19 @@ def _check_owner_id(owner: str, station_sn: str) -> None:
             f"owner id for {redact_serial(station_sn)} is not printable ASCII of at most "
             f"{_ECB_ACCOUNT_LEN - 1} characters ({len(owner)} characters)"
         )
+
+
+def _cipher_items(data: object) -> list[object]:
+    """The entries of a non-empty ``get_ciphers`` ``data``: a list, ``{"ciphers": [...]}``
+    or one entry."""
+    items = (
+        data
+        if isinstance(data, list)
+        else _mapping(data, const.CIPHERS_PATH).get("ciphers", [data])
+    )
+    if not isinstance(items, list):
+        raise ProtocolError(f"cloud response to {const.CIPHERS_PATH} has no cipher list")
+    return items
 
 
 def _device_list(data: object) -> list[Mapping[str, Any]]:
