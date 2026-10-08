@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.2.5](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.4...v0.2.5) (2026-10-08)
+
+
+### Features
+
+* account report of every eufy device list, firmware and cipher state ([#25](https://github.com/alaraun/python-eufy-home-security/issues/25)) ([9f9809e](https://github.com/alaraun/python-eufy-home-security/commit/9f9809eaeda31599e73e51a6fc29b17f772a1c2b))
+
 ## [0.2.4](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.3...v0.2.4) (2026-10-07)
 
 
