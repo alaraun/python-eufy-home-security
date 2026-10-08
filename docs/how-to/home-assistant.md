@@ -70,6 +70,8 @@ async def async_setup_entry(hass, entry):
         entry.data[CONF_EMAIL],
         None,  # the password is cached by the library
         store=cache_store(hass, entry.data[CONF_EMAIL]),
+        country=hass.config.country or "",  # the login country, as the eufy app's
+        timezone=hass.config.time_zone,
         claims=station_claims(hass),
     )
     try:
@@ -108,6 +110,8 @@ async def async_step_user(self, user_input):
         email,
         user_input[CONF_PASSWORD],
         store=cache_store(self.hass, email),
+        country=self.hass.config.country or "",
+        timezone=self.hass.config.time_zone,
     )
     try:
         await eufy.async_login()  # caches the session and the password
@@ -118,7 +122,18 @@ async def async_step_user(self, user_input):
 
 `EufySecurity(...)` raises `ValueError` for an empty e-mail or one without `@`, before
 anything touches the cache or the cloud: catch it and show an "invalid e-mail" form
-error, so a typo never spends a sign-in.
+error, so a typo never spends a sign-in. It raises `ValueError` too for a `country` that
+is not a two-letter ISO 3166 code; HA's `hass.config.country` always is one (or None).
+
+`country` and `timezone` make the logins look like the eufy app's: the login sends the
+country as `ab`, the home cluster of that country (eufy's own lookup) logs in first, and
+every request carries the country and the zone as headers. Without `country` the
+library uses the country eufy places the HA host's IP address in; when neither is known
+it logs in as before (`ab` = the region). A cached session made with another `ab` (every
+session from before this, or after the HA country changes) logs in again once per
+region, inside the login budget; when that login is refused, the old session stays in
+use and is not asked again for the same country. See
+[cloud.md § Login country](../protocol/cloud.md#login-country).
 
 The cache is what keeps the integration clear of the cloud's limits. Read the next
 section before writing the config flow.
@@ -134,7 +149,8 @@ provides where it lives.
 |---|---|---|
 | `openudid` | this install's eufy device identity, minted once | never; the only part kept when the account changes |
 | `password` | the account password of the last successful login | on every successful login; dropped as soon as the cloud rejects it |
-| `cloud.sessions.<region>` | per cloud region: key ident, shared key, auth token, user id, expiry, the login answer's `mega_domain` and `country_code` | on a login to that region: a miss, an expiry, or a session-expired answer. A re-key answer (HTTP 463) replaces only the key ident and shared key, by a key exchange, no login. A kick-out (26084) drops that region's session |
+| `cloud.sessions.<region>` | per cloud region: key ident, shared key, auth token, user id, expiry, the `ab` the login sent and the one it asked for (`ab_wanted`), the login answer's `mega_domain` and `country_code` | on a login to that region: a miss, an expiry, or a session-expired answer. A re-key answer (HTTP 463) replaces only the key ident and shared key, by a key exchange, no login. A kick-out (26084) drops that region's session |
+| `cloud.country` | the login country (`code`, `source` `option` or `ip`, `home_region`) | on the first login of a process when the country or its home region changed |
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
 | `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), and the key-refresh latch | on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass |
@@ -293,8 +309,8 @@ For the integration:
 | rescan | `async_discover(rescan_regions=True)` | only on the user's request: the "refresh device list" button and the repair's fix. Timers and automatic refreshes pass `refresh=True` alone, so a suspended region is never retried by itself |
 | scan on every refresh | `EufySecurity(scan_regions=...)` | an options-flow switch, off by default |
 
-The login answer's `country_code` reads `US` on an EU-homed account too: it echoes the
-request's `country` header, not the account's home.
+The login answer's `country_code` echoes the request's `country` header (the login
+country, else `US`), not the account's home.
 
 ### Account report (diagnostics)
 
@@ -318,6 +334,11 @@ them", including devices the library does not serve:
   before a discovery).
   A device listed by the security realm but not by `house` is one the library does not
   serve.
+- `login_country`, `country_source` (`option`, `ip`), `home_region`: the country the
+  logins send as `ab` (None while unknown); `client_country`: the country eufy places
+  the host's IP address in; `logins`: per region, the `ab` its session was made with and
+  `last_login_code`, the `ab` of the account's last login there by any client (the eufy
+  app's included).
 - `ciphers`: per station owner (`"own"`, `"owner 1"` …), the whole cipher table read in
   one `get_ciphers` request: per cipher id whether the ECC key and the RSA key are
   usable, the RSA key's letter case and size, and which stations named it.

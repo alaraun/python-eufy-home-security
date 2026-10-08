@@ -229,6 +229,12 @@ class FakeCloud:
     ``things_error``, when set, is raised by every such request; it is independent of
     ``call_errors``, which a things request never consumes.
 
+    The login country lookups are answered from ``client_country`` (the IP country) and
+    ``country_regions`` (each country's home region) and are not recorded in ``calls``;
+    ``last_login_ab`` keeps each region's last login ``ab``, which a
+    ``get_last_login_code`` request (recorded as ``"last_login_code"``) answers, and a
+    ``get_client_real_code`` request on a session is recorded as ``"client_country"``.
+
     ``call_errors`` makes the cloud refuse: each entry is raised, in order, by the next
     request that is not a login (after it is recorded in ``calls``), exactly as the
     library's own answer classification would raise it, so the real session handling
@@ -272,6 +278,12 @@ class FakeCloud:
     """Key exchanges run on this cloud (a login's, and a re-key's)."""
     user_id: str = SYNTHETIC.account_id
     """The logged-in account's own cloud user id."""
+    client_country: str | None = None
+    """The host's IP country ``get_client_real_code`` names; None names none."""
+    country_regions: dict[str, str] = field(default_factory=dict)
+    """``estimate_domain``: each country's home region; another country names no cluster."""
+    last_login_ab: dict[str, str] = field(default_factory=dict)
+    """The ``ab`` of the last login per region (``get_last_login_code``)."""
 
     @staticmethod
     def refusal(status: int, code: int | None = None, message: str = "") -> EufySecurityError:
@@ -323,7 +335,16 @@ class FakeCloud:
             if self.login_error is not None:
                 await api.hold_off_for(self.login_error)
                 raise self.login_error
+            self.last_login_ab[region] = str(payload.get("ab"))
             return {"auth_token": _AUTH_TOKEN, "user_id": self.user_id}
+        if path == const.LAST_LOGIN_CODE_PATH:
+            note("last_login_code")
+            self._raise_call_error()
+            return {"ab_code": self.last_login_ab.get(region, "").upper()}
+        if path == const.CLIENT_COUNTRY_PATH:
+            note("client_country")
+            self._raise_call_error()
+            return {"ab_code": self.client_country or ""}
         if path == const.DEVICES_PATH and "house_id" in payload:
             house_id = str(payload["house_id"])
             note(f"house:{house_id}")
@@ -448,6 +469,14 @@ class _FakeCloudApi(EufyCloudApi):
     ) -> _Identity:
         self._fake.key_exchanges += 1
         return _Identity(key_ident=f"{_KEY_IDENT}-{next(_IDENTS)}", shared_key=_SHARED_KEY)
+
+    async def _lookup_client_country(self) -> str | None:
+        """Answered from ``client_country``; no key exchange, nothing recorded in ``calls``."""
+        return self._fake.client_country
+
+    async def _lookup_home_region(self, country: str) -> str | None:
+        """Answered from ``country_regions``; nothing recorded in ``calls``."""
+        return self._fake.country_regions.get(country)
 
     async def _call(
         self,

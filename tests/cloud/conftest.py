@@ -119,6 +119,13 @@ class FakeMega:
         # a dict → returned as the RomVersionData.
         self.rom_version_data: dict[str, Any] | None = None
         self.captcha = {"captcha_id": "cap-123", "item": "aGVsbG8="}
+        # get_client_real_code's ``ab_code`` (the caller's IP country); "" names none.
+        self.client_country = ""
+        # estimate_domain: country -> the region whose mega- domain it answers; any other
+        # country gets a non-mega domain, as live.
+        self.country_regions: dict[str, str] = {}
+        # The ``ab`` of the last successful login per region (get_last_login_code).
+        self.last_login_ab: dict[str, str] = {}
         self._login_calls = 0
 
     # ── registration on an aioresponses mock ─────────────────────────────────
@@ -166,6 +173,23 @@ class FakeMega:
         mock.post(
             _url(passport, const.CAPTCHA_PATH),
             callback=self._delayed("captcha", self._captcha, region),
+            repeat=True,
+        )
+        mock.post(
+            _url(passport, const.CLIENT_COUNTRY_PATH),
+            callback=self._delayed("client_country", self._client_country, region),
+            repeat=True,
+        )
+        mock.post(
+            _url(passport, const.LAST_LOGIN_CODE_PATH),
+            callback=self._delayed(
+                "last_login_code", functools.partial(self._last_login_code, region=region), region
+            ),
+            repeat=True,
+        )
+        mock.post(
+            _url(const.mega_host(region), const.ESTIMATE_DOMAIN_PATH),
+            callback=self._delayed("estimate_domain", self._estimate_domain, region),
             repeat=True,
         )
         mock.post(
@@ -299,6 +323,7 @@ class FakeMega:
         shared = self._shared_for(kwargs)
         payload = self._decrypt_body(kwargs)
         self.calls.append(("login", payload))
+        self.headers.setdefault("login", []).append(dict(kwargs["headers"]))
         if failure := self._failure_once("login", kwargs):
             return failure
         if code := self.region_login_code.get(region, self.login_code):
@@ -313,7 +338,32 @@ class FakeMega:
                 "fa_info": {"info": "use verify code for 2fa", "step": 26052},
             }
             return self._reply(shared, 0, pending)
+        self.last_login_ab[region] = str(payload.get("ab"))
         return self._reply(shared, 0, {**self.login_data, "fa_info": {"info": "", "step": 0}})
+
+    def _client_country(self, url: str, **kwargs: Any) -> CallbackResult:
+        self.calls.append(("client_country", self._decrypt_body(kwargs)))
+        if failure := self._failure_once("client_country", kwargs):
+            return failure
+        return self._reply(self._shared_for(kwargs), 0, {"ab_code": self.client_country})
+
+    def _last_login_code(self, url: str, *, region: str = "", **kwargs: Any) -> CallbackResult:
+        self.calls.append(("last_login_code", self._decrypt_body(kwargs)))
+        if failure := self._failure_once("last_login_code", kwargs):
+            return failure
+        code = self.last_login_ab.get(region, "").upper()
+        return self._reply(self._shared_for(kwargs), 0, {"ab_code": code})
+
+    def _estimate_domain(self, url: str, **kwargs: Any) -> CallbackResult:
+        """Plaintext both ways, as live: no identity, ``data`` not encrypted."""
+        payload = json.loads(kwargs["data"])
+        self.calls.append(("estimate_domain", payload))
+        if failure := self._failure_once("estimate_domain", kwargs):
+            return failure
+        region = self.country_regions.get(str(payload.get("ab")))
+        domain = f"mega-{region}-pr.eufy.com" if region else "aiot-api-eu.eufylife.com"
+        body = {"code": 0, "msg": "success!", "data": {"domain": domain, "is_same_region": True}}
+        return CallbackResult(status=200, body=json.dumps(body))
 
     def _send_verify_code(self, url: str, **kwargs: Any) -> CallbackResult:
         payload = self._decrypt_body(kwargs)

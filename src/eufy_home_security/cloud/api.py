@@ -66,6 +66,7 @@ from .models import (
     CloudHouse,
     CloudInvite,
     FirmwareUpdate,
+    LoginCountry,
     security_device_entry,
 )
 from .status import CloudStatus, LoginNeed, RegionStatus, StationRefreshStatus
@@ -176,6 +177,45 @@ def _key_text(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+_COUNTRY_KEY: Final = "country"
+"""``cloud.country``: the looked-up login country (``code``, ``source``, ``home_region``)."""
+_AB_KEY: Final = "ab"
+"""A cached session's ``ab``: what its login sent."""
+_AB_WANTED_KEY: Final = "ab_wanted"
+"""A cached session's settled ``ab``: what was asked for (differs after a refused country login)."""
+
+
+def _country_code(value: object) -> str | None:
+    """``value`` as an upper-case ISO 3166 alpha-2 code; None for anything else."""
+    if not isinstance(value, str):
+        return None
+    code = value.strip().upper()
+    return code if len(code) == 2 and code.isascii() and code.isalpha() else None
+
+
+def _ab_code(data: object) -> str | None:
+    """The ``ab_code`` of a passport answer, None when it carries none."""
+    code = data.get("ab_code") if isinstance(data, Mapping) else None
+    return code if isinstance(code, str) and code else None
+
+
+def _cached_country(cache: SessionCache) -> LoginCountry | None:
+    """The login country cached by an earlier lookup, None when none is (or it is malformed)."""
+    entry = cache.section("cloud").get(_COUNTRY_KEY) if cache.loaded else None
+    if not isinstance(entry, dict):
+        return None
+    code, source, home = (
+        _country_code(entry.get("code")),
+        entry.get("source"),
+        entry.get("home_region"),
+    )
+    if code is None or source not in {const.COUNTRY_SOURCE_OPTION, const.COUNTRY_SOURCE_IP}:
+        return None
+    return LoginCountry(
+        code=code, source=str(source), home_region=home if home in const.REGIONS else None
+    )
+
+
 class EufyCloudApi:
     """Async client for the eufy_mega ("eufy_security") cloud.
 
@@ -188,6 +228,12 @@ class EufyCloudApi:
     (``rescan_regions=True``) or, with ``scan_regions``, every fetch asks every region
     (a device added on another region's cluster then appears; a region without a
     usable session costs a login).
+
+    Logins follow the app: the login country (:attr:`login_country`) is ``country``
+    when given, else the host's IP country, and its cluster (``estimate_domain``) logs
+    in first. Every region's login sends it as ``ab`` and every request as the
+    ``country`` header; ``timezone`` is the ``timezone`` header. While no country is
+    known, ``ab`` is the region and the header :data:`~.const.DEFAULT_COUNTRY`.
     """
 
     def __init__(
@@ -198,20 +244,29 @@ class EufyCloudApi:
         password: PasswordSource | None,
         *,
         country: str = "",
+        timezone: str = "",
         region: str | None = None,
         scan_regions: bool = False,
         install: InstallState | None = None,
     ) -> None:
         """``install`` shares a request hold-off with the other accounts of the process.
 
-        ``region`` not in :data:`~.const.REGIONS`: ``ValueError``.
+        ``country`` is an ISO 3166 alpha-2 code (any case), else ``ValueError``;
+        ``timezone`` an IANA zone name. ``region`` not in :data:`~.const.REGIONS`:
+        ``ValueError``.
         """
         self._session = session
         self._cache = cache
         self._install = install
         self._email = email.strip()
         self._password = password
-        self._country = country or const.DEFAULT_COUNTRY
+        self._country_option = _country_code(country) if country else None
+        if country and self._country_option is None:
+            raise ValueError(f"country {country!r} is not a two-letter ISO 3166 code")
+        self._timezone = timezone or const.DEFAULT_TIMEZONE
+        self._login_country: LoginCountry | None = None
+        self._country_resolved = False
+        """Whether this process looked the login country up (once, before its first login)."""
         self._region_override = None if region is None else const.check_region(region)
         self._scan_regions = scan_regions
         self._identities: dict[str, _Identity] = {}
@@ -247,12 +302,27 @@ class EufyCloudApi:
     @property
     def region(self) -> str:
         """The account's first region: the override, else the first region holding
-        cached devices, else :data:`~.const.DEFAULT_REGION`. A forced login and a
-        reauthentication go there."""
+        cached devices, else the login country's home region, else
+        :data:`~.const.DEFAULT_REGION`. A forced login and a reauthentication go there."""
         if self._region_override:
             return self._region_override
         held = self.regions_with_devices()
-        return held[0] if held else const.DEFAULT_REGION
+        if held:
+            return held[0]
+        home = self._home_region()
+        return home or const.DEFAULT_REGION
+
+    def _home_region(self) -> str | None:
+        """The login country's home region: this process's lookup, else the cached one."""
+        if self._login_country is not None:
+            return self._login_country.home_region
+        cached = _cached_country(self._cache)
+        return cached.home_region if cached is not None else None
+
+    def _login_order(self, regions: Sequence[str]) -> list[str]:
+        """``regions`` with :attr:`region` first, as the app logs in to the home cluster."""
+        first = self.region
+        return sorted(regions, key=lambda r: r != first)
 
     def _listings(self) -> dict[str, dict[str, Any]]:
         """Each listed region's last device-list record (``devices``, ``at``)."""
@@ -337,7 +407,9 @@ class EufyCloudApi:
         """Establish a session in every region the next device list asks, reusing cached ones.
 
         ``force`` logs in to :attr:`region` even with a cached session; the other
-        regions log in only without a usable cached session.
+        regions log in only without a usable cached session, home region first. A cached
+        session made with another ``ab`` than the login country's logs in again once
+        (:meth:`_remake_for_country`).
 
         Raises :class:`LoginChallengeError` when the account needs an e-mailed code
         or a captcha — re-call with the answer and the challenge's ``login_id``; the
@@ -373,9 +445,20 @@ class EufyCloudApi:
                     login_id=login_id,
                 )
                 await self._release_after_take_over(force)
+            pending: list[str] = []
             for region in self.regions_to_list():
-                if region == first or self._load_cached_session(region):
+                if region == first:
                     continue
+                if self._load_cached_session(region):
+                    await self._remake_for_country(region)
+                    continue
+                pending.append(region)
+            if len(pending) > 1 and self._password_at_hand():
+                # The home region logs in first: look the country up before ordering,
+                # unless the first login would be refused locally anyway.
+                self._raise_if_held_off(login=True, region=pending[0])
+                await self._resolve_login_country()
+            for region in self._login_order(pending):
                 await self._do_login(region, verify_code=None, captcha_id=None, captcha_answer=None)
 
     async def async_reauthenticate(
@@ -509,6 +592,244 @@ class EufyCloudApi:
         )
         return True
 
+    # ── login country ────────────────────────────────────────────────────────
+
+    @property
+    def login_country(self) -> LoginCountry | None:
+        """The country logins use (see the class docstring), None while unknown: this
+        process's lookup, else the cached one. No lookup happens here."""
+        if self._country_resolved:
+            return self._login_country
+        return self._login_country or _cached_country(self._cache)
+
+    def login_ab(self, region: str) -> str:
+        """The ``ab`` a login to ``region`` sends: the login country's code, else the region."""
+        country = self.login_country
+        return country.code if country is not None else region
+
+    def _country_header(self) -> str:
+        """The ``country`` header: the login country, else the option, else the default."""
+        country = self.login_country
+        if country is not None:
+            return country.code
+        return self._country_option or const.DEFAULT_COUNTRY
+
+    async def async_last_login_code(self, region: str, *, login: bool = True) -> str | None:
+        """The ``ab`` of the account's last login on ``region``'s cluster, by any client
+        (``get_last_login_code``); None when it names none. ``login``: see
+        :meth:`_with_session`."""
+        data = await self._authenticated_call(
+            self._host("passport", region),
+            const.LAST_LOGIN_CODE_PATH,
+            {"email": self._email},
+            region=region,
+            expect_data=False,
+            login=login,
+        )
+        return _ab_code(data)
+
+    async def async_client_country(self, region: str, *, login: bool = True) -> str | None:
+        """The country eufy places this host's IP address in (``get_client_real_code``),
+        asked on ``region``'s session; None when it names none."""
+        data = await self._authenticated_call(
+            self._host("passport", region),
+            const.CLIENT_COUNTRY_PATH,
+            {},
+            region=region,
+            expect_data=False,
+            login=login,
+        )
+        return _ab_code(data)
+
+    def session_ab(self, region: str) -> str | None:
+        """The ``ab`` ``region``'s cached session was made with; None without one.
+
+        A session cached before logins recorded it was made with the region.
+        """
+        cloud = self._cache.cloud_sessions().get(region)
+        if not cloud or self._cached_session(region) is None:
+            return None
+        ab = cloud.get(_AB_KEY)
+        return ab if isinstance(ab, str) and ab else region
+
+    def _session_ab_wanted(self, region: str) -> str | None:
+        """The ``ab`` ``region``'s cached session settles: the one asked for when it was
+        made or last re-made (a refused country login leaves its ``ab``), else its own."""
+        wanted = self._cache.cloud_sessions().get(region, {}).get(_AB_WANTED_KEY)
+        return wanted if isinstance(wanted, str) and wanted else self.session_ab(region)
+
+    async def _resolve_login_country(self) -> None:
+        """Look the login country up once per process; callers hold ``_login_lock``.
+
+        The ``country`` option, else the cached country when it came from the IP, else
+        ``get_client_real_code`` (before any login). Its home region comes from the
+        cache when the code matches, else from ``estimate_domain``. A country the lookup
+        names no ``mega-`` cluster for is not used; a lookup that fails leaves the
+        country without a home region (an option) or unknown (the IP), and is not cached.
+        """
+        if self._country_resolved:
+            return
+        self._country_resolved = True
+        cached = _cached_country(self._cache)
+        option = self._country_option
+        if option is not None:
+            code, source = option, const.COUNTRY_SOURCE_OPTION
+        elif cached is not None and cached.source == const.COUNTRY_SOURCE_IP:
+            code, source = cached.code, cached.source
+        else:
+            looked_up = _country_code(await self._lookup_client_country())
+            if looked_up is None:
+                _LOGGER.info("login country unknown: logging in with the region as ab")
+                return
+            code, source = looked_up, const.COUNTRY_SOURCE_IP
+        if cached is not None and cached.code == code and cached.home_region is not None:
+            self._login_country = LoginCountry(
+                code=code, source=source, home_region=cached.home_region
+            )
+        else:
+            try:
+                home = await self._lookup_home_region(code)
+            except EufySecurityError as err:
+                _LOGGER.info("no home cluster for country %s yet: %s", code, err)
+                home = None
+                if source == const.COUNTRY_SOURCE_IP:
+                    return
+            else:
+                if home is None:
+                    _LOGGER.warning(
+                        "eufy names no cluster for country %s; logging in with the region as ab",
+                        code,
+                    )
+                    return
+            self._login_country = LoginCountry(code=code, source=source, home_region=home)
+        country = self._login_country
+        _LOGGER.info(
+            "login country %s (%s), home region %s",
+            country.code,
+            country.source,
+            country.home_region,
+        )
+        if country.home_region is not None and cached != country:
+            self._cache.section("cloud")[_COUNTRY_KEY] = {
+                "code": country.code,
+                "source": country.source,
+                "home_region": country.home_region,
+            }
+            await self._cache.async_save()
+
+    async def _lookup_client_country(self) -> str | None:
+        """The host's IP country from ``get_client_real_code`` on a fresh key-exchange
+        identity (no login), None when it fails or names no country."""
+        region = self._region_override or const.DEFAULT_REGION
+        try:
+            identity = await self._key_exchange(
+                self._host("openapi", region), const.KEY_EXCHANGE_PATH, const.MEGA_PRESET_KEY
+            )
+            identity.region = region
+            _code, _resp, data = await self._call(
+                self._host("passport", region), const.CLIENT_COUNTRY_PATH, {}, identity
+            )
+        except EufySecurityError as err:
+            _LOGGER.info("IP country lookup failed: %s", err)
+            return None
+        return _ab_code(data)
+
+    async def _lookup_home_region(self, country: str) -> str | None:
+        """The region whose cluster ``estimate_domain`` names for ``country``; None when
+        it names another kind of domain (not a eufy country). Raises
+        :class:`CommunicationError` or :class:`ProtocolError` when it does not answer."""
+        data = await self._post_plain(
+            const.mega_host(self._region_override or const.DEFAULT_REGION),
+            const.ESTIMATE_DOMAIN_PATH,
+            {"ab": country, "mode": const.ESTIMATE_DOMAIN_MODE},
+        )
+        domain = data.get("domain")
+        return const.region_from_mega_domain(domain if isinstance(domain, str) else None)
+
+    async def _post_plain(
+        self, host: str, path: str, payload: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        """POST a plaintext JSON body with no identity; the answer's ``data`` object.
+
+        Nothing is sent while a request hold-off runs. A non-zero body code raises
+        :class:`CloudApiError`.
+        """
+        self._raise_if_held_off(login=False)
+        import aiohttp  # noqa: PLC0415 - deferred so a cache-only run never imports it
+
+        url = f"https://{host}{path}"
+        headers = {
+            "app-name": const.APP_NAME,
+            "app-version": const.APP_VERSION,
+            "os-type": const.OS_TYPE,
+            "content-type": "application/json",
+            "user-agent": const.USER_AGENT,
+        }
+        _LOGGER.debug("→ POST %s body=%s", url, Payload(dict(payload)))
+        try:
+            async with self._http().post(
+                url,
+                headers=headers,
+                data=json.dumps(dict(payload)),
+                timeout=aiohttp.ClientTimeout(total=const.HTTP_TIMEOUT_SECONDS),
+            ) as resp:
+                status, text = resp.status, await resp.text()
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            raise CommunicationError(f"cloud request to {path} failed: {exc}") from exc
+        _LOGGER.debug("← %s HTTP %s: %s", path, status, text[:500])
+        if status != 200:
+            raise classify_refusal(status, _loose_code(text), _message(_loose_object(text)), path)
+        parsed = _loose_object(text)
+        code = _body_code(parsed.get("code", _SUCCESS), path)
+        if code != _SUCCESS:
+            raise CloudApiError(code, _message(parsed), endpoint=path)
+        return _mapping(parsed.get("data") or {}, path)
+
+    async def _remake_for_country(self, region: str) -> None:
+        """Log ``region`` in again once when its cached session was made with another
+        ``ab`` than the login country; callers hold ``_login_lock``.
+
+        Only with the country known and a password at hand (a cached one, or a string;
+        never a prompt). The cached session stays in use whatever happens: a hold-off, a
+        spent budget or no network leaves it for the next :meth:`async_login`; any other
+        refusal (a challenge, a credential or body-code error) is recorded so it is not
+        asked again for this country.
+        """
+        made = self._session_ab_wanted(region)
+        if made is None or not self._password_at_hand(prompt=False):
+            return
+        try:
+            self._raise_if_held_off(login=True, region=region)
+        except RateLimitedError:
+            return
+        await self._resolve_login_country()
+        wanted = self.login_ab(region)
+        if self.login_country is None or made == wanted:
+            return
+        _LOGGER.info(
+            "%s cloud session was made with ab %s; logging in once with ab %s", region, made, wanted
+        )
+        challenge_region = self._challenge_region
+        try:
+            await self._do_login(
+                region, verify_code=None, captcha_id=None, captcha_answer=None, fallback=False
+            )
+        except (RateLimitedError, CommunicationError) as err:
+            _LOGGER.info(
+                "%s re-login with ab %s not done (%s); kept the session", region, wanted, err
+            )
+        except EufySecurityError as err:
+            self._challenge_region = challenge_region
+            _LOGGER.warning(
+                "%s re-login with ab %s refused (%s); kept the session made with ab %s",
+                region,
+                wanted,
+                err,
+                made,
+            )
+            self._cache.cloud_session(region)[_AB_WANTED_KEY] = wanted
+            await self._cache.async_save()
+
     async def _do_login(
         self,
         region: str,
@@ -518,20 +839,27 @@ class EufyCloudApi:
         captcha_answer: str | None,
         login_id: str | None = None,
         password: str | None = None,
+        fallback: bool = True,
     ) -> None:
         """One password login to ``region`` (``password`` overrides every source).
 
-        Callers hold ``_login_lock``.
+        The login sends :meth:`login_ab` as ``ab``. With ``fallback``, a country login
+        the cloud refuses with a plain body code is sent once more with the region as
+        ``ab`` (a second login of the budget), and the session records the country as
+        the ``ab`` it settles, so no re-login follows for it. Callers hold ``_login_lock``.
         """
         self._raise_if_held_off(login=True, region=region)
         password, source = (
             (password, "reauthenticating") if password else await self._login_password()
         )
+        await self._resolve_login_country()
+        wanted = self.login_ab(region)
         _LOGGER.info(
-            "logging in to the eufy cloud as %s (password %s, region %s)",
+            "logging in to the eufy cloud as %s (password %s, region %s, ab %s)",
             Secret(self._email),
             source,
             region,
+            wanted,
         )
         _LOGGER.debug(
             "login: password %s, openudid %s, %d login(s) in the budget window",
@@ -543,35 +871,29 @@ class EufyCloudApi:
             self._host("openapi", region), const.KEY_EXCHANGE_PATH, const.MEGA_PRESET_KEY
         )
         identity.region = region
-        wrapped = crypto.encrypt_login_password(password)
-        _LOGGER.debug(
-            "login: password wrapped under an ephemeral ECDH key (client public key %s, "
-            "ECDH secret %s, ciphertext %s)",
-            wrapped.client_public_key,
-            Credential(wrapped.secret),
-            Credential(wrapped.encrypted),
-        )
-        payload = {
-            "email": self._email,
-            "password": wrapped.encrypted,
-            "ab": region,
-            "client_secret_info": {"public_key": wrapped.client_public_key},
+        answer = {
             "answer": captcha_answer or "",
             "captcha_id": captcha_id or "",
             "verify_code": verify_code or "",
             "login_id": login_id or "",
         }
-        # Counted before it is sent: a login that times out may still have landed.
-        self._cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, region)
-        await self._cache.async_save()
+        ab = wanted
         try:
-            code, resp, data = await self._call(
-                self._host("passport", region),
-                const.LOGIN_PATH,
-                payload,
-                identity,
-                tolerate=const.VERIFY_CODE_CODES | const.CAPTCHA_CODES,
-            )
+            try:
+                code, resp, data = await self._send_login(identity, password, ab, answer)
+            except CloudApiError as err:
+                if not (fallback and ab != region and type(err) is CloudApiError):
+                    raise
+                _LOGGER.warning(
+                    "%s login with ab %s refused (%s); logging in with ab %s",
+                    region,
+                    ab,
+                    err,
+                    region,
+                )
+                self._raise_if_held_off(login=True, region=region)
+                ab = region
+                code, resp, data = await self._send_login(identity, password, ab, answer)
         except AuthenticationError as err:
             if not isinstance(err, _SessionExpiredError) and self._cache.password == password:
                 # A rejected cached password is never tried again: each failure
@@ -601,9 +923,51 @@ class EufyCloudApi:
             await self._raise_verify_code_challenge(identity, step, resp, data)
         if self._challenge_region == region:
             self._challenge_region = None
-        self._store_session(identity, _mapping(data, const.LOGIN_PATH))
+        self._store_session(identity, _mapping(data, const.LOGIN_PATH), ab=ab, ab_wanted=wanted)
         self._cache.set_password(password)
         await self._cache.async_save()
+
+    async def _send_login(
+        self, identity: _Identity, password: str, ab: str, answer: Mapping[str, str]
+    ) -> tuple[int, dict[str, Any], Any]:
+        """Send one ``passport/login`` with ``ab`` and the challenge ``answer`` fields,
+        counted in the region's login budget before it is sent."""
+        region = identity.region
+        wrapped = crypto.encrypt_login_password(password)
+        _LOGGER.debug(
+            "login: password wrapped under an ephemeral ECDH key (client public key %s, "
+            "ECDH secret %s, ciphertext %s)",
+            wrapped.client_public_key,
+            Credential(wrapped.secret),
+            Credential(wrapped.encrypted),
+        )
+        payload = {
+            "email": self._email,
+            "password": wrapped.encrypted,
+            "ab": ab,
+            "client_secret_info": {"public_key": wrapped.client_public_key},
+            **answer,
+        }
+        # Counted before it is sent: a login that times out may still have landed.
+        self._cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, region)
+        await self._cache.async_save()
+        return await self._call(
+            self._host("passport", region),
+            const.LOGIN_PATH,
+            payload,
+            identity,
+            tolerate=const.VERIFY_CODE_CODES | const.CAPTCHA_CODES,
+        )
+
+    def _password_at_hand(self, *, prompt: bool = True) -> bool:
+        """Whether a login has a password without asking anyone: a given string, a cached
+        one, or (with ``prompt``) a callable that produces one."""
+        source = self._password
+        return bool(
+            (isinstance(source, str) and source)
+            or self._cache.password
+            or (prompt and callable(source))
+        )
 
     async def _login_password(self) -> tuple[str, str]:
         """The password to log in with and where it came from ("given", "cached", "callable").
@@ -695,7 +1059,11 @@ class EufyCloudApi:
                 return value
         return ""
 
-    def _store_session(self, identity: _Identity, data: Mapping[str, Any]) -> None:
+    def _store_session(
+        self, identity: _Identity, data: Mapping[str, Any], *, ab: str, ab_wanted: str
+    ) -> None:
+        """Make ``data``'s token ``identity``'s session and cache it with the ``ab`` it
+        was made with and the ``ab`` asked for."""
         token = data.get("auth_token") or data.get("token")
         if not isinstance(token, str) or not token:
             raise AuthenticationError("login succeeded but carried no auth token")
@@ -725,6 +1093,8 @@ class EufyCloudApi:
                 "auth_token": token,
                 "user_id": identity.user_id,
                 "expires_at": ttl,
+                _AB_KEY: ab,
+                _AB_WANTED_KEY: ab_wanted,
             }
         )
         if isinstance(mega_domain, str) and mega_domain:
@@ -732,10 +1102,11 @@ class EufyCloudApi:
         if isinstance(country_code, str) and country_code:
             cloud["country_code"] = country_code
         _LOGGER.info(
-            "%s cloud login ok (user %s, token expires %s, mega_domain %r, country_code %r)",
+            "%s cloud login ok (user %s, token expires %s, ab %s, mega_domain %r, country_code %r)",
             region,
             redact(identity.user_id),
             _epoch(ttl),
+            ab,
             mega_domain,
             country_code,
         )
@@ -1859,9 +2230,9 @@ class EufyCloudApi:
             "accept": "application/json",
             "accept-charset": "UTF-8",
             "user-agent": const.USER_AGENT,
-            "country": self._country,
+            "country": self._country_header(),
             "language": const.DEFAULT_LANGUAGE,
-            "timezone": const.DEFAULT_TIMEZONE,
+            "timezone": self._timezone,
         }
         if authenticated and auth_token:
             headers["x-auth-token"] = auth_token

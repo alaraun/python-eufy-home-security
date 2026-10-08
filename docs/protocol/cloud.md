@@ -31,9 +31,9 @@ Code: `src/eufy_home_security/cloud/crypto.py` (pure primitives),
   them **[app]**. The library uses it only for the region it names; the answers seen so far
   carried none (`domain ""`).
 - The library's `region` argument pins every call to one region.
-- `POST /passport/estimate_domain` with a **plaintext** body `{"ab": "<country>", "mode":
-  1}` returns the product-domain map for a country **[verified]**. The library does not
-  use it: the account's country is not known to it.
+- `POST mega-{region}-pr.eufy.com/passport/estimate_domain` names a country's cluster;
+  the library uses it to find the home region of the login country (see
+  [Login country](#login-country)).
 
 ## Request envelope (MegaCrypto)
 
@@ -91,7 +91,7 @@ identity minted in one realm is refused by the other's cipher gateway **[verifie
 `POST app-passport-{region}-pr.eufy.com/passport/login`, on a fresh eufy.com identity:
 
 ```json
-{"email": "<e-mail>", "password": "<wrapped>", "ab": "eu",
+{"email": "<e-mail>", "password": "<wrapped>", "ab": "<country>",
  "client_secret_info": {"public_key": "<client P-256 pub, uncompressed hex>"},
  "answer": "", "captcha_id": "", "verify_code": "", "login_id": ""}
 ```
@@ -110,8 +110,43 @@ repeatedly **[verified]**. Change it only against a capture of the app's own log
 | `auth_token` | session token, valid for weeks (`token_expires_at` when present) |
 | `ap_cloud_user_id` | the **logged-in** user's id. It feeds `gtoken`. It is **not** the P2P `account_id` for a shared member (see below). |
 | `mega_domain` / `domain` | the cluster's host base when present; empty on the answers seen |
-| `country_code` | echoes the request's `country` header (`US` on an EU-homed account); not the account's home |
+| `ab_code` | echoes the request's `ab` |
+| `country_code` | echoes the request's `country` header (`US` on an EU-homed account sent `US`); not the account's home |
 | `fa_info` | `{info, step}`: `step` 26052 while two-step verification is pending (see below), 0 otherwise **[verified: step 0]** |
+
+## Login country
+
+The eufy app logs in with the user's country, and the library does the same **[app]**:
+
+1. **Country**: the `country` argument (ISO 3166 alpha-2; Home Assistant passes its own
+   country setting), else the host's IP country: `POST
+   app-passport-{region}-pr.eufy.com/passport/get_client_real_code`, body `{}`, on a
+   fresh key-exchange identity before any login, answers `{"ab_code": "EE"}`
+   **[verified]**. Neither known: `ab` is the region (`eu`/`us`) and the `country` header
+   `US`, as before.
+2. **Home cluster**: `POST mega-{region}-pr.eufy.com/passport/estimate_domain`, a
+   **plaintext** body `{"ab": "<country>", "mode": 1}` with no identity, answers
+   plaintext `data.domain` = `mega-eu-pr.eufy.com` or `mega-us-pr.eufy.com` (and the
+   product-domain map), the same from either host **[verified]**. A lowercase or unknown
+   code answers another domain (`aiot-api-eu.eufylife.com`): the library then does not
+   use the country. The home region logs in first.
+3. **Login**: `ab` = the country on every region's login (a login in the other cluster
+   with the same `ab` succeeds and lists that cluster's devices **[verified]**), `country`
+   header = the country, `timezone` header = the caller's IANA zone (default `UTC`).
+4. **Old sessions**: each cached session records the `ab` it was made with; one made with
+   another `ab` logs in again once per region, inside the login budget. A plain body-code
+   refusal of a country login (26502 "Failed to request." was seen for `ab` `US` on the
+   `eu` cluster) keeps the old session there, or, for a fresh login, retries once with
+   the region as `ab`; either way that country is not asked again for the session.
+
+`POST app-passport-{region}-pr.eufy.com/passport/get_last_login_code`, body `{"email":
+…}`, answers `{"ab_code": …}`: the `ab` of the account's last login on that cluster, by
+any client **[verified]**. The account report shows it per region, with the IP country.
+The app compares it with the chosen country before logging in.
+
+Which lists a country login changes is not established: on an account that lists its
+devices with `ab` = the region, `ab` = the country listed the same devices
+**[verified]**.
 
 ## Login challenges
 

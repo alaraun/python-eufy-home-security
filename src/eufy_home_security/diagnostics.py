@@ -2,8 +2,8 @@
 
 :func:`async_account_report` asks every list the account's cloud sessions can reach
 without a login (the house device list account-wide and per house, the pending
-invitations, the security realm's station and device lists) and each owner's whole
-cipher table, and returns an
+invitations, the security realm's station and device lists), each region's last-login
+code, the host's IP country and each owner's whole cipher table, and returns an
 :class:`AccountReport`: JSON-safe and secret-free, so a consumer can put it in a
 diagnostics download as it is. Serials go through :func:`~._logging.redact_serial`;
 no user id, house id, DID, IP, name, key or parameter value (but the camera-info
@@ -40,6 +40,7 @@ __all__ = [
     "HouseReport",
     "InviteReport",
     "ListingReport",
+    "LoginReport",
     "OwnerCiphersReport",
     "async_account_report",
 ]
@@ -66,6 +67,18 @@ INVITES: Final = "invites"
 def house_source(index: int) -> str:
     """The ``listed_by`` label of the ``index``-th (1-based) house's device list."""
     return f"house:{index}"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LoginReport:
+    """One region's login: the ``ab`` its cached session was made with (None without
+    one) and the cloud's ``get_last_login_code`` (the ``ab`` of the account's last login
+    there, by any client), or why that was not read."""
+
+    region: str
+    ab: str | None
+    last_login_code: str | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -194,6 +207,11 @@ class AccountReport:
     were not, since asking them would cost a login. ``stopped`` is the error that ended
     the report's requests early (a throttle, a session another client took over, a
     refused credential), None when every request was sent.
+
+    ``login_country`` is the country logins send as ``ab``, with its ``country_source``
+    (``"option"``, ``"ip"``) and ``home_region``, all None while unknown;
+    ``client_country`` the country eufy places the host's IP address in (asked on the
+    first region's session), and ``logins`` each asked region's :class:`LoginReport`.
     """
 
     regions: tuple[str, ...]
@@ -203,6 +221,11 @@ class AccountReport:
     devices: tuple[DeviceEntryReport, ...]
     ciphers: tuple[OwnerCiphersReport, ...]
     invites: tuple[InviteReport, ...] = ()
+    login_country: str | None = None
+    country_source: str | None = None
+    home_region: str | None = None
+    client_country: str | None = None
+    logins: tuple[LoginReport, ...] = ()
     stopped: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -256,6 +279,9 @@ async def async_account_report(
     """
     builder = _ReportBuilder(cloud, cache)
     regions = cloud.regions_with_session()
+    client_country: str | None = None
+    if regions:
+        client_country = await builder.ask_client_country(regions[0])
     for region in regions:
         await builder.ask_region(region)
     labels, stations = _owners(cloud.user_id, builder.seen.values())
@@ -267,6 +293,7 @@ async def async_account_report(
         _device_report(entry, cloud.user_id, labels, cache, served_stations)
         for entry in builder.seen.values()
     )
+    country = cloud.login_country
     return AccountReport(
         regions=tuple(regions),
         regions_without_session=tuple(r for r in REGIONS if r not in regions),
@@ -275,6 +302,11 @@ async def async_account_report(
         devices=devices,
         ciphers=tuple(cipher_reports),
         invites=tuple(builder.invites),
+        login_country=None if country is None else country.code,
+        country_source=None if country is None else country.source,
+        home_region=None if country is None else country.home_region,
+        client_country=client_country,
+        logins=tuple(builder.logins),
         stopped=builder.stopped,
     )
 
@@ -289,6 +321,7 @@ class _ReportBuilder:
         self.listings: list[ListingReport] = []
         self.houses: list[HouseReport] = []
         self.invites: list[InviteReport] = []
+        self.logins: list[LoginReport] = []
         self.seen: dict[str, _Seen] = {}
 
     async def _ask[T](self, request: Awaitable[T]) -> tuple[T | None, str | None]:
@@ -322,9 +355,21 @@ class _ReportBuilder:
         )
         return result or []
 
+    async def ask_client_country(self, region: str) -> str | None:
+        """The host's IP country, asked on ``region``'s session; None on any failure."""
+        country, _error = await self._ask(self._cloud.async_client_country(region, login=False))
+        return country
+
     async def ask_region(self, region: str) -> None:
-        """Ask ``region``'s house, per-house, invitation and security-realm lists."""
+        """Ask ``region``'s last-login code and its house, per-house, invitation and
+        security-realm lists."""
         cloud = self._cloud
+        code, error = await self._ask(cloud.async_last_login_code(region, login=False))
+        self.logins.append(
+            LoginReport(
+                region=region, ab=cloud.session_ab(region), last_login_code=code, error=error
+            )
+        )
         self._note(
             HOUSE,
             await self._listing(region, HOUSE, cloud.async_list_house_devices(region, login=False)),
