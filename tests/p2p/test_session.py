@@ -54,6 +54,7 @@ from eufy_home_security.exceptions import (
 )
 from eufy_home_security.models import STATION_CHANNEL, GuardMode
 from eufy_home_security.p2p import transport as transport_module
+from eufy_home_security.p2p.crypto import CONN_INIT_ECC_VERSION
 from eufy_home_security.p2p.did import Did, static_key
 from eufy_home_security.p2p.media import (
     MediaDecoder,
@@ -677,6 +678,7 @@ async def test_stale_cipher_key_is_refreshed_once(station: FakeStation) -> None:
     assert station.conn_inits == 2
     stats = session.stats()
     assert (stats.handshake_failures, stats.key_refreshes, stats.connects) == (1, 1, 1)
+    assert (stats.conn_init_version, stats.cipher_id) == (CONN_INIT_ECC_VERSION, station.cipher_id)
 
 
 async def test_a_rejected_refetched_key_latches_until_released(station: FakeStation) -> None:
@@ -3166,6 +3168,7 @@ async def test_an_rsa_conn_init_runs_the_session_under_its_aes_key(
     assert [o["cmd"] for o in station.received] == [1277]
     assert stats.receipts_by_code == {"0": 2}  # the query's and the command's, in clear
     assert stats.dropped_undecodable == 0
+    assert (stats.conn_init_version, stats.cipher_id) == (1, station.cipher_id)
 
 
 async def test_an_rsa_conn_init_without_an_rsa_key_fails_the_handshake(

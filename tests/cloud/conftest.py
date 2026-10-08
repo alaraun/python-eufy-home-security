@@ -104,6 +104,14 @@ class FakeMega:
         # Endpoint ("login", "devices", "push" …) -> a delay overriding ``latency``.
         self.slow: dict[str, float] = {}
         self.cipher_objects: list[dict[str, Any]] | None = None
+        # get_house_list's house_infos, and each house id's own device list.
+        self.houses: list[dict[str, Any]] = []
+        self.house_devices: dict[str, list[dict[str, Any]]] = {}
+        # The security realm's get_hub_list / get_devs_list entries.
+        self.security_stations: list[dict[str, Any]] = []
+        self.security_devices: list[dict[str, Any]] = []
+        # Endpoint -> the request headers of each call, in order.
+        self.headers: dict[str, list[dict[str, str]]] = {}
         self.dsk_objects: list[dict[str, Any]] | None = None
         # get_rom_version: None → the OTA "up to date" error object (code 20004 in data);
         # a dict → returned as the RomVersionData.
@@ -165,6 +173,22 @@ class FakeMega:
             ),
             repeat=True,
         )
+        mock.post(
+            _url(house, const.HOUSES_PATH),
+            callback=self._delayed("houses", self._house_list, region),
+            repeat=True,
+        )
+        for path, endpoint in (
+            (const.SECURITY_STATIONS_PATH, "security_stations"),
+            (const.SECURITY_DEVICES_PATH, "security_devices"),
+        ):
+            mock.post(
+                _url(sec, path),
+                callback=self._delayed(
+                    endpoint, functools.partial(self._security_list, endpoint=endpoint), region
+                ),
+                repeat=True,
+            )
         mock.post(
             _url(sec, const.CIPHERS_PATH),
             callback=self._delayed("ciphers", self._get_ciphers, region),
@@ -285,15 +309,35 @@ class FakeMega:
         return self._reply(self._shared_for(kwargs), 0, self.captcha)
 
     def _device_list(self, url: str, *, region: str = "", **kwargs: Any) -> CallbackResult:
-        self.calls.append(("devices", self._decrypt_body(kwargs)))
+        payload = self._decrypt_body(kwargs)
+        self.calls.append(("devices", payload))
         if failure := self._failure_once("devices", kwargs):
             return failure
+        if "house_id" in payload:
+            listed = self.house_devices.get(str(payload["house_id"]), [])
+            return self._reply(self._shared_for(kwargs), 0, {"devices": listed})
         if region and region != self.region:
             return self._reply(
                 self._shared_for(kwargs), 0, {"devices": self.region_devices.get(region)}
             )
         data = self.data_override.get("devices", {"devices": self.devices})
         return self._reply(self._shared_for(kwargs), 0, data)
+
+    def _house_list(self, url: str, **kwargs: Any) -> CallbackResult:
+        self.calls.append(("houses", self._decrypt_body(kwargs)))
+        if failure := self._failure_once("houses", kwargs):
+            return failure
+        return self._reply(self._shared_for(kwargs), 0, {"house_infos": self.houses})
+
+    def _security_list(self, url: str, *, endpoint: str, **kwargs: Any) -> CallbackResult:
+        self.calls.append((endpoint, self._decrypt_body(kwargs)))
+        self.headers.setdefault(endpoint, []).append(dict(kwargs["headers"]))
+        if failure := self._failure_once(endpoint, kwargs):
+            return failure
+        entries = (
+            self.security_stations if endpoint == "security_stations" else self.security_devices
+        )
+        return self._reply(self._shared_for(kwargs), 0, entries)
 
     def _get_ciphers(self, url: str, **kwargs: Any) -> CallbackResult:
         shared = self._shared_for(kwargs)

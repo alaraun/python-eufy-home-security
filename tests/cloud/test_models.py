@@ -8,11 +8,16 @@ from eufy_home_security.cloud.const import firmware_ota_type
 from eufy_home_security.cloud.models import (
     CACHED_DEVICE_FIELDS,
     CACHED_MEMBER_FIELDS,
+    CipherRecord,
     CloudDevice,
+    CloudHouse,
     CloudParam,
     FirmwareUpdate,
+    RsaKeyCheck,
     device_cache_entry,
+    security_device_entry,
 )
+from eufy_home_security.testing import SYNTHETIC, FakeStation, security_device, security_station
 
 
 def test_from_api_lifts_the_owner_id_out_of_member() -> None:
@@ -155,6 +160,7 @@ def test_redacted_dict_is_json_safe_and_carries_no_identifier() -> None:
         "main_sw_version": "3.8.7.4",
         "sec_sw_version": None,
         "region": "us",
+        "source": "house",
         "has_p2p_did": True,
         "has_local_ip": True,
         "has_owner_user_id": True,
@@ -254,6 +260,7 @@ def test_cloud_params_no_params_key() -> None:
 # does (the member's contact details, radio MACs, MQTT/WebRTC details, cover images).
 _FULL_ENTRY = {
     "cloud_region": "eu",
+    "cloud_source": "security",
     "device_sn": "T8170P2000012345",
     "device_type": 48,
     "device_name": "SoloCam",
@@ -357,3 +364,95 @@ def test_firmware_update_from_api_parses_the_package() -> None:
 def test_firmware_ota_type_is_the_station_kit() -> None:
     assert firmware_ota_type("T8030P2000012345") == "T8030_Kit"
     assert firmware_ota_type("T7000P1000000001") == "T7000_Kit"
+
+
+def test_a_security_station_entry_reads_like_a_house_list_station() -> None:
+    entry = security_station()
+    device = CloudDevice.from_api(security_device_entry(entry, station=True))
+    assert (device.device_sn, device.name, device.station_sn, device.source) == (
+        SYNTHETIC.station_sn,
+        "Home Base",
+        None,
+        "security",
+    )
+    assert device.is_station
+    assert not device.is_standalone
+    assert device.raw["main_hw_version"] == "P1"
+    # The cache keeps the source, so a security-listed device stays tagged.
+    cached = CloudDevice.from_api(device_cache_entry(device.raw, keep_params=False))
+    assert cached.source == "security"
+
+
+def test_a_security_device_entry_names_its_station_as_parent() -> None:
+    device = CloudDevice.from_api(security_device_entry(security_device(), station=False))
+    assert (device.device_sn, device.station_sn, device.channel) == (
+        SYNTHETIC.camera_sn,
+        SYNTHETIC.station_sn,
+        0,
+    )
+    standalone = security_device_entry(
+        {"device_sn": "T8170P2000012345", "station_sn": "T8170P2000012345", "p2p_did": "X"},
+        station=False,
+    )
+    assert CloudDevice.from_api(standalone).is_standalone
+
+
+def test_a_security_station_entry_keeps_its_own_device_sn_and_parent() -> None:
+    entry = security_device_entry(
+        {"device_sn": "T8170P2000012345", "station_sn": "T8030P2000012345",
+         "parent_sn": "T8170P2000012345", "device_name": "Cam", "station_name": "Base"},
+        station=True,
+    )  # fmt: skip
+    assert (entry["device_sn"], entry["parent_sn"], entry["device_name"]) == (
+        "T8170P2000012345",
+        "T8170P2000012345",
+        "Cam",
+    )
+
+
+def test_a_house_list_entry_is_the_house_source() -> None:
+    assert CloudDevice.from_api({"device_sn": SYNTHETIC.station_sn}).source == "house"
+
+
+def test_cloud_house_from_api() -> None:
+    house = CloudHouse.from_api(
+        {"house_id": "h1", "house_name": "Home", "admin_user_id": "owner", "member_type": "2",
+         "is_default": True}
+    )  # fmt: skip
+    assert (house.house_id, house.name, house.owner_user_id, house.member_type) == (
+        "h1",
+        "Home",
+        "owner",
+        2,
+    )
+    assert house.is_default
+    assert not CloudHouse.from_api({"house_id": "h2", "is_default": 0}).is_default
+
+
+def test_cipher_record_states_without_the_key() -> None:
+    pem = FakeStation(SYNTHETIC.station_sn).rsa_private_key_pem
+    intact = CipherRecord.from_api(
+        {"cipher_id": 98, "ecc_private_key": "ab" * 32, "private_key": pem}
+    )
+    lowered = CipherRecord.from_api({"cipher_id": "40", "private_key": pem.lower()})
+    assert intact is not None
+    assert lowered is not None
+    assert intact.ecc_state == "usable"
+    assert intact.check_rsa() == RsaKeyCheck(state="usable", case="mixed", bits=1024)
+    assert lowered.cipher_id == 40
+    assert lowered.ecc_state == "absent"
+    check = lowered.check_rsa()
+    assert (check.state, check.case, check.bits) == ("unusable", "lower", None)
+    assert check.reason == "rsa_unparsable"
+    assert pem not in repr(intact)
+    assert "ab" * 32 not in repr(intact)
+
+
+def test_cipher_record_rejects_malformed_entries() -> None:
+    assert CipherRecord.from_api({"ecc_private_key": "ab" * 32}) is None
+    assert CipherRecord.from_api("40") is None
+    short = CipherRecord.from_api({"cipher_id": 1, "ecc_private_key": "abcd", "private_key": " "})
+    assert short is not None
+    assert short.ecc_state == "unusable"
+    assert short.check_rsa().state == "absent"
+    assert CipherRecord(cipher_id=2, ecc_private_key="zz" * 32).ecc_state == "unusable"

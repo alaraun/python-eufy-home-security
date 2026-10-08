@@ -9,12 +9,14 @@ from .._lazy import lazy_exports
 if TYPE_CHECKING:
     from .api import EufyCloudApi
     from .const import CIPHER_ID_P2P, CloudCode, cluster_host
-    from .models import CloudDevice
+    from .models import CipherRecord, CloudDevice, CloudHouse
 
 __all__ = [
     "CIPHER_ID_P2P",
+    "CipherRecord",
     "CloudCode",
     "CloudDevice",
+    "CloudHouse",
     "EufyCloudApi",
     "cluster_host",
 ]
@@ -25,6 +27,6 @@ __getattr__, __dir__ = lazy_exports(
     {
         "EufyCloudApi": "api",
         **dict.fromkeys(("CIPHER_ID_P2P", "CloudCode", "cluster_host"), "const"),
-        "CloudDevice": "models",
+        **dict.fromkeys(("CipherRecord", "CloudDevice", "CloudHouse"), "models"),
     },
 )

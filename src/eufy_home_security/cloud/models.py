@@ -5,11 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 from .._logging import redact, redact_serial
 from ..devices.types import DeviceModel, model_for_serial, serial_prefix
-from ..exceptions import ProtocolError
+from ..exceptions import CipherUnusableError, ProtocolError
+
+type DeviceSource = Literal["house", "security"]
+type KeyState = Literal["absent", "usable", "unusable"]
+type KeyCase = Literal["mixed", "lower", "upper"]
 
 
 def _str_or_none(value: object) -> str | None:
@@ -126,6 +130,10 @@ class CloudDevice:
     region: str | None = None
     """The cloud region (``eu``, ``us``) whose device list holds this device; every cloud
     call about it goes to that region. None for an entry the library did not list."""
+    source: DeviceSource = "house"
+    """The list that named the device: ``"house"`` (``app/house/get_devs_list``, what the
+    library serves) or ``"security"`` (the security realm's lists, see
+    :func:`security_device_entry`)."""
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     def __repr__(self) -> str:
@@ -136,7 +144,7 @@ class CloudDevice:
             f"station_sn={redact_serial(self.station_sn)!r}, channel={self.channel}, "
             f"p2p_did={redact(self.p2p_did)!r}, local_ip={redact(self.local_ip)!r}, "
             f"owner_user_id={redact(self.owner_user_id)!r}, member_type={self.member_type}, "
-            f"region={self.region!r})"
+            f"region={self.region!r}, source={self.source!r})"
         )
 
     def as_redacted_dict(self) -> dict[str, Any]:
@@ -158,6 +166,7 @@ class CloudDevice:
             "main_sw_version": self.main_sw_version,
             "sec_sw_version": self.sec_sw_version,
             "region": self.region,
+            "source": self.source,
             "has_p2p_did": self.p2p_did is not None,
             "has_local_ip": self.local_ip is not None,
             "has_owner_user_id": self.owner_user_id is not None,
@@ -286,12 +295,170 @@ class CloudDevice:
             main_sw_version=_str_or_none(data.get("main_sw_version")),
             sec_sw_version=_str_or_none(data.get("sec_sw_version")),
             region=_str_or_none(data.get(REGION_KEY)),
+            source="security" if data.get(SOURCE_KEY) == "security" else "house",
             raw=MappingProxyType(dict(data)),
         )
 
 
 #: The key the library adds to each ``get_devs_list`` entry: the region that listed it.
 REGION_KEY: Final = "cloud_region"
+
+#: The key :func:`security_device_entry` adds: the list that named the device.
+SOURCE_KEY: Final = "cloud_source"
+
+
+def security_device_entry(data: Mapping[str, Any], *, station: bool) -> dict[str, Any]:
+    """A security-realm list entry in the house list's shape, tagged ``"security"``.
+
+    ``station`` marks a ``get_hub_list`` entry (the app's ``QueryStationData``), else a
+    ``get_devs_list`` one (``QueryDeviceData``). A station entry may name itself only in
+    ``station_sn`` and has no parent unless it carries ``parent_sn``; a device entry names
+    its station in ``station_sn``, which becomes ``parent_sn``. The name is
+    ``device_name``, else ``station_name``. Every other field is kept as it is, so
+    :meth:`CloudDevice.from_api` and :func:`device_cache_entry` read the result like a
+    house-list entry. Field names are declared from the app, not observed.
+    """
+    entry = dict(data)
+    serial = _str_or_none(data.get("device_sn"))
+    if serial is None and station:
+        serial = _str_or_none(data.get("station_sn"))
+    entry["device_sn"] = serial or ""
+    name = _str_or_none(data.get("device_name")) or _str_or_none(data.get("station_name"))
+    if name is not None:
+        entry["device_name"] = name
+    parent = _str_or_none(data.get("parent_sn"))
+    if parent is None and not station:
+        parent = _str_or_none(data.get("station_sn"))
+    entry.pop("parent_sn", None)
+    if parent is not None:
+        entry["parent_sn"] = parent
+    entry[SOURCE_KEY] = "security"
+    return entry
+
+
+@dataclass(frozen=True, slots=True, kw_only=True, repr=False)
+class CloudHouse:
+    """One entry of ``app/house/get_house_list`` (``house_infos``): a home of the account.
+
+    ``owner_user_id`` is the house's ``admin_user_id``; ``member_type`` this account's
+    role in it (0 guest, 1 admin, 2 owner).
+    """
+
+    house_id: str
+    name: str
+    owner_user_id: str | None = None
+    member_type: int | None = None
+    is_default: bool = False
+    raw: Mapping[str, Any] = field(default_factory=dict, repr=False, compare=False)
+
+    def __repr__(self) -> str:
+        """Identifiers redacted: a house repr lands in logs."""
+        return (
+            f"CloudHouse(house_id={redact(self.house_id)!r}, name={redact(self.name)!r}, "
+            f"owner_user_id={redact(self.owner_user_id)!r}, member_type={self.member_type}, "
+            f"is_default={self.is_default})"
+        )
+
+    @classmethod
+    def from_api(cls, data: Mapping[str, Any]) -> CloudHouse:
+        """Build from one raw ``house_infos`` entry; malformed fields become None."""
+        return cls(
+            house_id=_str_or_none(data.get("house_id")) or "",
+            name=_str_or_none(data.get("house_name")) or "",
+            owner_user_id=_str_or_none(data.get("admin_user_id")),
+            member_type=_int_or_none(data.get("member_type")),
+            is_default=_int_or_none(data.get("is_default")) == 1 or data.get("is_default") is True,
+            raw=MappingProxyType(dict(data)),
+        )
+
+
+_ECC_KEY_BYTES: Final = 32
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RsaKeyCheck:
+    """Whether a cipher's RSA ``private_key`` parses, without the key itself.
+
+    ``case`` is the letter case of the base64 body (armour lines excluded): a key the
+    cloud lowercased reads ``"lower"`` and does not parse. ``bits`` is the key size of a
+    usable key; ``reason`` the :class:`~..exceptions.CipherUnusableError` reason of an
+    unusable one.
+    """
+
+    state: KeyState
+    case: KeyCase | None = None
+    bits: int | None = None
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True, repr=False)
+class CipherRecord:
+    """One entry of a ``get_ciphers`` answer: a cipher id's keys under one owner.
+
+    ``ecc_private_key`` (hex P-256 scalar) unwraps a version-8 CONN_INIT,
+    ``rsa_private_key`` (base64 DER, PEM armour optional) a legacy one; see
+    docs/protocol/session-crypto.md.
+    """
+
+    cipher_id: int
+    ecc_private_key: str | None = None
+    rsa_private_key: str | None = None
+
+    def __repr__(self) -> str:
+        """Key states only: a record repr lands in logs."""
+        return (
+            f"CipherRecord(cipher_id={self.cipher_id}, ecc={self.ecc_state}, "
+            f"rsa={'absent' if not self.rsa_private_key else 'held'})"
+        )
+
+    @classmethod
+    def from_api(cls, data: object) -> CipherRecord | None:
+        """Build from one ``get_ciphers`` entry; None without an integer ``cipher_id``."""
+        if not isinstance(data, Mapping):
+            return None
+        cipher_id = _int_or_none(data.get("cipher_id"))
+        if cipher_id is None:
+            return None
+        return cls(
+            cipher_id=cipher_id,
+            ecc_private_key=_key_or_none(data.get("ecc_private_key")),
+            rsa_private_key=_key_or_none(data.get("private_key")),
+        )
+
+    @property
+    def ecc_state(self) -> KeyState:
+        """``"usable"`` for 32 bytes of hex, ``"absent"`` for none, else ``"unusable"``."""
+        key = self.ecc_private_key
+        if not key:
+            return "absent"
+        try:
+            return "usable" if len(bytes.fromhex(key)) == _ECC_KEY_BYTES else "unusable"
+        except ValueError:
+            return "unusable"
+
+    def check_rsa(self) -> RsaKeyCheck:
+        """Parse the RSA key and report its state; the key itself is not returned."""
+        from ..p2p.crypto import load_rsa_private_key  # noqa: PLC0415 - import cycle
+
+        text = self.rsa_private_key
+        if not text:
+            return RsaKeyCheck(state="absent")
+        body = "".join(line for line in text.splitlines() if "-----" not in line)
+        upper = any(c.isupper() for c in body)
+        lower = any(c.islower() for c in body)
+        case: KeyCase | None = (
+            "mixed" if upper and lower else "upper" if upper else "lower" if lower else None
+        )
+        try:
+            key = load_rsa_private_key(text)
+        except CipherUnusableError as err:
+            return RsaKeyCheck(state="unusable", case=case, reason=err.reason)
+        return RsaKeyCheck(state="usable", case=case, bits=key.key_size)
+
+
+def _key_or_none(value: object) -> str | None:
+    return value.strip() or None if isinstance(value, str) else None
+
 
 # What of a ``get_devs_list`` entry is worth persisting: exactly what CloudDevice reads
 # (:meth:`CloudDevice.from_api` and its properties) and the product code in ``raw``. The
@@ -311,6 +478,7 @@ CACHED_DEVICE_FIELDS: Final = (
     "app_conn",  # rendezvous_servers: how a battery station is woken
     "device_new_pn",  # the product code that keys a model's settings
     REGION_KEY,
+    SOURCE_KEY,
 )
 CACHED_MEMBER_FIELDS: Final = ("admin_user_id", "member_type")
 CACHED_PARAM_FIELDS: Final = ("param_type", "param_value", "update_time")

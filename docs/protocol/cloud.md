@@ -155,6 +155,30 @@ token, body `{transaction, message_type: 2 (e-mail; 1 SMS, 3 app push), biz_type
 `app/devicerelation/get_device_list` returns a station → sub-devices tree but
 carries no P2P material.
 
+## Houses and the security realm's lists
+
+Read by `EufyCloudApi.async_list_houses`, `async_list_house_devices(region, house_id)`
+and `async_list_security_devices(region, stations=…)`, uncached; the library serves
+only the account-wide house list above. Request bodies and fields are **[declared:
+app]**; none of these has been observed on the wire.
+
+- `POST app-house-{region}-pr.eufy.com/app/house/get_house_list`, body `{}`:
+  `data.house_infos[]` with `house_id`, `house_name`, `admin_user_id`, `member_type`,
+  `is_default`.
+- The same `get_devs_list` per house: body `{"house_id": …, "categories": [],
+  "add_pns": []}` (the app's shape). The account-wide answer (`{"device_sn": ""}`) and
+  the per-house answers may differ; a device one lists can be missing from the other.
+- The security realm (the same identity as `get_ciphers`, `category: eufy_security`):
+  `POST security-app-{region}.eufylife.com/v3/app/get_hub_list` (stations) and
+  `/v3/app/get_devs_list` (devices), body `{"device_sn": "", "station_sn": "",
+  "num": 1000, "page": 0, "orderby": "", "time_zone": <UTC offset ms>,
+  "event_num_type": 1, "transaction": …}`. `data` is a list of entries shaped like the
+  house list's, except: a station names itself in `station_sn` (with `station_name`)
+  and may carry `main_hw_version`, `sec_hw_version`; a device names its station in
+  `station_sn`. The eufy Security app reads these in its binding flows and per-device screens;
+  `security_device_entry` maps an entry to the house list's shape, tagged
+  `cloud_source: "security"` (`CloudDevice.source`).
+
 ## Owner account_id
 
 The station accepts commands only from the id it is bound to: the **owner's** cloud
@@ -178,20 +202,20 @@ sharing changes, so cache it per station. A station event push also carries the 
 
 `data` decrypts to a list of
 `{cipher_id, ecc_private_key (P-256, 64 hex), private_key (RSA PEM), user_id}`.
-`ecc_private_key` unwraps the ECIES CONN_INIT and is the root of the P2P session key for
-every station the current app supports **[declared: app]**
-([session-crypto.md](session-crypto.md)). The RSA `private_key` is a legacy field: the
-current app/SDK no longer reads it for the session (only a non-version-8 station would need
-it, and the RSA session path has been dropped). On a HomeBase 3's cipher 40 the RSA PEM
-comes back **lowercased by the server** and cannot be parsed **[verified]**: the base64
-body is lowercased, which destroys its case and is irreversible, so `load_rsa_private_key`
-fails and the library raises `CipherUnusableError`. Measured on two accounts (cipher 40)
-and reported for a user's standalone T8410 (cipher 202); the request body field name makes
-no difference (`station_sn` and `sn` return the same key), and the unversioned endpoint
-404s. The MegaCrypto decrypt is not the cause — mixed-case fields (device names) and
-`ecc_private_key` survive intact in the same response; only `private_key` is lowercased.
-No account has been seen to serve an RSA `private_key` with its case intact; whether the
-station owner (vs a shared member) is served one is not observed.
+`ecc_private_key` unwraps the ECIES CONN_INIT (version 8) and is the root of the P2P
+session key for every station the current app supports **[declared: app]**
+([session-crypto.md](session-crypto.md)). The RSA `private_key` serves a station whose
+CONN_INIT is not version 8 (the legacy RSA handshake). Whether it is usable depends on the
+record **[verified, one account]**: in one response to a shared member, ciphers 98 and 155
+came back intact (a mixed-case PEM that parses as RSA-1024) and 13, 40 and 212 came back
+**lowercased by the server**, armour included. A lowercased body is irreversible, so
+`load_rsa_private_key` fails and the library raises `CipherUnusableError`. Lowercased on
+cipher 40 (a HomeBase 3's) on two accounts, and reported for a user's standalone T8410
+(cipher 202). The request body field name makes no difference (`station_sn` and `sn`
+return the same key), and the unversioned endpoint 404s. The MegaCrypto decrypt is not
+the cause: mixed-case fields (device names) and `ecc_private_key` survive intact in the
+same response. Which records eufy lowercases, and whether the station owner is served
+another copy, is **[open]**.
 
 | request | answer **[verified]** |
 |---|---|
@@ -204,6 +228,10 @@ The empty answer does not tell "wrong user id" from "no such cipher under this o
 The library raises `CipherUnavailableError` for it (with the cipher id and whether the
 user id asked was the account's own or `member.admin_user_id`) and does not ask the
 same station and cipher again for an hour (`CIPHER_UNAVAILABLE_BACKOFF`).
+
+`EufyCloudApi.async_list_ciphers` reads an owner's whole table this way (default ids
+0–400, `CIPHER_ID_SWEEP`) as `CipherRecord`s, uncached; `CipherRecord.check_rsa()` and
+`ecc_state` report whether each key is usable without exposing it.
 
 The key belongs to the **cipher id under the owner**, not to the serial **[verified]**:
 asked for ids 0–400 with each serial on one account (a HomeBase 3, a T8170, two T8160
