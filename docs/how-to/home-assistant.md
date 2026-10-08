@@ -309,11 +309,11 @@ them", including devices the library does not serve:
   (`security_stations`, `security_devices`). `houses`: per house, its own device count
   and this account's role.
 - `devices`: each device once, merged over every list that named it (`listed_by`), with
-  model, catalogue support grade, product code, the cloud's own model field, station kind
-  (`connect_type`), firmware
-  and hardware versions, the parameter ids of the cloud snapshot, the camera-info
-  parameter (a version-8 hint), the cipher its station named in its last CONN_INIT,
-  and `served` (whether this client built a station for it; None before a discovery).
+  model, catalogue support grade, product code, the cloud's own model field, station
+  kind (`connect_type`), firmware and hardware versions, the parameter ids of the cloud
+  snapshot, the camera-info parameter (a version-8 hint), the cipher its station named
+  in its last CONN_INIT, and `served` (whether this client built a station for it; None
+  before a discovery).
   A device listed by the security realm but not by `house` is one the library does not
   serve.
 - `ciphers`: per station owner (`"own"`, `"owner 1"` …), the whole cipher table read in
