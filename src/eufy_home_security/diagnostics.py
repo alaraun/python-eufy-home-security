@@ -99,7 +99,8 @@ class DeviceEntryReport:
     ``listed_by`` names those lists (:data:`HOUSE`, :func:`house_source`,
     :data:`SECURITY_STATIONS`, :data:`SECURITY_DEVICES`); a device the library serves is
     listed by :data:`HOUSE`. ``model_support`` is the catalogue's support grade, None
-    for a model the catalogue lacks. ``connect_type`` is how a sub-device is reached
+    for a model the catalogue lacks; ``cloud_model`` the entry's own ``device_model``
+    (``station_model`` on a security-realm station). ``connect_type`` is how a sub-device is reached
     (its station's kind), None for a station. ``owner`` is ``"own"`` or ``"owner N"``,
     the same label as :attr:`OwnerCiphersReport.owner`. ``camera_info`` is the
     :data:`CAMERA_INFO_PARAM` value of the cloud's parameter snapshot; ``param_ids`` the
@@ -117,6 +118,7 @@ class DeviceEntryReport:
     model_name: str | None
     model_support: str | None
     product_code: str | None
+    cloud_model: str | None
     is_station: bool
     is_standalone: bool
     connect_type: str | None
@@ -441,6 +443,9 @@ def _device_report(
         model_support=None if model is None else model.evidence.support.value,
         product_code=product_code_of(
             _first(_raw_text(d, "device_new_pn") for d in devices), serial
+        ),
+        cloud_model=_first(
+            _raw_text(d, "device_model") or _raw_text(d, "station_model") for d in devices
         ),
         is_station=is_station,
         is_standalone=any(d.is_standalone for d in devices),

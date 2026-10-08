@@ -159,23 +159,30 @@ carries no P2P material.
 
 Read by `EufyCloudApi.async_list_houses`, `async_list_house_devices(region, house_id)`
 and `async_list_security_devices(region, stations=…)`, uncached; the library serves
-only the account-wide house list above. Request bodies and fields are **[declared:
-app]**; none of these has been observed on the wire.
+only the account-wide house list above. The request bodies are the app's **[declared:
+app]**; the answers below were read on one account (a shared member, one HomeBase 3
+with four paired cameras) **[verified, one account]**.
 
 - `POST app-house-{region}-pr.eufy.com/app/house/get_house_list`, body `{}`:
   `data.house_infos[]` with `house_id`, `house_name`, `admin_user_id`, `member_type`,
-  `is_default`.
+  `is_default`, `user_id` and location fields. The account had three houses in `eu`
+  and one in `us`.
 - The same `get_devs_list` per house: body `{"house_id": …, "categories": [],
-  "add_pns": []}` (the app's shape). The account-wide answer (`{"device_sn": ""}`) and
-  the per-house answers may differ; a device one lists can be missing from the other.
+  "add_pns": []}` (the app's shape). On that account one house listed the same six
+  devices as the account-wide body (`{"device_sn": ""}`), the others none. Whether the
+  two ever differ is **[open]**.
 - The security realm (the same identity as `get_ciphers`, `category: eufy_security`):
   `POST security-app-{region}.eufylife.com/v3/app/get_hub_list` (stations) and
   `/v3/app/get_devs_list` (devices), body `{"device_sn": "", "station_sn": "",
   "num": 1000, "page": 0, "orderby": "", "time_zone": <UTC offset ms>,
-  "event_num_type": 1, "transaction": …}`. `data` is a list of entries shaped like the
-  house list's, except: a station names itself in `station_sn` (with `station_name`)
-  and may carry `main_hw_version`, `sec_hw_version`; a device names its station in
-  `station_sn`. The eufy Security app reads these in its binding flows and per-device screens;
+  "event_num_type": 1, "transaction": …}`. `data` is a list. A station entry names
+  itself in `station_sn` only (no `device_sn`), with `station_name`, `station_model`,
+  `p2p_did`, `app_conn`, `member`, `params` and firmware and hardware versions; a
+  device entry has `device_sn`, `device_name`, `device_model`, its station in
+  `station_sn`, `device_channel`, `local_ip`, `member` and `params`. Neither carries
+  `device_new_pn`. On that account they listed the HomeBase 3 and its four cameras,
+  the same as the house list; the house list's non-security device was not in them.
+  The eufy Security app reads them in its binding flows and per-device screens.
   `security_device_entry` maps an entry to the house list's shape, tagged
   `cloud_source: "security"` (`CloudDevice.source`).
 
@@ -230,7 +237,8 @@ user id asked was the account's own or `member.admin_user_id`) and does not ask 
 same station and cipher again for an hour (`CIPHER_UNAVAILABLE_BACKOFF`).
 
 `EufyCloudApi.async_list_ciphers` reads an owner's whole table this way (default ids
-0–400, `CIPHER_ID_SWEEP`) as `CipherRecord`s, uncached; `CipherRecord.check_rsa()` and
+0–400 in one request, `CIPHER_ID_SWEEP`; it answered the five held records
+**[verified]**) as `CipherRecord`s, uncached; `CipherRecord.check_rsa()` and
 `ecc_state` report whether each key is usable without exposing it.
 
 The key belongs to the **cipher id under the owner**, not to the serial **[verified]**:

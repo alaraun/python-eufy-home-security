@@ -1013,9 +1013,8 @@ class EufyCloudApi:
 
         The lists the eufy Security app reads with the account's session on the
         security realm; entries come back through :func:`~.models.security_device_entry`
-        (``source`` ``"security"``) tagged with ``region``. Request body and fields are
-        declared from the app. Without ``login`` nothing logs in (see
-        :meth:`_with_session`).
+        (``source`` ``"security"``) tagged with ``region``. The request body is the
+        app's. Without ``login`` nothing logs in (see :meth:`_with_session`).
         """
         path = const.SECURITY_STATIONS_PATH if stations else const.SECURITY_DEVICES_PATH
         body = {

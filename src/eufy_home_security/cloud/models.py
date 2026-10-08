@@ -316,7 +316,8 @@ def security_device_entry(data: Mapping[str, Any], *, station: bool) -> dict[str
     its station in ``station_sn``, which becomes ``parent_sn``. The name is
     ``device_name``, else ``station_name``. Every other field is kept as it is, so
     :meth:`CloudDevice.from_api` and :func:`device_cache_entry` read the result like a
-    house-list entry. Field names are declared from the app, not observed.
+    house-list entry. Seen on one account: a station entry has ``station_sn`` and no
+    ``device_sn``.
     """
     entry = dict(data)
     serial = _str_or_none(data.get("device_sn"))

@@ -48,7 +48,7 @@ def _cloud() -> FakeCloud:
         ],
         security_devices=[
             security_device(_HB2_CAMERA_SN, station_sn=_HB2_SN),
-            {**camera_device(), "main_hw_version": "H2"},
+            {**camera_device(), "main_hw_version": "H2", "device_model": "T8160"},
         ],
         cipher_records={
             40: {"ecc_private_key": _ECC, "private_key": pem.lower()},
@@ -105,6 +105,8 @@ async def test_every_list_is_asked_and_merged_per_device() -> None:
     assert hb2["param_ids"] == [CAMERA_INFO_PARAM]
     assert (hb2["main_sw_version"], hb2["main_hw_version"]) == ("2.1.6.9h", "P1")
     assert hb2["owner"] == "owner 1"
+    assert hb2["cloud_model"] is None
+    assert camera["cloud_model"] == "T8160"
     assert not hb2["account_is_owner"]
     hb2_camera = _by_serial(report, _HB2_CAMERA_SN)
     assert hb2_camera["listed_by"] == [house_source(1), SECURITY_DEVICES]

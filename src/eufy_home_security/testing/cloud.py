@@ -104,8 +104,8 @@ def security_station(
     name: str = "Home Base",
     params: Mapping[int, str] | None = None,
 ) -> dict[str, Any]:
-    """A security-realm ``get_hub_list`` entry for a station (the app's
-    ``QueryStationData`` fields): it names itself in ``station_sn`` only."""
+    """A security-realm ``get_hub_list`` entry for a station: it names itself in
+    ``station_sn`` only, as the cloud's does."""
     model = model_for_serial(serial)
     return {
         "station_sn": serial,
