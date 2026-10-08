@@ -51,6 +51,11 @@ def region_from_mega_domain(mega_domain: str | None) -> str | None:
     return region if region in REGIONS else None
 
 
+def mega_host(region: str) -> str:
+    """``mega-{region}-pr.eufy.com``: the host the app asks for a country's cluster."""
+    return f"{MEGA_DOMAIN_PREFIX}{check_region(region)}-pr.eufy.com"
+
+
 def security_host(region: str) -> str:
     """The eufy_security realm gateway (``/v3/...``) of ``region``'s cluster."""
     return _SECURITY_HOSTS[check_region(region)]
@@ -81,6 +86,14 @@ LOGIN_SERVER_PUBLIC_KEY: Final = (
 KEY_EXCHANGE_PATH: Final = "/openapi/oauth/key/exchange"
 SECURITY_KEY_EXCHANGE_PATH: Final = "/v3/openapi/oauth/key/exchange"
 LOGIN_PATH: Final = "/passport/login"
+ESTIMATE_DOMAIN_PATH: Final = "/passport/estimate_domain"
+"""A country's cluster: plaintext body ``{"ab": <country>, "mode": 1}`` on a ``mega-`` host,
+no identity; ``data.domain`` is the cluster's ``mega-`` domain."""
+ESTIMATE_DOMAIN_MODE: Final = 1
+CLIENT_COUNTRY_PATH: Final = "/passport/get_client_real_code"
+"""The caller's IP country (``data.ab_code``); answers a key-exchange identity before login."""
+LAST_LOGIN_CODE_PATH: Final = "/passport/get_last_login_code"
+"""The ``ab`` of the account's last login on this cluster (``data.ab_code``), body ``{email}``."""
 CAPTCHA_PATH: Final = "/passport/generate/captcha"
 SEND_VERIFY_CODE_PATH: Final = "/app/sendmsg/verify_code"
 """Asks the cloud to send a login verification code (the push service's host)."""
@@ -149,9 +162,14 @@ USER_AGENT: Final = "ktor-client"
 CATEGORY: Final = "eufy_security"
 ENCRYPTION_INFO: Final = "algo_ecdh"
 DEFAULT_COUNTRY: Final = "US"
+"""The ``country`` header while the login country is unknown."""
 DEFAULT_LANGUAGE: Final = "en"
-# The app sends the phone's IANA zone. Nothing observed depends on it.
+# The app sends the phone's IANA zone; this is the zone when the caller passes none.
 DEFAULT_TIMEZONE: Final = "UTC"
+COUNTRY_SOURCE_OPTION: Final = "option"
+"""The login country was passed by the caller."""
+COUNTRY_SOURCE_IP: Final = "ip"
+"""The login country is the host's IP country (:data:`CLIENT_COUNTRY_PATH`)."""
 
 # ── identities ───────────────────────────────────────────────────────────────
 

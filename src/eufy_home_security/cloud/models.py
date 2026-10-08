@@ -454,6 +454,22 @@ _ECC_KEY_BYTES: Final = 32
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class LoginCountry:
+    """The country the account logs in with, as the app does: the login's ``ab`` and the
+    ``country`` header of every request.
+
+    ``source`` is :data:`~.const.COUNTRY_SOURCE_OPTION` (passed by the caller) or
+    :data:`~.const.COUNTRY_SOURCE_IP` (the host's IP country). ``home_region`` is the
+    cluster ``estimate_domain`` names for the country, None while that lookup has not
+    answered.
+    """
+
+    code: str
+    source: str
+    home_region: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class RsaKeyCheck:
     """Whether a cipher's RSA ``private_key`` parses, without the key itself.
 

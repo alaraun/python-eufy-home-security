@@ -1300,7 +1300,9 @@ async def test_a_login_is_counted_once_it_is_sent(
         "exchange": (const.cluster_host("openapi", "eu"), const.KEY_EXCHANGE_PATH),
     }[failing]
     with aioresponses() as mock:
-        mock.post(f"https://{host}{path}", exception=aiohttp.ClientConnectionError("down"))
+        mock.post(
+            f"https://{host}{path}", exception=aiohttp.ClientConnectionError("down"), repeat=True
+        )
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             api = _api(session, cache)

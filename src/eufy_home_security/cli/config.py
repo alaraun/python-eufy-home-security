@@ -56,7 +56,9 @@ def _add_global_options(parser: argparse.ArgumentParser, *, suppress: bool) -> N
         help="session cache file (default: $XDG_CONFIG_HOME/eufy-security/cache.json)",
     )
     group.add_argument(
-        "--country", default=default(""), help="account country code, e.g. DE (default: auto)"
+        "--country",
+        default=default(""),
+        help="login country, ISO 3166 code such as DE (default: the host's IP country)",
     )
     group.add_argument(
         "--region",
