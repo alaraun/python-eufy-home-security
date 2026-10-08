@@ -4,6 +4,19 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.2.7](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.6...v0.2.7) (2026-10-08)
+
+
+### Features
+
+* log in with the account's country, as the eufy app does ([#31](https://github.com/alaraun/python-eufy-home-security/issues/31)) ([d289991](https://github.com/alaraun/python-eufy-home-security/commit/d289991a90deac38086ed0bee9508fd61551ec29))
+* pending home and device invitations ([#29](https://github.com/alaraun/python-eufy-home-security/issues/29)) ([cb5eb27](https://github.com/alaraun/python-eufy-home-security/commit/cb5eb27582653d24c381af77b5002508ef5ac14b))
+
+
+### Bug Fixes
+
+* a reply that arrived while the event loop was held is not a timeout ([#32](https://github.com/alaraun/python-eufy-home-security/issues/32)) ([afc3eb4](https://github.com/alaraun/python-eufy-home-security/commit/afc3eb402f17ebb009f05f5b078504b6c961887f))
+
 ## [0.2.6](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.5...v0.2.6) (2026-10-08)
 
 
