@@ -211,12 +211,13 @@ OP_LOCK_WAIT_LOG = 0.05
 DISCOVERY_TIMEOUT = 6.0
 HANDSHAKE_TIMEOUT = 6.0
 COMMAND_TIMEOUT = 6.0
-LOOP_STALL_LATENESS = 0.5
-"""A request's timer firing at least this late (seconds) means the event loop was held
-by something else; the request then waits :data:`LOOP_STALL_GRACE` more."""
-LOOP_STALL_GRACE = 1.0
-"""The extra wait for replies that arrived while the loop was held: they are read one
-datagram per loop turn, after the late timer."""
+LOOP_STALL_STEP = 0.25
+"""A reply wait checks this often (seconds) whether the event loop was held."""
+LOOP_STALL_LATENESS = 0.1
+"""A wait step ending at least this late means something else held the event loop; the
+reply deadline moves out by the lateness (replies that arrived meanwhile are still queued)."""
+LOOP_STALL_MAX = 30.0
+"""The most a reply deadline moves out for a held event loop, in all."""
 PARAM_QUERY_TIMEOUT = 8.0
 """A parameter dump's wait for the station's own block."""
 STILL_FETCH_TIMEOUT = 12.0
@@ -4187,23 +4188,32 @@ class StationSession:
     ) -> bool:
         """Wait for ``future`` until ``deadline`` (monotonic); whether it is done.
 
-        A timer that fires :data:`LOOP_STALL_LATENESS` late means the event loop was held
-        by something else; replies that arrived meanwhile are read one datagram per loop
-        turn after it, so the wait goes on for :data:`LOOP_STALL_GRACE`.
+        The wait runs in steps of :data:`LOOP_STALL_STEP`. A step that ends at least
+        :data:`LOOP_STALL_LATENESS` late means something else held the event loop, and
+        replies that arrived meanwhile are still queued (read one datagram per loop turn):
+        the deadline moves out by that lateness, up to :data:`LOOP_STALL_MAX` in all, so
+        the station gets its full timeout of time in which this client could hear it.
         """
-        done, _ = await asyncio.wait({future}, timeout=max(deadline - time.monotonic(), 0.0))
-        if done or (late := time.monotonic() - deadline) < LOOP_STALL_LATENESS:
-            return bool(done)
-        _LOGGER.debug(
-            "%s: %s: the wait ended %.1fs late (event loop held); waiting %.1fs more for "
-            "replies queued meanwhile",
-            self._log_name,
-            label,
-            late,
-            LOOP_STALL_GRACE,
-        )
-        done, _ = await asyncio.wait({future}, timeout=LOOP_STALL_GRACE)
-        return bool(done)
+        credited = 0.0
+        while not future.done():
+            started = time.monotonic()
+            left = deadline + credited - started
+            if left <= 0:
+                break
+            step = min(left, LOOP_STALL_STEP)
+            await asyncio.wait({future}, timeout=step)
+            late = time.monotonic() - started - step
+            if late >= LOOP_STALL_LATENESS and credited < LOOP_STALL_MAX:
+                extra = min(late, LOOP_STALL_MAX - credited)
+                credited += extra
+                _LOGGER.debug(
+                    "%s: %s: the event loop was held %.1fs; deadline moved out by %.1fs",
+                    self._log_name,
+                    label,
+                    late,
+                    extra,
+                )
+        return future.done()
 
     async def _listen(
         self,

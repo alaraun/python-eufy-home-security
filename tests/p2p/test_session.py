@@ -1252,6 +1252,31 @@ async def test_a_reply_queued_while_the_event_loop_was_blocked_is_still_taken(
     assert info.disk is not None
 
 
+async def test_a_loop_held_twice_past_the_deadline_still_takes_the_reply(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each stretch the loop is held moves the deadline out, not only the first."""
+    timeout = 0.3
+    sent = station.send_storage
+    loop = asyncio.get_running_loop()
+
+    def answer_then_block_twice(*, cipher: int = FrameCipher.GCM) -> None:
+        for _ in range(4):
+            station.send_receipt(FrameType.CMD_TRANSFER, 0)
+        sent(cipher=cipher)
+        time.sleep(timeout + 0.5)
+        loop.call_soon(time.sleep, 1.5)  # held again before the queued reply is read
+
+    monkeypatch.setattr(station, "send_storage", answer_then_block_twice)
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        info = await session.async_get_storage(timeout=timeout)
+    finally:
+        await session.async_close()
+    assert info.disk is not None
+
+
 async def test_storage_rejection_and_silence_are_typed_errors(station: FakeStation) -> None:
     station.storage_reply_code = -104
     session = make_session(station, Provider(station))
