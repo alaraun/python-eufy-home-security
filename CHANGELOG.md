@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.2.6](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.5...v0.2.6) (2026-10-08)
+
+
+### Bug Fixes
+
+* a version-8 session key need not be printable ([#27](https://github.com/alaraun/python-eufy-home-security/issues/27)) ([0fad068](https://github.com/alaraun/python-eufy-home-security/commit/0fad068fb7bb6058163c35248db923e707bbdeeb))
+
 ## [0.2.5](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.4...v0.2.5) (2026-10-08)
 
 
