@@ -220,7 +220,9 @@ class FakeCloud:
     these. ``cipher_records`` serves a cipher id the same keys for every station
     (``ecc_private_key``, ``private_key``), ahead of the per-station keys. These requests
     are recorded as ``"houses"``, ``"house:<house_id>"``, ``"security_stations"`` and
-    ``"security_devices"``.
+    ``"security_devices"``. ``house_invites`` and ``device_invites`` are the raw pending
+    invitation entries (``house_invite_records``, ``invites``) of the ``region`` cluster,
+    recorded as ``"house_invites"`` and ``"device_invites"``.
 
     ``things`` holds the thing description per product code that ``get_things_list``
     returns (see :func:`thing_description`); a code not in it is omitted from the reply.
@@ -255,6 +257,8 @@ class FakeCloud:
     house_devices: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     security_stations: list[dict[str, Any]] = field(default_factory=list)
     security_devices: list[dict[str, Any]] = field(default_factory=list)
+    house_invites: list[dict[str, Any]] = field(default_factory=list)
+    device_invites: list[dict[str, Any]] = field(default_factory=list)
     cipher_ids_requested: list[int] = field(default_factory=list)
     login_error: EufySecurityError | None = None
     call_errors: list[EufySecurityError] = field(default_factory=list)
@@ -326,6 +330,16 @@ class FakeCloud:
             self._raise_call_error()
             listed = self.house_devices.get(house_id, []) if region == self.region else []
             return {"devices": [self._with_owner(d) for d in listed]}
+        if path in {const.HOUSE_INVITES_PATH, const.DEVICE_INVITES_PATH}:
+            house = path == const.HOUSE_INVITES_PATH
+            note("house_invites" if house else "device_invites")
+            self._raise_call_error()
+            listed = (
+                (self.house_invites if house else self.device_invites)
+                if region == self.region
+                else []
+            )
+            return {"house_invite_records" if house else "invites": list(listed)}
         if path == const.HOUSES_PATH:
             note("houses")
             self._raise_call_error()

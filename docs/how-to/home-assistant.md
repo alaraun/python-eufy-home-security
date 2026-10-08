@@ -305,9 +305,11 @@ them", including devices the library does not serve:
 
 - `listings`: per region, how many entries each list answered (or its error): the
   account-wide house device list the library serves (`house`), the house list
-  (`houses`), and the security realm's station and device lists
-  (`security_stations`, `security_devices`). `houses`: per house, its own device count
-  and this account's role.
+  (`houses`), the pending invitations (`invites`), and the security realm's station and
+  device lists (`security_stations`, `security_devices`). `houses`: per house, its own
+  device count and this account's role.
+- `invites`: each pending invitation sent to the account: whether it shares a home or a
+  device, the device's redacted serial and product code, when it was sent.
 - `devices`: each device once, merged over every list that named it (`listed_by`), with
   model, catalogue support grade, product code, the cloud's own model field, station
   kind (`connect_type`), firmware and hardware versions, the parameter ids of the cloud
@@ -327,6 +329,18 @@ It never logs in: it asks only regions whose session is held or cached
 credential refusal ends it (`stopped`). It sends a few requests per region plus one per
 owner, on the account's shared throttle, and caches nothing: call it from the
 diagnostics download only, never on a timer. `ciphers=False` leaves the cipher sweep out.
+
+#### Pending invitations
+
+An account that a home or device was shared with sees those devices only after it
+accepts the invitation in the eufy app. `await eufy.async_pending_invites()` returns the
+invitations it has not accepted (`CloudInvite`: `kind` `"house"` or `"device"`,
+`house_name` or `device_sn` / `product_code`, `inviter`, `region`), login-free and
+uncached, two requests per region with a session. Ask it when the device list comes
+back empty (and on a user's rescan), and when it is not empty raise a repair: "accept
+the invitation from *inviter* to *home* in the eufy app, then rescan". `house_name` and
+`inviter` are for that message only: keep them out of logs and diagnostics
+(`as_redacted_dict()` has neither).
 
 Each station's `stats()` (`SessionStats`) also carries `conn_init_version` (8: ECIES,
 anything else: the legacy RSA handshake) and the `cipher_id` it named, once a CONN_INIT

@@ -64,6 +64,7 @@ from .models import (
     CipherRecord,
     CloudDevice,
     CloudHouse,
+    CloudInvite,
     FirmwareUpdate,
     security_device_entry,
 )
@@ -146,6 +147,19 @@ def _mapping(data: object, path: str) -> Mapping[str, Any]:
             f"cloud response to {path} carried {type(data).__name__}, not an object"
         )
     return data
+
+
+def _entries(data: object, path: str, key: str) -> list[Mapping[str, Any]]:
+    """The mapping entries of ``data[key]``; none for a bare success or a null list,
+    :class:`ProtocolError` when ``key`` holds something else."""
+    if data is None:
+        return []
+    listed = _mapping(data, path).get(key)
+    if listed is None:
+        return []
+    if not isinstance(listed, list):
+        raise ProtocolError(f"cloud response to {path} has no {key} list")
+    return [entry for entry in listed if isinstance(entry, Mapping)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1004,6 +1018,47 @@ class EufyCloudApi:
         if not isinstance(houses, list):
             raise ProtocolError(f"cloud response to {const.HOUSES_PATH} has no house_infos list")
         return [CloudHouse.from_api(h) for h in houses if isinstance(h, Mapping)]
+
+    async def async_list_invites(self, region: str, *, login: bool = True) -> list[CloudInvite]:
+        """The invitations sent to the account in ``region`` that it has not accepted:
+        homes (``get_house_invite_records``), then single devices (``get_invites``).
+
+        Not cached. An account sees a shared home's devices only after it accepts the
+        invitation in the eufy app, so a pending one explains an empty device list.
+        Without ``login`` nothing logs in (see :meth:`_with_session`).
+        """
+        houses = await self._authenticated_call(
+            self._host("house", region),
+            const.HOUSE_INVITES_PATH,
+            {"transaction": crypto.new_key_ident(), "is_inviter": const.INVITES_RECEIVED},
+            region=region,
+            login=login,
+            expect_data=False,
+        )
+        devices = await self._authenticated_call(
+            self._host("devicerelation", region),
+            const.DEVICE_INVITES_PATH,
+            {
+                "transaction": crypto.new_key_ident(),
+                "is_inviter": const.INVITES_RECEIVED,
+                "categories": [],
+                "add_pns": [],
+            },
+            region=region,
+            login=login,
+            expect_data=False,
+        )
+        invites = [
+            CloudInvite.from_house_api(entry, region=region)
+            for entry in _entries(houses, const.HOUSE_INVITES_PATH, "house_invite_records")
+        ]
+        invites += [
+            CloudInvite.from_device_api(entry, region=region)
+            for entry in _entries(devices, const.DEVICE_INVITES_PATH, "invites")
+        ]
+        for invite in invites:
+            _LOGGER.debug("  %r", invite)
+        return invites
 
     async def async_list_security_devices(
         self, region: str, *, stations: bool, login: bool = True

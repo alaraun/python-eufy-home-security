@@ -169,8 +169,21 @@ with four paired cameras) **[verified, one account]**.
   and one in `us`.
 - The same `get_devs_list` per house: body `{"house_id": …, "categories": [],
   "add_pns": []}` (the app's shape). On that account one house listed the same six
-  devices as the account-wide body (`{"device_sn": ""}`), the others none. Whether the
-  two ever differ is **[open]**.
+  devices as the account-wide body (`{"device_sn": ""}`), the others none; the bare `{}`
+  and `{"house_id": ""}` bodies list the same six as `{"device_sn": ""}`
+  **[verified, one account]**.
+- Pending invitations, read by `EufyCloudApi.async_list_invites(region)`: a shared home
+  shows its devices only once the invitation is accepted in the eufy app.
+  `POST app-house-{region}-pr.eufy.com/app/house/get_house_invite_records`, body
+  `{"transaction": …, "is_inviter": 1}`: `data.house_invite_records[]` with `id`,
+  `house_id`, `house_name`, `action_user_nick`, `role_type`, `email`, `user_id`.
+  `POST app-devicerelation-{region}-pr.eufy.com/app/devicerelation/get_invites`, body
+  `{"transaction": …, "is_inviter": 1, "categories": [], "add_pns": []}`: `data.invites[]`
+  with `id`, `device_sn`, `product_code`, `action_user_nick`, `action_user_email`,
+  `member_type`, `create_time`, `status`. `is_inviter` 1 asks the invitations sent to
+  the account (the app's start-up invitation dialog), 0 the ones it sent **[declared:
+  app]**. Both answer code 0 with empty lists on an account whose shares were accepted
+  **[verified, one account]**; a pending entry has not been observed.
 - The security realm (the same identity as `get_ciphers`, `category: eufy_security`):
   `POST security-app-{region}.eufylife.com/v3/app/get_hub_list` (stations) and
   `/v3/app/get_devs_list` (devices), body `{"device_sn": "", "station_sn": "",

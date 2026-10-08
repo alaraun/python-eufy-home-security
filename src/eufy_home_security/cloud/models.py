@@ -373,6 +373,83 @@ class CloudHouse:
         )
 
 
+InviteKind = Literal["house", "device"]
+"""What an invitation shares: a whole home, or single devices."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True, repr=False)
+class CloudInvite:
+    """An invitation sent to the account that it has not accepted yet.
+
+    A ``"house"`` invitation (``get_house_invite_records``) shares a home: ``house_id``
+    and ``house_name`` name it. A ``"device"`` invitation (``get_invites``) shares one
+    device and its sub-devices: ``device_sn`` and ``product_code`` name it. ``inviter``
+    is the inviting account's nickname or e-mail address; ``created_at`` epoch seconds.
+    The account sees the shared devices only after it accepts in the eufy app; an
+    accepted invitation leaves both lists. Names and ids are private: log the repr,
+    put :meth:`as_redacted_dict` in diagnostics.
+    """
+
+    kind: InviteKind
+    region: str
+    invite_id: int | None = None
+    house_id: str | None = None
+    house_name: str = ""
+    device_sn: str | None = None
+    product_code: str | None = None
+    inviter: str = ""
+    created_at: int | None = None
+    raw: Mapping[str, Any] = field(default_factory=dict, repr=False, compare=False)
+
+    def __repr__(self) -> str:
+        """Identifiers redacted: an invitation repr lands in logs."""
+        return (
+            f"CloudInvite(kind={self.kind!r}, region={self.region!r}, "
+            f"house_id={redact(self.house_id)!r}, device_sn={redact_serial(self.device_sn)!r}, "
+            f"product_code={self.product_code!r}, created_at={self.created_at})"
+        )
+
+    @classmethod
+    def from_house_api(cls, data: Mapping[str, Any], *, region: str) -> CloudInvite:
+        """Build from one ``house_invite_records`` entry; malformed fields become None."""
+        return cls(
+            kind="house",
+            region=region,
+            invite_id=_int_or_none(data.get("id")),
+            house_id=_str_or_none(data.get("house_id")),
+            house_name=_str_or_none(data.get("house_name")) or "",
+            inviter=_str_or_none(data.get("action_user_nick")) or "",
+            raw=MappingProxyType(dict(data)),
+        )
+
+    @classmethod
+    def from_device_api(cls, data: Mapping[str, Any], *, region: str) -> CloudInvite:
+        """Build from one ``get_invites`` ``invites`` entry; malformed fields become None."""
+        inviter = _str_or_none(data.get("action_user_nick")) or _str_or_none(
+            data.get("action_user_email")
+        )
+        return cls(
+            kind="device",
+            region=region,
+            invite_id=_int_or_none(data.get("id")),
+            device_sn=_str_or_none(data.get("device_sn")),
+            product_code=_str_or_none(data.get("product_code")),
+            inviter=inviter or "",
+            created_at=_int_or_none(data.get("create_time")),
+            raw=MappingProxyType(dict(data)),
+        )
+
+    def as_redacted_dict(self) -> dict[str, Any]:
+        """The invitation without names or ids (the serial redacted), for diagnostics."""
+        return {
+            "kind": self.kind,
+            "region": self.region,
+            "device_sn": redact_serial(self.device_sn) if self.device_sn else None,
+            "product_code": self.product_code,
+            "created_at": self.created_at,
+        }
+
+
 _ECC_KEY_BYTES: Final = 32
 
 
