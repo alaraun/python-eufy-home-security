@@ -126,6 +126,9 @@ class FakeMega:
         self.country_regions: dict[str, str] = {}
         # The ``ab`` of the last successful login per region (get_last_login_code).
         self.last_login_ab: dict[str, str] = {}
+        # Login ``ab`` -> the devices only a session made with it lists (its own token).
+        self.country_devices: dict[str, list[dict[str, Any]]] = {}
+        self._token_ab: dict[str, str] = {}
         self._login_calls = 0
 
     # ── registration on an aioresponses mock ─────────────────────────────────
@@ -338,8 +341,13 @@ class FakeMega:
                 "fa_info": {"info": "use verify code for 2fa", "step": 26052},
             }
             return self._reply(shared, 0, pending)
-        self.last_login_ab[region] = str(payload.get("ab"))
-        return self._reply(shared, 0, {**self.login_data, "fa_info": {"info": "", "step": 0}})
+        ab = str(payload.get("ab"))
+        self.last_login_ab[region] = ab
+        data = {**self.login_data, "fa_info": {"info": "", "step": 0}}
+        if ab in self.country_devices:
+            data["auth_token"] = f"{FAKE_AUTH_TOKEN}-{ab}"
+            self._token_ab[data["auth_token"]] = ab
+        return self._reply(shared, 0, data)
 
     def _client_country(self, url: str, **kwargs: Any) -> CallbackResult:
         self.calls.append(("client_country", self._decrypt_body(kwargs)))
@@ -383,6 +391,8 @@ class FakeMega:
         if "house_id" in payload:
             listed = self.house_devices.get(str(payload["house_id"]), [])
             return self._reply(self._shared_for(kwargs), 0, {"devices": listed})
+        if (ab := self._token_ab.get(str(kwargs["headers"].get("x-auth-token")))) is not None:
+            return self._reply(self._shared_for(kwargs), 0, {"devices": self.country_devices[ab]})
         if region and region != self.region:
             return self._reply(
                 self._shared_for(kwargs), 0, {"devices": self.region_devices.get(region)}

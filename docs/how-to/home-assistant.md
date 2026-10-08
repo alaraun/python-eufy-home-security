@@ -126,7 +126,7 @@ error, so a typo never spends a sign-in. It raises `ValueError` too for a `count
 is not a two-letter ISO 3166 code; HA's `hass.config.country` always is one (or None).
 
 `country` and `timezone` make the logins look like the eufy app's: the login sends the
-country as `ab`, the home cluster of that country (eufy's own lookup) logs in first, and
+country as `ab`, only the home cluster of that country (eufy's own lookup) logs in, and
 every request carries the country and the zone as headers. Without `country` the
 library uses the country eufy places the HA host's IP address in; when neither is known
 it logs in as before (`ab` = the region). A cached session made with another `ab` (every
@@ -134,6 +134,17 @@ session from before this, or after the HA country changes) logs in again once pe
 region, inside the login budget; when that login is refused, the old session stays in
 use and is not asked again for the same country. See
 [cloud.md § Login country](../protocol/cloud.md#login-country).
+
+**The country is the user's choice.** eufy lists a device only to a login with the
+country it is held under: an account whose own devices sit under `EE` and that accepted
+a home shared from an account in `CH` sees the shared devices only with `CH`, as the
+eufy app does. HA's country and the host's IP are guesses. Offer a country list in the
+config flow and the options (default: HA's country), pass it as
+`country=[first, *extra]`, and rescan after it changes
+(`async_discover(rescan_regions=True)`): each extra country costs one login on its home
+region, and its devices come back with `CloudDevice.region` `<region>:<country>`.
+When the list comes back empty, tell the user to check the country the eufy app logs
+in with.
 
 The cache is what keeps the integration clear of the cloud's limits. Read the next
 section before writing the config flow.
@@ -149,8 +160,9 @@ provides where it lives.
 |---|---|---|
 | `openudid` | this install's eufy device identity, minted once | never; the only part kept when the account changes |
 | `password` | the account password of the last successful login | on every successful login; dropped as soon as the cloud rejects it |
-| `cloud.sessions.<region>` | per cloud region: key ident, shared key, auth token, user id, expiry, the `ab` the login sent and the one it asked for (`ab_wanted`), the login answer's `mega_domain` and `country_code` | on a login to that region: a miss, an expiry, or a session-expired answer. A re-key answer (HTTP 463) replaces only the key ident and shared key, by a key exchange, no login. A kick-out (26084) drops that region's session |
+| `cloud.sessions.<region>` | per cloud region, and per extra country as `<region>:<country>`: key ident, shared key, auth token, user id, expiry, the `ab` the login sent and the one it asked for (`ab_wanted`), the login answer's `mega_domain` and `country_code` | on a login to that region: a miss, an expiry, or a session-expired answer. A re-key answer (HTTP 463) replaces only the key ident and shared key, by a key exchange, no login. A kick-out (26084) drops that region's session |
 | `cloud.country` | the login country (`code`, `source` `option` or `ip`, `home_region`) | on the first login of a process when the country or its home region changed |
+| `cloud.extra_countries` | each extra country's home region | when a login or a device list first needs an extra country not looked up |
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
 | `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), and the key-refresh latch | on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass |
@@ -276,29 +288,31 @@ the integration is the device list:
 ### Cloud regions
 
 The eufy cloud runs two clusters, `eu` and `us` (the app's production environments). A
-login on either succeeds for any account and answers the same user id, but each cluster
-lists only the devices homed on it: the other one answers an empty list, not an error.
-Nothing in the login answer names the home cluster. So the library keeps one session
-per region and remembers, per device, the region that listed it:
+login on either succeeds for any account and answers the same user id, but a login lists
+only the devices its cluster holds for the login's country: the other cluster, or
+another country, answers an empty list, not an error. So the library logs in once per
+country, on that country's home cluster (eufy's `estimate_domain`), and remembers, per
+device, the *login scope* that listed it: the region (`eu`) for the login country,
+`<region>:<country>` (`eu:CH`) for each extra country of `country=[…]`:
 
-- The first device list asks every region (a login each: two logins on a cold cache).
-  The login budget (3 per 6 h) and a login-count throttle (100028) are kept per region;
-  a credential lock (too many wrong passwords) holds off every region. This rests on
-  the logins of one region not counting against the other's limits, which no lockout
-  has tested. `async_login()` on a cold cache logs in to
-  every region the next device list asks, so a login challenge surfaces there; its
-  `LoginChallengeError.region` names the region, and the answer
-  (`async_login(verify_code=…, login_id=…)`) goes back to it.
-- A region that lists no devices is **suspended**: no later device list, login or push
+- A cold cache costs one login per country. The login budget (3 per 6 h) and a
+  login-count throttle (100028) are kept per cluster, so two countries homed on `eu`
+  share its budget; a credential lock (too many wrong passwords) holds off every
+  cluster. `async_login()` on a cold cache logs in to every scope the next device list
+  asks, so a login challenge surfaces there; its `LoginChallengeError.region` names the
+  scope, and the answer (`async_login(verify_code=…, login_id=…)`) goes back to it.
+- While no country is known (no `country`, and eufy names no IP country), both regions
+  log in with the region as `ab`, as before.
+- A scope that lists no devices is **suspended**: no later device list, login or push
   registration asks it. It is asked again only when the user says so:
-  `async_discover(rescan_regions=True)` (one fetch that asks every region), or the
+  `async_discover(rescan_regions=True)` (one fetch that asks every scope), or the
   client option `EufySecurity(scan_regions=True)` (every device-list refresh asks every
-  region; a region whose session lapsed costs a login). With every region suspended a
-  refresh sends nothing and returns the cached, empty list. There is no automatic retry.
-- Every cloud call about a device goes to its region: cipher key, DSK, firmware check.
-  The push token is registered in every region that has devices.
-- `EufySecurity(region="eu" | "us")` pins the account to one region: only that region is
-  asked, rescans included.
+  scope; one whose session lapsed costs a login). With every scope suspended a refresh
+  sends nothing and returns the cached, empty list. There is no automatic retry.
+- Every cloud call about a device goes to its scope's session: cipher key, DSK, firmware
+  check. The push token is registered in every scope that has devices.
+- `EufySecurity(region="eu" | "us")` pins the login country's scope to that region and
+  leaves out extra countries homed on the other one.
 
 For the integration:
 

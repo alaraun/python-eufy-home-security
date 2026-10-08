@@ -215,11 +215,11 @@ async def test_pending_invites_are_read_without_a_login() -> None:
     assert cold.calls == []
 
 
-async def test_the_login_country_and_each_region_login_are_reported() -> None:
+async def test_the_login_country_and_its_home_region_login_are_reported() -> None:
     cloud = _cloud()
     cloud.client_country = "DE"
     cloud.country_regions = {"DE": "eu"}
-    eufy = _client(cloud)  # warmed with the country known: every login sent "DE"
+    eufy = _client(cloud)  # warmed with the country known: one login, "DE", on eu
     report = (await eufy.async_account_report(ciphers=False)).as_dict()
     assert (report["login_country"], report["country_source"], report["home_region"]) == (
         "DE",
@@ -229,8 +229,8 @@ async def test_the_login_country_and_each_region_login_are_reported() -> None:
     assert report["client_country"] == "DE"
     assert report["logins"] == [
         {"region": "eu", "ab": "DE", "last_login_code": "DE", "error": None},
-        {"region": "us", "ab": "DE", "last_login_code": "DE", "error": None},
     ]
+    assert (report["regions"], report["regions_without_session"]) == (["eu"], [])
 
 
 async def test_without_a_session_nothing_is_sent() -> None:

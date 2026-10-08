@@ -132,7 +132,7 @@ async def open_account(ctx: Context, *, station_sn: str | None = None) -> EufySe
         email,
         ctx.env.get(ENV_PASSWORD) or prompt_password,
         store=store,
-        country=ctx.args.country,
+        country=[c for c in ctx.args.country.split(",") if c.strip()],
         region=ctx.args.region,
         station_hosts=hosts,
         local_ports=ports,

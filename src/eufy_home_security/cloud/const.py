@@ -18,10 +18,33 @@ from typing import Final, NamedTuple
 # The app's production clusters (``MegaEnvironment`` US_PR / EU_PR; the QA ones are
 # left out), each with its eufy_security realm gateway (the app's
 # ``DEFAULT_SECURITY_CONFIG_DOMAIN`` and ``…_EU``; the US one names no region). One
-# login serves one cluster, and each cluster lists only its own devices.
+# login serves one cluster and one country (its ``ab``): it lists only the devices
+# that cluster holds for that country.
 _SECURITY_HOSTS: Final = {"eu": "security-app-eu.eufylife.com", "us": "security-app.eufylife.com"}
 REGIONS: Final = tuple(_SECURITY_HOSTS)
 DEFAULT_REGION: Final = "eu"
+
+# A login scope names one session: a region (the login country's session there) or
+# ``<region>:<country>`` (an extra country's session on its home region).
+SCOPE_SEPARATOR: Final = ":"
+
+
+def scope(region: str, country: str | None = None) -> str:
+    """The login scope of ``country`` on ``region``; the region alone without a country."""
+    check_region(region)
+    return f"{region}{SCOPE_SEPARATOR}{country}" if country else region
+
+
+def scope_region(login_scope: str) -> str:
+    """The region (cluster) of a login scope; ``ValueError`` when it names none."""
+    return check_region(login_scope.split(SCOPE_SEPARATOR, 1)[0])
+
+
+def scope_country(login_scope: str) -> str | None:
+    """The extra country of a login scope; None for a region's own scope."""
+    _region, sep, country = login_scope.partition(SCOPE_SEPARATOR)
+    return country if sep and country else None
+
 
 # A login answer may carry a ``mega_domain``; every service host of that cluster is
 # the domain with ``mega-`` swapped for ``app-{service}-``, which is how the app builds

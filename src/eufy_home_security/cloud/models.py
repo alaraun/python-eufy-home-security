@@ -128,8 +128,10 @@ class CloudDevice:
     main_sw_version: str | None = None
     sec_sw_version: str | None = None
     region: str | None = None
-    """The cloud region (``eu``, ``us``) whose device list holds this device; every cloud
-    call about it goes to that region. None for an entry the library did not list."""
+    """The login scope whose device list holds this device: a cloud region (``eu``,
+    ``us``) or an extra country's ``<region>:<country>`` (:func:`~.const.scope`); every
+    cloud call about it goes to that scope's session. None for an entry the library did
+    not list."""
     source: DeviceSource = "house"
     """The list that named the device: ``"house"`` (``app/house/get_devs_list``, what the
     library serves) or ``"security"`` (the security realm's lists, see
@@ -300,7 +302,7 @@ class CloudDevice:
         )
 
 
-#: The key the library adds to each ``get_devs_list`` entry: the region that listed it.
+#: The key the library adds to each ``get_devs_list`` entry: the login scope that listed it.
 REGION_KEY: Final = "cloud_region"
 
 #: The key :func:`security_device_entry` adds: the list that named the device.

@@ -58,13 +58,16 @@ def _add_global_options(parser: argparse.ArgumentParser, *, suppress: bool) -> N
     group.add_argument(
         "--country",
         default=default(""),
-        help="login country, ISO 3166 code such as DE (default: the host's IP country)",
+        help=(
+            "login country, ISO 3166 code such as DE; more codes, comma-separated, add"
+            " extra countries (default: the host's IP country)"
+        ),
     )
     group.add_argument(
         "--region",
         choices=REGIONS,
         default=default(None),
-        help="use only this cloud region (default: every region that lists devices)",
+        help="log the login country in on this cloud region (default: its home region)",
     )
     group.add_argument(
         "--station",

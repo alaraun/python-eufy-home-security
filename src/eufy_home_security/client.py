@@ -180,7 +180,7 @@ class EufySecurity:
         password: PasswordSource | None,
         *,
         store: Store,
-        country: str = "",
+        country: str | Sequence[str] = "",
         timezone: str = "",
         region: str | None = None,
         scan_regions: bool = False,
@@ -199,14 +199,18 @@ class EufySecurity:
 
         ``country`` (ISO 3166 alpha-2, e.g. Home Assistant's ``hass.config.country``) is
         the country the account logs in with, as the eufy app does; without it the host's
-        IP country is used (see :class:`EufyCloudApi`). ``timezone`` is the IANA zone the
-        cloud requests carry (Home Assistant's ``hass.config.time_zone``; default UTC).
+        IP country is used (see :class:`EufyCloudApi`). eufy lists a device only to a
+        login with the country it is held under, so a sequence adds extra countries: the
+        first is the login country, each further one logs in once more on its own home
+        region and its devices join the list. ``timezone`` is the IANA zone the cloud
+        requests carry (Home Assistant's ``hass.config.time_zone``; default UTC).
 
-        ``region`` pins the account to one cloud region (``eu``, ``us``). Without it the
-        first device list asks every region and each device keeps the region that
-        listed it; a region that lists nothing is suspended until
+        Each country logs in on its home cloud region only (one login scope each); while
+        no country is known, every region does. ``region`` pins the login country's
+        scope to one cloud region (``eu``, ``us``). Each device keeps the scope that
+        listed it; a scope that lists nothing is suspended until
         ``async_discover(rescan_regions=True)``, or, with ``scan_regions``, every
-        device-list refresh asks every region (see :class:`EufyCloudApi`).
+        device-list refresh asks every scope (see :class:`EufyCloudApi`).
 
         ``email`` must look like an e-mail address (not empty, with an ``@``), else
         ``ValueError`` before anything is read or sent: a login with it would only
@@ -528,7 +532,7 @@ class EufySecurity:
 
         ``refresh`` forces a fresh cloud fetch; otherwise the cached list is used
         when there is one, so a warm start needs no cloud call at all.
-        ``rescan_regions`` fetches too and asks every cloud region, the suspended
+        ``rescan_regions`` fetches too and asks every login scope, the suspended
         ones included (see :meth:`EufyCloudApi.async_fetch_devices`). With
         ``claims``, only the stations this account wins are built; the others are
         listed in :attr:`stations_served_elsewhere`. Stations included as remote go to
