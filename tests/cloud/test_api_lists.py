@@ -1,5 +1,5 @@
-"""EufyCloudApi's read-only lists: houses, house-scoped devices, the security realm's
-station and device lists, the cipher-table sweep, and ``login=False``."""
+"""EufyCloudApi's read-only lists: houses, house-scoped devices, pending invitations, the
+security realm's station and device lists, the cipher-table sweep, and ``login=False``."""
 
 from __future__ import annotations
 
@@ -66,6 +66,66 @@ async def test_the_account_wide_house_list_sends_the_librarys_body(
             devices = await api.async_list_house_devices("eu")
     assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
     assert _bodies(fake_mega, "devices") == [{"device_sn": ""}]
+
+
+async def test_pending_invitations_of_homes_and_devices(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.invite_data = {
+        "house_invites": {"house_invite_records": [
+            {"id": 7, "house_id": "house-9", "house_name": "Cottage", "action_user_nick": "Kim"},
+        ]},
+        "device_invites": {"invites": [
+            {"id": 3, "device_sn": SYNTHETIC.camera_sn, "product_code": "T8160",
+             "action_user_email": "kim@example.invalid", "create_time": 1700000000},
+        ]},
+    }  # fmt: skip
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            home, device = await api.async_list_invites("eu")
+    assert (home.kind, home.invite_id, home.house_id, home.house_name, home.inviter) == (
+        "house",
+        7,
+        "house-9",
+        "Cottage",
+        "Kim",
+    )
+    assert (device.kind, device.device_sn, device.product_code, device.inviter) == (
+        "device",
+        SYNTHETIC.camera_sn,
+        "T8160",
+        "kim@example.invalid",
+    )
+    assert device.as_redacted_dict() == {
+        "kind": "device",
+        "region": "eu",
+        "device_sn": "T8160***7890",
+        "product_code": "T8160",
+        "created_at": 1700000000,
+    }
+    for secret in ("house-9", "Cottage", "Kim", "kim@", SYNTHETIC.camera_sn):
+        assert secret not in repr([home, device])
+    for endpoint in ("house_invites", "device_invites"):
+        (body,) = _bodies(fake_mega, endpoint)
+        assert body["is_inviter"] == const.INVITES_RECEIVED
+        assert body["transaction"]
+    assert _bodies(fake_mega, "device_invites")[0]["categories"] == []
+
+
+@pytest.mark.parametrize("data", [None, {"house_invite_records": None}, {}])
+async def test_no_invitation_list_is_no_invitations(
+    fake_mega: FakeMega, cache: SessionCache, data: object
+) -> None:
+    fake_mega.invite_data = {"house_invites": data, "device_invites": {"invites": None}}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            assert await api.async_list_invites("eu") == []
 
 
 async def test_security_lists_map_to_house_shaped_devices(

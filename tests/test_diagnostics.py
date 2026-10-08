@@ -1,4 +1,5 @@
-"""The account report: every list, merged per device, cipher state without keys."""
+"""The account report: every list, merged per device, cipher state without keys; the
+client's login-free pending-invitations read."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from eufy_home_security.cloud import const
 from eufy_home_security.diagnostics import (
     CAMERA_INFO_PARAM,
     HOUSE,
+    INVITES,
     SECURITY_DEVICES,
     SECURITY_STATIONS,
     house_source,
@@ -43,6 +45,9 @@ def _cloud() -> FakeCloud:
         owner_ids={SYNTHETIC.station_sn: SYNTHETIC.account_id, _HB2_SN: _OTHER_OWNER},
         houses=[{"house_id": "house-1", "admin_user_id": _OTHER_OWNER, "member_type": 1}],
         house_devices={"house-1": [security_device(_HB2_CAMERA_SN, station_sn=_HB2_SN)]},
+        house_invites=[
+            {"id": 4, "house_id": "house-2", "house_name": "Cottage", "action_user_nick": "Kim"}
+        ],
         security_stations=[
             security_station(_HB2_SN, did="EUPRAMA-654321-ABCDE", params={CAMERA_INFO_PARAM: "5"})
         ],
@@ -79,7 +84,22 @@ async def test_every_list_is_asked_and_merged_per_device() -> None:
     assert report["regions_without_session"] == []
     assert report["stopped"] is None
     eu = {(r["source"], r["entries"]) for r in report["listings"] if r["region"] == "eu"}
-    assert eu == {(HOUSE, 2), ("houses", 1), (SECURITY_STATIONS, 1), (SECURITY_DEVICES, 2)}
+    assert eu == {
+        (HOUSE, 2),
+        ("houses", 1),
+        (INVITES, 1),
+        (SECURITY_STATIONS, 1),
+        (SECURITY_DEVICES, 2),
+    }
+    assert report["invites"] == [
+        {
+            "region": "eu",
+            "kind": "house",
+            "device_sn": None,
+            "product_code": None,
+            "created_at": None,
+        }
+    ]
     assert report["houses"] == [
         {
             "region": "eu",
@@ -165,12 +185,34 @@ async def test_the_report_is_json_safe_and_secret_free() -> None:
         SYNTHETIC.did,
         SYNTHETIC.station_ip,
         "house-1",
+        "house-2",
+        "Cottage",
+        "Kim",
         "Home Base",
         _ECC,
         pem.splitlines()[1],
         pem.lower().splitlines()[1],
     ):
         assert secret not in dumped
+
+
+async def test_pending_invites_are_read_without_a_login() -> None:
+    cloud = _cloud()
+    eufy = _client(cloud)
+    cloud.calls.clear()
+    (invite,) = await eufy.async_pending_invites()
+    assert (invite.kind, invite.region, invite.house_name, invite.inviter) == (
+        "house",
+        "eu",
+        "Cottage",
+        "Kim",
+    )
+    assert "login" not in cloud.calls
+    assert {c.split("@")[0] for c in cloud.calls} == {"house_invites", "device_invites"}
+
+    cold = FakeCloud()
+    assert await _client(cold, MemoryStore()).async_pending_invites() == []
+    assert cold.calls == []
 
 
 async def test_without_a_session_nothing_is_sent() -> None:

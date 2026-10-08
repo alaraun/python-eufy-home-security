@@ -90,6 +90,13 @@ VERIFY_CODE_BY_EMAIL: Final = 2
 """``message_type`` that delivers the code by e-mail (1 SMS, 3 app push)."""
 DEVICES_PATH: Final = "/app/house/get_devs_list"
 HOUSES_PATH: Final = "/app/house/get_house_list"
+HOUSE_INVITES_PATH: Final = "/app/house/get_house_invite_records"
+"""Invitations to share a home (the house service's host)."""
+DEVICE_INVITES_PATH: Final = "/app/devicerelation/get_invites"
+"""Invitations to share single devices (the device-relation service's host)."""
+INVITES_RECEIVED: Final = 1
+"""``is_inviter`` of an invitation list request that asks the invitations sent to the
+account (the app's start-up invitation dialog); 0 asks the ones it sent."""
 SECURITY_STATIONS_PATH: Final = "/v3/app/get_hub_list"
 """The security realm's station list (the eufy Security app's binder service)."""
 SECURITY_DEVICES_PATH: Final = "/v3/app/get_devs_list"

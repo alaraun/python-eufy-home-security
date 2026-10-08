@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Literal, Self
 from ._logging import Identifier, LogThrottle, Secret, redact_serial
 from .cloud.api import EufyCloudApi, HttpSession, PasswordSource
 from .cloud.const import CLOUD_STATE_REFRESH, firmware_ota_type
-from .cloud.models import CloudDevice, FirmwareUpdate
+from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
 from .cloud.status import CloudStatus
 from .devices.model_settings import (
     Setting,
@@ -452,6 +452,21 @@ class EufySecurity:
         return await async_account_report(
             self.cloud, self.cache, ciphers=ciphers, served_stations=served
         )
+
+    async def async_pending_invites(self) -> list[CloudInvite]:
+        """The invitations sent to the account that it has not accepted, in every region
+        whose session is held or cached (see :meth:`EufyCloudApi.async_list_invites`).
+
+        Login-free: a region without a session is not asked. The account sees a shared
+        home's devices only once the invitation is accepted in the eufy app, so a
+        consumer can tell the user so. Two cloud requests per region: call it when the
+        device list comes back empty or on a user's request, not on a timer.
+        """
+        await self._ensure_cache_loaded()
+        invites: list[CloudInvite] = []
+        for region in self.cloud.regions_with_session():
+            invites += await self.cloud.async_list_invites(region, login=False)
+        return invites
 
     async def async_reauthenticate(
         self,

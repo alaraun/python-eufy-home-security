@@ -1,8 +1,9 @@
 """A read-only account report: every device each eufy list names, firmware, cipher state.
 
 :func:`async_account_report` asks every list the account's cloud sessions can reach
-without a login (the house device list account-wide and per house, the security
-realm's station and device lists) and each owner's whole cipher table, and returns an
+without a login (the house device list account-wide and per house, the pending
+invitations, the security realm's station and device lists) and each owner's whole
+cipher table, and returns an
 :class:`AccountReport`: JSON-safe and secret-free, so a consumer can put it in a
 diagnostics download as it is. Serials go through :func:`~._logging.redact_serial`;
 no user id, house id, DID, IP, name, key or parameter value (but the camera-info
@@ -20,7 +21,7 @@ from typing import Any, Final
 from ._logging import redact_serial
 from .cloud.api import EufyCloudApi
 from .cloud.const import REGIONS
-from .cloud.models import CipherRecord, CloudDevice, KeyCase, KeyState
+from .cloud.models import CipherRecord, CloudDevice, CloudInvite, InviteKind, KeyCase, KeyState
 from .devices.command_types import APK_COMMAND_TYPES
 from .devices.model_settings import product_code_of
 from .devices.recipes import connect_type
@@ -37,6 +38,7 @@ __all__ = [
     "CipherReport",
     "DeviceEntryReport",
     "HouseReport",
+    "InviteReport",
     "ListingReport",
     "OwnerCiphersReport",
     "async_account_report",
@@ -57,6 +59,8 @@ HOUSE: Final = "house"
 """The account-wide house device list (``app/house/get_devs_list``, what the library serves)."""
 SECURITY_STATIONS: Final = "security_stations"
 SECURITY_DEVICES: Final = "security_devices"
+INVITES: Final = "invites"
+"""The pending invitations (homes and single devices) sent to the account."""
 
 
 def house_source(index: int) -> str:
@@ -68,7 +72,7 @@ def house_source(index: int) -> str:
 class ListingReport:
     """One list the report asked in one region: how many entries it answered, or why not.
 
-    ``source`` is :data:`HOUSE`, ``"houses"`` (the house list itself),
+    ``source`` is :data:`HOUSE`, ``"houses"`` (the house list itself), :data:`INVITES`,
     :data:`SECURITY_STATIONS` or :data:`SECURITY_DEVICES`.
     """
 
@@ -90,6 +94,23 @@ class HouseReport:
     account_is_owner: bool
     devices: int | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class InviteReport:
+    """One pending invitation (see :class:`~.cloud.models.CloudInvite`) without names or
+    ids: what it shares (``kind``, the device's redacted serial and product code) and
+    when it was sent (epoch seconds)."""
+
+    region: str
+    kind: InviteKind
+    device_sn: str | None
+    product_code: str | None
+    created_at: int | None
+
+    @classmethod
+    def of(cls, invite: CloudInvite) -> InviteReport:
+        return cls(**invite.as_redacted_dict())
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -181,6 +202,7 @@ class AccountReport:
     houses: tuple[HouseReport, ...]
     devices: tuple[DeviceEntryReport, ...]
     ciphers: tuple[OwnerCiphersReport, ...]
+    invites: tuple[InviteReport, ...] = ()
     stopped: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -224,8 +246,8 @@ async def async_account_report(
     """Ask every list and cipher table the account reaches without a login.
 
     Per region with a usable session (:meth:`EufyCloudApi.regions_with_session`): the
-    house device list, the house list and each house's device list, the security
-    realm's station and device lists. Then, with ``ciphers``, one cipher sweep
+    house device list, the house list and each house's device list, the pending
+    invitations, the security realm's station and device lists. Then, with ``ciphers``, one cipher sweep
     (:data:`~.cloud.const.CIPHER_ID_SWEEP`) per station owner, named for that owner's
     first station. Nothing is cached, nothing logs in, and the first throttle, kick-out
     or credential refusal ends the requests (:attr:`AccountReport.stopped`); every
@@ -252,6 +274,7 @@ async def async_account_report(
         houses=tuple(builder.houses),
         devices=devices,
         ciphers=tuple(cipher_reports),
+        invites=tuple(builder.invites),
         stopped=builder.stopped,
     )
 
@@ -265,6 +288,7 @@ class _ReportBuilder:
         self.stopped: str | None = None
         self.listings: list[ListingReport] = []
         self.houses: list[HouseReport] = []
+        self.invites: list[InviteReport] = []
         self.seen: dict[str, _Seen] = {}
 
     async def _ask[T](self, request: Awaitable[T]) -> tuple[T | None, str | None]:
@@ -299,7 +323,7 @@ class _ReportBuilder:
         return result or []
 
     async def ask_region(self, region: str) -> None:
-        """Ask ``region``'s house, per-house and security-realm lists."""
+        """Ask ``region``'s house, per-house, invitation and security-realm lists."""
         cloud = self._cloud
         self._note(
             HOUSE,
@@ -323,6 +347,10 @@ class _ReportBuilder:
                 )
             )
             self._note(house_source(index), found or [])
+        invites = await self._listing(
+            region, INVITES, cloud.async_list_invites(region, login=False)
+        )
+        self.invites += (InviteReport.of(invite) for invite in invites)
         for source, stations in ((SECURITY_STATIONS, True), (SECURITY_DEVICES, False)):
             listed = await self._listing(
                 region,

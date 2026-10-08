@@ -10,7 +10,7 @@ from ._lazy import lazy_exports
 if TYPE_CHECKING:
     from ._logging import redact, redact_serial, set_secret_logging, set_wire_logging
     from .client import EufySecurity, ModelStatus, SkippedDevice
-    from .cloud.models import CloudDevice, FirmwareUpdate
+    from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
     from .cloud.status import CloudStatus, LoginNeed, RegionStatus, StationRefreshStatus
     from .devices.model_settings import Setting, SettingControl, SettingKind
     from .devices.recipes import MAX_PRESET_SLOTS, MAX_ZOOM, MIN_ZOOM, PanTilt, PresetPosition
@@ -118,7 +118,7 @@ _EXPORTS: dict[str, str] = {
     ),
     **dict.fromkeys(("EufySecurity", "ModelStatus", "SkippedDevice"), "client"),
     "AccountReport": "diagnostics",
-    **dict.fromkeys(("CloudDevice", "FirmwareUpdate"), "cloud.models"),
+    **dict.fromkeys(("CloudDevice", "CloudInvite", "FirmwareUpdate"), "cloud.models"),
     **dict.fromkeys(
         ("CloudStatus", "LoginNeed", "RegionStatus", "StationRefreshStatus"), "cloud.status"
     ),
@@ -267,6 +267,7 @@ __all__ = [
     "CloudApiError",
     "CloudDevice",
     "CloudError",
+    "CloudInvite",
     "CloudProblem",
     "CloudStatus",
     "CommandError",

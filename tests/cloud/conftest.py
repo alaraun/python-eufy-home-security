@@ -110,6 +110,8 @@ class FakeMega:
         # The security realm's get_hub_list / get_devs_list entries.
         self.security_stations: list[dict[str, Any]] = []
         self.security_devices: list[dict[str, Any]] = []
+        # "house_invites" / "device_invites" -> the answer's data (default: an empty list).
+        self.invite_data: dict[str, Any] = {}
         # Endpoint -> the request headers of each call, in order.
         self.headers: dict[str, list[dict[str, str]]] = {}
         self.dsk_objects: list[dict[str, Any]] | None = None
@@ -178,6 +180,21 @@ class FakeMega:
             callback=self._delayed("houses", self._house_list, region),
             repeat=True,
         )
+        for host, path, endpoint in (
+            (house, const.HOUSE_INVITES_PATH, "house_invites"),
+            (
+                const.cluster_host("devicerelation", region),
+                const.DEVICE_INVITES_PATH,
+                "device_invites",
+            ),
+        ):
+            mock.post(
+                _url(host, path),
+                callback=self._delayed(
+                    endpoint, functools.partial(self._invite_list, endpoint=endpoint), region
+                ),
+                repeat=True,
+            )
         for path, endpoint in (
             (const.SECURITY_STATIONS_PATH, "security_stations"),
             (const.SECURITY_DEVICES_PATH, "security_devices"),
@@ -328,6 +345,13 @@ class FakeMega:
         if failure := self._failure_once("houses", kwargs):
             return failure
         return self._reply(self._shared_for(kwargs), 0, {"house_infos": self.houses})
+
+    def _invite_list(self, url: str, *, endpoint: str, **kwargs: Any) -> CallbackResult:
+        self.calls.append((endpoint, self._decrypt_body(kwargs)))
+        if failure := self._failure_once(endpoint, kwargs):
+            return failure
+        key = "house_invite_records" if endpoint == "house_invites" else "invites"
+        return self._reply(self._shared_for(kwargs), 0, self.invite_data.get(endpoint, {key: []}))
 
     def _security_list(self, url: str, *, endpoint: str, **kwargs: Any) -> CallbackResult:
         self.calls.append((endpoint, self._decrypt_body(kwargs)))
