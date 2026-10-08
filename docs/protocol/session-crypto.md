@@ -7,7 +7,7 @@ a station whose CONN_INIT is not version 8 (a T8410), declared from the eufy app
 |---|---|---|
 | AES-128-ECB | **static key** (serial + DID) | CONN_INIT, legacy scalar commands and results, ECB-tagged station frames |
 | ECIES (P-256 + HMAC-SHA256 KDF) | the `ecc_private_key` of the cipher CONN_INIT names (40 on a HomeBase 3, 98 on a T8170) | the session key inside CONN_INIT |
-| AES-256-GCM | **session key** (32 ASCII bytes) | JSON commands and GCM-tagged station frames, in both directions |
+| AES-256-GCM | **session key** (32 bytes) | JSON commands and GCM-tagged station frames, in both directions |
 | RSA-1024 PKCS#1 v1.5, then AES-128-ECB | the cipher's RSA `private_key`; then the 16-character key it carries | the RSA CONN_INIT; then every frame of that session |
 
 Media keyframes use a separate RSA/AES-128 scheme ([media.md](media.md)).
@@ -65,11 +65,14 @@ while len(km) < 48:
 aes_key    = km[0:16]
 hmac_key   = km[16:48]
 check        HMAC-SHA256(hmac_key, iv ‖ ct) == tag
-session    = PKCS7-unpad(AES-128-CBC-decrypt(aes_key, iv, ct))   # 32 printable ASCII bytes
+session    = PKCS7-unpad(AES-128-CBC-decrypt(aes_key, iv, ct))   # exactly 32 bytes
 ```
 
-- The ECB layer adds a padding tail after the blob. Find the blob's true length by
-  trying candidate lengths against the HMAC tag (the ECDH needs computing only once).
+- The blob is the first 129 bytes after the cipher id; the ECB layer adds a padding
+  tail after it, which the tag does not cover.
+- The session key is used as-is: any 32 bytes. A HomeBase 3 sends 32 printable ASCII
+  bytes [verified]; nothing requires it [declared], and a key of another length fails
+  the handshake.
 - **The station chooses the cipher [verified].** `cipher_id` is 40 on a HomeBase 3
   (fw 3.8.7.4) and 98 on a T8170 standalone camera (fw 3.3.5.4), on the same account.
   The id is readable before any cloud key is needed (only the static key), so it tells
@@ -148,7 +151,7 @@ key = RSA-PKCS#1-v1.5-decrypt(private_key, ciphertext) up to its first NUL, firs
 
 | | client → station | station → client |
 |---|---|---|
-| key | session key (32 ASCII bytes, used as-is) | same key. **There is no separate receive key.** |
+| key | session key (32 bytes, used as-is) | same key. **There is no separate receive key.** |
 | AAD | `"eufy security"` (13 bytes, a constant in the app) | same |
 | nonce | 12 random bytes per frame | chosen by the station |
 | layout | `tag(16) ‖ nonce(12) ‖ seq u32le(4) ‖ ciphertext` | `tag(16) ‖ nonce(12) ‖ ciphertext` |
