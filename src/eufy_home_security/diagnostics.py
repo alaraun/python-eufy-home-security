@@ -20,7 +20,6 @@ from typing import Any, Final
 
 from ._logging import redact_serial
 from .cloud.api import EufyCloudApi
-from .cloud.const import REGIONS
 from .cloud.models import CipherRecord, CloudDevice, CloudInvite, InviteKind, KeyCase, KeyState
 from .devices.command_types import APK_COMMAND_TYPES
 from .devices.model_settings import product_code_of
@@ -203,8 +202,9 @@ class OwnerCiphersReport:
 class AccountReport:
     """What :func:`async_account_report` found; :meth:`as_dict` is JSON-safe.
 
-    ``regions`` were asked (a session was held or cached); ``regions_without_session``
-    were not, since asking them would cost a login. ``stopped`` is the error that ended
+    ``regions`` are the login scopes asked (a session was held or cached; a region, or
+    an extra country's ``<region>:<country>``); ``regions_without_session`` the scopes
+    not asked, since asking them would cost a login. ``stopped`` is the error that ended
     the report's requests early (a throttle, a session another client took over, a
     refused credential), None when every request was sent.
 
@@ -296,7 +296,7 @@ async def async_account_report(
     country = cloud.login_country
     return AccountReport(
         regions=tuple(regions),
-        regions_without_session=tuple(r for r in REGIONS if r not in regions),
+        regions_without_session=tuple(r for r in cloud.login_scopes() if r not in regions),
         listings=tuple(builder.listings),
         houses=tuple(builder.houses),
         devices=devices,

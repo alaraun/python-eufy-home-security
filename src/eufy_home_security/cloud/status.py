@@ -45,7 +45,8 @@ class StationRefreshStatus:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RegionStatus:
-    """One cloud region's session and device list, as the cache holds them."""
+    """One login scope's session and device list (a region, or an extra country's
+    ``<region>:<country>``), as the cache holds them."""
 
     session_expires_in: float | None
     """Seconds until this region's cached session expires (0.0 once past); None without one."""
@@ -92,4 +93,4 @@ class CloudStatus:
     stations: Mapping[str, StationRefreshStatus]
     """Per station serial the cache holds state for."""
     regions: Mapping[str, RegionStatus] = field(default_factory=dict)
-    """Per cloud region (``eu``, ``us``)."""
+    """Per cloud region (``eu``, ``us``), then per extra country's login scope."""

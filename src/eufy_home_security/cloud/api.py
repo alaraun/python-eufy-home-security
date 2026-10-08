@@ -183,6 +183,8 @@ _AB_KEY: Final = "ab"
 """A cached session's ``ab``: what its login sent."""
 _AB_WANTED_KEY: Final = "ab_wanted"
 """A cached session's settled ``ab``: what was asked for (differs after a refused country login)."""
+_EXTRA_HOMES_KEY: Final = "extra_countries"
+"""``cloud.extra_countries``: each looked-up extra country's home region."""
 
 
 def _country_code(value: object) -> str | None:
@@ -191,6 +193,22 @@ def _country_code(value: object) -> str | None:
         return None
     code = value.strip().upper()
     return code if len(code) == 2 and code.isascii() and code.isalpha() else None
+
+
+def _country_codes(option: str | Sequence[str]) -> tuple[str, ...]:
+    """The ``country`` option as codes, first kept, repeats dropped; ``ValueError`` for
+    anything that is not an ISO 3166 alpha-2 code."""
+    values = [option] if isinstance(option, str) else list(option)
+    codes: list[str] = []
+    for value in values:
+        if not value.strip():
+            continue
+        code = _country_code(value)
+        if code is None:
+            raise ValueError(f"country {value!r} is not a two-letter ISO 3166 code")
+        if code not in codes:
+            codes.append(code)
+    return tuple(codes)
 
 
 def _ab_code(data: object) -> str | None:
@@ -216,24 +234,42 @@ def _cached_country(cache: SessionCache) -> LoginCountry | None:
     )
 
 
+def _cached_extra_homes(cache: SessionCache) -> dict[str, str]:
+    """The home region an earlier lookup found for each extra country."""
+    entry = cache.section("cloud").get(_EXTRA_HOMES_KEY) if cache.loaded else None
+    if not isinstance(entry, dict):
+        return {}
+    return {
+        code: home
+        for code, home in entry.items()
+        if _country_code(code) == code and home in const.REGIONS
+    }
+
+
 class EufyCloudApi:
     """Async client for the eufy_mega ("eufy_security") cloud.
 
     The injected ``session`` and ``cache`` are never created here. Call
     :meth:`async_login` before anything else (it reuses cached sessions).
 
-    ``region`` pins every call to that region's cluster. Without it, the first
-    device-list fetch asks every region; a region that lists no devices is then
-    *suspended*: no later fetch or login asks it again until a rescan
-    (``rescan_regions=True``) or, with ``scan_regions``, every fetch asks every region
-    (a device added on another region's cluster then appears; a region without a
-    usable session costs a login).
+    Logins follow the app: one login per country, on that country's home cluster.
+    A login lists only the devices its cluster holds for its ``ab`` country, so the
+    countries decide what the account sees. The login country (:attr:`login_country`)
+    is the first of ``country``, else the host's IP country; its home region
+    (``estimate_domain``) is the login scope named by the region alone. Each further
+    code of ``country`` is an extra country with its own session on its home region,
+    the login scope ``<region>:<country>`` (:func:`~.const.scope`). A login sends its
+    country as ``ab`` and every request carries it as the ``country`` header;
+    ``timezone`` is the ``timezone`` header. While no country is known, every region
+    is a scope, logged in with the region as ``ab`` and the header
+    :data:`~.const.DEFAULT_COUNTRY`.
 
-    Logins follow the app: the login country (:attr:`login_country`) is ``country``
-    when given, else the host's IP country, and its cluster (``estimate_domain``) logs
-    in first. Every region's login sends it as ``ab`` and every request as the
-    ``country`` header; ``timezone`` is the ``timezone`` header. While no country is
-    known, ``ab`` is the region and the header :data:`~.const.DEFAULT_COUNTRY`.
+    ``region`` pins the login country's scope to that region and leaves out the extra
+    countries homed elsewhere. A scope whose device list is empty is *suspended*: no
+    later fetch or login asks it again until a rescan (``rescan_regions=True``), or,
+    with ``scan_regions``, every fetch asks every scope. Scopes stand where regions do
+    everywhere (listings, suspension, sessions, :attr:`CloudDevice.region`); the login
+    budget and login hold-offs count per cluster.
     """
 
     def __init__(
@@ -243,7 +279,7 @@ class EufyCloudApi:
         email: str,
         password: PasswordSource | None,
         *,
-        country: str = "",
+        country: str | Sequence[str] = "",
         timezone: str = "",
         region: str | None = None,
         scan_regions: bool = False,
@@ -251,18 +287,22 @@ class EufyCloudApi:
     ) -> None:
         """``install`` shares a request hold-off with the other accounts of the process.
 
-        ``country`` is an ISO 3166 alpha-2 code (any case), else ``ValueError``;
-        ``timezone`` an IANA zone name. ``region`` not in :data:`~.const.REGIONS`:
-        ``ValueError``.
+        ``country`` is an ISO 3166 alpha-2 code (any case), or a sequence of them: the
+        first is the login country, each further one an extra country with its own
+        session on its home region (see the class docstring); anything else raises
+        ``ValueError``. ``timezone`` an IANA zone name. ``region`` not in
+        :data:`~.const.REGIONS`: ``ValueError``.
         """
         self._session = session
         self._cache = cache
         self._install = install
         self._email = email.strip()
         self._password = password
-        self._country_option = _country_code(country) if country else None
-        if country and self._country_option is None:
-            raise ValueError(f"country {country!r} is not a two-letter ISO 3166 code")
+        codes = _country_codes(country)
+        self._country_option = codes[0] if codes else None
+        self._extra_countries: tuple[str, ...] = codes[1:]
+        self._extras_resolved = False
+        """Whether this process looked the extra countries' home regions up."""
         self._timezone = timezone or const.DEFAULT_TIMEZONE
         self._login_country: LoginCountry | None = None
         self._country_resolved = False
@@ -306,7 +346,7 @@ class EufyCloudApi:
         :data:`~.const.DEFAULT_REGION`. A forced login and a reauthentication go there."""
         if self._region_override:
             return self._region_override
-        held = self.regions_with_devices()
+        held = [r for r in self.regions_with_devices() if const.scope_country(r) is None]
         if held:
             return held[0]
         home = self._home_region()
@@ -325,58 +365,81 @@ class EufyCloudApi:
         return sorted(regions, key=lambda r: r != first)
 
     def _listings(self) -> dict[str, dict[str, Any]]:
-        """Each listed region's last device-list record (``devices``, ``at``)."""
+        """Each listed scope's last device-list record (``devices``, ``at``)."""
         listed = self._cache.section("cloud").get("listed")
         if not isinstance(listed, dict):
             return {}
-        return {r: v for r, v in listed.items() if r in const.REGIONS and isinstance(v, dict)}
+        scopes = self.login_scopes()
+        return {r: v for r, v in listed.items() if r in scopes and isinstance(v, dict)}
+
+    def _extra_scopes(self) -> list[str]:
+        """The login scope of each extra country whose home region is known, in the
+        order given; with a ``region`` override only those on that region."""
+        homes = _cached_extra_homes(self._cache)
+        return [
+            const.scope(homes[code], code)
+            for code in self._extra_countries
+            if code in homes and self._region_override in (None, homes[code])
+        ]
+
+    def login_scopes(self) -> list[str]:
+        """Every login scope: the login country's home region (the override instead;
+        every region while no country is known), then the extra countries'."""
+        if self._region_override:
+            regions = [self._region_override]
+        else:
+            home = self._home_region()
+            regions = [home] if home else list(const.REGIONS)
+        return regions + self._extra_scopes()
 
     def regions_with_devices(self) -> list[str]:
-        """The regions whose last device list held devices, in :data:`~.const.REGIONS` order."""
+        """The scopes whose last device list held devices, regions first."""
         listings = self._listings()
-        return [r for r in const.REGIONS if _count(listings.get(r, {}).get("devices"))]
+        return [r for r in self.login_scopes() if _count(listings.get(r, {}).get("devices"))]
 
     def suspended_regions(self) -> list[str]:
-        """The regions whose last device list was empty: asked again only on a rescan."""
+        """The scopes whose last device list was empty: asked again only on a rescan."""
         listings = self._listings()
         return [
-            r for r in const.REGIONS if r in listings and not _count(listings[r].get("devices"))
+            r
+            for r in self.login_scopes()
+            if r in listings and not _count(listings[r].get("devices"))
         ]
 
     def regions_to_list(self, *, rescan: bool = False) -> list[str]:
-        """The regions the next device-list fetch asks: the override alone; every region
-        on a ``rescan`` or with ``scan_regions``; else every region not suspended."""
-        if self._region_override:
-            return [self._region_override]
+        """The scopes the next device-list fetch asks: every scope on a ``rescan`` or
+        with ``scan_regions``, else every scope not suspended. A ``region`` override
+        leaves out the other region and the extra countries homed there."""
+        scopes = self.login_scopes()
         if rescan or self._scan_regions:
-            return list(const.REGIONS)
+            return scopes
         suspended = self.suspended_regions()
-        return [r for r in const.REGIONS if r not in suspended]
+        return [r for r in scopes if r not in suspended]
 
     def device_region(self, device_sn: str) -> str:
-        """The region serving ``device_sn``: the override, else the region that listed it,
-        else :attr:`region`."""
-        if self._region_override:
-            return self._region_override
+        """The scope serving ``device_sn``: the one that listed it, else :attr:`region`."""
+        scopes = self.login_scopes()
         for entry in self._cache.cached_devices() or ():
-            if entry.get("device_sn") == device_sn and entry.get(REGION_KEY) in const.REGIONS:
+            if entry.get("device_sn") == device_sn and entry.get(REGION_KEY) in scopes:
                 return str(entry[REGION_KEY])
         return self.region
 
     def _regions_in_service(self) -> list[str]:
-        """The regions whose devices this account serves: :attr:`region` before any
-        listing, none once every region is suspended."""
+        """The scopes whose devices this account serves: :attr:`region` before any
+        listing, none once every scope is suspended; with a ``region`` override always
+        that region."""
         if self._region_override:
-            return [self._region_override]
+            served = self.regions_with_devices()
+            return [self._region_override, *(s for s in served if s != self._region_override)]
         if not self._listings():
             return [self.region]
         return self.regions_with_devices()
 
     def regions_with_session(self) -> list[str]:
-        """The regions a call can reach without a login: a session held or cached and
-        not expiring within the margin, in :data:`~.const.REGIONS` order."""
+        """The scopes a call can reach without a login: a session held or cached and
+        not expiring within the margin, regions first."""
         regions = []
-        for region in const.REGIONS:
+        for region in self.login_scopes():
             held = self._identities.get(region)
             cached = self._cached_session(region)
             if (held is not None and held.auth_token) or (
@@ -386,12 +449,13 @@ class EufyCloudApi:
         return regions
 
     def _host(self, service: str, region: str) -> str:
-        """``service``'s host on ``region``'s cluster, from the session's ``mega_domain``
-        when that names the same region."""
+        """``service``'s host on the cluster of scope ``region``, from the session's
+        ``mega_domain`` when that names the same cluster."""
+        cluster = const.scope_region(region)
         domain = self._cache.cloud_sessions().get(region, {}).get("mega_domain")
-        if not (isinstance(domain, str) and const.region_from_mega_domain(domain) == region):
+        if not (isinstance(domain, str) and const.region_from_mega_domain(domain) == cluster):
             domain = None
-        return const.cluster_host(service, region, domain)
+        return const.cluster_host(service, cluster, domain)
 
     # ── login ──────────────────────────────────────────────────────────────
 
@@ -424,6 +488,12 @@ class EufyCloudApi:
         answering = bool(verify_code or (captcha_id and captcha_answer))
         async with self._login_lock:
             self._take_over_or_raise_if_replaced(force)
+            if self._login_possible() and (
+                self._password_at_hand(prompt=False) or not self._all_sessions_cached()
+            ):
+                # The scopes follow the countries: look them up (no login) first.
+                await self._resolve_login_country()
+                await self._resolve_extra_countries()
             first: str | None = None
             if answering or force:
                 first = (self._challenge_region if answering else None) or self.region
@@ -453,11 +523,6 @@ class EufyCloudApi:
                     await self._remake_for_country(region)
                     continue
                 pending.append(region)
-            if len(pending) > 1 and self._password_at_hand():
-                # The home region logs in first: look the country up before ordering,
-                # unless the first login would be refused locally anyway.
-                self._raise_if_held_off(login=True, region=pending[0])
-                await self._resolve_login_country()
             for region in self._login_order(pending):
                 await self._do_login(region, verify_code=None, captcha_id=None, captcha_answer=None)
 
@@ -603,12 +668,20 @@ class EufyCloudApi:
         return self._login_country or _cached_country(self._cache)
 
     def login_ab(self, region: str) -> str:
-        """The ``ab`` a login to ``region`` sends: the login country's code, else the region."""
+        """The ``ab`` a login to scope ``region`` sends: an extra scope's country, else the
+        login country's code, else the region."""
+        extra = const.scope_country(region)
+        if extra is not None:
+            return extra
         country = self.login_country
         return country.code if country is not None else region
 
-    def _country_header(self) -> str:
-        """The ``country`` header: the login country, else the option, else the default."""
+    def _country_header(self, region: str | None = None) -> str:
+        """The ``country`` header: an extra scope's country, else the login country, else
+        the option, else the default."""
+        extra = None if region is None else const.scope_country(region)
+        if extra is not None:
+            return extra
         country = self.login_country
         if country is not None:
             return country.code
@@ -717,6 +790,32 @@ class EufyCloudApi:
             }
             await self._cache.async_save()
 
+    async def _resolve_extra_countries(self) -> None:
+        """Look up the home region of each extra country not cached, once per process
+        (``estimate_domain``, no login). A country eufy names no ``mega-`` cluster for,
+        or a lookup that fails, gets no session; only a found region is cached."""
+        if self._extras_resolved or not self._extra_countries:
+            return
+        self._extras_resolved = True
+        homes = _cached_extra_homes(self._cache)
+        found: dict[str, str] = {}
+        for code in self._extra_countries:
+            if code in homes:
+                continue
+            try:
+                home = await self._lookup_home_region(code)
+            except EufySecurityError as err:
+                _LOGGER.info("no home cluster for extra country %s yet: %s", code, err)
+                continue
+            if home is None:
+                _LOGGER.warning("eufy names no cluster for country %s; no session for it", code)
+                continue
+            _LOGGER.info("extra country %s, home region %s", code, home)
+            found[code] = home
+        if found:
+            self._cache.section("cloud")[_EXTRA_HOMES_KEY] = {**homes, **found}
+            await self._cache.async_save()
+
     async def _lookup_client_country(self) -> str | None:
         """The host's IP country from ``get_client_real_code`` on a fresh key-exchange
         identity (no login), None when it fails or names no country."""
@@ -804,7 +903,7 @@ class EufyCloudApi:
             return
         await self._resolve_login_country()
         wanted = self.login_ab(region)
-        if self.login_country is None or made == wanted:
+        if made == wanted or (self.login_country is None and const.scope_country(region) is None):
             return
         _LOGGER.info(
             "%s cloud session was made with ab %s; logging in once with ab %s", region, made, wanted
@@ -865,7 +964,11 @@ class EufyCloudApi:
             "login: password %s, openudid %s, %d login(s) in the budget window",
             Credential(password),
             Identifier(self._cache.openudid),
-            len(self._cache.recent_logins(const.LOGIN_BUDGET_WINDOW_SECONDS, region)),
+            len(
+                self._cache.recent_logins(
+                    const.LOGIN_BUDGET_WINDOW_SECONDS, const.scope_region(region)
+                )
+            ),
         )
         identity = await self._key_exchange(
             self._host("openapi", region), const.KEY_EXCHANGE_PATH, const.MEGA_PRESET_KEY
@@ -882,17 +985,20 @@ class EufyCloudApi:
             try:
                 code, resp, data = await self._send_login(identity, password, ab, answer)
             except CloudApiError as err:
-                if not (fallback and ab != region and type(err) is CloudApiError):
+                fallback_ab = region if const.scope_country(region) is None else None
+                if not (
+                    fallback and fallback_ab and ab != fallback_ab and type(err) is CloudApiError
+                ):
                     raise
                 _LOGGER.warning(
                     "%s login with ab %s refused (%s); logging in with ab %s",
                     region,
                     ab,
                     err,
-                    region,
+                    fallback_ab,
                 )
                 self._raise_if_held_off(login=True, region=region)
-                ab = region
+                ab = fallback_ab
                 code, resp, data = await self._send_login(identity, password, ab, answer)
         except AuthenticationError as err:
             if not isinstance(err, _SessionExpiredError) and self._cache.password == password:
@@ -949,7 +1055,7 @@ class EufyCloudApi:
             **answer,
         }
         # Counted before it is sent: a login that times out may still have landed.
-        self._cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, region)
+        self._cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, const.scope_region(region))
         await self._cache.async_save()
         return await self._call(
             self._host("passport", region),
@@ -958,6 +1064,24 @@ class EufyCloudApi:
             identity,
             tolerate=const.VERIFY_CODE_CODES | const.CAPTCHA_CODES,
         )
+
+    def _all_sessions_cached(self) -> bool:
+        """Whether every scope the next device list asks has a usable cached session."""
+        return all(
+            (cached := self._cached_session(r)) is not None and self._session_usable(cached[3])
+            for r in self.regions_to_list()
+        )
+
+    def _login_possible(self) -> bool:
+        """Whether a login to :attr:`region` could be sent now: a password at hand (or a
+        prompt) and no login hold-off or spent budget."""
+        if not self._password_at_hand():
+            return False
+        try:
+            self._raise_if_held_off(login=True, region=self.region)
+        except RateLimitedError:
+            return False
+        return True
 
     def _password_at_hand(self, *, prompt: bool = True) -> bool:
         """Whether a login has a password without asking anyone: a given string, a cached
@@ -1287,19 +1411,20 @@ class EufyCloudApi:
     async def async_fetch_devices(self, *, rescan_regions: bool = False) -> list[CloudDevice]:
         """The device list fetched from the cloud now, cached; every failure raises.
 
-        Asks each region of :meth:`regions_to_list` (``rescan_regions``: every region)
-        and tags each device with the region that listed it (:attr:`CloudDevice.region`;
-        a serial two regions list keeps the first region's entry). A region that lists
-        no devices is suspended. With every region suspended nothing is sent and the
-        cached (empty) list is returned. Nothing is cached unless every region asked
-        answered.
+        Asks each login scope of :meth:`regions_to_list` (``rescan_regions``: every
+        scope; the extra countries' home regions are looked up first when not cached)
+        and tags each device with the scope that listed it (:attr:`CloudDevice.region`;
+        a serial two scopes list keeps the first scope's entry). A scope that lists no
+        devices is suspended. With every scope suspended nothing is sent and the cached
+        (empty) list is returned. Nothing is cached unless every scope asked answered.
         """
+        await self._resolve_extra_countries()
         regions = self.regions_to_list(rescan=rescan_regions)
         if not regions:
             _LOGGER.info(
-                "device list not fetched: every region (%s) listed no devices last time; "
+                "device list not fetched: every login scope (%s) listed no devices last time; "
                 "a rescan asks them again",
-                ", ".join(const.REGIONS),
+                ", ".join(self.login_scopes()),
             )
             return [CloudDevice.from_api(d) for d in self._cache.cached_devices() or ()]
         entries: list[dict[str, Any]] = []
@@ -1457,7 +1582,7 @@ class EufyCloudApi:
         async def fetch(base: _Identity) -> Any:
             sec = await self._security_identity(base)
             _code, _resp, data = await self._call(
-                const.security_host(region), path, body, sec, category=True
+                const.security_host(const.scope_region(region)), path, body, sec, category=True
             )
             return data
 
@@ -1773,7 +1898,7 @@ class EufyCloudApi:
         async def fetch(base: _Identity) -> Any:
             sec = await self._security_identity(base)
             _code, _resp, data = await self._call(
-                const.security_host(region),
+                const.security_host(const.scope_region(region)),
                 const.CIPHERS_PATH,
                 payload,
                 sec,
@@ -1820,7 +1945,7 @@ class EufyCloudApi:
             "security realm: key exchange on session key_ident %s", Identifier(base.key_ident)
         )
         sec = await self._key_exchange(
-            const.security_host(base.region),
+            const.security_host(const.scope_region(base.region)),
             const.SECURITY_KEY_EXCHANGE_PATH,
             const.SECURITY_PRESET_KEY,
             auth=base,
@@ -1909,8 +2034,9 @@ class EufyCloudApi:
 
     def _held_off(self, kind: str, region: str | None = None) -> float | None:
         """Seconds left on this account's ``kind`` hold-off (a login hold-off is per
-        ``region``); requests also see the install's."""
-        own = self._cache.held_off_for(kind, longest=const.LOCKOUT_HOLD_OFF_SECONDS, region=region)
+        ``region``'s cluster); requests also see the install's."""
+        cluster = None if region is None else const.scope_region(region)
+        own = self._cache.held_off_for(kind, longest=const.LOCKOUT_HOLD_OFF_SECONDS, region=cluster)
         shared = (
             self._install.request_held_off_for()
             if kind == "requests" and self._install is not None
@@ -1926,7 +2052,7 @@ class EufyCloudApi:
         A login hold-off holds off ``region``'s logins (every region's when None).
         """
         if login_only:
-            for held in [region] if region is not None else const.REGIONS:
+            for held in [const.scope_region(region)] if region is not None else const.REGIONS:
                 self._cache.hold_off("login", seconds, region=held)
         else:
             self._cache.hold_off("requests", seconds)
@@ -1938,7 +2064,7 @@ class EufyCloudApi:
         """``region``'s logins in the budget window, and seconds until its next is allowed
         if its budget is spent."""
         window = const.LOGIN_BUDGET_WINDOW_SECONDS
-        recent = self._cache.recent_logins(window, region)
+        recent = self._cache.recent_logins(window, const.scope_region(region))
         if len(recent) < const.LOGIN_BUDGET:
             return len(recent), None
         # The next login is allowed once enough of the recent ones leave the window.
@@ -2013,7 +2139,8 @@ class EufyCloudApi:
         """
         now = time.time()
         in_use = self.regions_to_list()
-        sessions = {region: self._cached_session(region) for region in const.REGIONS}
+        scopes = self.login_scopes()
+        sessions = {region: self._cached_session(region) for region in scopes}
         expiries = [
             cached[3]
             for region in in_use
@@ -2060,7 +2187,7 @@ class EufyCloudApi:
             stations={sn: self._station_refresh_status(sn) for sn in self._cache.station_serials()},
             regions={
                 region: self._region_status(region, sessions[region], in_use, now)
-                for region in const.REGIONS
+                for region in scopes
             },
         )
 
@@ -2230,7 +2357,7 @@ class EufyCloudApi:
             "accept": "application/json",
             "accept-charset": "UTF-8",
             "user-agent": const.USER_AGENT,
-            "country": self._country_header(),
+            "country": self._country_header(identity.region),
             "language": const.DEFAULT_LANGUAGE,
             "timezone": self._timezone,
         }

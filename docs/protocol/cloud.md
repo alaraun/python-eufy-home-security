@@ -24,8 +24,9 @@ Code: `src/eufy_home_security/cloud/crypto.py` (pure primitives),
   the same user id, `ab_code` = the `ab` sent, `country_code` and an empty `domain`
   alike on both), but `get_devs_list` lists only the devices homed on that cluster; the
   other answers `{"devices": null}` **[verified]**. A session on one cluster does not end
-  the other's **[verified]**. The library keeps a session per region and asks each
-  region for its devices (see [the guide](../how-to/home-assistant.md#cloud-regions)).
+  the other's **[verified]**. Within a cluster the login's country decides the list (see
+  [Login country](#login-country)): the library logs in once per country, on that
+  country's cluster (see [the guide](../how-to/home-assistant.md#cloud-regions)).
 - A login answer's `mega_domain` (`mega-{region}-pr.eufy.com`), when present, gives the
   region's hosts: the domain with `mega-` replaced by `app-{service}-`, as the app builds
   them **[app]**. The library uses it only for the region it names; the answers seen so far
@@ -119,7 +120,8 @@ repeatedly **[verified]**. Change it only against a capture of the app's own log
 The eufy app logs in with the user's country, and the library does the same **[app]**:
 
 1. **Country**: the `country` argument (ISO 3166 alpha-2; Home Assistant passes its own
-   country setting), else the host's IP country: `POST
+   country setting; the first code of a list, see *Extra countries* below), else the
+   host's IP country: `POST
    app-passport-{region}-pr.eufy.com/passport/get_client_real_code`, body `{}`, on a
    fresh key-exchange identity before any login, answers `{"ab_code": "EE"}`
    **[verified]**. Neither known: `ab` is the region (`eu`/`us`) and the `country` header
@@ -129,12 +131,13 @@ The eufy app logs in with the user's country, and the library does the same **[a
    plaintext `data.domain` = `mega-eu-pr.eufy.com` or `mega-us-pr.eufy.com` (and the
    product-domain map), the same from either host **[verified]**. A lowercase or unknown
    code answers another domain (`aiot-api-eu.eufylife.com`): the library then does not
-   use the country. The home region logs in first.
-3. **Login**: `ab` = the country on every region's login (a login in the other cluster
-   with the same `ab` succeeds and lists that cluster's devices **[verified]**), `country`
-   header = the country, `timezone` header = the caller's IANA zone (default `UTC`).
+   use the country. Only the home region logs in; the other cluster is not asked.
+3. **Login**: `ab` = the country, `country` header = the country, `timezone` header =
+   the caller's IANA zone (default `UTC`). A login in the other cluster with the same
+   `ab` succeeds but lists nothing there **[verified]**. While no country is known, every
+   region logs in with `ab` = the region and the empty ones are suspended, as before.
 4. **Old sessions**: each cached session records the `ab` it was made with; one made with
-   another `ab` logs in again once per region, inside the login budget. A plain body-code
+   another `ab` logs in again once, inside the login budget. A plain body-code
    refusal of a country login (26502 "Failed to request." was seen for `ab` `US` on the
    `eu` cluster) keeps the old session there, or, for a fresh login, retries once with
    the region as `ab`; either way that country is not asked again for the session.
@@ -144,9 +147,24 @@ The eufy app logs in with the user's country, and the library does the same **[a
 any client **[verified]**. The account report shows it per region, with the IP country.
 The app compares it with the chosen country before logging in.
 
-Which lists a country login changes is not established: on an account that lists its
-devices with `ab` = the region, `ab` = the country listed the same devices
-**[verified]**.
+**What a country login lists [verified].** Within one cluster the login's `ab` decides
+which devices the lists show: a login with another country lists the devices held under
+that country and not the others. On a member account that holds a home shared under `EE`
+and a home station shared under `CH`, both on `eu`, the `EE` session lists only the first
+and a `CH` session only the second; the eufy app logged in with `CH` shows the same split.
+The `country` header does not change any list: on one session, `EE`, `CH`, `DE`, `GB` and
+`US` headers answered the same house, security and invitation lists. Sessions made with
+different `ab` on the same cluster coexist: a new `CH` login left the `EE` session valid.
+`ab` = the region (`eu`) listed the same devices as `ab` = `EE` on that account.
+
+**Extra countries.** `country` may name several codes (`["EE", "CH"]`). The first is the
+login country above; each further one has its home region looked up
+(`estimate_domain`, cached) and logs in once more there with `ab` = that country, as the
+login scope `<region>:<country>` (`eu:CH`). Its devices join the device list tagged with
+the scope, and every call about them (lists, ciphers, DSK, push) uses its session. An
+extra scope is listed and suspended like a region; its logins count in its cluster's
+login budget. A country eufy names no cluster for gets no session, and a refused extra
+login is not retried with the region as `ab`.
 
 ## Login challenges
 
