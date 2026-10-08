@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.2.8](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.7...v0.2.8) (2026-10-08)
+
+
+### Features
+
+* log in once per user-set country, on its home region only ([#33](https://github.com/alaraun/python-eufy-home-security/issues/33)) ([f5714a3](https://github.com/alaraun/python-eufy-home-security/commit/f5714a3db42fb60c4243d52609ca7ce90145ebb9))
+
 ## [0.2.7](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.6...v0.2.7) (2026-10-08)
 
 
