@@ -1228,6 +1228,30 @@ async def test_storage_answer_is_taken_under_either_cipher(station: FakeStation)
         await session.async_close()
 
 
+async def test_a_reply_queued_while_the_event_loop_was_blocked_is_still_taken(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A loop blocked past the deadline fires the timer late, ahead of the replies that
+    arrived meanwhile; the request waits a grace period for them instead of failing."""
+    timeout = 0.3
+    sent = station.send_storage
+
+    def answer_then_block(*, cipher: int = FrameCipher.GCM) -> None:
+        for _ in range(4):  # frames ahead of the record, one datagram each
+            station.send_receipt(FrameType.CMD_TRANSFER, 0)
+        sent(cipher=cipher)
+        time.sleep(timeout + 1.0)  # another component holds the loop past the deadline
+
+    monkeypatch.setattr(station, "send_storage", answer_then_block)
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        info = await session.async_get_storage(timeout=timeout)
+    finally:
+        await session.async_close()
+    assert info.disk is not None
+
+
 async def test_storage_rejection_and_silence_are_typed_errors(station: FakeStation) -> None:
     station.storage_reply_code = -104
     session = make_session(station, Provider(station))

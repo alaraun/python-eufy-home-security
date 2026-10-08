@@ -211,6 +211,12 @@ OP_LOCK_WAIT_LOG = 0.05
 DISCOVERY_TIMEOUT = 6.0
 HANDSHAKE_TIMEOUT = 6.0
 COMMAND_TIMEOUT = 6.0
+LOOP_STALL_LATENESS = 0.5
+"""A request's timer firing at least this late (seconds) means the event loop was held
+by something else; the request then waits :data:`LOOP_STALL_GRACE` more."""
+LOOP_STALL_GRACE = 1.0
+"""The extra wait for replies that arrived while the loop was held: they are read one
+datagram per loop turn, after the late timer."""
 PARAM_QUERY_TIMEOUT = 8.0
 """A parameter dump's wait for the station's own block."""
 STILL_FETCH_TIMEOUT = 12.0
@@ -1704,9 +1710,7 @@ class StationSession:
                         COMMAND_RESEND_AFTER,
                     )
                     indices.append(self._send_secure(body, dev_type=header))
-                await asyncio.wait(
-                    {waiter.future}, timeout=max(started + timeout - time.monotonic(), 0.0)
-                )
+                await self._wait_until(waiter.future, started + timeout, f"cmd {command}")
                 if not waiter.future.done() and not receipt.is_set() and self._acked(indices):
                     _LOGGER.debug(
                         "%s: cmd %d (%s) acknowledged without a receipt; waiting for it",
@@ -4164,9 +4168,7 @@ class StationSession:
                         resend_after,
                     )
                     send()
-            remaining = max(deadline - time.monotonic(), 0.0)
-            done, _ = await asyncio.wait({waiter.future}, timeout=remaining)
-            if not done:
+            if not await self._wait_until(waiter.future, deadline, label):
                 _LOGGER.debug("%s: %s: no reply within %.0fs", self._log_name, label, timeout)
                 raise DeviceTimeoutError(f"no reply from the station within {timeout:.0f}s")
             _LOGGER.debug(
@@ -4179,6 +4181,29 @@ class StationSession:
         finally:
             if waiter is not None:
                 self._remove_waiter(waiter)
+
+    async def _wait_until(
+        self, future: asyncio.Future[object], deadline: float, label: str
+    ) -> bool:
+        """Wait for ``future`` until ``deadline`` (monotonic); whether it is done.
+
+        A timer that fires :data:`LOOP_STALL_LATENESS` late means the event loop was held
+        by something else; replies that arrived meanwhile are read one datagram per loop
+        turn after it, so the wait goes on for :data:`LOOP_STALL_GRACE`.
+        """
+        done, _ = await asyncio.wait({future}, timeout=max(deadline - time.monotonic(), 0.0))
+        if done or (late := time.monotonic() - deadline) < LOOP_STALL_LATENESS:
+            return bool(done)
+        _LOGGER.debug(
+            "%s: %s: the wait ended %.1fs late (event loop held); waiting %.1fs more for "
+            "replies queued meanwhile",
+            self._log_name,
+            label,
+            late,
+            LOOP_STALL_GRACE,
+        )
+        done, _ = await asyncio.wait({future}, timeout=LOOP_STALL_GRACE)
+        return bool(done)
 
     async def _listen(
         self,
