@@ -225,12 +225,21 @@ def test_aes_key_from_conn_init_rejects_a_wrong_or_bad_key_and_a_short_block() -
     priv, _ = _rsa_keypair()
     _, other = _rsa_keypair()
     wrapped = priv.public_key().encrypt(b"0123456789abcdef", padding.PKCS1v15())
-    with pytest.raises(HandshakeError):  # a decrypt error, or noise (implicit rejection)
-        crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), other)
-    # A wrong-but-valid key is a stale key, not an unusable one: still a plain HandshakeError.
+    # A wrong-but-valid key decrypts to noise (implicit rejection) or fails: a stale key,
+    # not an unusable one, so still a plain HandshakeError.
     with pytest.raises(HandshakeError) as noise:
         crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), other)
     assert not isinstance(noise.value, CipherUnusableError)
+    # A key of another size cannot decrypt the 128-byte block at all.
+    big = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    big_pem = big.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+    with pytest.raises(HandshakeError, match="RSA decrypt failed") as size:
+        crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), big_pem)
+    assert not isinstance(size.value, CipherUnusableError)
     with pytest.raises(HandshakeError, match="not 128") as short:
         crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped[:100]), other)
     assert not isinstance(short.value, CipherUnusableError)  # a protocol shape, not a bad key

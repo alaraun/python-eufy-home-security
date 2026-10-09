@@ -83,7 +83,7 @@ session    = PKCS7-unpad(AES-128-CBC-decrypt(aes_key, iv, ct))   # exactly 32 by
   re-fetch latch). The eufy app does the same **[declared: app]**: it fetches a key only
   when the station's `APP_CMD_GATEWAYINFO` (1100) callback names the id, caches it per
   owner id and cipher id, and preloads nothing.
-- An HMAC mismatch, or a key that is not 32 printable bytes, means the cached key of
+- An HMAC mismatch, or a key that is not 32 bytes, means the cached key of
   that cipher no longer matches the station. Re-fetch it **once**. No other signal
   tells a stale key apart from a dead link.
 

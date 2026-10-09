@@ -308,9 +308,9 @@ CONN_INIT_MIN_LEN = 4 + CONN_INIT_RSA_BLOB_LEN
 """Smallest CONN_INIT payload that holds a key: the cipher id and the 128-byte RSA
 ciphertext (the ECIES form needs 133, and a HomeBase 3 pads it to 144)."""
 CONN_INIT_MAX_LEN = 4096
-"""Largest CONN_INIT payload accepted. A real one is a few hundred bytes; the ECIES
-unwrap searches candidate lengths on the event loop, so an oversized blob would stall
-every session and stream in the process."""
+"""Largest CONN_INIT payload accepted. A real one is a few hundred bytes; a larger one
+(corrupt, or from whatever won the punch race on the LAN) is dropped before any of the
+handshake's decryption runs on the event loop."""
 STAT_KEY_LIMIT = 64
 """Most distinct keys a wire-keyed statistic counts before bucketing the rest.
 
@@ -912,8 +912,9 @@ class StationSession:
         self._transport: PPPPTransport | None = None
         self._creds: P2PCredentials | None = None
         self._cipher_id: int | None = None
-        self._conn_init_version: int | None = None
         """The cipher the station named in its last CONN_INIT (None before one arrived)."""
+        self._conn_init_version: int | None = None
+        """The version (subheader byte 0) of the last CONN_INIT reply."""
         self._did: Did | None = None
         self._static_key: bytes | None = None
         self._session_key: bytes | None = None
@@ -3280,10 +3281,7 @@ class StationSession:
         def match(inbound: Inbound) -> Frame | None:
             if inbound.type != FrameType.CONN_INIT:
                 return None
-            # Bound the blob before it reaches the ECIES unwrap. A real CONN_INIT is a
-            # few hundred bytes; the unwrap searches candidate lengths and runs on the
-            # event loop, so an oversized one — corrupt, or from whatever won the punch
-            # race on the LAN — would stall every session and stream in the process.
+            # Bound the payload before the handshake decrypts it (CONN_INIT_MAX_LEN).
             if not CONN_INIT_MIN_LEN <= len(inbound.frame.payload) <= CONN_INIT_MAX_LEN:
                 return None
             return inbound.frame
