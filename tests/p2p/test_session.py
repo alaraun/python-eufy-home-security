@@ -2470,11 +2470,16 @@ async def test_live_stream_ignores_a_few_wrong_camera_frames(
     stream_media = FakeStation._stream
 
     async def other_camera_first(
-        self: FakeStation, public: Any, count: int | None, pframe: bytes, camera: int
+        self: FakeStation,
+        public: Any,
+        count: int | None,
+        pframe: bytes,
+        camera: int,
+        **kwargs: Any,
     ) -> None:
         for _ in range(10):
             self.send_video(pframe, keyframe=False, camera=1 - camera)
-        await stream_media(self, public, count, pframe, camera)
+        await stream_media(self, public, count, pframe, camera, **kwargs)
 
     monkeypatch.setattr(FakeStation, "_stream", other_camera_first)
 

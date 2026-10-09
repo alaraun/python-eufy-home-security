@@ -9,6 +9,7 @@ from types import MappingProxyType
 from typing import Any, Final, Literal
 
 from .._logging import redact, redact_serial
+from ..devices.command_types import APK_COMMAND_TYPES
 from ..devices.types import DeviceModel, model_for_serial, serial_prefix
 from ..exceptions import CipherUnusableError, CloudApiError, EmptyResponseError, ProtocolError
 from .const import OTA_NO_UPGRADE_CODE, OTA_ROM_PATH
@@ -33,6 +34,12 @@ def _ota_reason_code(reason: str) -> int | None:
     """The ``code`` embedded in an OTA error object's ``reason`` text."""
     match = _OTA_REASON_CODE.search(reason)
     return int(match.group(1)) if match else None
+
+
+CAMERA_INFO_PARAM: Final = next(k for k, v in APK_COMMAND_TYPES.items() if v == "CAMERA_INFO")
+"""The parameter whose value the app reads as the device's ability (bit 0x80: a version-8
+CONN_INIT and an ECC media key); a hint only, the CONN_INIT version byte decides the
+session."""
 
 
 def _int_or_none(value: object) -> int | None:
@@ -259,6 +266,14 @@ class CloudDevice:
             )
             params.append(CloudParam(param_id, value, updated_at))
         return tuple(params)
+
+    @property
+    def camera_info(self) -> int | None:
+        """The :data:`CAMERA_INFO_PARAM` value of :attr:`cloud_params` as an integer;
+        None when absent or not a number. The app offers an ECC media key from 128
+        (:func:`~..p2p.media.media_key_type_for`)."""
+        value = next((p.value for p in self.cloud_params if p.param_id == CAMERA_INFO_PARAM), None)
+        return None if value is None else _int_or_none(value)
 
     @property
     def rendezvous_servers(self) -> tuple[str, ...]:

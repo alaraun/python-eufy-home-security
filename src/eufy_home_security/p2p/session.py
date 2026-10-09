@@ -130,10 +130,10 @@ from .media import (
     KEYFRAME_MIN,
     KEYFRAME_RSA_LEN,
     PLAYBACK_ENDED,
-    UNDECODABLE_VIDEO,
     VIDEO_HEADER_LEN,
     MediaDecoder,
     MediaFrame,
+    MediaKeyType,
     MediaKind,
     Still,
     StillFormat,
@@ -143,6 +143,7 @@ from .media import (
     decode_record_play_ctrl,
     decode_v1_still,
     download_video_payload,
+    generate_media_ecc_key,
     generate_media_rsa_key,
     media_variant_label,
     record_view_payload,
@@ -749,7 +750,7 @@ class MediaStream:
             return
         self._last_rx = time.monotonic()
         variant = video_variant(subheader) if is_video and subheader else None
-        if variant is not None and variant in UNDECODABLE_VIDEO:
+        if variant is not None and not self._decoder.decodes(variant):
             self._undecodable_video(variant)
             return
         # Decide what to drop before decoding: a keyframe unwrap and its copies are
@@ -760,7 +761,8 @@ class MediaStream:
                 self.dropped += 1
             return
         is_key = is_video and video_record_is_key(payload, variant)
-        if is_video and self._need_keyframe and not is_key:
+        # An ECC record without the keyframe flag is told only after its decrypt.
+        if is_video and self._need_keyframe and not is_key and variant is not VideoVariant.ECC:
             if self._started:
                 self.dropped += 1
             return
@@ -807,6 +809,10 @@ class MediaStream:
             return
         if frame is None:
             return
+        if frame.kind is MediaKind.VIDEO and self._need_keyframe and not frame.is_keyframe:
+            if self._started:
+                self.dropped += 1
+            return
         if frame.is_keyframe:
             if not self._started:
                 _LOGGER.debug(
@@ -839,15 +845,21 @@ class MediaStream:
         self._session._detach_media(self)
 
     def _undecodable_video(self, variant: VideoVariant) -> None:
-        """Fail a stream whose video arrives in a protection the library does not
-        decode; after its first keyframe, drop such records."""
+        """Fail a stream whose video arrives in a protection its key does not decode;
+        after its first keyframe, drop such records."""
+        key = self._decoder.key_type
         if self._started:
             if self._throttle.should_log(("undecodable-video", variant)):
-                _LOGGER.warning("dropping %s video records the library does not decode", variant)
+                _LOGGER.warning(
+                    "dropping %s video records a stream opened with an %s key does not decode",
+                    variant,
+                    key,
+                )
             return
         self._fail(
             UnsupportedError(
-                f"the station sends {variant.value} video, which the library does not decode"
+                f"the station sends {variant.value} video, which a stream opened with an "
+                f"{key.value.upper()} key does not decode"
             )
         )
         self._session._detach_media(self)
@@ -2706,6 +2718,7 @@ class StationSession:
         idle_timeout: float | None = None,
         wait: bool = False,
         live_ext_value: bool = True,
+        media_key: MediaKeyType = MediaKeyType.RSA,
     ) -> MediaStream:
         """Open a camera's live video and audio. This wakes a battery camera.
 
@@ -2729,6 +2742,11 @@ class StationSession:
         (a HomeBase 2) the camera handlers' 1003 without the T8030 fields
         (:func:`~..devices.recipes.open_live_stream_station`) and a bare 1004 carrying
         the channel.
+
+        ``media_key`` is the key pair the open offers (its ``key`` field): RSA, or ECC,
+        which the app offers a device whose param 1103 is 128 or more
+        (:func:`~.media.media_key_type_for`; :meth:`~..station.Station.async_open_live`
+        picks it so). The station protects the stream for the key it is offered.
         """
         if self.standalone:
 
@@ -2787,10 +2805,11 @@ class StationSession:
                 first_frame_timeout=first,
                 idle_timeout=idle,
                 wait=wait,
+                media_key=media_key,
             )
         extra = await self._live_route(first, wait)
         if extra is not None:
-            return await self._open_extra_live(extra, channel, first, idle)
+            return await self._open_extra_live(extra, channel, first, idle, media_key)
         try:
             return await self._open_media(
                 CMD_START_REALTIME_MEDIA,
@@ -2800,6 +2819,7 @@ class StationSession:
                 first_frame_timeout=first,
                 idle_timeout=idle,
                 wait=wait,
+                media_key=media_key,
             )
         finally:
             self._slot_claimed = False
@@ -2908,7 +2928,12 @@ class StationSession:
         return muxer.clip()
 
     async def _open_extra_live(
-        self, extra: StationSession, channel: int, first: float, idle: float
+        self,
+        extra: StationSession,
+        channel: int,
+        first: float,
+        idle: float,
+        media_key: MediaKeyType = MediaKeyType.RSA,
     ) -> MediaStream:
         """Open live on ``extra``; the stream's end closes the session (PPPP CLOSE)."""
         started = time.monotonic()
@@ -2923,7 +2948,7 @@ class StationSession:
                 time.monotonic() - started,
             )
             return await extra.async_open_live(
-                channel, first_frame_timeout=first, idle_timeout=idle
+                channel, first_frame_timeout=first, idle_timeout=idle, media_key=media_key
             )
         except BaseException:
             extra._end_extra_live()
@@ -2998,11 +3023,17 @@ class StationSession:
         first_frame_timeout: float,
         idle_timeout: float,
         wait: bool,
+        media_key: MediaKeyType = MediaKeyType.RSA,
     ) -> MediaStream:
         await self.async_connect()
         creds = self._require_creds()
-        # RSA key generation takes tens of milliseconds: keep it off the event loop.
-        key_hex, rsa_key = await asyncio.to_thread(generate_media_rsa_key)
+        if media_key is MediaKeyType.ECC:
+            key_hex, ecc_key = generate_media_ecc_key()
+            decoder = MediaDecoder(ecc_private_key=ecc_key)
+        else:
+            # RSA key generation takes tens of milliseconds: keep it off the event loop.
+            key_hex, rsa_key = await asyncio.to_thread(generate_media_rsa_key)
+            decoder = MediaDecoder(rsa_key)
         frame_type, body = open_frame(creds.account_id, key_hex)
         slot_deadline = time.monotonic() + first_frame_timeout
         # The slot wait and the drain run without the op lock, so commands are not
@@ -3031,17 +3062,18 @@ class StationSession:
                     self,
                     command=command,
                     channel=channel,
-                    decoder=MediaDecoder(rsa_key),
+                    decoder=decoder,
                     stop_body=(None if stop_body is None else lambda: stop_body(creds.account_id)),
                     first_frame_timeout=first_frame_timeout,
                     idle_timeout=idle_timeout,
                 )
                 _LOGGER.debug(
-                    "%s: opening %s (cmd %d) on channel %d",
+                    "%s: opening %s (cmd %d) on channel %d with an %s key",
                     self._log_name,
                     "a recording" if command in _RECORDING_COMMANDS else "live media",
                     command,
                     channel,
+                    media_key,
                 )
                 self._set_media(stream)
                 try:

@@ -9,6 +9,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -152,7 +153,7 @@ def test_a_clear_keyframe_is_cut_at_datalen_and_not_decrypted() -> None:
 
 
 @pytest.mark.parametrize("subheader", [bytes([8, 0, 1, 1, 10, 0]), bytes([4, 0, 1, 2, 10, 0])])
-def test_video_the_library_does_not_decode_raises_unsupported(subheader: bytes) -> None:
+def test_video_an_rsa_stream_does_not_decode_raises_unsupported(subheader: bytes) -> None:
     payload = struct.pack("<I", 4) + bytes(18) + b"BODY"
     decoder = media.MediaDecoder(media.generate_media_rsa_key()[1])
     with pytest.raises(UnsupportedError):
@@ -171,6 +172,95 @@ def test_the_variant_label_names_the_media_kind() -> None:
     assert media.media_variant_label(FrameType.VIDEO_FRAME, b"", sub) == "video:rsa_prefix"
     assert media.media_variant_label(FrameType.AUDIO_FRAME, b"", sub) == "audio:aac"
     assert media.media_variant_label(FrameType.CMD_TRANSFER, b"", sub) is None
+
+
+@pytest.mark.parametrize(
+    ("camera_info", "key"),
+    [
+        (None, media.MediaKeyType.RSA),
+        (-43, media.MediaKeyType.RSA),
+        (127, media.MediaKeyType.RSA),
+        (128, media.MediaKeyType.ECC),
+        (255, media.MediaKeyType.ECC),
+    ],
+)
+def test_the_app_offers_ecc_from_param_1103_128(
+    camera_info: int | None, key: media.MediaKeyType
+) -> None:
+    assert media.media_key_type_for(camera_info) is key
+
+
+def test_the_ecc_offer_is_the_uncompressed_point_without_its_prefix() -> None:
+    public_hex, priv = media.generate_media_ecc_key()
+    assert len(public_hex) == 128
+    assert public_hex == public_hex.upper()
+    point = priv.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+    assert point == b"\x04" + bytes.fromhex(public_hex)
+
+
+def _ecc_decoder() -> tuple[media.MediaDecoder, testing_station.EccMediaKey]:
+    public_hex, priv = media.generate_media_ecc_key()
+    return media.MediaDecoder(ecc_private_key=priv), testing_station.EccMediaKey.for_offer(
+        public_hex
+    )
+
+
+_ECC_SUB = bytes([8, 0, 1, 1, 10, 0])
+
+
+def test_an_ecc_video_record_decrypts_to_its_clear_body() -> None:
+    decoder, key = _ecc_decoder()
+    body = b"\x00\x00\x00\x01\x40\x01" + bytes(300)
+    record = testing_station.video_record(body, keyframe=True, counter=7, timestamp_ms=1000)
+    sealed = testing_station.ecc_video_record(record, key)
+    assert len(sealed) == len(record) + media.ECC_VIDEO_HEADER_LEN - media.VIDEO_HEADER_LEN
+    frame = decoder.decode(FrameType.VIDEO_FRAME, sealed, _ECC_SUB)
+    assert frame is not None
+    assert (frame.data, frame.is_keyframe, frame.timestamp_ms) == (body, True, 1000)
+    assert decoder.aes_key == key.key
+
+
+def test_ecc_audio_waits_for_the_key_of_a_video_record() -> None:
+    decoder, key = _ecc_decoder()
+    audio = testing_station.ecc_audio_record(
+        testing_station.audio_record(b"\xff\xf1AAC", timestamp_ms=5), key
+    )
+    assert decoder.decode(FrameType.AUDIO_FRAME, audio, _ECC_SUB) is None
+    video = testing_station.video_record(b"\x00\x00\x00\x01\x02\x01", keyframe=False)
+    decoder.decode(FrameType.VIDEO_FRAME, testing_station.ecc_video_record(video, key), _ECC_SUB)
+    frame = decoder.decode(FrameType.AUDIO_FRAME, audio, _ECC_SUB)
+    assert frame is not None
+    assert (frame.data, frame.timestamp_ms) == (b"\xff\xf1AAC", 5)
+
+
+def test_an_ecc_record_wrapped_for_another_key_is_foreign() -> None:
+    decoder, _ = _ecc_decoder()
+    _, other = _ecc_decoder()
+    record = testing_station.video_record(b"\x00\x00\x00\x01\x26" + bytes(64), keyframe=True)
+    with pytest.raises(media._ForeignKeyframeError):
+        decoder.decode(
+            FrameType.VIDEO_FRAME, testing_station.ecc_video_record(record, other), _ECC_SUB
+        )
+    assert decoder.aes_key == b""
+
+
+def test_an_ecc_record_with_a_broken_tag_raises_protocol_error() -> None:
+    decoder, key = _ecc_decoder()
+    record = testing_station.video_record(b"\x00\x00\x00\x01\x26" + bytes(64), keyframe=True)
+    sealed = bytearray(testing_station.ecc_video_record(record, key))
+    sealed[-1] ^= 1
+    with pytest.raises(ProtocolError, match="GCM tag"):
+        decoder.decode(FrameType.VIDEO_FRAME, bytes(sealed), _ECC_SUB)
+
+
+def test_a_decoder_decodes_the_variants_of_its_key() -> None:
+    rsa_decoder = media.MediaDecoder(media.generate_media_rsa_key()[1])
+    ecc_decoder, _ = _ecc_decoder()
+    v = media.VideoVariant
+    assert [rsa_decoder.decodes(x) for x in v] == [x not in (v.ECC, v.E2E) for x in v]
+    assert [ecc_decoder.decodes(x) for x in v] == [x not in (v.RSA_PREFIX, v.E2E) for x in v]
+    with pytest.raises(ValueError, match="exactly one"):
+        media.MediaDecoder()
 
 
 def test_the_homebase2_open_payload_has_no_t8030_fields() -> None:

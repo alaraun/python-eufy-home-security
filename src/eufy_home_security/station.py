@@ -136,7 +136,7 @@ from .network import LanPath, lan_path_for
 from .p2p._json import json_int
 from .p2p.clip import ClipWriter, MediaClip
 from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
-from .p2p.media import MediaFrame, Still
+from .p2p.media import MediaFrame, MediaKeyType, Still, media_key_type_for
 from .p2p.messages import decode_preset_picture, record_id_day
 from .p2p.mode_actions import MODE_TABLE_PARAMS, ModeTableField, mode_table_from_params
 from .p2p.params import (
@@ -1633,6 +1633,9 @@ class Station:
         through the turn; the first frames may show it turning. Checked before anything
         is sent, as :meth:`async_goto_preset`; a go-to the camera refuses raises and
         opens nothing.
+
+        The open offers the media key the app would (:meth:`media_key_type`); pass
+        ``media_key`` to override it.
         """
         ch = self._media_channel(device_sn, channel)
         if preset is not None:
@@ -1648,9 +1651,24 @@ class Station:
         station's own product (a standalone device's handler, see
         :func:`~.devices.recipes.handler_variant`)."""
         variant = handler_variant(self._product_code(self.serial))
+        kwargs.setdefault("media_key", self.media_key_type(channel))
         return await self.session.async_open_live(
             channel, live_ext_value=variant.live_open_ext_value, **kwargs
         )
+
+    def media_key_type(self, channel: int) -> MediaKeyType:
+        """The media key the app offers the camera on ``channel``: ECC when the camera's
+        cloud param 1103 is 128 or more, else RSA (:func:`~.p2p.media.media_key_type_for`).
+        A channel without a known device gets RSA."""
+        device = next(
+            (
+                d
+                for d in (self.device, *self.sub_devices)
+                if (own_channel(d) if d is self.device else d.channel) == channel
+            ),
+            None,
+        )
+        return media_key_type_for(None if device is None else device.camera_info)
 
     async def async_open_recording(
         self,
