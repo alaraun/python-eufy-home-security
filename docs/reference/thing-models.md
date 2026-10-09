@@ -88,6 +88,8 @@ Generated from the cached TDs and `CASES`; do not edit by hand.
 | Product code | Handler version | Handler date | Actions | Properties | Events |
 |---|---|---|---|---|---|
 | T8030 | 174 | 2026/09/04 | 54 | 75 | 6 |
+| T8113 | 115 | 2026/07/24 | 35 | 98 | 4 |
+| T8142 | 123 | 2026/08/19 | 35 | 98 | 4 |
 | T8160 | 119 | 2026/07/15 | 34 | 98 | 4 |
 | T8170 | 283 | 2026/08/31 | 70 | 148 | 7 |
 | T8410 | 159 | 2026/09/07 | 62 | 130 | 3 |
@@ -107,6 +109,10 @@ Generated from the cached TDs and `CASES`; do not edit by hand.
 | T8170 | SINGLE | `set_picture_zoom` | `set_picture_zoom` | verified |  |
 | T8160 | HB3 | `open_live_stream` | — | declared | The library sends its own HomeBase live open, not this recipe. |
 | T8160 | HB3 | `close_live_stream` | `close_live_stream` | declared |  |
+| T8113 | HB2 | `open_live_stream` | `open_live_stream_station` | declared |  |
+| T8113 | HB2 | `close_live_stream` | `close_live_stream` | declared |  |
+| T8142 | HB2 | `open_live_stream` | `open_live_stream_station` | declared |  |
+| T8142 | HB2 | `close_live_stream` | `close_live_stream` | declared |  |
 | T8410 | SINGLE | `open_live_stream` | `open_live_stream_single` | declared | The T8410 variant: no `extValue`. |
 | T8410 | SINGLE | `close_live_stream` | `close_live_stream` | declared |  |
 | T8410 | SINGLE | `ptz_action_control` | `ptz_rotate` | declared | The T8410 variant: no `zoom`, no `ivalue`. |

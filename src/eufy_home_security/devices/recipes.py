@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import math
+import struct
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
@@ -47,6 +48,8 @@ class SubCommand(IntEnum):
     """Sub-commands the library's recipes use (the handler's ``P2PCommandCode`` names)."""
 
     SUB_CMD_START_LIVESTREAM = 1000
+    START_LIVE_STREAM = 1003
+    """The live open behind a station; the app's ``APP_CMD_START_REALTIME_MEDIA``."""
     INDOOR_ROTATE = 6030
     COMMAND_INDOOR_SPAN_SET_POINT = 6032
     COMMAND_INDOOR_SPAN_DEL_POINT = 6033
@@ -161,11 +164,12 @@ class Recipe:
             return None
         return self.notify_sub_cmd if self.notify_sub_cmd is not None else self.sub_cmd
 
-    def plaintext(self) -> bytes:
+    def plaintext(self, channel: int = 0) -> bytes:
         """The bytes the executor encrypts into a frame of type :attr:`cmd`.
 
         A 1700 recipe is ``{"commandType": sub_cmd, "data": params}`` (``data``
-        omitted without params); a bare 1004 is four zero bytes, as the app sends it.
+        omitted without params); a bare 1004 is the camera's ``channel`` as u32le, as
+        the app sends it (four zero bytes on a standalone device).
         Raises :class:`~..exceptions.UnsupportedError` for a recipe shape the library
         does not send this way (1350 recipes go through ``async_send_command``).
         """
@@ -175,7 +179,7 @@ class Recipe:
                 body["data"] = dict(self.params)
             return json.dumps(body, separators=(",", ":")).encode()
         if self.cmd == RecipeCommand.STOP_LIVE_STREAM and self.params is None:
-            return bytes(4)
+            return struct.pack("<I", channel)
         raise UnsupportedError(f"recipe {self.identifier} (cmd {self.cmd}) has no direct encoding")
 
     def as_handler_dict(self) -> dict[str, Any]:
@@ -288,6 +292,47 @@ def open_live_stream_single(
         timeout=LIVE_OPEN_TIMEOUT,
         params=MappingProxyType(params),
     )
+
+
+def open_live_stream_station(*, channel: int, account_id: str, key_hex: str) -> Recipe:
+    """Open live video on a camera behind a station other than a HomeBase 3
+    (``openLiveStream1350``, every camera handler's recipe for a HomeBase 2).
+
+    A ``DeviceMsgBean`` of cmd 1003 whose payload (:func:`station_live_payload`)
+    carries no T8030 fields.
+    """
+    return Recipe(
+        identifier="open_live_stream",
+        cmd=RecipeCommand.SET_PAYLOAD,
+        sub_cmd=SubCommand.START_LIVE_STREAM,
+        timeout=LIVE_OPEN_TIMEOUT,
+        params=MappingProxyType(
+            {
+                "cmd": int(SubCommand.START_LIVE_STREAM),
+                "mChannel": channel,
+                "account_id": account_id,
+                "mValue3": int(SubCommand.START_LIVE_STREAM),
+                "mValueStrSub": account_id,
+                "mValue5": 0,
+                "payload": station_live_payload(account_id, key_hex),
+            }
+        ),
+    )
+
+
+def station_live_payload(account_id: str, key_hex: str) -> dict[str, Any]:
+    """The ``payload`` of :func:`open_live_stream_station`: the handler's fields for the
+    app's input (stream, camera and entry type 0, no channel list); ``key_hex`` is the
+    client's RSA modulus."""
+    return {
+        "streamtype": 0,
+        "camera_type": 0,
+        "entrytype": 0,
+        "accountId": account_id,
+        "chn_list": [],
+        "key": key_hex,
+        "ClientOS": "ANDROID",
+    }
 
 
 def close_live_stream() -> Recipe:

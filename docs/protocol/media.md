@@ -252,7 +252,8 @@ Sent as a GCM DeviceMsgBean on DRW channel 0, with the XZYH subheader
 - `key` is the **public modulus of an RSA-1024 key pair the client mints for this
   stream** (exponent 65537 implied). The station wraps the stream's AES key to it.
 - `extValue`, `chn_list`, `stitch_mode` and `pip_cord` belong to the app's T8030
-  (multi-camera station) branch. The app sends them even for a single camera.
+  (multi-camera station) branch. The app sends them even for a single camera, and only
+  to a T8030 (see [other stations](#other-stations-homebase-2-open-1003-stop-bare-1004-declared)).
 - The owner `account_id` is required. A shared member's session streams when it
   sends the owner id.
 - **Stop** with 1004, same envelope with `mValue3: 1004`, payload
@@ -278,6 +279,29 @@ Sent as a GCM DeviceMsgBean on DRW channel 0, with the XZYH subheader
   independently; what selects them has not been isolated **[open]**.
 - While a camera streams, every session receives `0x0547` cmd 6246 `{"num": <viewers>}`
   and `0x0408` (1032) frames carrying the camera's Wi-Fi RSSI.
+
+### Other stations (HomeBase 2): open 1003, stop bare 1004 **[declared]**
+
+Behind a station other than a T8030 the app opens a camera with its handler's
+`openLiveStream1350` recipe (T8113, T8142, T8140 on a T8010 identical): the same
+DeviceMsgBean and subheader as above, with the payload
+
+```json
+{"streamtype": 0, "camera_type": 0, "entrytype": 0, "accountId": "<owner user id>",
+ "chn_list": [], "key": "<RSA-1024 modulus, 256 hex chars, UPPERCASE>", "ClientOS": "ANDROID"}
+```
+
+- No `extValue`, `stitch_mode`, `audio_chn`, `station_video_type` or `pip_cord`, and an
+  empty `chn_list`: the station takes the camera from the subheader.
+- **Stop** is the handler's `close_live_stream`: a bare GCM frame of type `0x03EC`
+  (1004) whose body is the channel as `u32le`, the channel in subheader byte 2.
+- **The key is RSA.** The app offers its ECC key only when the station's ability
+  parameter 1103 is 128 or more; a HomeBase 2 reports −43, so it gets the RSA modulus
+  even though it speaks the v8 session handshake. Media arrives on DRW channel 1 as on a
+  HomeBase 3, in one of the protections of [media protection](#media-protection-by-subheader-app).
+- The connection is P2P: a T8010's thing description has no WebRTC properties.
+- The library sends this open and stop to every station whose serial is not a T8030's
+  (`StationSession.homebase3`). Not verified on a HomeBase 2.
 
 ### Standalone device: open 1700/1000, stop bare 1004, ping 1139 **[verified]**
 
@@ -431,6 +455,34 @@ frame   = AES128_ECB_decrypt(aes_key, body[129:257]) ‖ body[257:]      # Annex
   are decrypted with AES-256-GCM (12-byte IV, 16-byte tag, constant 13-byte AAD).
   Driving the open with an RSA modulus always selected the RSA path on HomeBase 3,
   so this variant is not implemented.
+
+### Media protection by subheader **[app]**
+
+The app's media receiver does not look at the keyframe flag to choose a decrypt: it
+reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 the
+**encrypted flag** `e`, first match wins:
+
+| condition | variant (`VideoVariant`) | header | body | library |
+|---|---|---|---|---|
+| `v` 8 or 9 | `ecc` | 179 B | AES-256-GCM | `UnsupportedError` |
+| `v` 4 or 5, `e` ≥ 2 | `e2e` | 151 B | end-to-end; the app plays it from recordings only | `UnsupportedError` |
+| `v` ≥ 3, `e` = 1 | `rsa_v3` | 22 B | clear | decoded |
+| `v` ≠ 0, `e` ≠ 0 | `rsa_prefix` | 22 B + 129 B prefix | [keyframe decryption](#keyframe-decryption-verified) | decoded |
+| otherwise | `plain` | 22 B | clear | decoded |
+
+- A HomeBase 3 sends keyframes as `v` 1 `e` 1 (`rsa_prefix`) and P-frames as `v` 1
+  `e` 0 (`plain`) **[verified]**; a T8170 uses `v` 2.
+- Byte 4 is the session id the live open carried (`0x0a`).
+- A clear record without the keyframe flag starts a picture group when its first NAL
+  unit is an IDR picture or a parameter set (HEVC 0x26, 0x28, 0x2a, 0x40, 0x42, 0x44;
+  H.264 0x65, 0x67, 0x68, 0x27), the app's keyframe test.
+- **Audio:** `v` 0 is dropped; subheader byte 5 = 3 marks floodlight audio (`v` 1
+  G.711 A-law, `v` 2 AAC); `v` 8/9 and `v` 4/5 with `e` ≥ 2 are encrypted as video;
+  otherwise version 1 is AAC-LC and a later version names its stream type in header
+  byte 5 (0 = AAC-LC). The library delivers AAC-LC only (`AudioVariant`).
+- A stream whose video arrives as `ecc` or `e2e` before its first keyframe fails with
+  `UnsupportedError` naming the variant. `SessionStats.media_frames_by_variant` counts
+  every media record received by `"video:<variant>"` / `"audio:<variant>"`.
 
 ## Streaming quality **[verified]**
 

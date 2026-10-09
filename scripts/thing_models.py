@@ -79,6 +79,19 @@ HOMEBASE_T8160: Final[Mapping[str, Any]] = {
     "device_channel": 1,
     "main_sw_version": "3.8.7.4",
 }
+HOMEBASE2_SN: Final = "T8010P2000054321"
+"""A synthetic HomeBase 2 serial."""
+HOMEBASE2_T8113: Final[Mapping[str, Any]] = {
+    "device_sn": "T8113P2000067890",
+    "parent_sn": HOMEBASE2_SN,
+    "device_channel": 1,
+    "main_sw_version": "1.7.4",
+}
+HOMEBASE2_T8142: Final[Mapping[str, Any]] = {
+    **HOMEBASE2_T8113,
+    "device_sn": "T8142P2000067890",
+    "main_sw_version": "3.0.5.7",
+}
 LIVE_OPEN_PAYLOAD: Final[Mapping[str, Any]] = {
     "key": FAKE_STREAM_KEY,
     "userId": SYNTHETIC.account_id,
@@ -86,6 +99,8 @@ LIVE_OPEN_PAYLOAD: Final[Mapping[str, Any]] = {
     "cameraType": 0,
     "streamType": 0,
 }
+HOMEBASE2_LIVE_OPEN_PAYLOAD: Final[Mapping[str, Any]] = {**LIVE_OPEN_PAYLOAD, "ClientOS": "ANDROID"}
+"""The app's live-open input for a camera behind a station: it adds the client OS."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -172,6 +187,34 @@ CASES: Final[tuple[Case, ...]] = (
         product_code="T8160",
         identifier="close_live_stream",
         device=HOMEBASE_T8160,
+        payload=0,
+        builder="close_live_stream",
+    ),
+    Case(
+        product_code="T8113",
+        identifier="open_live_stream",
+        device=HOMEBASE2_T8113,
+        payload=HOMEBASE2_LIVE_OPEN_PAYLOAD,
+        builder="open_live_stream_station",
+    ),
+    Case(
+        product_code="T8113",
+        identifier="close_live_stream",
+        device=HOMEBASE2_T8113,
+        payload=0,
+        builder="close_live_stream",
+    ),
+    Case(
+        product_code="T8142",
+        identifier="open_live_stream",
+        device=HOMEBASE2_T8142,
+        payload=HOMEBASE2_LIVE_OPEN_PAYLOAD,
+        builder="open_live_stream_station",
+    ),
+    Case(
+        product_code="T8142",
+        identifier="close_live_stream",
+        device=HOMEBASE2_T8142,
         payload=0,
         builder="close_live_stream",
     ),

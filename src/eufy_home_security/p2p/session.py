@@ -130,22 +130,26 @@ from .media import (
     KEYFRAME_MIN,
     KEYFRAME_RSA_LEN,
     PLAYBACK_ENDED,
+    UNDECODABLE_VIDEO,
     VIDEO_HEADER_LEN,
     MediaDecoder,
     MediaFrame,
     MediaKind,
     Still,
     StillFormat,
+    VideoVariant,
     _ForeignKeyframeError,
     classify_still,
     decode_record_play_ctrl,
     decode_v1_still,
     download_video_payload,
     generate_media_rsa_key,
-    is_keyframe_record,
+    media_variant_label,
     record_view_payload,
     start_realtime_media_payload,
     stop_realtime_media_payload,
+    video_record_is_key,
+    video_variant,
 )
 from .messages import (
     CAMERA_WAKE_CODES,
@@ -502,6 +506,9 @@ class SessionStats:
     media_failures_by_type: Mapping[str, int]
     """Streams that ended in an error, by exception class name (a session closed by the
     client is not counted)."""
+    media_frames_by_variant: Mapping[str, int]
+    """Media records received, by protection: ``"video:<VideoVariant>"`` and
+    ``"audio:<AudioVariant>"`` (:func:`~.media.media_variant_label`)."""
     stills_by_format: Mapping[str, int]
     """Stills fetched, by :class:`~.media.StillFormat` value."""
     still_late_replies: int
@@ -726,7 +733,14 @@ class MediaStream:
         self._wake.set()
         self._session._detach_media(self)
 
-    def _feed(self, frame_type: int, payload: bytes, camera: int | None = None) -> None:
+    def _feed(
+        self,
+        frame_type: int,
+        payload: bytes,
+        camera: int | None = None,
+        subheader: bytes | None = None,
+    ) -> None:
+        # Without a subheader the record's protection follows its keyframe flag.
         if self._closed:
             return
         is_video = frame_type == FrameType.VIDEO_FRAME
@@ -734,6 +748,10 @@ class MediaStream:
             self._other_camera_frame(camera, is_video)
             return
         self._last_rx = time.monotonic()
+        variant = video_variant(subheader) if is_video and subheader else None
+        if variant is not None and variant in UNDECODABLE_VIDEO:
+            self._undecodable_video(variant)
+            return
         # Decide what to drop before decoding: a keyframe unwrap and its copies are
         # the expensive part, and they are wasted on a frame that is thrown away.
         if len(self._frames) >= MEDIA_QUEUE_FRAMES:
@@ -741,14 +759,15 @@ class MediaStream:
             if self._started:
                 self.dropped += 1
             return
-        is_key = is_video and is_keyframe_record(payload)
+        is_key = is_video and video_record_is_key(payload, variant)
         if is_video and self._need_keyframe and not is_key:
             if self._started:
                 self.dropped += 1
             return
         if not is_video and not self._started:
             return  # audio before the first picture would put the tracks out of step
-        wrapped = _wrapped_key(payload) if is_key else None
+        carries_key = is_key and variant in (None, VideoVariant.RSA_PREFIX)
+        wrapped = _wrapped_key(payload) if carries_key else None
         if wrapped is not None and self._wrapped_key not in (None, wrapped):
             # Another stream's keyframe. Dropping it leaves this stream's GOP intact,
             # so the need for a keyframe is not re-armed.
@@ -756,7 +775,7 @@ class MediaStream:
                 _LOGGER.debug("dropping a keyframe wrapped to another stream's key")
             return
         try:
-            frame = self._decoder.decode(frame_type, payload)
+            frame = self._decoder.decode(frame_type, payload, subheader)
             if (
                 frame is not None
                 and frame.is_keyframe
@@ -817,6 +836,20 @@ class MediaStream:
         )
         self._closed = True
         self._wake.set()
+        self._session._detach_media(self)
+
+    def _undecodable_video(self, variant: VideoVariant) -> None:
+        """Fail a stream whose video arrives in a protection the library does not
+        decode; after its first keyframe, drop such records."""
+        if self._started:
+            if self._throttle.should_log(("undecodable-video", variant)):
+                _LOGGER.warning("dropping %s video records the library does not decode", variant)
+            return
+        self._fail(
+            UnsupportedError(
+                f"the station sends {variant.value} video, which the library does not decode"
+            )
+        )
         self._session._detach_media(self)
 
     def _other_camera_frame(self, camera: int, is_video: bool) -> None:
@@ -1007,6 +1040,7 @@ class StationSession:
         self._account_mismatch_seen = False
         self._media_opens = 0
         self._media_failures: Counter[str] = Counter()
+        self._media_variants: Counter[str] = Counter()
         self._stills_by_format: Counter[str] = Counter()
         self._trigger_frame_lock = asyncio.Lock()
         """At most one short-lived trigger-frame session per station at a time."""
@@ -1072,6 +1106,12 @@ class StationSession:
         """Whether this station is a standalone device (its own station, like a SoloCam),
         by the app's rule: its serial names no station kind (:func:`~..devices.recipes.connect_type`)."""
         return connect_type(self.serial, self.serial) is ConnectType.SINGLE
+
+    @property
+    def homebase3(self) -> bool:
+        """Whether this station is a HomeBase 3 (T8030): the app's live open then carries
+        its multi-camera fields."""
+        return connect_type(self.serial, self.serial) is ConnectType.HB3
 
     @property
     def announced(self) -> bool:
@@ -1324,6 +1364,7 @@ class StationSession:
             account_mismatch_seen=self._account_mismatch_seen,
             media_opens=self._media_opens,
             media_failures_by_type=dict(self._media_failures),
+            media_frames_by_variant=dict(self._media_variants),
             stills_by_format=dict(self._stills_by_format),
             still_late_replies=self.still_late_replies,
             still_file_mismatches=self.still_file_mismatches,
@@ -2682,9 +2723,12 @@ class StationSession:
 
         A standalone device (:attr:`standalone`) gets its handler's open, a 1700
         frame with sub-command 1000 (``extValue`` left out with ``live_ext_value``
-        False, see :class:`~..devices.recipes.HandlerVariant`), and a bare 1004 stop;
-        a station's camera gets the station's 1003 in a ``DeviceMsgBean`` and a 1004
-        naming the channel.
+        False, see :class:`~..devices.recipes.HandlerVariant`), and a bare 1004 stop.
+        A HomeBase 3's camera gets the app's T8030 1003 in a ``DeviceMsgBean`` and a
+        1004 ``DeviceMsgBean`` naming the channel; a camera behind any other station
+        (a HomeBase 2) the camera handlers' 1003 without the T8030 fields
+        (:func:`~..devices.recipes.open_live_stream_station`) and a bare 1004 carrying
+        the channel.
         """
         if self.standalone:
 
@@ -2704,13 +2748,19 @@ class StationSession:
 
             open_frame, stop_frame = open_standalone, stop_standalone
         else:
+            homebase3 = self.homebase3
 
             def open_station(account_id: str, key_hex: str) -> tuple[int, bytes]:
-                payload = start_realtime_media_payload(account_id, channel, key_hex)
+                payload = start_realtime_media_payload(
+                    account_id, channel, key_hex, homebase3=homebase3
+                )
                 body = self._media_msg(account_id, CMD_START_REALTIME_MEDIA, channel, payload)
                 return FrameType.CMD_TRANSFER, body
 
             def stop_station(account_id: str) -> tuple[int, bytes]:
+                if not homebase3:
+                    recipe = close_live_stream()
+                    return recipe.cmd, recipe.plaintext(channel)
                 payload = stop_realtime_media_payload(account_id, channel)
                 body = self._media_msg(account_id, CMD_STOP_REALTIME_MEDIA, channel, payload)
                 return FrameType.CMD_TRANSFER, body
@@ -3660,8 +3710,18 @@ class StationSession:
         stream = self._media
         if inbound.type in _MEDIA_FRAME_TYPES:
             self._media_rx_at = time.monotonic()
+            label = media_variant_label(
+                inbound.type, inbound.frame.payload, inbound.frame.subheader
+            )
+            if label is not None:
+                _count_capped(self._media_variants, label)
             if stream is not None:
-                stream._feed(inbound.type, inbound.frame.payload, _frame_camera(inbound.frame))
+                stream._feed(
+                    inbound.type,
+                    inbound.frame.payload,
+                    _frame_camera(inbound.frame),
+                    inbound.frame.subheader,
+                )
             elif self._throttle.should_log("media-orphan"):
                 _LOGGER.debug("%s: media frame with no open stream", self._log_name)
             return

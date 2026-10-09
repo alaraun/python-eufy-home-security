@@ -24,6 +24,12 @@ type Case = dict[str, Any]
 
 def _open_live_stream(case: Case, variant: HandlerVariant) -> Recipe:
     payload = case["payload"]
+    if _connect_type(case) is not ConnectType.SINGLE:
+        return recipes.open_live_stream_station(
+            channel=case["device"]["device_channel"],
+            account_id=payload["userId"],
+            key_hex=payload["key"],
+        )
     return recipes.open_live_stream_single(
         channel=case["device"]["device_channel"],
         account_id=payload["userId"],
@@ -63,10 +69,8 @@ def _connect_type(case: Case) -> ConnectType:
 
 
 def _is_homebase_live_open(case: Case) -> bool:
-    """The documented deviation: behind a station the library keeps its own live open."""
-    return case["identifier"] == "open_live_stream" and _connect_type(case) is not (
-        ConnectType.SINGLE
-    )
+    """The documented deviation: behind a HomeBase 3 the library keeps the app's T8030 open."""
+    return case["identifier"] == "open_live_stream" and _connect_type(case) is ConnectType.HB3
 
 
 def _golden_cases() -> Iterator[tuple[str, Case]]:
@@ -84,9 +88,16 @@ def _builder_params() -> Iterator[Any]:
         yield pytest.param(product_code, case, id=f"{product_code}-{identifier}")
 
 
-def test_the_golden_files_for_the_t8170_t8410_t8410c_and_the_homebase_t8160_are_present() -> None:
+def test_the_golden_files_of_the_standalone_homebase3_and_homebase2_cameras_are_present() -> None:
     names = [path.name for path in GOLDEN_FILES]
-    assert names == ["T8160.json", "T8170.json", "T8410.json", "T8410C.json"]
+    assert names == [
+        "T8113.json",
+        "T8142.json",
+        "T8160.json",
+        "T8170.json",
+        "T8410.json",
+        "T8410C.json",
+    ]
 
 
 def test_every_golden_identifier_is_mapped_to_a_builder() -> None:
