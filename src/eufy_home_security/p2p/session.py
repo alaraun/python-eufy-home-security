@@ -3706,8 +3706,9 @@ class StationSession:
                     "" if matched else " (no request waiting)",
                     Payload(obj),
                 )
-            # _decode_json only decodes ECB or GCM frames, so the tag always names one;
-            # anything else is dropped rather than mislabelled as authenticated.
+            # _decode_json decodes only ECB-tagged frames (static key, an RSA session's
+            # key, or clear) and GCM frames under the session key; any other tag is dropped
+            # rather than mislabelled as authenticated.
             tag = inbound.frame.cipher
             if tag is None or tag not in FrameCipher:
                 return
@@ -4013,22 +4014,23 @@ class StationSession:
         :meth:`_handle_alarm`, which all ask here. The static ECB key is
         derivable from the serial and DID alone, so once a session key exists, only
         GCM state is authenticated. ECB image replies, scalar results and camera
-        pushes are not state and still decode. On an RSA session, state under its
-        session key (encryption type 2) is the station's own and decodes; state under
-        the static key or in clear is refused.
+        pushes are not state and still decode. On an RSA session only state under its
+        session key (ECB tag, encryption type 2) is the station's own and decodes; any
+        other state frame is refused, whatever its cipher tag.
         """
-        if frame.cipher != FrameCipher.ECB or frame.type not in _STATE_FRAME_TYPES:
+        if frame.type not in _STATE_FRAME_TYPES:
             return False
         if self._aes_key is not None:
             if self._session_ecb_frame(frame):
                 return False
-        elif self._session_key is None:
+        elif frame.cipher != FrameCipher.ECB or self._session_key is None:
             return False
         self.ecb_state_refused += 1
         if self._throttle.should_log(("ecb-state", frame.type)):
             _LOGGER.debug(
-                "%s: refusing static-key ECB state frame 0x%04x (%d refused)",
+                "%s: refusing %s state frame 0x%04x (%d refused)",
                 self._log_name,
+                "static-key ECB" if self._aes_key is None else "non-session-key",
                 frame.type,
                 self.ecb_state_refused,
             )
@@ -4043,13 +4045,13 @@ class StationSession:
 
     def _decode_json(self, frame: Frame) -> dict[str, Any] | None:
         payload = frame.payload
+        plain_rsa = self._plain_rsa_frame(frame)
+        if plain_rsa and decode_command_receipt(frame, clear=True) is not None:
+            return None  # an RSA session's clear receipt: not state, not JSON
         if self._refuse_ecb_state(frame):
             return None
-        if self._plain_rsa_frame(frame):
-            # An RSA session's clear frame (encryption type 0): a receipt, or JSON.
-            if decode_command_receipt(frame, clear=True) is not None:
-                return None
-            return self._counted_json(payload)
+        if plain_rsa:
+            return self._counted_json(payload)  # an RSA session's clear reply
         if (
             frame.cipher == FrameCipher.ECB
             and frame.type in _CLEAR_REPLY_TYPES
@@ -4324,8 +4326,12 @@ class StationSession:
         )
 
     def _plain_rsa_frame(self, frame: Frame) -> bool:
-        """Whether ``frame`` is an RSA session's clear frame (encryption type 0)."""
-        return self._aes_key is not None and frame_encryption(frame.subheader) == FRAME_PLAIN
+        """Whether ``frame`` is an RSA session's clear frame (ECB tag, encryption type 0)."""
+        return (
+            self._aes_key is not None
+            and frame.cipher == FrameCipher.ECB
+            and frame_encryption(frame.subheader) == FRAME_PLAIN
+        )
 
     def _unanswered_error(
         self, command: int, channel: int, indices: Sequence[int]

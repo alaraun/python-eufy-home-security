@@ -54,7 +54,7 @@ from eufy_home_security.exceptions import (
 )
 from eufy_home_security.models import STATION_CHANNEL, GuardMode
 from eufy_home_security.p2p import transport as transport_module
-from eufy_home_security.p2p.crypto import CONN_INIT_ECC_VERSION
+from eufy_home_security.p2p.crypto import CONN_INIT_ECC_VERSION, FRAME_PLAIN
 from eufy_home_security.p2p.did import Did, static_key
 from eufy_home_security.p2p.media import (
     MediaDecoder,
@@ -3211,6 +3211,20 @@ class RsaProvider:
         return P2PCredentials(SYNTHETIC.account_id, "user", "", rsa_private_key=rsa_key)
 
 
+def make_rsa_session(
+    station: FakeStation, provider: RsaProvider | None = None, **kwargs: Any
+) -> StationSession:
+    """A session to ``station`` answering the RSA CONN_INIT (version 1)."""
+    station.conn_init_version = 1
+    return StationSession(
+        SYNTHETIC.station_sn,
+        provider or RsaProvider(station),
+        host="127.0.0.1",
+        port=station.discovery_port,
+        **kwargs,
+    )
+
+
 @pytest.mark.parametrize("encryption", [0, 1])
 async def test_an_rsa_conn_init_runs_the_session_under_its_aes_key(
     station: FakeStation, encryption: int
@@ -3240,8 +3254,39 @@ async def test_an_rsa_conn_init_runs_the_session_under_its_aes_key(
     assert outcome is CommandOutcome.APPLIED
     assert [o["cmd"] for o in station.received] == [1277]
     assert stats.receipts_by_code == {"0": 2}  # the query's and the command's, in clear
-    assert stats.dropped_undecodable == 0
+    assert (stats.dropped_undecodable, stats.ecb_state_refused) == (0, 0)
     assert (stats.conn_init_version, stats.cipher_id) == (1, station.cipher_id)
+
+
+@pytest.mark.parametrize("tag", [FrameCipher.ECB, FrameCipher.GCM, 0x05])
+async def test_an_rsa_session_takes_no_clear_frame_as_state_or_authenticated(
+    station: FakeStation, tag: int
+) -> None:
+    """On an RSA session only frames under its key are the station's: a clear parameter
+    dump is refused whatever its cipher tag, and a clear push is never authenticated."""
+    session = make_rsa_session(station)
+    events: list[Event] = []
+    session.subscribe(events.append)
+    clear = bytes([tag, 0, 0xFF, FRAME_PLAIN, 0, 0])
+    dump = {"params": [{"dev_type": 255, "param_type": 1224, "param_value": "63"}]}
+    inner = {"msg_type": 18, "event_type": 3104, "device_sn": SYNTHETIC.camera_sn, "channel": 0}
+    push = {"cmd": 2037, "payload": json.dumps(inner)}
+    try:
+        await session.async_get_params()
+        refused = session.ecb_state_refused
+        for ftype, body in ((FrameType.PARAM_NOTIFY, dump), (FrameType.NOTIFY_PAYLOAD, push)):
+            station.send_frame(
+                ftype, json.dumps(body).encode(), cipher=0, channel=1, subheader=clear
+            )
+        station.push_camera_event()  # under the session key, after the clear frames
+        await wait_until(lambda: any(isinstance(e, SecurityEvent) for e in events))
+    finally:
+        await session.async_close()
+    assert (STATION_CHANNEL, 1224) not in session.params
+    assert session.ecb_state_refused == refused + 1
+    pushes = [e for e in events if isinstance(e, SecurityEvent)]
+    assert not any(e.authenticated for e in pushes if e.event_type == 3104)
+    assert all(e.frame_cipher is FrameCipher.ECB for e in pushes)
 
 
 async def test_an_rsa_conn_init_without_an_rsa_key_fails_the_handshake(

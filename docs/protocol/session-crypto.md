@@ -210,6 +210,10 @@ replayed within the same session.
 
 - ECB frames that are not state still decode: image replies (`0x051C`), legacy
   scalar results and camera pushes (cmd 2037).
+- On an RSA session ([RSA CONN_INIT](#rsa-conn_init-declared-app-legacy)) only state
+  under its session key (tag `0x01`, encryption type 2) counts; state in clear or under
+  any other tag is refused and counted. A clear frame decodes only under the ECB tag
+  and is never authenticated.
 - A camera push records the cipher of its frame in `SecurityEvent.frame_cipher`.
   `SecurityEvent.authenticated` is False for an ECB push and True for a GCM push or
   a cloud push (`frame_cipher` None, TLS). It proves origin, not freshness.
