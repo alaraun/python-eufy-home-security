@@ -219,7 +219,13 @@ session means another login, and a lost hold-off means calling a throttled cloud
   in, `await eufy.async_close()` (which saves), then create the entry.
 - **Login challenge:** carry `login_id` (and `captcha_id`) between flow steps, and close
   the instance before the step shows the form. The next step builds a new instance on
-  the same store; it reloads the document and answers with that `login_id`.
+  the same store; it reloads the document and answers with that `login_id`, and the
+  answer goes to the login scope that asked (the store keeps it). With extra countries
+  each scope logs in on its own, so an account with two-step verification answers one
+  challenge per scope: after an answer, `async_login` may raise the next scope's
+  challenge; show the form again. Two logins per scope count in that cluster's budget
+  (3 per 6 h), so the last answer can meet `LoginLimitedError`; after its
+  `retry_after`, `async_login()` asks that scope again with a new code.
 - **Reauth / reconfigure:** these carry a new password. If the entry is still loaded,
   unload it first. Build an instance on the store and call
   `await eufy.async_reauthenticate(password)`, then close, then
@@ -302,7 +308,8 @@ device, the *login scope* that listed it: the region (`eu`) for the login countr
   share its budget; a credential lock (too many wrong passwords) holds off every
   cluster. `async_login()` on a cold cache logs in to every scope the next device list
   asks, so a login challenge surfaces there; its `LoginChallengeError.region` names the
-  scope, and the answer (`async_login(verify_code=…, login_id=…)`) goes back to it.
+  scope, and the answer (`async_login(verify_code=…, login_id=…)`) goes back to it, on
+  this instance or a new one on the same store.
 - While no country is known (no `country`, and eufy names no IP country), both regions
   log in with the region as `ab`, as before.
 - A scope that lists no devices is **suspended**: no later device list, login or push

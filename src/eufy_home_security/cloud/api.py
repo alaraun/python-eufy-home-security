@@ -199,6 +199,9 @@ _REFUSED_KEY: Final = "refused"
 """``cloud.refused``: per extra scope whose login the cloud refused, the body ``code``,
 when (``at``) and the extra countries given then (``countries``)."""
 
+_CHALLENGES_KEY: Final = "challenges"
+"""``cloud.challenges``: the ``login_id`` of each scope's unanswered login challenge."""
+
 _LOOKUP_TRANSIENT: Final = (CommunicationError, RateLimitedError)
 """Failures of a country lookup that leave the answer open: asked again later."""
 
@@ -330,7 +333,7 @@ class EufyCloudApi:
         self._identities: dict[str, _Identity] = {}
         """The live session identity per region."""
         self._challenge_region: str | None = None
-        """The region whose login raised the last unanswered challenge."""
+        """The scope whose login raised this instance's last unanswered challenge."""
         self._login_lock = asyncio.Lock()
         self._cipher_unavailable: dict[tuple[str, int], tuple[float, str]] = {}
         """(monotonic time, owner id source) of the last empty ``get_ciphers`` answer per
@@ -527,8 +530,9 @@ class EufyCloudApi:
 
         Raises :class:`LoginChallengeError` when the account needs an e-mailed code
         or a captcha — re-call with the answer and the challenge's ``login_id``; the
-        answer goes to the region that asked (the challenge's ``region``) and the
-        other regions follow —
+        answer goes to the scope that asked (the challenge's ``region``, kept in the
+        cache, so a new instance answers there too) and the other scopes follow, each
+        of which may ask in turn —
         :class:`AuthenticationError` on bad credentials,
         :class:`RateLimitedError` when throttled or locked, and
         :class:`SessionReplacedError` after another client took the session over
@@ -546,7 +550,7 @@ class EufyCloudApi:
                 await self._resolve_extra_countries()
             first: str | None = None
             if answering or force:
-                first = (self._challenge_region if answering else None) or self.region
+                first = (self._challenge_scope(login_id) if answering else None) or self.region
                 if answering:
                     _LOGGER.debug(
                         "answering the %s login challenge (login_id %s, verify_code %s, "
@@ -614,7 +618,7 @@ class EufyCloudApi:
                 await self._resolve_login_country(retry=True)
                 await self._resolve_extra_countries()
             await self._do_login(
-                (self._challenge_region if answering else None) or self.region,
+                (self._challenge_scope(login_id) if answering else None) or self.region,
                 verify_code=verify_code,
                 captcha_id=captcha_id,
                 captcha_answer=captcha_answer,
@@ -1156,7 +1160,7 @@ class EufyCloudApi:
                 await self._cache.async_save()
             raise
         if code in const.CAPTCHA_CODES or code in const.VERIFY_CODE_CODES:
-            self._note_challenge(region, interactive=interactive)
+            await self._note_challenge(region, resp, data, interactive=interactive)
         if code in const.CAPTCHA_CODES:
             _LOGGER.info("%s login needs a captcha (code %s)", region, code)
             await self._raise_captcha_challenge(
@@ -1171,16 +1175,16 @@ class EufyCloudApi:
         if step in const.VERIFY_CODE_CODES:
             # Code 0 with ``fa_info.step`` 26052: two-step verification is pending and
             # the token in this answer is not a session yet.
-            self._note_challenge(region, interactive=interactive)
+            await self._note_challenge(region, resp, data, interactive=interactive)
             _LOGGER.info(
                 "%s login needs an e-mailed verification code (fa_info step %s)", region, step
             )
             await self._raise_verify_code_challenge(identity, step, resp, data, request=interactive)
         if self._challenge_region == region:
             self._challenge_region = None
-        refused = self._cache.section("cloud").get(_REFUSED_KEY)
-        if isinstance(refused, dict):
-            refused.pop(region, None)
+        for key in (_CHALLENGES_KEY, _REFUSED_KEY):
+            if isinstance(entries := self._cache.section("cloud").get(key), dict):
+                entries.pop(region, None)
         self._store_session(identity, _mapping(data, const.LOGIN_PATH), ab=ab, ab_wanted=wanted)
         self._cache.set_password(password)
         await self._cache.async_save()
@@ -1265,10 +1269,32 @@ class EufyCloudApi:
             return await source(), "callable"
         raise AuthenticationError("no password: none was given and none is cached")
 
-    def _note_challenge(self, region: str, *, interactive: bool) -> None:
-        """Record ``region`` as the scope whose challenge an answer goes to."""
-        if interactive:
-            self._challenge_region = region
+    async def _note_challenge(
+        self, region: str, resp: Mapping[str, Any], data: object, *, interactive: bool
+    ) -> None:
+        """Record ``region`` as the scope whose challenge an answer goes to, here and in
+        the cache with its ``login_id``, so a new instance answers there too."""
+        if not interactive:
+            return
+        self._challenge_region = region
+        pending = self._cache.section("cloud").setdefault(_CHALLENGES_KEY, {})
+        pending[region] = self._extract_login_id(resp, data)
+        await self._cache.async_save()
+
+    def _challenge_scope(self, login_id: str | None) -> str | None:
+        """The scope a challenge answer goes to: this instance's last challenge, else
+        the cached one whose ``login_id`` is ``login_id``, else the only one cached;
+        None when none of them is a login scope."""
+        scopes = self.login_scopes()
+        if self._challenge_region in scopes:
+            return self._challenge_region
+        stored = self._cache.section("cloud").get(_CHALLENGES_KEY)
+        pending: dict[str, object] = (
+            {s: lid for s, lid in stored.items() if s in scopes} if isinstance(stored, dict) else {}
+        )
+        if login_id and (match := [s for s, lid in pending.items() if lid == login_id]):
+            return match[-1]
+        return next(iter(pending)) if len(pending) == 1 else None
 
     async def _raise_verify_code_challenge(
         self,

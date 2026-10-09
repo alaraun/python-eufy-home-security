@@ -186,7 +186,9 @@ class LoginChallengeError(AuthenticationError):
     calls (it may be empty). ``captcha_image`` is a data URI when the challenge is a
     captcha. For a verification code the library has asked the cloud to e-mail one
     (``code_requested``); False when the login answer gave it no session to ask with.
-    ``region`` is the cloud region whose login asked; the answer goes there.
+    ``region`` is the login scope whose login asked (a region, or an extra country's
+    ``<region>:<country>``); the answer goes there, also from a new client on the
+    same cache.
     """
 
     def __init__(

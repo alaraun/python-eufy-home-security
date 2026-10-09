@@ -204,6 +204,13 @@ the challenge is raised all the same with `code_requested` false, so the login c
 be answered. The token is never stored. The answer is a new login with
 `verify_code` and `login_id` (empty when the challenge carried none).
 
+**Which scope answers.** Each login scope logs in on its own, so each can raise its own
+challenge. The library keeps the scope of every unanswered challenge with its `login_id`
+in the cache (`cloud.challenges`; no code, no captcha answer) and sends an answer to the
+scope whose `login_id` it carries, else to the only one pending, else to the home
+region; that scope's successful login clears it. Two-step verification therefore costs
+two logins per scope, which count in its cluster's login budget.
+
 ## Device list
 
 `POST app-house-{region}-pr.eufy.com/app/house/get_devs_list`, body `{"device_sn": ""}` (encrypted).

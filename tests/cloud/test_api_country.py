@@ -15,8 +15,8 @@ from aioresponses import aioresponses
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.models import LoginCountry
-from eufy_home_security.exceptions import CommunicationError, RateLimitedError
-from eufy_home_security.storage import SessionCache
+from eufy_home_security.exceptions import CommunicationError, LoginChallengeError, RateLimitedError
+from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
 from .conftest import FAKE_AUTH_TOKEN, FakeMega
@@ -56,6 +56,13 @@ async def _logged_in_by_region(fake_mega: FakeMega, cache: SessionCache, http: A
     assert [cache.cloud_session(r).get("ab") for r in const.REGIONS] == ["eu", "us"]
     fake_mega.calls.clear()
     fake_mega.region_calls.clear()
+
+
+async def _reloaded(store: MemoryStore) -> SessionCache:
+    """The cache as a new instance (a restart) reads it from ``store``."""
+    cache = SessionCache(store, SYNTHETIC.email)
+    await cache.async_load()
+    return cache
 
 
 def test_a_country_that_is_no_iso_code_is_refused(
@@ -591,6 +598,37 @@ async def test_a_refused_extra_scope_keeps_the_devices_it_listed_last(
         _EXTRA_STATION_SN: "eu:CH",
     }
     assert api.refused_regions() == ["eu:CH"]
+
+
+async def test_a_challenge_from_an_extra_scope_is_answered_there_after_a_restart(
+    fake_mega: FakeMega, http: aiohttp.ClientSession
+) -> None:
+    """Each scope of a two-step account asks in turn; an answer given on a new
+    instance goes to the scope that asked, which ends the flow."""
+    _with_an_extra_country(fake_mega)
+    fake_mega.two_step = {"eu"}
+    store = MemoryStore()
+    countries = ["EE", "CH"]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        with pytest.raises(LoginChallengeError) as first:
+            await _api(http, await _reloaded(store), country=countries).async_login()
+        with pytest.raises(LoginChallengeError) as second:
+            await _api(http, await _reloaded(store), country=countries).async_login(
+                verify_code="123456", login_id=first.value.login_id
+            )
+        cache = await _reloaded(store)
+        cache.section("throttle")["logins"] = {}  # the budget is not under test here
+        await cache.async_save()
+        fake_mega.calls.clear()
+        fake_mega.region_calls.clear()
+        api = _api(http, await _reloaded(store), country=countries)
+        await api.async_login(verify_code="654321", login_id=second.value.login_id)
+    assert (first.value.region, second.value.region) == ("eu", "eu:CH")
+    answers = [(p["ab"], p["verify_code"]) for p in _sent(fake_mega, "login")]
+    assert answers == [("CH", "654321")]
+    assert api.regions_with_session() == ["eu", "eu:CH"]
+    assert not (await _reloaded(store)).section("cloud").get("challenges")
 
 
 async def test_an_extra_country_logs_in_under_its_own_install_id(
