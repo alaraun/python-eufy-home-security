@@ -13,7 +13,7 @@ from aioresponses import aioresponses
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.models import LoginCountry
-from eufy_home_security.exceptions import CloudApiError
+from eufy_home_security.exceptions import CloudApiError, CommunicationError
 from eufy_home_security.storage import SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
@@ -148,6 +148,36 @@ async def test_a_country_eufy_names_no_cluster_for_keeps_the_region_as_ab(
     assert _login_abs(fake_mega) == ["eu", "us"]
     assert fake_mega.headers["login"][0]["country"] == "AQ"
     assert api.login_country is None
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "country", "domain_lookups"),
+    [("estimate_domain", "EE", 2), ("client_country", "", 1)],
+)
+async def test_no_login_while_the_login_country_lookup_does_not_answer(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    endpoint: str,
+    country: str,
+    domain_lookups: int,
+) -> None:
+    """A lookup that fails on the network is asked again before the next login, and
+    no login is spent meanwhile."""
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.error_bodies[endpoint] = [(503, {})]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country=country)
+        with pytest.raises(CommunicationError):
+            await api.async_login()
+        assert _login_abs(fake_mega) == []
+        await api.async_login()
+    assert len(_sent(fake_mega, "estimate_domain")) == domain_lookups
+    assert _login_abs(fake_mega) == ["EE"]
+    assert api.login_country is not None
+    assert api.login_country.home_region == "eu"
 
 
 async def test_a_session_made_with_another_ab_logs_in_again_once(
@@ -385,6 +415,25 @@ async def test_an_extra_country_eufy_names_no_cluster_for_gets_no_session(
     assert _login_abs(fake_mega) == ["EE"]
     assert api.regions_with_session() == ["eu"]
     assert "extra_countries" not in cache.section("cloud")
+
+
+async def test_an_extra_country_lookup_that_failed_is_asked_again_by_the_next_fetch(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    _with_an_extra_country(fake_mega)
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache, country="EE").async_login()
+        fake_mega.calls.clear()
+        fake_mega.error_bodies["estimate_domain"] = [(503, {})]
+        api = _api(http, cache, country=["EE", "CH"])
+        await api.async_login()
+        assert api.login_scopes() == ["eu"]
+        devices = await api.async_fetch_devices()
+    assert [p["ab"] for p in _sent(fake_mega, "estimate_domain")] == ["CH", "CH"]
+    assert _login_abs(fake_mega) == ["CH"]
+    assert api.login_scopes() == ["eu", "eu:CH"]
+    assert _EXTRA_STATION_SN in {d.device_sn for d in devices}
 
 
 async def test_an_extra_country_login_refused_is_not_retried_with_the_region(

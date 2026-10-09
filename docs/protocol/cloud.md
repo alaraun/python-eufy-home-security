@@ -132,6 +132,11 @@ The eufy app logs in with the user's country, and the library does the same **[a
    product-domain map), the same from either host **[verified]**. A lowercase or unknown
    code answers another domain (`aiot-api-eu.eufylife.com`): the library then does not
    use the country. Only the home region logs in; the other cluster is not asked.
+   A lookup of either step that does not answer (no network, a non-200 or non-JSON
+   answer, a throttle) leaves the country open: no login is sent until a later lookup
+   answers, which the next login asks again, so a cold cache spends no login on a
+   guessed cluster. A body-code refusal counts as an answer: an IP country is then
+   unknown, an option keeps its code without a home region.
 3. **Login**: `ab` = the country, `country` header = the country, `timezone` header =
    the caller's IANA zone (default `UTC`). A login in the other cluster with the same
    `ab` succeeds but lists nothing there **[verified]**. While no country is known, every
@@ -170,7 +175,9 @@ login budget. Each extra scope logs in under its own install id (`openudid`, min
 and cached): a `CH` login from another install id left an `EE` session on `eu` valid
 **[verified]**, while `CH` and `EE` under one install id did not both survive
 **[observed once]**, which reads as one session per install id and cluster. A country eufy names no cluster for gets no session, and a refused extra
-login is not retried with the region as `ab`.
+login is not retried with the region as `ab`. An extra country whose lookup does not
+answer gets no session until a later lookup does: the next login or device-list fetch
+asks again.
 
 ## Login challenges
 
