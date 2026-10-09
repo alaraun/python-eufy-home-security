@@ -115,11 +115,13 @@ async def station(fake: FakeStation) -> AsyncIterator[Station]:
     await st.async_close()
 
 
-async def test_update_builds_a_snapshot(station: Station) -> None:
+async def test_update_builds_a_snapshot(station: Station, monkeypatch: pytest.MonkeyPatch) -> None:
     assert station.channels == {0}
-    started = time.monotonic()
-    state = await station.async_update()
-    assert time.monotonic() - started < PARAM_SETTLE / 2  # the camera's channel reported
+    await station.session.async_connect()
+    # Returns once the camera's channel reported, not after the settle time.
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 30.0)
+    async with asyncio.timeout(10.0):
+        state = await station.async_update()
     assert state.guard_mode is GuardMode.DISARMED
     assert state.firmware == "3.8.7.4"
     camera = state.devices[0]
