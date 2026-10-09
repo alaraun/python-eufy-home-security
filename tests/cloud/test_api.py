@@ -983,6 +983,32 @@ async def test_an_empty_cipher_answer_is_not_asked_again_during_the_back_off(
             assert cipher_requests() == [[98], [40], [98]]
 
 
+async def test_the_empty_cipher_back_off_ends_when_the_owner_changes(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """A key asked under a stale owner id is asked again once the owner id is refreshed."""
+    station = {"device_sn": SYNTHETIC.station_sn, "device_type": 18}
+    fake_mega.devices = [{**station, "member": {"admin_user_id": FAKE_OWNER_ID}}]
+    fake_mega.cipher_objects = None
+    new_owner = "0123456789abcdef0123456789abcdef01234567"
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(CipherUnavailableError):
+                await api.async_get_cipher_keys(SYNTHETIC.station_sn, 98)
+            fake_mega.devices = [{**station, "member": {"admin_user_id": new_owner}}]
+            fake_mega.cipher_objects = [{"cipher_id": 98, "ecc_private_key": FAKE_ECC_KEY}]
+            assert await api.async_get_station_owner_id(SYNTHETIC.station_sn, refresh=True) == (
+                new_owner
+            )
+            keys = await api.async_get_cipher_keys(SYNTHETIC.station_sn, 98, refresh=True)
+    assert keys.ecc_private_key == FAKE_ECC_KEY
+    owners = [payload["user_id"] for name, payload in fake_mega.calls if name == "ciphers"]
+    assert owners == [FAKE_OWNER_ID, new_owner]
+
+
 async def test_cipher_refresh_honours_the_cooldown(
     fake_mega: FakeMega, cache: SessionCache
 ) -> None:

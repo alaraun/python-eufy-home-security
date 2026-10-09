@@ -325,9 +325,9 @@ class EufyCloudApi:
         self._challenge_region: str | None = None
         """The region whose login raised the last unanswered challenge."""
         self._login_lock = asyncio.Lock()
-        self._cipher_unavailable: dict[tuple[str, int], tuple[float, str]] = {}
-        """(monotonic time, owner id source) of the last empty ``get_ciphers`` answer per
-        (station, cipher id), for the back-off."""
+        self._cipher_unavailable: dict[tuple[str, int], tuple[float, str, str]] = {}
+        """(monotonic time, owner id source, owner id) of the last empty ``get_ciphers``
+        answer per (station, cipher id), for the back-off."""
 
     # ── public properties ────────────────────────────────────────────────────
 
@@ -1824,7 +1824,8 @@ class EufyCloudApi:
 
         An empty answer raises :class:`CipherUnavailableError`; for
         :data:`~.const.CIPHER_UNAVAILABLE_BACKOFF` after it, the same station and cipher
-        raise it again without a request (``refresh`` included).
+        raise it again without a request (``refresh`` included) while the station's
+        cached owner id is the one that was asked.
         """
         if not refresh:
             cached = CipherKeys(
@@ -1856,7 +1857,11 @@ class EufyCloudApi:
         try:
             keys = await self._fetch_cipher(station_sn, cipher_id, owner)
         except CipherUnavailableError as err:
-            self._cipher_unavailable[(station_sn, cipher_id)] = (time.monotonic(), err.owner_source)
+            self._cipher_unavailable[(station_sn, cipher_id)] = (
+                time.monotonic(),
+                err.owner_source,
+                owner,
+            )
             raise
         _LOGGER.debug(
             "cipher %d for %s fetched: ecc_private_key %s, RSA key %s",
@@ -2140,14 +2145,16 @@ class EufyCloudApi:
             )
 
     def _raise_if_cipher_unavailable(self, station_sn: str, cipher_id: int) -> None:
-        """Re-raise the empty answer for this station and cipher while its back-off runs."""
+        """Re-raise the empty answer for this station and cipher while its back-off runs;
+        a different cached owner id since then ends the back-off."""
         key = (station_sn, cipher_id)
         last = self._cipher_unavailable.get(key)
         if last is None:
             return
-        since, source = last
+        since, source, owner = last
         left = const.CIPHER_UNAVAILABLE_BACKOFF - (time.monotonic() - since)
-        if left <= 0:
+        cached_owner = self._cache.station_account_id(station_sn)
+        if left <= 0 or (cached_owner and cached_owner != owner):
             del self._cipher_unavailable[key]
             return
         _LOGGER.debug("cipher %d refused locally: no key last time, %.0fs left", cipher_id, left)
