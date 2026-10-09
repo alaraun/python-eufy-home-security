@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.2](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.1...v0.3.2) (2026-10-09)
+
+
+### Features
+
+* live video from HomeBase 2 and other non-T8030 stations ([#42](https://github.com/alaraun/python-eufy-home-security/issues/42)) ([cef8f94](https://github.com/alaraun/python-eufy-home-security/commit/cef8f9436530b067a32261bea1f8fc2c59d409c4))
+
 ## [0.3.1](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.0...v0.3.1) (2026-10-09)
 
 
