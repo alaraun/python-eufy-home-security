@@ -748,3 +748,28 @@ async def test_a_cached_list_that_misses_or_outlives_a_scope_is_fetched_again(
         fake_mega.region_calls.clear()
         assert {d.device_sn for d in await api.async_get_devices()} == listed
     assert _requests(fake_mega, "devices") == []  # the refetched list is a hit
+
+
+async def test_the_fallback_list_leaves_out_a_removed_scopes_devices(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A removed extra country's devices leave even when the cloud refuses the fetch."""
+    caplog.set_level(logging.INFO, logger="eufy_home_security.cloud.api")
+    _with_an_extra_country(fake_mega)
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache, country=["EE", "CH"]).async_get_devices()
+        fake_mega.code_once["devices"] = int(const.CloudCode.API_REQUEST_LIMIT)
+        api = _api(http, cache, country=["EE"])
+        devices = await api.async_get_devices()
+        again = await api.async_get_devices(refresh=True)  # refused locally: the hold-off
+    assert [d.device_sn for d in devices] == [d.device_sn for d in again] == [SYNTHETIC.station_sn]
+    assert api.device_list_source == "fallback"
+    assert caplog.text.count("cached devices of the eu:CH scope left out") == 1
+    assert {d["device_sn"] for d in cache.cached_devices() or ()} == {
+        SYNTHETIC.station_sn,
+        _EXTRA_STATION_SN,
+    }  # the cache itself changes only with a fetched list

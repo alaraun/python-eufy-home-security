@@ -70,7 +70,14 @@ from .models import (
     LoginCountry,
     security_device_entry,
 )
-from .status import CloudStatus, LoginNeed, RegionStatus, StationRefreshStatus
+from .status import (
+    CloudStatus,
+    DeviceListSource,
+    LoginNeed,
+    RegionStatus,
+    SessionState,
+    StationRefreshStatus,
+)
 
 if TYPE_CHECKING:
     import aiohttp
@@ -205,6 +212,8 @@ _AB_KEY: Final = "ab"
 """A cached session's ``ab``: what its login sent."""
 _AB_WANTED_KEY: Final = "ab_wanted"
 """A cached session's settled ``ab``: what was asked for (differs after a refused country login)."""
+_ENDED_KEY: Final = "ended"
+"""A cached session section's record of why its session was dropped (a :class:`SessionState`)."""
 _EXTRA_HOMES_KEY: Final = "extra_countries"
 """``cloud.extra_countries``: each looked-up extra country's home region."""
 
@@ -336,6 +345,10 @@ class EufyCloudApi:
         self._extras_answered: set[str] = set()
         """The extra countries whose lookup eufy answered without a cluster in this process."""
         self._timezone = timezone or const.DEFAULT_TIMEZONE
+        self.device_list_source: DeviceListSource | None = None
+        """How the last device list was obtained (:data:`~.status.DeviceListSource`);
+        None before the first."""
+        self._scopes_dropped_logged: set[str] = set()
         self._login_country: LoginCountry | None = None
         self._country_resolved = False
         """Whether a lookup of the login country answered in this process."""
@@ -1459,8 +1472,11 @@ class EufyCloudApi:
             Secret(token),
         )
 
-    async def _drop_session_if_current(self, failed: _Identity) -> None:
-        """Forget ``failed`` — unless another task has already replaced it — and save.
+    async def _drop_session_if_current(
+        self, failed: _Identity, ended: SessionState = SessionState.ENDED
+    ) -> None:
+        """Forget ``failed`` — unless another task has already replaced it — and save;
+        the scope's section records why (``ended``) until its next login.
 
         Concurrent calls can all fail on the same expired token; only the first may
         drop it, or a later one would wipe the session the first just logged in.
@@ -1475,6 +1491,7 @@ class EufyCloudApi:
         del self._identities[region]
         for key in ("auth_token", "key_ident", "shared_key", "expires_at"):
             cloud.pop(key, None)
+        cloud[_ENDED_KEY] = str(ended)
         await self._cache.async_save()
 
     @property
@@ -1498,7 +1515,7 @@ class EufyCloudApi:
             "another client logged in with this eufy account and ended this session; "
             "not logging in again until asked to"
         )
-        await self._drop_session_if_current(failed)
+        await self._drop_session_if_current(failed, SessionState.REPLACED)
 
     async def _ensure_session(self, region: str, *, login: bool = True) -> _Identity:
         """``region``'s live session: the one held, the cached one, or a new login.
@@ -1623,6 +1640,7 @@ class EufyCloudApi:
             cached = self._cache.cached_devices()
             if cached is not None and self._cache_covers_scopes(cached):
                 _LOGGER.debug("device list from the cache (%d devices)", len(cached))
+                self.device_list_source = "cache"
                 return [CloudDevice.from_api(d) for d in cached]
         try:
             return await self.async_fetch_devices(rescan_regions=rescan_regions)
@@ -1631,7 +1649,21 @@ class EufyCloudApi:
             if cached is None:
                 raise
             _LOGGER.warning("device list refresh failed (%s); using the cached list", err)
-            return [CloudDevice.from_api(d) for d in cached]
+            self.device_list_source = "fallback"
+            return [CloudDevice.from_api(d) for d in self._in_scope(cached)]
+
+    def _in_scope(self, cached: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+        """``cached`` without the devices of scopes that are no login scope any more
+        (a removed extra country, a moved home region); each dropped scope logged once."""
+        scopes = self.login_scopes()
+        kept = [d for d in cached if d.get(REGION_KEY) in scopes]
+        dropped = {str(d.get(REGION_KEY)) for d in cached if d.get(REGION_KEY) not in scopes}
+        for scope in sorted(dropped - self._scopes_dropped_logged):
+            _LOGGER.info(
+                "cached devices of the %s scope left out: it is no login scope any more", scope
+            )
+        self._scopes_dropped_logged |= dropped
+        return kept
 
     def _cache_covers_scopes(self, cached: Sequence[Mapping[str, Any]]) -> bool:
         """Whether ``cached`` answers for the scopes in use: every scope of
@@ -1660,6 +1692,8 @@ class EufyCloudApi:
         a serial two scopes list keeps the first scope's entry). A scope that lists no
         devices is suspended. With every scope suspended nothing is sent and the cached
         (empty) list is returned. Nothing is cached unless every scope asked answered.
+        Sets :attr:`device_list_source` (``"fetched"``, or ``"unsent"`` when nothing
+        was sent).
         """
         async with self._login_lock:
             if not self.session_replaced and self._login_possible():
@@ -1676,7 +1710,10 @@ class EufyCloudApi:
                 "a rescan asks them again",
                 ", ".join(self.login_scopes()),
             )
-            return [CloudDevice.from_api(d) for d in self._cache.cached_devices() or ()]
+            self.device_list_source = "unsent"
+            return [
+                CloudDevice.from_api(d) for d in self._in_scope(self._cache.cached_devices() or ())
+            ]
         entries: list[dict[str, Any]] = []
         counts: dict[str, int] = {}
         listed_by: dict[str, str] = {}
@@ -1726,6 +1763,7 @@ class EufyCloudApi:
         devices = [CloudDevice.from_api(d) for d in entries]
         for device in devices:
             _LOGGER.debug("  %r", device)
+        self.device_list_source = "fetched"
         return devices
 
     async def _house_entries(
@@ -2489,6 +2527,7 @@ class EufyCloudApi:
         expires = cached[3] if cached else None
         count, wait = self._login_budget_wait(region)
         return RegionStatus(
+            session_state=self._session_state(region, cached),
             session_expires_in=None if expires is None else max(expires - now, 0.0),
             devices=_count(listing.get("devices")) if listing else None,
             listed_age=now - at if isinstance(at, (int, float)) and at else None,
@@ -2505,6 +2544,23 @@ class EufyCloudApi:
                 ),
                 default=0.0,
             ),
+        )
+
+    def _session_state(
+        self, region: str, cached: tuple[str, str, str, float | None] | None
+    ) -> SessionState:
+        held = self._identities.get(region)
+        if (held is not None and held.auth_token) or (
+            cached is not None and self._session_usable(cached[3])
+        ):
+            return SessionState.USABLE
+        if cached is not None:
+            return SessionState.EXPIRED
+        ended = self._cache.cloud_sessions().get(region, {}).get(_ENDED_KEY)
+        return (
+            SessionState(ended)
+            if ended in (SessionState.ENDED, SessionState.REPLACED)
+            else (SessionState.NONE)
         )
 
     def _station_refresh_status(self, station_sn: str) -> StationRefreshStatus:

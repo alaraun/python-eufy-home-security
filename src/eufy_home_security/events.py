@@ -45,6 +45,7 @@ from .exceptions import (
 from .models import FrameCipher, GuardMode
 
 if TYPE_CHECKING:
+    from .cloud.status import DeviceListSource
     from .p2p.storage_info import StorageInfo
     from .station import StationState
 
@@ -992,6 +993,24 @@ class DevicesChanged:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class StationsChanged:
+    """A discovery after the first built a station, or no longer lists a built one.
+
+    Emitted by :meth:`~.client.EufySecurity.async_discover` only when something
+    changed. Each field holds station serials, sorted: ``added`` the stations (local or
+    remote) this discovery built; ``removed`` built stations the device list no longer
+    names, each reported once (they stay in ``stations`` until the client is rebuilt).
+    ``source`` says how the list was obtained (``"fetched"``, ``"cache"``,
+    ``"fallback"``, ``"unsent"``). A consumer reloads on it, as on
+    :class:`DevicesChanged`.
+    """
+
+    added: tuple[str, ...] = ()
+    removed: tuple[str, ...] = ()
+    source: DeviceListSource | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class StationStateChanged:
     """A completed parameter dump changed a station's built state.
 
@@ -1383,6 +1402,7 @@ type Event = (
     | CredentialsRefreshed
     | AccountMismatch
     | DevicesChanged
+    | StationsChanged
     | StationStateChanged
     | StorageChanged
     | CameraBusyChanged

@@ -16,7 +16,7 @@ from aioresponses import aioresponses
 from eufy_home_security._logging import set_secret_logging
 from eufy_home_security.cloud import const, crypto
 from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, _check_owner_id, _Identity
-from eufy_home_security.cloud.status import LoginNeed
+from eufy_home_security.cloud.status import LoginNeed, SessionState
 from eufy_home_security.exceptions import (
     AuthenticationError,
     CipherUnavailableError,
@@ -552,6 +552,35 @@ async def test_an_expired_token_triggers_a_single_relogin(
     assert fake_mega.login_calls == 2  # initial + one automatic re-login
 
 
+async def test_the_session_state_says_why_a_scope_needs_a_login(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """None stored, usable, past its expiry, and ended by the cloud before its expiry."""
+    fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 18}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            states = [api.cloud_status().regions["eu"].session_state]
+            await api.async_get_devices()
+            states.append(api.cloud_status().regions["eu"].session_state)
+            expires = cache.cloud_session("eu")["expires_at"]
+            cache.cloud_session("eu")["expires_at"] = time.time() - 10
+            states.append(_api(session, cache).cloud_status().regions["eu"].session_state)
+            cache.cloud_session("eu")["expires_at"] = expires
+            for _ in range(const.LOGIN_BUDGET - 1):  # the re-login meets the spent budget
+                cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, "eu")
+            fake_mega.code_once["devices"] = int(const.CloudCode.SESSION_TIMEOUT)
+            await api.async_get_devices(refresh=True)  # falls back to the cached list
+            states.append(api.cloud_status().regions["eu"].session_state)
+    assert states == [
+        SessionState.NONE,
+        SessionState.USABLE,
+        SessionState.EXPIRED,
+        SessionState.ENDED,
+    ]
+
+
 _REKEY_ANSWERS = {
     # the gateway's answer once the key identity has lapsed (verified on hardware)
     "http-463-body-4404": (463, {"code": 4404, "msg": "get identity error"}),
@@ -654,6 +683,7 @@ async def test_a_replaced_session_latches_until_a_forced_login(
             latched = api.session_replaced
             assert latched
             assert "auth_token" not in cache.cloud_session("eu")
+            assert api.cloud_status().regions["eu"].session_state == SessionState.REPLACED
             assert cache.password == SYNTHETIC.password  # the credentials were never wrong
 
             # Nothing logs in again or reaches the cloud by itself, after a restart too.

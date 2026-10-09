@@ -18,14 +18,14 @@ import logging
 import math
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
-from types import TracebackType
+from types import MappingProxyType, TracebackType
 from typing import TYPE_CHECKING, Any, Literal, Self
 
 from ._logging import Identifier, LogThrottle, Secret, redact_serial
 from .cloud.api import EufyCloudApi, HttpSession, PasswordSource
 from .cloud.const import CLOUD_STATE_REFRESH, firmware_ota_type
 from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
-from .cloud.status import CloudStatus
+from .cloud.status import CloudStatus, DeviceListSource
 from .devices.model_settings import (
     Setting,
     bundled_codes,
@@ -50,6 +50,7 @@ from .events import (
     GuardModeTracker,
     PushChanged,
     SecurityEvent,
+    StationsChanged,
     Unsubscribe,
     as_guard_mode,
 )
@@ -320,6 +321,11 @@ class EufySecurity:
         self.stations_served_elsewhere: tuple[CloudDevice, ...] = ()
         # Devices of the last device list that nothing is built for (see SkippedDevice).
         self.skipped_devices: tuple[SkippedDevice, ...] = ()
+        # Every device the last discovery's list named, by serial: stations built, served
+        # elsewhere, remote, paired devices and skipped devices alike.
+        self.listed_devices: Mapping[str, CloudDevice] = MappingProxyType({})
+        # Built stations the last discovery's list did not name (reported once each).
+        self._unlisted: frozenset[str] = frozenset()
         self._discovered = False
         # The model scan (_async_scan_models): read-only settings listed from the cloud
         # TD per unbundled product code.
@@ -546,11 +552,18 @@ class EufySecurity:
         ``claims``, only the stations this account wins are built; the others are
         listed in :attr:`stations_served_elsewhere`. Stations included as remote go to
         :attr:`remote_stations`; the returned list holds the local ones. Devices
-        nothing can be built for are listed in :attr:`skipped_devices`.
+        nothing can be built for are listed in :attr:`skipped_devices`, every device of
+        the list in :attr:`listed_devices`, and how the list was obtained in
+        :attr:`device_list_source`. A discovery after the first emits
+        :class:`~.events.StationsChanged` when it built a station or the list no longer
+        names a built one.
         """
         await self._ensure_cache_loaded()
         devices = await self.cloud.async_get_devices(refresh=refresh, rescan_regions=rescan_regions)
+        first = not self._discovered
+        built = frozenset(self.stations) | frozenset(self.remote_stations)
         self._discovered = True
+        self.listed_devices = MappingProxyType({d.device_sn: d for d in devices})
         candidates, children, self.skipped_devices = _group(devices)
         included = [d for d in candidates if self._reach(d.device_sn) is not None]
         if self._claims is None:
@@ -601,7 +614,33 @@ class EufySecurity:
                 station.apply_cloud_device(device)  # the cached snapshot, until a fresh one
             self.stations[serial] = station
             self._unsubs.append(station.subscribe(self._on_station_event))
+        self._report_stations_changed(first, built, candidates)
         return list(self.stations.values())
+
+    @property
+    def device_list_source(self) -> DeviceListSource | None:
+        """How the last device list was obtained (:data:`~.cloud.status.DeviceListSource`):
+        ``"fetched"`` is a whole answer of every scope in use; None before the first list."""
+        return self.cloud.device_list_source
+
+    def _report_stations_changed(
+        self, first: bool, built: frozenset[str], candidates: Sequence[CloudDevice]
+    ) -> None:
+        """Emit :class:`StationsChanged` for the stations this discovery built and the
+        built ones its list no longer names (once each); nothing on the first discovery."""
+        now_built = frozenset(self.stations) | frozenset(self.remote_stations)
+        unlisted = built - {d.device_sn for d in candidates}
+        removed, self._unlisted = unlisted - self._unlisted, unlisted
+        added = now_built - built
+        if first or not (added or removed):
+            return
+        self._bus.emit(
+            StationsChanged(
+                added=tuple(sorted(added)),
+                removed=tuple(sorted(removed)),
+                source=self.cloud.device_list_source,
+            )
+        )
 
     # ── models without a bundled file ───────────────────────────────────────
 

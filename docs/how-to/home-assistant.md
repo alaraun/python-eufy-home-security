@@ -287,11 +287,23 @@ the integration is the device list:
 
 - Refresh it deliberately: a daily `async_discover(refresh=True)`, or a "refresh
   devices" service. Never on every start.
-- A refresh that cannot reach the cloud, or runs into a hold-off, returns the cached list.
+- A refresh that cannot reach the cloud, or runs into a hold-off, returns the cached list,
+  without the devices of a login scope no longer in use (a removed extra country).
+- `eufy.device_list_source` says how the last list was obtained: `"fetched"` (every scope
+  in use answered now: a whole, fresh list), `"cache"` (the cached list, covering every
+  scope in use), `"fallback"` (the cached list after a refresh the cloud did not answer)
+  or `"unsent"` (every scope suspended, nothing asked). Every one of them holds only
+  devices of the scopes in use, so a removed country's devices are gone from each; a
+  cleanup that must also see devices eufy stopped listing waits for `"fetched"`.
+  `eufy.listed_devices` maps every serial of that list to its `CloudDevice`: built
+  stations, stations served elsewhere, remote stations, paired and skipped devices.
 - A refresh adds new stations and updates the paired devices of the stations already
   built. When a station's devices change it emits `DevicesChanged(station_sn, added,
   removed, moved)` (serials): reload the entry on it, and never diff device lists in the
-  integration. A refresh that changed nothing emits nothing.
+  integration. A refresh that changed nothing emits nothing. A discovery after the first
+  that built a station, or whose list no longer names a built one, emits
+  `StationsChanged(added, removed, source)` (station serials, each removal once): reload
+  on it too. A removed station stays in `eufy.stations` until the client is rebuilt.
 - A device paired after the last device-list refresh may still get an identity from
   the station's own serial list: its `SubDeviceState.serial_source` is `"param_1072"`
   instead of `"cloud"`. Use that serial for its entities (ids come from serials), but
@@ -337,7 +349,7 @@ For the integration:
 | what | where | use |
 |---|---|---|
 | a device's region | `CloudDevice.region` (`station.device.region`, each sub-device's `CloudDevice`) | a diagnostic attribute; never part of an entity id |
-| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `login_refused` (an extra country the cloud refused to log in: skipped until a rescan), `logins_in_window` (its cluster's logins in the budget window; the account-wide `CloudStatus.logins_in_window` is the fullest cluster's), `next_login_allowed_in` (0.0 when this scope may log in now), `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
+| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `login_refused` (an extra country the cloud refused to log in: skipped until a rescan), `logins_in_window` (its cluster's logins in the budget window; the account-wide `CloudStatus.logins_in_window` is the fullest cluster's), `next_login_allowed_in` (0.0 when this scope may log in now), `session_state` (`SessionState`: `usable`; `none` never stored; `expired` past its expiry; `ended` the cloud answered it expired early, e.g. after another login under the same install id; `replaced` another client took it over), `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
 | rescan | `async_discover(rescan_regions=True)` | only on the user's request: the "refresh device list" button and the repair's fix. Timers and automatic refreshes pass `refresh=True` alone, so a suspended region is never retried by itself |
 | scan on every refresh | `EufySecurity(scan_regions=...)` | an options-flow switch, off by default |
 

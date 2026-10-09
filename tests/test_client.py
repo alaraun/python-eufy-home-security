@@ -39,6 +39,7 @@ from eufy_home_security.events import (
     GuardModeChanged,
     PushChanged,
     SecurityEvent,
+    StationsChanged,
 )
 from eufy_home_security.exceptions import (
     AuthenticationError,
@@ -330,6 +331,47 @@ async def test_refresh_updates_the_stations_already_built() -> None:
     assert home in again
     assert [d.device_sn for d in home.sub_devices] == [SYNTHETIC.camera_sn, NEW_CAMERA_SN]
     assert home.session.expect_channels == {0, 1}
+
+
+async def test_a_discovery_names_its_list_and_the_stations_it_added_or_lost() -> None:
+    """``listed_devices`` holds every device of the list; a later discovery reports a
+    station it built or no longer finds once, with how its list was obtained."""
+    cloud = two_stations()
+    events: list[Event] = []
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        eufy.subscribe(events.append)
+        await eufy.async_discover()
+        first = (eufy.device_list_source, set(eufy.listed_devices))
+        cloud.devices = [d for d in cloud.devices if d["device_sn"] != OTHER_STATION_SN]
+        await eufy.async_discover(refresh=True)
+        await eufy.async_discover(refresh=True)  # still gone: not reported again
+        kept = OTHER_STATION_SN in eufy.stations  # until the client is rebuilt
+        cloud.devices.append(garage_device(SYNTHETIC.did))
+        await eufy.async_discover(refresh=True)  # back: built already, nothing to report
+        listed = set(eufy.listed_devices)
+        await eufy.async_close()
+    assert first == ("cache", {SYNTHETIC.station_sn, SYNTHETIC.camera_sn, OTHER_STATION_SN})
+    assert listed == first[1]
+    assert [e for e in events if isinstance(e, StationsChanged)] == [
+        StationsChanged(removed=(OTHER_STATION_SN,), source="fetched")
+    ]
+    assert kept
+
+
+async def test_a_discovery_reports_a_station_it_built_after_the_first() -> None:
+    cloud = FakeCloud(devices=[station_device(), camera_device()])
+    events: list[Event] = []
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        eufy.subscribe(events.append)
+        await eufy.async_discover()
+        cloud.devices.append(garage_device(SYNTHETIC.did))
+        await eufy.async_discover(refresh=True)
+        await eufy.async_close()
+    assert [e for e in events if isinstance(e, StationsChanged)] == [
+        StationsChanged(added=(OTHER_STATION_SN,), source="fetched")
+    ]
 
 
 ODD_CAMERA_SN = "T8160-BAD_0001"

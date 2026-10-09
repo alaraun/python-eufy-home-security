@@ -298,3 +298,20 @@ async def test_push_is_not_registered_once_every_region_is_suspended(
         await api.async_get_devices()
         await api.async_register_push_token("fcm-token")
     assert _requests(fake_mega, "push") == []
+
+
+async def test_the_device_list_source_says_how_each_list_was_obtained(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    sources = []
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache)
+        sources.append(api.device_list_source)
+        await api.async_get_devices()  # eu and us both list nothing: both suspended
+        sources.append(api.device_list_source)
+        await api.async_get_devices()
+        sources.append(api.device_list_source)
+        await api.async_get_devices(refresh=True)
+        sources.append(api.device_list_source)
+    assert sources == [None, "fetched", "cache", "unsent"]

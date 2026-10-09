@@ -11,6 +11,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Literal
+
+type DeviceListSource = Literal["fetched", "cache", "fallback", "unsent"]
+"""Where the last device list came from: ``"fetched"`` every scope asked answered now;
+``"cache"`` the cached list, which covers every scope in use (nothing sent);
+``"fallback"`` the cached list after a refresh the cloud did not answer (a network error
+or a throttle), without devices of scopes no longer in use; ``"unsent"`` every scope in
+use is suspended, so nothing was sent and the cached (empty) list stands."""
 
 
 class LoginNeed(StrEnum):
@@ -29,6 +37,23 @@ class LoginNeed(StrEnum):
     """No session and no password to run a login with: a human must supply one."""
     REPLACED = "replaced"
     """The session-replaced latch is set: only a forced login or a take-over logs in."""
+
+
+class SessionState(StrEnum):
+    """The state of one login scope's cached cloud session."""
+
+    USABLE = "usable"
+    """A session is held or cached and not expiring within the safety margin."""
+    NONE = "none"
+    """No session was ever stored for this scope."""
+    EXPIRED = "expired"
+    """The cached session is past (or within the safety margin of) its expiry."""
+    ENDED = "ended"
+    """The cloud answered the session as expired before its expiry, and it was dropped
+    (for an extra country's scope on one cluster, typically another login under the
+    same install id)."""
+    REPLACED = "replaced"
+    """Another client's login ended the session (the session-replaced latch)."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -71,6 +96,8 @@ class RegionStatus:
     """Seconds until a login to this scope is allowed: the longest of the request
     hold-off, its cluster's login hold-off and its cluster's budget wait; 0.0 when
     allowed now."""
+    session_state: SessionState = SessionState.NONE
+    """Why this scope does or does not need a login (:class:`SessionState`)."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
