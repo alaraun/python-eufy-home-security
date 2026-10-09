@@ -329,7 +329,7 @@ For the integration:
 | what | where | use |
 |---|---|---|
 | a device's region | `CloudDevice.region` (`station.device.region`, each sub-device's `CloudDevice`) | a diagnostic attribute; never part of an entity id |
-| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `login_refused` (an extra country the cloud refused to log in: skipped until a rescan), `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
+| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `login_refused` (an extra country the cloud refused to log in: skipped until a rescan), `logins_in_window` (its cluster's logins in the budget window; the account-wide `CloudStatus.logins_in_window` is the fullest cluster's), `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
 | rescan | `async_discover(rescan_regions=True)` | only on the user's request: the "refresh device list" button and the repair's fix. Timers and automatic refreshes pass `refresh=True` alone, so a suspended region is never retried by itself |
 | scan on every refresh | `EufySecurity(scan_regions=...)` | an options-flow switch, off by default |
 

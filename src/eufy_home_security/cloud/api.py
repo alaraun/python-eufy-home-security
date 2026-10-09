@@ -2363,7 +2363,8 @@ class EufyCloudApi:
         """The login, throttle and refresh state as the cache holds it; never contacts the cloud.
 
         The login need and the session expiry cover the regions the next device list
-        asks (:meth:`regions_to_list`). A password counts as available when one is
+        asks (:meth:`regions_to_list`); the login hold-off and the budget wait cover
+        those and :attr:`region`, where a forced login goes. A password counts as available when one is
         cached or a string was given; a password callable is a prompt, so without
         either the need is ``PASSWORD_REQUIRED``. The cache must be loaded.
         """
@@ -2389,15 +2390,18 @@ class EufyCloudApi:
         else:
             need = LoginNeed.PASSWORD_REQUIRED
         request_hold_off = self._held_off("requests")
+        # A forced login or a reauthentication goes to :attr:`region` even when no
+        # scope is in use.
+        logging_in = [*in_use, self.region]
         login_hold_off = max(
-            (left for r in in_use if (left := self._held_off("login", r)) is not None),
+            (left for r in logging_in if (left := self._held_off("login", r)) is not None),
             default=None,
         )
         budget_wait = max(
-            (left for r in in_use if (left := self._login_budget_wait(r)[1]) is not None),
+            (left for r in logging_in if (left := self._login_budget_wait(r)[1]) is not None),
             default=None,
         )
-        count = len(self._cache.recent_logins(const.LOGIN_BUDGET_WINDOW_SECONDS))
+        count = max(self._login_budget_wait(r)[0] for r in const.REGIONS)
         attempts = self._cache.recent_logins(math.inf)
         return CloudStatus(
             login_need=need,
@@ -2440,6 +2444,7 @@ class EufyCloudApi:
             in_use=region in in_use,
             suspended=region in self.suspended_regions(),
             login_refused=region in self.refused_regions(),
+            logins_in_window=self._login_budget_wait(region)[0],
         )
 
     def _station_refresh_status(self, station_sn: str) -> StationRefreshStatus:

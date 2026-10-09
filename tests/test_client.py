@@ -1272,7 +1272,8 @@ async def test_cache_summary_is_json_safe_and_secret_free() -> None:
     assert other["cipher_refresh_age"] is None
     status = summary["cloud_status"]
     assert status["login_need"] == "replaced"
-    assert status["logins_in_window"] == 2  # the first device list logs in to each region
+    assert status["logins_in_window"] == 1  # the first device list logs in once per cluster
+    assert [status["regions"][r]["logins_in_window"] for r in ("eu", "us")] == [1, 1]
     assert status["regions"]["eu"]["devices"] == len(doc["devices"])
     assert status["regions"]["us"]["suspended"] is True
     assert 0 < status["device_list_refresh_age"] < 120

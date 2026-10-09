@@ -64,15 +64,18 @@ class RegionStatus:
     login_refused: bool = False
     """The cloud refused this extra country's login with a plain body code: no login
     or device list asks it again until a rescan or a change of the extra countries."""
+    logins_in_window: int = 0
+    """Login attempts on this scope's cluster in the budget window (shared by the
+    scopes of one cluster)."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CloudStatus:
     """The login, throttle and refresh state of one account, as the cache holds it.
 
-    Whether a call spent a login attempt is answered by comparing
-    ``logins_in_window`` before and after it: the attempt is recorded before the
-    login request is sent, whatever the outcome.
+    Whether a call spent a login attempt is answered by comparing a region's
+    ``logins_in_window`` (or ``last_login_attempt_age``) before and after it: the
+    attempt is recorded before the login request is sent, whatever the outcome.
     """
 
     login_need: LoginNeed
@@ -84,8 +87,11 @@ class CloudStatus:
     request_hold_off: float | None
     """Seconds left on the hold-off that refuses every cloud call; None when none."""
     login_hold_off: float | None
-    """Seconds left on the hold-off that refuses logins; None when none."""
+    """Seconds left on the hold-off that refuses logins to a region in use or to the
+    first region (where a forced login goes); None when none."""
     logins_in_window: int
+    """Login attempts in the budget window on the cluster that holds the most; the
+    budget (``login_budget``) counts per cluster."""
     login_budget: int
     login_window: float
     next_login_allowed_in: float
