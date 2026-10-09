@@ -265,6 +265,19 @@ async def test_a_login_held_off_on_one_region_logs_in_no_region_the_country_leav
     assert api.login_scopes() == ["eu"]
 
 
+async def test_a_device_list_on_a_cold_cache_logs_in_on_the_home_region_only(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.devices = [_station(SYNTHETIC.station_sn)]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country="EE")
+        devices = await api.async_get_devices()
+    assert (_requests(fake_mega, "login"), _login_abs(fake_mega)) == (["eu"], ["EE"])
+    assert [d.region for d in devices] == ["eu"]
+
+
 async def test_a_session_made_with_another_ab_logs_in_again_once(
     fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
 ) -> None:

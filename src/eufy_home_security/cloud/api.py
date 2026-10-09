@@ -1528,14 +1528,18 @@ class EufyCloudApi:
         """The device list fetched from the cloud now, cached; every failure raises.
 
         Asks each login scope of :meth:`regions_to_list` (``rescan_regions``: every
-        scope), after looking up the extra countries' home regions neither cached nor
-        answered in this process (a rescan asks every one not cached again). Each device
+        scope), after looking up the login country when a login may follow and the
+        extra countries' home regions neither cached nor answered in this process (a
+        rescan asks every one not cached again). Each device
         is tagged with the scope that listed it (:attr:`CloudDevice.region`;
         a serial two scopes list keeps the first scope's entry). A scope that lists no
         devices is suspended. With every scope suspended nothing is sent and the cached
         (empty) list is returned. Nothing is cached unless every scope asked answered.
         """
         async with self._login_lock:
+            if not self.session_replaced and self._login_possible():
+                # The scopes follow the countries: look them up (no login) first.
+                await self._resolve_login_country(retry=True)
             if rescan_regions:
                 self._extras_answered.clear()
             await self._resolve_extra_countries()
