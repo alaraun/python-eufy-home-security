@@ -833,11 +833,13 @@ A closed session (`async_close`) never reconnects on its own — build a new
 
   **Per-mode actions** — "sound the siren in Away", "notify in Home" — are bits of a
   per-mode action mask: each camera has `camera_action_away`, `camera_action_home` and
-  `camera_action_custom_1`…`_3`, each motion sensor `sensor_action_<mode>`, and
-  `MODE_ACTION_FLAGS[scope]` names the bits that apply to that kind (camera: `record`,
-  `camera_siren`, `station_alarm`, `notification`, `light_alarm`,
-  `report_monitor_center`; sensor: `notification`, `station_alarm`,
-  `motion_sensor_respond`, `report_monitor_center`). One switch per (mode, flag), for
+  `camera_action_custom_1`…`_3`, each sensor `sensor_action_<mode>`, and
+  `mode_action_flags(scope, device.device_type)` names the bits that apply to that
+  device (camera: `record`, `camera_siren`, `station_alarm`, `notification`,
+  `light_alarm`, `report_monitor_center`; sensor: `notification`, `station_alarm`,
+  `report_monitor_center`, and `motion_sensor_respond` on a motion sensor only, cloud
+  `device_type` 10 or 127; `async_set_mode_action` refuses a flag the device does not
+  have). A siren accessory is of kind `other`, not `sensor`. One switch per (mode, flag), for
   example "Front · Away · camera siren", written with
   `station.async_set_mode_action("away", "camera_siren", on, device_sn=…)`: it reads the
   current mask fresh, changes that one bit, writes and confirms by read-back. **Never

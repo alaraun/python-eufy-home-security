@@ -1248,6 +1248,37 @@ async def test_a_mode_table_is_confirmed_by_read_back_not_the_receipt(
         await station.async_set_mode_action("away", "camera_siren", True, channel=0)
 
 
+async def test_a_non_motion_sensor_has_no_respond_action() -> None:
+    entry = CloudDevice(
+        device_sn="T8900P0000000001",
+        device_type=2,
+        name="Door",
+        station_sn=SYNTHETIC.station_sn,
+        channel=17,
+    )
+    hub = _hub_with(CAMERA, entry)
+    with pytest.raises(UnsupportedError, match="known flags: station_alarm, notification, report"):
+        await hub.async_set_mode_action("away", "motion_sensor_respond", True, channel=17)
+
+
+async def test_a_listed_siren_accessory_blocks_a_mode_table_write(
+    station: Station, fake: FakeStation
+) -> None:
+    _mode_table_blocks(fake)
+    siren = CloudDevice(
+        device_sn="T90R0P0000000001",
+        device_type=0,
+        name="Siren",
+        station_sn=SYNTHETIC.station_sn,
+        channel=3,
+    )
+    fake.params[3] = {1239: "1"}
+    hub = Station(STATION, station.session, sub_devices=[CAMERA, siren])
+    with pytest.raises(UnsupportedError, match="no known device kind"):
+        await hub.async_set_mode_action("away", "camera_siren", True, channel=0)
+    assert fake.mode_tables_received == []
+
+
 async def test_mode_table_refusals_send_nothing(station: Station, fake: FakeStation) -> None:
     _mode_table_blocks(fake)
     with pytest.raises(UnsupportedError, match="no per-device actions"):

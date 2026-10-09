@@ -91,6 +91,7 @@ Generated from the cached TDs and `CASES`; do not edit by hand.
 | T8160 | 119 | 2026/07/15 | 34 | 98 | 4 |
 | T8170 | 283 | 2026/08/31 | 70 | 148 | 7 |
 | T8410 | 159 | 2026/09/07 | 62 | 130 | 3 |
+| T8410C | 146 | 2026/09/29 | 65 | 133 | 3 |
 | T8910 | 48 | 2025/08/27 | 7 | 11 | 1 |
 
 ### Recipes the library implements
@@ -109,5 +110,8 @@ Generated from the cached TDs and `CASES`; do not edit by hand.
 | T8410 | SINGLE | `open_live_stream` | `open_live_stream_single` | declared | The T8410 variant: no `extValue`. |
 | T8410 | SINGLE | `close_live_stream` | `close_live_stream` | declared |  |
 | T8410 | SINGLE | `ptz_action_control` | `ptz_rotate` | declared | The T8410 variant: no `zoom`, no `ivalue`. |
+| T8410C | SINGLE | `open_live_stream` | `open_live_stream_single` | declared | The T8410C variant: no `extValue`. |
+| T8410C | SINGLE | `close_live_stream` | `close_live_stream` | declared |  |
+| T8410C | SINGLE | `ptz_action_control` | `ptz_rotate` | declared |  |
 
 <!-- END GENERATED: scripts/thing_models.py inventory -->

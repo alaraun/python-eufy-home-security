@@ -13,7 +13,7 @@ and carry none.
 | `capabilities.py` | `DeviceProfile`: which `Capability` a model has, with evidence each, its readable params and kind markers |
 | `data/models/<PN>.json` | The model's settings, generated from the vendor's thing description and handler ([models-schema.md](../reference/models-schema.md)) |
 | `settings.py` | `Scope`, `SettingUnit` and the per-mode delays and action masks of the mode tables |
-| `command_types.py` | Command/parameter names from the app's `CommandType` enum (maintained by hand from the app) |
+| `command_types.py` | Command/parameter names from the app's command-type enum (maintained by hand from the app) |
 
 ## What the statuses mean
 
@@ -47,19 +47,24 @@ handler. Then prove it on hardware (step 4). Keep the handler scripts out of the
 ## 1. The model
 
 Every product the eufy app names is already in the model list, *declared*:
-`scripts/gen_app_models.py` reads the app's `SnConstants` (one constant per serial
-prefix, e.g. `CAMERA2C = "T8113"`), its device-type map (`SnUtils`) and the `TYPE_*`
-ints that map refers to (`QueryDeviceData`), and writes `devices/app_models.py`. The
-kind comes from the constant's name (`STATION`, `KEYPAD`, `LOCK`, `DOORBELL`, `SENSOR`,
-then `CAM`/`CAMERA`/`FLOODLIGHT`/`WALLLIGHT` → camera, anything else `other`); a prefix
-whose constants read as two kinds is left out and reported. Regenerate it with each app
-release, from the decompiled build:
+`scripts/gen_app_models.py` reads the app's model constants (one constant per serial
+prefix, e.g. `CAMERA2C = "T8113"`), its device-type map and the `TYPE_*` ints that map
+refers to, and writes `devices/app_models.py`. The kind comes from the constant's name
+(`SIREN` → `other`, then `STATION`, `KEYPAD`, `LOCK`, `DOORBELL`, `SENSOR`, then
+`CAM`/`CAMERA`/`FLOODLIGHT`/`WALLLIGHT` → camera, anything else `other`); a prefix whose
+constants read as two kinds is left out and reported. Regenerate it with each app
+release, from that build's source files:
 
 ```
-uv run python scripts/gen_app_models.py --constants <SnConstants.java> \
-    --type-map <SnUtils.java> --device-types <QueryDeviceData.java> --app-version 6.1.10
+uv run python scripts/gen_app_models.py --constants <model constants file> \
+    --type-map <device-type map file> --device-types <device-type ints file> --app-version <X.Y.Z>
 uv run python scripts/gen_device_matrix.py
 ```
+
+`--app-version` is required: it names the app build in the module and every row's
+evidence. The generator writes nothing (exit 1) when the inputs give no models, or
+fewer than 90 % of the rows the committed module holds; pass `--allow-shrink` when a
+smaller list is expected.
 
 A hand-written entry in `types.py` wins over the generated one. Write one when a model
 has more than the app's tables give: a curated name, an observed `device_type`, or
@@ -72,7 +77,7 @@ has more than the app's tables give: a curated name, an observed `device_type`, 
         name="eufyCam …",
         kind=DeviceKind.CAMERA,
         cloud_device_type=None,  # only if a source states it
-        evidence=Evidence(Support.DECLARED, "eufy app SnConstants"),
+        evidence=Evidence(Support.DECLARED, "eufy app model list: CAMERA_X"),
     ),
 )
 ```
@@ -97,6 +102,11 @@ by fetching its thing model and regenerating
 ([regenerate-models.md](regenerate-models.md)). Until then the client lists the
 model's settings read-only from the cloud. `Station.async_set_setting()` returns the
 `CommandOutcome` of the send; the next parameter dump shows whether the value held.
+
+A device's product code picks its file and handler variant: the cloud's `device_new_pn`,
+else the product a serial rule of `types.SERIAL_PRODUCT_CODES` names (a T8410 serial
+with `5` at index 6 is a T8410C), else the serial's catalogued 5-character model. A
+product whose serial differs from its siblings' only past the prefix gets a rule there.
 
 ## 4. Verify on hardware
 

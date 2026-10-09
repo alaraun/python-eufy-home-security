@@ -19,6 +19,7 @@ from eufy_home_security.devices.model_settings import (
     WritePath,
     bundled_codes,
     mode_table_settings,
+    product_code_of,
     settings_of,
 )
 from eufy_home_security.devices.settings import Scope, SettingUnit, mode_table_setting
@@ -62,6 +63,34 @@ def test_product_codes_match_case_insensitively() -> None:
 @pytest.mark.parametrize("code", ["T0000", "", "../T8160", "T8160.json"])
 def test_unknown_or_invalid_code_has_no_settings(code: str) -> None:
     assert dict(settings_of(code)) == {}
+
+
+@pytest.mark.parametrize(
+    ("serial", "code"),
+    [
+        ("T8410X5000000001", "T8410C"),
+        ("t8410x5000000001", "T8410C"),
+        ("T8410X4000000001", "T8410"),
+        ("T8420X6000000001", "T8420X"),
+        ("T8420X5000000001", "T8420"),
+        ("T8210X8000000001", "T8210C"),
+        ("T8210X7000000001", "T8210"),
+        ("T8520X8000000001", "T8510P"),
+        ("T8520X9000000001", "T8520P"),
+        ("T8520X7000000001", "T8520"),
+        ("T8W11P0000000001", "T8W11C"),
+        ("T8W11X0000000001", "T8W11"),
+        ("T8160X5000000001", "T8160"),
+        ("T8410X", "T8410"),
+        ("T0000X0000000001", None),
+    ],
+)
+def test_without_a_cloud_code_the_serial_names_the_product(serial: str, code: str | None) -> None:
+    assert product_code_of(None, serial) == code
+
+
+def test_the_cloud_code_wins_over_the_serial() -> None:
+    assert product_code_of("t8410", "T8410X5000000001") == "T8410"
 
 
 # ── decode ──────────────────────────────────────────────────────────────────

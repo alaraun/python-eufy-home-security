@@ -923,8 +923,8 @@ class Station:
         await asyncio.to_thread(_load_settings, {c for c in codes if c is not None})
 
     def _product_code(self, serial: str) -> str | None:
-        """``serial``'s product code: the cloud's ``device_new_pn`` (canonical), else the
-        serial's catalogued model; ``None`` when neither names one."""
+        """``serial``'s product code (:func:`~.devices.model_settings.product_code_of`):
+        the cloud's ``device_new_pn``, else the serial's rule or catalogued model."""
         new_pn = next(
             (
                 device.raw.get("device_new_pn")
@@ -1500,7 +1500,8 @@ class Station:
             raise ValueError("pass exactly one of device_sn or channel")
         target = self.channel_for(device_sn) if device_sn is not None else cast(int, channel)
         key = mode_action_key(GuardMode.parse(mode), scope_for_kind(self._kind_on(target)))
-        spec = mode_table_setting(key)
+        cloud = self._cloud_by_channel().get(target)
+        spec = mode_table_setting(key).for_device_type(cloud.device_type if cloud else None)
         spec.with_flag(0, flag, on)  # refuses an unknown flag before any traffic
         current = await self._read_back(spec.read_param, target)
         if current is None:

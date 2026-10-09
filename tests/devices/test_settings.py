@@ -13,6 +13,7 @@ from eufy_home_security.devices.settings import (
     Scope,
     SettingKind,
     SettingUnit,
+    mode_action_flags,
     mode_action_key,
     mode_delay_key,
     mode_table_setting,
@@ -140,6 +141,23 @@ def test_scope_default_channel() -> None:
         Scope.SENSOR: 0,
         Scope.SUB_DEVICE: 0,
     }
+
+
+@pytest.mark.parametrize(
+    ("device_type", "respond"), [(10, True), (127, True), (None, True), (2, False)]
+)
+def test_only_a_motion_sensor_s_actions_name_respond(
+    device_type: int | None, respond: bool
+) -> None:
+    flags = mode_action_flags(Scope.SENSOR, device_type)
+    assert ("motion_sensor_respond" in flags) is respond
+    assert {"notification", "station_alarm", "report_monitor_center"} <= set(flags)
+    action = mode_table_setting("sensor_action_away").for_device_type(device_type)
+    assert action.flags == flags
+    camera = mode_table_setting("camera_action_away")
+    assert camera.for_device_type(2) is camera
+    assert mode_action_flags(Scope.CAMERA, 2) == MODE_ACTION_FLAGS[Scope.CAMERA]
+    assert dict(mode_action_flags(Scope.SUB_DEVICE)) == {}
 
 
 def test_with_flag_keeps_every_other_bit() -> None:
