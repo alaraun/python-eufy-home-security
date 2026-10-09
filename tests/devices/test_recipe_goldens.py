@@ -13,7 +13,8 @@ from typing import Any
 
 import pytest
 
-from eufy_home_security.devices import recipes
+from eufy_home_security.devices import live_open, recipes
+from eufy_home_security.devices.model_settings import product_code_of
 from eufy_home_security.devices.recipes import ConnectType, HandlerVariant, Recipe
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "thing_models"
@@ -37,7 +38,10 @@ def _open_live_stream(case: Case, variant: HandlerVariant) -> Recipe:
         entry_type=payload["entryType"],
         camera_type=payload["cameraType"],
         stream_type=payload["streamType"],
-        ext_value=variant.live_open_ext_value,
+        ext_value=live_open.live_open(
+            product_code_of(None, case["device"]["device_sn"]), ConnectType.SINGLE
+        )
+        is not live_open.LiveOpen.SINGLE_NO_EXT,
     )
 
 

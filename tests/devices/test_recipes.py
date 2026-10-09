@@ -169,17 +169,8 @@ def test_pan_tilt_directions_are_the_cameras() -> None:
 
 
 @pytest.mark.parametrize(
-    ("product_code", "ext_value", "zoom_ivalue"),
-    [
-        ("T8410", False, False),
-        ("t8410c", False, True),
-        ("T8170", True, True),
-        ("T8160", True, True),
-        (None, True, True),
-    ],
+    ("product_code", "zoom_ivalue"),
+    [("T8410", False), ("t8410", False), ("T8410C", True), ("T8170", True), (None, True)],
 )
-def test_handler_variant_per_product(
-    product_code: str | None, ext_value: bool, zoom_ivalue: bool
-) -> None:
-    variant = handler_variant(product_code)
-    assert (variant.live_open_ext_value, variant.ptz_zoom_ivalue) == (ext_value, zoom_ivalue)
+def test_handler_variant_per_product(product_code: str | None, zoom_ivalue: bool) -> None:
+    assert handler_variant(product_code).ptz_zoom_ivalue is zoom_ivalue

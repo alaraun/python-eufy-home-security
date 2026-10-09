@@ -60,6 +60,7 @@ from .._logging import (
     wire_logger,
 )
 from ..cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
+from ..devices.live_open import LiveOpen
 from ..devices.param_info import ParamInfo, param_info
 from ..devices.recipes import (
     ConnectType,
@@ -2717,7 +2718,7 @@ class StationSession:
         first_frame_timeout: float | None = None,
         idle_timeout: float | None = None,
         wait: bool = False,
-        live_ext_value: bool = True,
+        live_open: LiveOpen | None = None,
         media_key: MediaKeyType = MediaKeyType.RSA,
     ) -> MediaStream:
         """Open a camera's live video and audio. This wakes a battery camera.
@@ -2734,28 +2735,36 @@ class StationSession:
         or with ``wait`` waits for it to close. Timeouts default to
         :data:`MEDIA_LIVE_FIRST_FRAME_TIMEOUT` and :data:`MEDIA_IDLE_TIMEOUT`.
 
-        A standalone device (:attr:`standalone`) gets its handler's open, a 1700
-        frame with sub-command 1000 (``extValue`` left out with ``live_ext_value``
-        False, see :class:`~..devices.recipes.HandlerVariant`), and a bare 1004 stop.
+        ``live_open`` is the open the device's handler sends
+        (:func:`~..devices.live_open.library_live_open`; :meth:`~..station.Station.async_open_live`
+        passes it). A standalone device (:attr:`standalone`) gets a 1700 frame with
+        sub-command 1000 (:attr:`~..devices.live_open.LiveOpen.SINGLE`, the default, or
+        without ``extValue``), or the station open below
+        (:attr:`~..devices.live_open.LiveOpen.STATION`), and a bare 1004 stop.
         A HomeBase 3's camera gets the app's T8030 1003 in a ``DeviceMsgBean`` and a
         1004 ``DeviceMsgBean`` naming the channel; a camera behind any other station
         (a HomeBase 2) the camera handlers' 1003 without the T8030 fields
         (:func:`~..devices.recipes.open_live_stream_station`) and a bare 1004 carrying
-        the channel.
+        the channel. A 1700 ``live_open`` behind a station raises :class:`UnsupportedError`.
 
         ``media_key`` is the key pair the open offers (its ``key`` field): RSA, or ECC,
         which the app offers a device whose param 1103 is 128 or more
         (:func:`~.media.media_key_type_for`; :meth:`~..station.Station.async_open_live`
         picks it so). The station protects the stream for the key it is offered.
         """
-        if self.standalone:
+        single = live_open in (None, LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT)
+        if not self.standalone and live_open not in (None, LiveOpen.STATION):
+            raise UnsupportedError(
+                f"the {live_open.value} live open behind a station is not implemented"
+            )
+        if self.standalone and single:
 
             def open_standalone(account_id: str, key_hex: str) -> tuple[int, bytes]:
                 recipe = open_live_stream_single(
                     channel=channel,
                     account_id=account_id,
                     key_hex=key_hex,
-                    ext_value=live_ext_value,
+                    ext_value=live_open is not LiveOpen.SINGLE_NO_EXT,
                 )
                 return recipe.cmd, recipe.plaintext()
 

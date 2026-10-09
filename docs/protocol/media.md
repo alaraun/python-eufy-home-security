@@ -304,6 +304,32 @@ DeviceMsgBean and subheader as above, with the payload
 - The library sends this open and stop to every station whose serial is not a T8030's
   (`StationSession.homebase3`). Not verified on a HomeBase 2.
 
+### Which open a device gets **[declared]**
+
+The open is the device's own handler's (`open_live_stream` in its `<PN>Handle.mix.js`),
+and it depends on how the device is reached. `scripts/gen_live_open.py` runs every
+cached handler standalone and behind each station kind and records which library open
+reproduces it (`devices/_live_open_data.py`, `devices.live_open`). From the eufy app
+6.1.10 handlers (78 products with a live open):
+
+| handler's open | standalone | behind a HomeBase 2 / 3 |
+|---|---|---|
+| 1700/1000 with `extValue` (`single`) | 3 products | — / 2 |
+| 1700/1000 without `extValue` (`single_no_ext`) | 56 | 22 / 23 |
+| 1350/1003 `DeviceMsgBean`, plain payload (`station`) | 1 | 50 / 47 |
+| another open (dual-lens `stitch_mode`, bare 1003 `cryptoKey`, version-dependent) | 18 | 6 / 6 |
+
+Behind a NVR, a T9000, a T7000 or a HomeBase 4 (and on its own for a T8223, T8224, T8215
+or T8172) the handlers mark their requests `webRtc` (the handler's `isSupportWebRtc` lists
+those parents): the app sends them over WebRTC, which the library does not implement. A
+request the handler does not mark follows the parent's `is_connect_webrtc` (2: WebRTC, 0:
+P2P, 1: per device, through `is_connect_webrtc_sub_device_list`).
+The library sends the recorded open: on the device's own session every one of the three;
+behind a station only `station` (a 1700 open behind a station needs the route the app
+takes to the device, not implemented). Any other open raises `UnsupportedError` before
+anything is sent, and `Station.live_support` grades it `UNKNOWN`. A product the table does
+not list gets the defaults: `single` standalone, `station` behind a station.
+
 ### Standalone device: open 1700/1000, stop bare 1004, ping 1139 **[verified]**
 
 A standalone camera (its own station, e.g. the T8170 Battery SoloCam) takes the 1003

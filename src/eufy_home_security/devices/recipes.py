@@ -223,8 +223,6 @@ LIVE_OPEN_TIMEOUT: Final = 15.0
 class HandlerVariant:
     """Where a product's handler departs from the T8170's recipes."""
 
-    live_open_ext_value: bool = True
-    """The standalone live open (1700/1000) carries ``extValue`` 1000."""
     ptz_zoom_ivalue: bool = True
     """A pan/tilt step (1700/6030) carries ``zoom`` and ``ivalue`` -1."""
 
@@ -234,12 +232,12 @@ DEFAULT_VARIANT: Final = HandlerVariant()
 
 HANDLER_VARIANTS: Final[Mapping[str, HandlerVariant]] = MappingProxyType(
     {
-        "T8410": HandlerVariant(live_open_ext_value=False, ptz_zoom_ivalue=False),
-        "T8410C": HandlerVariant(live_open_ext_value=False),
+        "T8410": HandlerVariant(ptz_zoom_ivalue=False),
     }
 )
 """Per product code, the recipe variant its handler declares (declared from the
-T8410 and T8410C handlers' ``open_live_stream`` and ``ptz_action_control``)."""
+T8410 handler's ``ptz_action_control``). Which live open a product's handler sends is
+generated data: :mod:`.live_open`."""
 
 
 def handler_variant(product_code: str | None) -> HandlerVariant:
@@ -264,7 +262,7 @@ def open_live_stream_single(
 
     ``key_hex`` is the RSA-1024 modulus of the stream key, ``account_id`` the
     station owner's id. ``ext_value`` False leaves out ``extValue``
-    (:attr:`HandlerVariant.live_open_ext_value`). Verified on a T8170: the
+    (:attr:`~.live_open.LiveOpen.SINGLE_NO_EXT`). Verified on a T8170: the
     HomeBase's 1350/1003 open is taken but never streams there.
     """
     params: dict[str, Any] = {

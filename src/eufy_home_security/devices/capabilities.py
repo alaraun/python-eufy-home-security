@@ -8,7 +8,7 @@ capability is ``UNKNOWN`` — it degrades to "not offered", never to a guess.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
@@ -26,8 +26,10 @@ from ..models import (
     GuardMode,
 )
 from ..p2p.params import GUARD_MODE_PARAM
+from .live_open import app_version, library_live_open
+from .recipes import PARENT_CONNECT_TYPES, ConnectType
 from .support import Evidence, Support
-from .types import MODELS, DeviceKind, model_for_serial
+from .types import MODELS, DeviceKind, model_for_serial, serial_product_code
 
 
 class Capability(StrEnum):
@@ -464,14 +466,68 @@ def kind_from_params(params: Mapping[int, object]) -> DeviceKind | None:
     return kinds[0] if len(kinds) == 1 else None
 
 
+def own_profile(serial: str) -> DeviceProfile | None:
+    """The hand-written profile of a serial's model (:data:`PROFILES`), else the
+    generic profile of its kind; ``None`` for a serial whose model is not catalogued."""
+    model = model_for_serial(serial)
+    if model is None:
+        return None
+    return PROFILES.get(model.model, FALLBACK_PROFILES[model.kind])
+
+
+_LIVE_CAPABILITIES: Final = (Capability.LIVE_STREAM, Capability.LIVE_KEYFRAME)
+_CONNECT_TYPES: Final = (ConnectType.SINGLE, *dict.fromkeys(PARENT_CONNECT_TYPES.values()))
+
+
+_LIVE_PROFILES: dict[tuple[int, str], DeviceProfile] = {}
+
+
+def _with_live(profile: DeviceProfile, product_code: str) -> DeviceProfile:
+    """Memoised :func:`_build_with_live`, keyed by the (module-level, immortal) profile."""
+    key = (id(profile), product_code)
+    if key not in _LIVE_PROFILES:
+        _LIVE_PROFILES[key] = _build_with_live(profile, product_code)
+    return _LIVE_PROFILES[key]
+
+
+def _build_with_live(profile: DeviceProfile, product_code: str) -> DeviceProfile:
+    """``profile`` with live video graded ``DECLARED`` where the library sends the open the
+    product's handler sends under some connect type (:mod:`.live_open`); an entry the
+    profile grades itself (other than ``UNKNOWN``) stands. ``profile`` itself when
+    nothing changes."""
+    open_entries = [
+        c
+        for c in _LIVE_CAPABILITIES
+        if profile.capabilities.get(c, Evidence(Support.UNKNOWN, "")).support is Support.UNKNOWN
+    ]
+    where = [ct.value for ct in _CONNECT_TYPES if library_live_open(product_code, ct) is not None]
+    if not where or not open_entries:
+        return profile
+    evidence = Evidence(
+        Support.DECLARED,
+        f"the {product_code} handler's open_live_stream is the library's open under "
+        f"{', '.join(where)} (eufy app {app_version()})",
+        "depends on the station: Station.live_support answers for one device and station",
+    )
+    capabilities = dict(profile.capabilities)
+    capabilities.update(dict.fromkeys(open_entries, evidence))
+    return replace(profile, capabilities=MappingProxyType(capabilities))
+
+
 def profile_for_serial(serial: str) -> DeviceProfile | None:
     """The profile for a serial's model.
 
     A model in the catalog without its own profile gets the generic profile for
     its kind; a serial whose model is not catalogued at all returns ``None``
-    (use ``FALLBACK_PROFILES`` for the kind the caller believes it has).
+    (use ``FALLBACK_PROFILES`` for the kind the caller believes it has). Live video
+    (:attr:`Capability.LIVE_STREAM`, :attr:`Capability.LIVE_KEYFRAME`) the profile does not
+    grade is ``DECLARED`` when the library sends the product handler's live open under
+    some connect type; whether it does under one station is
+    :meth:`~..station.Station.live_support`.
     """
-    model = model_for_serial(serial)
-    if model is None:
+    profile = own_profile(serial)
+    if profile is None:
         return None
-    return PROFILES.get(model.model, FALLBACK_PROFILES[model.kind])
+    model = model_for_serial(serial)
+    code = serial_product_code(serial) or (model.model if model is not None else None)
+    return profile if code is None else _with_live(profile, code)

@@ -20,8 +20,11 @@ from .devices.capabilities import (
     Capability,
     DeviceProfile,
     kind_from_params,
+    own_profile,
     profile_for_serial,
 )
+from .devices.live_open import LiveOpen, has_live_open, library_live_open
+from .devices.live_open import app_version as live_open_app_version
 from .devices.model_settings import (
     Setting,
     SettingKind,
@@ -37,11 +40,13 @@ from .devices.recipes import (
     MAX_PRESET_SLOTS,
     MAX_ZOOM,
     MIN_ZOOM,
+    ConnectType,
     PanTilt,
     PresetPosition,
     Recipe,
     RecipeCommand,
     SubCommand,
+    connect_type,
     delete_preset,
     free_preset_slot,
     goto_preset,
@@ -1647,20 +1652,22 @@ class Station:
         return await self._session_live(ch, wait=wait, **kwargs)
 
     async def _session_live(self, channel: int, **kwargs: Any) -> MediaStream:
-        """The session's live open on ``channel``, with the recipe variant of this
-        station's own product (a standalone device's handler, see
-        :func:`~.devices.recipes.handler_variant`)."""
-        variant = handler_variant(self._product_code(self.serial))
+        """The session's live open on ``channel``: the open the device's handler sends
+        (:meth:`live_open`) and the media key the app offers (:meth:`media_key_type`).
+        A device whose handler's open the library does not implement raises
+        :class:`~.exceptions.UnsupportedError` before anything is sent."""
+        device = self._device_on_channel(channel)
+        mode = None
+        if device is not None:
+            mode = self._live_open_of(device.device_sn)
+            if mode is None and has_live_open(self._product_code(device.device_sn)):
+                raise UnsupportedError(self._live_unsupported_reason(device.device_sn))
         kwargs.setdefault("media_key", self.media_key_type(channel))
-        return await self.session.async_open_live(
-            channel, live_ext_value=variant.live_open_ext_value, **kwargs
-        )
+        return await self.session.async_open_live(channel, live_open=mode, **kwargs)
 
-    def media_key_type(self, channel: int) -> MediaKeyType:
-        """The media key the app offers the camera on ``channel``: ECC when the camera's
-        cloud param 1103 is 128 or more, else RSA (:func:`~.p2p.media.media_key_type_for`).
-        A channel without a known device gets RSA."""
-        device = next(
+    def _device_on_channel(self, channel: int) -> CloudDevice | None:
+        """The device addressed on ``channel`` (the station itself when standalone)."""
+        return next(
             (
                 d
                 for d in (self.device, *self.sub_devices)
@@ -1668,6 +1675,60 @@ class Station:
             ),
             None,
         )
+
+    def _connect_type_of(self, device_sn: str) -> ConnectType:
+        """How the app reaches ``device_sn``: on its own (this station's own serial when
+        standalone) or through this station."""
+        if device_sn == self.serial and self.is_standalone:
+            return ConnectType.SINGLE
+        return connect_type(self.serial, device_sn)
+
+    def _live_open_of(self, device_sn: str) -> LiveOpen | None:
+        """The live open the library sends ``device_sn``."""
+        return library_live_open(self._product_code(device_sn), self._connect_type_of(device_sn))
+
+    def _live_unsupported_reason(self, device_sn: str) -> str:
+        code = self._product_code(device_sn)
+        connect = self._connect_type_of(device_sn)
+        return (
+            f"the eufy app opens a {code} live stream "
+            f"{'on its own' if connect is ConnectType.SINGLE else f'behind a {connect.value} station'} "
+            "in a way this library does not implement"
+        )
+
+    def live_support(self, device_sn: str) -> Evidence:
+        """How well a live stream of ``device_sn`` is supported (live view, live image).
+
+        :attr:`~.devices.support.Support.VERIFIED` from the model's profile; else
+        ``DECLARED`` when the library sends the open the device's handler sends
+        under this station (:func:`~.devices.live_open.library_live_open`, generated from
+        the eufy app's handlers); else the model profile's own entry, or ``UNKNOWN`` with
+        the reason.
+        """
+        profile = own_profile(device_sn)
+        listed = None if profile is None else profile.capabilities.get(Capability.LIVE_STREAM)
+        if listed is not None and listed.support is Support.VERIFIED:
+            return listed
+        code = self._product_code(device_sn)
+        mode = self._live_open_of(device_sn)
+        if mode is not None:
+            connect = self._connect_type_of(device_sn)
+            return Evidence(
+                Support.DECLARED,
+                f"the {code} handler's open_live_stream under {connect.value} is the "
+                f"library's {mode.value} open (eufy app {live_open_app_version()})",
+            )
+        if has_live_open(code):
+            return Evidence(Support.UNKNOWN, self._live_unsupported_reason(device_sn))
+        return listed or Evidence(
+            Support.UNKNOWN, f"no live open recorded for {code or 'this model'}"
+        )
+
+    def media_key_type(self, channel: int) -> MediaKeyType:
+        """The media key the app offers the camera on ``channel``: ECC when the camera's
+        cloud param 1103 is 128 or more, else RSA (:func:`~.p2p.media.media_key_type_for`).
+        A channel without a known device gets RSA."""
+        device = self._device_on_channel(channel)
         return media_key_type_for(None if device is None else device.camera_info)
 
     async def async_open_recording(
