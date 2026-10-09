@@ -1,10 +1,11 @@
-"""The cloud hosts and login scopes of ``cloud.const``."""
+"""The cloud hosts, login scopes and firmware-kit types of ``cloud.const``."""
 
 from __future__ import annotations
 
 import pytest
 
 from eufy_home_security.cloud import const
+from eufy_home_security.testing import SYNTHETIC
 
 
 def test_each_region_has_its_own_security_host() -> None:
@@ -22,3 +23,8 @@ def test_a_login_scope_names_its_region_and_country(
 ) -> None:
     assert const.scope(region, country) == scope
     assert (const.scope_region(scope), const.scope_country(scope)) == (region, country)
+
+
+def test_firmware_ota_type_is_the_station_kit() -> None:
+    assert const.firmware_ota_type(SYNTHETIC.station_sn) == "T8030_Kit"
+    assert const.firmware_ota_type("T7000P1000000001") == "T7000_Kit"

@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from eufy_home_security.cloud.const import firmware_ota_type
 from eufy_home_security.cloud.models import (
     CACHED_DEVICE_FIELDS,
     CACHED_MEMBER_FIELDS,
@@ -382,11 +381,6 @@ def test_firmware_update_from_api_parses_the_package() -> None:
     assert update.download_url == "https://cdn.eufylife.com/fw/x.bin"
     assert update.size_bytes == 42
     assert update.forced is True
-
-
-def test_firmware_ota_type_is_the_station_kit() -> None:
-    assert firmware_ota_type("T8030P2000012345") == "T8030_Kit"
-    assert firmware_ota_type("T7000P1000000001") == "T7000_Kit"
 
 
 def test_a_security_station_entry_reads_like_a_house_list_station() -> None:
