@@ -69,7 +69,11 @@ async def test_warm_start_needs_no_cloud() -> None:
   `async_cloud_status()` reports the hold-off and later calls are refused locally.
 - **Cloud requests.** `calls` lists each request that reached the cloud, in order:
   `"login"`, `"devices"`, `"owner:<serial>"`, `"cipher:<serial>"`, `"dsk:<serial>"`,
-  `"push_token"`, `"things"`, with serials redacted. A cached answer adds nothing.
+  `"push_token"`, `"things"`, `"houses"`, `"house:<house_id>"`, `"house_invites"`,
+  `"device_invites"`, `"security_stations"`, `"security_devices"`, `"last_login_code"`,
+  `"client_country"`, with serials redacted. A request to a region other than
+  `FakeCloud.region` has `@<region>` appended (`"login@us"`, `"devices@us"`). A cached
+  answer adds nothing.
   `cipher_ids_requested` lists the cipher ids those `get_ciphers` requests named.
 - **Cold or warm.** A `MemoryStore()` is a cold start (one login, one device list, one
   key per station); `warm_store(...)` is a restart. Pass it the `country`, `region` and
