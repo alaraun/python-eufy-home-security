@@ -1393,8 +1393,10 @@ class EufyCloudApi:
     ) -> list[CloudDevice]:
         """Every device on the account (``app/house/get_devs_list``), cached.
 
-        Returns the cached list unless ``refresh`` or ``rescan_regions`` is set or
-        nothing is cached (``rescan_regions``: see :meth:`async_fetch_devices`). A
+        Returns the cached list unless ``refresh`` or ``rescan_regions`` is set,
+        nothing is cached, or the cache does not match the login scopes: a scope of
+        :meth:`regions_to_list` was never listed, or a cached device names a scope that
+        is no longer one (``rescan_regions``: see :meth:`async_fetch_devices`). A
         refresh that cannot reach the cloud (a network error or a throttle) falls back
         to the cache when there is one, so a Home Assistant restart during a cloud
         outage still comes up. A refusal from the cloud itself (a kick-out, a key
@@ -1403,7 +1405,7 @@ class EufyCloudApi:
         """
         if not (refresh or rescan_regions):
             cached = self._cache.cached_devices()
-            if cached is not None:
+            if cached is not None and self._cache_covers_scopes(cached):
                 _LOGGER.debug("device list from the cache (%d devices)", len(cached))
                 return [CloudDevice.from_api(d) for d in cached]
         try:
@@ -1414,6 +1416,22 @@ class EufyCloudApi:
                 raise
             _LOGGER.warning("device list refresh failed (%s); using the cached list", err)
             return [CloudDevice.from_api(d) for d in cached]
+
+    def _cache_covers_scopes(self, cached: Sequence[Mapping[str, Any]]) -> bool:
+        """Whether ``cached`` answers for the scopes in use: every scope of
+        :meth:`regions_to_list` has a listing and every device a current scope."""
+        listings = self._listings()
+        missing = [r for r in self.regions_to_list() if r not in listings]
+        scopes = self.login_scopes()
+        stale = {str(d.get(REGION_KEY)) for d in cached if d.get(REGION_KEY) not in scopes}
+        if missing or stale:
+            _LOGGER.debug(
+                "cached device list not used: scope(s) %s never listed, %s no longer in use",
+                ", ".join(missing) or "none",
+                ", ".join(sorted(stale)) or "none",
+            )
+            return False
+        return True
 
     async def async_fetch_devices(self, *, rescan_regions: bool = False) -> list[CloudDevice]:
         """The device list fetched from the cloud now, cached; every failure raises.

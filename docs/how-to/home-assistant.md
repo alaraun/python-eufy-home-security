@@ -310,6 +310,10 @@ device, the *login scope* that listed it: the region (`eu`) for the login countr
   client option `EufySecurity(scan_regions=True)` (every device-list refresh asks every
   scope; one whose session lapsed costs a login). With every scope suspended a refresh
   sends nothing and returns the cached, empty list. There is no automatic retry.
+- The cached device list is used only while it matches the scopes: a scope never listed
+  (an extra country added, the login country moved to another home region, an override
+  dropped) or a cached device of a scope no longer in use (a country removed) makes the
+  next `async_discover()` fetch the list once.
 - Every cloud call about a device goes to its scope's session: cipher key, DSK, firmware
   check. The push token is registered in every scope that has devices.
 - `EufySecurity(region="eu" | "us")` pins the login country's scope to that region and

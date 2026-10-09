@@ -1126,13 +1126,19 @@ async def test_discover_before_login_keeps_the_stored_cache() -> None:
     """A cloud-backed call before async_login must read the store, not overwrite it."""
     from .cloud.conftest import FakeMega  # noqa: PLC0415 - the cloud harness, only here
 
-    station = {"device_sn": SYNTHETIC.station_sn, "device_type": 18, "p2p_did": SYNTHETIC.did}
+    station = {
+        "device_sn": SYNTHETIC.station_sn,
+        "device_type": 18,
+        "p2p_did": SYNTHETIC.did,
+        "cloud_region": "eu",
+    }
     store = MemoryStore(
         {
             "version": CACHE_VERSION,
             "account": SYNTHETIC.email,
             "openudid": "0011223344556677",
             "devices": [station],
+            "cloud": {"listed": {"eu": {"devices": 1, "at": 1.0}, "us": {"devices": 0, "at": 1.0}}},
         }
     )
     fake_mega = FakeMega()

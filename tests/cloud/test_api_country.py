@@ -383,3 +383,32 @@ async def test_an_extra_country_logs_in_under_its_own_install_id(
     assert install_ids[0] == cache.openudid != install_ids[1]
     assert cache.section("cloud")["install_ids"] == {"eu:CH": install_ids[1]}
     assert {d.device_sn for d in devices} == {SYNTHETIC.station_sn, _EXTRA_STATION_SN}
+
+
+@pytest.mark.parametrize(
+    ("before", "after"), [(["EE"], ["EE", "CH"]), (["EE", "CH"], ["EE"])], ids=["added", "removed"]
+)
+async def test_a_cached_list_that_misses_or_outlives_a_scope_is_fetched_again(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    before: list[str],
+    after: list[str],
+) -> None:
+    """A cached list is served only when it covers every scope to list and no other."""
+    _with_an_extra_country(fake_mega)
+    listed = {SYNTHETIC.station_sn} | ({_EXTRA_STATION_SN} if "CH" in after else set())
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country=before)
+        await api.async_login()
+        await api.async_get_devices()
+        fake_mega.region_calls.clear()
+        api = _api(http, cache, country=after)
+        await api.async_login()
+        devices = await api.async_get_devices()
+        assert {d.device_sn for d in devices} == listed
+        assert len(_requests(fake_mega, "devices")) == len(after)
+        fake_mega.region_calls.clear()
+        assert {d.device_sn for d in await api.async_get_devices()} == listed
+    assert _requests(fake_mega, "devices") == []  # the refetched list is a hit
