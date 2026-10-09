@@ -726,7 +726,8 @@ class EufyCloudApi:
     @property
     def login_country(self) -> LoginCountry | None:
         """The country logins use (see the class docstring), None while unknown: this
-        process's lookup, else the cached one. No lookup happens here."""
+        process's lookup, else the cached one unless it was cached for another
+        ``country`` option. No lookup happens here."""
         if self._country_resolved:
             return self._login_country
         cached = _cached_country(self._cache)
