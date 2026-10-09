@@ -56,9 +56,17 @@ async def test_warm_start_needs_no_cloud() -> None:
 - **Cloud answers.** `FakeCloud` fields are live: change `devices`, `owner_ids` or
   `cipher_keys` between steps. `cipher_ids_held` limits the cipher ids the cloud holds
   a key for (None: any); a request for another id gets the empty answer, which the
-  library raises as `CipherUnavailableError`. Set `login_error` to the error a password login meets;
-  a `RateLimitedError` (or `LoginLimitedError`) also starts the hold-off the real answer
-  would, so `async_cloud_status()` reports it.
+  library raises as `CipherUnavailableError`. Set `login_error` to the error a password login meets,
+  and `call_errors` to the errors the next other requests meet, in order.
+- **Cloud refusals.** `FakeCloud.refusal(status, code, message, retry_after=)` is an HTTP
+  answer: served from `call_errors` or `login_error`, it runs through the library's own
+  answer handling, so a 401 with the takeover code latches the session, another 401 costs
+  one login and a retry, a 463 one key exchange and a retry, and a 429 starts the request
+  hold-off (the longer of one hour and its `Retry-After`). A `RateLimitedError` (or
+  `LoginLimitedError`) whose `code` is a throttle body code (`26145`, `100028`, …) or 429
+  is that answer too: the library's hold-off for the code starts and the library's error is
+  raised. One without such a code holds off for its own `retry_after`. Either way
+  `async_cloud_status()` reports the hold-off and later calls are refused locally.
 - **Cloud requests.** `calls` lists each request that reached the cloud, in order:
   `"login"`, `"devices"`, `"owner:<serial>"`, `"cipher:<serial>"`, `"dsk:<serial>"`,
   `"push_token"`, `"things"`, with serials redacted. A cached answer adds nothing.
