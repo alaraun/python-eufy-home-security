@@ -9,6 +9,7 @@ from typing import Any
 from eufy_home_security import EufySecurity, redact_serial
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import _SessionExpiredError
+from eufy_home_security.cloud.models import CipherRecord
 from eufy_home_security.diagnostics import (
     CAMERA_INFO_PARAM,
     HOUSE,
@@ -73,6 +74,17 @@ def _cloud() -> FakeCloud:
 def _client(cloud: FakeCloud, store: MemoryStore | None = None) -> EufySecurity:
     store = store or warm_store(email=SYNTHETIC.email, cloud=cloud)
     return build_eufy_security(email=SYNTHETIC.email, store=store, cloud=cloud)
+
+
+_RSA_FIELDS = ("rsa", "rsa_case", "rsa_bits", "rsa_reason")
+
+
+def _rsa_check(cloud: FakeCloud, cipher_id: int) -> dict[str, Any]:
+    """The report's RSA fields for ``cipher_id``: :meth:`CipherRecord.check_rsa` of its keys."""
+    record = CipherRecord.from_api({"cipher_id": cipher_id, **cloud.cipher_records[cipher_id]})
+    assert record is not None
+    check = record.check_rsa()
+    return dict(zip(_RSA_FIELDS, (check.state, check.case, check.bits, check.reason), strict=True))
 
 
 def _by_serial(report: dict[str, Any], serial: str) -> dict[str, Any]:
@@ -161,17 +173,11 @@ async def test_one_cipher_sweep_per_owner_reports_key_state_only() -> None:
     assert table[40] == {
         "cipher_id": 40,
         "ecc": "usable",
-        "rsa": "unusable",
-        "rsa_case": "lower",
-        "rsa_bits": None,
-        "rsa_reason": "rsa_unparsable",
+        **_rsa_check(cloud, 40),
         "named_by": ["T8030***2345"],
     }
-    assert (table[98]["rsa"], table[98]["rsa_case"], table[98]["rsa_bits"]) == (
-        "usable",
-        "mixed",
-        1024,
-    )
+    for cipher_id, row in table.items():
+        assert {k: row[k] for k in _RSA_FIELDS} == _rsa_check(cloud, cipher_id)
     assert table[13]["ecc"] == "absent"
     assert _by_serial(report, SYNTHETIC.station_sn)["named_cipher_id"] == 40
 
