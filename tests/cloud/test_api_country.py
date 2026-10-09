@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -13,7 +14,7 @@ from aioresponses import aioresponses
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.models import LoginCountry
-from eufy_home_security.exceptions import CloudApiError, CommunicationError
+from eufy_home_security.exceptions import CloudApiError, CommunicationError, RateLimitedError
 from eufy_home_security.storage import SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
@@ -178,6 +179,59 @@ async def test_no_login_while_the_login_country_lookup_does_not_answer(
     assert _login_abs(fake_mega) == ["EE"]
     assert api.login_country is not None
     assert api.login_country.home_region == "eu"
+
+
+_ESTIMATE_DOMAIN_URL = f"https://{const.mega_host('eu')}{const.ESTIMATE_DOMAIN_PATH}"
+
+
+@pytest.mark.parametrize(
+    ("answer", "error"),
+    [
+        ({"exception": aiohttp.ClientConnectionError("down")}, CommunicationError),
+        ({"status": 503, "body": ""}, CommunicationError),
+        ({"status": 200, "body": "<html>blocked</html>"}, CommunicationError),
+        ({"status": 200, "body": b"\xff\xfe\xfa"}, CommunicationError),
+        ({"status": 429, "body": "", "headers": {"Retry-After": "120"}}, RateLimitedError),
+        (
+            {"status": 200, "body": json.dumps({"code": int(const.CloudCode.API_REQUEST_LIMIT)})},
+            RateLimitedError,
+        ),
+    ],
+    ids=["network", "http-503", "not-json", "not-text", "http-429", "throttle-code"],
+)
+async def test_a_home_region_lookup_without_an_answer_spends_no_login(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    answer: dict[str, Any],
+    error: type[Exception],
+) -> None:
+    """A throttle starts the request hold-off, as on any other call."""
+    with aioresponses() as mock:
+        mock.post(_ESTIMATE_DOMAIN_URL, **answer)
+        fake_mega.install(mock)
+        api = _api(http, cache, country="EE")
+        with pytest.raises(error):
+            await api.async_login()
+    assert _login_abs(fake_mega) == []
+    assert (api.cloud_status().request_hold_off is not None) is (error is RateLimitedError)
+
+
+async def test_a_home_region_lookup_refused_with_a_body_code_keeps_the_option_without_a_home(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    fake_mega.error_bodies["estimate_domain"] = [(200, {"code": _PLAIN_REFUSAL, "msg": "error"})]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country="EE")
+        await api.async_login()
+    assert api.login_country == LoginCountry(
+        code="EE", source=const.COUNTRY_SOURCE_OPTION, home_region=None
+    )
+    assert list(zip(_requests(fake_mega, "login"), _login_abs(fake_mega), strict=True)) == [
+        ("eu", "EE"),
+        ("us", "EE"),
+    ]
 
 
 async def test_a_reauthentication_logs_in_on_the_home_region_of_a_country_not_yet_known(

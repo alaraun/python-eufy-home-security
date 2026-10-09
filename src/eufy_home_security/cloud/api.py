@@ -87,6 +87,8 @@ _LOGGER = logging.getLogger(__name__)
 _WIRE = wire_logger("cloud")
 
 _SUCCESS: Final = int(const.CloudCode.SUCCESS)
+_HTTP_429_THROTTLE: Final = const.Throttle(login_only=False, seconds=const.REQUEST_HOLD_OFF_SECONDS)
+"""The hold-off an HTTP 429 answer starts (a request throttle)."""
 
 # The account-wide house device-list body (the house-scoped one names a ``house_id``).
 _ACCOUNT_DEVICES_BODY: Final[Mapping[str, Any]] = MappingProxyType({"device_sn": ""})
@@ -879,21 +881,25 @@ class EufyCloudApi:
         """The region whose cluster ``estimate_domain`` names for ``country``; None when
         it names another kind of domain (not a eufy country). Raises
         :class:`CommunicationError` or :class:`ProtocolError` when it does not answer."""
+        region = self._region_override or const.DEFAULT_REGION
         data = await self._post_plain(
-            const.mega_host(self._region_override or const.DEFAULT_REGION),
+            const.mega_host(region),
             const.ESTIMATE_DOMAIN_PATH,
             {"ab": country, "mode": const.ESTIMATE_DOMAIN_MODE},
+            region=region,
         )
         domain = data.get("domain")
         return const.region_from_mega_domain(domain if isinstance(domain, str) else None)
 
     async def _post_plain(
-        self, host: str, path: str, payload: Mapping[str, Any]
+        self, host: str, path: str, payload: Mapping[str, Any], *, region: str
     ) -> Mapping[str, Any]:
-        """POST a plaintext JSON body with no identity; the answer's ``data`` object.
+        """POST a plaintext JSON body with no identity to ``region``'s cluster; the
+        answer's ``data`` object.
 
-        Nothing is sent while a request hold-off runs. A non-zero body code raises
-        :class:`CloudApiError`.
+        Nothing is sent while a request hold-off runs. HTTP 429 or a throttle body code
+        starts a hold-off as on :meth:`_call`; an answer that is no JSON object raises
+        :class:`CommunicationError`, another non-zero body code :class:`CloudApiError`.
         """
         self._raise_if_held_off(login=False)
         import aiohttp  # noqa: PLC0415 - deferred so a cache-only run never imports it
@@ -914,15 +920,28 @@ class EufyCloudApi:
                 data=json.dumps(dict(payload)),
                 timeout=aiohttp.ClientTimeout(total=const.HTTP_TIMEOUT_SECONDS),
             ) as resp:
-                status, text = resp.status, await resp.text()
-        except (aiohttp.ClientError, TimeoutError) as exc:
+                status = resp.status
+                retry_after = _retry_after(resp.headers.get("Retry-After"))
+                text = await resp.text()
+        except (aiohttp.ClientError, TimeoutError, UnicodeDecodeError) as exc:
             raise CommunicationError(f"cloud request to {path} failed: {exc}") from exc
         _LOGGER.debug("← %s HTTP %s: %s", path, status, text[:500])
+        if status == const.HTTP_TOO_MANY_REQUESTS:
+            await self._hold_off(
+                _HTTP_429_THROTTLE, status, "HTTP 429", path, region=region, retry_after=retry_after
+            )
         if status != 200:
             raise classify_refusal(status, _loose_code(text), _message(_loose_object(text)), path)
-        parsed = _loose_object(text)
+        try:
+            parsed = json.loads(text)
+        except ValueError as exc:
+            raise CommunicationError(f"cloud response to {path} was not JSON") from exc
+        if not isinstance(parsed, dict):
+            raise CommunicationError(f"cloud response to {path} was not an object")
         code = _body_code(parsed.get("code", _SUCCESS), path)
         if code != _SUCCESS:
+            if (throttle := const.THROTTLE_CODES.get(code)) is not None:
+                await self._hold_off(throttle, code, _message(parsed), path, region=region)
             raise CloudApiError(code, _message(parsed), endpoint=path)
         return _mapping(parsed.get("data") or {}, path)
 
@@ -2586,7 +2605,7 @@ class EufyCloudApi:
 
         if status == const.HTTP_TOO_MANY_REQUESTS:
             await self._hold_off(
-                const.Throttle(login_only=False, seconds=const.REQUEST_HOLD_OFF_SECONDS),
+                _HTTP_429_THROTTLE,
                 status,
                 "HTTP 429",
                 path,
