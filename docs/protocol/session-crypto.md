@@ -123,10 +123,16 @@ key = RSA-PKCS#1-v1.5-decrypt(private_key, ciphertext) up to its first NUL, firs
   the library takes a key that is not 16 printable bytes as a handshake failure.
 - A `private_key` whose bytes do not parse as a key at all is distinct from a wrong
   key: the cloud serves the same bytes on every fetch, so re-fetching cannot help. The
-  library raises `CipherUnusableError` (cause `key_unusable`) without re-fetching and
-  without the stale-key latch, and retries only after a code change or the cached key
-  being dropped. On some accounts the cloud lowercases the base64 of `private_key`
-  ([cloud.md](cloud.md)), which lands here.
+  library raises `CipherUnusableError` (cause `key_unusable`, reason `rsa_unparsable`,
+  or `not_rsa` for a key of another type) without re-fetching and without the stale-key
+  latch, and retries only after a code change or the cached key being dropped. On some
+  accounts the cloud lowercases the base64 of `private_key` ([cloud.md](cloud.md)),
+  which lands here.
+- Credentials without the key the station's handshake needs (no `private_key` for an
+  RSA CONN_INIT, no `ecc_private_key` for version 8; a cache written before the RSA key
+  was kept holds none) are re-fetched once. Still without it, the library raises
+  `CipherUnusableError` (reason `no_rsa_key` or `no_ecc_key`) without the stale-key
+  latch.
 - Library code: `crypto.parse_conn_init`, `crypto.aes_key_from_conn_init`,
   `crypto.load_rsa_private_key`, `StationSession.rsa_session`. Not observed on hardware:
   whether the T8410's reply is clear (the 133 bytes only fit as clear: ECB needs whole

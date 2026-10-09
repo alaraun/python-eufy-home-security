@@ -3254,20 +3254,27 @@ class RsaProvider:
     """Credentials of a station answering the RSA CONN_INIT: its RSA key, or none.
 
     ``bad_key`` serves an unparsable ``private_key`` (the cloud lowercases the base64
-    on some accounts); ``calls`` records each ``refresh`` flag asked.
+    on some accounts); ``cached_rsa_key`` False serves none until a refresh (a cache
+    that predates the RSA key); ``calls`` records each ``refresh`` flag asked.
     """
 
     def __init__(
-        self, station: FakeStation, *, rsa_key: bool = True, bad_key: bool = False
+        self,
+        station: FakeStation,
+        *,
+        rsa_key: bool = True,
+        bad_key: bool = False,
+        cached_rsa_key: bool = True,
     ) -> None:
         self.station = station
         self.rsa_key = rsa_key
         self.bad_key = bad_key
+        self.cached_rsa_key = cached_rsa_key
         self.calls: list[bool] = []
 
     async def __call__(self, *, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         self.calls.append(refresh)
-        if not self.rsa_key:
+        if not self.rsa_key or not (refresh or self.cached_rsa_key):
             rsa_key = None
         elif self.bad_key:
             rsa_key = self.station.rsa_private_key_pem.lower()  # lowercased = unparsable
@@ -3372,22 +3379,59 @@ async def test_a_push_under_the_rsa_session_key_is_authenticated(station: FakeSt
     )
 
 
-async def test_an_rsa_conn_init_without_an_rsa_key_fails_the_handshake(
+async def test_an_rsa_conn_init_without_an_rsa_key_is_unusable_after_one_refresh(
     station: FakeStation,
 ) -> None:
-    station.conn_init_version = 1
-    session = StationSession(
-        SYNTHETIC.station_sn,
-        RsaProvider(station, rsa_key=False),
-        host="127.0.0.1",
-        port=station.discovery_port,
-    )
+    """Credentials without the RSA key are re-fetched once; still without it, the cipher
+    is unusable (not a rejected key) and no stale-key latch is set."""
+    provider = RsaProvider(station, rsa_key=False)
+    latch = MemoryKeyRefreshLatch()
+    session = make_rsa_session(station, provider, key_refresh=latch)
     try:
-        with pytest.raises(HandshakeError, match="no RSA private key"):
+        with pytest.raises(CipherUnusableError, match="no RSA private key") as err:
             await session.async_connect()
     finally:
         await session.async_close()
-    assert not session.rsa_session
+    assert (err.value.reason, err.value.cipher_id) == ("no_rsa_key", station.cipher_id)
+    assert provider.calls == [False, True]
+    assert latch.retry_blocked_for() == 0.0
+
+
+async def test_an_rsa_key_missing_from_the_cache_is_fetched_once(station: FakeStation) -> None:
+    provider = RsaProvider(station, cached_rsa_key=False)
+    session = make_rsa_session(station, provider)
+    try:
+        await session.async_connect()
+        assert session.rsa_session
+    finally:
+        await session.async_close()
+    assert provider.calls == [False, True]
+
+
+async def test_an_ecies_conn_init_without_an_ecc_key_is_unusable(station: FakeStation) -> None:
+    """Version 8 with no ``ecc_private_key`` held, even after one refresh: unusable."""
+    calls: list[bool] = []
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        calls.append(refresh)
+        return P2PCredentials(SYNTHETIC.account_id, "user", "")
+
+    latch = MemoryKeyRefreshLatch()
+    session = StationSession(
+        SYNTHETIC.station_sn,
+        provider,
+        host="127.0.0.1",
+        port=station.discovery_port,
+        key_refresh=latch,
+    )
+    try:
+        with pytest.raises(CipherUnusableError) as err:
+            await session.async_connect()
+    finally:
+        await session.async_close()
+    assert (err.value.reason, err.value.cipher_id) == ("no_ecc_key", station.cipher_id)
+    assert calls == [False, True]
+    assert latch.retry_blocked_for() == 0.0
 
 
 async def test_an_rsa_key_that_does_not_parse_is_unusable_not_rejected(

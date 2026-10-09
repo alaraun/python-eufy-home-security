@@ -1349,9 +1349,11 @@ class StationSession:
         or the latch is released. A re-fetched key that is rejected too raises
         :class:`KeyRejectedError`. A key that does not parse at all raises
         :class:`CipherUnusableError` without a re-fetch or latch (the cloud serves the
-        same bytes again). After :meth:`async_close` every call raises
-        :class:`StationUnreachableError`: a closed session has no owner left to close
-        it again.
+        same bytes again); credentials without the key the station's handshake needs
+        are re-fetched once, and still without it raise :class:`CipherUnusableError`
+        (reason ``no_rsa_key`` or ``no_ecc_key``) without the latch. After
+        :meth:`async_close` every call raises :class:`StationUnreachableError`: a closed
+        session has no owner left to close it again.
         """
         self._raise_if_closed()
         async with self._connect_lock:
@@ -1378,6 +1380,8 @@ class StationSession:
                     creds = await self._establish(creds)
                 except CipherUnusableError:
                     raise
+                except _MissingKeyError as again:
+                    raise again.unusable() from again
                 except HandshakeError as again:
                     raise KeyRejectedError(
                         f"the station rejected the re-fetched cipher key too: {again}"
@@ -3368,12 +3372,14 @@ class StationSession:
             raise HandshakeError(
                 f"CONN_INIT names cipher {named}, the key is cipher {creds.cipher_id}"
             )
+        missing = _MissingKeyError(named, rsa=conn_init.rsa)
+        if not missing.held_by(creds):
+            raise missing
         if not conn_init.rsa:
             return creds, conn_init, session_key_from_conn_init(conn_init, creds.ecc_private_key)
-        if not creds.rsa_private_key:
-            raise HandshakeError(f"no RSA private key held for cipher {named}")
+        rsa_key = cast(str, creds.rsa_private_key)  # held_by checked it
         try:
-            return creds, conn_init, aes_key_from_conn_init(conn_init, creds.rsa_private_key)
+            return creds, conn_init, aes_key_from_conn_init(conn_init, rsa_key)
         except CipherUnusableError as exc:
             if exc.cipher_id is None:
                 exc.cipher_id = named
@@ -3388,11 +3394,16 @@ class StationSession:
                 f"no automatic re-fetch for {wait:.0f}s ({err})"
             ) from err
         _LOGGER.warning(
-            "%s: session key would not unwrap (%s); re-fetching the cipher key once",
+            "%s: %s (%s); re-fetching the cipher key once",
             self._log_name,
+            "credentials without the key"
+            if isinstance(err, _MissingKeyError)
+            else "session key would not unwrap",
             err,
         )
         creds = await self._load_credentials(refresh=True)
+        if isinstance(err, _MissingKeyError) and not err.held_by(creds):
+            raise err.unusable() from err  # no key came back: nothing for the latch
         await self._key_refresh.async_refreshed()  # only now: the fetch returned a key
         self._key_refreshes += 1
         return creds
@@ -4523,6 +4534,24 @@ def _raise_waiter_error(waiter: _Waiter) -> None:
     future = waiter.future
     if future.done() and not future.cancelled() and (error := future.exception()) is not None:
         raise error
+
+
+class _MissingKeyError(HandshakeError):
+    """The credentials hold no key for the handshake the station chose."""
+
+    def __init__(self, cipher_id: int, *, rsa: bool) -> None:
+        self.cipher_id = cipher_id
+        self.rsa = rsa
+        self.reason = "no_rsa_key" if rsa else "no_ecc_key"
+        kind = "RSA" if rsa else "ECC"
+        super().__init__(f"no {kind} private key held for cipher {cipher_id}")
+
+    def held_by(self, creds: P2PCredentials) -> bool:
+        """Whether ``creds`` hold the key this handshake needs."""
+        return bool(creds.rsa_private_key if self.rsa else creds.ecc_private_key)
+
+    def unusable(self) -> CipherUnusableError:
+        return CipherUnusableError(str(self), cipher_id=self.cipher_id, reason=self.reason)
 
 
 class _StallClock:
