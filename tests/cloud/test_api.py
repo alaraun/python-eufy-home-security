@@ -893,6 +893,27 @@ async def test_cipher_fetch_keeps_the_rsa_private_key(
     assert cache.rsa_cipher_key(SYNTHETIC.station_sn, 40) is None
 
 
+async def test_a_cipher_entry_is_read_as_the_cipher_table_reads_it(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """A blank key is no key, and a ``cipher_id`` sent as text matches its number."""
+    fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 18}]
+    fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": "  ", "private_key": "\n"}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(EmptyResponseError, match="no private key"):
+                await api.async_get_cipher_keys(SYNTHETIC.station_sn)
+            fake_mega.cipher_objects = [{"cipher_id": "40", "ecc_private_key": f" {FAKE_ECC_KEY}"}]
+            keys = await api.async_get_cipher_keys(SYNTHETIC.station_sn)
+            (record,) = await api.async_list_ciphers(SYNTHETIC.station_sn, FAKE_OWNER_ID, [40])
+    assert keys == CipherKeys(record.ecc_private_key, record.rsa_private_key)
+    assert keys.ecc_private_key == FAKE_ECC_KEY
+    assert cache.rsa_cipher_key(SYNTHETIC.station_sn, 40) is None
+
+
 @pytest.mark.parametrize(
     ("member", "source"),
     [

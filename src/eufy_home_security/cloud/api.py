@@ -177,16 +177,13 @@ def _entries(data: object, path: str, key: str) -> list[Mapping[str, Any]]:
 
 @dataclass(frozen=True, slots=True)
 class CipherKeys:
-    """One station cipher's private keys as ``get_ciphers`` returns them, None when absent:
-    ``ecc_private_key`` (hex) unwraps an ECIES CONN_INIT, ``rsa_private_key`` (the
-    cloud's ``private_key``, base64 PKCS#8) an RSA one."""
+    """One station cipher's private keys as :meth:`CipherRecord.from_api` reads a
+    ``get_ciphers`` entry, None when absent or blank: ``ecc_private_key`` (hex) unwraps
+    an ECIES CONN_INIT, ``rsa_private_key`` (the cloud's ``private_key``, base64 PKCS#8)
+    an RSA one."""
 
     ecc_private_key: str | None
     rsa_private_key: str | None
-
-
-def _key_text(value: object) -> str | None:
-    return value if isinstance(value, str) and value else None
 
 
 _COUNTRY_KEY: Final = "country"
@@ -1898,12 +1895,13 @@ class EufyCloudApi:
                 endpoint=const.CIPHERS_PATH,
             )
         for item in _cipher_items(data):
-            if isinstance(item, Mapping) and str(item.get("cipher_id")) == str(cipher_id):
-                keys = CipherKeys(
-                    _key_text(item.get("ecc_private_key")), _key_text(item.get("private_key"))
-                )
-                if keys.ecc_private_key or keys.rsa_private_key:
-                    return keys
+            record = CipherRecord.from_api(item)
+            if (
+                record is not None
+                and record.cipher_id == cipher_id
+                and (record.ecc_private_key or record.rsa_private_key)
+            ):
+                return CipherKeys(record.ecc_private_key, record.rsa_private_key)
         raise EmptyResponseError(
             _SUCCESS,
             f"cipher {cipher_id} for {redact_serial(station_sn)} carried no private key",
