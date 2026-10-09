@@ -29,7 +29,6 @@ from eufy_home_security.events import (
     DevicesChanged,
     Event,
     EventSource,
-    HistoryRecord,
     PresetsChanged,
     SecurityEvent,
     StationStateChanged,
@@ -116,11 +115,13 @@ async def station(fake: FakeStation) -> AsyncIterator[Station]:
     await st.async_close()
 
 
-async def test_update_builds_a_snapshot(station: Station) -> None:
+async def test_update_builds_a_snapshot(station: Station, monkeypatch: pytest.MonkeyPatch) -> None:
     assert station.channels == {0}
-    started = time.monotonic()
-    state = await station.async_update()
-    assert time.monotonic() - started < PARAM_SETTLE / 2  # the camera's channel reported
+    await station.session.async_connect()
+    # Returns once the camera's channel reported, not after the settle time.
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 30.0)
+    async with asyncio.timeout(10.0):
+        state = await station.async_update()
     assert state.guard_mode is GuardMode.DISARMED
     assert state.firmware == "3.8.7.4"
     camera = state.devices[0]
@@ -1507,27 +1508,44 @@ async def test_async_camera_image_rejects_unpaired_and_invalid_days(
     assert len(fake.received) == sent_before
 
 
-async def test_event_thumbnail_passes_timeout_to_history_query(
-    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("timeout", "expected"),
+    [
+        (4.2, {"history query": 4.2, "image fetch": 4.2}),
+        (None, {"history query": 7.0, "image fetch": 3.0}),
+    ],
+)
+async def test_event_thumbnail_gives_each_request_the_timeout_or_its_own_default(
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    timeout: float | None,
+    expected: dict[str, float],
 ) -> None:
+    monkeypatch.setattr(session_module, "HISTORY_QUERY_TIMEOUT", 7.0)
+    monkeypatch.setattr(session_module, "STILL_FETCH_TIMEOUT", 3.0)
+    path = "/zx/hdd_data0/Camera00/20260916/snapshort.jpg"
+    fake.images[path] = b"\xff\xd8JFIF..."
+    record_id = 20260916 * HISTORY_RECORD_COUNTER + 42
+    fake.rows = [{"record_id": record_id, "device_sn": SYNTHETIC.camera_sn, "thumb_path": path}]
     event = SecurityEvent(
         source=EventSource.P2P,
         station_sn=SYNTHETIC.station_sn,
         device_sn=SYNTHETIC.camera_sn,
-        record_id=2026091600042,
+        record_id=record_id,
     )
 
-    passed: dict[str, Any] = {}
-    history_record = station.session.async_history_record
+    await station.session.async_connect()  # only the event's own requests are timed
+    timeouts: dict[str, float] = {}
+    request = station.session._request
 
-    async def spy(record_id: int, **kwargs: Any) -> HistoryRecord | None:
-        passed.update(kwargs)
-        return await history_record(record_id, **kwargs)
+    async def spy(*args: Any, timeout: float, label: str, **kwargs: Any) -> Any:
+        timeouts[label] = timeout
+        return await request(*args, timeout=timeout, label=label, **kwargs)
 
-    monkeypatch.setattr(station.session, "async_history_record", spy)
-    with pytest.raises(RecordNotFoundError):  # the fake has no rows
-        await station.async_event_thumbnail(event, timeout=4.2)
-    assert passed == {"timeout": 4.2}
+    monkeypatch.setattr(station.session, "_request", spy)
+    await station.async_event_thumbnail(event, timeout=timeout)
+    assert timeouts == expected
 
 
 async def test_a_standalone_station_is_its_own_device_on_its_channel() -> None:
@@ -2761,6 +2779,35 @@ async def test_a_standalone_detection_gets_its_own_still(
         assert isinstance(info.value, StillNotWrittenError) is (outcome == "not written yet")
         if isinstance(info.value, StillNotWrittenError):
             assert info.value.offset == pytest.approx(still_after, abs=1.0)
+
+
+async def test_a_standalone_detection_passes_the_callers_timeout_to_each_query(
+    standalone_station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """None reaches the event-count query and the still fetch, so each uses its own default."""
+    trigger = datetime(2026, 10, 2, 20, 48, 50).astimezone()
+    path = f"/media/mmcblk0p1/Camera00/event/{trigger:%Y%m%d%H%M%S}_snapshot.jpg"
+    fake.event_summaries = {
+        "T8170P2000054321": {"event_count": 1, "crop_hb3_path": path, "crop_cloud_path": ""}
+    }
+    image = b"\xff\xd8\xff\xe0" + bytes(400) + b"\xff\xd9"
+    fake.images[path] = v1_still(image, "T8170P2000054321", did=SYNTHETIC.did)
+    session = standalone_station.session
+    passed: dict[str, Any] = {}
+    summary, fetch = session.async_event_summary, session.async_fetch_still
+
+    async def summary_spy(device_sn: str, *, timeout: float | None = None) -> Any:
+        passed["event count"] = timeout
+        return await summary(device_sn, timeout=timeout)
+
+    async def fetch_spy(still_path: str, *, timeout: float | None = None) -> Any:
+        passed["image fetch"] = timeout
+        return await fetch(still_path, timeout=timeout)
+
+    monkeypatch.setattr(session, "async_event_summary", summary_spy)
+    monkeypatch.setattr(session, "async_fetch_still", fetch_spy)
+    await standalone_station.async_event_thumbnail(_standalone_detection(trigger))
+    assert passed == {"event count": None, "image fetch": None}
 
 
 async def test_a_standalone_detection_still_is_read_in_the_device_zone(

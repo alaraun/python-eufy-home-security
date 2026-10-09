@@ -175,7 +175,11 @@ async def test_future_login_stamps_neither_count_nor_persist() -> None:
     assert stored[1] <= time.time()
 
 
-async def test_a_version_change_keeps_the_password_throttle_and_openudid() -> None:
+#: Extra-country install ids, kept wherever ``openudid`` is.
+_INSTALL_IDS = {"eu:CH": "fedcba9876543210"}
+
+
+async def test_a_version_change_keeps_the_password_throttle_and_install_identity() -> None:
     store = MemoryStore(
         {
             "version": CACHE_VERSION + 1,
@@ -183,7 +187,7 @@ async def test_a_version_change_keeps_the_password_throttle_and_openudid() -> No
             "openudid": "0123456789abcdef",
             "password": "secret",
             "throttle": {"logins": [1.0]},
-            "cloud": {"auth_token": "old"},
+            "cloud": {"auth_token": "old", "install_ids": _INSTALL_IDS},
             "devices": [{"device_sn": "T8030P2000012345"}],
         }
     )
@@ -192,7 +196,7 @@ async def test_a_version_change_keeps_the_password_throttle_and_openudid() -> No
     assert cache.password == "secret"
     assert cache.section("throttle") == {"logins": [1.0]}
     assert cache.openudid == "0123456789abcdef"
-    assert cache.section("cloud") == {}
+    assert cache.section("cloud") == {"install_ids": _INSTALL_IDS}
     assert cache.cached_devices() is None
 
     other = SessionCache(store, "someone-else@example.com")
@@ -200,6 +204,7 @@ async def test_a_version_change_keeps_the_password_throttle_and_openudid() -> No
     assert other.password is None  # never another account's password
     assert other.section("throttle") == {}
     assert other.openudid == "0123456789abcdef"
+    assert other.section("cloud") == {"install_ids": _INSTALL_IDS}
 
 
 @pytest.mark.parametrize(
@@ -217,29 +222,29 @@ async def test_version_1_moves_its_session_under_its_region(
     store = MemoryStore(
         {
             "version": 1,
-            "account": "user@example.com",
+            "account": SYNTHETIC.email,
             "password": "secret",
             "cloud": {**session, **cloud},
-            "devices": [{"device_sn": "T8030P2000012345"}],
-            "stations": {"T8030P2000012345": {"account_id": "owner"}},
+            "devices": [{"device_sn": SYNTHETIC.station_sn}],
+            "stations": {SYNTHETIC.station_sn: {"account_id": "owner"}},
         }
     )
-    cache = SessionCache(store, "user@example.com")
+    cache = SessionCache(store, SYNTHETIC.email)
     await cache.async_load()
     stored = cache.cloud_sessions()[region]
     assert {key: stored[key] for key in session} == session
     assert set(cache.cloud_sessions()) == {region}
-    assert cache.cached_devices() == [{"device_sn": "T8030P2000012345", "cloud_region": region}]
+    assert cache.cached_devices() == [{"device_sn": SYNTHETIC.station_sn, "cloud_region": region}]
     assert cache.section("cloud")["listed"] == {region: {"devices": 1, "at": None}}
-    assert cache.station_account_id("T8030P2000012345") == "owner"
+    assert cache.station_account_id(SYNTHETIC.station_sn) == "owner"
     assert cache.password == "secret"
 
 
 async def test_version_1_without_devices_drops_the_empty_list() -> None:
     store = MemoryStore(
-        {"version": 1, "account": "user@example.com", "cloud": {"auth_token": "t"}, "devices": []}
+        {"version": 1, "account": SYNTHETIC.email, "cloud": {"auth_token": "t"}, "devices": []}
     )
-    cache = SessionCache(store, "user@example.com")
+    cache = SessionCache(store, SYNTHETIC.email)
     await cache.async_load()
     assert cache.cached_devices() is None  # the next fetch asks every region once
     assert "listed" not in cache.section("cloud")
@@ -268,7 +273,12 @@ def _populated_document() -> dict[str, Any]:
         "account": SYNTHETIC.email,
         "openudid": "0123456789abcdef",
         "password": "secret",
-        "cloud": {"auth_token": "t", "key_ident": "k", "shared_key": "s"},
+        "cloud": {
+            "auth_token": "t",
+            "key_ident": "k",
+            "shared_key": "s",
+            "install_ids": _INSTALL_IDS,
+        },
         "replaced": {"at": 1},
         "push": {"fcm": {"token": "x"}},
         "stations": {SYNTHETIC.station_sn: {"account_id": "owner", "ciphers": {"40": "ab"}}},
@@ -286,6 +296,7 @@ async def test_forget_account_keeps_only_the_throttle_state(keep_install_identit
     expected = {key: doc[key] for key in ("version", "account", "throttle")}
     if keep_install_identity:
         expected["openudid"] = doc["openudid"]
+        expected["cloud"] = {"install_ids": _INSTALL_IDS}
     assert store.data == expected
 
     empty = MemoryStore()

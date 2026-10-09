@@ -21,7 +21,7 @@ from eufy_home_security import client as client_module
 from eufy_home_security.cli import commands
 from eufy_home_security.cli.commands import Context, date_window, select_station
 from eufy_home_security.cli.config import UsageError, parse_args
-from eufy_home_security.cloud.api import CipherKeys
+from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.exceptions import LoginChallengeError
 from eufy_home_security.models import GuardMode
@@ -177,7 +177,7 @@ class ListedCloud(StubCloud):
     async def async_get_devices(
         self, *, refresh: bool = False, rescan_regions: bool = False
     ) -> list[CloudDevice]:
-        devices = await super().async_get_devices(refresh=refresh)
+        devices = await super().async_get_devices(refresh=refresh, rescan_regions=rescan_regions)
         return [
             replace(d, raw={"device_new_pn": "T9999"}) if d.device_sn == SYNTHETIC.camera_sn else d
             for d in devices
@@ -340,6 +340,48 @@ async def run_bare(argv: list[str], *, secret_prompt: Callable[[str], str]) -> i
     args = parse_args(argv)
     async with Context(args, env={}, secret_prompt=secret_prompt) as ctx:
         return await commands.COMMANDS[args.command](ctx)
+
+
+def _record_cloud_options(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Make each account's real cloud client record the options it is built with."""
+    seen: dict[str, Any] = {}
+
+    class Recording(EufyCloudApi):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            seen.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", Recording)
+    return seen
+
+
+async def _open_account(tmp_path: Path, options: list[str]) -> None:
+    args = parse_args(
+        ["--email", SYNTHETIC.email, "--store", str(tmp_path / "cache.json"), *options, "devices"]
+    )
+    async with Context(args, env={}) as ctx:
+        await commands.open_account(ctx)
+
+
+@pytest.mark.parametrize(
+    ("country", "codes"),
+    [("EE,CH", ["EE", "CH"]), (" ee , ch ,", ["ee", "ch"]), ("", [])],
+)
+async def test_country_is_split_on_commas_and_region_passed_through(
+    country: str, codes: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _record_cloud_options(monkeypatch)
+    await _open_account(tmp_path, ["--country", country, "--region", "us"])
+    assert seen["country"] == codes
+    assert seen["region"] == "us"
+
+
+async def test_a_bad_country_is_a_usage_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _record_cloud_options(monkeypatch)
+    with pytest.raises(UsageError, match="XYZ"):
+        await _open_account(tmp_path, ["--country", "XYZ"])
 
 
 async def test_status_reads_the_cached_device_list_then_devices_refreshes_it(

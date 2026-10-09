@@ -177,9 +177,10 @@ attached records describe an earlier event ([events.md](events.md#binding-the-at
 so the history row is the usual source. Raised before anything is sent:
 `UnsupportedError` for an event of another station, or one with neither a
 `thumb_path` nor a `record_id` whose first eight digits are a real calendar day
-(`messages.record_id_day`; an id such as `2026139900001` counts as none). After the query: `RecordNotFoundError`
-when there is no such row, when the row names another camera, or when its `thumb_path`
-is missing or fails the media-path rules. **The row itself comes late
+(`messages.record_id_day`; an id such as `2026139900001` counts as none). After the query: `StillNotWrittenError`
+(a `RecordNotFoundError`) when there is no such row or its `thumb_path` is missing;
+`RecordNotFoundError` when the row names another camera or its `thumb_path` fails the
+media-path rules. **The row itself comes late
 [verified]:** 3.8 s after a detection's trigger there was no row; 42 s after there was,
 already with its `thumb_path`, while the clip was still recording. An early miss
 succeeds on a later retry.
