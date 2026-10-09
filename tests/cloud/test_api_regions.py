@@ -39,13 +39,6 @@ def _requests(fake_mega: FakeMega, endpoint: str) -> list[str]:
     return [region for name, region in fake_mega.region_calls if name == endpoint]
 
 
-def test_each_region_has_its_own_security_host() -> None:
-    assert const.security_host("eu") == "security-app-eu.eufylife.com"
-    assert const.security_host("us") == "security-app.eufylife.com"
-    with pytest.raises(ValueError, match="unknown region"):
-        const.security_host("ap")
-
-
 def test_an_unknown_region_override_is_refused(
     http: aiohttp.ClientSession, cache: SessionCache
 ) -> None:

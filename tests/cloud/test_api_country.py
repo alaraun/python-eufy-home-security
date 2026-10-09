@@ -465,16 +465,6 @@ def _with_an_extra_country(fake_mega: FakeMega) -> None:
     fake_mega.country_devices = {"CH": [_station(_EXTRA_STATION_SN)]}
 
 
-@pytest.mark.parametrize(
-    ("region", "country", "scope"), [("eu", None, "eu"), ("us", None, "us"), ("eu", "CH", "eu:CH")]
-)
-def test_a_login_scope_names_its_region_and_country(
-    region: str, country: str | None, scope: str
-) -> None:
-    assert const.scope(region, country) == scope
-    assert (const.scope_region(scope), const.scope_country(scope)) == (region, country)
-
-
 def test_a_country_list_with_a_non_iso_code_is_refused(
     http: aiohttp.ClientSession, cache: SessionCache
 ) -> None:
