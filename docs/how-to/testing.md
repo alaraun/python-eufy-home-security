@@ -15,7 +15,7 @@ session serves a poll, a snapshot and an arm, and a push reaches an entity.
 | `SYNTHETIC` | The synthetic identities the doubles use: station and camera serial, P2P id, keys, owner id, e-mail, password, a documentation-range address. Never a real identifier. |
 | `FakeStation` | A HomeBase speaking PPPP/XZYH on loopback: discovery, handshake, parameter dumps, arming, settings, camera pushes, images, media. `await start()` binds it, `stop()` silences it. |
 | `FakeCloud` | The eufy cloud answered below the HTTP envelope. The real client's session cache, hold-offs, login budget and owner-id rules still run. |
-| `warm_store(email=, cloud=)` | A `MemoryStore` holding the cache document as after one login, written by the library's own cache writers. |
+| `warm_store(email=, cloud=, country=, region=, scan_regions=)` | A `MemoryStore` holding the cache document as after one login, written by the library's own cache writers. |
 | `build_eufy_security(email=, store=, cloud=, stations=)` | A real `EufySecurity` wired to the fakes at the cloud-HTTP and discovery-port seams. |
 
 ## A test
@@ -72,8 +72,11 @@ async def test_warm_start_needs_no_cloud() -> None:
   `"push_token"`, `"things"`, with serials redacted. A cached answer adds nothing.
   `cipher_ids_requested` lists the cipher ids those `get_ciphers` requests named.
 - **Cold or warm.** A `MemoryStore()` is a cold start (one login, one device list, one
-  key per station); `warm_store(...)` is a restart. Reuse one store across two clients
-  to test a restart with whatever the first client cached.
+  key per station); `warm_store(...)` is a restart. Pass it the `country`, `region` and
+  `scan_regions` the client gets (Home Assistant: `country=hass.config.country`): a
+  session made for another login country is logged in again on start. `call_errors`
+  and `login_error` are left for the client. Reuse one store across two clients to test
+  a restart with whatever the first client cached.
 - **Stations.** Pass started fakes keyed by serial. They are reached on loopback and
   must share one discovery port, so use one `FakeStation` per client. A stopped fake is
   an unreachable station: `async_start()` returns its error.

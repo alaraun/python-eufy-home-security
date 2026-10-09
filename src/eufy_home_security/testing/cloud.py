@@ -15,7 +15,7 @@ import itertools
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable, Coroutine, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, NoReturn, cast
 
@@ -705,21 +705,38 @@ async def _async_warm(api: EufyCloudApi, cache: SessionCache, cloud: FakeCloud) 
     await cache.async_save()
 
 
-def warm_store(*, email: str, cloud: FakeCloud) -> MemoryStore:
+def warm_store(
+    *,
+    email: str,
+    cloud: FakeCloud,
+    country: str | Sequence[str] = "",
+    region: str | None = None,
+    scan_regions: bool = False,
+) -> MemoryStore:
     """A store holding the cache document as after the first login against ``cloud``.
 
     That login asks every region once: ``cloud.region`` lists ``cloud.devices``, and a
     region listing none is suspended (see :class:`~..cloud.api.EufyCloudApi`).
+    ``country``, ``region`` and ``scan_regions`` are the client's options of the same
+    name: pass the ones the client under test gets, so its sessions match the cache.
 
     Written by the library's own cache writers (a password login, the device list,
     each station's owner id and cipher key), so it keeps the real layout. Nothing is
-    recorded in ``cloud.calls`` or ``cloud.cipher_ids_requested``, and
-    ``cloud.login_error`` is not applied.
+    recorded in ``cloud.calls`` or ``cloud.cipher_ids_requested``, and neither
+    ``cloud.login_error`` nor ``cloud.call_errors`` is applied.
     """
     store = MemoryStore()
-    scratch = replace(cloud, login_error=None, calls=[], cipher_ids_requested=[])
+    scratch = replace(cloud, login_error=None, calls=[], cipher_ids_requested=[], call_errors=[])
     cache = SessionCache(store, email)
-    api = scratch.make_api(_no_http, cache, email, SYNTHETIC.password)
+    api = scratch.make_api(
+        _no_http,
+        cache,
+        email,
+        SYNTHETIC.password,
+        country=country,
+        region=region,
+        scan_regions=scan_regions,
+    )
     _run_unsuspended(_async_warm(api, cache, scratch))
     return store
 

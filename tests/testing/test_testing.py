@@ -344,6 +344,24 @@ async def test_a_second_clients_search_leaves_the_live_session_alone(fake: FakeS
     assert fake.conn_inits == 1  # no reset, no second handshake
 
 
+async def test_a_store_warmed_with_the_clients_country_needs_no_login() -> None:
+    cloud = FakeCloud(country_regions={"DE": "eu"})
+    store = warm_store(email=SYNTHETIC.email, cloud=cloud, country="DE")
+    eufy = build_eufy_security(email=SYNTHETIC.email, store=store, cloud=cloud, country="DE")
+    try:
+        await eufy.async_login()
+    finally:
+        await eufy.async_close()
+    assert cloud.calls == []
+
+
+def test_warming_a_store_leaves_the_planned_call_errors() -> None:
+    planned = [CommunicationError("planned for the test")]
+    cloud = FakeCloud(call_errors=list(planned))
+    warm_store(email=SYNTHETIC.email, cloud=cloud)
+    assert cloud.call_errors == planned
+
+
 def test_fake_stations_must_be_started_on_one_port() -> None:
     with pytest.raises(ValueError, match="start every FakeStation"):
         build_eufy_security(
