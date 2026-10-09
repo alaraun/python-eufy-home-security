@@ -1,7 +1,7 @@
 """The app's command/parameter id catalog.
 
 Provenance: ``APK_COMMAND_TYPES`` is transcribed from the eufy Security app's
-``com.anker.esiotkit.media.model.CommandType`` enum with the
+command-type enum with the
 redundant ``APP_CMD_``/``APP_``/``COMMAND_``/``COMMAMD_`` (sic)/``CMD_`` prefixes
 stripped; constants that share a value are joined with ``" / "``. Values below 900
 are left out: there the class mixes in unrelated enums (device types,

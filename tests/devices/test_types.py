@@ -90,7 +90,7 @@ def test_the_apps_models_are_catalogued(
     found = MODELS[model]
     assert (found.kind, found.cloud_device_type, found.name) == (kind, device_type, name)
     assert found.evidence.support is Support.DECLARED
-    assert "SnConstants" in found.evidence.source
+    assert found.evidence.source.startswith("eufy app 6.1.10 model list: ")
 
 
 def test_a_prefix_the_app_names_as_two_kinds_is_not_catalogued() -> None:
@@ -99,7 +99,7 @@ def test_a_prefix_the_app_names_as_two_kinds_is_not_catalogued() -> None:
 
 def test_a_hand_written_entry_wins_over_the_generated_one() -> None:
     assert MODELS["T8030"].name == "HomeBase 3 (S380)"
-    assert MODELS["T8910"].evidence.source.endswith("MOTION_SENSOR; eufy app SnUtils type map (10)")
+    assert MODELS["T8910"].evidence.source.endswith("MOTION_SENSOR; eufy app device-type map (10)")
 
 
 def test_connects_on_demand_on_demand_prefixes() -> None:

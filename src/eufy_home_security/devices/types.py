@@ -57,7 +57,7 @@ def _register(registry: dict[str, DeviceModel], *models: DeviceModel) -> None:
         registry[entry.model] = entry
 
 
-_APP_SN_CONSTANTS = "eufy app SnConstants"
+_APP_MODEL_LIST = "eufy app model list:"
 
 _models: dict[str, DeviceModel] = {}
 _register(
@@ -82,7 +82,7 @@ _register(
         evidence=Evidence(
             Support.VERIFIED,
             "live settings write+read-back and media on T8030 HomeBase 3, camera fw 3.4.3.0",
-            "device_type 19 is carried by live event pushes and matches the eufy app SnUtils type map",
+            "device_type 19 is carried by live event pushes and matches the eufy app device-type map",
         ),
     ),
     DeviceModel(
@@ -92,7 +92,7 @@ _register(
         cloud_device_type=23,
         evidence=Evidence(
             Support.DECLARED,
-            f"{_APP_SN_CONSTANTS} CAMERA3C; eufy app SnUtils type map (23)",
+            f"{_APP_MODEL_LIST} CAMERA3C; eufy app device-type map (23)",
         ),
     ),
     DeviceModel(
@@ -102,7 +102,7 @@ _register(
         cloud_device_type=10,
         evidence=Evidence(
             Support.DECLARED,
-            f"{_APP_SN_CONSTANTS} MOTION_SENSOR; eufy app SnUtils type map (10)",
+            f"{_APP_MODEL_LIST} MOTION_SENSOR; eufy app device-type map (10)",
             "a T8910 paired to a HomeBase 3 reports device_type 10 in the cloud device list; "
             "its battery is in the station's parameter dump",
         ),
@@ -114,7 +114,7 @@ _register(
         cloud_device_type=48,
         evidence=Evidence(
             Support.DECLARED,
-            f"{_APP_SN_CONSTANTS} BATTERY_SOLO_CAM_8170; eufy app SnUtils type map (48)",
+            f"{_APP_MODEL_LIST} BATTERY_SOLO_CAM_8170; eufy app device-type map (48)",
             "a standalone camera, its own station; the cloud device list reports "
             "device_type 48 and the parameter dump labels its block 48",
         ),
@@ -126,7 +126,7 @@ _register(
         cloud_device_type=31,
         evidence=Evidence(
             Support.DECLARED,
-            f"{_APP_SN_CONSTANTS} INDOOR_CAMERA_PT; eufy app SnUtils type map (31)",
+            f"{_APP_MODEL_LIST} INDOOR_CAMERA_PT; eufy app device-type map (31)",
             "a standalone camera, its own station; a serial with '5' at index 6 is the "
             "app's separate product T8410C, with its own thing description and handler",
         ),
@@ -138,8 +138,8 @@ _register(
         cloud_device_type=None,
         evidence=Evidence(
             Support.DECLARED,
-            f"{_APP_SN_CONSTANTS} STATION_2",
-            "eufy app SnUtils files T8001/T8002/T8010/T8020 under one shared type 0",
+            f"{_APP_MODEL_LIST} STATION_2",
+            "the eufy app device-type map files T8001/T8002/T8010/T8020 under one shared type 0",
         ),
     ),
     DeviceModel(
@@ -149,7 +149,7 @@ _register(
         cloud_device_type=None,
         evidence=Evidence(
             Support.DECLARED,
-            f"{_APP_SN_CONSTANTS} STATION_AI",
+            f"{_APP_MODEL_LIST} STATION_AI",
             "the eufy app constant calls this prefix STATION_AI",
         ),
     ),
@@ -174,9 +174,9 @@ def _display_name(constant: str) -> str:
 
 
 def _app_model(prefix: str, constant: str, kind: str, device_type: int | None) -> DeviceModel:
-    source = f"eufy app {APP_VERSION} SnConstants {constant}"
+    source = f"eufy app {APP_VERSION} model list: {constant}"
     if device_type is not None:
-        source += f"; SnUtils type map ({device_type})"
+        source += f"; device-type map ({device_type})"
     return DeviceModel(
         model=prefix,
         name=_display_name(constant),
@@ -205,8 +205,7 @@ ON_DEMAND_PREFIXES: Final = frozenset(
 )  # fmt: skip
 ON_DEMAND_EVIDENCE: Final = Evidence(
     Support.DECLARED,
-    "eufy app PlatformP2PClientKt.getConnectBlackList (= P2PConfigManager.getFilter), used by "
-    "P2PWatchDog and needAutoReconnectP2P",
+    "eufy app: the serial prefixes its P2P watchdog and auto-reconnect leave out",
     "the app reconnects every other station's session every 60 s while it is in the "
     "foreground, and closes every session 120 s after it leaves",
 )

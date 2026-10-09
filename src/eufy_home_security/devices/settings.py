@@ -214,7 +214,7 @@ _DELAY_DESCRIPTIONS: Final[Mapping[ModeTableField, str]] = MappingProxyType(
 
 MODE_ACTION_FLAGS: Final[Mapping[Scope, Mapping[str, int]]] = MappingProxyType(
     {
-        # ArmingManager.g for a camera (device_type 1, 8, 9, 14, 15, 19, 23 ...): record,
+        # The app's per-mode actions of a camera (device_type 1, 8, 9, 14, 15, 19, 23 ...): record,
         # notification, its own siren, the HomeBase alarm and the light; plus the
         # monitoring-centre report every device gets. No privacy or respond bit.
         Scope.CAMERA: MappingProxyType(
@@ -230,7 +230,7 @@ MODE_ACTION_FLAGS: Final[Mapping[Scope, Mapping[str, int]]] = MappingProxyType(
                 )
             }
         ),
-        # ArmingManager.g for a motion sensor (device_type 10, 127): notification, the
+        # The app's per-mode actions of a motion sensor (device_type 10, 127): notification, the
         # HomeBase alarm and "respond"; plus the monitoring-centre report.
         Scope.SENSOR: MappingProxyType(
             {

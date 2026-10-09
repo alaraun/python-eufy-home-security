@@ -14,7 +14,7 @@ from eufy_home_security.devices.types import MODELS
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Synthetic lines in the shape of the app's classes.
+# Synthetic lines in the shape of the app's model tables.
 _CONSTANTS = """
     public static final String CAMERA9X = "T9101";
     public static final String CAMERA9X_PRO = "T9102";
@@ -26,8 +26,8 @@ _CONSTANTS = """
 """
 _TYPE_MAP = """
         hashMap.put(7, new String[]{"T9101", "T9102"});
-        hashMap.put(Integer.valueOf(QueryDeviceData.TYPE_NINE), new String[]{"T9001"});
-        hashMap.put(Integer.valueOf(QueryDeviceData.TYPE_UNDEFINED), new String[]{"T9201"});
+        hashMap.put(Integer.valueOf(DeviceTypes.TYPE_NINE), new String[]{"T9001"});
+        hashMap.put(Integer.valueOf(DeviceTypes.TYPE_UNDEFINED), new String[]{"T9201"});
 """
 _TYPE_INTS = "    public static final int TYPE_NINE = 10009;\n"
 
