@@ -2132,19 +2132,6 @@ async def test_set_zoom_of_a_paired_camera_names_its_channel_in_the_subheader(
     await _until(lambda: paired_ptz.zoom(PAIRED_PTZ.device_sn) == 4.0)
 
 
-async def test_set_zoom_of_a_paired_camera_under_subheader_0_is_not_handled(
-    paired_ptz: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The HomeBase answers -108 and the camera never sees the zoom."""
-    monkeypatch.setattr(session_module, "_command_header_channel", lambda channel: 0)
-
-    with pytest.raises(CommandUnsupportedError):
-        await paired_ptz.async_set_zoom(PAIRED_PTZ.device_sn, 4)
-
-    assert fake.zoom_writes == []
-    assert paired_ptz.zoom(PAIRED_PTZ.device_sn) is None
-
-
 async def test_set_zoom_refused_in_dual_view(
     standalone_station: Station, fake: FakeStation
 ) -> None:

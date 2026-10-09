@@ -12,6 +12,7 @@ import pytest
 from eufy_home_security.client import EufySecurity
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.status import LoginNeed
+from eufy_home_security.devices.recipes import SubCommand
 from eufy_home_security.events import Event, SecurityEvent
 from eufy_home_security.exceptions import (
     CloudApiError,
@@ -24,7 +25,10 @@ from eufy_home_security.exceptions import (
 )
 from eufy_home_security.install import InstallState
 from eufy_home_security.p2p import session as session_module
+from eufy_home_security.p2p.messages import RECEIPT_NOT_HANDLED, device_msg
 from eufy_home_security.p2p.pppp import MsgType, decode_packet, encode_packet
+from eufy_home_security.p2p.session import P2PCredentials, StationSession
+from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.storage import MemoryStore
 from eufy_home_security.testing import (
     SYNTHETIC,
@@ -360,6 +364,38 @@ def test_warming_a_store_leaves_the_planned_call_errors() -> None:
     cloud = FakeCloud(call_errors=list(planned))
     warm_store(email=SYNTHETIC.email, cloud=cloud)
     assert cloud.call_errors == planned
+
+
+async def test_a_paired_cameras_command_under_subheader_0_gets_only_receipt_108(
+    fake: FakeStation,
+) -> None:
+    """A station passes a relayed channel's command on only under that subheader
+    channel: under 0 it answers -108 and the camera never sees the zoom."""
+    fake.relayed_channels = {2}
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_connect()
+        waiter = session._add_waiter(
+            lambda inbound: inbound.receipt() if inbound.type == FrameType.CMD_TRANSFER else None
+        )
+        zoom = device_msg(
+            SYNTHETIC.account_id, SubCommand.COMMAND_DUAL_CAMERA_ZOOM, {"dstZoom": 4}, channel=2
+        )
+        session._send_secure(zoom, dev_type=0)  # the subheader names channel 0
+        async with asyncio.timeout(2):
+            receipt = await waiter.future
+        session._remove_waiter(waiter)
+    finally:
+        await session.async_close()
+    assert receipt == RECEIPT_NOT_HANDLED
+    assert fake.received_header_channels[-1] == 0
+    assert fake.zoom_writes == []
 
 
 def test_fake_stations_must_be_started_on_one_port() -> None:
