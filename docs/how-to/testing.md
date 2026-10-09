@@ -109,8 +109,9 @@ attempts. A test that meets such a wait on purpose shortens it.
 
 - **All at once:** `testing.short_timeouts()` is a context manager that sets every wait
   in `testing.timeouts.SHORT_TIMEOUTS` to a loopback value and restores them on exit;
-  keyword arguments override single values by name. The library's own suite passes with
-  it applied to every test. As a fixture:
+  keyword arguments override single values by name. Every value outlasts the fakes'
+  loopback answers, so a test that is not about a wait's length runs unchanged with it.
+  As a fixture:
 
   ```python
   @pytest.fixture
@@ -139,8 +140,13 @@ attempts. A test that meets such a wait on purpose shortens it.
 | still download, SD info | `p2p.session.STILL_FETCH_TIMEOUT`, `SD_INFO_TIMEOUT` | 1 s |
 | first live / recording frame | `p2p.session.MEDIA_LIVE_FIRST_FRAME_TIMEOUT`, `MEDIA_RECORDING_FIRST_FRAME_TIMEOUT` | 2 s |
 | preset image stream idle, capture start | `station.PRESET_STREAM_IDLE_SECONDS`, `p2p.broadcast.CAPTURE_START_TIMEOUT` | 1 s, 2 s |
+| preset turn, pan/tilt step settle | `station.PRESET_SETTLE_SECONDS`, `PTZ_SETTLE_SECONDS` | 0.05 s each |
+| re-send while the camera moves; default-preset write result | `station.PTZ_BUSY_DELAY`, `DEFAULT_PRESET_RESULT_WAIT` | 0.05 s, 0.1 s |
+| full-resolution live image, live open (1700) | `station.FULL_RESOLUTION_TIMEOUT`, `devices.recipes.LIVE_OPEN_TIMEOUT` | 1 s, 2 s |
 | LAN search (`async_probe_lan`, `async_station_choices`) | `p2p.pppp.LAN_DISCOVERY_TIMEOUT` | 0.5 s |
 
 Not shortened, because a test observes their length: `PARAM_SETTLE` (sub-device blocks
 following a dump), `MEDIA_IDLE_TIMEOUT`, `MEDIA_DRAIN_MAX` (a stopped stream's leftover
-frames), the probe schedule, and the reprobe and idle-close delays. Set them per test.
+frames), `SETTLE_STATION` and `SETTLE_STANDALONE` (how long a picture size must hold;
+a full-resolution image is bounded by `FULL_RESOLUTION_TIMEOUT`), the probe schedule,
+and the reprobe and idle-close delays. Set them per test.

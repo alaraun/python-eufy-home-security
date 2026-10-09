@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import time
 from collections.abc import AsyncIterator
 
@@ -43,6 +44,35 @@ def test_short_timeouts_sets_each_wait_and_restores_it() -> None:
         assert SHORT_TIMEOUTS["DISCOVERY_ATTEMPTS"][1] == session_module.DISCOVERY_ATTEMPTS
         assert SHORT_TIMEOUTS["CAPTURE_START_TIMEOUT"][1] == broadcast.CAPTURE_START_TIMEOUT
     assert {name: getattr(session_module, name) for name in before} == before
+
+
+def test_short_timeouts_sets_every_listed_wait_on_its_module() -> None:
+    def current() -> dict[str, object]:
+        return {
+            name: getattr(importlib.import_module(f"eufy_home_security.{module}"), name)
+            for name, (module, _value) in SHORT_TIMEOUTS.items()
+        }
+
+    before = current()
+    with short_timeouts():
+        assert current() == {name: value for name, (_module, value) in SHORT_TIMEOUTS.items()}
+    assert current() == before
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "PRESET_SETTLE_SECONDS",
+        "PTZ_SETTLE_SECONDS",
+        "PTZ_BUSY_DELAY",
+        "DEFAULT_PRESET_RESULT_WAIT",
+        "FULL_RESOLUTION_TIMEOUT",
+        "LIVE_OPEN_TIMEOUT",
+    ],
+)
+def test_the_camera_motion_and_live_image_waits_are_shortened(name: str) -> None:
+    module, value = SHORT_TIMEOUTS[name]
+    assert value < getattr(importlib.import_module(f"eufy_home_security.{module}"), name)
 
 
 def test_short_timeouts_refuses_an_unknown_name() -> None:
