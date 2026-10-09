@@ -67,6 +67,10 @@ class RegionStatus:
     logins_in_window: int = 0
     """Login attempts on this scope's cluster in the budget window (shared by the
     scopes of one cluster)."""
+    next_login_allowed_in: float = 0.0
+    """Seconds until a login to this scope is allowed: the longest of the request
+    hold-off, its cluster's login hold-off and its cluster's budget wait; 0.0 when
+    allowed now."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

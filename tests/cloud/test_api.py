@@ -363,9 +363,11 @@ async def test_request_throttle_holds_off_every_cloud_call(
                 await api.async_get_devices(refresh=True)
             assert not isinstance(caught.value, LoginLimitedError)
             assert caught.value.retry_after == pytest.approx(3600, abs=5)
+            assert (caught.value.origin, caught.value.scope) == ("cloud", None)
             sent = len(mock.requests)
-            with pytest.raises(RateLimitedError):
+            with pytest.raises(RateLimitedError) as local:
                 await api.async_register_push_token("token")
+            assert (local.value.origin, local.value.scope) == ("hold_off", None)
             with pytest.raises(RateLimitedError):
                 await api.async_login(force=True)
             assert len(mock.requests) == sent  # refused locally: nothing reached the cloud
@@ -1087,6 +1089,7 @@ async def test_cipher_refresh_honours_the_cooldown(
                 await api.async_get_cipher_key(SYNTHETIC.station_sn, refresh=True)
     assert caught.value.code == 0
     assert caught.value.retry_after is not None
+    assert (caught.value.origin, caught.value.scope) == ("cooldown", None)
 
 
 async def test_register_push_token(fake_mega: FakeMega, cache: SessionCache) -> None:
@@ -1388,7 +1391,11 @@ async def test_cloud_status_next_login_matches_the_budget_refusal(cache: Session
         const.LOGIN_BUDGET_WINDOW_SECONDS,
     )
     assert caught.value.retry_after is not None
+    assert (caught.value.origin, caught.value.scope) == ("budget", "eu")
     assert status.next_login_allowed_in == pytest.approx(caught.value.retry_after, abs=1)
+    assert status.regions["eu"].next_login_allowed_in == pytest.approx(
+        caught.value.retry_after, abs=1
+    )
     assert status.last_login_attempt_age == pytest.approx(10, abs=5)
     assert status.login_hold_off is None
     assert status.request_hold_off is None

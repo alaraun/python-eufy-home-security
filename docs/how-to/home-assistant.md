@@ -337,7 +337,7 @@ For the integration:
 | what | where | use |
 |---|---|---|
 | a device's region | `CloudDevice.region` (`station.device.region`, each sub-device's `CloudDevice`) | a diagnostic attribute; never part of an entity id |
-| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `login_refused` (an extra country the cloud refused to log in: skipped until a rescan), `logins_in_window` (its cluster's logins in the budget window; the account-wide `CloudStatus.logins_in_window` is the fullest cluster's), `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
+| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `login_refused` (an extra country the cloud refused to log in: skipped until a rescan), `logins_in_window` (its cluster's logins in the budget window; the account-wide `CloudStatus.logins_in_window` is the fullest cluster's), `next_login_allowed_in` (0.0 when this scope may log in now), `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
 | rescan | `async_discover(rescan_regions=True)` | only on the user's request: the "refresh device list" button and the repair's fix. Timers and automatic refreshes pass `refresh=True` alone, so a suspended region is never retried by itself |
 | scan on every refresh | `EufySecurity(scan_regions=...)` | an options-flow switch, off by default |
 
@@ -1888,7 +1888,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 |---|---|
 | `LoginChallengeError`, `AuthenticationError` | `raise ConfigEntryAuthFailed` — start the reauth flow. Answer a challenge with `async_login(verify_code=…, login_id=challenge.login_id)` (or `captcha_id`/`captcha_answer`). A `verify_code` challenge (`kind`) is also how an account with two-step verification answers a correct password; `code_requested` says the library has asked eufy to e-mail the code. `SessionRejectedError` (an `AuthenticationError`): the cloud refused the session again after one fresh login |
 | `SessionReplacedError` | not a reauth: another app or integration logged in with this account and the cloud ended the library's session. Raise a repair issue ("give Home Assistant its own eufy account, shared from the owner"). At setup, carry on from the cache: `async_discover()` and `async_start()` need no login when the cache is warm, so local control keeps working. `raise ConfigEntryNotReady` only if `async_discover()` fails too (a cold cache). Nothing logs in again by itself, restarts included (`EufySecurity.session_replaced`); when the user confirms in the repair flow, call `async_login(force=True)` and reload the entry |
-| `LoginLimitedError` (a `RateLimitedError`) | not a reauth: the credentials are fine. Raise a repair issue ("eufy is refusing logins, retrying in …") and carry on from the cache as above; `raise ConfigEntryNotReady` only on a cold cache. Clear the issue on the next successful login |
+| `LoginLimitedError` (a `RateLimitedError`) | not a reauth: the credentials are fine. Raise a repair issue ("eufy is refusing logins, retrying in …"; with `origin == "budget"` it is the library's own limit for `scope`, see below the table) and carry on from the cache as above; `raise ConfigEntryNotReady` only on a cold cache. Clear the issue on the next successful login |
 | `RateLimitedError` | `raise ConfigEntryNotReady` / `UpdateFailed`; schedule the next attempt no sooner than `err.retry_after` seconds |
 | `StationUnreachableError`, `DeviceTimeoutError` | `raise UpdateFailed` — the session's own supervisor is already reconnecting. A reply wait moves its deadline out by the time something else held the event loop (another integration's blocking setup at HA start; up to `p2p.session.LOOP_STALL_MAX`, 30 s), so a held loop alone does not raise `DeviceTimeoutError` |
 | `DeviceBusyError` (a `CommunicationError`, raised while an image capture holds the camera: by another capture, a default-preset write or a pan/tilt step) | not an outage: from a button or service action, `raise HomeAssistantError` ("capture in progress"); never `UpdateFailed` |
@@ -1962,7 +1962,15 @@ stops every cloud call (each station's credential refresh, the push listener's t
 upload, device refreshes — which fall back to the cached list); a login throttle stops
 only logins, so a still-valid session keeps working. On top of that the library allows
 at most 3 login attempts in a rolling 6 h. Every refusal is a `RateLimitedError` with
-`retry_after`, so the coordinator needs no timers of its own. Local control is
+`retry_after`, so the coordinator needs no timers of its own. Its `origin` says who
+refused: `"cloud"` (eufy answered a throttle code now), `"hold_off"` (refused locally
+because eufy throttled earlier), `"budget"` (the library's own 3-per-6-h login budget;
+eufy was not asked) or `"cooldown"` (`RefreshCooldownError`). A refused login carries its
+`scope` (`"eu"`, `"eu:FR"`): a budget refusal for an extra country's scope means only the
+devices listed under that country wait, so the repair can name the country instead of
+"eufy is refusing sign-ins". `scope` is None when the refusal covers every call or every
+scope. `cloud_status().regions[scope].next_login_allowed_in` tells, without a login
+attempt, whether a scope may log in now. Local control is
 unaffected: the P2P sessions need no cloud once the station identities and cipher keys
 are cached.
 

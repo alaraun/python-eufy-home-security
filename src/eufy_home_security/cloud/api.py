@@ -2349,6 +2349,7 @@ class EufyCloudApi:
             raise RateLimitedError(
                 f"holding off the eufy cloud after it throttled ({left:.0f}s left)",
                 retry_after=left,
+                origin="hold_off",
             )
         if not login:
             return
@@ -2358,6 +2359,8 @@ class EufyCloudApi:
             raise LoginLimitedError(
                 f"holding off {region} logins after the cloud refused one ({left:.0f}s left)",
                 retry_after=left,
+                scope=region,
+                origin="hold_off",
             )
         count, left = self._login_budget_wait(region)
         if left is not None:
@@ -2373,6 +2376,8 @@ class EufyCloudApi:
                 f"{const.LOGIN_BUDGET_WINDOW_SECONDS / 3600:.0f} h already; "
                 f"next allowed in {left:.0f}s",
                 retry_after=left,
+                scope=region,
+                origin="budget",
             )
 
     def _raise_if_cipher_unavailable(self, station_sn: str, cipher_id: int) -> None:
@@ -2482,6 +2487,7 @@ class EufyCloudApi:
         at = listing.get("at")
         country = self._cache.cloud_sessions().get(region, {}).get("country_code")
         expires = cached[3] if cached else None
+        count, wait = self._login_budget_wait(region)
         return RegionStatus(
             session_expires_in=None if expires is None else max(expires - now, 0.0),
             devices=_count(listing.get("devices")) if listing else None,
@@ -2490,7 +2496,15 @@ class EufyCloudApi:
             in_use=region in in_use,
             suspended=region in self.suspended_regions(),
             login_refused=region in self.refused_regions(),
-            logins_in_window=self._login_budget_wait(region)[0],
+            logins_in_window=count,
+            next_login_allowed_in=max(
+                (
+                    w
+                    for w in (self._held_off("requests"), self._held_off("login", region), wait)
+                    if w is not None
+                ),
+                default=0.0,
+            ),
         )
 
     def _station_refresh_status(self, station_sn: str) -> StationRefreshStatus:
@@ -2541,6 +2555,8 @@ class EufyCloudApi:
             f"cloud throttled {path} (code {code}): {message}".rstrip(": "),
             retry_after=left,
             code=code,
+            scope=region if throttle.login_only and throttle.per_region else None,
+            origin="cloud",
         )
 
     # ── envelope ─────────────────────────────────────────────────────────────

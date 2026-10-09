@@ -470,4 +470,6 @@ reports, that is persisted with the session: until it ends the library refuses l
 and sends nothing — every call for a request throttle, logins only for a login
 throttle. Independently, at most 3 login attempts (of any outcome) are sent in a
 rolling 6 h. A refusal is a `RateLimitedError` (`LoginLimitedError` for logins) carrying
-`retry_after`.
+`retry_after`, its `origin` (`cloud`: the answer was a throttle; `hold_off`: refused
+locally after one; `budget`: the library's login budget; `cooldown`: a key-refresh
+cooldown) and, for a refused login, its login `scope`.

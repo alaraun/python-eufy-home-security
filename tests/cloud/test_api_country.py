@@ -15,7 +15,12 @@ from aioresponses import aioresponses
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.models import LoginCountry
-from eufy_home_security.exceptions import CommunicationError, LoginChallengeError, RateLimitedError
+from eufy_home_security.exceptions import (
+    CommunicationError,
+    LoginChallengeError,
+    LoginLimitedError,
+    RateLimitedError,
+)
 from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
@@ -507,6 +512,28 @@ async def test_an_extra_country_logs_in_on_its_home_region_and_its_devices_join_
     assert cache.section("cloud")["extra_countries"] == {"CH": "eu"}
     # The login budget counts per cluster: both eu logins.
     assert len(cache.recent_logins(const.LOGIN_BUDGET_WINDOW_SECONDS, "eu")) == 2
+
+
+async def test_a_spent_budget_names_the_extra_scope_that_needed_the_login(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """The library's own budget refuses an extra country's login: the error names
+    that scope and the budget, and the scopes of that cluster wait alike."""
+    _with_an_extra_country(fake_mega)
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache, country=["EE", "CH"]).async_login()  # 2 eu logins
+        cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, "eu")  # the third
+        del cache.section("cloud")["sessions"]["eu:CH"]
+        api = _api(http, cache, country=["EE", "CH"])
+        with pytest.raises(LoginLimitedError) as caught:
+            await api.async_login()
+    assert (caught.value.origin, caught.value.scope, caught.value.code) == ("budget", "eu:CH", 0)
+    regions = api.cloud_status().regions
+    assert regions["eu:CH"].next_login_allowed_in == pytest.approx(caught.value.retry_after, abs=1)
+    assert regions["eu"].next_login_allowed_in == pytest.approx(
+        regions["eu:CH"].next_login_allowed_in, abs=1
+    )
 
 
 async def test_a_restart_reuses_the_extra_country_session_without_a_lookup(

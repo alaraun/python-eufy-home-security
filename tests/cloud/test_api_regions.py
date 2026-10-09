@@ -255,13 +255,15 @@ async def test_a_login_count_throttle_holds_off_only_its_region(
     with aioresponses() as mock:
         fake_mega.install(mock)
         api = _api(http, cache)
-        with pytest.raises(LoginLimitedError):
+        with pytest.raises(LoginLimitedError) as answered:
             await api.async_login()
         fake_mega.region_login_code = {}
-        with pytest.raises(LoginLimitedError, match="eu logins"):
+        with pytest.raises(LoginLimitedError, match="eu logins") as local:
             await api.async_login()  # refused locally
         await _api(http, cache, region="us").async_login()
     assert _requests(fake_mega, "login") == ["eu", "us"]
+    assert (answered.value.origin, answered.value.scope) == ("cloud", "eu")
+    assert (local.value.origin, local.value.scope) == ("hold_off", "eu")
 
 
 async def test_a_credential_lock_holds_off_every_region(
@@ -271,12 +273,14 @@ async def test_a_credential_lock_holds_off_every_region(
     with aioresponses() as mock:
         fake_mega.install(mock)
         api = _api(http, cache)
-        with pytest.raises(LoginLimitedError):
+        with pytest.raises(LoginLimitedError) as answered:
             await api.async_login()
         fake_mega.region_login_code = {}
-        with pytest.raises(LoginLimitedError):
+        with pytest.raises(LoginLimitedError) as local:
             await _api(http, cache, region="us").async_login()  # refused locally
     assert _requests(fake_mega, "login") == ["eu"]
+    assert (answered.value.origin, answered.value.scope) == ("cloud", None)
+    assert (local.value.origin, local.value.scope) == ("hold_off", "us")
 
 
 async def test_the_login_budget_is_counted_per_region(
@@ -289,6 +293,7 @@ async def test_the_login_budget_is_counted_per_region(
         api = _api(http, cache, region="us")
         await api.async_login()
     assert _requests(fake_mega, "login") == ["us"]
+    assert api.cloud_status().regions["us"].next_login_allowed_in == 0.0
 
 
 async def test_push_is_not_registered_once_every_region_is_suspended(
