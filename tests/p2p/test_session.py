@@ -125,6 +125,12 @@ async def station() -> AsyncIterator[FakeStation]:
     fake.stop()
 
 
+@pytest.fixture
+def short_settle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A parameter read's settle wait shortened (the fake sends every block at once)."""
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 0.05)
+
+
 def make_session(station: FakeStation, provider: Provider) -> StationSession:
     return StationSession(
         SYNTHETIC.station_sn, provider, host="127.0.0.1", port=station.discovery_port
@@ -442,7 +448,9 @@ async def test_state_dumps_are_trusted_only_under_gcm(
 
 
 @pytest.mark.parametrize("rsa", [False, True], ids=["gcm", "rsa"])
-async def test_alarm_frames_become_param_and_alarm_changes(station: FakeStation, rsa: bool) -> None:
+async def test_alarm_frames_become_param_and_alarm_changes(
+    station: FakeStation, rsa: bool, short_settle: None
+) -> None:
     """Alarm frames under the session's cipher (GCM, or an RSA session's key) count; one
     under the static key is refused, and one that does not decrypt is dropped."""
     session = make_rsa_session(station) if rsa else make_session(station, Provider(station))
@@ -1257,14 +1265,14 @@ async def test_a_reply_queued_while_the_event_loop_was_blocked_is_still_taken(
 ) -> None:
     """A loop blocked past the deadline fires the timer late, ahead of the replies that
     arrived meanwhile; the request waits a grace period for them instead of failing."""
-    timeout = 0.3
+    timeout = 0.2
     sent = station.send_storage
 
     def answer_then_block(*, cipher: int = FrameCipher.GCM) -> None:
         for _ in range(4):  # frames ahead of the record, one datagram each
             station.send_receipt(FrameType.CMD_TRANSFER, 0)
         sent(cipher=cipher)
-        time.sleep(timeout + 1.0)  # another component holds the loop past the deadline
+        time.sleep(timeout + 0.2)  # another component holds the loop past the deadline
 
     monkeypatch.setattr(station, "send_storage", answer_then_block)
     session = make_session(station, Provider(station))
@@ -1280,7 +1288,7 @@ async def test_a_loop_held_twice_past_the_deadline_still_takes_the_reply(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Each stretch the loop is held moves the deadline out, not only the first."""
-    timeout = 0.3
+    timeout = 0.2
     sent = station.send_storage
     loop = asyncio.get_running_loop()
 
@@ -1288,8 +1296,8 @@ async def test_a_loop_held_twice_past_the_deadline_still_takes_the_reply(
         for _ in range(4):
             station.send_receipt(FrameType.CMD_TRANSFER, 0)
         sent(cipher=cipher)
-        time.sleep(timeout + 0.5)
-        loop.call_soon(time.sleep, 1.5)  # held again before the queued reply is read
+        time.sleep(timeout + 0.1)
+        loop.call_soon(time.sleep, 0.3)  # held again before the queued reply is read
 
     monkeypatch.setattr(station, "send_storage", answer_then_block_twice)
     session = make_session(station, Provider(station))
@@ -1302,12 +1310,11 @@ async def test_a_loop_held_twice_past_the_deadline_still_takes_the_reply(
 
 
 async def test_a_loop_held_before_a_resend_still_takes_the_parameter_dump(
-    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch, short_settle: None
 ) -> None:
     """The held-loop credit covers a request's resend phase too: a dump queued while the
     loop was held there past the whole timeout is still taken, and not asked for twice."""
     monkeypatch.setattr(session_module, "PARAM_QUERY_RESEND_AFTER", 0.1)
-    monkeypatch.setattr(session_module, "PARAM_SETTLE", 0.05)
     timeout = 0.2
     sent = station.send_param_dump
 
@@ -1689,7 +1696,7 @@ async def test_discovery_reply_from_another_station_is_ignored(
 ) -> None:
     """Every station answers a broadcast; a session only adopts the reply carrying its own DID."""
     monkeypatch.setattr(session_module, "DISCOVERY_ATTEMPTS", 1)
-    monkeypatch.setattr(session_module, "DISCOVERY_TIMEOUT", 1.0)
+    monkeypatch.setattr(session_module, "DISCOVERY_TIMEOUT", 0.2)
     other = StationSession(
         SYNTHETIC.station_sn,
         Provider(station),
@@ -3265,7 +3272,7 @@ async def test_async_get_sd_info_raises_timeout_on_no_answer(station: FakeStatio
 
 
 async def test_a_session_key_that_is_not_printable_runs_the_gcm_session(
-    station: FakeStation,
+    station: FakeStation, short_settle: None
 ) -> None:
     """Version 8 with 32 session-key bytes outside printable ASCII: the handshake takes
     them as the GCM key, and commands and the parameter dump run under it."""
@@ -3337,7 +3344,7 @@ def make_rsa_session(
 
 @pytest.mark.parametrize("encryption", [0, 1])
 async def test_an_rsa_conn_init_runs_the_session_under_its_aes_key(
-    station: FakeStation, encryption: int
+    station: FakeStation, encryption: int, short_settle: None
 ) -> None:
     """Version 1: the RSA-wrapped 16-character key, then every frame AES-128-ECB under it.
 
@@ -3370,7 +3377,7 @@ async def test_an_rsa_conn_init_runs_the_session_under_its_aes_key(
 
 @pytest.mark.parametrize("tag", [FrameCipher.ECB, FrameCipher.GCM, 0x05])
 async def test_an_rsa_session_takes_no_clear_frame_as_state_or_authenticated(
-    station: FakeStation, tag: int
+    station: FakeStation, tag: int, short_settle: None
 ) -> None:
     """On an RSA session only frames under its key are the station's: a clear parameter
     dump is refused whatever its cipher tag, and a clear push is never authenticated."""

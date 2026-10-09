@@ -209,6 +209,8 @@ DISCOVERY_ATTEMPTS = 3
 OP_LOCK_WAIT_LOG = 0.05
 """A wait for the command lock at least this long (seconds) gets a DEBUG line."""
 DISCOVERY_TIMEOUT = 6.0
+DISCOVERY_RETRY_DELAY = 0.5
+"""Pause (seconds) before the next discovery attempt after one failed; none after the last."""
 HANDSHAKE_TIMEOUT = 6.0
 COMMAND_TIMEOUT = 6.0
 LOOP_STALL_STEP = 0.25
@@ -3243,7 +3245,8 @@ class StationSession:
             except StationUnreachableError as err:
                 last_error = err
                 _LOGGER.debug("%s: discovery attempt %d failed: %s", self._log_name, attempt, err)
-                await asyncio.sleep(0.5)
+                if attempt < DISCOVERY_ATTEMPTS:
+                    await asyncio.sleep(DISCOVERY_RETRY_DELAY)
                 continue
             except BaseException:
                 transport.close()
