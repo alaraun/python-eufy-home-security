@@ -51,9 +51,12 @@ from ..p2p.crypto import (
 )
 from ..p2p.did import Did, static_key
 from ..p2p.media import (
+    AUDIO_HEADER_LEN,
     PLAYBACK_ENDED,
     V1_ENCRYPTED_LEN,
     VIDEO_CODEC_HEVC,
+    VIDEO_HEADER_LEN,
+    MediaKeyType,
     StillFormat,
     VideoVariant,
     pic_check_code,
@@ -155,6 +158,42 @@ def audio_record(body: bytes, *, counter: int = 0, timestamp_ms: int = 0) -> byt
     ) + body
 
 
+@dataclass(frozen=True, slots=True)
+class EccMediaKey:
+    """An ECC stream's AES-256 key and its ECIES wrap to the client's offered key."""
+
+    key: bytes
+    wrapped: bytes
+
+    @classmethod
+    def for_offer(cls, public_hex: str) -> EccMediaKey:
+        """A fresh stream key wrapped to the 128-hex-char ``X ‖ Y`` key of an ECC offer."""
+        point = b"\x04" + bytes.fromhex(public_hex)
+        public = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), point)
+        key = os.urandom(32)
+        return cls(key, ecies_encrypt(key, public))
+
+    def seal(self, clear: bytes) -> tuple[bytes, bytes]:
+        """``(tag ‖ iv, ciphertext)`` of ``clear`` under AES-256-GCM, AAD ``GCM_AAD``."""
+        iv = os.urandom(12)
+        sealed = AESGCM(self.key).encrypt(iv, clear, GCM_AAD)
+        return sealed[-16:] + iv, sealed[:-16]
+
+
+def ecc_video_record(clear_record: bytes, media_key: EccMediaKey) -> bytes:
+    """A clear :func:`video_record` as an ECC record: its 22-byte header, the wrapped key,
+    the GCM tag and IV, then the body's ciphertext."""
+    tag_iv, ciphertext = media_key.seal(clear_record[VIDEO_HEADER_LEN:])
+    return clear_record[:VIDEO_HEADER_LEN] + media_key.wrapped + tag_iv + ciphertext
+
+
+def ecc_audio_record(clear_record: bytes, media_key: EccMediaKey) -> bytes:
+    """A clear :func:`audio_record` as an ECC record: its 16-byte header, the GCM tag and
+    IV, then the body's ciphertext."""
+    tag_iv, ciphertext = media_key.seal(clear_record[AUDIO_HEADER_LEN:])
+    return clear_record[:AUDIO_HEADER_LEN] + tag_iv + ciphertext
+
+
 def v1_still(
     image: bytes,
     serial: str = SYNTHETIC.camera_sn,
@@ -253,6 +292,8 @@ _VIDEO_SUBHEADER_FLAGS: dict[VideoVariant, tuple[tuple[int, int], tuple[int, int
 }
 _AUDIO_MEDIA_VERSION = 2
 """A HomeBase 3's audio subheader byte 0."""
+_ECC_MEDIA_VERSION = 8
+"""Subheader byte 0 of an ECC stream's records."""
 _MEDIA_SESSION_ID = 0x0A
 """Subheader byte 4 of media frames: the session id the live open carried."""
 
@@ -414,6 +455,9 @@ class FakeStation:
     the first NAL unit tells a keyframe."""
     audio_media_version: int = _AUDIO_MEDIA_VERSION
     """Audio subheader byte 0 (0: audio the app does not play)."""
+    ecc_offer_ignored: bool = False
+    """Answer an ECC key offer with :attr:`video_variant` records wrapped to a throwaway
+    key, as a station without ECC media would; otherwise an ECC offer gets ECC records."""
 
     def __post_init__(self) -> None:
         self.static_key = static_key(self.serial, self.did)
@@ -461,6 +505,8 @@ class FakeStation:
         """Bare 1004 stops received (a standalone device's live stop)."""
         self.bare_stop_frames: list[tuple[int, bytes]] = []
         """Each bare 1004 received, as (subheader channel, body)."""
+        self.media_keys_offered: list[MediaKeyType] = []
+        """The key type each media open offered (by its ``key`` length)."""
         self.live_open_payloads: list[dict[str, Any]] = []
         """The ``payload`` object of every 1003 received through a ``DeviceMsgBean``."""
         self.pings = 0
@@ -1020,16 +1066,26 @@ class FakeStation:
         peer = _CURRENT_PEER.get()
         if peer is None:
             return
-        public = rsa.RSAPublicNumbers(65537, int(key_hex, 16)).public_key()
+        ecc: EccMediaKey | None = None
+        if len(key_hex) == 2 * 64:
+            self.media_keys_offered.append(MediaKeyType.ECC)
+            if self.ecc_offer_ignored:
+                public = rsa.generate_private_key(65537, 1024).public_key()  # noqa: S505
+            else:
+                ecc = EccMediaKey.for_offer(key_hex)
+                public = None
+        else:
+            self.media_keys_offered.append(MediaKeyType.RSA)
+            public = rsa.RSAPublicNumbers(65537, int(key_hex, 16)).public_key()
         loop = asyncio.get_running_loop()
         if live:
             peer.stop_live()
-            peer.live = loop.create_task(self._stream(public, None, MEDIA_PFRAME, camera))
+            peer.live = loop.create_task(self._stream(public, None, MEDIA_PFRAME, camera, ecc=ecc))
             peer.live_camera = camera
             self.max_live_cameras = max(self.max_live_cameras, len(self.live_cameras))
         else:
             task = loop.create_task(
-                self._stream(public, self.recording_frames, MEDIA_RECORDING_PFRAME, camera)
+                self._stream(public, self.recording_frames, MEDIA_RECORDING_PFRAME, camera, ecc=ecc)
             )
             peer.recordings.add(task)
             task.add_done_callback(peer.recordings.discard)
@@ -1043,16 +1099,23 @@ class FakeStation:
             peer.stop_media()
 
     async def _stream(
-        self, public: rsa.RSAPublicKey, count: int | None, pframe: bytes, camera: int
+        self,
+        public: rsa.RSAPublicKey | None,
+        count: int | None,
+        pframe: bytes,
+        camera: int,
+        *,
+        ecc: EccMediaKey | None = None,
     ) -> None:
+        # ``public`` None: an ECC stream, every record sealed with ``ecc``.
         keyframe = (
             media_keyframe(public, os.urandom(16))
-            if self.video_variant is VideoVariant.RSA_PREFIX
+            if public is not None and self.video_variant is VideoVariant.RSA_PREFIX
             else MEDIA_KEYFRAME
         )
         # Joined mid-GOP, like a real stream: a P-frame comes before the first keyframe.
         clock = MEDIA_CLOCK_START
-        self.send_video(pframe, keyframe=False, camera=camera, timestamp_ms=clock)
+        self.send_video(pframe, keyframe=False, camera=camera, timestamp_ms=clock, ecc=ecc)
         sent = 0
         loop = asyncio.get_running_loop()
         self._last_ping = max(self._last_ping, loop.time())
@@ -1077,13 +1140,17 @@ class FakeStation:
                 timestamp_ms=clock,
                 width=size[0],
                 height=size[1],
+                ecc=ecc,
             )
+            audio = audio_record(MEDIA_AUDIO, counter=sent + 1, timestamp_ms=clock)
             self.send_frame(
                 FrameType.AUDIO_FRAME,
-                audio_record(MEDIA_AUDIO, counter=sent + 1, timestamp_ms=clock),
+                audio if ecc is None else ecc_audio_record(audio, ecc),
                 cipher=0,
                 channel=1,
-                subheader=_media_subheader(camera, self.audio_media_version),
+                subheader=_media_subheader(
+                    camera, self.audio_media_version if ecc is None else _ECC_MEDIA_VERSION
+                ),
             )
             sent += 1
             self.media_frames_sent = sent
@@ -1110,21 +1177,24 @@ class FakeStation:
         timestamp_ms: int = 0,
         width: int = MEDIA_WIDTH,
         height: int = MEDIA_HEIGHT,
+        ecc: EccMediaKey | None = None,
     ) -> None:
         """A video record of the camera on channel ``camera`` (subheader byte 2), tagged
-        per :attr:`video_variant`."""
-        key_flags, p_flags = _VIDEO_SUBHEADER_FLAGS[self.video_variant]
+        per :attr:`video_variant`, or sealed as an ECC record with ``ecc``."""
+        variant = self.video_variant if ecc is None else VideoVariant.ECC
+        key_flags, p_flags = _VIDEO_SUBHEADER_FLAGS[variant]
         version, encrypted = key_flags if keyframe else p_flags
+        record = video_record(
+            body,
+            keyframe=keyframe and self.keyframe_flag,
+            counter=counter,
+            timestamp_ms=timestamp_ms,
+            width=width,
+            height=height,
+        )
         self.send_frame(
             FrameType.VIDEO_FRAME,
-            video_record(
-                body,
-                keyframe=keyframe and self.keyframe_flag,
-                counter=counter,
-                timestamp_ms=timestamp_ms,
-                width=width,
-                height=height,
-            ),
+            record if ecc is None else ecc_video_record(record, ecc),
             cipher=0,
             channel=1,
             subheader=_media_subheader(camera, version, encrypted),

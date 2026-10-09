@@ -97,7 +97,7 @@ if TYPE_CHECKING:
     from .p2p.broadcast import DEFAULT_QUEUE_CHUNKS, FrameStream, ResizePolicy, StreamBroadcast
     from .p2p.clip import CLIP_CONTENT_TYPE, ClipWriter, MediaClip
     from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
-    from .p2p.media import Still, StillFormat
+    from .p2p.media import MediaKeyType, Still, StillFormat
     from .p2p.pppp import LAN_DISCOVERY_TIMEOUT
     from .p2p.session import (
         DEFAULT_STATION_SESSIONS,
@@ -226,7 +226,7 @@ _EXPORTS: dict[str, str] = {
     **dict.fromkeys(("Reach", "StationChoice"), "inclusion"),
     **dict.fromkeys(("FrameCipher", "GuardMode"), "models"),
     **dict.fromkeys(("HostSource", "LanPath", "PathWarning", "suggest_local_ports"), "network"),
-    **dict.fromkeys(("Still", "StillFormat"), "p2p.media"),
+    **dict.fromkeys(("MediaKeyType", "Still", "StillFormat"), "p2p.media"),
     "LAN_DISCOVERY_TIMEOUT": "p2p.pppp",
     **dict.fromkeys(
         (
@@ -332,6 +332,7 @@ __all__ = [
     "LoginLimitedError",
     "LoginNeed",
     "MediaClip",
+    "MediaKeyType",
     "MemoryStore",
     "ModelDataError",
     "ModelStatus",

@@ -9,9 +9,8 @@ from typing import Any
 from eufy_home_security import EufySecurity, redact_serial
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import _SessionExpiredError
-from eufy_home_security.cloud.models import CipherRecord
+from eufy_home_security.cloud.models import CAMERA_INFO_PARAM, CipherRecord
 from eufy_home_security.diagnostics import (
-    CAMERA_INFO_PARAM,
     HOUSE,
     INVITES,
     SECURITY_DEVICES,

@@ -58,7 +58,7 @@ from eufy_home_security.models import STATION_CHANNEL, GuardMode
 from eufy_home_security.network import HostSource
 from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p.did import static_key
-from eufy_home_security.p2p.media import MediaFrame, MediaKind, StillFormat
+from eufy_home_security.p2p.media import MediaFrame, MediaKeyType, MediaKind, StillFormat
 from eufy_home_security.p2p.messages import HISTORY_RECORD_COUNTER, STANDALONE_RECEIPT_LEN
 from eufy_home_security.p2p.params import ParamDump
 from eufy_home_security.p2p.session import (
@@ -355,6 +355,40 @@ async def test_overlapping_snapshots_each_return_a_keyframe(
     )
     assert list(both) == [MEDIA_KEYFRAME, MEDIA_KEYFRAME]
     assert fake.opened_while_streaming == [False, False]
+
+
+@pytest.mark.parametrize(
+    ("camera_info", "offered"),
+    [
+        (None, MediaKeyType.RSA),
+        ("-43", MediaKeyType.RSA),
+        ("127", MediaKeyType.RSA),
+        ("128", MediaKeyType.ECC),
+    ],
+)
+async def test_the_live_open_offers_the_key_the_app_picks_from_param_1103(
+    station: Station, fake: FakeStation, camera_info: str | None, offered: MediaKeyType
+) -> None:
+    params = [] if camera_info is None else [{"param_type": 1103, "param_value": camera_info}]
+    camera = dataclasses.replace(CAMERA, raw={"params": params})
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    assert hub.media_key_type(0) is offered
+    async with await hub.async_open_live(SYNTHETIC.camera_sn) as view:
+        async for frame in view:
+            if frame.is_keyframe:
+                assert frame.data == MEDIA_KEYFRAME
+                break
+    assert fake.media_keys_offered == [offered]
+
+
+async def test_media_key_overrides_the_apps_pick(station: Station, fake: FakeStation) -> None:
+    async with await station.async_open_live(
+        SYNTHETIC.camera_sn, media_key=MediaKeyType.ECC
+    ) as view:
+        async for frame in view:
+            if frame.is_keyframe:
+                break
+    assert fake.media_keys_offered == [MediaKeyType.ECC]
 
 
 async def test_a_live_still_beside_a_live_view_takes_an_extra_session(

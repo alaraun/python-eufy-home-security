@@ -4,16 +4,16 @@ Live video and clip downloads both arrive on DRW ch1 as XZYH VIDEO_FRAME
 (0x0514) / AUDIO_FRAME (0x0515) records. This module holds only the pure parts —
 no sockets, no ffmpeg:
 
-* :func:`generate_media_rsa_key` mints the per-session RSA-1024 keypair whose
-  public modulus the client hands the station in the open command; the station wraps the
-  per-session AES key to it.
+* :func:`generate_media_rsa_key` / :func:`generate_media_ecc_key` mint the per-stream
+  key pair whose public half the client hands the station in the open command; the
+  station wraps the stream's AES key to it (:class:`MediaKeyType`).
 * :func:`video_variant` / :func:`audio_variant` read how a record is protected from its
   XZYH subheader, as the app's media receiver does.
 * :func:`parse_video_frame` / :func:`parse_audio_frame` split the media header.
 * :class:`MediaDecoder` turns one stream's records into playable
   :class:`MediaFrame` objects: it undoes the small encrypted header prefix of a
-  record that carries the wrapped stream key (other records are clear), unwrapping
-  the stream key once.
+  record that carries the RSA-wrapped stream key (other RSA-stream records are clear),
+  or the AES-256-GCM of an ECC stream's records, unwrapping each stream key once.
 * the ``*_payload`` builders shape the ``payload`` object of the open / download
   commands.
 """
@@ -27,11 +27,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from ..devices.recipes import station_live_payload
 from ..exceptions import ProtocolError, UnsupportedError
-from .crypto import ecb_decrypt, gcm_decrypt_broadcast
+from .crypto import GCM_AAD, ecb_decrypt, ecies_decrypt, gcm_decrypt_broadcast
 from .xzyh import Frame, FrameCipher, FrameType
 
 #: XZYH frame types carried on the media channel.
@@ -59,6 +61,24 @@ _KEYFRAME_ENC_PREFIX = 128
 KEYFRAME_MIN = KEYFRAME_RSA_LEN + _KEYFRAME_MARKER + _KEYFRAME_ENC_PREFIX  # 257
 _KEYFRAME_AES_KEY_LEN = 16
 _KEYFRAME_FLAG_OFFSET = 4
+
+#: ECC video record: the 22-byte video header, the ECIES-wrapped stream key, the GCM tag
+#: and IV, then the AES-256-GCM body (``video_encrypt_gcm`` in the app).
+ECC_WRAPPED_KEY_LEN = 129
+_GCM_TAG_LEN = 16
+_GCM_IV_LEN = 12
+_ECC_VIDEO_WRAPPED = slice(VIDEO_HEADER_LEN, VIDEO_HEADER_LEN + ECC_WRAPPED_KEY_LEN)
+_ECC_VIDEO_TAG = slice(_ECC_VIDEO_WRAPPED.stop, _ECC_VIDEO_WRAPPED.stop + _GCM_TAG_LEN)
+_ECC_VIDEO_IV = slice(_ECC_VIDEO_TAG.stop, _ECC_VIDEO_TAG.stop + _GCM_IV_LEN)
+ECC_VIDEO_HEADER_LEN = _ECC_VIDEO_IV.stop  # 179
+#: ECC audio record: the 16-byte audio header, the GCM tag and IV, then the body; the
+#: key is the one the stream's video records carry (``audio_info_ecc`` in the app).
+_ECC_AUDIO_TAG = slice(AUDIO_HEADER_LEN, AUDIO_HEADER_LEN + _GCM_TAG_LEN)
+_ECC_AUDIO_IV = slice(_ECC_AUDIO_TAG.stop, _ECC_AUDIO_TAG.stop + _GCM_IV_LEN)
+ECC_AUDIO_HEADER_LEN = _ECC_AUDIO_IV.stop  # 44
+_GCM_MEDIA_KEY_LEN = 32
+#: Param 1103 (``CAMERA_INFO``) from which the app offers an ECC media key.
+ECC_MEDIA_ABILITY = 128
 
 #: XZYH subheader bytes the app's media receiver reads.
 _SUB_MEDIA_VERSION = 0
@@ -89,15 +109,16 @@ class VideoVariant(StrEnum):
     RSA_V3 = "rsa_v3"
     """``v`` 3 or more with ``e`` 1: a clear body after the 22-byte header."""
     ECC = "ecc"
-    """``v`` 8 or 9: an ECIES-wrapped key and AES-256-GCM, for a client that offered an
-    ECC key. Not decoded."""
+    """``v`` 8 or 9: the ECIES-wrapped stream key, then an AES-256-GCM body, for a client
+    that offered an ECC key (:attr:`MediaKeyType.ECC`)."""
     E2E = "e2e"
     """``v`` 4 or 5 with ``e`` 2 or more: end-to-end encrypted (the app plays it only from
     recordings). Not decoded."""
 
 
-UNDECODABLE_VIDEO = frozenset({VideoVariant.ECC, VideoVariant.E2E})
-"""The variants :class:`MediaDecoder` does not decode."""
+UNDECODABLE_VIDEO = frozenset({VideoVariant.E2E})
+"""The variants :class:`MediaDecoder` never decodes (ECC needs a stream opened with an
+ECC key, :meth:`MediaDecoder.decodes`)."""
 
 
 def video_variant(subheader: bytes) -> VideoVariant:
@@ -126,7 +147,7 @@ class AudioVariant(StrEnum):
     G711 = "g711"
     """Floodlight audio (subheader byte 5 = 3, version 1): G.711 A-law. Not decoded."""
     ECC = "ecc"
-    """Media version 8 or 9: AES-256-GCM. Not decoded."""
+    """Media version 8 or 9: AES-256-GCM under the key of the stream's video records."""
     E2E = "e2e"
     """Media version 4 or 5 with the encrypted flag 2 or more. Not decoded."""
     OTHER = "other"
@@ -177,6 +198,34 @@ def starts_picture_group(data: bytes) -> bool:
     else:
         return False
     return len(data) > start and data[start] in _GOP_START_NAL
+
+
+class MediaKeyType(StrEnum):
+    """The key pair a client offers in a live open; the station protects the stream for it."""
+
+    RSA = "rsa"
+    """An RSA-1024 modulus (256 hex chars): RSA-wrapped AES-128 keyframe prefixes."""
+    ECC = "ecc"
+    """A P-256 public key (128 hex chars): every record AES-256-GCM, its key ECIES-wrapped."""
+
+
+def media_key_type_for(camera_info: int | None) -> MediaKeyType:
+    """The key the app offers a device with param 1103 ``camera_info`` (None: absent):
+    ECC from :data:`ECC_MEDIA_ABILITY`, else RSA."""
+    if camera_info is not None and camera_info >= ECC_MEDIA_ABILITY:
+        return MediaKeyType.ECC
+    return MediaKeyType.RSA
+
+
+def generate_media_ecc_key() -> tuple[str, ec.EllipticCurvePrivateKey]:
+    """Mint a per-stream P-256 key pair; return ``(public_hex_upper, private_key)``.
+
+    The public key is ``X ‖ Y`` (32 bytes each, big-endian) as 128 uppercase hex chars,
+    the form the app's ``GetCrypto(8)`` returns.
+    """
+    priv = ec.generate_private_key(ec.SECP256R1())
+    numbers = priv.public_key().public_numbers()
+    return format(numbers.x, "064X") + format(numbers.y, "064X"), priv
 
 
 def generate_media_rsa_key() -> tuple[str, rsa.RSAPrivateKey]:
@@ -291,12 +340,15 @@ def _resolve_variant(payload: bytes, variant: VideoVariant | None) -> VideoVaria
 def video_record_is_key(payload: bytes, variant: VideoVariant | None = None) -> bool:
     """Whether a VIDEO_FRAME record starts a picture group (a header peek, no decrypt).
 
-    A record carrying the wrapped key always does; a clear one when its header flags a
-    keyframe or its first NAL unit is an IDR picture or a parameter set.
+    A record carrying the RSA-wrapped key always does; a clear one when its header flags
+    a keyframe or its first NAL unit is an IDR picture or a parameter set; an encrypted
+    one (ECC) only by the header flag.
     """
     variant = _resolve_variant(payload, variant)
     if variant is VideoVariant.RSA_PREFIX or is_keyframe_record(payload):
         return True
+    if variant in (VideoVariant.ECC, VideoVariant.E2E):
+        return False
     return starts_picture_group(payload[VIDEO_HEADER_LEN : VIDEO_HEADER_LEN + 8])
 
 
@@ -311,6 +363,8 @@ def parse_video_frame(payload: bytes, *, variant: VideoVariant | None = None) ->
     ``variant`` comes from the record's subheader (:func:`video_variant`); without
     one, a flagged keyframe is taken as :attr:`VideoVariant.RSA_PREFIX` and any other
     record as clear. :data:`UNDECODABLE_VIDEO` variants raise :class:`UnsupportedError`.
+    An :attr:`VideoVariant.ECC` record's body is its ciphertext after the 179-byte
+    header, whole (the app decrypts all of it), and only its header flag marks a keyframe.
 
     ``datalen`` counts the frame as it **decodes**, not the bytes on the wire. A
     wrapped-key body also carries the 129-byte prefix that
@@ -335,6 +389,21 @@ def parse_video_frame(payload: bytes, *, variant: VideoVariant | None = None) ->
     variant = _resolve_variant(payload, variant)
     if variant in UNDECODABLE_VIDEO:
         raise UnsupportedError(f"{variant.value} video is not decoded by this library")
+    if variant is VideoVariant.ECC:
+        if len(payload) < ECC_VIDEO_HEADER_LEN:
+            raise ProtocolError(
+                f"ECC video frame shorter than its {ECC_VIDEO_HEADER_LEN}-byte header"
+            )
+        return VideoFrame(
+            is_keyframe=is_keyframe_record(payload),
+            data=payload[ECC_VIDEO_HEADER_LEN:],
+            timestamp_ms=timestamp_ms,
+            codec=VideoCodec.from_code(payload[5]),
+            width=width,
+            height=height,
+            counter=counter,
+            variant=variant,
+        )
     # A clear body is exactly datalen long and a station may pad the datagram; a
     # wrapped-key body's extra bytes are the prefix the decrypt consumes.
     prefixed = variant is VideoVariant.RSA_PREFIX
@@ -418,23 +487,53 @@ class _ForeignKeyframeError(ProtocolError):
 
 
 class MediaDecoder:
-    """Decode the media records of one stream opened with ``rsa_private_key``.
+    """Decode the media records of one stream opened with ``rsa_private_key`` or
+    ``ecc_private_key`` (the key whose public half the open offered).
 
-    The wrapped AES key is the same in every keyframe of a stream, so the RSA
-    unwrap runs once and is reused while the wrapped bytes stay the same.
+    The wrapped AES key is the same in every keyframe of a stream, so the unwrap runs
+    once and is reused while the wrapped bytes stay the same.
     """
 
-    __slots__ = ("_aes_key", "_rsa_key", "_wrapped")
+    __slots__ = ("_aes_key", "_ecc_key_hex", "_rsa_key", "_wrapped")
 
-    def __init__(self, rsa_private_key: rsa.RSAPrivateKey) -> None:
+    def __init__(
+        self,
+        rsa_private_key: rsa.RSAPrivateKey | None = None,
+        *,
+        ecc_private_key: ec.EllipticCurvePrivateKey | None = None,
+    ) -> None:
+        if (rsa_private_key is None) == (ecc_private_key is None):
+            raise ValueError("pass exactly one of rsa_private_key or ecc_private_key")
         self._rsa_key = rsa_private_key
+        self._ecc_key_hex = (
+            None
+            if ecc_private_key is None
+            else format(ecc_private_key.private_numbers().private_value, "064x")
+        )
         self._wrapped: bytes | None = None
         self._aes_key = b""
 
     @property
+    def key_type(self) -> MediaKeyType:
+        """The key type the stream was opened with."""
+        return MediaKeyType.RSA if self._rsa_key is not None else MediaKeyType.ECC
+
+    @property
     def aes_key(self) -> bytes:
-        """The stream's unwrapped AES-128 key; empty until a keyframe was decrypted."""
+        """The stream's unwrapped AES key (AES-128 on an RSA stream, AES-256 on an ECC
+        one); empty until a record carrying it was decrypted."""
         return self._aes_key
+
+    def decodes(self, variant: VideoVariant) -> bool:
+        """Whether this stream's key decodes video of ``variant``: RSA-wrapped keyframes
+        need the RSA key, ECC records the ECC key; E2E is never decoded."""
+        if variant in UNDECODABLE_VIDEO:
+            return False
+        if variant is VideoVariant.ECC:
+            return self._ecc_key_hex is not None
+        if variant is VideoVariant.RSA_PREFIX:
+            return self._rsa_key is not None
+        return True
 
     def decode(
         self, frame_type: int, payload: bytes, subheader: bytes | None = None
@@ -449,24 +548,103 @@ class MediaDecoder:
         """
         if frame_type == VIDEO_FRAME_TYPE:
             variant = video_variant(subheader) if subheader else None
+            if variant is not None and not self.decodes(variant):
+                raise UnsupportedError(
+                    f"{variant.value} video does not decode with an {self.key_type.value} key"
+                )
             video = parse_video_frame(payload, variant=variant)
-            prefixed = video.variant is VideoVariant.RSA_PREFIX
-            data = self.decrypt_keyframe(video.data) if prefixed else video.data
+            is_keyframe = video.is_keyframe
+            if video.variant is VideoVariant.ECC:
+                data = self.decrypt_ecc_video(payload)
+                is_keyframe = is_keyframe or starts_picture_group(data[:8])
+            elif video.variant is VideoVariant.RSA_PREFIX:
+                data = self.decrypt_keyframe(video.data)
+            else:
+                data = video.data
             return MediaFrame(
                 MediaKind.VIDEO,
                 data,
-                is_keyframe=video.is_keyframe,
+                is_keyframe=is_keyframe,
                 timestamp_ms=video.timestamp_ms,
                 codec=video.codec,
                 width=video.width,
                 height=video.height,
             )
         if frame_type == AUDIO_FRAME_TYPE:
-            if subheader and audio_variant(subheader, payload) is not AudioVariant.AAC:
+            kind = audio_variant(subheader, payload) if subheader else AudioVariant.AAC
+            if kind is AudioVariant.ECC:
+                clear = self.decrypt_ecc_audio(payload)
+                if clear is None:
+                    return None
+                payload = clear
+            elif kind is not AudioVariant.AAC:
                 return None
             audio = parse_audio_frame(payload)
             return MediaFrame(MediaKind.AUDIO, audio.data, timestamp_ms=audio.timestamp_ms)
         return None
+
+    def _gcm_key(self, wrapped: bytes) -> bytes:
+        """The AES-256 key an ECC record's ECIES-wrapped bytes carry, unwrapped once per
+        distinct wrap. The app keeps up to 32 plaintext bytes, zero-padded."""
+        if wrapped == self._wrapped:
+            return self._aes_key
+        if self._ecc_key_hex is None:
+            raise UnsupportedError("ECC media on a stream opened with an RSA key")
+        try:
+            plain = ecies_decrypt(wrapped, self._ecc_key_hex, ECC_WRAPPED_KEY_LEN)
+        except ProtocolError as exc:
+            raise _ForeignKeyframeError(
+                f"ECC record not wrapped for this stream's key ({exc})"
+            ) from exc
+        if not plain:
+            raise _ForeignKeyframeError("ECC record unwrapped to an empty key")
+        key = plain[:_GCM_MEDIA_KEY_LEN].ljust(_GCM_MEDIA_KEY_LEN, b"\x00")
+        self._aes_key, self._wrapped = key, wrapped
+        return key
+
+    def decrypt_ecc_video(self, payload: bytes) -> bytes:
+        """An ECC VIDEO_FRAME record's Annex-B body: ``payload[22:151]`` is the
+        ECIES-wrapped AES-256 key, ``[151:167]`` the GCM tag, ``[167:179]`` the IV, and
+        everything after the AES-256-GCM ciphertext (AAD ``b"eufy security"``).
+
+        A record wrapped for another key raises :class:`_ForeignKeyframeError`, a body
+        that fails its tag :class:`ProtocolError`.
+        """
+        if len(payload) < ECC_VIDEO_HEADER_LEN:
+            raise ProtocolError(
+                f"ECC video frame shorter than its {ECC_VIDEO_HEADER_LEN}-byte header"
+            )
+        key = self._gcm_key(bytes(payload[_ECC_VIDEO_WRAPPED]))
+        return _gcm_open(
+            key,
+            payload[_ECC_VIDEO_IV],
+            payload[ECC_VIDEO_HEADER_LEN:],
+            payload[_ECC_VIDEO_TAG],
+        )
+
+    def decrypt_ecc_audio(self, payload: bytes) -> bytes | None:
+        """An ECC AUDIO_FRAME record as a clear audio record (its 16-byte header, then
+        the body): ``payload[16:32]`` is the GCM tag, ``[32:44]`` the IV, the rest the
+        ciphertext, under the key of the stream's video records.
+
+        None before a video record brought the key, or when header byte 5 names a stream
+        type other than AAC-LC.
+        """
+        if len(payload) < ECC_AUDIO_HEADER_LEN:
+            raise ProtocolError(
+                f"ECC audio frame shorter than its {ECC_AUDIO_HEADER_LEN}-byte header"
+            )
+        if self._ecc_key_hex is None or not self._aes_key:
+            return None
+        if payload[_AUDIO_STREAM_TYPE_OFFSET] != _AUDIO_STREAM_AAC:
+            return None
+        body = _gcm_open(
+            self._aes_key,
+            payload[_ECC_AUDIO_IV],
+            payload[ECC_AUDIO_HEADER_LEN:],
+            payload[_ECC_AUDIO_TAG],
+        )
+        return bytes(payload[:AUDIO_HEADER_LEN]) + body
 
     def decrypt_keyframe(self, video_body: bytes) -> bytes:
         """Decrypt a keyframe body to Annex-B HEVC.
@@ -487,6 +665,8 @@ class MediaDecoder:
         """
         if len(video_body) < KEYFRAME_MIN:
             return video_body
+        if self._rsa_key is None:
+            raise UnsupportedError("an RSA-wrapped keyframe on a stream opened with an ECC key")
         wrapped = video_body[0:KEYFRAME_RSA_LEN]
         if wrapped != self._wrapped:
             try:
@@ -507,6 +687,14 @@ class MediaDecoder:
         clear_prefix = ecb_decrypt(self._aes_key, video_body[start:KEYFRAME_MIN])
         # One copy of the (megabyte-sized) clear tail, not three.
         return b"".join((clear_prefix, memoryview(video_body)[KEYFRAME_MIN:]))
+
+
+def _gcm_open(key: bytes, iv: bytes, ciphertext: bytes, tag: bytes) -> bytes:
+    """AES-256-GCM decrypt of one media body (AAD :data:`~.crypto.GCM_AAD`)."""
+    try:
+        return AESGCM(key).decrypt(bytes(iv), bytes(ciphertext) + bytes(tag), GCM_AAD)
+    except InvalidTag as exc:
+        raise ProtocolError("ECC media record failed its GCM tag") from exc
 
 
 def start_realtime_media_payload(

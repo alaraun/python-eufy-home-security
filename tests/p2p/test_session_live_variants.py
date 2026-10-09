@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator
 import pytest
 
 from eufy_home_security.exceptions import UnsupportedError
-from eufy_home_security.p2p.media import MediaFrame, MediaKind, VideoVariant
+from eufy_home_security.p2p.media import MediaFrame, MediaKeyType, MediaKind, VideoVariant
 from eufy_home_security.p2p.session import MediaStream, P2PCredentials, StationSession
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import MEDIA_KEYFRAME, FakeStation
@@ -158,8 +158,60 @@ async def test_a_clear_keyframe_without_the_header_flag_is_found_by_its_first_na
         await session.async_close()
 
 
+@pytest.mark.parametrize("serial", [HB2_SN, SYNTHETIC.station_sn])
+async def test_an_ecc_offer_streams_aes_gcm_video_and_audio(serial: str) -> None:
+    fake = FakeStation(serial=serial)
+    await fake.start()
+    session = _session(fake)
+    try:
+        stream = await session.async_open_live(CAMERA, media_key=MediaKeyType.ECC)
+        frames = await _frames(stream)
+        assert fake.media_keys_offered == [MediaKeyType.ECC]
+        (payload,) = fake.live_open_payloads
+        assert len(payload["key"]) == 128
+        assert payload["key"] == payload["key"].upper()
+        keyframes = [f.data for f in frames if f.kind is MediaKind.VIDEO and f.is_keyframe]
+        assert keyframes == [MEDIA_KEYFRAME, MEDIA_KEYFRAME]
+        assert any(f.kind is MediaKind.AUDIO and f.data.startswith(b"\xff\xf1") for f in frames)
+        counts = session.stats().media_frames_by_variant
+        assert counts["video:ecc"] > 0
+        assert counts["audio:ecc"] > 0
+        await stream.aclose()
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+async def test_an_ecc_keyframe_without_the_header_flag_is_found_after_its_decrypt(
+    hb2: FakeStation,
+) -> None:
+    hb2.keyframe_flag = False
+    session = _session(hb2)
+    try:
+        stream = await session.async_open_live(CAMERA, media_key=MediaKeyType.ECC)
+        frames = await _frames(stream)
+        assert frames[0].is_keyframe
+        assert frames[0].data == MEDIA_KEYFRAME
+        await stream.aclose()
+    finally:
+        await session.async_close()
+
+
+async def test_a_station_that_ignores_the_ecc_offer_fails_the_open_naming_it(
+    hb2: FakeStation,
+) -> None:
+    hb2.ecc_offer_ignored = True
+    session = _session(hb2)
+    try:
+        stream = await session.async_open_live(CAMERA, media_key=MediaKeyType.ECC)
+        with pytest.raises(UnsupportedError, match=r"rsa_prefix video.*ECC key"):
+            await _frames(stream, 1)
+    finally:
+        await session.async_close()
+
+
 @pytest.mark.parametrize("variant", [VideoVariant.ECC, VideoVariant.E2E])
-async def test_video_the_library_does_not_decode_fails_the_open_naming_it(
+async def test_video_an_rsa_open_does_not_decode_fails_the_open_naming_it(
     hb2: FakeStation, variant: VideoVariant
 ) -> None:
     hb2.video_variant = variant

@@ -20,8 +20,15 @@ from typing import Any, Final
 
 from ._logging import _hidden_text, redact_serial
 from .cloud.api import EufyCloudApi
-from .cloud.models import CipherRecord, CloudDevice, CloudInvite, InviteKind, KeyCase, KeyState
-from .devices.command_types import APK_COMMAND_TYPES
+from .cloud.models import (
+    CAMERA_INFO_PARAM,
+    CipherRecord,
+    CloudDevice,
+    CloudInvite,
+    InviteKind,
+    KeyCase,
+    KeyState,
+)
 from .devices.model_settings import product_code_of
 from .devices.recipes import connect_type
 from .exceptions import (
@@ -45,10 +52,6 @@ __all__ = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
-
-CAMERA_INFO_PARAM: Final = next(k for k, v in APK_COMMAND_TYPES.items() if v == "CAMERA_INFO")
-"""The parameter whose value the app reads as the device's connect ability (bit 0x80:
-a version-8 CONN_INIT); a hint only, the CONN_INIT version byte decides."""
 
 # Errors after which the report sends nothing more: the account is throttled, its
 # session is gone, or its credentials are refused.
