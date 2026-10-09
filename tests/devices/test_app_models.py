@@ -106,5 +106,51 @@ def test_the_committed_module_is_in_the_catalogue() -> None:
 
 def test_check_without_the_app_tables_exits_2(tmp_path: Path) -> None:
     missing = str(tmp_path / "none.java")
-    args = ["--constants", missing, "--type-map", missing, "--device-types", missing, "--check"]
-    assert _generator().main(args) == 2
+    args = ["--constants", missing, "--type-map", missing, "--device-types", missing]
+    assert _generator().main([*args, "--app-version", "9.9.9", "--check"]) == 2
+
+
+def _inputs(tmp_path: Path, constants: str = _CONSTANTS) -> list[str]:
+    files = {"constants": constants, "type-map": _TYPE_MAP, "device-types": _TYPE_INTS}
+    args: list[str] = []
+    for flag, text in files.items():
+        path = tmp_path / f"{flag}.java"
+        path.write_text(text, encoding="utf-8")
+        args += [f"--{flag}", str(path)]
+    return args
+
+
+def test_the_app_version_is_required(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as exc:
+        _generator().main([*_inputs(tmp_path), "--out", str(tmp_path / "out.py")])
+    assert exc.value.code == 2
+    assert not (tmp_path / "out.py").exists()
+
+
+def test_no_rows_are_refused_and_nothing_is_written(tmp_path: Path) -> None:
+    out = tmp_path / "out.py"
+    args = [*_inputs(tmp_path, constants=""), "--out", str(out), "--app-version", "9.9.9"]
+    assert _generator().main(args) == 1
+    assert not out.exists()
+
+
+def test_a_shrinking_catalogue_needs_allow_shrink(tmp_path: Path) -> None:
+    gen = _generator()
+    out = tmp_path / "out.py"
+    rows = [(f"T9{n:03d}", f"CAMERA_{n}", "camera", None) for n in range(20)]
+    before = gen.render(rows, "9.9.8")
+    out.write_text(before, encoding="utf-8")
+    args = [*_inputs(tmp_path), "--out", str(out), "--app-version", "9.9.9"]
+    assert gen.main(args) == 1  # 3 rows against 20
+    assert out.read_text(encoding="utf-8") == before
+    assert gen.main([*args, "--allow-shrink"]) == 0
+    assert out.read_text(encoding="utf-8").count('    ("T') == 3
+
+
+def test_a_drop_within_the_margin_is_written(tmp_path: Path) -> None:
+    gen = _generator()
+    out = tmp_path / "out.py"
+    gen.main([*_inputs(tmp_path), "--out", str(out), "--app-version", "9.9.8"])
+    # one row of 3 left out is beyond the margin; the same 3 rows are within it
+    assert gen.main([*_inputs(tmp_path), "--out", str(out), "--app-version", "9.9.9"]) == 0
+    assert 'APP_VERSION: Final = "9.9.9"' in out.read_text(encoding="utf-8")

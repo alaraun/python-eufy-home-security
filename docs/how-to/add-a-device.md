@@ -57,9 +57,14 @@ release, from the decompiled build:
 
 ```
 uv run python scripts/gen_app_models.py --constants <SnConstants.java> \
-    --type-map <SnUtils.java> --device-types <QueryDeviceData.java> --app-version 6.1.10
+    --type-map <SnUtils.java> --device-types <QueryDeviceData.java> --app-version <X.Y.Z>
 uv run python scripts/gen_device_matrix.py
 ```
+
+`--app-version` is required: it names the app build in the module and every row's
+evidence. The generator writes nothing (exit 1) when the inputs give no models, or
+fewer than 90 % of the rows the committed module holds; pass `--allow-shrink` when a
+smaller list is expected.
 
 A hand-written entry in `types.py` wins over the generated one. Write one when a model
 has more than the app's tables give: a curated name, an observed `device_type`, or

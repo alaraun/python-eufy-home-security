@@ -12,7 +12,10 @@ gives one. A prefix whose constants read as different kinds is left out and repo
 Runs on a maintainer host (the app's code is not shipped):
 
     gen_app_models.py --constants FILE --type-map FILE --device-types FILE
-                      [--out FILE] [--app-version V] [--check]
+                      --app-version V [--out FILE] [--check] [--allow-shrink]
+
+It refuses (exit 1, nothing written) when the inputs give no rows, or fewer than
+:data:`SHRINK_MARGIN` of the rows ``--out`` holds unless ``--allow-shrink``.
 """
 
 from __future__ import annotations
@@ -24,10 +27,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUT = ROOT / "src" / "eufy_home_security" / "devices" / "app_models.py"
-DEFAULT_APP_VERSION = "6.1.10"
+#: The share of ``--out``'s rows a run must keep without ``--allow-shrink``.
+SHRINK_MARGIN = 0.9
 PREFIX = re.compile(r"T[0-9A-Z]{4}")
 
 _CONSTANT = re.compile(r'public static final String ([A-Z0-9_]+) = "([^"]*)";')
+_ROW = re.compile(r'^    \("', re.MULTILINE)
 _TYPE_INT = re.compile(r"public static final int (TYPE_[A-Za-z0-9_]+) = (\d+);")
 _TYPE_PUT = re.compile(
     r"hashMap\.put\((?:Integer\.valueOf\()?(?:QueryDeviceData\.)?([A-Za-z0-9_]+)\)?, "
@@ -130,8 +135,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--type-map", type=Path, required=True, help="SnUtils.java")
     parser.add_argument("--device-types", type=Path, required=True, help="QueryDeviceData.java")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    parser.add_argument("--app-version", default=DEFAULT_APP_VERSION)
+    parser.add_argument("--app-version", required=True, help="the app build the inputs are from")
     parser.add_argument("--check", action="store_true", help="compare with --out, write nothing")
+    parser.add_argument(
+        "--allow-shrink", action="store_true", help="write even when rows drop beyond the margin"
+    )
     args = parser.parse_args(argv)
     sources = (args.constants, args.type_map, args.device_types)
     missing = [str(p) for p in sources if not p.is_file()]
@@ -145,6 +153,17 @@ def main(argv: list[str] | None = None) -> int:
     rows, conflicts = build(named, types)
     for line in conflicts:
         print(f"left out, kinds differ: {line}", file=sys.stderr)
+    if not rows:
+        print("no models in the inputs; nothing written", file=sys.stderr)
+        return 1
+    before = len(_ROW.findall(args.out.read_text(encoding="utf-8"))) if args.out.is_file() else 0
+    if len(rows) < before * SHRINK_MARGIN and not args.allow_shrink:
+        print(
+            f"{len(rows)} models against {before} in {args.out}; nothing written "
+            "(--allow-shrink to write)",
+            file=sys.stderr,
+        )
+        return 1
     text = render(rows, args.app_version)
     if args.check:
         same = args.out.is_file() and args.out.read_text(encoding="utf-8") == text
