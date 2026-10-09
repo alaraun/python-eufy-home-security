@@ -46,6 +46,7 @@ def test_recipe_plaintext() -> None:
     assert goto_preset(1).plaintext() == b'{"commandType":6035,"data":{"value":1}}'
     assert Recipe(identifier="test", cmd=1700, sub_cmd=1700).plaintext() == b'{"commandType":1700}'
     assert close_live_stream().plaintext() == b"\x00\x00\x00\x00"
+    assert close_live_stream().plaintext(channel=3) == b"\x03\x00\x00\x00"
 
     with pytest.raises(UnsupportedError):
         Recipe(identifier="test", cmd=1350).plaintext()

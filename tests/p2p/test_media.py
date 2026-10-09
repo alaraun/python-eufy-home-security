@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from eufy_home_security.exceptions import ProtocolError
+from eufy_home_security.exceptions import ProtocolError, UnsupportedError
 from eufy_home_security.p2p import crypto, media
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
 from eufy_home_security.testing import SYNTHETIC
@@ -74,6 +74,119 @@ def test_parse_video_frame_reads_the_h264_codec_flag() -> None:
     # an unknown code is reported as unknown, not guessed
     unknown = struct.pack("<I", len(body)) + bytes([1, 9]) + bytes(16)
     assert media.parse_video_frame(unknown + body).codec is None
+
+
+@pytest.mark.parametrize(
+    ("version", "encrypted", "variant"),
+    [
+        (0, 0, media.VideoVariant.PLAIN),
+        (1, 0, media.VideoVariant.PLAIN),
+        (0, 1, media.VideoVariant.PLAIN),
+        (1, 1, media.VideoVariant.RSA_PREFIX),
+        (2, 1, media.VideoVariant.RSA_PREFIX),
+        (2, 3, media.VideoVariant.RSA_PREFIX),
+        (3, 1, media.VideoVariant.RSA_V3),
+        (6, 1, media.VideoVariant.RSA_V3),
+        (3, 2, media.VideoVariant.RSA_PREFIX),
+        (4, 1, media.VideoVariant.RSA_V3),
+        (4, 2, media.VideoVariant.E2E),
+        (5, 7, media.VideoVariant.E2E),
+        (8, 0, media.VideoVariant.ECC),
+        (9, 1, media.VideoVariant.ECC),
+    ],
+)
+def test_video_variant_follows_the_apps_subheader_rule(
+    version: int, encrypted: int, variant: media.VideoVariant
+) -> None:
+    assert media.video_variant(bytes([version, 0, 1, encrypted, 10, 0])) is variant
+
+
+def test_video_variant_of_a_short_subheader_is_plain() -> None:
+    assert media.video_variant(b"\x01\x00\x01") is media.VideoVariant.PLAIN
+
+
+@pytest.mark.parametrize(
+    ("subheader", "stream_type", "variant"),
+    [
+        (bytes([2, 0, 0, 0, 10, 0]), 0, media.AudioVariant.AAC),
+        (bytes([1, 0, 0, 0, 10, 0]), 4, media.AudioVariant.AAC),
+        (bytes([2, 0, 0, 0, 10, 0]), 1, media.AudioVariant.OTHER),
+        (bytes([0, 0, 0, 0, 10, 0]), 0, media.AudioVariant.IGNORED),
+        (bytes([8, 0, 0, 1, 10, 0]), 0, media.AudioVariant.ECC),
+        (bytes([4, 0, 0, 2, 10, 0]), 0, media.AudioVariant.E2E),
+        (bytes([1, 0, 0, 0, 10, 3]), 0, media.AudioVariant.G711),
+        (bytes([2, 0, 0, 0, 10, 3]), 0, media.AudioVariant.AAC),
+        (bytes([0, 0, 0, 0, 10, 3]), 0, media.AudioVariant.IGNORED),
+        (b"", 0, media.AudioVariant.AAC),
+    ],
+)
+def test_audio_variant_follows_the_apps_rule(
+    subheader: bytes, stream_type: int, variant: media.AudioVariant
+) -> None:
+    payload = struct.pack("<I", 2) + bytes([0, stream_type]) + bytes(10) + b"\xff\xf1"
+    assert media.audio_variant(subheader, payload) is variant
+
+
+def test_a_clear_record_without_a_subheader_or_flag_is_a_keyframe_by_its_first_nal() -> None:
+    def record(body: bytes) -> bytes:
+        return struct.pack("<I", len(body)) + bytes(18) + body
+
+    idr_hevc = b"\x00\x00\x00\x01\x26\x01AAAA"
+    sps_h264 = b"\x00\x00\x01\x67\x42AAAA"
+    p_hevc = b"\x00\x00\x00\x01\x02\x01AAAA"
+    plain = media.VideoVariant.PLAIN
+    assert media.parse_video_frame(record(idr_hevc), variant=plain).is_keyframe
+    assert media.parse_video_frame(record(sps_h264), variant=plain).is_keyframe
+    assert not media.parse_video_frame(record(p_hevc), variant=plain).is_keyframe
+    assert not media.parse_video_frame(record(b"garbage"), variant=plain).is_keyframe
+
+
+def test_a_clear_keyframe_is_cut_at_datalen_and_not_decrypted() -> None:
+    body = b"\x00\x00\x00\x01\x40\x01VPS"
+    payload = struct.pack("<I", len(body)) + bytes([1, 1]) + bytes(16) + body + b"PAD"
+    decoder = media.MediaDecoder(media.generate_media_rsa_key()[1])
+    frame = decoder.decode(FrameType.VIDEO_FRAME, payload, bytes([3, 0, 1, 1, 10, 0]))
+    assert frame is not None
+    assert frame.is_keyframe
+    assert frame.data == body
+
+
+@pytest.mark.parametrize("subheader", [bytes([8, 0, 1, 1, 10, 0]), bytes([4, 0, 1, 2, 10, 0])])
+def test_video_the_library_does_not_decode_raises_unsupported(subheader: bytes) -> None:
+    payload = struct.pack("<I", 4) + bytes(18) + b"BODY"
+    decoder = media.MediaDecoder(media.generate_media_rsa_key()[1])
+    with pytest.raises(UnsupportedError):
+        decoder.decode(FrameType.VIDEO_FRAME, payload, subheader)
+
+
+def test_audio_the_app_does_not_play_decodes_to_none() -> None:
+    payload = struct.pack("<I", 2) + bytes(12) + b"\xff\xf1"
+    decoder = media.MediaDecoder(media.generate_media_rsa_key()[1])
+    assert decoder.decode(FrameType.AUDIO_FRAME, payload, bytes([0, 0, 1, 0, 10, 0])) is None
+    assert decoder.decode(FrameType.AUDIO_FRAME, payload, bytes([2, 0, 1, 0, 10, 0])) is not None
+
+
+def test_the_variant_label_names_the_media_kind() -> None:
+    sub = bytes([1, 0, 1, 1, 10, 0])
+    assert media.media_variant_label(FrameType.VIDEO_FRAME, b"", sub) == "video:rsa_prefix"
+    assert media.media_variant_label(FrameType.AUDIO_FRAME, b"", sub) == "audio:aac"
+    assert media.media_variant_label(FrameType.CMD_TRANSFER, b"", sub) is None
+
+
+def test_the_homebase2_open_payload_has_no_t8030_fields() -> None:
+    hb2 = media.start_realtime_media_payload("acct", 2, "KEY", homebase3=False)
+    assert hb2 == {
+        "streamtype": 0,
+        "camera_type": 0,
+        "entrytype": 0,
+        "accountId": "acct",
+        "chn_list": [],
+        "key": "KEY",
+        "ClientOS": "ANDROID",
+    }
+    hb3 = media.start_realtime_media_payload("acct", 2, "KEY")
+    assert hb3["chn_list"][0]["chn"] == 2
+    assert hb3["extValue"] == 1000
 
 
 def test_parse_audio_frame() -> None:

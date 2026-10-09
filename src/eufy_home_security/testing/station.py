@@ -55,6 +55,7 @@ from ..p2p.media import (
     V1_ENCRYPTED_LEN,
     VIDEO_CODEC_HEVC,
     StillFormat,
+    VideoVariant,
     pic_check_code,
 )
 from ..p2p.messages import (
@@ -241,9 +242,25 @@ def _record_day(row: dict[str, Any]) -> str | None:
     )
 
 
-def _media_subheader(camera: int) -> bytes:
-    """A media frame's subheader: the station tags it with the camera's channel (byte 2)."""
-    return bytes([0, 0, camera, 0, 0, 0])
+#: Subheader ``(media version, encrypted flag)`` of a keyframe and of a P-frame per
+#: :class:`VideoVariant`, as the app's receiver reads them (a HomeBase 3: RSA_PREFIX).
+_VIDEO_SUBHEADER_FLAGS: dict[VideoVariant, tuple[tuple[int, int], tuple[int, int]]] = {
+    VideoVariant.RSA_PREFIX: ((1, 1), (1, 0)),
+    VideoVariant.RSA_V3: ((3, 1), (3, 0)),
+    VideoVariant.PLAIN: ((0, 0), (0, 0)),
+    VideoVariant.ECC: ((8, 1), (8, 0)),
+    VideoVariant.E2E: ((4, 2), (4, 2)),
+}
+_AUDIO_MEDIA_VERSION = 2
+"""A HomeBase 3's audio subheader byte 0."""
+_MEDIA_SESSION_ID = 0x0A
+"""Subheader byte 4 of media frames: the session id the live open carried."""
+
+
+def _media_subheader(camera: int, version: int = 0, encrypted: int = 0) -> bytes:
+    """A media frame's subheader: media version (byte 0), the camera's channel (byte 2),
+    the encrypted flag (byte 3), the session id (byte 4)."""
+    return bytes([version, 0, camera, encrypted, _MEDIA_SESSION_ID, 0])
 
 
 def _gcm_broadcast(key: bytes, plaintext: bytes) -> bytes:
@@ -387,6 +404,16 @@ class FakeStation:
     preset_pictures: dict[int, bytes] = field(default_factory=dict)
     """The JPEG each slot answers a 6097 read with; a slot with none answers an empty
     string, as the real camera does for an empty slot."""
+    video_variant: VideoVariant = VideoVariant.RSA_PREFIX
+    """How video records are protected (subheader bytes 0 and 3): RSA_PREFIX wraps the
+    stream key into every keyframe, as a HomeBase 3; RSA_V3 and PLAIN send clear
+    keyframes; ECC and E2E records are sent as their subheader names them, the body
+    undecodable."""
+    keyframe_flag: bool = True
+    """Set the keyframe flag (header byte 4) on keyframes; False leaves it 0, so only
+    the first NAL unit tells a keyframe."""
+    audio_media_version: int = _AUDIO_MEDIA_VERSION
+    """Audio subheader byte 0 (0: audio the app does not play)."""
 
     def __post_init__(self) -> None:
         self.static_key = static_key(self.serial, self.did)
@@ -432,6 +459,10 @@ class FakeStation:
         """The ``dstZoom`` of every picture-zoom write (1350 / 6203) received."""
         self.bare_stops = 0
         """Bare 1004 stops received (a standalone device's live stop)."""
+        self.bare_stop_frames: list[tuple[int, bytes]] = []
+        """Each bare 1004 received, as (subheader channel, body)."""
+        self.live_open_payloads: list[dict[str, Any]] = []
+        """The ``payload`` object of every 1003 received through a ``DeviceMsgBean``."""
         self.pings = 0
         """App 1139 pings received (empty 0x0473 frames)."""
         self._last_ping = 0.0
@@ -644,6 +675,7 @@ class FakeStation:
                 self._on_doorbell_payload(obj, subheader)
         elif ftype == FrameType.STOP_REALTIME_MEDIA:
             self.bare_stops += 1
+            self.bare_stop_frames.append((subheader[2], plain))
             self.send_receipt(FrameType.STOP_REALTIME_MEDIA, RECEIPT_TAKEN)
             self._stop_live()
         elif ftype == CMD_SD_INFO:
@@ -834,6 +866,7 @@ class FakeStation:
             camera = subheader[2] if cmd == 1003 else obj.get("mChannel", 0)
             if cmd == 1003:
                 self.live_opens.append(camera)
+                self.live_open_payloads.append(dict(obj["payload"]))
             self._start_media(obj["payload"]["key"], live=cmd == 1003, camera=camera)
         elif cmd == 1004:
             self._stop_live()
@@ -1012,7 +1045,11 @@ class FakeStation:
     async def _stream(
         self, public: rsa.RSAPublicKey, count: int | None, pframe: bytes, camera: int
     ) -> None:
-        keyframe = media_keyframe(public, os.urandom(16))
+        keyframe = (
+            media_keyframe(public, os.urandom(16))
+            if self.video_variant is VideoVariant.RSA_PREFIX
+            else MEDIA_KEYFRAME
+        )
         # Joined mid-GOP, like a real stream: a P-frame comes before the first keyframe.
         clock = MEDIA_CLOCK_START
         self.send_video(pframe, keyframe=False, camera=camera, timestamp_ms=clock)
@@ -1046,7 +1083,7 @@ class FakeStation:
                 audio_record(MEDIA_AUDIO, counter=sent + 1, timestamp_ms=clock),
                 cipher=0,
                 channel=1,
-                subheader=_media_subheader(camera),
+                subheader=_media_subheader(camera, self.audio_media_version),
             )
             sent += 1
             self.media_frames_sent = sent
@@ -1074,12 +1111,15 @@ class FakeStation:
         width: int = MEDIA_WIDTH,
         height: int = MEDIA_HEIGHT,
     ) -> None:
-        """A video record of the camera on channel ``camera`` (subheader byte 2)."""
+        """A video record of the camera on channel ``camera`` (subheader byte 2), tagged
+        per :attr:`video_variant`."""
+        key_flags, p_flags = _VIDEO_SUBHEADER_FLAGS[self.video_variant]
+        version, encrypted = key_flags if keyframe else p_flags
         self.send_frame(
             FrameType.VIDEO_FRAME,
             video_record(
                 body,
-                keyframe=keyframe,
+                keyframe=keyframe and self.keyframe_flag,
                 counter=counter,
                 timestamp_ms=timestamp_ms,
                 width=width,
@@ -1087,7 +1127,7 @@ class FakeStation:
             ),
             cipher=0,
             channel=1,
-            subheader=_media_subheader(camera),
+            subheader=_media_subheader(camera, version, encrypted),
         )
 
     # ── outbound ─────────────────────────────────────────────────────────────
