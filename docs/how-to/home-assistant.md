@@ -679,7 +679,7 @@ push and across reconnects, so the integration never de-duplicates:
   the row, or its thumbnail, comes later (see [Camera images](#camera-images)); retry
   once, later, rather than in a loop. Any other `RecordNotFoundError` is final (another
   camera's row, no valid thumbnail path).
-  Its `timeout` bounds the query and the fetch each, and neither holds up an arm
+  Its `timeout` bounds the query and the fetch each (None: each its own default), and neither holds up an arm
   while it waits for a reply, so no shortened timeout is needed. A record id whose
   first eight digits are no calendar day (a forged push) raises `UnsupportedError`
   before anything is sent.
