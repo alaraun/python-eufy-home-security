@@ -12,14 +12,167 @@ Support legend (models, capabilities and guard modes):
 
 | model | name | kind | cloud device_type | support | source |
 |---|---|---|---|---|---|
+| T6010 | Station 6010 | station | 108 | declared | eufy app 6.1.10 SnConstants STATION_6010; SnUtils type map (108) (kind read from the constant's name) |
+| T6060 | Baby Mom Device Breast Pump 2 | other |  | declared | eufy app 6.1.10 SnConstants BABY_MOM_DEVICE_BREAST_PUMP_2 (kind read from the constant's name) |
+| T7000 | Station T7000 | station |  | declared | eufy app 6.1.10 SnConstants STATION_T7000 (kind read from the constant's name) |
+| T7200 | Dogcam | camera |  | declared | eufy app 6.1.10 SnConstants DOGCAM (kind read from the constant's name) |
+| T7203 | Dogcam Low | camera |  | declared | eufy app 6.1.10 SnConstants DOGCAM_LOW (kind read from the constant's name) |
+| T7400 | Smart Safe 7400 | other |  | declared | eufy app 6.1.10 SnConstants SMART_SAFE_7400 (kind read from the constant's name) |
+| T7401 | Smart Safe 7401 | other | 141 | declared | eufy app 6.1.10 SnConstants SMART_SAFE_7401; SnUtils type map (141) (kind read from the constant's name) |
+| T7402 | Smart Safe 7402 | other |  | declared | eufy app 6.1.10 SnConstants SMART_SAFE_7402 (kind read from the constant's name) |
+| T7403 | Smart Safe 7403 | other |  | declared | eufy app 6.1.10 SnConstants SMART_SAFE_7403 (kind read from the constant's name) |
+| T8001 | Station | station | 0 | declared | eufy app 6.1.10 SnConstants STATION; SnUtils type map (0) (kind read from the constant's name) |
 | T8002 | HomeBase 1 | station |  | declared | eufy app SnConstants STATION_AI (the eufy app constant calls this prefix STATION_AI) |
 | T8010 | HomeBase 2 | station |  | declared | eufy app SnConstants STATION_2 (eufy app SnUtils files T8001/T8002/T8010/T8020 under one shared type 0) |
+| T8020 | Station S | station | 0 | declared | eufy app 6.1.10 SnConstants STATION_S; SnUtils type map (0) (kind read from the constant's name) |
+| T8021 | Station 8021 | station |  | declared | eufy app 6.1.10 SnConstants STATION_8021 (kind read from the constant's name) |
+| T8023 | Station 8023 | station |  | declared | eufy app 6.1.10 SnConstants STATION_8023 (kind read from the constant's name) |
+| T8024 | Station 8024 | station |  | declared | eufy app 6.1.10 SnConstants STATION_8024 (kind read from the constant's name) |
+| T8025 | Station 8025 | station |  | declared | eufy app 6.1.10 SnConstants STATION_8025 (kind read from the constant's name) |
+| T8026 | Station 8026 | station | 600 | declared | eufy app 6.1.10 SnConstants STATION_8026; SnUtils type map (600) (kind read from the constant's name) |
 | T8030 | HomeBase 3 (S380) | station | 18 | verified | live P2P sessions, HomeBase 3 fw 3.8.6.0 and 3.8.7.4 (device_type 18 is from the cloud device list; event-push and event-database records for the same station carry device_type 43) |
+| T8040 | Station 4 | station |  | declared | eufy app 6.1.10 SnConstants STATION_4 (kind read from the constant's name) |
+| T8101 | Camera 101 | camera |  | declared | eufy app 6.1.10 SnConstants CAMERA_101 (kind read from the constant's name) |
+| T8102 | Camera E 102 | camera |  | declared | eufy app 6.1.10 SnConstants CAMERA_E_102 (kind read from the constant's name) |
+| T8110 | Battery Solo Cam 8110 | camera | 10035 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8110; SnUtils type map (10035) (kind read from the constant's name) |
+| T8111 | Camera | camera | 1 | declared | eufy app 6.1.10 SnConstants CAMERA; SnUtils type map (1) (kind read from the constant's name) |
+| T8112 | Camera E | camera | 1 | declared | eufy app 6.1.10 SnConstants CAMERA_E; SnUtils type map (1) (kind read from the constant's name) |
+| T8113 | Camera 2C | camera | 8 | declared | eufy app 6.1.10 SnConstants CAMERA2C; SnUtils type map (8) (kind read from the constant's name) |
+| T8114 | Camera 2 | camera | 9 | declared | eufy app 6.1.10 SnConstants CAMERA2; SnUtils type map (9) (kind read from the constant's name) |
+| T8115 | Battery Solo Cam 8115 | camera | 10038 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8115; SnUtils type map (10038) (kind read from the constant's name) |
+| T8122 | Battery Solo Cam Spotlight 1080 | camera | 60 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_SPOTLIGHT_1080; SnUtils type map (60) (kind read from the constant's name) |
+| T8123 | Battery Solo Cam Spotlight 2K | camera | 61 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_SPOTLIGHT_2K; SnUtils type map (61) (kind read from the constant's name) |
+| T8124 | Battery Solo Cam Spotlight Solar 8124 | camera | 62 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_SPOTLIGHT_SOLAR_8124; SnUtils type map (62) (kind read from the constant's name) |
+| T8130 | Battery Solo Cam 8130 | camera | 32 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8130; SnUtils type map (32) (kind read from the constant's name) |
+| T8131 | Battery Solo Cam Pro | camera | 33 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_PRO; SnUtils type map (33) (kind read from the constant's name) |
+| T8134 | Battery Solo Cam 8134 | camera | 63 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8134; SnUtils type map (63) (kind read from the constant's name) |
+| T8140 | Camera 2 Pro | camera | 14 | declared | eufy app 6.1.10 SnConstants CAMERA2_PRO; SnUtils type map (14) (kind read from the constant's name) |
+| T8142 | Camera 2C Pro | camera | 15 | declared | eufy app 6.1.10 SnConstants CAMERA2C_PRO; SnUtils type map (15) (kind read from the constant's name) |
+| T814X | Battery Solo Cam 814X | camera | 10037 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_814X; SnUtils type map (10037) (kind read from the constant's name) |
+| T8150 | Cam 4G | camera |  | declared | eufy app 6.1.10 SnConstants CAM_4G (kind read from the constant's name) |
+| T8151 | Cam 4G EU | camera |  | declared | eufy app 6.1.10 SnConstants CAM_4G_EU (kind read from the constant's name) |
+| T8152 | Cam 4G AUS | camera |  | declared | eufy app 6.1.10 SnConstants CAM_4G_AUS (kind read from the constant's name) |
+| T8153 | Cam 4G TMO | camera |  | declared | eufy app 6.1.10 SnConstants CAM_4G_TMO (kind read from the constant's name) |
 | T8160 | eufyCam 3 (S330) | camera | 19 | verified | live settings write+read-back and media on T8030 HomeBase 3, camera fw 3.4.3.0 (device_type 19 is carried by live event pushes and matches the eufy app SnUtils type map) |
 | T8161 | eufyCam 3C | camera | 23 | declared | eufy app SnConstants CAMERA3C; eufy app SnUtils type map (23) |
+| T8165 | Battery Solo Cam 8165 | camera |  | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8165 (kind read from the constant's name) |
 | T8170 | Battery SoloCam (T8170) | camera | 48 | declared | eufy app SnConstants BATTERY_SOLO_CAM_8170; eufy app SnUtils type map (48) (a standalone camera, its own station; the cloud device list reports device_type 48 and the parameter dump labels its block 48) |
+| T8171 | Battery Solo Cam 8171 | camera | 88 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8171; SnUtils type map (88) (kind read from the constant's name) |
+| T8172 | Battery Solo Cam 8172 | camera | 89 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8172; SnUtils type map (89) (kind read from the constant's name) |
+| T8173 | Battery Solo Cam 8173 | camera | 98 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8173; SnUtils type map (98) (kind read from the constant's name) |
+| T817L | Battery Solo Cam 817L | camera | 10031 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_817L; SnUtils type map (10031) (kind read from the constant's name) |
+| T8180 | Battery Solo Cam 8180 | camera | 315 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8180; SnUtils type map (315) (kind read from the constant's name) |
+| T81A0 | Walllight T81A0 | camera | 10005 | declared | eufy app 6.1.10 SnConstants WALLLIGHT_T81A0; SnUtils type map (10005) (kind read from the constant's name) |
+| T8200 | Doorbell 2K | doorbell | 5 | declared | eufy app 6.1.10 SnConstants DOORBELL_2K; SnUtils type map (5) (kind read from the constant's name) |
+| T8201 | Wired Doorbell 1080P | doorbell | 5 | declared | eufy app 6.1.10 SnConstants WIRED_DOORBELL_1080P; SnUtils type map (5) (kind read from the constant's name) |
+| T8202 | Wired Doorbell 8202 | doorbell | 5 | declared | eufy app 6.1.10 SnConstants WIRED_DOORBELL_8202; SnUtils type map (5) (kind read from the constant's name) |
+| T8203 | Battery Doorbell 8203 | doorbell |  | declared | eufy app 6.1.10 SnConstants BATTERY_DOORBELL_8203 (kind read from the constant's name) |
+| T8210 | Battery Doorbell 8210 | doorbell | 7 | declared | eufy app 6.1.10 SnConstants BATTERY_DOORBELL_8210; SnUtils type map (7) (kind read from the constant's name) |
+| T8212 | Battery Doorbell 8212 | doorbell |  | declared | eufy app 6.1.10 SnConstants BATTERY_DOORBELL_8212 (kind read from the constant's name) |
+| T8213 | Battery Doorbell 8213 | doorbell | 91 | declared | eufy app 6.1.10 SnConstants BATTERY_DOORBELL_8213; SnUtils type map (91) (kind read from the constant's name) |
+| T8214 | Battery Doorbell T8214 | doorbell |  | declared | eufy app 6.1.10 SnConstants BATTERY_DOORBELL_T8214 (kind read from the constant's name) |
+| T8217 | Battery Solo Cam 8217 | camera | 312 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8217; SnUtils type map (312) (kind read from the constant's name) |
+| T8220 | Battery Doorbell 8220 | doorbell | 16 | declared | eufy app 6.1.10 SnConstants BATTERY_DOORBELL_8220; SnUtils type map (16) (kind read from the constant's name) |
+| T8221 | Battery Doorbell 8221 | doorbell | 16 | declared | eufy app 6.1.10 SnConstants BATTERY_DOORBELL_8221; SnUtils type map (16) (kind read from the constant's name) |
+| T8222 | Battery Doorbell 8222 | doorbell | 16 | declared | eufy app 6.1.10 SnConstants BATTERY_DOORBELL_8222; SnUtils type map (16) (kind read from the constant's name) |
+| T8223 | Battery Doorbell 8223 | doorbell |  | declared | eufy app 6.1.10 SnConstants BATTERY_DOORBELL_8223 (kind read from the constant's name) |
+| T8224 | Battery Doorbell 8224 | doorbell |  | declared | eufy app 6.1.10 SnConstants BATTERY_DOORBELL_8224 (kind read from the constant's name) |
+| T8340 | Babycare Sock | other |  | declared | eufy app 6.1.10 SnConstants BABYCARE_SOCK (kind read from the constant's name) |
+| T8350 | Babycare Monitor | other |  | declared | eufy app 6.1.10 SnConstants BABYCARE_MONITOR (kind read from the constant's name) |
+| T8351 | Babycare Monitor No Screen | other |  | declared | eufy app 6.1.10 SnConstants BABYCARE_MONITOR_NO_SCREEN (kind read from the constant's name) |
+| T8352 | Babycare 8352 | other |  | declared | eufy app 6.1.10 SnConstants BABYCARE_8352 (kind read from the constant's name) |
+| T8353 | Babycare 8353 | other |  | declared | eufy app 6.1.10 SnConstants BABYCARE_8353 (kind read from the constant's name) |
+| T8354 | Babycare 8354 | other |  | declared | eufy app 6.1.10 SnConstants BABYCARE_8354 (kind read from the constant's name) |
+| T8360 | Babycare Camera | camera |  | declared | eufy app 6.1.10 SnConstants BABYCARE_CAMERA (kind read from the constant's name) |
+| T8400 | Indoor Camera | camera | 30 | declared | eufy app 6.1.10 SnConstants INDOOR_CAMERA; SnUtils type map (30) (kind read from the constant's name) |
+| T8401 | Indoor Camera 1080 | camera | 34 | declared | eufy app 6.1.10 SnConstants INDOOR_CAMERA_1080; SnUtils type map (34) (kind read from the constant's name) |
+| T8404 | Camera 8404 | camera | 314 | declared | eufy app 6.1.10 SnConstants CAMERA_8404; SnUtils type map (314) (kind read from the constant's name) |
 | T8410 | Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24) | camera | 31 | declared | eufy app SnConstants INDOOR_CAMERA_PT; eufy app SnUtils type map (31) (a standalone camera, its own station; a serial with '5' at index 6 is the app's separate product T8410C, with its own thing description and handler) |
-| T8910 | Outdoor motion sensor | sensor | 10 | unknown | cloud device list: a T8910 paired to a HomeBase 3 reports device_type 10; its battery is in the station's parameter dump (no eufy app source ties the prefix to a model; the name is inferred from the type) |
+| T8411 | Indoor Camera PT 1080 | camera | 35 | declared | eufy app 6.1.10 SnConstants INDOOR_CAMERA_PT_1080; SnUtils type map (35) (kind read from the constant's name) |
+| T8414 | Indoor Camera Costdown T8414 | camera | 100 | declared | eufy app 6.1.10 SnConstants INDOOR_CAMERA_COSTDOWN_T8414; SnUtils type map (100) (kind read from the constant's name) |
+| T8416 | Indoor Camera 8416 | camera | 104 | declared | eufy app 6.1.10 SnConstants INDOOR_CAMERA_8416; SnUtils type map (104) (kind read from the constant's name) |
+| T8417 | Indoor Camera 8417 | camera | 105 | declared | eufy app 6.1.10 SnConstants INDOOR_CAMERA_8417; SnUtils type map (105) (kind read from the constant's name) |
+| T8419 | Indoor Camera T8419 | camera | 10009 | declared | eufy app 6.1.10 SnConstants INDOOR_CAMERA_T8419; SnUtils type map (10009) (kind read from the constant's name) |
+| T8420 | Floodlight | camera | 3 | declared | eufy app 6.1.10 SnConstants FLOODLIGHT; SnUtils type map (3) (kind read from the constant's name) |
+| T8422 | Floodlight E 2K | camera | 37 | declared | eufy app 6.1.10 SnConstants FLOODLIGHT_E_2K; SnUtils type map (37) (kind read from the constant's name) |
+| T8423 | Floodlight 2 | camera | 38 | declared | eufy app 6.1.10 SnConstants FLOODLIGHT2; SnUtils type map (38) (kind read from the constant's name) |
+| T8424 | Floodlight Cam 2K | camera | 39 | declared | eufy app 6.1.10 SnConstants FLOODLIGHT_CAM_2K; SnUtils type map (39) (kind read from the constant's name) |
+| T8425 | Floodlight 8425 | camera | 47 | declared | eufy app 6.1.10 SnConstants FLOODLIGHT_8425; SnUtils type map (47) (kind read from the constant's name) |
+| T8426 | Floodlight 8426 | camera | 87 | declared | eufy app 6.1.10 SnConstants FLOODLIGHT_8426; SnUtils type map (87) (kind read from the constant's name) |
+| T8440 | Indoor Outdoor Camera 1080P No Light | camera |  | declared | eufy app 6.1.10 SnConstants INDOOR_OUTDOOR_CAMERA_1080P_NO_LIGHT (kind read from the constant's name) |
+| T8441 | Indoor Outdoor Camera 2K | camera |  | declared | eufy app 6.1.10 SnConstants INDOOR_OUTDOOR_CAMERA_2K (kind read from the constant's name) |
+| T8442 | Indoor Outdoor Camera 1080P | camera |  | declared | eufy app 6.1.10 SnConstants INDOOR_OUTDOOR_CAMERA_1080P (kind read from the constant's name) |
+| T84A1 | Walllight T84A1 | camera | 151 | declared | eufy app 6.1.10 SnConstants WALLLIGHT_T84A1; SnUtils type map (151) (kind read from the constant's name) |
+| T8500 | BLE Lock No Finger | lock | 52 | declared | eufy app 6.1.10 SnConstants BLE_LOCK_NO_FINGER; SnUtils type map (52) (kind read from the constant's name) |
+| T8501 | Wifi Lock No Finger | lock | 53 | declared | eufy app 6.1.10 SnConstants WIFI_LOCK_NO_FINGER; SnUtils type map (53) (kind read from the constant's name) |
+| T8502 | Lock 8502 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_8502 (kind read from the constant's name) |
+| T8503 | Lock 8503 | lock | 54 | declared | eufy app 6.1.10 SnConstants LOCK_8503; SnUtils type map (54) (kind read from the constant's name) |
+| T8504 | Lock 8504 | lock | 58 | declared | eufy app 6.1.10 SnConstants LOCK_8504; SnUtils type map (58) (kind read from the constant's name) |
+| T8506 | Lock 8506 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_8506 (kind read from the constant's name) |
+| T8510 | BLE Lock | lock | 50 | declared | eufy app 6.1.10 SnConstants BLE_LOCK; SnUtils type map (50) (kind read from the constant's name) |
+| T8520 | Wifi Lock | lock | 51 | declared | eufy app 6.1.10 SnConstants WIFI_LOCK; SnUtils type map (51) (kind read from the constant's name) |
+| T8530 | Lock 8530 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_8530 (kind read from the constant's name) |
+| T8531 | Lock 8531 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_8531 (kind read from the constant's name) |
+| T8592 | Keypad 8592 | keypad |  | declared | eufy app 6.1.10 SnConstants KEYPAD_8592 (kind read from the constant's name) |
+| T85A3 | Keypad 85A3 | keypad |  | declared | eufy app 6.1.10 SnConstants KEYPAD_85A3 (kind read from the constant's name) |
+| T85A4 | Keypad 85A4 | keypad |  | declared | eufy app 6.1.10 SnConstants KEYPAD_85A4 (kind read from the constant's name) |
+| T85D0 | Lock 85D0 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_85D0 (kind read from the constant's name) |
+| T85D2 | Lock 85D2 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_85D2 (kind read from the constant's name) |
+| T85F0 | Lock 85F0 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_85F0 (kind read from the constant's name) |
+| T85F1 | Lock 85F1 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_85F1 (kind read from the constant's name) |
+| T85L0 | Lock 85L0 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_85L0 (kind read from the constant's name) |
+| T85P0 | Lock 85P0 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_85P0 (kind read from the constant's name) |
+| T85P1 | Lock 85P1 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_85P1 (kind read from the constant's name) |
+| T85V0 | Lock 85V0 | lock |  | declared | eufy app 6.1.10 SnConstants LOCK_85V0 (kind read from the constant's name) |
+| T8600 | Camera 8600 | camera | 24 | declared | eufy app 6.1.10 SnConstants CAMERA_8600; SnUtils type map (24) (kind read from the constant's name) |
+| T86C1 | Camera 86C1 | camera | 298 | declared | eufy app 6.1.10 SnConstants CAMERA_86C1; SnUtils type map (298) (kind read from the constant's name) |
+| T86P2 | Cam 4G PT | camera |  | declared | eufy app 6.1.10 SnConstants CAM_4G_PT (kind read from the constant's name) |
+| T870G | Sensor 870G | sensor |  | declared | eufy app 6.1.10 SnConstants SENSOR_870G (kind read from the constant's name) |
+| T8740 | Chime 433 | other |  | declared | eufy app 6.1.10 SnConstants CHIME_433 (kind read from the constant's name) |
+| T8790 | Box SPB | other |  | declared | eufy app 6.1.10 SnConstants BOX_SPB (kind read from the constant's name) |
+| T87B0 | Tracker 87B0 | other |  | declared | eufy app 6.1.10 SnConstants TRACKER_87B0 (kind read from the constant's name) |
+| T87B1 | Tracker 87B1 | other |  | declared | eufy app 6.1.10 SnConstants TRACKER_87B1 (kind read from the constant's name) |
+| T87B2 | Tracker 87B2 | other |  | declared | eufy app 6.1.10 SnConstants TRACKER_87B2 (kind read from the constant's name) |
+| T87B3 | Tracker 87B3 | other |  | declared | eufy app 6.1.10 SnConstants TRACKER_87B3 (kind read from the constant's name) |
+| T87B4 | Tracker 87B4 | other |  | declared | eufy app 6.1.10 SnConstants TRACKER_87B4 (kind read from the constant's name) |
+| T87B5 | Tracker 87B5 | other |  | declared | eufy app 6.1.10 SnConstants TRACKER_87B5 (kind read from the constant's name) |
+| T87C0 | Baby Mom Breast Pump Charging Chamber | other |  | declared | eufy app 6.1.10 SnConstants BABY_MOM_BREAST_PUMP_CHARGING_CHAMBER (kind read from the constant's name) |
+| T8900 | Entry Sensor | sensor | 2 | declared | eufy app 6.1.10 SnConstants ENTRY_SENSOR; SnUtils type map (2) (kind read from the constant's name) |
+| T8910 | Motion sensor | sensor | 10 | declared | eufy app SnConstants MOTION_SENSOR; eufy app SnUtils type map (10) (a T8910 paired to a HomeBase 3 reports device_type 10 in the cloud device list; its battery is in the station's parameter dump) |
+| T8920 | Water Sensor | sensor |  | declared | eufy app 6.1.10 SnConstants WATER_SENSOR (kind read from the constant's name) |
+| T8931 | Smoke Sensor | sensor |  | declared | eufy app 6.1.10 SnConstants SMOKE_SENSOR (kind read from the constant's name) |
+| T8960 | Keypad | keypad | 11 | declared | eufy app 6.1.10 SnConstants KEYPAD; SnUtils type map (11) (kind read from the constant's name) |
+| T8970 | Siren Sensor | sensor |  | declared | eufy app 6.1.10 SnConstants SIREN_SENSOR (kind read from the constant's name) |
+| T8B00 | Battery Solo Cam 8B00 | camera | 64 | declared | eufy app 6.1.10 SnConstants BATTERY_SOLO_CAM_8B00; SnUtils type map (64) (kind read from the constant's name) |
+| T8D00 | Baby Mom Device Breast Pump Both | other |  | declared | eufy app 6.1.10 SnConstants BABY_MOM_DEVICE_BREAST_PUMP_BOTH (kind read from the constant's name) |
+| T8D02 | Baby Mom Device Breast Pump With Heating | other |  | declared | eufy app 6.1.10 SnConstants BABY_MOM_DEVICE_BREAST_PUMP_WITH_HEATING (kind read from the constant's name) |
+| T8D03 | Baby Mom Device Breast Pump | other |  | declared | eufy app 6.1.10 SnConstants BABY_MOM_DEVICE_BREAST_PUMP (kind read from the constant's name) |
+| T8D04 | Baby Mom Device Breast Pump S | other |  | declared | eufy app 6.1.10 SnConstants BABY_MOM_DEVICE_BREAST_PUMP_S (kind read from the constant's name) |
+| T8E00 | Camera T8E00 | camera |  | declared | eufy app 6.1.10 SnConstants CAMERA_T8E00 (kind read from the constant's name) |
+| T8L00 | Light 8L00 | other |  | declared | eufy app 6.1.10 SnConstants LIGHT_8L00 (kind read from the constant's name) |
+| T8L01 | Light 8L01 | other |  | declared | eufy app 6.1.10 SnConstants LIGHT_8L01 (kind read from the constant's name) |
+| T8L02 | Light 8L02 | other |  | declared | eufy app 6.1.10 SnConstants LIGHT_8L02 (kind read from the constant's name) |
+| T8L04 | Light 8L04 | other |  | declared | eufy app 6.1.10 SnConstants LIGHT_8L04 (kind read from the constant's name) |
+| T8L10 | Light 8L10 | other |  | declared | eufy app 6.1.10 SnConstants LIGHT_8L10 (kind read from the constant's name) |
+| T8L20 | Light 8L20 | other |  | declared | eufy app 6.1.10 SnConstants LIGHT_8L20 (kind read from the constant's name) |
+| T8L30 | Light 8L30 | other |  | declared | eufy app 6.1.10 SnConstants LIGHT_8L30 (kind read from the constant's name) |
+| T8L40 | Light 8L40 | other |  | declared | eufy app 6.1.10 SnConstants LIGHT_8L40 (kind read from the constant's name) |
+| T8L60 | Camera 8L60 | camera |  | declared | eufy app 6.1.10 SnConstants CAMERA_8L60 (kind read from the constant's name) |
+| T8N00 | Station NVR | station |  | declared | eufy app 6.1.10 SnConstants STATION_NVR (kind read from the constant's name) |
+| T8P00 | Camera T8P00 | camera |  | declared | eufy app 6.1.10 SnConstants CAMERA_T8P00 (kind read from the constant's name) |
+| T8P10 | Camera T8P10 | camera |  | declared | eufy app 6.1.10 SnConstants CAMERA_T8P10 (kind read from the constant's name) |
+| T8W11 | Indoor Camera 8W11 | camera | 10006 | declared | eufy app 6.1.10 SnConstants INDOOR_CAMERA_8W11; SnUtils type map (10006) (kind read from the constant's name) |
+| T9000 | Station T9000 | station |  | declared | eufy app 6.1.10 SnConstants STATION_T9000 (kind read from the constant's name) |
+| T90C0 | Smoke Sensor T90C0 | sensor |  | declared | eufy app 6.1.10 SnConstants SMOKE_SENSOR_T90C0 (kind read from the constant's name) |
+| T90E0 | Entry Sensor T90E0 | sensor |  | declared | eufy app 6.1.10 SnConstants ENTRY_SENSOR_T90E0 (kind read from the constant's name) |
+| T90F0 | Water Sensor T90F0 | sensor |  | declared | eufy app 6.1.10 SnConstants WATER_SENSOR_T90F0 (kind read from the constant's name) |
+| T90G0 | Glass Break Sensor | sensor |  | declared | eufy app 6.1.10 SnConstants GLASS_BREAK_SENSOR (kind read from the constant's name) |
+| T90K0 | Keyfor Sensor T90K0 | sensor |  | declared | eufy app 6.1.10 SnConstants KEYFOR_SENSOR_T90K0 (kind read from the constant's name) |
+| T90M0 | Motion Sensor T90M0 | sensor |  | declared | eufy app 6.1.10 SnConstants MOTION_SENSOR_T90M0 (kind read from the constant's name) |
+| T90P0 | Panic Sensor T90P0 | sensor |  | declared | eufy app 6.1.10 SnConstants PANIC_SENSOR_T90P0 (kind read from the constant's name) |
+| T90R0 | Siren Sensor T90R0 | sensor |  | declared | eufy app 6.1.10 SnConstants SIREN_SENSOR_T90R0 (kind read from the constant's name) |
+| T90R1 | Outdoor Siren Sensor | sensor |  | declared | eufy app 6.1.10 SnConstants OUTDOOR_SIREN_SENSOR (kind read from the constant's name) |
+| T90S0 | Smoke Sensor T90S0 | sensor |  | declared | eufy app 6.1.10 SnConstants SMOKE_SENSOR_T90S0 (kind read from the constant's name) |
 
 Models without a profile below offer no capability (all *unknown*).
 
@@ -126,7 +279,7 @@ Settings: rw 43 / ro 86, see [Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo I
 | parameter | id |
 |---|---|
 
-## T8910 Outdoor motion sensor
+## T8910 Motion sensor
 
 | capability | support | source |
 |---|---|---|
@@ -134,7 +287,7 @@ Settings: rw 43 / ro 86, see [Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo I
 | rssi | declared | eufy app GET_SUB1G_RSSI (param 1141), the sensor's only signal parameter (three live parameter dumps of a T8910 on a T8030 HomeBase 3 fw 3.8.7.4, from a sensor offline for months: the value never changed, so it is not proven to track) |
 | pir_event_time | declared | eufy app MOTION_SENSOR_PIR_EVT (param 1605) (epoch ms on the sensor's block only in the same dumps; whether it moves on motion past a working sensor is untested, so it is no last-seen time) |
 
-Settings: rw 2 / ro 9, see [Settings of T8910 Outdoor motion sensor](#settings-of-t8910-outdoor-motion-sensor)
+Settings: rw 2 / ro 9, see [Settings of T8910 Motion sensor](#settings-of-t8910-motion-sensor)
 
 Kind markers (a block without a known serial): 1601, 1605, 1609
 
@@ -162,7 +315,7 @@ Each model's settings as its bundled settings file lists them: *rw* settings the
 
 The per-mode settings (`alarm_delay_<mode>`, `leaving_delay_<mode>` and `<scope>_action_<mode>`) are not model data: they apply to every camera and sensor paired to a station and are listed with that device's settings.
 
-### Settings of T6010
+### Settings of T6010 Station 6010
 
 rw 0 / ro 45
 
@@ -214,7 +367,7 @@ rw 0 / ro 45
 | `mac_address` | string | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
 
-### Settings of T7400
+### Settings of T7400 Smart Safe 7400
 
 rw 0 / ro 39
 
@@ -260,7 +413,7 @@ rw 0 / ro 39
 | `trigger_interval_time` | range | 5..60 step 1 | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T7401
+### Settings of T7401 Smart Safe 7401
 
 rw 0 / ro 40
 
@@ -307,7 +460,7 @@ rw 0 / ro 40
 | `trigger_interval_time` | range | 5..60 step 1 | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T8001
+### Settings of T8001 Station
 
 rw 6 / ro 41
 
@@ -473,7 +626,7 @@ rw 10 / ro 41
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=EU, 1=US |
 
-### Settings of T8020
+### Settings of T8020 Station S
 
 rw 6 / ro 33
 
@@ -519,7 +672,7 @@ rw 6 / ro 33
 | `time_format_set` | other | - | - | yes | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8023
+### Settings of T8023 Station 8023
 
 rw 7 / ro 35
 
@@ -568,7 +721,7 @@ rw 7 / ro 35
 | `time_format_set` | string | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8024
+### Settings of T8024 Station 8024
 
 rw 7 / ro 39
 
@@ -621,7 +774,7 @@ rw 7 / ro 39
 | `time_format_set` | string | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8025
+### Settings of T8025 Station 8025
 
 rw 13 / ro 60
 
@@ -701,7 +854,7 @@ rw 13 / ro 60
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=EU, 1=US |
 
-### Settings of T8026
+### Settings of T8026 Station 8026
 
 rw 7 / ro 37
 
@@ -834,7 +987,7 @@ rw 13 / ro 62
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=EU, 1=US |
 
-### Settings of T8110
+### Settings of T8110 Battery Solo Cam 8110
 
 rw 37 / ro 87
 
@@ -965,7 +1118,7 @@ rw 37 / ro 87
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8111
+### Settings of T8111 Camera
 
 rw 24 / ro 60
 
@@ -1056,7 +1209,7 @@ rw 24 / ro 60
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8113
+### Settings of T8113 Camera 2C
 
 rw 27 / ro 69
 
@@ -1159,7 +1312,7 @@ rw 27 / ro 69
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8114
+### Settings of T8114 Camera 2
 
 rw 26 / ro 62
 
@@ -1254,7 +1407,7 @@ rw 26 / ro 62
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8115
+### Settings of T8115 Battery Solo Cam 8115
 
 rw 38 / ro 85
 
@@ -1384,7 +1537,7 @@ rw 38 / ro 85
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8122
+### Settings of T8122 Battery Solo Cam Spotlight 1080
 
 rw 30 / ro 65
 
@@ -1486,7 +1639,7 @@ rw 30 / ro 65
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8123
+### Settings of T8123 Battery Solo Cam Spotlight 2K
 
 rw 32 / ro 64
 
@@ -1589,7 +1742,7 @@ rw 32 / ro 64
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8124
+### Settings of T8124 Battery Solo Cam Spotlight Solar 8124
 
 rw 30 / ro 67
 
@@ -1799,7 +1952,7 @@ rw 32 / ro 67
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8130
+### Settings of T8130 Battery Solo Cam 8130
 
 rw 27 / ro 62
 
@@ -1895,7 +2048,7 @@ rw 27 / ro 62
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8131
+### Settings of T8131 Battery Solo Cam Pro
 
 rw 28 / ro 66
 
@@ -1996,7 +2149,7 @@ rw 28 / ro 66
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8134
+### Settings of T8134 Battery Solo Cam 8134
 
 rw 31 / ro 79
 
@@ -2113,7 +2266,7 @@ rw 31 / ro 79
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8140
+### Settings of T8140 Camera 2 Pro
 
 rw 29 / ro 67
 
@@ -2216,7 +2369,7 @@ rw 29 / ro 67
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8142
+### Settings of T8142 Camera 2C Pro
 
 rw 30 / ro 66
 
@@ -3056,7 +3209,7 @@ rw 39 / ro 107
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8171
+### Settings of T8171 Battery Solo Cam 8171
 
 rw 35 / ro 104
 
@@ -3202,7 +3355,7 @@ rw 35 / ro 104
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8172
+### Settings of T8172 Battery Solo Cam 8172
 
 rw 50 / ro 119
 
@@ -3378,7 +3531,7 @@ rw 50 / ro 119
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8173
+### Settings of T8173 Battery Solo Cam 8173
 
 rw 36 / ro 101
 
@@ -3522,7 +3675,7 @@ rw 36 / ro 101
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T817L
+### Settings of T817L Battery Solo Cam 817L
 
 rw 51 / ro 98
 
@@ -3678,7 +3831,7 @@ rw 51 / ro 98
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T81A0
+### Settings of T81A0 Walllight T81A0
 
 rw 15 / ro 85
 
@@ -3785,7 +3938,7 @@ rw 15 / ro 85
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T8200
+### Settings of T8200 Doorbell 2K
 
 rw 18 / ro 54
 
@@ -3941,7 +4094,7 @@ rw 17 / ro 53
 | `video_quality_hdr_switch` | bool | - | - | yes | switch | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8201
+### Settings of T8201 Wired Doorbell 1080P
 
 rw 18 / ro 54
 
@@ -4098,7 +4251,7 @@ rw 17 / ro 54
 | `video_quality_hdr_switch` | bool | - | - | yes | switch | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8202
+### Settings of T8202 Wired Doorbell 8202
 
 rw 20 / ro 57
 
@@ -4182,7 +4335,7 @@ rw 20 / ro 57
 | `video_quality_when_recoding_clips` | enum | 0, 1 | - | yes | select | 0=Recording quality, 1=Streaming quality |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8203
+### Settings of T8203 Battery Doorbell 8203
 
 rw 19 / ro 63
 
@@ -4271,7 +4424,7 @@ rw 19 / ro 63
 | `view_mode` | enum | 0, 1 | - | yes | select | 0=Dual, 1=Single |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8210
+### Settings of T8210 Battery Doorbell 8210
 
 rw 27 / ro 57
 
@@ -4362,7 +4515,7 @@ rw 27 / ro 57
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8213
+### Settings of T8213 Battery Doorbell 8213
 
 rw 34 / ro 64
 
@@ -4467,7 +4620,7 @@ rw 34 / ro 64
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8214
+### Settings of T8214 Battery Doorbell T8214
 
 rw 49 / ro 110
 
@@ -4820,7 +4973,7 @@ rw 54 / ro 126
 | `watermark_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off, 1=Time, 2=Time and logo, 3=Logo |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8220
+### Settings of T8220 Battery Doorbell 8220
 
 rw 22 / ro 50
 
@@ -4899,7 +5052,7 @@ rw 22 / ro 50
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8221
+### Settings of T8221 Battery Doorbell 8221
 
 rw 21 / ro 50
 
@@ -4977,7 +5130,7 @@ rw 21 / ro 50
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8222
+### Settings of T8222 Battery Doorbell 8222
 
 rw 22 / ro 53
 
@@ -5059,7 +5212,7 @@ rw 22 / ro 53
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8223
+### Settings of T8223 Battery Doorbell 8223
 
 rw 31 / ro 93
 
@@ -5190,7 +5343,7 @@ rw 31 / ro 93
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8224
+### Settings of T8224 Battery Doorbell 8224
 
 rw 31 / ro 87
 
@@ -5315,7 +5468,7 @@ rw 31 / ro 87
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8400
+### Settings of T8400 Indoor Camera
 
 rw 39 / ro 80
 
@@ -5441,7 +5594,7 @@ rw 39 / ro 80
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8401
+### Settings of T8401 Indoor Camera 1080
 
 rw 39 / ro 80
 
@@ -5842,7 +5995,7 @@ rw 46 / ro 86
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8411
+### Settings of T8411 Indoor Camera PT 1080
 
 rw 39 / ro 79
 
@@ -5967,7 +6120,7 @@ rw 39 / ro 79
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8414
+### Settings of T8414 Indoor Camera Costdown T8414
 
 rw 38 / ro 74
 
@@ -6086,7 +6239,7 @@ rw 38 / ro 74
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8416
+### Settings of T8416 Indoor Camera 8416
 
 rw 48 / ro 93
 
@@ -6234,7 +6387,7 @@ rw 48 / ro 93
 | `view_mode` | enum | 0, 1,  | - | yes | select | =, 0=Dual, 1=Single |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8417
+### Settings of T8417 Indoor Camera 8417
 
 rw 47 / ro 88
 
@@ -6376,7 +6529,7 @@ rw 47 / ro 88
 | `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8419
+### Settings of T8419 Indoor Camera T8419
 
 rw 39 / ro 79
 
@@ -6501,7 +6654,7 @@ rw 39 / ro 79
 | `video_setting_flickers_adjustment` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=50 Hz, 2=60 Hz |
 | `watermark_set` | enum | 0, 1, 2,  | - | yes | select | =, 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8420
+### Settings of T8420 Floodlight
 
 rw 20 / ro 55
 
@@ -6664,7 +6817,7 @@ rw 25 / ro 49
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8422
+### Settings of T8422 Floodlight E 2K
 
 rw 26 / ro 53
 
@@ -6750,7 +6903,7 @@ rw 26 / ro 53
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8423
+### Settings of T8423 Floodlight 2
 
 rw 30 / ro 65
 
@@ -6852,7 +7005,7 @@ rw 30 / ro 65
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8424
+### Settings of T8424 Floodlight Cam 2K
 
 rw 27 / ro 52
 
@@ -6938,7 +7091,7 @@ rw 27 / ro 52
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8425
+### Settings of T8425 Floodlight 8425
 
 rw 42 / ro 82
 
@@ -7069,7 +7222,7 @@ rw 42 / ro 82
 | `view_mode` | enum | 0, 1 | - | yes | select | 0=Dual, 1=Single |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8426
+### Settings of T8426 Floodlight 8426
 
 rw 40 / ro 79
 
@@ -7195,7 +7348,7 @@ rw 40 / ro 79
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8440
+### Settings of T8440 Indoor Outdoor Camera 1080P No Light
 
 rw 37 / ro 71
 
@@ -7310,7 +7463,7 @@ rw 37 / ro 71
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8441
+### Settings of T8441 Indoor Outdoor Camera 2K
 
 rw 12 / ro 44
 
@@ -7373,7 +7526,7 @@ rw 12 / ro 44
 | `live_support_mute` | bool | - | - | no | - | - |
 | `live_support_record` | bool | - | - | no | - | - |
 
-### Settings of T8442
+### Settings of T8442 Indoor Outdoor Camera 1080P
 
 rw 41 / ro 78
 
@@ -7682,7 +7835,7 @@ rw 20 / ro 65
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T84A1
+### Settings of T84A1 Walllight T84A1
 
 rw 13 / ro 74
 
@@ -7776,7 +7929,7 @@ rw 13 / ro 74
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T8530
+### Settings of T8530 Lock 8530
 
 rw 9 / ro 79
 
@@ -7871,7 +8024,7 @@ rw 9 / ro 79
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T8531
+### Settings of T8531 Lock 8531
 
 rw 20 / ro 74
 
@@ -8486,7 +8639,7 @@ rw 32 / ro 136
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T85V0
+### Settings of T85V0 Lock 85V0
 
 rw 24 / ro 111
 
@@ -8628,7 +8781,7 @@ rw 24 / ro 111
 | `video_quality_hdr_switch` | bool | - | - | yes | switch | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T8600
+### Settings of T8600 Camera 8600
 
 rw 36 / ro 74
 
@@ -8745,7 +8898,7 @@ rw 36 / ro 74
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T86P2
+### Settings of T86P2 Cam 4G PT
 
 rw 30 / ro 63
 
@@ -8845,7 +8998,7 @@ rw 30 / ro 63
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8790
+### Settings of T8790 Box SPB
 
 rw 4 / ro 59
 
@@ -8928,7 +9081,7 @@ rw 0 / ro 6
 | `firmware_main_version` | string | - | - | no | - | - |
 | `is_device_upgrade` | bool | - | - | no | - | - |
 
-### Settings of T8900
+### Settings of T8900 Entry Sensor
 
 rw 0 / ro 11
 
@@ -8946,7 +9099,7 @@ rw 0 / ro 11
 | `sensor_door_status` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 
-### Settings of T8910 Outdoor motion sensor
+### Settings of T8910 Motion sensor
 
 rw 2 / ro 9
 
@@ -8964,7 +9117,7 @@ rw 2 / ro 9
 | `sensor_motion_pet_setting` | bool | - | - | yes | switch | - |
 | `sensor_motion_trigger_time` | string | - | - | no | - | - |
 
-### Settings of T8920
+### Settings of T8920 Water Sensor
 
 rw 1 / ro 12
 
@@ -8984,7 +9137,7 @@ rw 1 / ro 12
 | `sensor_water_status` | bool | - | - | no | - | - |
 | `set_alarm_type` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 
-### Settings of T8960
+### Settings of T8960 Keypad
 
 rw 1 / ro 11
 
@@ -9003,7 +9156,7 @@ rw 1 / ro 11
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 
-### Settings of T8970
+### Settings of T8970 Siren Sensor
 
 rw 1 / ro 10
 
@@ -9021,7 +9174,7 @@ rw 1 / ro 10
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 | `set_alarm_type` | string | - | - | no | - | - |
 
-### Settings of T8B00
+### Settings of T8B00 Battery Solo Cam 8B00
 
 rw 29 / ro 68
 
@@ -9125,7 +9278,7 @@ rw 29 / ro 68
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8E00
+### Settings of T8E00 Camera T8E00
 
 rw 34 / ro 72
 
@@ -9238,7 +9391,7 @@ rw 34 / ro 72
 | `video_watch_view_mode` | string | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 3 | - | yes | select | 0=Off, 1=Timestamp, 3=Logo |
 
-### Settings of T8N00
+### Settings of T8N00 Station NVR
 
 rw 17 / ro 93
 
@@ -9355,7 +9508,7 @@ rw 17 / ro 93
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=EU, 1=US |
 
-### Settings of T8P00
+### Settings of T8P00 Camera T8P00
 
 rw 29 / ro 62
 
@@ -9453,7 +9606,7 @@ rw 29 / ro 62
 | `video_setting_image_effect_set` | string | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 3, 4 | - | yes | select | 0=Off, 1=Timestamp, 3=Logo, 4=Name |
 
-### Settings of T8P10
+### Settings of T8P10 Camera T8P10
 
 rw 29 / ro 65
 
@@ -9554,7 +9707,7 @@ rw 29 / ro 65
 | `video_watch_view_mode` | string | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 3, 4 | - | yes | select | 0=Off, 1=Timestamp, 3=Logo, 4=Name |
 
-### Settings of T8W11
+### Settings of T8W11 Indoor Camera 8W11
 
 rw 31 / ro 58
 
@@ -9776,7 +9929,7 @@ rw 34 / ro 85
 | `video_setting_flickers_adjustment` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=50 Hz, 2=60 Hz |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T9000
+### Settings of T9000 Station T9000
 
 rw 15 / ro 90
 
@@ -9888,7 +10041,7 @@ rw 15 / ro 90
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=EU, 1=US |
 
-### Settings of T90C0
+### Settings of T90C0 Smoke Sensor T90C0
 
 rw 0 / ro 4
 
@@ -9899,7 +10052,7 @@ rw 0 / ro 4
 | `device_model` | string | - | - | no | - | - |
 | `device_wifi_signal_strength_level` | other | - | - | no | - | - |
 
-### Settings of T90E0
+### Settings of T90E0 Entry Sensor T90E0
 
 rw 2 / ro 19
 
@@ -9927,7 +10080,7 @@ rw 2 / ro 19
 | `sensor_door_status` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 
-### Settings of T90F0
+### Settings of T90F0 Water Sensor T90F0
 
 rw 2 / ro 19
 
@@ -9955,7 +10108,7 @@ rw 2 / ro 19
 | `sensor_water_status` | bool | - | - | no | - | - |
 | `set_alarm_type` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 
-### Settings of T90G0
+### Settings of T90G0 Glass Break Sensor
 
 rw 1 / ro 20
 
@@ -9983,7 +10136,7 @@ rw 1 / ro 20
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 | `set_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 
-### Settings of T90K0
+### Settings of T90K0 Keyfor Sensor T90K0
 
 rw 2 / ro 13
 
@@ -10005,7 +10158,7 @@ rw 2 / ro 13
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 | `sensor_panic_trigger_type` | enum | 0, 2, 3 | - | yes | select | 0=Police Alarm, 2=Fire, 3=Medical |
 
-### Settings of T90M0
+### Settings of T90M0 Motion Sensor T90M0
 
 rw 2 / ro 18
 
@@ -10032,7 +10185,7 @@ rw 2 / ro 18
 | `sensor_motion_pet_setting` | bool | - | - | yes | switch | - |
 | `sensor_motion_trigger_time` | string | - | - | no | - | - |
 
-### Settings of T90P0
+### Settings of T90P0 Panic Sensor T90P0
 
 rw 2 / ro 15
 
@@ -10056,7 +10209,7 @@ rw 2 / ro 15
 | `sensor_panic_status` | other | - | - | no | - | - |
 | `sensor_panic_trigger_type` | enum | 0, 1, 2, 3 | - | yes | select | 0=Audible Alarm, 1=Silent Alarm, 2=Fire, 3=Medical |
 
-### Settings of T90R0
+### Settings of T90R0 Siren Sensor T90R0
 
 rw 2 / ro 16
 
@@ -10081,7 +10234,7 @@ rw 2 / ro 16
 | `sensor_siren_ring_status` | bool | - | - | no | - | - |
 | `set_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 
-### Settings of T90R1
+### Settings of T90R1 Outdoor Siren Sensor
 
 rw 0 / ro 16
 
@@ -10104,7 +10257,7 @@ rw 0 / ro 16
 | `sensor_siren_ring_time` | other | - | - | no | - | - |
 | `set_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 
-### Settings of T90S0
+### Settings of T90S0 Smoke Sensor T90S0
 
 rw 1 / ro 17
 

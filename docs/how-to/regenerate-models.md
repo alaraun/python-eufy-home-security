@@ -69,9 +69,18 @@ Run it on the whole corpus after changing the generator;
 `tests/devices/test_gen_models_check.py` runs it on two models and skips without Node or
 the cache.
 
+## The model list
+
+The model list (`devices/app_models.py`: every serial prefix the app names, with its
+kind and cloud device type) comes from the same app build, through
+`scripts/gen_app_models.py`; see
+[add-a-device.md § The model](add-a-device.md#1-the-model). Regenerate it with the
+settings files, then the support matrix.
+
 ## Before a release
 
-1. Generate, then `--check` on the whole corpus: `check: 0 files differ`.
+1. Generate, then `--check` on the whole corpus: `check: 0 files differ`. Regenerate
+   the model list (`gen_app_models.py`, `--check` to compare).
 2. Regenerate the support matrix, which lists every model's settings:
    `uv run python scripts/gen_device_matrix.py`.
 3. Update the settings counts in [home-assistant.md](home-assistant.md#settings-per-model)

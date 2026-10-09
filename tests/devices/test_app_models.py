@@ -1,0 +1,110 @@
+"""The app model generator: constants, the device-type map, kinds by name."""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+from eufy_home_security.devices.app_models import APP_MODELS
+from eufy_home_security.devices.types import MODELS
+
+ROOT = Path(__file__).resolve().parents[2]
+
+# Synthetic lines in the shape of the app's classes.
+_CONSTANTS = """
+    public static final String CAMERA9X = "T9101";
+    public static final String CAMERA9X_PRO = "T9102";
+    public static final String STATION_9 = "T9001";
+    public static final String DOORBELL_9 = "T9201";
+    public static final String SOLO_CAM_9201 = "T9201";
+    public static final String DOORBELL_START = "T92";
+    public static final String NOT_A_SERIAL = "abc";
+"""
+_TYPE_MAP = """
+        hashMap.put(7, new String[]{"T9101", "T9102"});
+        hashMap.put(Integer.valueOf(QueryDeviceData.TYPE_NINE), new String[]{"T9001"});
+        hashMap.put(Integer.valueOf(QueryDeviceData.TYPE_UNDEFINED), new String[]{"T9201"});
+"""
+_TYPE_INTS = "    public static final int TYPE_NINE = 10009;\n"
+
+
+def _generator() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "gen_app_models", ROOT / "scripts" / "gen_app_models.py"
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    ("constant", "kind"),
+    [
+        ("STATION_NVR", "station"),
+        ("KEYPAD_85A3", "keypad"),
+        ("WIFI_LOCK_NO_FINGER", "lock"),
+        ("BATTERY_DOORBELL_8210", "doorbell"),
+        ("INDOOR_SIREN_SENSOR", "sensor"),
+        ("CAMERA2C_PRO", "camera"),
+        ("BATTERY_SOLO_CAM_8170", "camera"),
+        ("FLOODLIGHT_E_2K", "camera"),
+        ("WALLLIGHT_T84A1", "camera"),
+        ("TRACKER_87B0", "other"),
+        ("LIGHT_8L00", "other"),
+    ],
+)
+def test_a_constant_name_reads_as_a_kind(constant: str, kind: str) -> None:
+    assert _generator().kind_of(constant) == kind
+
+
+def test_the_tables_build_one_row_per_prefix_and_leave_out_mixed_kinds() -> None:
+    gen = _generator()
+    named = gen.constants(_CONSTANTS)
+    assert named == {
+        "T9101": ["CAMERA9X"],
+        "T9102": ["CAMERA9X_PRO"],
+        "T9001": ["STATION_9"],
+        "T9201": ["DOORBELL_9", "SOLO_CAM_9201"],
+    }
+    types = gen.device_types(_TYPE_MAP, _TYPE_INTS)
+    assert types == {"T9101": 7, "T9102": 7, "T9001": 10009}
+    rows, conflicts = gen.build(named, types)
+    assert rows == [
+        ("T9001", "STATION_9", "station", 10009),
+        ("T9101", "CAMERA9X", "camera", 7),
+        ("T9102", "CAMERA9X_PRO", "camera", 7),
+    ]
+    assert conflicts == ["T9201: DOORBELL_9 (doorbell), SOLO_CAM_9201 (camera)"]
+
+
+def test_a_prefix_mapped_to_two_device_types_is_refused() -> None:
+    twice = _TYPE_MAP + '        hashMap.put(8, new String[]{"T9101"});\n'
+    with pytest.raises(ValueError, match="T9101"):
+        _generator().device_types(twice, _TYPE_INTS)
+
+
+def test_the_rendered_module_holds_the_rows(tmp_path: Path) -> None:
+    gen = _generator()
+    rows = [("T9001", "STATION_9", "station", 10009), ("T9101", "CAMERA9X", "camera", None)]
+    namespace: dict[str, object] = {}
+    exec(compile(gen.render(rows, "9.9.9"), "app_models", "exec"), namespace)  # noqa: S102
+    assert (namespace["APP_VERSION"], namespace["APP_MODELS"]) == ("9.9.9", tuple(rows))
+
+
+def test_the_committed_module_is_in_the_catalogue() -> None:
+    assert len(APP_MODELS) > 150
+    assert {prefix for prefix, *_ in APP_MODELS} <= set(MODELS)
+    assert len({prefix for prefix, *_ in APP_MODELS}) == len(APP_MODELS)
+
+
+def test_check_without_the_app_tables_exits_2(tmp_path: Path) -> None:
+    missing = str(tmp_path / "none.java")
+    args = ["--constants", missing, "--type-map", missing, "--device-types", missing, "--check"]
+    assert _generator().main(args) == 2

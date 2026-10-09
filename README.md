@@ -31,6 +31,9 @@ but it has no Home Assistant dependency and works on its own.
 - **Per-model settings from eufy's own code**: each product's settings (values, labels,
   units, how to write and read them) are generated from the thing description and
   handler the eufy app downloads, and ship with the library for 107 products.
+- **Every product the eufy app names**: the model list (161 serial prefixes, with kind
+  and cloud device type) is generated from the app's own tables, so a camera is
+  recognised as a camera even when nobody has tested it.
 - **Support graded as data**: every model and capability carries *verified* (proven on
   hardware), *declared* (from the eufy app, not proven) or *unknown*, with its source,
   so a consumer can tell what is proven.
@@ -44,8 +47,9 @@ Node.js bridge, no add-on, no threads.
 |---|---|
 | HomeBase 3 (T8030) with eufyCam 3 (T8160) | the primary target. Login, local session, status, guard mode, camera settings, live stream, recordings, stills, local and push events are verified on hardware |
 | Battery SoloCam (T8170), standalone | guard mode, status, live stream, pan/tilt presets and control, zoom, and settings (write + read-back) verified. The camera sleeps, so each call first wakes it (seconds) |
-| Outdoor motion sensor (T8910) | battery and signal read through the station; of its settings, only the per-mode delays and actions were written |
-| other HomeBases and cameras | *declared* only: known from the app, never tested. Settings files for 107 products ship with the library, generated from eufy's own code; a product without one is listed read-only from the cloud |
+| Motion sensor (T8910) | battery and signal read through the station; of its settings, only the per-mode delays and actions were written |
+| HomeBase 2 (T8010) | local session reported working by users (version-8 handshake); its cameras (eufyCam 2 / 2C / 2 Pro / 2C Pro) are *declared*, live view through it not yet confirmed |
+| other HomeBases and cameras | *declared* only: known from the app, never tested. Every product the app names is in the model list; settings files for 107 products ship with the library, generated from eufy's own code; a product without one is listed read-only from the cloud |
 | per-mode actions and delays | readable and writable; the Home, Away and Custom 1 delays are verified by write + read-back, the action flags' names are not checked against the app |
 | firmware updates | reported, never installed |
 | API | not stable: names and signatures may change in any 0.x release |
