@@ -22,7 +22,7 @@ lock-out. A tiny wrapper that sets `os.environ` and `execv`s the CLI is safer.
 | `--station SN\|NAME` | which station; required when the account has several |
 | `--host IP` | the station's LAN address, skipping the broadcast |
 | `--local-port N` | pin the selected station's local UDP port so a firewall can admit its replies by destination port (the station's source port changes every session). One port per station: use a different one for each |
-| `--country CC[,CC…]` | login country, ISO 3166 code; further comma-separated codes add extra countries (default: the host's IP country; see [cloud.md](../protocol/cloud.md#login-country)) |
+| `--country CC[,CC…]` | login country, ISO 3166 code; further comma-separated codes add extra countries (default: the host's IP country; see [cloud.md](../protocol/cloud.md#login-country)); anything but two-letter codes is a usage error |
 | `--region eu\|us` | log the login country in on this cloud region (default: its home region; every region while no country is known; see [the guide](../how-to/home-assistant.md#cloud-regions)) |
 | `--redact-serials` | mask serials in human output, e.g. before sharing it (full by default; log lines are always redacted) |
 | `-v` / `-vv` | INFO / DEBUG on stderr |

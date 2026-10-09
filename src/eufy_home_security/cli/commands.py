@@ -111,7 +111,9 @@ async def open_account(ctx: Context, *, station_sn: str | None = None) -> EufySe
     The e-mail comes from ``--email``, ``$EUFY_EMAIL`` or the session cache; the
     password from ``$EUFY_PASSWORD`` or a prompt that is only shown if a login
     actually happens (a cached session needs none). ``--host`` applies to
-    ``station_sn`` only (see :func:`_pinned_station_serial`).
+    ``station_sn`` only (see :func:`_pinned_station_serial`). An option the library
+    refuses (a malformed e-mail, country code or local port) raises
+    :class:`UsageError`.
     """
     from ..client import EufySecurity  # noqa: PLC0415 - aiohttp and the cloud, see Context
 
@@ -127,16 +129,19 @@ async def open_account(ctx: Context, *, station_sn: str | None = None) -> EufySe
 
     hosts = {station_sn: ctx.args.host} if station_sn and ctx.args.host else None
     ports = {station_sn: ctx.args.local_port} if station_sn and ctx.args.local_port else None
-    return EufySecurity(
-        ctx.http_session,
-        email,
-        ctx.env.get(ENV_PASSWORD) or prompt_password,
-        store=store,
-        country=[c for c in ctx.args.country.split(",") if c.strip()],
-        region=ctx.args.region,
-        station_hosts=hosts,
-        local_ports=ports,
-    )
+    try:
+        return EufySecurity(
+            ctx.http_session,
+            email,
+            ctx.env.get(ENV_PASSWORD) or prompt_password,
+            store=store,
+            country=[c.strip() for c in ctx.args.country.split(",") if c.strip()],
+            region=ctx.args.region,
+            station_hosts=hosts,
+            local_ports=ports,
+        )
+    except ValueError as err:
+        raise UsageError(str(err)) from err
 
 
 def select_station(stations: Sequence[Station], wanted: str | None, *, show: bool) -> Station:

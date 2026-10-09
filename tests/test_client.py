@@ -407,7 +407,7 @@ def test_an_address_without_an_at_is_refused_before_any_cloud_client_exists(emai
         EufySecurity(None, email, None, store=MemoryStore(), _cloud_factory=factory)  # type: ignore[arg-type]
 
 
-def test_the_install_state_reaches_the_cloud_client() -> None:
+def test_the_cloud_options_and_install_state_reach_the_cloud_client() -> None:
     install = InstallState()
     seen: dict[str, Any] = {}
 
@@ -415,6 +415,12 @@ def test_the_install_state_reaches_the_cloud_client() -> None:
         seen.update(kwargs)
         return StubCloud(*args, **kwargs)
 
+    options: dict[str, Any] = {
+        "country": ["EE", "CH"],
+        "timezone": "Europe/Tallinn",
+        "region": "us",
+        "scan_regions": True,
+    }
     EufySecurity(
         no_session(),
         SYNTHETIC.email,
@@ -422,8 +428,10 @@ def test_the_install_state_reaches_the_cloud_client() -> None:
         store=MemoryStore(),
         install=install,
         _cloud_factory=factory,
+        **options,
     )
     assert seen["install"] is install
+    assert {key: seen[key] for key in options} == options
 
 
 MEMBER_EMAIL = "member@example.com"
