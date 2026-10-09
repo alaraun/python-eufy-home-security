@@ -233,6 +233,22 @@ async def test_a_refused_country_login_falls_back_to_the_region_once(
     assert _login_abs(fake_mega) == []
 
 
+async def test_a_refused_country_is_not_sent_again_when_the_session_lapses(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.code_once["login"] = _PLAIN_REFUSAL
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache).async_login()
+        cache.cloud_session("eu")["expires_at"] = time.time() - 10
+        fake_mega.calls.clear()
+        await _api(http, cache).async_login()
+    assert _login_abs(fake_mega) == ["eu"]  # the settled ab, one login
+    assert (cache.cloud_session("eu")["ab"], cache.cloud_session("eu")["ab_wanted"]) == ("eu", "EE")
+
+
 async def test_the_last_login_code_and_the_ip_country_are_read_on_a_session(
     fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
 ) -> None:

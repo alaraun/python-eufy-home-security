@@ -945,7 +945,9 @@ class EufyCloudApi:
     ) -> None:
         """One password login to ``region`` (``password`` overrides every source).
 
-        The login sends :meth:`login_ab` as ``ab``. With ``fallback``, a country login
+        The login sends :meth:`login_ab` as ``ab``, or, when the scope's session records
+        that ``ab`` as refused (``ab_wanted`` is it, ``ab`` another), that other ``ab``.
+        With ``fallback``, a country login
         the cloud refuses with a plain body code is sent once more with the region as
         ``ab`` (a second login of the budget), and the session records the country as
         the ``ab`` it settles, so no re-login follows for it. Callers hold ``_login_lock``.
@@ -986,6 +988,11 @@ class EufyCloudApi:
             "login_id": login_id or "",
         }
         ab = wanted
+        settled = self._cache.cloud_sessions().get(region, {})
+        if settled.get(_AB_WANTED_KEY) == wanted and settled.get(_AB_KEY) not in (None, wanted):
+            # The cloud refused this country for the scope before: send the ab it took.
+            ab = str(settled[_AB_KEY])
+            _LOGGER.info("%s login with ab %s, as the refused ab %s settled", region, ab, wanted)
         try:
             try:
                 code, resp, data = await self._send_login(identity, password, ab, answer)

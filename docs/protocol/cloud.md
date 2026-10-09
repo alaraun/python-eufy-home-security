@@ -140,7 +140,8 @@ The eufy app logs in with the user's country, and the library does the same **[a
    another `ab` logs in again once, inside the login budget. A plain body-code
    refusal of a country login (26502 "Failed to request." was seen for `ab` `US` on the
    `eu` cluster) keeps the old session there, or, for a fresh login, retries once with
-   the region as `ab`; either way that country is not asked again for the session.
+   the region as `ab`; either way that country is not asked again for that region: a
+   later login there (an expiry, a forced login) sends the `ab` the session settled on.
 
 `POST app-passport-{region}-pr.eufy.com/passport/get_last_login_code`, body `{"email":
 …}`, answers `{"ab_code": …}`: the `ab` of the account's last login on that cluster, by
