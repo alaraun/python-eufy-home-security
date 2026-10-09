@@ -250,7 +250,8 @@ Sent as a GCM DeviceMsgBean on DRW channel 0, with the XZYH subheader
   fails with `ProtocolError` when 25 of them arrive before a frame of its own camera.
   So a consumer never receives another camera's view.
 - `key` is the **public modulus of an RSA-1024 key pair the client mints for this
-  stream** (exponent 65537 implied). The station wraps the stream's AES key to it.
+  stream** (exponent 65537 implied), or a P-256 public key (see
+  [media key](#media-key-rsa-or-ecc-verified)). The station wraps the stream's AES key to it.
 - `extValue`, `chn_list`, `stitch_mode` and `pip_cord` belong to the app's T8030
   (multi-camera station) branch. The app sends them even for a single camera, and only
   to a T8030 (see [other stations](#other-stations-homebase-2-open-1003-stop-bare-1004-declared)).
@@ -450,11 +451,39 @@ frame   = AES128_ECB_decrypt(aes_key, body[129:257]) ‖ body[257:]      # Annex
   never kept as the stream key.
 - This is the app's own `aes_decrypt` (whole-block AES-ECB) applied to a fixed
   128-byte prefix. With a longer prefix the clear tail decodes as garbage.
-- **ECC / AES-256-GCM media variant** **[app]**: when the app negotiates the newer
-  ECC exchange instead of an RSA `key`, frames carry a 129-byte ECC-wrapped key and
-  are decrypted with AES-256-GCM (12-byte IV, 16-byte tag, constant 13-byte AAD).
-  Driving the open with an RSA modulus always selected the RSA path on HomeBase 3,
-  so this variant is not implemented.
+### Media key: RSA or ECC **[verified]**
+
+The open's `key` field decides how the station protects the stream; the rest of the
+open is the same.
+
+| offer | `key` | keyframes | P-frames | audio |
+|---|---|---|---|---|
+| RSA | RSA-1024 modulus, 256 hex chars | `rsa_prefix` (above) | clear | clear |
+| ECC | P-256 public key `X ‖ Y`, 128 hex chars | `ecc`: AES-256-GCM | clear | `ecc`: AES-256-GCM |
+
+- **Which one the app offers** **[app]**: ECC when the camera's cloud param 1103
+  (`CAMERA_INFO`) is 128 or more, RSA otherwise (a HomeBase 2 reports −43; none of the
+  verified devices carries 1103). The client mints a fresh key pair per open.
+  `Station.async_open_live` offers what the app would; `media_key=MediaKeyType.ECC`
+  forces ECC.
+- **ECC video record:**
+
+  ```
+  off   0..21    the video header (above)
+  off  22..150   ECIES-wrapped AES-256 key (129 bytes, as the CONN_INIT session key:
+                 33-byte compressed ephemeral key, 16-byte IV, 48-byte AES-128-CBC
+                 ciphertext, 32-byte HMAC-SHA256 tag; plaintext 32 bytes)
+  off 151..166   GCM tag
+  off 167..178   GCM IV (12 bytes)
+  off 179..      AES-256-GCM ciphertext of the whole frame, AAD b"eufy security"
+  ```
+
+- **ECC audio record:** the 16-byte audio header, the GCM tag (16), the IV (12), then
+  the ciphertext of the ADTS frame, under the key of the stream's video records.
+- Verified on a HomeBase 3 with a T8160 as an offer the station accepted: keyframes and
+  audio arrived as above, P-frames clear, the picture decoded cleanly
+  ([hardware verification](../reference/hardware-verification.md)). Not observed on a
+  station that asks for ECC itself.
 
 ### Media protection by subheader **[app]**
 
@@ -464,7 +493,7 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
 
 | condition | variant (`VideoVariant`) | header | body | library |
 |---|---|---|---|---|
-| `v` 8 or 9 | `ecc` | 179 B | AES-256-GCM | `UnsupportedError` |
+| `v` 8 or 9 | `ecc` | 179 B | AES-256-GCM ([media key](#media-key-rsa-or-ecc-verified)) | decoded on an ECC stream |
 | `v` 4 or 5, `e` ≥ 2 | `e2e` | 151 B | end-to-end; the app plays it from recordings only | `UnsupportedError` |
 | `v` ≥ 3, `e` = 1 | `rsa_v3` | 22 B | clear | decoded |
 | `v` ≠ 0, `e` ≠ 0 | `rsa_prefix` | 22 B + 129 B prefix | [keyframe decryption](#keyframe-decryption-verified) | decoded |
@@ -480,7 +509,8 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
   G.711 A-law, `v` 2 AAC); `v` 8/9 and `v` 4/5 with `e` ≥ 2 are encrypted as video;
   otherwise version 1 is AAC-LC and a later version names its stream type in header
   byte 5 (0 = AAC-LC). The library delivers AAC-LC only (`AudioVariant`).
-- A stream whose video arrives as `ecc` or `e2e` before its first keyframe fails with
+- A stream whose video arrives in a variant its key does not decode (`ecc` on an RSA
+  stream, `rsa_prefix` on an ECC one, `e2e` always) before its first keyframe fails with
   `UnsupportedError` naming the variant. `SessionStats.media_frames_by_variant` counts
   every media record received by `"video:<variant>"` / `"audio:<variant>"`.
 
@@ -583,10 +613,10 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
 | end-of-playback frame (`0x0402` = 2) | **[verified]** |
 | V1 encrypted stills (key from `gen_pic_code_v1`) | **[verified]** (T8170) |
 | V2/V8 encrypted stills | **[app]**, not decoded |
-| ECC / AES-256-GCM media path | **[app]**, not exercised |
+| ECC media key: AES-256-GCM keyframes and audio | **[verified]** as an ECC offer to a HomeBase 3 (T8160); not seen on a station whose param 1103 asks for it |
 | legacy snapshot (1028) | **[open]** |
 | talkback (outbound audio, AUDIO_FRAME from client) | **[app]**, not attempted |
-| cameras on other stations, H.264 variants | **[open]** |
+| cameras on other stations (HomeBase 2 open, stop, media variants), H.264 variants | **[app]**, not observed |
 | standalone live open (1700/1000), bare 1004 stop, 1139 ping keeping it streaming | **[verified]** (T8170) |
 | video header width, height, stream-relative ms time | **[verified]** (T8170); no wall clock |
 | video header bytes 18..21, audio header bytes 4..5 and 12..15 | **[open]** |
