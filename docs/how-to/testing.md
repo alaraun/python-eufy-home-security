@@ -134,6 +134,7 @@ attempts. A test that meets such a wait on purpose shortens it.
 | wait | constant | shortened by `short_timeouts` |
 |---|---|---|
 | discovery attempts, each | `p2p.session.DISCOVERY_ATTEMPTS`, `DISCOVERY_TIMEOUT` | 1 × 2.5 s (a station ignores the first search after a close) |
+| pause between discovery attempts | `p2p.session.DISCOVERY_RETRY_DELAY` | 0.05 s |
 | CONN_INIT reply | `p2p.session.HANDSHAKE_TIMEOUT` | 2.5 s (outlasts one DRW retransmit, 1.5 s) |
 | command result; its late receipt | `p2p.session.COMMAND_TIMEOUT`, `COMMAND_RECEIPT_TIMEOUT` | 0.5 s, 1 s (shorter than a retransmit: a test that drops a command frame sets it itself) |
 | parameter dump | `p2p.session.PARAM_QUERY_TIMEOUT` | 2.5 s |

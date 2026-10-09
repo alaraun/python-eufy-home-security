@@ -140,7 +140,7 @@ The eufy app logs in with the user's country, and the library does the same **[a
    the caller's IANA zone (default `UTC`). A login in the other cluster with the same
    `ab` succeeds but lists nothing there **[verified]**. While no country is known, every
    region logs in with `ab` = the region and the empty ones are suspended.
-4. **Old sessions**: each cached session records the `ab` it was made with; one made with
+4. **Sessions made with another `ab`**: each cached session records the `ab` it was made with; one made with
    another `ab` logs in again once, inside the login budget. A plain body-code
    refusal of a country login (26502 "Failed to request." was seen for `ab` `US` on the
    `eu` cluster) keeps the old session there, or, for a fresh login, retries once with

@@ -25,6 +25,7 @@ SHORT_TIMEOUTS: Final[Mapping[str, tuple[str, Any]]] = {
     # a command frame sets it per test.
     "DISCOVERY_ATTEMPTS": ("p2p.session", 1),
     "DISCOVERY_TIMEOUT": ("p2p.session", 2.5),
+    "DISCOVERY_RETRY_DELAY": ("p2p.session", 0.05),
     "HANDSHAKE_TIMEOUT": ("p2p.session", 2.5),
     "COMMAND_TIMEOUT": ("p2p.session", 0.5),
     "COMMAND_RECEIPT_TIMEOUT": ("p2p.session", 1.0),

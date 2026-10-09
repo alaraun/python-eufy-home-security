@@ -89,7 +89,7 @@ _KEPT_ACROSS_VERSIONS = ("password", "throttle", "replaced")
 # account cannot reset the cloud's limits (the install identity is kept separately).
 _KEPT_WHEN_FORGOTTEN = ("version", "account", "throttle")
 # ``cloud.install_ids``: each extra country's install id, kept wherever ``openudid`` is.
-_INSTALL_IDS: Final = "install_ids"
+INSTALL_IDS_KEY: Final = "install_ids"
 # Older layouts SessionCache migrates on load instead of dropping them.
 _MIGRATED_VERSIONS: Final = (1,)
 # Top-level section of the session-replaced latch.
@@ -710,9 +710,9 @@ def _install_identity(doc: dict[str, Any]) -> dict[str, Any]:
     if doc.get("openudid"):
         kept["openudid"] = doc["openudid"]
     cloud = doc.get("cloud")
-    install_ids = cloud.get(_INSTALL_IDS) if isinstance(cloud, dict) else None
+    install_ids = cloud.get(INSTALL_IDS_KEY) if isinstance(cloud, dict) else None
     if isinstance(install_ids, dict) and install_ids:
-        kept["cloud"] = {_INSTALL_IDS: install_ids}
+        kept["cloud"] = {INSTALL_IDS_KEY: install_ids}
     return kept
 
 

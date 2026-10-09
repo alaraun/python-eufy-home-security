@@ -57,7 +57,7 @@ from ..exceptions import (
     SessionRejectedError,
     SessionReplacedError,
 )
-from ..storage import SessionCache
+from ..storage import INSTALL_IDS_KEY, SessionCache
 from . import const, crypto
 from .const import DSK_REFRESH_MARGIN
 from .models import (
@@ -207,8 +207,6 @@ _AB_WANTED_KEY: Final = "ab_wanted"
 """A cached session's settled ``ab``: what was asked for (differs after a refused country login)."""
 _EXTRA_HOMES_KEY: Final = "extra_countries"
 """``cloud.extra_countries``: each looked-up extra country's home region."""
-_INSTALL_IDS_KEY: Final = "install_ids"
-"""``cloud.install_ids``: the ``openudid`` of each extra country's login scope."""
 
 _REFUSED_KEY: Final = "refused"
 """``cloud.refused``: per extra scope whose login the cloud refused, the body ``code``,
@@ -2620,7 +2618,7 @@ class EufyCloudApi:
         the same id would end the first's session."""
         if const.scope_country(region) is None:
             return self._cache.openudid
-        ids = self._cache.section("cloud").setdefault(_INSTALL_IDS_KEY, {})
+        ids = self._cache.section("cloud").setdefault(INSTALL_IDS_KEY, {})
         value = ids.get(region)
         if not isinstance(value, str) or not value:
             value = ids[region] = secrets.token_hex(8)
