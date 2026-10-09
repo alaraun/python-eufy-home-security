@@ -10,16 +10,25 @@ from collections.abc import AsyncIterator, Callable
 import pytest
 
 from eufy_home_security.client import EufySecurity
+from eufy_home_security.cloud import const
 from eufy_home_security.cloud.status import LoginNeed
+from eufy_home_security.devices.recipes import SubCommand
 from eufy_home_security.events import Event, SecurityEvent
 from eufy_home_security.exceptions import (
+    CloudApiError,
+    CommunicationError,
     LoginLimitedError,
     RateLimitedError,
+    SessionRejectedError,
+    SessionReplacedError,
     StationUnreachableError,
 )
 from eufy_home_security.install import InstallState
 from eufy_home_security.p2p import session as session_module
+from eufy_home_security.p2p.messages import RECEIPT_NOT_HANDLED, device_msg
 from eufy_home_security.p2p.pppp import MsgType, decode_packet, encode_packet
+from eufy_home_security.p2p.session import P2PCredentials, StationSession
+from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.storage import MemoryStore
 from eufy_home_security.testing import (
     SYNTHETIC,
@@ -104,7 +113,9 @@ async def test_a_region_lists_its_own_devices(fake: FakeStation) -> None:
 
 
 async def test_a_login_error_is_raised_and_the_cloud_status_agrees(fake: FakeStation) -> None:
-    cloud = FakeCloud.for_stations(fake, login_error=LoginLimitedError(retry_after=60))
+    """A throttle code holds off as the cloud's answer with that code does."""
+    error = LoginLimitedError(retry_after=60, code=const.CloudCode.MAX_LOGIN_LIMIT)
+    cloud = FakeCloud.for_stations(fake, login_error=error)
     eufy = client_for(fake, cloud, MemoryStore())
     try:
         with pytest.raises(LoginLimitedError) as raised:
@@ -114,12 +125,140 @@ async def test_a_login_error_is_raised_and_the_cloud_status_agrees(fake: FakeSta
             await eufy.async_login()  # refused locally: no second login reaches the cloud
     finally:
         await eufy.async_close()
-    assert raised.value is cloud.login_error
+    assert raised.value.code == const.CloudCode.MAX_LOGIN_LIMIT
     assert status.login_need is LoginNeed.CACHED_PASSWORD
-    assert status.login_hold_off is not None
-    assert 0 < status.login_hold_off <= 60
+    assert status.login_hold_off == pytest.approx(const.LOGIN_HOLD_OFF_SECONDS, abs=5)
     assert status.next_login_allowed_in > 0
     assert cloud.calls == ["login"]
+
+
+async def test_a_login_error_without_a_throttle_code_holds_off_for_its_retry_after() -> None:
+    cloud = FakeCloud(login_error=LoginLimitedError(retry_after=60))
+    eufy = build_eufy_security(email=SYNTHETIC.email, store=MemoryStore(), cloud=cloud)
+    try:
+        with pytest.raises(LoginLimitedError) as raised:
+            await eufy.async_login()
+        status = await eufy.async_cloud_status()
+    finally:
+        await eufy.async_close()
+    assert raised.value is cloud.login_error
+    assert status.login_hold_off is not None
+    assert 0 < status.login_hold_off <= 60
+
+
+async def _warm_cloud_client(cloud: FakeCloud) -> EufySecurity:
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+    await eufy.async_login()
+    cloud.calls.clear()
+    return eufy
+
+
+async def test_a_throttle_from_call_errors_holds_off_every_later_call() -> None:
+    cloud = FakeCloud()
+    eufy = await _warm_cloud_client(cloud)
+    cloud.call_errors = [
+        RateLimitedError("throttled", retry_after=600.0, code=const.CloudCode.API_REQUEST_LIMIT)
+    ]
+    try:
+        with pytest.raises(RateLimitedError):
+            await eufy.cloud.async_fetch_devices()
+        status = await eufy.async_cloud_status()
+        with pytest.raises(RateLimitedError):
+            await eufy.cloud.async_fetch_devices()  # refused locally
+    finally:
+        await eufy.async_close()
+    assert status.request_hold_off == pytest.approx(const.REQUEST_HOLD_OFF_SECONDS, abs=5)
+    assert cloud.calls == ["devices"]
+
+
+async def test_a_call_error_without_a_throttle_code_holds_off_for_its_retry_after() -> None:
+    cloud = FakeCloud()
+    eufy = await _warm_cloud_client(cloud)
+    error = RateLimitedError("throttled", retry_after=60.0)
+    cloud.call_errors = [error]
+    try:
+        with pytest.raises(RateLimitedError) as raised:
+            await eufy.cloud.async_fetch_devices()
+        status = await eufy.async_cloud_status()
+    finally:
+        await eufy.async_close()
+    assert raised.value is error
+    assert status.request_hold_off is not None
+    assert 0 < status.request_hold_off <= 60
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "error"),
+    [
+        (401, const.CloudCode.SESSION_REPLACED, SessionReplacedError),
+        (401, None, SessionRejectedError),
+        (429, None, RateLimitedError),
+        (463, 4404, CloudApiError),
+        (500, None, CommunicationError),
+    ],
+)
+def test_a_refusal_is_the_error_the_library_raises_for_that_answer(
+    status: int, code: int | None, error: type[Exception]
+) -> None:
+    assert isinstance(FakeCloud.refusal(status, code), error)
+
+
+def test_a_success_is_no_refusal() -> None:
+    with pytest.raises(ValueError, match="not a refusal"):
+        FakeCloud.refusal(200, 0)
+
+
+async def test_a_served_401_with_the_takeover_code_latches_the_session() -> None:
+    cloud = FakeCloud()
+    eufy = await _warm_cloud_client(cloud)
+    cloud.call_errors = [FakeCloud.refusal(401, const.CloudCode.SESSION_REPLACED)]
+    try:
+        with pytest.raises(SessionReplacedError):
+            await eufy.async_probe_cloud_session()
+        assert eufy.session_replaced
+    finally:
+        await eufy.async_close()
+    assert "login" not in cloud.calls
+
+
+async def test_a_served_401_costs_one_login_and_a_retry() -> None:
+    cloud = FakeCloud()
+    eufy = await _warm_cloud_client(cloud)
+    cloud.call_errors = [FakeCloud.refusal(401)]
+    try:
+        await eufy.cloud.async_fetch_devices()
+    finally:
+        await eufy.async_close()
+    assert cloud.calls == ["devices", "login", "devices"]
+
+
+async def test_a_served_429_holds_off_every_later_call() -> None:
+    cloud = FakeCloud()
+    eufy = await _warm_cloud_client(cloud)
+    cloud.call_errors = [FakeCloud.refusal(429, retry_after=7200.0)]
+    try:
+        with pytest.raises(RateLimitedError):
+            await eufy.cloud.async_fetch_devices()
+        status = await eufy.async_cloud_status()
+        with pytest.raises(RateLimitedError):
+            await eufy.cloud.async_fetch_devices()  # refused locally
+    finally:
+        await eufy.async_close()
+    assert status.request_hold_off == pytest.approx(7200.0, abs=5)  # the longer Retry-After
+    assert cloud.calls == ["devices"]
+
+
+async def test_a_region_without_a_device_list_answers_a_null_list() -> None:
+    cloud = FakeCloud()
+    eufy = await _warm_cloud_client(cloud)
+    try:
+        devices = await eufy.cloud.async_list_house_devices("us")
+    finally:
+        await eufy.async_close()
+    assert devices == []
+    assert cloud.calls == ["devices@us"]
 
 
 async def test_a_request_limit_from_the_fake_cloud_holds_off_the_whole_install(
@@ -207,6 +346,56 @@ async def test_a_second_clients_search_leaves_the_live_session_alone(fake: FakeS
         probe.close()
         await eufy.async_close()
     assert fake.conn_inits == 1  # no reset, no second handshake
+
+
+async def test_a_store_warmed_with_the_clients_country_needs_no_login() -> None:
+    cloud = FakeCloud(country_regions={"DE": "eu"})
+    store = warm_store(email=SYNTHETIC.email, cloud=cloud, country="DE")
+    eufy = build_eufy_security(email=SYNTHETIC.email, store=store, cloud=cloud, country="DE")
+    try:
+        await eufy.async_login()
+    finally:
+        await eufy.async_close()
+    assert cloud.calls == []
+
+
+def test_warming_a_store_leaves_the_planned_call_errors() -> None:
+    planned = [CommunicationError("planned for the test")]
+    cloud = FakeCloud(call_errors=list(planned))
+    warm_store(email=SYNTHETIC.email, cloud=cloud)
+    assert cloud.call_errors == planned
+
+
+async def test_a_paired_cameras_command_under_subheader_0_gets_only_receipt_108(
+    fake: FakeStation,
+) -> None:
+    """A station passes a relayed channel's command on only under that subheader
+    channel: under 0 it answers -108 and the camera never sees the zoom."""
+    fake.relayed_channels = {2}
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_connect()
+        waiter = session._add_waiter(
+            lambda inbound: inbound.receipt() if inbound.type == FrameType.CMD_TRANSFER else None
+        )
+        zoom = device_msg(
+            SYNTHETIC.account_id, SubCommand.COMMAND_DUAL_CAMERA_ZOOM, {"dstZoom": 4}, channel=2
+        )
+        session._send_secure(zoom, dev_type=0)  # the subheader names channel 0
+        async with asyncio.timeout(2):
+            receipt = await waiter.future
+        session._remove_waiter(waiter)
+    finally:
+        await session.async_close()
+    assert receipt == RECEIPT_NOT_HANDLED
+    assert fake.received_header_channels[-1] == 0
+    assert fake.zoom_writes == []
 
 
 def test_fake_stations_must_be_started_on_one_port() -> None:
