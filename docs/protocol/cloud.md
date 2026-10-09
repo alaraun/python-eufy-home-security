@@ -186,7 +186,9 @@ live account.
 library sends `POST app-push-{region}-pr.eufy.com/app/sendmsg/verify_code` under that
 token, body `{transaction, message_type: 2 (e-mail; 1 SMS, 3 app push), biz_type: 1004
 (login), captcha_id: "", answer: ""}`, before raising `LoginChallengeError`
-(`code_requested`). The token is never stored. The answer is a new login with
+(`code_requested`). When that request fails (an HTTP 401, a body code, the network),
+the challenge is raised all the same with `code_requested` false, so the login can still
+be answered. The token is never stored. The answer is a new login with
 `verify_code` and `login_id` (empty when the challenge carried none).
 
 ## Device list

@@ -249,6 +249,25 @@ async def test_a_pending_two_step_login_is_a_challenge_not_a_session(
     assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
 
 
+@pytest.mark.parametrize(
+    "failure", [(401, {"code": 401, "msg": "expired"}), (200, {"code": 26502, "msg": "error"})]
+)
+async def test_a_failed_code_request_still_raises_the_challenge(
+    fake_mega: FakeMega, cache: SessionCache, failure: tuple[int, dict[str, Any]]
+) -> None:
+    """The pending login stays answerable when asking for the code fails."""
+    fake_mega.two_step = {"eu"}
+    fake_mega.error_bodies["sendmsg"] = [failure]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(LoginChallengeError) as exc:
+                await _api(session, cache).async_login()
+    assert (exc.value.kind, exc.value.region) == ("verify_code", "eu")
+    assert not exc.value.code_requested
+    assert len(fake_mega.code_requests) == 1
+
+
 async def test_captcha_challenge_fetches_an_image(fake_mega: FakeMega, cache: SessionCache) -> None:
     fake_mega.login_code = int(const.CloudCode.LOGIN_NEED_CAPTCHA)
     fake_mega.login_extra = {"login_id": "lid-7"}

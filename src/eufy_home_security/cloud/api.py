@@ -1120,6 +1120,7 @@ class EufyCloudApi:
         """Ask for the login code with the answer's pending token, then raise the challenge.
 
         The pending token is used for this one request and never stored as a session.
+        A failed request still raises the challenge, with ``code_requested`` False.
         """
         requested = False
         token = data.get("auth_token") if isinstance(data, Mapping) else None
@@ -1132,20 +1133,26 @@ class EufyCloudApi:
                 user_id=str(user_id) if user_id else None,
                 region=identity.region,
             )
-            await self._call(
-                self._host("push", identity.region),
-                const.SEND_VERIFY_CODE_PATH,
-                {
-                    "transaction": str(int(time.time() * 1000)),
-                    "message_type": const.VERIFY_CODE_BY_EMAIL,
-                    "biz_type": const.VERIFY_CODE_BIZ_LOGIN,
-                    "captcha_id": "",
-                    "answer": "",
-                },
-                pending,
-            )
-            requested = True
-            _LOGGER.info("%s cloud asked to e-mail a login verification code", identity.region)
+            try:
+                await self._call(
+                    self._host("push", identity.region),
+                    const.SEND_VERIFY_CODE_PATH,
+                    {
+                        "transaction": str(int(time.time() * 1000)),
+                        "message_type": const.VERIFY_CODE_BY_EMAIL,
+                        "biz_type": const.VERIFY_CODE_BIZ_LOGIN,
+                        "captcha_id": "",
+                        "answer": "",
+                    },
+                    pending,
+                )
+            except EufySecurityError as err:
+                _LOGGER.warning(
+                    "%s cloud refused to e-mail a login verification code: %s", identity.region, err
+                )
+            else:
+                requested = True
+                _LOGGER.info("%s cloud asked to e-mail a login verification code", identity.region)
         raise LoginChallengeError(
             "verify_code",
             login_id=self._extract_login_id(resp, data),
