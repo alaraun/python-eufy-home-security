@@ -37,7 +37,15 @@ from eufy_home_security.install import InstallState
 from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
-from .conftest import FAKE_AUTH_TOKEN, FAKE_ECC_KEY, FAKE_OWNER_ID, FAKE_PENDING_TOKEN, FakeMega
+from .conftest import (
+    FAKE_AUTH_TOKEN,
+    FAKE_ECC_KEY,
+    FAKE_OWNER_ID,
+    FAKE_PENDING_TOKEN,
+    MEGA_REALM,
+    SECURITY_REALM,
+    FakeMega,
+)
 
 
 def _api(session: aiohttp.ClientSession, cache: SessionCache) -> EufyCloudApi:
@@ -596,9 +604,9 @@ async def test_concurrent_rekey_answers_share_one_key_exchange(
             api = _api(session, cache)
             await api.async_login()
             fake_mega.error_bodies["devices"] = [refusal, refusal]
-            exchanges = len(fake_mega._shared)
+            exchanges = len(fake_mega._shared["mega"])
             await asyncio.gather(*(api.async_get_devices(refresh=True) for _ in range(2)))
-    assert len(fake_mega._shared) == exchanges + 1
+    assert len(fake_mega._shared["mega"]) == exchanges + 1
     assert fake_mega.login_calls == 1
 
 
@@ -868,6 +876,34 @@ async def test_cipher_fetch_uses_the_owner_id_and_caches(
     cipher_body = next(payload for name, payload in fake_mega.calls if name == "ciphers")
     assert cipher_body["user_id"] == FAKE_OWNER_ID  # never the caller's own id
     assert cipher_body["station_sn"] == SYNTHETIC.station_sn
+
+
+async def test_the_cipher_fetch_runs_on_a_security_realm_identity(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """``get_ciphers`` needs an identity of the security realm, the session's token and
+    ``gtoken``, and ``category``; that realm's key exchange the token and ``gtoken``
+    without ``category`` (the fake refuses anything else)."""
+    fake_mega.devices = [
+        {"device_sn": SYNTHETIC.station_sn, "device_type": 18,
+         "member": {"admin_user_id": FAKE_OWNER_ID}},
+    ]  # fmt: skip
+    fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": FAKE_ECC_KEY}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            assert await api.async_get_cipher_key(SYNTHETIC.station_sn) == FAKE_ECC_KEY
+    assert fake_mega.refused == []
+    (headers,) = fake_mega.headers["ciphers"]
+    assert headers["x-key-ident"] in fake_mega._shared[SECURITY_REALM]
+    assert headers["x-key-ident"] not in fake_mega._shared[MEGA_REALM]
+    assert (headers["category"], headers["gtoken"], headers["x-auth-token"]) == (
+        const.CATEGORY,
+        crypto.gtoken(SYNTHETIC.account_id),
+        FAKE_AUTH_TOKEN,
+    )
 
 
 async def test_cipher_fetch_keeps_the_rsa_private_key(
