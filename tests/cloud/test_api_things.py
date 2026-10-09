@@ -28,7 +28,6 @@ from eufy_home_security.exceptions import (
     NoCachedSessionError,
     ProtocolError,
     RateLimitedError,
-    SessionRejectedError,
     SessionReplacedError,
 )
 from eufy_home_security.install import InstallState
@@ -274,7 +273,7 @@ async def test_http_401_without_the_takeover_code_neither_latches_nor_logs_in(
         async with aiohttp.ClientSession() as session:
             api, _cache = await _seeded(session, login_guard)
             fake_mega.error_bodies["things"] = [(401, {"code": 401, "msg": "expired"})]
-            with pytest.raises(SessionRejectedError):
+            with pytest.raises(NoCachedSessionError):  # no login was tried: never a reauth
                 await api.async_get_thing_descriptions(["TX0001"])
             assert api.session_replaced is False
     assert fake_mega.login_calls == 1

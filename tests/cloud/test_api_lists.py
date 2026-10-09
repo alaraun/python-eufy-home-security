@@ -12,7 +12,7 @@ from aioresponses import aioresponses
 
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import EufyCloudApi
-from eufy_home_security.exceptions import NoCachedSessionError, SessionRejectedError
+from eufy_home_security.exceptions import AuthenticationError, NoCachedSessionError
 from eufy_home_security.storage import SessionCache
 from eufy_home_security.testing import SYNTHETIC, security_device, security_station
 
@@ -266,18 +266,26 @@ async def test_without_login_no_session_refuses_before_sending(
     assert fake_mega.calls == []
 
 
+@pytest.mark.parametrize("answer", ["code 26006", "HTTP 401"])
 async def test_without_login_an_expired_token_is_not_logged_in_again(
-    fake_mega: FakeMega, cache: SessionCache
+    fake_mega: FakeMega, cache: SessionCache, answer: str
 ) -> None:
-    fake_mega.code_once["houses"] = int(const.CloudCode.SESSION_TIMEOUT)
+    """The refusal is a missing session, not a credential problem: never a reauth."""
+    if answer == "HTTP 401":
+        fake_mega.error_bodies["houses"] = [(401, {"code": 401, "msg": "expired"})]
+    else:
+        fake_mega.code_once["houses"] = int(const.CloudCode.SESSION_TIMEOUT)
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             api = _api(session, cache)
             await api.async_login()
+            token = cache.cloud_session("eu")["auth_token"]
             assert api.regions_with_session() == ["eu"]
-            with pytest.raises(SessionRejectedError):
+            with pytest.raises(NoCachedSessionError) as caught:
                 await api.async_list_houses("eu", login=False)
+    assert not isinstance(caught.value, AuthenticationError)
+    assert cache.cloud_session("eu")["auth_token"] == token  # left for the next call
     assert fake_mega.login_calls == 1
 
 

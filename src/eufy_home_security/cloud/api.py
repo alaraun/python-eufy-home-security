@@ -146,6 +146,13 @@ class _SessionExpiredError(SessionRejectedError):
     """The server no longer accepts the auth token (one re-login is allowed)."""
 
 
+def _no_session_error(region: str, err: _SessionExpiredError) -> NoCachedSessionError:
+    """The error of a call that may not log in when the cloud answers its session expired."""
+    return NoCachedSessionError(
+        f"the {region} cloud session is no longer accepted ({err}); not logging in"
+    )
+
+
 def _two_step(data: object) -> int:
     """``fa_info.step`` of a login answer: 26052 while two-step verification is pending."""
     info = data.get("fa_info") if isinstance(data, Mapping) else None
@@ -1330,9 +1337,9 @@ class EufyCloudApi:
         :class:`KeyExchangeRefusedError`. A credential rejection, a throttle, a session
         another client took over, or any other failure propagates at once.
 
-        Without ``login`` nothing logs in: no usable session raises
-        :class:`NoCachedSessionError`, and a session-expired code propagates with the
-        session left for the next ordinary call.
+        Without ``login`` nothing logs in: no usable session, or one the cloud answers
+        as expired, raises :class:`NoCachedSessionError` (never an
+        :class:`AuthenticationError`), the session left for the next ordinary call.
         """
         identity = await self._ensure_session(region, login=login)
         rekeyed = relogged = False
@@ -1350,7 +1357,9 @@ class EufyCloudApi:
                 rekeyed = True
                 identity = await self._rekey(identity, err)
             except _SessionExpiredError as err:
-                if relogged or not login:
+                if not login:
+                    raise _no_session_error(region, err) from err
+                if relogged:
                     raise
                 relogged = True
                 _LOGGER.info("cloud session no longer accepted (%s); logging in once more", err)
@@ -2029,9 +2038,9 @@ class EufyCloudApi:
         It never spends a login: it never logs in, never logs in again,
         and never drops or refreshes the session. With no usable session (none
         cached, the cache not loaded, or one expiring within the margin) it raises
-        :class:`NoCachedSessionError` without a request. An expired-token or re-key
-        answer propagates as a :class:`CloudError` and leaves the session for the
-        next ordinary call. A hold-off refuses locally, and a 429 or throttle code
+        :class:`NoCachedSessionError` without a request; an expired-token answer
+        raises it too, and a re-key answer propagates as a :class:`CloudError`, both
+        leaving the session for the next ordinary call. A hold-off refuses locally, and a 429 or throttle code
         starts the account's shared hold-off exactly as every other call does. Only
         a session another client took over is latched and forgotten, as everywhere.
         """
@@ -2061,6 +2070,8 @@ class EufyCloudApi:
         except SessionReplacedError:
             await self._mark_replaced(identity)
             raise
+        except _SessionExpiredError as err:
+            raise _no_session_error(region, err) from err
         if not isinstance(data, Mapping) or not isinstance(data.get("things_list"), list):
             raise ProtocolError(f"cloud response to {const.THINGS_PATH} has no things_list")
         things = [t for t in data["things_list"] if isinstance(t, Mapping)]

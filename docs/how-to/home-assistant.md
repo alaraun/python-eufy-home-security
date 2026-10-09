@@ -366,7 +366,9 @@ them", including devices the library does not serve:
 
 It never logs in: it asks only regions whose session is held or cached
 (`regions_without_session` lists the rest), and the first throttle, kick-out or
-credential refusal ends it (`stopped`). It sends a few requests per region plus one per
+credential refusal ends it (`stopped`); a region whose session the cloud no longer
+accepts records `NoCachedSessionError` on its lists and the other regions are still
+asked. It sends a few requests per region plus one per
 owner, on the account's shared throttle, and caches nothing: call it from the
 diagnostics download only, never on a timer. `ciphers=False` leaves the cipher sweep out.
 
@@ -376,7 +378,10 @@ An account that a home or device was shared with sees those devices only after i
 accepts the invitation in the eufy app. `await eufy.async_pending_invites()` returns the
 invitations it has not accepted (`CloudInvite`: `kind` `"house"` or `"device"`,
 `house_name` or `device_sn` / `product_code`, `inviter`, `region`), login-free and
-uncached, two requests per region with a session. Ask it when the device list comes
+uncached, two requests per region with a session. A region whose request fails is
+skipped; the call raises only when no region answered, and a session the cloud no
+longer accepts raises `NoCachedSessionError` there (no login was tried: not a reauth).
+Ask it when the device list comes
 back empty (and on a user's rescan), and when it is not empty raise a repair: "accept
 the invitation from *inviter* to *home* in the eufy app, then rescan". `house_name` and
 `inviter` are for that message only: keep them out of logs and diagnostics

@@ -414,7 +414,8 @@ per start.
 | FCM credentials and token | install-scoped | Google identity of the install ([events.md](events.md)) |
 
 Rules the library follows: at most one automatic re-login per call, and only on a
-session-expired code — never on a re-key answer (a key exchange instead) and never
+session-expired code (a login-free call raises `NoCachedSessionError` instead) — never
+on a re-key answer (a key exchange instead) and never
 after a kick-out (26084), which blocks automatic logins until a forced one;
 concurrent calls share one login; a cooldown (15 min) on forced cipher re-fetches and,
 separately, on the forced device-list re-read behind an owner-id refresh (inside it
