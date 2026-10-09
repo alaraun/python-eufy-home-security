@@ -924,8 +924,8 @@ class Station:
         await asyncio.to_thread(_load_settings, {c for c in codes if c is not None})
 
     def _product_code(self, serial: str) -> str | None:
-        """``serial``'s product code: the cloud's ``device_new_pn`` (canonical), else the
-        serial's catalogued model; ``None`` when neither names one."""
+        """``serial``'s product code (:func:`~.devices.model_settings.product_code_of`):
+        the cloud's ``device_new_pn``, else the serial's rule or catalogued model."""
         new_pn = next(
             (
                 device.raw.get("device_new_pn")

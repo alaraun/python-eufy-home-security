@@ -30,7 +30,7 @@ from ..p2p.mode_actions import ACTION_FLAGS
 from .labels import setting_name
 from .settings import MODE_TABLE_SETTINGS, Scope, SettingDef, SettingUnit
 from .timezones import TIMEZONE_DOMAIN, decode_zone, encode_zone, zone_ids
-from .types import model_for_serial
+from .types import model_for_serial, serial_product_code
 
 __all__ = [
     "IDENTIFIER",
@@ -736,8 +736,9 @@ def canonical_code(product_code: object) -> str | None:
 
 def product_code_of(device_new_pn: object, serial: str) -> str | None:
     """A device's product code: the cloud's ``device_new_pn`` (canonical), else the
-    serial's catalogued model; ``None`` when neither names one."""
-    code = canonical_code(device_new_pn)
+    product a serial rule names (:func:`~.types.serial_product_code`), else the serial's
+    catalogued model; ``None`` when none names one."""
+    code = canonical_code(device_new_pn) or serial_product_code(serial)
     if code is not None:
         return code
     model = model_for_serial(serial)

@@ -23,11 +23,14 @@ from .types import (
     MODELS,
     ON_DEMAND_EVIDENCE,
     ON_DEMAND_PREFIXES,
+    SERIAL_PRODUCT_CODES,
+    SERIAL_PRODUCT_CODES_EVIDENCE,
     DeviceKind,
     DeviceModel,
     connects_on_demand,
     model_for_serial,
     serial_prefix,
+    serial_product_code,
 )
 
 __all__ = [
@@ -39,6 +42,8 @@ __all__ = [
     "ON_DEMAND_PREFIXES",
     "PROFILES",
     "SCOPE_DEFAULT_CHANNEL",
+    "SERIAL_PRODUCT_CODES",
+    "SERIAL_PRODUCT_CODES_EVIDENCE",
     "Capability",
     "DeviceKind",
     "DeviceModel",
@@ -60,4 +65,5 @@ __all__ = [
     "profile_for_serial",
     "scope_for_kind",
     "serial_prefix",
+    "serial_product_code",
 ]

@@ -211,6 +211,33 @@ ON_DEMAND_EVIDENCE: Final = Evidence(
 )
 
 
+#: Serials whose product code is not their 5-character prefix: ``(serial start, the
+#: character at index 6 or None for any, product code)``, first match wins.
+SERIAL_PRODUCT_CODES: Final[tuple[tuple[str, str | None, str], ...]] = (
+    ("T8W11P", None, "T8W11C"),
+    ("T8420", "6", "T8420X"),
+    ("T8520", "8", "T8510P"),
+    ("T8520", "9", "T8520P"),
+    ("T8210", "8", "T8210C"),
+    ("T8410", "5", "T8410C"),
+)
+SERIAL_PRODUCT_CODES_EVIDENCE: Final = Evidence(
+    Support.DECLARED,
+    "eufy app 6.1.10 serial-to-product rules",
+    "applied when the cloud names no product code (device_new_pn)",
+)
+
+
+def serial_product_code(serial: str) -> str | None:
+    """The product code a rule of :data:`SERIAL_PRODUCT_CODES` gives ``serial``
+    (``"T8410C"`` for a T8410 serial with ``5`` at index 6); ``None`` when none applies."""
+    sn = serial.strip().upper()
+    for start, sixth, code in SERIAL_PRODUCT_CODES:
+        if sn.startswith(start) and (sixth is None or sn[6:7] == sixth):
+            return code
+    return None
+
+
 def serial_prefix(serial: str) -> str | None:
     """The 5-character model prefix of ``serial`` (``"T8160"``), catalogued or not;
     ``None`` for a serial shorter than a prefix."""

@@ -103,6 +103,11 @@ by fetching its thing model and regenerating
 model's settings read-only from the cloud. `Station.async_set_setting()` returns the
 `CommandOutcome` of the send; the next parameter dump shows whether the value held.
 
+A device's product code picks its file and handler variant: the cloud's `device_new_pn`,
+else the product a serial rule of `types.SERIAL_PRODUCT_CODES` names (a T8410 serial
+with `5` at index 6 is a T8410C), else the serial's catalogued 5-character model. A
+product whose serial differs from its siblings' only past the prefix gets a rule there.
+
 ## 4. Verify on hardware
 
 With a station on your LAN:
