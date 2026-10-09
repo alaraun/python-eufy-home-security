@@ -362,7 +362,8 @@ them", including devices the library does not serve:
   one `get_ciphers` request: per cipher id whether the ECC key and the RSA key are
   usable, the RSA key's letter case and size, and which stations named it.
 - Serials redacted; no user id, house id, DID, IP, name, key or parameter value (but
-  the camera-info one).
+  the camera-info one). Error texts have serials, account ids and e-mail addresses
+  redacted.
 
 It never logs in: it asks only regions whose session is held or cached
 (`regions_without_session` lists the rest), and the first throttle, kick-out or

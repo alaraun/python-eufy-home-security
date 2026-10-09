@@ -18,7 +18,7 @@ from collections.abc import Awaitable, Collection, Coroutine, Iterable, Mapping,
 from dataclasses import dataclass
 from typing import Any, Final
 
-from ._logging import redact_serial
+from ._logging import _hidden_text, redact_serial
 from .cloud.api import EufyCloudApi
 from .cloud.models import CipherRecord, CloudDevice, CloudInvite, InviteKind, KeyCase, KeyState
 from .devices.command_types import APK_COMMAND_TYPES
@@ -243,7 +243,8 @@ def _plain(value: object) -> object:
 
 
 def _error_text(err: BaseException) -> str:
-    return f"{type(err).__name__}: {err}"[:_ERROR_LEN]
+    """The error for the report: serials, account ids and e-mail addresses redacted."""
+    return _hidden_text(f"{type(err).__name__}: {err}")[:_ERROR_LEN]
 
 
 @dataclass
