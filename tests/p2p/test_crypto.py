@@ -153,6 +153,14 @@ def test_parse_conn_init_reads_a_clear_payload_and_pads_a_partial_block() -> Non
         crypto.parse_conn_init(body, b"\x01", static)
 
 
+def test_parse_conn_init_rejects_an_undecryptable_or_short_payload() -> None:
+    static = static_key(SYNTHETIC.station_sn, SYNTHETIC.did)
+    with pytest.raises(HandshakeError, match="ECB decrypt failed"):
+        crypto.parse_conn_init(bytes(32), bytes([1, 0, 0xFF, 1, 0, 0]), static[:15])
+    with pytest.raises(HandshakeError, match="too short"):
+        crypto.parse_conn_init(bytes(3), bytes([1, 0, 0xFF, crypto.FRAME_PLAIN, 0, 0]), static)
+
+
 def test_session_key_from_conn_init_recovers_the_key() -> None:
     static = static_key(SYNTHETIC.station_sn, SYNTHETIC.did)
     session_key = bytes((65 + i % 26) for i in range(32))
@@ -225,12 +233,21 @@ def test_aes_key_from_conn_init_rejects_a_wrong_or_bad_key_and_a_short_block() -
     priv, _ = _rsa_keypair()
     _, other = _rsa_keypair()
     wrapped = priv.public_key().encrypt(b"0123456789abcdef", padding.PKCS1v15())
-    with pytest.raises(HandshakeError):  # a decrypt error, or noise (implicit rejection)
-        crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), other)
-    # A wrong-but-valid key is a stale key, not an unusable one: still a plain HandshakeError.
+    # A wrong-but-valid key decrypts to noise (implicit rejection) or fails: a stale key,
+    # not an unusable one, so still a plain HandshakeError.
     with pytest.raises(HandshakeError) as noise:
         crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), other)
     assert not isinstance(noise.value, CipherUnusableError)
+    # A key of another size cannot decrypt the 128-byte block at all.
+    big = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    big_pem = big.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+    with pytest.raises(HandshakeError, match="RSA decrypt failed") as size:
+        crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped), big_pem)
+    assert not isinstance(size.value, CipherUnusableError)
     with pytest.raises(HandshakeError, match="not 128") as short:
         crypto.aes_key_from_conn_init(crypto.ConnInit(1, 40, wrapped[:100]), other)
     assert not isinstance(short.value, CipherUnusableError)  # a protocol shape, not a bad key

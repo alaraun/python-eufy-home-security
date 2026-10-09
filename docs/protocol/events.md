@@ -41,8 +41,9 @@ XZYH 0x0547 (NOTIFY_PAYLOAD), cipher tag 0x08 or 0x01, decrypted:
 - The same event arrives under GCM or ECB depending on the client (see
   [session-crypto.md](session-crypto.md)).
 - The decoded `SecurityEvent` carries the frame's cipher as `frame_cipher`.
-  `authenticated` is True under GCM (the tag proves the station sent it) and False
-  under ECB (the static key is derivable on the LAN). An ECB push is still
+  `authenticated` is True under GCM (the tag proves the station sent it) and under an
+  RSA session's key (`session_ecb`), and False under the static ECB key (derivable on
+  the LAN). An ECB push is still
   delivered. Neither proves freshness: station → client frames carry no seq, so a
   GCM frame can be replayed within one session.
 - A cloud push has `frame_cipher` None and counts as authenticated (TLS from

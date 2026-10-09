@@ -214,8 +214,6 @@ def ecies_encrypt(
 CONN_INIT_ECC_VERSION = 8
 """The CONN_INIT reply version (subheader byte 0) of the ECIES handshake and its GCM
 session; the eufy app takes any other version as the RSA handshake."""
-CONN_INIT_ECC_BLOB_LEN = 129
-"""ECIES blob bytes the app unwraps after the cipher id: eph 33 + iv 16 + ct 48 + tag 32."""
 CONN_INIT_RSA_BLOB_LEN = 128
 """RSA-1024 ciphertext bytes the app decrypts after the cipher id."""
 AES_SESSION_KEY_LEN = 16

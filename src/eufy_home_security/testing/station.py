@@ -968,7 +968,13 @@ class FakeStation:
             return  # taken, never answered: the session reports it as not acted on
         if code == 0 and self.apply_settings:
             self.params.setdefault(channel, {})[ftype] = str(value)
-        self.send_frame(ftype, struct.pack("<i", code) + b"\x00" * 12, cipher=FrameCipher.ECB)
+        result = struct.pack("<i", code) + b"\x00" * 12
+        if self.rsa_session:  # the result under the session's key, like every frame
+            subheader = bytes([FrameCipher.ECB, 0, 0xFF, FRAME_SESSION_ECB, 0, 0])
+            result = ecb_encrypt(RSA_SESSION_KEY, result)
+            self.send_frame(ftype, result, cipher=FrameCipher.ECB, subheader=subheader)
+        else:
+            self.send_frame(ftype, result, cipher=FrameCipher.ECB)
 
     # ── media ────────────────────────────────────────────────────────────────
 
@@ -1197,10 +1203,11 @@ class FakeStation:
         plain = struct.pack(f"<{len(values)}I", *values)
         if cipher == FrameCipher.ECB:
             body = ecb_encrypt(self.static_key, plain)
+            subheader = bytes([cipher, 0, channel, FRAME_STATIC_ECB, 0, 0])
         else:
             body = self._seal(plain)
-        subheader = bytes([cipher, 0, channel, 2, 0, 0])
-        self.send_frame(ftype, body, cipher=cipher, channel=2, subheader=subheader)
+            subheader = bytes([cipher, 0, channel, 2, 0, 0])
+        self.send_frame(ftype, body, cipher=cipher, channel=2, subheader=subheader, sealed=True)
 
     def _seal(self, plain: bytes) -> bytes:
         """A body under the session's cipher: GCM, or an RSA session's AES-128-ECB."""
@@ -1216,14 +1223,19 @@ class FakeStation:
         cipher: int,
         channel: int = 0,
         subheader: bytes | None = None,
+        sealed: bool | None = None,
     ) -> None:
         """Send one frame. On an RSA session a GCM-tagged frame goes out ECB-tagged:
-        encryption type 2 when its body is sealed (no ``subheader``), else 0 (clear)."""
+        encryption type 2 when its body is sealed (``sealed``; by default when there is
+        no ``subheader``), else 0 (clear)."""
         if self.rsa_session and cipher == FrameCipher.GCM and ftype != FrameType.CONN_INIT:
+            if sealed is None:
+                sealed = subheader is None
+            encryption = FRAME_SESSION_ECB if sealed else FRAME_PLAIN
             if subheader is None:
-                subheader = bytes([FrameCipher.ECB, 0, 0xFF, FRAME_SESSION_ECB, 0, 0])
+                subheader = bytes([FrameCipher.ECB, 0, 0xFF, encryption, 0, 0])
             else:
-                subheader = bytes([FrameCipher.ECB, *subheader[1:3], FRAME_PLAIN, *subheader[4:]])
+                subheader = bytes([FrameCipher.ECB, *subheader[1:3], encryption, *subheader[4:]])
             cipher = FrameCipher.ECB
         frame = encode_frame(ftype, payload, subheader or bytes([cipher, 0, 0xFF, cipher, 0, 0]))
         for peer in self._targets():

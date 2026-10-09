@@ -656,6 +656,7 @@ parameter dumps and alarm frames under that key once a session is up, so
 |---|---|---|
 | `FrameCipher.GCM` | `True` | a P2P push under the session key |
 | `FrameCipher.ECB` | `False` | a P2P push under the static key: could be forged |
+| `FrameCipher.ECB`, `event.session_ecb` | `True` | a P2P push under an RSA session's key (legacy firmware) |
 | `None` | `True` | a cloud push (TLS) |
 
 - Let only an authenticated event drive a security decision: clearing TRIGGERED,
@@ -717,7 +718,7 @@ same state on demand. Map it:
 |---|---|
 | `unreachable`, `probe_unanswered`, `station_closed`, `link_silent` | entities unavailable; the supervisor is already reconnecting. After a grace period, the unreachable repair issue |
 | `key_rejected` | entities unavailable. The first rejection refreshes the key by itself; an `error` that is a `KeyRejectedError` means that refresh did not help (see the error table) |
-| `key_unusable` | entities unavailable. The cipher key cannot be used at all (`CipherUnusableError`) — a device on outdated firmware that uses the legacy RSA handshake, whose cloud key eufy serves corrupted. No re-fetch helps. Raise a repair telling the user to **update the device's firmware** in the eufy app; do not call it a rejected key or suggest a reset. |
+| `key_unusable` | entities unavailable. The cipher key cannot be used at all (`CipherUnusableError`; `error.reason`: `rsa_unparsable`/`not_rsa`, or `no_rsa_key`/`no_ecc_key` when the cloud serves no key for the station's handshake) — usually a device on outdated firmware that uses the legacy RSA handshake, whose cloud key eufy serves corrupted or not at all. No re-fetch helps. Raise a repair telling the user to **update the device's firmware** in the eufy app; do not call it a rejected key or suggest a reset. |
 | `credentials_unavailable` | entities unavailable. With `error=None` the reason is the `CloudProblem` already emitted; with a `RefreshCooldownError` just wait, no repair |
 | `protocol` | entities unavailable; log it, the supervisor retries |
 | `closed` | the integration's own `async_close`: nothing to do |

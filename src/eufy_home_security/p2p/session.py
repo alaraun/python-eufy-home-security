@@ -209,13 +209,16 @@ DISCOVERY_ATTEMPTS = 3
 OP_LOCK_WAIT_LOG = 0.05
 """A wait for the command lock at least this long (seconds) gets a DEBUG line."""
 DISCOVERY_TIMEOUT = 6.0
+DISCOVERY_RETRY_DELAY = 0.5
+"""Pause (seconds) before the next discovery attempt after one failed; none after the last."""
 HANDSHAKE_TIMEOUT = 6.0
 COMMAND_TIMEOUT = 6.0
 LOOP_STALL_STEP = 0.25
 """A reply wait checks this often (seconds) whether the event loop was held."""
 LOOP_STALL_LATENESS = 0.1
 """A wait step ending at least this late means something else held the event loop; the
-reply deadline moves out by the lateness (replies that arrived meanwhile are still queued)."""
+reply deadline moves out by the step's duration (replies that arrived meanwhile are still
+queued)."""
 LOOP_STALL_MAX = 30.0
 """The most a reply deadline moves out for a held event loop, in all."""
 PARAM_QUERY_TIMEOUT = 8.0
@@ -307,9 +310,9 @@ CONN_INIT_MIN_LEN = 4 + CONN_INIT_RSA_BLOB_LEN
 """Smallest CONN_INIT payload that holds a key: the cipher id and the 128-byte RSA
 ciphertext (the ECIES form needs 133, and a HomeBase 3 pads it to 144)."""
 CONN_INIT_MAX_LEN = 4096
-"""Largest CONN_INIT payload accepted. A real one is a few hundred bytes; the ECIES
-unwrap searches candidate lengths on the event loop, so an oversized blob would stall
-every session and stream in the process."""
+"""Largest CONN_INIT payload accepted. A real one is a few hundred bytes; a larger one
+(corrupt, or from whatever won the punch race on the LAN) is dropped before any of the
+handshake's decryption runs on the event loop."""
 STAT_KEY_LIMIT = 64
 """Most distinct keys a wire-keyed statistic counts before bucketing the rest.
 
@@ -911,8 +914,9 @@ class StationSession:
         self._transport: PPPPTransport | None = None
         self._creds: P2PCredentials | None = None
         self._cipher_id: int | None = None
-        self._conn_init_version: int | None = None
         """The cipher the station named in its last CONN_INIT (None before one arrived)."""
+        self._conn_init_version: int | None = None
+        """The version (subheader byte 0) of the last CONN_INIT reply."""
         self._did: Did | None = None
         self._static_key: bytes | None = None
         self._session_key: bytes | None = None
@@ -1348,9 +1352,11 @@ class StationSession:
         or the latch is released. A re-fetched key that is rejected too raises
         :class:`KeyRejectedError`. A key that does not parse at all raises
         :class:`CipherUnusableError` without a re-fetch or latch (the cloud serves the
-        same bytes again). After :meth:`async_close` every call raises
-        :class:`StationUnreachableError`: a closed session has no owner left to close
-        it again.
+        same bytes again); credentials without the key the station's handshake needs
+        are re-fetched once, and still without it raise :class:`CipherUnusableError`
+        (reason ``no_rsa_key`` or ``no_ecc_key``) without the latch. After
+        :meth:`async_close` every call raises :class:`StationUnreachableError`: a closed
+        session has no owner left to close it again.
         """
         self._raise_if_closed()
         async with self._connect_lock:
@@ -1377,6 +1383,8 @@ class StationSession:
                     creds = await self._establish(creds)
                 except CipherUnusableError:
                     raise
+                except _MissingKeyError as again:
+                    raise again.unusable() from again
                 except HandshakeError as again:
                     raise KeyRejectedError(
                         f"the station rejected the re-fetched cipher key too: {again}"
@@ -1701,7 +1709,14 @@ class StationSession:
             try:
                 indices = [self._send_secure(body, dev_type=header)]
                 started = time.monotonic()
-                await _wait_any(waiter.future, receipt, min(COMMAND_RESEND_AFTER, timeout))
+                clock, label = _StallClock(), f"cmd {command}"
+                await self._wait_until(
+                    waiter.future,
+                    started + min(COMMAND_RESEND_AFTER, timeout),
+                    label,
+                    clock=clock,
+                    event=receipt,
+                )
                 if not waiter.future.done() and not receipt.is_set() and not self._acked(indices):
                     _LOGGER.debug(
                         "%s: cmd %d (%s): no receipt or ACK after %.1fs; resending",
@@ -1711,7 +1726,7 @@ class StationSession:
                         COMMAND_RESEND_AFTER,
                     )
                     indices.append(self._send_secure(body, dev_type=header))
-                await self._wait_until(waiter.future, started + timeout, f"cmd {command}")
+                await self._wait_until(waiter.future, started + timeout, label, clock=clock)
                 if not waiter.future.done() and not receipt.is_set() and self._acked(indices):
                     _LOGGER.debug(
                         "%s: cmd %d (%s) acknowledged without a receipt; waiting for it",
@@ -1719,10 +1734,12 @@ class StationSession:
                         command,
                         self._param(command, channel).label,
                     )
-                    await _wait_any(
+                    await self._wait_until(
                         waiter.future,
-                        receipt,
-                        started + COMMAND_RECEIPT_TIMEOUT - time.monotonic(),
+                        started + COMMAND_RECEIPT_TIMEOUT,
+                        label,
+                        clock=clock,
+                        event=receipt,
                     )
             finally:
                 self._remove_waiter(waiter)
@@ -3228,7 +3245,8 @@ class StationSession:
             except StationUnreachableError as err:
                 last_error = err
                 _LOGGER.debug("%s: discovery attempt %d failed: %s", self._log_name, attempt, err)
-                await asyncio.sleep(0.5)
+                if attempt < DISCOVERY_ATTEMPTS:
+                    await asyncio.sleep(DISCOVERY_RETRY_DELAY)
                 continue
             except BaseException:
                 transport.close()
@@ -3266,10 +3284,7 @@ class StationSession:
         def match(inbound: Inbound) -> Frame | None:
             if inbound.type != FrameType.CONN_INIT:
                 return None
-            # Bound the blob before it reaches the ECIES unwrap. A real CONN_INIT is a
-            # few hundred bytes; the unwrap searches candidate lengths and runs on the
-            # event loop, so an oversized one — corrupt, or from whatever won the punch
-            # race on the LAN — would stall every session and stream in the process.
+            # Bound the payload before the handshake decrypts it (CONN_INIT_MAX_LEN).
             if not CONN_INIT_MIN_LEN <= len(inbound.frame.payload) <= CONN_INIT_MAX_LEN:
                 return None
             return inbound.frame
@@ -3358,12 +3373,14 @@ class StationSession:
             raise HandshakeError(
                 f"CONN_INIT names cipher {named}, the key is cipher {creds.cipher_id}"
             )
+        missing = _MissingKeyError(named, rsa=conn_init.rsa)
+        if not missing.held_by(creds):
+            raise missing
         if not conn_init.rsa:
             return creds, conn_init, session_key_from_conn_init(conn_init, creds.ecc_private_key)
-        if not creds.rsa_private_key:
-            raise HandshakeError(f"no RSA private key held for cipher {named}")
+        rsa_key = cast(str, creds.rsa_private_key)  # held_by checked it
         try:
-            return creds, conn_init, aes_key_from_conn_init(conn_init, creds.rsa_private_key)
+            return creds, conn_init, aes_key_from_conn_init(conn_init, rsa_key)
         except CipherUnusableError as exc:
             if exc.cipher_id is None:
                 exc.cipher_id = named
@@ -3378,11 +3395,16 @@ class StationSession:
                 f"no automatic re-fetch for {wait:.0f}s ({err})"
             ) from err
         _LOGGER.warning(
-            "%s: session key would not unwrap (%s); re-fetching the cipher key once",
+            "%s: %s (%s); re-fetching the cipher key once",
             self._log_name,
+            "credentials without the key"
+            if isinstance(err, _MissingKeyError)
+            else "session key would not unwrap",
             err,
         )
         creds = await self._load_credentials(refresh=True)
+        if isinstance(err, _MissingKeyError) and not err.held_by(creds):
+            raise err.unusable() from err  # no key came back: nothing for the latch
         await self._key_refresh.async_refreshed()  # only now: the fetch returned a key
         self._key_refreshes += 1
         return creds
@@ -3706,8 +3728,9 @@ class StationSession:
                     "" if matched else " (no request waiting)",
                     Payload(obj),
                 )
-            # _decode_json only decodes ECB or GCM frames, so the tag always names one;
-            # anything else is dropped rather than mislabelled as authenticated.
+            # _decode_json decodes only ECB-tagged frames (static key, an RSA session's
+            # key, or clear) and GCM frames under the session key; any other tag is dropped
+            # rather than mislabelled as authenticated.
             tag = inbound.frame.cipher
             if tag is None or tag not in FrameCipher:
                 return
@@ -3717,10 +3740,12 @@ class StationSession:
                     listener(obj, cipher)
                 except Exception:
                     _LOGGER.exception("%s: notify listener failed", self._log_name)
-            trusted = cipher is FrameCipher.GCM or self._session_ecb_frame(inbound.frame)
-            if trusted and self._note_storage(obj):
+            session_ecb = self._session_ecb_frame(inbound.frame)
+            if (cipher is FrameCipher.GCM or session_ecb) and self._note_storage(obj):
                 return
-            event = decode_camera_push(obj, station_sn=self.serial, frame_cipher=cipher)
+            event = decode_camera_push(
+                obj, station_sn=self.serial, frame_cipher=cipher, session_ecb=session_ecb
+            )
             if event is not None:
                 if _LOGGER.isEnabledFor(logging.DEBUG):
                     _log_camera_push(self._log_name, event, cipher)
@@ -3737,7 +3762,8 @@ class StationSession:
     def _note_storage(self, obj: Mapping[str, Any]) -> bool:
         """Keep a storage record (asked for or pushed); whether ``obj`` was one.
 
-        Only an authenticated (GCM) record is kept: it is station state.
+        Only an authenticated record (GCM, or under an RSA session's key) is kept: it is
+        station state.
         """
         record = storage_record(obj)
         if record is None:
@@ -4013,22 +4039,23 @@ class StationSession:
         :meth:`_handle_alarm`, which all ask here. The static ECB key is
         derivable from the serial and DID alone, so once a session key exists, only
         GCM state is authenticated. ECB image replies, scalar results and camera
-        pushes are not state and still decode. On an RSA session, state under its
-        session key (encryption type 2) is the station's own and decodes; state under
-        the static key or in clear is refused.
+        pushes are not state and still decode. On an RSA session only state under its
+        session key (ECB tag, encryption type 2) is the station's own and decodes; any
+        other state frame is refused, whatever its cipher tag.
         """
-        if frame.cipher != FrameCipher.ECB or frame.type not in _STATE_FRAME_TYPES:
+        if frame.type not in _STATE_FRAME_TYPES:
             return False
         if self._aes_key is not None:
             if self._session_ecb_frame(frame):
                 return False
-        elif self._session_key is None:
+        elif frame.cipher != FrameCipher.ECB or self._session_key is None:
             return False
         self.ecb_state_refused += 1
         if self._throttle.should_log(("ecb-state", frame.type)):
             _LOGGER.debug(
-                "%s: refusing static-key ECB state frame 0x%04x (%d refused)",
+                "%s: refusing %s state frame 0x%04x (%d refused)",
                 self._log_name,
+                "static-key ECB" if self._aes_key is None else "non-session-key",
                 frame.type,
                 self.ecb_state_refused,
             )
@@ -4043,13 +4070,13 @@ class StationSession:
 
     def _decode_json(self, frame: Frame) -> dict[str, Any] | None:
         payload = frame.payload
+        plain_rsa = self._plain_rsa_frame(frame)
+        if plain_rsa and decode_command_receipt(frame, clear=True) is not None:
+            return None  # an RSA session's clear receipt: not state, not JSON
         if self._refuse_ecb_state(frame):
             return None
-        if self._plain_rsa_frame(frame):
-            # An RSA session's clear frame (encryption type 0): a receipt, or JSON.
-            if decode_command_receipt(frame, clear=True) is not None:
-                return None
-            return self._counted_json(payload)
+        if plain_rsa:
+            return self._counted_json(payload)  # an RSA session's clear reply
         if (
             frame.cipher == FrameCipher.ECB
             and frame.type in _CLEAR_REPLY_TYPES
@@ -4159,8 +4186,9 @@ class StationSession:
                 send()
             started = time.monotonic()
             deadline = started + timeout
+            clock = _StallClock()
             if resend_after is not None and resend_after < timeout:
-                await asyncio.wait({waiter.future}, timeout=resend_after)
+                await self._wait_until(waiter.future, started + resend_after, label, clock=clock)
                 if not waiter.future.done():
                     _LOGGER.debug(
                         "%s: %s unanswered after %.1fs; resending",
@@ -4169,7 +4197,7 @@ class StationSession:
                         resend_after,
                     )
                     send()
-            if not await self._wait_until(waiter.future, deadline, label):
+            if not await self._wait_until(waiter.future, deadline, label, clock=clock):
                 _LOGGER.debug("%s: %s: no reply within %.0fs", self._log_name, label, timeout)
                 raise DeviceTimeoutError(f"no reply from the station within {timeout:.0f}s")
             _LOGGER.debug(
@@ -4184,35 +4212,54 @@ class StationSession:
                 self._remove_waiter(waiter)
 
     async def _wait_until(
-        self, future: asyncio.Future[object], deadline: float, label: str
+        self,
+        future: asyncio.Future[object],
+        deadline: float,
+        label: str,
+        *,
+        clock: _StallClock | None = None,
+        event: asyncio.Event | None = None,
     ) -> bool:
-        """Wait for ``future`` until ``deadline`` (monotonic); whether it is done.
+        """Wait for ``future`` (or ``event``) until ``deadline`` (monotonic); whether
+        ``future`` is done.
 
         The wait runs in steps of :data:`LOOP_STALL_STEP`. A step that ends at least
         :data:`LOOP_STALL_LATENESS` late means something else held the event loop, and
         replies that arrived meanwhile are still queued (read one datagram per loop turn):
-        the deadline moves out by that lateness, up to :data:`LOOP_STALL_MAX` in all, so
-        the station gets its full timeout of time in which this client could hear it.
+        the deadline moves out by that step's whole duration (the hold may have taken all
+        of it), up to :data:`LOOP_STALL_MAX` in all, so the station gets its full timeout
+        of time in which this client could hear it, and a held last step still leaves a
+        step to read the queue. ``clock`` carries that credit across the wait phases of
+        one request. A wait entered past its deadline still yields to the loop once.
         """
-        credited = 0.0
-        while not future.done():
-            started = time.monotonic()
-            left = deadline + credited - started
-            if left <= 0:
-                break
-            step = min(left, LOOP_STALL_STEP)
-            await asyncio.wait({future}, timeout=step)
-            late = time.monotonic() - started - step
-            if late >= LOOP_STALL_LATENESS and credited < LOOP_STALL_MAX:
-                extra = min(late, LOOP_STALL_MAX - credited)
-                credited += extra
-                _LOGGER.debug(
-                    "%s: %s: the event loop was held %.1fs; deadline moved out by %.1fs",
-                    self._log_name,
-                    label,
-                    late,
-                    extra,
-                )
+        clock = _StallClock() if clock is None else clock
+        flag = None if event is None else asyncio.ensure_future(event.wait())
+        waits: set[asyncio.Future[Any]] = {future} if flag is None else {future, flag}
+        first = True
+        try:
+            while not future.done() and (event is None or not event.is_set()):
+                started = time.monotonic()
+                left = deadline + clock.credited - started
+                if left <= 0 and not first:
+                    break
+                first = False
+                step = min(max(left, 0.0), LOOP_STALL_STEP)
+                await asyncio.wait(waits, timeout=step, return_when=asyncio.FIRST_COMPLETED)
+                held = time.monotonic() - started
+                late = held - step
+                if late >= LOOP_STALL_LATENESS and clock.credited < LOOP_STALL_MAX:
+                    extra = min(held, LOOP_STALL_MAX - clock.credited)
+                    clock.credited += extra
+                    _LOGGER.debug(
+                        "%s: %s: the event loop was held %.1fs; deadline moved out by %.1fs",
+                        self._log_name,
+                        label,
+                        held,
+                        extra,
+                    )
+        finally:
+            if flag is not None:
+                flag.cancel()
         return future.done()
 
     async def _listen(
@@ -4324,8 +4371,12 @@ class StationSession:
         )
 
     def _plain_rsa_frame(self, frame: Frame) -> bool:
-        """Whether ``frame`` is an RSA session's clear frame (encryption type 0)."""
-        return self._aes_key is not None and frame_encryption(frame.subheader) == FRAME_PLAIN
+        """Whether ``frame`` is an RSA session's clear frame (ECB tag, encryption type 0)."""
+        return (
+            self._aes_key is not None
+            and frame.cipher == FrameCipher.ECB
+            and frame_encryption(frame.subheader) == FRAME_PLAIN
+        )
 
     def _unanswered_error(
         self, command: int, channel: int, indices: Sequence[int]
@@ -4486,16 +4537,31 @@ def _raise_waiter_error(waiter: _Waiter) -> None:
         raise error
 
 
-async def _wait_any(future: asyncio.Future[object], event: asyncio.Event, timeout: float) -> None:
-    """Wait until ``future`` is done or ``event`` is set, for at most ``timeout`` seconds."""
-    if future.done() or event.is_set() or timeout <= 0:
-        return
-    flag = asyncio.ensure_future(event.wait())
-    either: set[asyncio.Future[Any]] = {future, flag}
-    try:
-        await asyncio.wait(either, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
-    finally:
-        flag.cancel()
+class _MissingKeyError(HandshakeError):
+    """The credentials hold no key for the handshake the station chose."""
+
+    def __init__(self, cipher_id: int, *, rsa: bool) -> None:
+        self.cipher_id = cipher_id
+        self.rsa = rsa
+        self.reason = "no_rsa_key" if rsa else "no_ecc_key"
+        kind = "RSA" if rsa else "ECC"
+        super().__init__(f"no {kind} private key held for cipher {cipher_id}")
+
+    def held_by(self, creds: P2PCredentials) -> bool:
+        """Whether ``creds`` hold the key this handshake needs."""
+        return bool(creds.rsa_private_key if self.rsa else creds.ecc_private_key)
+
+    def unusable(self) -> CipherUnusableError:
+        return CipherUnusableError(str(self), cipher_id=self.cipher_id, reason=self.reason)
+
+
+class _StallClock:
+    """The event-loop hold credited to one request, shared by its wait phases."""
+
+    __slots__ = ("credited",)
+
+    def __init__(self) -> None:
+        self.credited = 0.0
 
 
 def _or(value: float | None, default: float) -> float:

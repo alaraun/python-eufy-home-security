@@ -119,6 +119,7 @@ def decode_camera_push(
     *,
     station_sn: str | None,
     frame_cipher: FrameCipher | None = None,
+    session_ecb: bool = False,
     now_ms: Callable[[], int] = wall_ms,
 ) -> SecurityEvent | None:
     """Turn a camera push (cmd 2037) into a :class:`SecurityEvent`.
@@ -142,7 +143,8 @@ def decode_camera_push(
 
     ``arming`` is lifted into ``guard_mode`` by the rule the cloud decoder uses
     (:meth:`~..events.PushFieldReader.guard_mode`), and only from an authenticated
-    (GCM) frame: under ECB it is listed in ``rejected_fields`` and stays in ``raw``.
+    frame (GCM, or ``session_ecb``): under the static ECB key it is listed in
+    ``rejected_fields`` and stays in ``raw``.
     **Dormant path:** the station sends no arming, alarm or alarm-delay push over P2P
     (verified on fw 3.8.7.4: it reports those facts as ``0x047F`` and the alarm frames
     instead); the lifting is kept so a firmware that does send one passes the same
@@ -150,8 +152,9 @@ def decode_camera_push(
     and the ``0x047F`` reports (:class:`~..events.GuardModeTracker`) before it becomes
     a ``GuardModeChanged``.
 
-    ``frame_cipher`` is the cipher of the frame that carried the push. An ECB push
-    is still decoded, with :attr:`SecurityEvent.authenticated` False.
+    ``frame_cipher`` is the cipher of the frame that carried the push; ``session_ecb``
+    marks an ECB frame under an RSA session's key. A push under the static ECB key is
+    still decoded, with :attr:`SecurityEvent.authenticated` False.
     """
     if not _is_push(obj):
         return None
@@ -171,7 +174,8 @@ def decode_camera_push(
     record = _bound_record(payload.get("rec_content"), device_sn, record_id)
     rec = record if record is not None else _NO_RECORD
     event_time = reader.event_time(reader.payload_time(payload))
-    guard_mode = reader.guard_mode(payload, authenticated=frame_cipher is not FrameCipher.ECB)
+    authenticated = frame_cipher is not FrameCipher.ECB or session_ecb
+    guard_mode = reader.guard_mode(payload, authenticated=authenticated)
     thumb_path = reader.path("thumb_path", rec.get("thumb_path"), STILL_SUFFIX)
     video_path = reader.path(
         "video_path",
@@ -193,6 +197,7 @@ def decode_camera_push(
         crop_path=crop_path,
         pic_url=_text(payload.get("pic_url")),
         frame_cipher=frame_cipher,
+        session_ecb=session_ecb,
         rejected_fields=frozenset(reader.rejected),
         raw=dict(payload),
         **common,
