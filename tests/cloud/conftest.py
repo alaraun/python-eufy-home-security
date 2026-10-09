@@ -501,6 +501,7 @@ class FakeMega:
     def _get_dsk(self, url: str, **kwargs: Any) -> CallbackResult:
         shared = self._shared_for(kwargs)
         self.calls.append(("dsk", self._decrypt_body(kwargs)))
+        self.headers.setdefault("dsk", []).append(dict(kwargs["headers"]))
         if failure := self._failure_once("dsk", kwargs):
             return failure
         if self.dsk_objects is None:
@@ -516,6 +517,7 @@ class FakeMega:
     def _get_rom_version(self, url: str, **kwargs: Any) -> CallbackResult:
         shared = self._shared_for(kwargs)
         self.calls.append(("ota", self._decrypt_body(kwargs)))
+        self.headers.setdefault("ota", []).append(dict(kwargs["headers"]))
         if failure := self._failure_once("ota", kwargs):
             return failure
         if self.rom_version_data is None:  # up to date: code-0 envelope, 20004 in the data

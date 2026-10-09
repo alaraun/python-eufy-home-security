@@ -1263,12 +1263,13 @@ async def test_region_override_wins_over_a_cached_mega_domain(cache: SessionCach
     fake_mega.devices = [_STATION_OF_OWNER]
     fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": FAKE_ECC_KEY}]
     with aioresponses() as mock:
-        fake_mega.install(mock)  # only eu hosts exist: a us host would fail to connect
+        fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             api = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password, region="eu")
             await api.async_login()
             await api.async_get_devices(refresh=True)
             assert await api.async_get_cipher_key(SYNTHETIC.station_sn) == FAKE_ECC_KEY
+    assert {region for _endpoint, region in fake_mega.region_calls} == {"eu"}
 
 
 async def test_login_logs_the_auth_flow_with_secrets_only_when_enabled(
