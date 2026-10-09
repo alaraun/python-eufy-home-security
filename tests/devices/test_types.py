@@ -64,6 +64,11 @@ def test_cloud_device_type_homebase3() -> None:
     assert MODELS["T8030"].cloud_device_type == 18
 
 
+@pytest.mark.parametrize("model", ["T8001", "T8002", "T8010", "T8020"])
+def test_the_first_homebases_share_device_type_0(model: str) -> None:
+    assert MODELS[model].cloud_device_type == 0
+
+
 def test_every_model_but_the_live_proven_is_declared_from_the_app() -> None:
     graded = {m.evidence.support for m in MODELS.values() if m.model not in {"T8030", "T8160"}}
     assert graded == {Support.DECLARED}

@@ -22,8 +22,8 @@ Support legend (models, capabilities and guard modes):
 | T7402 | Smart Safe 7402 | other |  | declared | eufy app 6.1.10 model list: SMART_SAFE_7402 (kind read from the constant's name) |
 | T7403 | Smart Safe 7403 | other |  | declared | eufy app 6.1.10 model list: SMART_SAFE_7403 (kind read from the constant's name) |
 | T8001 | Station | station | 0 | declared | eufy app 6.1.10 model list: STATION; device-type map (0) (kind read from the constant's name) |
-| T8002 | HomeBase 1 | station |  | declared | eufy app model list: STATION_AI (the eufy app constant calls this prefix STATION_AI) |
-| T8010 | HomeBase 2 | station |  | declared | eufy app model list: STATION_2 (the eufy app device-type map files T8001/T8002/T8010/T8020 under one shared type 0) |
+| T8002 | HomeBase 1 | station | 0 | declared | eufy app model list: STATION_AI; eufy app device-type map (0) (the eufy app constant calls this prefix STATION_AI) |
+| T8010 | HomeBase 2 | station | 0 | declared | eufy app model list: STATION_2; eufy app device-type map (0) (the map files T8001/T8002/T8010/T8020 under one shared type 0) |
 | T8020 | Station S | station | 0 | declared | eufy app 6.1.10 model list: STATION_S; device-type map (0) (kind read from the constant's name) |
 | T8021 | Station 8021 | station |  | declared | eufy app 6.1.10 model list: STATION_8021 (kind read from the constant's name) |
 | T8023 | Station 8023 | station |  | declared | eufy app 6.1.10 model list: STATION_8023 (kind read from the constant's name) |
