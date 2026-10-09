@@ -53,7 +53,7 @@ ints that map refers to (`QueryDeviceData`), and writes `devices/app_models.py`.
 kind comes from the constant's name (`STATION`, `KEYPAD`, `LOCK`, `DOORBELL`, `SENSOR`,
 then `CAM`/`CAMERA`/`FLOODLIGHT`/`WALLLIGHT` → camera, anything else `other`); a prefix
 whose constants read as two kinds is left out and reported. Regenerate it with each app
-release, from the decompiled build:
+release, from that release's build:
 
 ```
 uv run python scripts/gen_app_models.py --constants <SnConstants.java> \

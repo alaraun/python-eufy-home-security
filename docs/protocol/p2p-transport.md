@@ -68,7 +68,7 @@ Facts that shape a client **[verified]**:
 | Within one session, **every datagram from the station comes from that one port**: replies, pushes, parameter dumps and media alike. ACKs and keepalives sent only to that port keep every channel, media included, flowing. | Once the peer is pinned, the library accepts datagrams only from that exact (host, port) and drops the rest. A datagram from the station's IP on another port is not this session's traffic (another session on the base, or a forgery). It is dropped, counted, and logged at DEBUG (throttled). Before a peer is pinned, discovery filters on the searched host and the expected DID. |
 | **The first LAN_SEARCH after a session is closed is ignored.** This holds after the client's own CLOSE and after another client's session closes. | Discovery must re-send until a timeout (the library sends every 1 s for 6 s, 3 attempts). A single failed search is not "station gone". |
 | **A battery or solar standalone camera answers late, or not at all while asleep.** A T8170 answered one search after 2.1 s, and at another time no search for 15 s, broadcast or unicast, while its address still answered ARP. It wakes on its own about every 7 min. | Listen longer (`LAN_DISCOVERY_TIMEOUT`, 5 s) to catch a wake window, or **wake it deliberately** ([below](#waking-a-battery-station-verified)). |
-| **The eufy app holds no session to a battery device.** A list of serial prefixes (`getConnectBlackList`: battery SoloCams such as the T8170, battery doorbells, trackers, locks) is excluded from the app's watchdog, which reconnects every other session every 60 s while the app is in the foreground; the app closes every session 120 s after it leaves the foreground **[declared: app]**. | The library copies it: `devices.ON_DEMAND_PREFIXES`; such a station connects per command and closes after `ON_DEMAND_IDLE_CLOSE` (120 s) idle, and its state comes from the cloud snapshot ([cloud.md](cloud.md)). |
+| **The eufy app holds no session to a battery device.** A list of serial prefixes (battery SoloCams such as the T8170, battery doorbells, trackers, locks) is excluded from the app's watchdog, which reconnects every other session every 60 s while the app is in the foreground; the app closes every session 120 s after it leaves the foreground **[declared: app]**. | The library copies it: `devices.ON_DEMAND_PREFIXES`; such a station connects per command and closes after `ON_DEMAND_IDLE_CLOSE` (120 s) idle, and its state comes from the cloud snapshot ([cloud.md](cloud.md)). |
 | A host firewall can only admit the station's replies by the **client's** port. | Bind a fixed local port **per station** when needed (two sessions cannot bind one port) and accept `udp dport <local port>` from the station's address, or accept all UDP from that address. Either rule needs the station on a fixed IP. With an open path, an ephemeral port is fine. |
 | P2P_RDY is frequently absent on the LAN. | Wait briefly (the library waits 2 s), then proceed. |
 | The station accepts several concurrent sessions, but has a **session budget** [verified]: a HomeBase 3 holds 9 sessions across all clients, a T8170 4. Idle or streaming makes no difference to the count. | The library holds at most `max_sessions` to a station (default 6: its session, 1 trigger-frame session, 4 extra live sessions; configurable 2–9) and closes short-lived ones at once. A live open next to 0, 2 or 4 idle extra sessions reached its first keyframe in 2 to 4 s; one outlier run with two idle extras got no frame in 25 s and did not recur. |
@@ -82,7 +82,7 @@ known addresses of the stations that are not connected.
 
 ## Waking a battery station **[verified]**
 
-A battery station (a T8170 standalone camera; the app's `getConnectBlackList` prefixes,
+A battery station (a T8170 standalone camera; the app's no-session prefixes,
 `devices.ON_DEMAND_PREFIXES`) keeps only a standing link to eufy's cloud while it sleeps
 and does not answer a `LAN_SEARCH`. To reach it, poke it through its rendezvous servers,
 exactly as the app does:
@@ -150,8 +150,8 @@ wakes it locally, with a magic packet over plain IP **[verified]**:
   three times on that TCP connection, 1 s apart, and from 0.1 s after the first as UDP
   from HomeBase port 32008 to camera port 32108, every 100 ms for ~2.3 s
   (24–26 datagrams).
-- **Token:** at the end of each awake period the camera sends `KALoginData` (76 bytes,
-  encrypted) on the 10402 connection and the HomeBase answers `KALoginData` with a new
+- **Token:** at the end of each awake period the camera sends a keep-alive login (76 bytes,
+  encrypted) on the 10402 connection and the HomeBase answers it with a new
   16-character token in clear; the next wake carries exactly that token. One token per
   sleep cycle.
 - **After the wake** (0.7–1.0 s to the camera's first TCP ACK): the camera opens TCP to

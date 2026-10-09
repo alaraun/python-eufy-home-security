@@ -163,7 +163,7 @@ Derived properties, which apply the authentication rule of the frame:
 | property | rule | evidence |
 |---|---|---|
 | `alarm_phase` (one push; the alarm's state is [`AlarmChanged`](#alarm-lifecycle)) | msg_type 10 → `triggered`, or `stopped` when `alarm_type` is 15 keypad / 16 app / 17 HomeBase **and** the event is authenticated (an unauthenticated stop is None, `alarm_type` still set); msg_type 16 → `delay` | msg_type 10 **[verified]** over FCM: `alarm_type` 3 and 25 at a trigger, **16 when stopped from the app** (device = the station, channel 255). msg_type 16 not captured (no delay was configured). Over P2P no msg_type 10 push exists: see [Alarm over P2P](#alarm-over-p2p). |
-| `arming_source` | msg_type 9 and authenticated only: `user` 1 → `keypad`, 5 → `key_fob`, any other code → `app`; None without a `user` | **[app]** `CusPushMode`. Captured FCM arming pushes: `user` 2 from the app and a P2P client; **`user` 0 with `user_name` "Eufy Security" from a schedule slot** — which the rule above maps to `app` |
+| `arming_source` | msg_type 9 and authenticated only: `user` 1 → `keypad`, 5 → `key_fob`, any other code → `app`; None without a `user` | **[app]**. Captured FCM arming pushes: `user` 2 from the app and a P2P client; **`user` 0 with `user_name` "Eufy Security" from a schedule slot** — which the rule above maps to `app` |
 
 The enum members carry this grading in code (`PushMessageType.evidence`,
 `DetectionType.evidence`, `AlarmStopSource.evidence`, `ArmingSource.evidence`).

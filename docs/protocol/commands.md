@@ -29,7 +29,7 @@ Code: `src/eufy_home_security/p2p/messages.py` (builders, decoders, result codes
 | `transaction` | optional string, usually epoch milliseconds, echoed in replies |
 | `mValueStrSub`, `mValue5` | sent by the app on media commands only ([media.md](media.md)) |
 
-Serialize compactly (no spaces). This is the app's `SecurityMqttPayloadInfo` shape
+Serialize compactly (no spaces). This is the app's command shape
 **[app]**, byte-for-byte what the app sends for arming **[verified]**.
 
 ## What counts as success
@@ -71,7 +71,7 @@ library takes both lengths (`RECEIPT_LENS`).
 | −204 | a live open (1003) of a HomeBase camera the station could not wake, about 12 s after the open, instead of the code-0 receipt ([media.md](media.md#open-1003-verified)) |
 
 `RECEIPT_CODES` names the other codes of the app's error table as well (−100 to −135,
-−203 to −205, spelled as in the app's `P2PErrorCode`) **[declared]**; the app calls 0
+−203 to −205, spelled as in the app) **[declared]**; the app calls 0
 `SUCCESSFUL` and −108 `WAIT_TIMEOUT`; the library raises `CameraWakeError` for −203, −204 and
 −205 and `CommandRejectedError` with the name for the rest.
 
@@ -307,7 +307,7 @@ chunks:
 | 1191 working days, 1192 PIR count, 1193 record count | camera | the app's power-manager figures since the last USB charge |
 | 2111 `BATTERY_STATUS` | camera | charging source: 0/2 not charging, 1 USB, 3 AC, 4 built-in solar, 5 USB + built-in solar, 6 or 8 external panel, 7 or 12 external + built-in (per-model thing descriptions), 20 a connected panel (handler `is_connected_solar_panel`). The app's command table names the id `SUB1G_REP_UNPLUG_POWER_LINE`. Parameter ids and XZYH frame types are separate namespaces: frame type `0x083F` (2111, seen when a session ends, [p2p-transport.md](p2p-transport.md#frame-types)) only shares the number |
 | 1309 `SOLAR_INTENSITY` | camera | raw solar input; 0 without light or panel |
-| 1509–1513 | sub-device | per-mode siren action (Away, Home, Custom 1–3; app `getSirenAction`) |
+| 1509–1513 | sub-device | per-mode siren action (Away, Home, Custom 1–3; named by the app) |
 | 1601 `MOTION_SENSOR_BAT_STATE` | motion sensor | low-battery flag (handler `sensor_is_low_power`) |
 | 1605 | motion sensor | epoch ms of the last PIR trigger |
 | 1609 | motion sensor | raw PIR sensitivity; the handler maps only 0–2 |
@@ -466,13 +466,13 @@ not been seen.
 A standalone camera (a T8170) does not answer the HomeBase storage record (1307 /
 11001). Its handler's `get_storage_info` recipe resolves, for a non-station device, to
 a bare **`GET_SD_INFO_EXT`** command (app enum `SDINFO_EX`) — an XZYH frame of type **1144 (`0x0478`)** with an empty
-body (the app's `getSdInfoEx`, `msgType 10`, no JSON). The camera answers with a frame
+body (`msgType 10`, no JSON). The camera answers with a frame
 of the **same type on channel 0**, GCM-tagged but **clear** (like a command receipt),
 whose 12-byte body is three little-endian `int32`:
 
 | offset | `int32` | meaning |
 |---|---|---|
-| 0 | status | 0 normal (`AndroidP2PReceiver` maps it to a UI status: 2 = no card, 3 = low memory, 4 = corrupted) |
+| 0 | status | 0 normal; the app shows 2 as no card, 3 as low memory, 4 as corrupted **[app]** |
 | 4 | total | total size |
 | 8 | free | free size |
 
@@ -529,13 +529,13 @@ by a receipt (code 0) and no `0x0547`.
  "siren_sensor_action": [{"device_channel": 16, "action": 0}, ...]}
 ```
 
-- `mode_id` is the guard-mode code: 0 Away, 1 Home, 3/4/5 Custom 1–3 **[app]**
-  (`ArmingManager`). `devices[].action` lands in the device's per-mode action param
+- `mode_id` is the guard-mode code: 0 Away, 1 Home, 3/4/5 Custom 1–3 **[app]**.
+  `devices[].action` lands in the device's per-mode action param
   (1239 for Away). `delay_time` lands in the alarm delay
   (1166–1170) of every channel in `count_down_alarm.channel_list` and the leaving
   delay (1171–1175) of every channel in `count_down_arm.channel_list`; other channels
   keep theirs.
-- **`action` is a bitmask** (the app's `DeviceParam` constants), stored per device per
+- **`action` is a bitmask** (the app's constants), stored per device per
   mode in 1239 (Away), 1225 (Home), 1148–1150 (Custom 1–3):
 
   | bit | app name | meaning |
@@ -555,19 +555,19 @@ by a receipt (code 0) and no `0x0547`.
   (record, notify) raised nothing. Its bit names are **[app]**.
 - The table carries every device of the mode, so a client must write back the other
   devices' current actions and the delays unchanged.
-- Which bits a device has depends on its type **[app]** (`ArmingManager.g`): a camera
+- Which bits a device has depends on its type **[app]**: a camera
   (eufyCam 3 is type 19) gets record, notification, camera siren, HomeBase alarm and
   light; a motion sensor (type 10) notification, HomeBase alarm and respond (32); every
   device the monitoring-centre report (64). The privacy bits belong to indoor cameras.
 - The delay ids run Home first: alarm 1166 Home, 1167 Away, 1168–1170 Custom 1–3;
-  leaving 1171 Home, 1172 Away, 1173–1175 Custom 1–3 **[app]** (`ArmingManager.c/d`).
+  leaving 1171 Home, 1172 Away, 1173–1175 Custom 1–3 **[app]**.
   The app reads a count-down back from the dump as "the channels whose delay for this
   mode is non-zero, at that value", so a delay is **one value per mode**, switched on
   per device.
 - `siren_sensor_action` **[app]**: per device, 1 when its trigger sounds a paired eufy
-  siren accessory (`GuardSirenAlarmAdapter`), else 0. All 0 on a station without one.
+  siren accessory, else 0. All 0 on a station without one.
 - 1157–1161 (`ARM_DELAY_*`, not in the parameter dump) are, to the app, a base64 JSON
-  copy of each mode's table (`ArmingManager.b`), not a number.
+  copy of each mode's table, not a number.
 - 1177 (`GET_OFF_ACTION`) is the Off mode's action param; the Off mode has no delay ids
   and the library writes no table for it.
 
@@ -731,8 +731,8 @@ result and no parameter push (HomeBase 3, fw 3.8.7.4): 1101
 The parameter query with its second `u32le` changed from 903 to a single id (1158,
 1140, 1235, 1254) or 0 got no parameter reply either, and the subheader dev_type (255, 0, 1 or 16)
 is ignored: each returns the same full dump, with no parameter added. **So the
-parameter dump is the only local read.** The app agrees: its P2P send table
-(`AndroidP2PClient.p2pSendRequestByCommand`) has only the 1103 query as a read and
+parameter dump is the only local read.** The app agrees **[app]**: its P2P commands
+have only the 1103 query as a read and
 only SET shapes for the parameters the dump lacks (1235 as a value, 1254 and 1256 as
 JSON). Those values reach the app through the cloud device list.
 

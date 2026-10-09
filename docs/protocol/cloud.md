@@ -16,10 +16,9 @@ Code: `src/eufy_home_security/cloud/crypto.py` (pure primitives),
 | eufy.com ("basic") | `app-{service}-{region}-pr.eufy.com` | key exchange (`openapi`), login (`passport`), devices (`house`), push token (`push`), also `devicerelation`, `event`, `things` |
 | eufy_security | `security-app-eu.eufylife.com` (`eu`), `security-app.eufylife.com` (`us`) | `/v3/...`, and in particular `/v3/app/cipher/get_ciphers` |
 
-- `region` is `eu` or `us`: the app's two production environments (`MegaEnvironment`
-  `EU_PR`, `US_PR`; the rest are QA) **[app]**. The US security-realm host carries no
-  region (`DEFAULT_SECURITY_CONFIG_DOMAIN`); `security-app-us.eufylife.com` does not
-  resolve.
+- `region` is `eu` or `us`: the app's two production environments (the rest are QA)
+  **[app]**. The US security-realm host carries no region;
+  `security-app-us.eufylife.com` does not resolve.
 - Each region is its own cluster. A login on either succeeds for any account (code 0,
   the same user id, `ab_code` = the `ab` sent, `country_code` and an empty `domain`
   alike on both), but `get_devs_list` lists only the devices homed on that cluster; the
@@ -288,8 +287,8 @@ record **[verified, one account]**: in one response to a shared member, ciphers 
 came back intact (a mixed-case PEM that parses as RSA-1024) and 13, 40 and 212 came back
 **lowercased by the server**, armour included. A lowercased body is irreversible, so
 `load_rsa_private_key` fails and the library raises `CipherUnusableError`. Lowercased on
-cipher 40 (a HomeBase 3's) on two accounts, and reported for a user's standalone T8410
-(cipher 202). The request body field name makes no difference (`station_sn` and `sn`
+cipher 40 (a HomeBase 3's) on two accounts, and on cipher 202 of a standalone T8410
+(one sample). The request body field name makes no difference (`station_sn` and `sn`
 return the same key), and the unversioned endpoint 404s. The MegaCrypto decrypt is not
 the cause: mixed-case fields (device names) and `ecc_private_key` survive intact in the
 same response. Which records eufy lowercases, and whether the station owner is served
@@ -379,15 +378,14 @@ asks whether a newer firmware exists for a device. Body:
   updates itself and its paired cameras as one bundle, so every device behind a hub — the
   hub and each camera, each by its own `device_sn` — is queried under the hub's kit type:
   `T8030_Kit` for a HomeBase 3 **[verified]**, `<model>_Kit` for the others (`T9000`,
-  `T7000`, `T8025`) **[app]**. The app derives it from the station, not the device
-  (`getHomebaseOtaType`).
+  `T7000`, `T8025`) **[app]**. The app derives it from the station, not the device.
 - **A device already on the newest published firmware is "up to date", reported oddly:**
   the envelope is `code 0 "success!"` and its `data` decrypts to the error object
   `{"reason": "error: code = 20004 reason =  message = "}`. So body `code` 20004 lives
   *inside* a success, and means no update — not a transport failure **[verified]**.
   The server keys the answer on the device's registered version, so sending an older
   `current_version_name` does not produce a package.
-- **When an update exists**, `data` is `RomVersionData`:
+- **When an update exists**, `data` is the offered version:
   `{device_type, rom_version, rom_version_name, force_upgrade, up_forced, introduction,
   full_package: {file_md5, file_name, file_path, file_size}, …}`. **`full_package.file_path`
   is the image URL** on eufy's CDN, with `file_md5` and `file_size` **[app]**. No update
