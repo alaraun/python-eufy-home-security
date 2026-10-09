@@ -15,7 +15,8 @@
           "jsonpath": "$.package[?(@.name.value=='eufy-home-security')].version"
         }
       ],
-      "include-component-in-tag": false
+      "include-component-in-tag": false,
+      "release-as": "0.3.0"
     }
   }
 }
