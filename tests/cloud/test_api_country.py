@@ -186,6 +186,25 @@ async def test_a_refused_re_login_keeps_the_session_and_is_not_asked_again(
     assert _login_abs(fake_mega) == []
 
 
+async def test_a_re_login_that_meets_a_challenge_asks_for_no_code(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """The one-time country re-login runs unattended: a challenge keeps the session
+    and e-mails nothing."""
+    await _logged_in_by_region(fake_mega, cache, http)
+    token = cache.cloud_session("eu")["auth_token"]
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.two_step = {"eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache).async_login()
+    assert _login_abs(fake_mega) == ["EE"]
+    assert fake_mega.code_requests == []
+    assert cache.cloud_session("eu")["auth_token"] == token
+    assert cache.cloud_session("eu")["ab_wanted"] == "EE"
+
+
 async def test_no_re_login_while_the_budget_is_spent_or_without_a_password(
     fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
 ) -> None:

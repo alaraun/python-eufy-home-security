@@ -142,6 +142,8 @@ The eufy app logs in with the user's country, and the library does the same **[a
    `eu` cluster) keeps the old session there, or, for a fresh login, retries once with
    the region as `ab`; either way that country is not asked again for that region: a
    later login there (an expiry, a forced login) sends the `ab` the session settled on.
+   The one-time re-login runs unattended: when it meets a challenge it asks for no
+   e-mailed code and keeps the old session the same way.
 
 `POST app-passport-{region}-pr.eufy.com/passport/get_last_login_code`, body `{"email":
 …}`, answers `{"ab_code": …}`: the `ab` of the account's last login on that cluster, by

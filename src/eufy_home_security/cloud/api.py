@@ -895,7 +895,8 @@ class EufyCloudApi:
         never a prompt). The cached session stays in use whatever happens: a hold-off, a
         spent budget or no network leaves it for the next :meth:`async_login`; any other
         refusal (a challenge, a credential or body-code error) is recorded so it is not
-        asked again for this country.
+        asked again for this country. The re-login runs unattended: a challenge it meets
+        asks eufy for no e-mailed code and no captcha.
         """
         made = self._session_ab_wanted(region)
         if made is None or not self._password_at_hand(prompt=False):
@@ -911,17 +912,20 @@ class EufyCloudApi:
         _LOGGER.info(
             "%s cloud session was made with ab %s; logging in once with ab %s", region, made, wanted
         )
-        challenge_region = self._challenge_region
         try:
             await self._do_login(
-                region, verify_code=None, captcha_id=None, captcha_answer=None, fallback=False
+                region,
+                verify_code=None,
+                captcha_id=None,
+                captcha_answer=None,
+                fallback=False,
+                interactive=False,
             )
         except (RateLimitedError, CommunicationError) as err:
             _LOGGER.info(
                 "%s re-login with ab %s not done (%s); kept the session", region, wanted, err
             )
         except EufySecurityError as err:
-            self._challenge_region = challenge_region
             _LOGGER.warning(
                 "%s re-login with ab %s refused (%s); kept the session made with ab %s",
                 region,
@@ -942,6 +946,7 @@ class EufyCloudApi:
         login_id: str | None = None,
         password: str | None = None,
         fallback: bool = True,
+        interactive: bool = True,
     ) -> None:
         """One password login to ``region`` (``password`` overrides every source).
 
@@ -950,7 +955,9 @@ class EufyCloudApi:
         With ``fallback``, a country login
         the cloud refuses with a plain body code is sent once more with the region as
         ``ab`` (a second login of the budget), and the session records the country as
-        the ``ab`` it settles, so no re-login follows for it. Callers hold ``_login_lock``.
+        the ``ab`` it settles, so no re-login follows for it. Without ``interactive`` a
+        challenge is raised without asking eufy for a code or a captcha and is not
+        recorded as the one to answer. Callers hold ``_login_lock``.
         """
         self._raise_if_held_off(login=True, region=region)
         password, source = (
@@ -1021,24 +1028,26 @@ class EufyCloudApi:
                 await self._cache.async_save()
             raise
         if code in const.CAPTCHA_CODES or code in const.VERIFY_CODE_CODES:
-            self._challenge_region = region
+            self._note_challenge(region, interactive=interactive)
         if code in const.CAPTCHA_CODES:
             _LOGGER.info("%s login needs a captcha (code %s)", region, code)
-            await self._raise_captcha_challenge(identity, code, self._extract_login_id(resp, data))
+            await self._raise_captcha_challenge(
+                identity, code, self._extract_login_id(resp, data), request=interactive
+            )
         if code in const.VERIFY_CODE_CODES:
             _LOGGER.info("%s login needs an e-mailed verification code (code %s)", region, code)
-            await self._raise_verify_code_challenge(identity, code, resp, data)
+            await self._raise_verify_code_challenge(identity, code, resp, data, request=interactive)
         if not data:
             raise EmptyResponseError(code, "login returned no data", endpoint=const.LOGIN_PATH)
         step = _two_step(data)
         if step in const.VERIFY_CODE_CODES:
             # Code 0 with ``fa_info.step`` 26052: two-step verification is pending and
             # the token in this answer is not a session yet.
-            self._challenge_region = region
+            self._note_challenge(region, interactive=interactive)
             _LOGGER.info(
                 "%s login needs an e-mailed verification code (fa_info step %s)", region, step
             )
-            await self._raise_verify_code_challenge(identity, step, resp, data)
+            await self._raise_verify_code_challenge(identity, step, resp, data, request=interactive)
         if self._challenge_region == region:
             self._challenge_region = None
         self._store_session(identity, _mapping(data, const.LOGIN_PATH), ab=ab, ab_wanted=wanted)
@@ -1121,17 +1130,29 @@ class EufyCloudApi:
             return await source(), "callable"
         raise AuthenticationError("no password: none was given and none is cached")
 
+    def _note_challenge(self, region: str, *, interactive: bool) -> None:
+        """Record ``region`` as the scope whose challenge an answer goes to."""
+        if interactive:
+            self._challenge_region = region
+
     async def _raise_verify_code_challenge(
-        self, identity: _Identity, code: int, resp: Mapping[str, Any], data: object
+        self,
+        identity: _Identity,
+        code: int,
+        resp: Mapping[str, Any],
+        data: object,
+        *,
+        request: bool = True,
     ) -> NoReturn:
-        """Ask for the login code with the answer's pending token, then raise the challenge.
+        """Ask for the login code with the answer's pending token (only with
+        ``request``), then raise the challenge.
 
         The pending token is used for this one request and never stored as a session.
         A failed request still raises the challenge, with ``code_requested`` False.
         """
         requested = False
         token = data.get("auth_token") if isinstance(data, Mapping) else None
-        if isinstance(token, str) and token:
+        if request and isinstance(token, str) and token:
             user_id = data.get("user_id") if isinstance(data, Mapping) else None
             pending = _Identity(
                 key_ident=identity.key_ident,
@@ -1168,8 +1189,11 @@ class EufyCloudApi:
             code_requested=requested,
         )
 
-    async def _raise_captcha_challenge(self, identity: _Identity, code: int, login_id: str) -> None:
-        cid, image = await self._fetch_captcha(identity)
+    async def _raise_captcha_challenge(
+        self, identity: _Identity, code: int, login_id: str, *, request: bool = True
+    ) -> None:
+        """Fetch a captcha (only with ``request``), then raise the challenge."""
+        cid, image = await self._fetch_captcha(identity) if request else ("", "")
         raise LoginChallengeError(
             "captcha",
             login_id=login_id,
