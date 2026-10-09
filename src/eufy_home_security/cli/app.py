@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from .._logging import set_secret_logging, set_wire_logging
 from ..exceptions import (
     AuthenticationError,
+    CipherUnusableError,
     CloudError,
     CommandNotAppliedError,
     CommandRejectedError,
@@ -23,6 +24,7 @@ from ..exceptions import (
     LoginLimitedError,
     ProtocolError,
     RateLimitedError,
+    SessionRejectedError,
     SessionReplacedError,
     StationUnreachableError,
     UnsupportedError,
@@ -70,6 +72,11 @@ def describe_error(exc: EufySecurityError) -> str:
                 "again, which ends the other client's session — give each client its own "
                 "account shared from the owner"
             )
+        case SessionRejectedError():
+            return (
+                f"the eufy cloud refused the session right after a fresh login ({exc}); the "
+                "e-mail and password were accepted — retry later"
+            )
         case AuthenticationError():
             return f"the eufy cloud rejected the login ({exc}); check the e-mail and password"
         case CloudError():
@@ -92,6 +99,12 @@ def describe_error(exc: EufySecurityError) -> str:
             return f"the station did not answer in time: {exc}"
         case CommunicationError():
             return f"network error: {exc}"
+        case CipherUnusableError():
+            return (
+                f"the station's cipher key cannot be used: {exc}. eufy serves the same key on "
+                "every fetch, so it is not re-fetched; a station firmware update or a library "
+                "update may cure it (please report with -vv)"
+            )
         case HandshakeError():
             return (
                 f"could not establish the P2P session: {exc}. The station may have been "

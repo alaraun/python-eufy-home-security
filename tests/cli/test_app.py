@@ -14,6 +14,7 @@ from eufy_home_security.cli.commands import COMMANDS, Context
 from eufy_home_security.cli.config import UsageError, parse_args
 from eufy_home_security.exceptions import (
     AuthenticationError,
+    CipherUnusableError,
     CloudApiError,
     CommandNotAppliedError,
     CommandRejectedError,
@@ -25,6 +26,7 @@ from eufy_home_security.exceptions import (
     LoginLimitedError,
     ProtocolError,
     RateLimitedError,
+    SessionRejectedError,
     SessionReplacedError,
     StationUnreachableError,
     UnsupportedError,
@@ -50,6 +52,7 @@ def restore_logging() -> Iterator[None]:
         (LoginLimitedError("100028", retry_after=7200), "next login is allowed in 2.0 h"),
         (LoginLimitedError("budget"), "in a while"),
         (SessionReplacedError(code=26084), "ends the other client's session"),
+        (SessionRejectedError("401", code=401), "right after a fresh login"),
         (AuthenticationError("bad password"), "check the e-mail and password"),
         (CloudApiError(26006, "nope"), "eufy cloud error: cloud error 26006"),
         (CommandNotAppliedError(1224), "station owner's"),
@@ -57,6 +60,7 @@ def restore_logging() -> Iterator[None]:
         (StationUnreachableError("no reply"), "--local-port"),
         (DeviceTimeoutError("slow"), "did not answer in time"),
         (CommunicationError("down"), "network error: down"),
+        (CipherUnusableError("not a key", cipher_id=98), "station firmware update"),
         (HandshakeError("bad key"), "re-paired"),
         (ProtocolError("garbled"), "-vv"),
         (UnsupportedError("no"), "not supported: no"),
