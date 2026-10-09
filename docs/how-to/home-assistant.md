@@ -166,7 +166,7 @@ provides where it lives.
 | `cloud.install_ids` | the install id (`openudid`) of each extra country's login scope | minted on that scope's first key exchange, then kept |
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
-| `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), and the key-refresh latch | on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass |
+| `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`) and its RSA private key when served (`rsa_ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), the key-refresh latch, a standalone camera's device session key (`dsk`, with its expiry) and each camera's preset slots (`presets`) | keys on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass. `dsk` when a wake needs it and less than 5 min of it remain; `presets` on each preset read that differs |
 | `devices` | the `get_devs_list` entries, each reduced to the fields `CloudDevice` reads (serials, type, name, channel, DID, IP, firmware versions, `app_conn`, the product code `device_new_pn`, the member's `admin_user_id` and `member_type`, and `cloud_region`, the region that listed it); the cloud's `params` snapshot only for a device reached on demand. The member's e-mail and phone, MAC addresses and the rest never reach the store | only on `async_discover(refresh=True)`; an entry stored with more fields is reduced on load |
 | `push` | FCM credentials, the registered token, recent push ids and guard-mode times | on push start; delivery state written at most 30 s after it changes, and on close |
 | `refresh_attempts` | when the owner id (account-wide) and each station's cipher key were last force-fetched | with those fetches |
@@ -183,7 +183,9 @@ the password, the throttle state and the `replaced` latch, and drops the rest. T
 again with the cached password and fetches the device list and keys again. That is one
 login cycle, within the hold-off and the login budget, and nobody is asked for anything.
 Version 1 (one session, before regions) is migrated instead: its session and devices
-become the region it was logged in to, so the upgrade costs no login. A version-1 cache
+become the region it was logged in to, so the migration itself costs no login. That
+session carries no `ab`, so with a login country known it logs in again once, inside the
+login budget (see the login country above). A version-1 cache
 with an empty device list drops that list, so the next start asks every region once.
 
 Most of it is secret. The password and the auth token open the account, and a
@@ -698,7 +700,7 @@ same state on demand. Map it:
 |---|---|
 | `unreachable`, `probe_unanswered`, `station_closed`, `link_silent` | entities unavailable; the supervisor is already reconnecting. After a grace period, the unreachable repair issue |
 | `key_rejected` | entities unavailable. The first rejection refreshes the key by itself; an `error` that is a `KeyRejectedError` means that refresh did not help (see the error table) |
-| `key_unusable` | entities unavailable. The cipher key cannot be used at all (`CipherUnusableError`) — a device on outdated firmware that uses the legacy RSA handshake, whose cloud key eufy serves corrupted. No re-fetch helps. Raise a repair telling the user to **update the device's firmware** in the eufy app; do not call it a rejected key or suggest a reset. |
+| `key_unusable` | entities unavailable. The cipher key cannot be used at all (`CipherUnusableError`, `reason` `rsa_unparsable` or `not_rsa`): a device on older firmware that uses the legacy RSA handshake, whose RSA key eufy serves lowercased. No re-fetch helps. Raise a repair telling the user to **update the device's firmware** in the eufy app (current firmware uses the ECIES handshake); do not call it a rejected key or suggest a reset. |
 | `credentials_unavailable` | entities unavailable. With `error=None` the reason is the `CloudProblem` already emitted; with a `RefreshCooldownError` just wait, no repair |
 | `protocol` | entities unavailable; log it, the supervisor retries |
 | `closed` | the integration's own `async_close`: nothing to do |
