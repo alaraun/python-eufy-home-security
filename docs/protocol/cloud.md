@@ -242,7 +242,8 @@ with four paired cameras) **[verified, one account]**.
   app]**. Both answer code 0 with empty lists on an account whose shares were accepted
   **[verified, one account]**; a pending entry has not been observed.
 - The security realm (the same identity as `get_ciphers`, `category: eufy_security`):
-  `POST security-app-{region}.eufylife.com/v3/app/get_hub_list` (stations) and
+  `POST <security host>/v3/app/get_hub_list` (stations; the region's host from
+  [Hosts](#hosts)) and
   `/v3/app/get_devs_list` (devices), body `{"device_sn": "", "station_sn": "",
   "num": 1000, "page": 0, "orderby": "", "time_zone": <UTC offset ms>,
   "event_num_type": 1, "transaction": …}`. `data` is a list. A station entry names
@@ -271,7 +272,7 @@ sharing changes, so cache it per station. A station event push also carries the 
 ## Station ciphers (security realm)
 
 1. Run the eufy_security key exchange on the logged-in session (token + gtoken, no `category`).
-2. `POST security-app-{region}.eufylife.com/v3/app/cipher/get_ciphers` with that identity and `category: eufy_security`:
+2. `POST <security host>/v3/app/cipher/get_ciphers` (the region's host from [Hosts](#hosts)) with that identity and `category: eufy_security`:
 
 ```json
 {"cipher_ids": [40], "user_id": "<owner user id>", "station_sn": "T8030XXXXXXXXXXX"}

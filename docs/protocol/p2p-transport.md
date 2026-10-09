@@ -269,7 +269,7 @@ station uses both values within one session ([session-crypto.md](session-crypto.
 | station media frame (`0x0514`, `0x0515`) | `.. .. <channel> .. .. ..` | byte 2 = the channel of the camera the frames come from | **[verified]** |
 | client ECB scalar (type = command id) | `01 <seq> <channel> 01 00 00` | ECB tag, seq u8, **sub-device channel** (0..50, 255 = station; anything else is refused with −110), "encrypted" flag | **[verified]** |
 | station, any frame | `01 ...` or `08 ...` | `0x01` = AES-128-ECB under the static key, `0x08` = AES-256-GCM under the session key. The remaining bytes are not needed to decode. | **[verified]** byte 0, **[open]** bytes 1..5 |
-| RSA session (CONN_INIT version ≠ 8), both directions | `01 <seq> <dev_type> <enc> <flag> 00` | byte 3 is the encryption type: `02` AES-128-ECB under the key the RSA CONN_INIT carried, `01` the static key, `00` clear (a receipt). The app sends every command `02` ([session-crypto.md](session-crypto.md#rsa-conn_init-declared-app)) | **[declared: app]** |
+| RSA session (CONN_INIT version ≠ 8), both directions | `01 <seq> <dev_type> <enc> <flag> 00` | byte 3 is the encryption type: `02` AES-128-ECB under the key the RSA CONN_INIT carried, `01` the static key, `00` clear (a receipt). The app sends every command `02` ([session-crypto.md](session-crypto.md#rsa-conn_init-declared-app-legacy)) | **[declared: app]** |
 | station, receipt (request type on channel 0) | `08 00 FF 00 01 00` (query), `08 00 00 00 01 00` (command) | a 132-byte body (36 bytes on a T8170) that is not ciphertext: `int32le` code (0 taken, −108 not handled) + zero bytes ([commands.md](commands.md#command-receipt-verified)) | **[verified]** |
 
 For the image request (`1308`), neither the subheader dev_type byte nor `mChannel`
