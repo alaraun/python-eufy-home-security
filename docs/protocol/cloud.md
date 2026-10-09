@@ -123,7 +123,7 @@ The eufy app logs in with the user's country, and the library does the same **[a
    country setting; the first code of a list, see *Extra countries* below), else the
    host's IP country: `POST
    app-passport-{region}-pr.eufy.com/passport/get_client_real_code`, body `{}`, on a
-   fresh key-exchange identity before any login, answers `{"ab_code": "EE"}`
+   fresh key-exchange identity before any login, answers `{"ab_code": "<IP country>"}`
    **[verified]**. Neither known: `ab` is the region (`eu`/`us`) and the `country` header
    `US`, as before.
 2. **Home cluster**: `POST mega-{region}-pr.eufy.com/passport/estimate_domain`, a
@@ -149,23 +149,24 @@ The app compares it with the chosen country before logging in.
 
 **What a country login lists [verified].** Within one cluster the login's `ab` decides
 which devices the lists show: a login with another country lists the devices held under
-that country and not the others. On a member account that holds a home shared under `EE`
-and a home station shared under `CH`, both on `eu`, the `EE` session lists only the first
-and a `CH` session only the second; the eufy app logged in with `CH` shows the same split.
-The `country` header does not change any list: on one session, `EE`, `CH`, `DE`, `GB` and
+that country and not the others. On a member account that holds a home shared under one
+country (`AA`) and a home station shared under another (`BB`), both on `eu`, the `AA`
+session lists only the first and a `BB` session only the second; the eufy app logged in
+with `BB` shows the same split.
+The `country` header does not change any list: on one session, `AA`, `BB`, `DE`, `GB` and
 `US` headers answered the same house, security and invitation lists. Sessions made with
-different `ab` on the same cluster coexist: a new `CH` login left the `EE` session valid.
-`ab` = the region (`eu`) listed the same devices as `ab` = `EE` on that account.
+different `ab` on the same cluster coexist: a new `BB` login left the `AA` session valid.
+`ab` = the region (`eu`) listed the same devices as `ab` = `AA` on that account.
 
-**Extra countries.** `country` may name several codes (`["EE", "CH"]`). The first is the
+**Extra countries.** `country` may name several codes (`["DE", "FR"]`). The first is the
 login country above; each further one has its home region looked up
 (`estimate_domain`, cached) and logs in once more there with `ab` = that country, as the
-login scope `<region>:<country>` (`eu:CH`). Its devices join the device list tagged with
+login scope `<region>:<country>` (`eu:FR`). Its devices join the device list tagged with
 the scope, and every call about them (lists, ciphers, DSK, push) uses its session. An
 extra scope is listed and suspended like a region; its logins count in its cluster's
 login budget. Each extra scope logs in under its own install id (`openudid`, minted once
-and cached): a `CH` login from another install id left an `EE` session on `eu` valid
-**[verified]**, while `CH` and `EE` under one install id did not both survive
+and cached): a `BB` login from another install id left an `AA` session on `eu` valid
+**[verified]**, while `BB` and `AA` under one install id did not both survive
 **[observed once]**, which reads as one session per install id and cluster. A country eufy names no cluster for gets no session, and a refused extra
 login is not retried with the region as `ab`.
 

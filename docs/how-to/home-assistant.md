@@ -136,8 +136,9 @@ use and is not asked again for the same country. See
 [cloud.md § Login country](../protocol/cloud.md#login-country).
 
 **The country is the user's choice.** eufy lists a device only to a login with the
-country it is held under: an account whose own devices sit under `EE` and that accepted
-a home shared from an account in `CH` sees the shared devices only with `CH`, as the
+country it is held under: an account whose own devices sit under one country (`AA`) and
+that accepted a home shared from an account in another (`BB`) sees the shared devices
+only with `BB`, as the
 eufy app does. HA's country and the host's IP are guesses. Offer a country list in the
 config flow and the options (default: HA's country), pass it as
 `country=[first, *extra]`, and rescan after it changes
@@ -296,7 +297,7 @@ only the devices its cluster holds for the login's country: the other cluster, o
 another country, answers an empty list, not an error. So the library logs in once per
 country, on that country's home cluster (eufy's `estimate_domain`), and remembers, per
 device, the *login scope* that listed it: the region (`eu`) for the login country,
-`<region>:<country>` (`eu:CH`) for each extra country of `country=[…]`:
+`<region>:<country>` (`eu:FR`) for each extra country of `country=[…]`:
 
 - A cold cache costs one login per country. The login budget (3 per 6 h) and a
   login-count throttle (100028) are kept per cluster, so two countries homed on `eu`
