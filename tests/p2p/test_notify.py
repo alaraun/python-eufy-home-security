@@ -64,12 +64,17 @@ def _payload(**overrides: Any) -> dict[str, Any]:
 
 
 def _decode(
-    payload: dict[str, Any], *, cipher: FrameCipher | None = None, station_sn: str | None = None
+    payload: dict[str, Any],
+    *,
+    cipher: FrameCipher | None = None,
+    station_sn: str | None = None,
+    session_ecb: bool = False,
 ) -> SecurityEvent:
     ev = decode_camera_push(
         {"cmd": 2037, "payload": json.dumps(payload)},
         station_sn=station_sn or SYNTHETIC.station_sn,
         frame_cipher=cipher,
+        session_ecb=session_ecb,
         now_ms=lambda: NOW_MS,
     )
     assert ev is not None
@@ -113,13 +118,19 @@ def test_decode_camera_push_reads_a_person_event() -> None:
 
 
 @pytest.mark.parametrize(
-    ("cipher", "authenticated"), [(FrameCipher.GCM, True), (FrameCipher.ECB, False)]
+    ("cipher", "session_ecb", "authenticated"),
+    [
+        (FrameCipher.GCM, False, True),
+        (FrameCipher.ECB, False, False),
+        (FrameCipher.ECB, True, True),
+    ],
 )
 def test_decode_camera_push_records_the_frame_cipher(
-    cipher: FrameCipher, authenticated: bool
+    cipher: FrameCipher, session_ecb: bool, authenticated: bool
 ) -> None:
-    ev = _decode(_payload(), cipher=cipher)  # an ECB push is still delivered
-    assert ev.frame_cipher is cipher
+    """An ECB push is still delivered; under an RSA session's key it is authenticated."""
+    ev = _decode(_payload(), cipher=cipher, session_ecb=session_ecb)
+    assert (ev.frame_cipher, ev.session_ecb) == (cipher, session_ecb)
     assert ev.authenticated is authenticated
 
 
@@ -329,16 +340,27 @@ def test_alarm_type_is_lifted_only_on_alarm_pushes() -> None:
 
 
 @pytest.mark.parametrize(
-    ("cipher", "source"), [(FrameCipher.GCM, ArmingSource.KEY_FOB), (FrameCipher.ECB, None)]
+    ("cipher", "session_ecb", "source"),
+    [
+        (FrameCipher.GCM, False, ArmingSource.KEY_FOB),
+        (FrameCipher.ECB, False, None),
+        (FrameCipher.ECB, True, ArmingSource.KEY_FOB),
+    ],
 )
-def test_arming_fields_and_source(cipher: FrameCipher, source: ArmingSource | None) -> None:
-    ev = _decode(_payload(msg_type=9, arming=1, mode=1, user=5, user_name="someone"), cipher=cipher)
+def test_arming_fields_and_source(
+    cipher: FrameCipher, session_ecb: bool, source: ArmingSource | None
+) -> None:
+    ev = _decode(
+        _payload(msg_type=9, arming=1, mode=1, user=5, user_name="someone"),
+        cipher=cipher,
+        session_ecb=session_ecb,
+    )
     assert ev.scope is EventScope.STATION
     assert (ev.mode, ev.arming_user, ev.user_name) == (1, 5, "someone")
     assert ev.arming_source is source
     # `arming` moves the guard mode only from an authenticated frame
-    assert ev.guard_mode == (None if cipher is FrameCipher.ECB else 1)
-    assert ("guard_mode" in ev.rejected_fields) is (cipher is FrameCipher.ECB)
+    assert ev.guard_mode == (1 if ev.authenticated else None)
+    assert ("guard_mode" in ev.rejected_fields) is not ev.authenticated
     assert ev.raw["arming"] == 1
 
 

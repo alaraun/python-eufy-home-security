@@ -637,6 +637,7 @@ parameter dumps and alarm frames under that key once a session is up, so
 |---|---|---|
 | `FrameCipher.GCM` | `True` | a P2P push under the session key |
 | `FrameCipher.ECB` | `False` | a P2P push under the static key: could be forged |
+| `FrameCipher.ECB`, `event.session_ecb` | `True` | a P2P push under an RSA session's key (legacy firmware) |
 | `None` | `True` | a cloud push (TLS) |
 
 - Let only an authenticated event drive a security decision: clearing TRIGGERED,

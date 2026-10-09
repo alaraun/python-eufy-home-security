@@ -3718,10 +3718,12 @@ class StationSession:
                     listener(obj, cipher)
                 except Exception:
                     _LOGGER.exception("%s: notify listener failed", self._log_name)
-            trusted = cipher is FrameCipher.GCM or self._session_ecb_frame(inbound.frame)
-            if trusted and self._note_storage(obj):
+            session_ecb = self._session_ecb_frame(inbound.frame)
+            if (cipher is FrameCipher.GCM or session_ecb) and self._note_storage(obj):
                 return
-            event = decode_camera_push(obj, station_sn=self.serial, frame_cipher=cipher)
+            event = decode_camera_push(
+                obj, station_sn=self.serial, frame_cipher=cipher, session_ecb=session_ecb
+            )
             if event is not None:
                 if _LOGGER.isEnabledFor(logging.DEBUG):
                     _log_camera_push(self._log_name, event, cipher)
@@ -3738,7 +3740,8 @@ class StationSession:
     def _note_storage(self, obj: Mapping[str, Any]) -> bool:
         """Keep a storage record (asked for or pushed); whether ``obj`` was one.
 
-        Only an authenticated (GCM) record is kept: it is station state.
+        Only an authenticated record (GCM, or under an RSA session's key) is kept: it is
+        station state.
         """
         record = storage_record(obj)
         if record is None:

@@ -3289,6 +3289,24 @@ async def test_an_rsa_session_takes_no_clear_frame_as_state_or_authenticated(
     assert all(e.frame_cipher is FrameCipher.ECB for e in pushes)
 
 
+async def test_a_push_under_the_rsa_session_key_is_authenticated(station: FakeStation) -> None:
+    session = make_rsa_session(station)
+    events: list[Event] = []
+    session.subscribe(events.append)
+    try:
+        await session.async_connect()
+        station.push_camera_event()
+        await wait_until(lambda: any(isinstance(e, SecurityEvent) for e in events))
+    finally:
+        await session.async_close()
+    push = next(e for e in events if isinstance(e, SecurityEvent))
+    assert (push.frame_cipher, push.session_ecb, push.authenticated) == (
+        FrameCipher.ECB,
+        True,
+        True,
+    )
+
+
 async def test_an_rsa_conn_init_without_an_rsa_key_fails_the_handshake(
     station: FakeStation,
 ) -> None:

@@ -215,8 +215,9 @@ replayed within the same session.
   any other tag is refused and counted. A clear frame decodes only under the ECB tag
   and is never authenticated.
 - A camera push records the cipher of its frame in `SecurityEvent.frame_cipher`.
-  `SecurityEvent.authenticated` is False for an ECB push and True for a GCM push or
-  a cloud push (`frame_cipher` None, TLS). It proves origin, not freshness.
+  `SecurityEvent.authenticated` is False for a push under the static ECB key and True
+  for a GCM push, a push under an RSA session's key (`SecurityEvent.session_ecb`) or a
+  cloud push (`frame_cipher` None, TLS). It proves origin, not freshness.
 - Each refusal is logged at DEBUG (throttled) and counted in
   `StationSession.ecb_state_refused`.
 - A parameter read that times out while ECB dumps were refused says so in its
