@@ -1182,6 +1182,20 @@ stream costs about **2 % of one core**. Any design that decodes video on the hos
 unusable on small hardware. Audio is passed through too; only WebRTC needs a transcode
 (see *Audio*, below).
 
+#### Which cameras stream
+
+Ask the station: `station.live_support(device_sn)` returns an `Evidence` whose `support`
+is `VERIFIED` (proven on hardware), `DECLARED` (the library sends the open the device's
+own handler in the eufy app sends, under this station) or `UNKNOWN` (no open recorded, or
+an open the library does not implement; `source` says which). Offer a stream entity for
+anything but `UNKNOWN`. It depends on the station as well as the model: a Wi-Fi camera
+linked to a HomeBase is opened differently from the same camera on its own, and the
+library implements only some of those opens. `profile_for_serial(...).support(
+Capability.LIVE_STREAM)` is `DECLARED` when the library sends the handler's open under
+*some* station, so it can say yes for a camera this station cannot stream; prefer
+`live_support`. Opening a stream the library cannot open raises `UnsupportedError`
+before anything is sent.
+
 #### What the library gives you
 
 ```python

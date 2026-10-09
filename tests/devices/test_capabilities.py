@@ -155,3 +155,31 @@ def test_ptz_presets_capabilities() -> None:
         .support
         == Support.UNKNOWN
     )
+
+
+@pytest.mark.parametrize(
+    ("serial", "support"),
+    [
+        ("T8113P2000067890", Support.DECLARED),  # behind a HomeBase: the station open
+        ("T8400P2000067890", Support.DECLARED),  # standalone: 1700 without extValue
+        ("T8170P0000054321", Support.VERIFIED),  # its profile's grade stands
+        ("T8172P2000067890", Support.UNKNOWN),  # dual lens: an open not implemented
+        ("T8030P0000054321", Support.UNKNOWN),  # a station has no live open
+    ],
+)
+def test_live_video_is_declared_where_the_library_sends_the_handlers_open(
+    serial: str, support: Support
+) -> None:
+    profile = profile_for_serial(serial)
+    assert profile is not None
+    for capability in (Capability.LIVE_STREAM, Capability.LIVE_KEYFRAME):
+        assert profile.support(capability) is support
+    if serial.startswith(("T8113", "T8400")):
+        evidence = profile.capabilities[Capability.LIVE_STREAM]
+        assert "open_live_stream" in evidence.source
+        assert "Station.live_support" in evidence.note
+    assert profile_for_serial(serial) is profile
+
+
+def test_the_generic_profile_itself_claims_no_live_video() -> None:
+    assert FALLBACK_PROFILES[DeviceKind.CAMERA].support(Capability.LIVE_STREAM) is Support.UNKNOWN

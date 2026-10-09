@@ -57,6 +57,14 @@ reference row that is meant to change (the vendor changed the recipe) goes into
 `INDEX.json` lists every `<PN>.json` in the output directory, so a new product code is
 bundled by generating its file.
 
+The live-open table (`devices/_live_open_data.py`: which library open reproduces each
+product handler's `open_live_stream`, per connect type) is generated from the same cache:
+
+```
+uv run python scripts/gen_live_open.py           # rewrite the table
+uv run python scripts/gen_live_open.py --check   # compare, write nothing
+```
+
 ## Check
 
 ```

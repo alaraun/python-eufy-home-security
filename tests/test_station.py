@@ -15,6 +15,7 @@ import pytest
 import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.station as station_mod
 from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.devices.live_open import LiveOpen, live_open
 from eufy_home_security.devices.model_settings import (
     Setting,
     SettingKind,
@@ -23,6 +24,7 @@ from eufy_home_security.devices.model_settings import (
 )
 from eufy_home_security.devices.recipes import (
     MAX_PRESET_SLOTS,
+    ConnectType,
     PanTilt,
     PresetPosition,
     handler_variant,
@@ -30,6 +32,7 @@ from eufy_home_security.devices.recipes import (
     set_picture_zoom,
 )
 from eufy_home_security.devices.settings import Scope
+from eufy_home_security.devices.support import Support
 from eufy_home_security.devices.types import DeviceKind
 from eufy_home_security.events import (
     CameraBusyChanged,
@@ -2061,14 +2064,82 @@ async def test_a_t8410_live_open_applies_its_handler_variant(
     t8410_station: Station, fake: FakeStation
 ) -> None:
     body = await _live_open_body(t8410_station, fake)
-    assert ("extValue" in body) is handler_variant("T8410").live_open_ext_value
+    assert live_open("T8410", ConnectType.SINGLE) is LiveOpen.SINGLE_NO_EXT
+    assert "extValue" not in body
 
 
 async def test_a_t8170_live_open_applies_its_handler_variant(
     standalone_station: Station, fake: FakeStation
 ) -> None:
     body = await _live_open_body(standalone_station, fake)
-    assert ("extValue" in body) is handler_variant("T8170").live_open_ext_value
+    assert live_open("T8170", ConnectType.SINGLE) is LiveOpen.SINGLE
+    assert body["extValue"] == 1000
+
+
+async def test_a_standalone_product_whose_handler_sends_the_station_open_gets_it(
+    fake: FakeStation,
+) -> None:
+    # The T8213 handler opens live with the 1350/1003 DeviceMsgBean even standalone.
+    station = await _standalone(fake, "T8213P2000054321")
+    try:
+        assert live_open("T8213", ConnectType.SINGLE) is LiveOpen.STATION
+        async with await station.async_open_live(station.serial) as stream:
+            await anext(aiter(stream))
+        (payload,) = fake.live_open_payloads
+        assert payload["chn_list"] == []
+        assert "extValue" not in payload
+        assert not [b for b in fake.doorbell_payloads if b.get("commandType") == 1000]
+        async with asyncio.timeout(3):
+            while fake.bare_stops == 0:
+                await asyncio.sleep(0.02)
+        assert fake.bare_stop_frames == [(0, bytes(4))]
+    finally:
+        await station.async_close()
+
+
+async def test_a_camera_whose_handler_open_is_not_implemented_is_refused_before_sending(
+    station: Station, fake: FakeStation
+) -> None:
+    dual_lens = dataclasses.replace(CAMERA, device_sn="T8172P2000067890")
+    hub = Station(station.device, station.session, sub_devices=[dual_lens])
+    with pytest.raises(UnsupportedError, match="T8172 live stream behind a HB3 station"):
+        await hub.async_open_live(dual_lens.device_sn)
+    assert fake.live_opens == []
+    assert hub.live_support(dual_lens.device_sn).support is Support.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    ("serial", "support"),
+    [
+        (SYNTHETIC.camera_sn, Support.VERIFIED),
+        ("T8113P2000067890", Support.DECLARED),
+        ("T8400P2000067890", Support.UNKNOWN),
+        ("T9999P2000067890", Support.UNKNOWN),
+    ],
+)
+def test_live_support_behind_a_homebase_3(serial: str, support: Support) -> None:
+    camera = dataclasses.replace(CAMERA, device_sn=serial)
+    hub = _hub_with(camera)
+    evidence = hub.live_support(serial)
+    assert evidence.support is support
+    if support is Support.DECLARED:
+        assert "station open" in evidence.source
+
+
+def test_live_support_of_a_standalone_camera_follows_its_handler() -> None:
+    assert _standalone_t8170().live_support(_T8170_SN).support is Support.VERIFIED
+    t8400 = CloudDevice(
+        device_sn="T8400P2000054321",
+        station_sn="T8400P2000054321",
+        p2p_did=SYNTHETIC.did,
+        device_type=30,
+        channel=0,
+        name="indoor",
+    )
+    station = Station(t8400, _unconnected_station(host=None, local_ip=None, local_port=0).session)
+    evidence = station.live_support(t8400.device_sn)
+    assert evidence.support is Support.DECLARED
+    assert "single_no_ext" in evidence.source
 
 
 async def test_a_t8410_refuses_every_slot_call_before_sending(
