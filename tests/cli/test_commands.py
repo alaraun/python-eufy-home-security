@@ -177,7 +177,7 @@ class ListedCloud(StubCloud):
     async def async_get_devices(
         self, *, refresh: bool = False, rescan_regions: bool = False
     ) -> list[CloudDevice]:
-        devices = await super().async_get_devices(refresh=refresh)
+        devices = await super().async_get_devices(refresh=refresh, rescan_regions=rescan_regions)
         return [
             replace(d, raw={"device_new_pn": "T9999"}) if d.device_sn == SYNTHETIC.camera_sn else d
             for d in devices

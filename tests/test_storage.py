@@ -222,29 +222,29 @@ async def test_version_1_moves_its_session_under_its_region(
     store = MemoryStore(
         {
             "version": 1,
-            "account": "user@example.com",
+            "account": SYNTHETIC.email,
             "password": "secret",
             "cloud": {**session, **cloud},
-            "devices": [{"device_sn": "T8030P2000012345"}],
-            "stations": {"T8030P2000012345": {"account_id": "owner"}},
+            "devices": [{"device_sn": SYNTHETIC.station_sn}],
+            "stations": {SYNTHETIC.station_sn: {"account_id": "owner"}},
         }
     )
-    cache = SessionCache(store, "user@example.com")
+    cache = SessionCache(store, SYNTHETIC.email)
     await cache.async_load()
     stored = cache.cloud_sessions()[region]
     assert {key: stored[key] for key in session} == session
     assert set(cache.cloud_sessions()) == {region}
-    assert cache.cached_devices() == [{"device_sn": "T8030P2000012345", "cloud_region": region}]
+    assert cache.cached_devices() == [{"device_sn": SYNTHETIC.station_sn, "cloud_region": region}]
     assert cache.section("cloud")["listed"] == {region: {"devices": 1, "at": None}}
-    assert cache.station_account_id("T8030P2000012345") == "owner"
+    assert cache.station_account_id(SYNTHETIC.station_sn) == "owner"
     assert cache.password == "secret"
 
 
 async def test_version_1_without_devices_drops_the_empty_list() -> None:
     store = MemoryStore(
-        {"version": 1, "account": "user@example.com", "cloud": {"auth_token": "t"}, "devices": []}
+        {"version": 1, "account": SYNTHETIC.email, "cloud": {"auth_token": "t"}, "devices": []}
     )
-    cache = SessionCache(store, "user@example.com")
+    cache = SessionCache(store, SYNTHETIC.email)
     await cache.async_load()
     assert cache.cached_devices() is None  # the next fetch asks every region once
     assert "listed" not in cache.section("cloud")
