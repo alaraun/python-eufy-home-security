@@ -440,8 +440,11 @@ async def test_state_dumps_are_trusted_only_under_gcm(
         assert (255, 1224) not in session.params
 
 
-async def test_alarm_frames_become_param_and_alarm_changes(station: FakeStation) -> None:
-    session = make_session(station, Provider(station))
+@pytest.mark.parametrize("rsa", [False, True], ids=["gcm", "rsa"])
+async def test_alarm_frames_become_param_and_alarm_changes(station: FakeStation, rsa: bool) -> None:
+    """Alarm frames under the session's cipher (GCM, or an RSA session's key) count; one
+    under the static key is refused, and one that does not decrypt is dropped."""
+    session = make_rsa_session(station) if rsa else make_session(station, Provider(station))
     events: list[Event] = []
     try:
         await session.async_get_params()
@@ -456,6 +459,10 @@ async def test_alarm_frames_become_param_and_alarm_changes(station: FakeStation)
         station.send_alarm_frame(siren, 25, 30, channel=1)
         station.send_alarm_frame(light, 1, channel=1)
         station.send_alarm_frame(tone, 0, 0, channel=1, cipher=FrameCipher.ECB)  # forged
+        undecodable = bytes([FrameCipher.GCM, 0, 1, 2, 0, 0])  # no GCM tag, not whole blocks
+        station.send_frame(
+            tone, bytes(40), cipher=FrameCipher.GCM, channel=2, subheader=undecodable, sealed=True
+        )
         station.send_alarm_frame(tone, 16, 0, channel=255)  # stopped from the app
         station.send_alarm_frame(tone, 0, 0, channel=0)  # no alarm on: not a transition
         await wait_until(lambda: (0, 1201) in session.params)
@@ -490,6 +497,7 @@ async def test_alarm_frames_become_param_and_alarm_changes(station: FakeStation)
         ),
     ]
     assert session.ecb_state_refused == 1
+    assert session.stats().dropped_undecodable == 1
 
 
 async def test_arm_ignores_an_ecb_mode_report(station: FakeStation) -> None:
