@@ -69,6 +69,14 @@ def test_every_cloud_public_name_resolves() -> None:
         assert getattr(eufy_home_security.cloud, name) is not None
 
 
+def test_the_cloud_package_exports_the_types_its_api_returns() -> None:
+    from eufy_home_security.cloud import api, models  # noqa: PLC0415
+
+    cloud = eufy_home_security.cloud
+    assert {"CipherKeys", "RsaKeyCheck"} <= set(cloud.__all__)
+    assert (cloud.CipherKeys, cloud.RsaKeyCheck) == (api.CipherKeys, models.RsaKeyCheck)
+
+
 def test_the_cache_layout_version_is_the_storage_version() -> None:
     from eufy_home_security import storage  # noqa: PLC0415
 
