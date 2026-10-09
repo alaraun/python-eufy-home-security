@@ -104,8 +104,8 @@ def _library_recipes(channel: int) -> dict[LiveOpen, dict[str, Any]]:
 def classify(
     handler_p2p: Mapping[str, Any], library: Mapping[LiveOpen, dict[str, Any]]
 ) -> LiveOpen | None:
-    """The library open equal to the handler's, or None; an open the handler routes over
-    WebRTC (``webRtc`` set: its ``isSupportWebRtc`` lists the parent) is never one."""
+    """The library open equal to the handler's, or None; an open the handler flags
+    ``webRtc`` (its ``isSupportWebRtc`` lists the parent) is never one."""
     if handler_p2p.get("webRtc"):
         return None
     wanted = {k: v for k, v in handler_p2p.items() if k not in HANDLER_UNUSED_KEYS}
