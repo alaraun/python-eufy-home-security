@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -13,8 +15,8 @@ from aioresponses import aioresponses
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.models import LoginCountry
-from eufy_home_security.exceptions import CloudApiError
-from eufy_home_security.storage import SessionCache
+from eufy_home_security.exceptions import CommunicationError, LoginChallengeError, RateLimitedError
+from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
 from .conftest import FAKE_AUTH_TOKEN, FakeMega
@@ -54,6 +56,13 @@ async def _logged_in_by_region(fake_mega: FakeMega, cache: SessionCache, http: A
     assert [cache.cloud_session(r).get("ab") for r in const.REGIONS] == ["eu", "us"]
     fake_mega.calls.clear()
     fake_mega.region_calls.clear()
+
+
+async def _reloaded(store: MemoryStore) -> SessionCache:
+    """The cache as a new instance (a restart) reads it from ``store``."""
+    cache = SessionCache(store, SYNTHETIC.email)
+    await cache.async_load()
+    return cache
 
 
 def test_a_country_that_is_no_iso_code_is_refused(
@@ -150,9 +159,139 @@ async def test_a_country_eufy_names_no_cluster_for_keeps_the_region_as_ab(
     assert api.login_country is None
 
 
-async def test_a_session_made_with_another_ab_logs_in_again_once(
+@pytest.mark.parametrize(
+    ("endpoint", "country", "domain_lookups"),
+    [("estimate_domain", "EE", 2), ("client_country", "", 1)],
+)
+async def test_no_login_while_the_login_country_lookup_does_not_answer(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    *,
+    endpoint: str,
+    country: str,
+    domain_lookups: int,
+) -> None:
+    """A lookup that fails on the network is asked again before the next login, and
+    no login is spent meanwhile."""
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.error_bodies[endpoint] = [(503, {})]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country=country)
+        with pytest.raises(CommunicationError):
+            await api.async_login()
+        assert _login_abs(fake_mega) == []
+        await api.async_login()
+    assert len(_sent(fake_mega, "estimate_domain")) == domain_lookups
+    assert _login_abs(fake_mega) == ["EE"]
+    assert api.login_country is not None
+    assert api.login_country.home_region == "eu"
+
+
+_ESTIMATE_DOMAIN_URL = f"https://{const.mega_host('eu')}{const.ESTIMATE_DOMAIN_PATH}"
+
+
+@pytest.mark.parametrize(
+    ("answer", "error"),
+    [
+        ({"exception": aiohttp.ClientConnectionError("down")}, CommunicationError),
+        ({"status": 503, "body": ""}, CommunicationError),
+        ({"status": 200, "body": "<html>blocked</html>"}, CommunicationError),
+        ({"status": 200, "body": b"\xff\xfe\xfa"}, CommunicationError),
+        ({"status": 429, "body": "", "headers": {"Retry-After": "120"}}, RateLimitedError),
+        (
+            {"status": 200, "body": json.dumps({"code": int(const.CloudCode.API_REQUEST_LIMIT)})},
+            RateLimitedError,
+        ),
+    ],
+    ids=["network", "http-503", "not-json", "not-text", "http-429", "throttle-code"],
+)
+async def test_a_home_region_lookup_without_an_answer_spends_no_login(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    answer: dict[str, Any],
+    error: type[Exception],
+) -> None:
+    """A throttle starts the request hold-off, as on any other call."""
+    with aioresponses() as mock:
+        mock.post(_ESTIMATE_DOMAIN_URL, **answer)
+        fake_mega.install(mock)
+        api = _api(http, cache, country="EE")
+        with pytest.raises(error):
+            await api.async_login()
+    assert _login_abs(fake_mega) == []
+    assert (api.cloud_status().request_hold_off is not None) is (error is RateLimitedError)
+
+
+async def test_a_home_region_lookup_refused_with_a_body_code_keeps_the_option_without_a_home(
     fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
 ) -> None:
+    fake_mega.error_bodies["estimate_domain"] = [(200, {"code": _PLAIN_REFUSAL, "msg": "error"})]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country="EE")
+        await api.async_login()
+    assert api.login_country == LoginCountry(
+        code="EE", source=const.COUNTRY_SOURCE_OPTION, home_region=None
+    )
+    assert list(zip(_requests(fake_mega, "login"), _login_abs(fake_mega), strict=True)) == [
+        ("eu", "EE"),
+        ("us", "EE"),
+    ]
+
+
+async def test_a_reauthentication_logs_in_on_the_home_region_of_a_country_not_yet_known(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    fake_mega.client_country = "US"
+    fake_mega.country_regions = {"US": "us"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache)
+        await api.async_reauthenticate(SYNTHETIC.password)
+    assert (_requests(fake_mega, "login"), _login_abs(fake_mega)) == (["us"], ["US"])
+    assert api.login_scopes() == api.regions_with_session() == ["us"]
+
+
+async def test_a_login_held_off_on_one_region_logs_in_no_region_the_country_leaves_out(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """The country is looked up before the scopes to log in to are chosen, even while
+    the first region's logins are held off."""
+    await _logged_in_by_region(fake_mega, cache, http)
+    del cache.section("cloud")["sessions"]["us"]
+    cache.hold_off("login", 3600, region="eu")
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache)
+        await api.async_login()
+    assert _login_abs(fake_mega) == []
+    assert api.login_scopes() == ["eu"]
+
+
+async def test_a_device_list_on_a_cold_cache_logs_in_on_the_home_region_only(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.devices = [_station(SYNTHETIC.station_sn)]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country="EE")
+        devices = await api.async_get_devices()
+    assert (_requests(fake_mega, "login"), _login_abs(fake_mega)) == (["eu"], ["EE"])
+    assert [d.region for d in devices] == ["eu"]
+
+
+async def test_a_session_made_with_another_ab_logs_in_again_once(
+    fake_mega: FakeMega, http: aiohttp.ClientSession
+) -> None:
+    store = MemoryStore()
+    cache = await _reloaded(store)
     await _logged_in_by_region(fake_mega, cache, http)
     fake_mega.client_country = "EE"
     fake_mega.country_regions = {"EE": "eu"}
@@ -162,13 +301,15 @@ async def test_a_session_made_with_another_ab_logs_in_again_once(
         assert _login_abs(fake_mega) == ["EE"]  # the other region is no scope any more
         assert [cache.cloud_session(r)["ab"] for r in const.REGIONS] == ["EE", "us"]
         fake_mega.calls.clear()
-        await _api(http, cache).async_login()  # a restart: settled, nothing sent
+        await _api(http, await _reloaded(store)).async_login()  # a restart: settled, nothing sent
     assert _login_abs(fake_mega) == []
 
 
 async def test_a_refused_re_login_keeps_the_session_and_is_not_asked_again(
-    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+    fake_mega: FakeMega, http: aiohttp.ClientSession
 ) -> None:
+    store = MemoryStore()
+    cache = await _reloaded(store)
     await _logged_in_by_region(fake_mega, cache, http)
     token = cache.cloud_session("eu")["auth_token"]
     fake_mega.client_country = "EE"
@@ -182,8 +323,51 @@ async def test_a_refused_re_login_keeps_the_session_and_is_not_asked_again(
         assert (api.session_ab("eu"), cache.cloud_session("eu")["ab_wanted"]) == ("eu", "EE")
         assert _login_abs(fake_mega) == ["EE"]  # refused, no fallback
         fake_mega.calls.clear()
-        await _api(http, cache).async_login()
+        await _api(http, await _reloaded(store)).async_login()
     assert _login_abs(fake_mega) == []
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [(503, {}), (200, {"code": int(const.CloudCode.MAX_LOGIN_LIMIT), "msg": "too many"})],
+    ids=["unreachable", "throttled"],
+)
+async def test_a_re_login_that_does_not_get_through_keeps_the_session_and_asks_again(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    failure: tuple[int, dict[str, Any]],
+) -> None:
+    await _logged_in_by_region(fake_mega, cache, http)
+    token = cache.cloud_session("eu")["auth_token"]
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.error_bodies["login"] = [failure]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache).async_login()
+    assert _login_abs(fake_mega) == ["EE"]
+    assert cache.cloud_session("eu")["auth_token"] == token
+    assert cache.cloud_session("eu")["ab_wanted"] == "eu"  # not settled: asked again later
+
+
+async def test_a_re_login_that_meets_a_challenge_asks_for_no_code(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """The one-time country re-login runs unattended: a challenge keeps the session
+    and e-mails nothing."""
+    await _logged_in_by_region(fake_mega, cache, http)
+    token = cache.cloud_session("eu")["auth_token"]
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.two_step = {"eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache).async_login()
+    assert _login_abs(fake_mega) == ["EE"]
+    assert fake_mega.code_requests == []
+    assert cache.cloud_session("eu")["auth_token"] == token
+    assert cache.cloud_session("eu")["ab_wanted"] == "EE"
 
 
 async def test_no_re_login_while_the_budget_is_spent_or_without_a_password(
@@ -216,8 +400,10 @@ async def _never() -> str:
 
 
 async def test_a_refused_country_login_falls_back_to_the_region_once(
-    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+    fake_mega: FakeMega, http: aiohttp.ClientSession
 ) -> None:
+    store = MemoryStore()
+    cache = await _reloaded(store)
     fake_mega.client_country = "EE"
     fake_mega.country_regions = {"EE": "eu"}
     fake_mega.code_once["login"] = _PLAIN_REFUSAL
@@ -229,8 +415,24 @@ async def test_a_refused_country_login_falls_back_to_the_region_once(
         assert (api.session_ab("eu"), cache.cloud_session("eu")["ab_wanted"]) == ("eu", "EE")
         assert len(cache.recent_logins(const.LOGIN_BUDGET_WINDOW_SECONDS, "eu")) == 2
         fake_mega.calls.clear()
-        await _api(http, cache).async_login()
+        await _api(http, await _reloaded(store)).async_login()
     assert _login_abs(fake_mega) == []
+
+
+async def test_a_refused_country_is_not_sent_again_when_the_session_lapses(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.code_once["login"] = _PLAIN_REFUSAL
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache).async_login()
+        cache.cloud_session("eu")["expires_at"] = time.time() - 10
+        fake_mega.calls.clear()
+        await _api(http, cache).async_login()
+    assert _login_abs(fake_mega) == ["eu"]  # the settled ab, one login
+    assert (cache.cloud_session("eu")["ab"], cache.cloud_session("eu")["ab_wanted"]) == ("eu", "EE")
 
 
 async def test_the_last_login_code_and_the_ip_country_are_read_on_a_session(
@@ -308,14 +510,15 @@ async def test_an_extra_country_logs_in_on_its_home_region_and_its_devices_join_
 
 
 async def test_a_restart_reuses_the_extra_country_session_without_a_lookup(
-    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+    fake_mega: FakeMega, http: aiohttp.ClientSession
 ) -> None:
     _with_an_extra_country(fake_mega)
+    store = MemoryStore()
     with aioresponses() as mock:
         fake_mega.install(mock)
-        await _api(http, cache, country=["EE", "CH"]).async_login()
+        await _api(http, await _reloaded(store), country=["EE", "CH"]).async_login()
         fake_mega.calls.clear()
-        api = _api(http, cache, country=["EE", "CH"])
+        api = _api(http, await _reloaded(store), country=["EE", "CH"])
         await api.async_login()
         devices = await api.async_fetch_devices()
     assert _sent(fake_mega, "estimate_domain") == []
@@ -352,7 +555,7 @@ async def test_an_extra_country_eufy_names_no_cluster_for_gets_no_session(
     assert "extra_countries" not in cache.section("cloud")
 
 
-async def test_an_extra_country_login_refused_is_not_retried_with_the_region(
+async def test_an_extra_country_lookup_that_failed_is_asked_again_by_the_next_fetch(
     fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
 ) -> None:
     _with_an_extra_country(fake_mega)
@@ -360,10 +563,103 @@ async def test_an_extra_country_login_refused_is_not_retried_with_the_region(
         fake_mega.install(mock)
         await _api(http, cache, country="EE").async_login()
         fake_mega.calls.clear()
-        fake_mega.code_once["login"] = _PLAIN_REFUSAL
-        with pytest.raises(CloudApiError):
-            await _api(http, cache, country=["EE", "CH"]).async_login()
+        fake_mega.error_bodies["estimate_domain"] = [(503, {})]
+        api = _api(http, cache, country=["EE", "CH"])
+        await api.async_login()
+        assert api.login_scopes() == ["eu"]
+        devices = await api.async_fetch_devices()
+    assert [p["ab"] for p in _sent(fake_mega, "estimate_domain")] == ["CH", "CH"]
     assert _login_abs(fake_mega) == ["CH"]
+    assert api.login_scopes() == ["eu", "eu:CH"]
+    assert _EXTRA_STATION_SN in {d.device_sn for d in devices}
+
+
+@pytest.mark.parametrize("asked_again_by", ["rescan", "country list change"])
+async def test_a_refused_extra_country_is_skipped_until_asked_again(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    caplog: pytest.LogCaptureFixture,
+    asked_again_by: str,
+) -> None:
+    """A plain refusal of an extra country's login is not retried with the region and
+    blocks neither the other scopes nor the device list."""
+    _with_an_extra_country(fake_mega)
+    countries = ["EE", "CH"]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache, country="EE").async_get_devices()
+        fake_mega.calls.clear()
+        fake_mega.code_once["login"] = _PLAIN_REFUSAL
+        with caplog.at_level(logging.WARNING, logger="eufy_home_security.cloud.api"):
+            await _api(http, cache, country=countries).async_login()
+            api = _api(http, cache, country=countries)
+            await api.async_login()
+            devices = await api.async_get_devices(refresh=True)
+        assert _login_abs(fake_mega) == ["CH"]  # once, no fallback, not asked again
+        assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
+        status = api.cloud_status().regions["eu:CH"]
+        assert (status.login_refused, status.in_use) == (True, False)
+        assert sum("eu:CH" in r.getMessage() for r in caplog.records) == 1
+        if asked_again_by == "rescan":
+            devices = await api.async_fetch_devices(rescan_regions=True)
+        else:
+            countries = ["EE", "CH", "AQ"]
+            api = _api(http, cache, country=countries)
+            devices = await api.async_get_devices(refresh=True)
+    assert _login_abs(fake_mega) == ["CH", "CH"]
+    assert _EXTRA_STATION_SN in {d.device_sn for d in devices}
+    assert not api.cloud_status().regions["eu:CH"].login_refused
+
+
+async def test_a_refused_extra_scope_keeps_the_devices_it_listed_last(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    _with_an_extra_country(fake_mega)
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country=["EE", "CH"])
+        await api.async_get_devices()
+        cache.cloud_session("eu:CH")["expires_at"] = time.time() - 10
+        fake_mega.code_once["login"] = _PLAIN_REFUSAL
+        api = _api(http, cache, country=["EE", "CH"])
+        devices = await api.async_get_devices(refresh=True)
+    assert {d.device_sn: d.region for d in devices} == {
+        SYNTHETIC.station_sn: "eu",
+        _EXTRA_STATION_SN: "eu:CH",
+    }
+    assert api.refused_regions() == ["eu:CH"]
+
+
+async def test_a_challenge_from_an_extra_scope_is_answered_there_after_a_restart(
+    fake_mega: FakeMega, http: aiohttp.ClientSession
+) -> None:
+    """Each scope of a two-step account asks in turn; an answer given on a new
+    instance goes to the scope that asked, which ends the flow."""
+    _with_an_extra_country(fake_mega)
+    fake_mega.two_step = {"eu"}
+    store = MemoryStore()
+    countries = ["EE", "CH"]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        with pytest.raises(LoginChallengeError) as first:
+            await _api(http, await _reloaded(store), country=countries).async_login()
+        with pytest.raises(LoginChallengeError) as second:
+            await _api(http, await _reloaded(store), country=countries).async_login(
+                verify_code="123456", login_id=first.value.login_id
+            )
+        cache = await _reloaded(store)
+        cache.section("throttle")["logins"] = {}  # the budget is not under test here
+        await cache.async_save()
+        fake_mega.calls.clear()
+        fake_mega.region_calls.clear()
+        api = _api(http, await _reloaded(store), country=countries)
+        await api.async_login(verify_code="654321", login_id=second.value.login_id)
+    assert (first.value.region, second.value.region) == ("eu", "eu:CH")
+    answers = [(p["ab"], p["verify_code"]) for p in _sent(fake_mega, "login")]
+    assert answers == [("CH", "654321")]
+    assert api.regions_with_session() == ["eu", "eu:CH"]
+    assert not (await _reloaded(store)).section("cloud").get("challenges")
 
 
 async def test_an_extra_country_logs_in_under_its_own_install_id(

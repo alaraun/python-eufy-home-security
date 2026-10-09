@@ -249,6 +249,25 @@ async def test_a_pending_two_step_login_is_a_challenge_not_a_session(
     assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
 
 
+@pytest.mark.parametrize(
+    "failure", [(401, {"code": 401, "msg": "expired"}), (200, {"code": 26502, "msg": "error"})]
+)
+async def test_a_failed_code_request_still_raises_the_challenge(
+    fake_mega: FakeMega, cache: SessionCache, failure: tuple[int, dict[str, Any]]
+) -> None:
+    """The pending login stays answerable when asking for the code fails."""
+    fake_mega.two_step = {"eu"}
+    fake_mega.error_bodies["sendmsg"] = [failure]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(LoginChallengeError) as exc:
+                await _api(session, cache).async_login()
+    assert (exc.value.kind, exc.value.region) == ("verify_code", "eu")
+    assert not exc.value.code_requested
+    assert len(fake_mega.code_requests) == 1
+
+
 async def test_captcha_challenge_fetches_an_image(fake_mega: FakeMega, cache: SessionCache) -> None:
     fake_mega.login_code = int(const.CloudCode.LOGIN_NEED_CAPTCHA)
     fake_mega.login_extra = {"login_id": "lid-7"}
@@ -1289,6 +1308,41 @@ async def test_cloud_status_next_login_matches_the_budget_refusal(cache: Session
     assert status.last_login_attempt_age == pytest.approx(10, abs=5)
     assert status.login_hold_off is None
     assert status.request_hold_off is None
+
+
+async def test_cloud_status_counts_logins_per_cluster(cache: SessionCache) -> None:
+    """The budget is per cluster: the account-wide count is the fullest cluster's."""
+    now = time.time()
+    cache.section("throttle")["logins"] = {"eu": [now - 60, now - 30], "us": [now - 10]}
+    async with aiohttp.ClientSession() as session:
+        status = EufyCloudApi(session, cache, SYNTHETIC.email, None).cloud_status()
+    assert status.logins_in_window == 2
+    assert {r: s.logins_in_window for r, s in status.regions.items()} == {"eu": 2, "us": 1}
+    assert status.next_login_allowed_in == 0.0
+
+
+@pytest.mark.parametrize("limit", ["budget", "hold-off"])
+async def test_cloud_status_next_login_covers_the_region_with_every_scope_suspended(
+    cache: SessionCache, limit: str
+) -> None:
+    """A forced login goes to the first region even when no scope is in use."""
+    now = time.time()
+    cache.section("cloud")["listed"] = {r: {"devices": 0, "at": now} for r in const.REGIONS}
+    if limit == "budget":
+        cache.section("throttle")["logins"] = {"eu": [now - 10] * const.LOGIN_BUDGET}
+    else:
+        cache.hold_off("login", 600, region="eu")
+    with aioresponses() as mock:
+        async with aiohttp.ClientSession() as session:
+            api = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password)
+            status = api.cloud_status()
+            with pytest.raises(LoginLimitedError) as caught:
+                await api.async_login(force=True)
+        assert not any(url.path == const.LOGIN_PATH for _method, url in mock.requests)
+    assert not any(region.in_use for region in status.regions.values())
+    assert caught.value.retry_after is not None
+    assert status.next_login_allowed_in == pytest.approx(caught.value.retry_after, abs=1)
+    assert (status.login_hold_off is not None) is (limit == "hold-off")
 
 
 @pytest.mark.parametrize(("failing", "spent"), [("login", 1), ("exchange", 0)])

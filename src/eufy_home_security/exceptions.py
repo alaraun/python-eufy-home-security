@@ -154,7 +154,8 @@ class NoCachedSessionError(CloudError):
 
     Raised by calls that must never spend a login, such as the thing
     description fetch: with no cached session, an unloaded session cache or one
-    expiring within the safety margin, they refuse before sending anything. Nothing
+    expiring within the safety margin, they refuse before sending anything. Also
+    raised for a login asked for a region that is no login scope of the account. Nothing
     was sent. It is not an :class:`AuthenticationError` — the credentials are not in
     question, so it must not start a reauth; the next ordinary call that may log in
     restores the session.
@@ -185,7 +186,9 @@ class LoginChallengeError(AuthenticationError):
     calls (it may be empty). ``captcha_image`` is a data URI when the challenge is a
     captcha. For a verification code the library has asked the cloud to e-mail one
     (``code_requested``); False when the login answer gave it no session to ask with.
-    ``region`` is the cloud region whose login asked; the answer goes there.
+    ``region`` is the login scope whose login asked (a region, or an extra country's
+    ``<region>:<country>``); the answer goes there, also from a new client on the
+    same cache.
     """
 
     def __init__(

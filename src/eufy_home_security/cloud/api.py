@@ -87,6 +87,8 @@ _LOGGER = logging.getLogger(__name__)
 _WIRE = wire_logger("cloud")
 
 _SUCCESS: Final = int(const.CloudCode.SUCCESS)
+_HTTP_429_THROTTLE: Final = const.Throttle(login_only=False, seconds=const.REQUEST_HOLD_OFF_SECONDS)
+"""The hold-off an HTTP 429 answer starts (a request throttle)."""
 
 # The account-wide house device-list body (the house-scoped one names a ``house_id``).
 _ACCOUNT_DEVICES_BODY: Final[Mapping[str, Any]] = MappingProxyType({"device_sn": ""})
@@ -129,6 +131,10 @@ class _RekeyRequiredError(CloudApiError):
     ) -> None:
         self.status = status
         super().__init__(code, message, endpoint=endpoint)
+
+
+class _ScopeRefusedError(CloudApiError):
+    """The cloud refused an extra country's login: the scope is skipped until a rescan."""
 
 
 class _SessionExpiredError(SessionRejectedError):
@@ -188,6 +194,16 @@ _EXTRA_HOMES_KEY: Final = "extra_countries"
 """``cloud.extra_countries``: each looked-up extra country's home region."""
 _INSTALL_IDS_KEY: Final = "install_ids"
 """``cloud.install_ids``: the ``openudid`` of each extra country's login scope."""
+
+_REFUSED_KEY: Final = "refused"
+"""``cloud.refused``: per extra scope whose login the cloud refused, the body ``code``,
+when (``at``) and the extra countries given then (``countries``)."""
+
+_CHALLENGES_KEY: Final = "challenges"
+"""``cloud.challenges``: the ``login_id`` of each scope's unanswered login challenge."""
+
+_LOOKUP_TRANSIENT: Final = (CommunicationError, RateLimitedError)
+"""Failures of a country lookup that leave the answer open: asked again later."""
 
 
 def _country_code(value: object) -> str | None:
@@ -304,18 +320,20 @@ class EufyCloudApi:
         codes = _country_codes(country)
         self._country_option = codes[0] if codes else None
         self._extra_countries: tuple[str, ...] = codes[1:]
-        self._extras_resolved = False
-        """Whether this process looked the extra countries' home regions up."""
+        self._extras_answered: set[str] = set()
+        """The extra countries whose lookup eufy answered without a cluster in this process."""
         self._timezone = timezone or const.DEFAULT_TIMEZONE
         self._login_country: LoginCountry | None = None
         self._country_resolved = False
-        """Whether this process looked the login country up (once, before its first login)."""
+        """Whether a lookup of the login country answered in this process."""
+        self._country_error: EufySecurityError | None = None
+        """The last login country lookup's failure while it did not answer."""
         self._region_override = None if region is None else const.check_region(region)
         self._scan_regions = scan_regions
         self._identities: dict[str, _Identity] = {}
         """The live session identity per region."""
         self._challenge_region: str | None = None
-        """The region whose login raised the last unanswered challenge."""
+        """The scope whose login raised this instance's last unanswered challenge."""
         self._login_lock = asyncio.Lock()
         self._cipher_unavailable: dict[tuple[str, int], tuple[float, str]] = {}
         """(monotonic time, owner id source) of the last empty ``get_ciphers`` answer per
@@ -356,11 +374,9 @@ class EufyCloudApi:
         return home or const.DEFAULT_REGION
 
     def _home_region(self) -> str | None:
-        """The login country's home region: this process's lookup, else the cached one."""
-        if self._login_country is not None:
-            return self._login_country.home_region
-        cached = _cached_country(self._cache)
-        return cached.home_region if cached is not None else None
+        """The home region of :attr:`login_country`."""
+        country = self.login_country
+        return country.home_region if country is not None else None
 
     def _login_order(self, regions: Sequence[str]) -> list[str]:
         """``regions`` with :attr:`region` first, as the app logs in to the home cluster."""
@@ -410,14 +426,47 @@ class EufyCloudApi:
         ]
 
     def regions_to_list(self, *, rescan: bool = False) -> list[str]:
-        """The scopes the next device-list fetch asks: every scope on a ``rescan`` or
-        with ``scan_regions``, else every scope not suspended. A ``region`` override
-        leaves out the other region and the extra countries homed there."""
+        """The scopes the next device-list fetch asks: every scope on a ``rescan``; else
+        every scope whose login was not refused (:meth:`refused_regions`) and, without
+        ``scan_regions``, not suspended. A ``region`` override leaves out the other
+        region and the extra countries homed there."""
         scopes = self.login_scopes()
-        if rescan or self._scan_regions:
+        if rescan:
             return scopes
-        suspended = self.suspended_regions()
-        return [r for r in scopes if r not in suspended]
+        skipped = set(self.refused_regions())
+        if not self._scan_regions:
+            skipped.update(self.suspended_regions())
+        return [r for r in scopes if r not in skipped]
+
+    def refused_regions(self) -> list[str]:
+        """The extra countries' scopes whose login the cloud refused with a plain body
+        code: no login and no device list asks them again until a rescan or a change of
+        the extra countries."""
+        refused = self._cache.section("cloud").get(_REFUSED_KEY)
+        if not isinstance(refused, dict):
+            return []
+        countries = sorted(self._extra_countries)
+        return [
+            r
+            for r in self._extra_scopes()
+            if isinstance(record := refused.get(r), dict) and record.get("countries") == countries
+        ]
+
+    async def _refuse_scope(self, region: str, err: CloudApiError) -> NoReturn:
+        """Record the refusal of extra scope ``region``'s login, warn, and raise it."""
+        self._cache.section("cloud").setdefault(_REFUSED_KEY, {})[region] = {
+            "code": err.code,
+            "at": time.time(),
+            "countries": sorted(self._extra_countries),
+        }
+        await self._cache.async_save()
+        _LOGGER.warning(
+            "the cloud refused the %s login (%s); %s is skipped until a rescan",
+            region,
+            err,
+            region,
+        )
+        raise _ScopeRefusedError(err.code, err.message, endpoint=err.endpoint) from err
 
     def device_region(self, device_sn: str) -> str:
         """The scope serving ``device_sn``: the one that listed it, else :attr:`region`."""
@@ -436,7 +485,8 @@ class EufyCloudApi:
             return [self._region_override, *(s for s in served if s != self._region_override)]
         if not self._listings():
             return [self.region]
-        return self.regions_with_devices()
+        refused = self.refused_regions()
+        return [r for r in self.regions_with_devices() if r not in refused]
 
     def regions_with_session(self) -> list[str]:
         """The scopes a call can reach without a login: a session held or cached and
@@ -480,8 +530,9 @@ class EufyCloudApi:
 
         Raises :class:`LoginChallengeError` when the account needs an e-mailed code
         or a captcha — re-call with the answer and the challenge's ``login_id``; the
-        answer goes to the region that asked (the challenge's ``region``) and the
-        other regions follow —
+        answer goes to the scope that asked (the challenge's ``region``, kept in the
+        cache, so a new instance answers there too) and the other scopes follow, each
+        of which may ask in turn —
         :class:`AuthenticationError` on bad credentials,
         :class:`RateLimitedError` when throttled or locked, and
         :class:`SessionReplacedError` after another client took the session over
@@ -495,11 +546,11 @@ class EufyCloudApi:
                 self._password_at_hand(prompt=False) or not self._all_sessions_cached()
             ):
                 # The scopes follow the countries: look them up (no login) first.
-                await self._resolve_login_country()
+                await self._resolve_login_country(retry=True)
                 await self._resolve_extra_countries()
             first: str | None = None
             if answering or force:
-                first = (self._challenge_region if answering else None) or self.region
+                first = (self._challenge_scope(login_id) if answering else None) or self.region
                 if answering:
                     _LOGGER.debug(
                         "answering the %s login challenge (login_id %s, verify_code %s, "
@@ -527,7 +578,12 @@ class EufyCloudApi:
                     continue
                 pending.append(region)
             for region in self._login_order(pending):
-                await self._do_login(region, verify_code=None, captcha_id=None, captcha_answer=None)
+                try:
+                    await self._do_login(
+                        region, verify_code=None, captcha_id=None, captcha_answer=None
+                    )
+                except _ScopeRefusedError:
+                    continue  # skipped until a rescan; the other scopes carry on
 
     async def async_reauthenticate(
         self,
@@ -541,7 +597,8 @@ class EufyCloudApi:
     ) -> None:
         """One real login to :attr:`region` with ``password``, whatever the cache holds.
 
-        A challenge answer goes to the region that asked. Success replaces that
+        The login country is looked up first when not known, so :attr:`region` is its
+        home region. A challenge answer goes to the region that asked. Success replaces that
         region's session and the cached password, and releases every
         station's key-refresh latch. A rejection raises :class:`AuthenticationError`:
         the new password is not cached and the cached one is left as it was. Hold-offs
@@ -556,8 +613,12 @@ class EufyCloudApi:
         answering = bool(verify_code or (captcha_id and captcha_answer))
         async with self._login_lock:
             self._take_over_or_raise_if_replaced(take_over)
+            if self._login_allowed():
+                # The region follows the country: look it up (no login) first.
+                await self._resolve_login_country(retry=True)
+                await self._resolve_extra_countries()
             await self._do_login(
-                (self._challenge_region if answering else None) or self.region,
+                (self._challenge_scope(login_id) if answering else None) or self.region,
                 verify_code=verify_code,
                 captcha_id=captcha_id,
                 captcha_answer=captcha_answer,
@@ -665,10 +726,14 @@ class EufyCloudApi:
     @property
     def login_country(self) -> LoginCountry | None:
         """The country logins use (see the class docstring), None while unknown: this
-        process's lookup, else the cached one. No lookup happens here."""
+        process's lookup, else the cached one unless it was cached for another
+        ``country`` option. No lookup happens here."""
         if self._country_resolved:
             return self._login_country
-        return self._login_country or _cached_country(self._cache)
+        cached = _cached_country(self._cache)
+        if cached is not None and self._country_option not in (None, cached.code):
+            return None  # cached for another option
+        return cached
 
     def login_ab(self, region: str) -> str:
         """The ``ab`` a login to scope ``region`` sends: an extra scope's country, else the
@@ -734,18 +799,36 @@ class EufyCloudApi:
         wanted = self._cache.cloud_sessions().get(region, {}).get(_AB_WANTED_KEY)
         return wanted if isinstance(wanted, str) and wanted else self.session_ab(region)
 
-    async def _resolve_login_country(self) -> None:
-        """Look the login country up once per process; callers hold ``_login_lock``.
+    async def _resolve_login_country(self, *, retry: bool = False) -> None:
+        """Look the login country up until a lookup answers; callers hold ``_login_lock``.
 
         The ``country`` option, else the cached country when it came from the IP, else
         ``get_client_real_code`` (before any login). Its home region comes from the
         cache when the code matches, else from ``estimate_domain``. A country the lookup
-        names no ``mega-`` cluster for is not used; a lookup that fails leaves the
-        country without a home region (an option) or unknown (the IP), and is not cached.
+        names no ``mega-`` cluster for is not used, nor is it when ``estimate_domain``
+        refuses the IP country; an option it refuses has no home region. A lookup that
+        does not answer (the network, a throttle) is kept as :attr:`_country_error` and
+        asked again only with ``retry``; no login is sent while it stands
+        (:meth:`_raise_if_country_unknown`).
         """
-        if self._country_resolved:
+        if self._country_resolved or (self._country_error is not None and not retry):
+            return
+        self._country_error = None
+        try:
+            await self._look_up_login_country()
+        except _LOOKUP_TRANSIENT as err:
+            self._country_error = err
+            _LOGGER.info("login country lookup failed (%s); asked again before a login", err)
             return
         self._country_resolved = True
+
+    def _raise_if_country_unknown(self, region: str) -> None:
+        """Refuse a login to a region scope while the login country lookup did not answer."""
+        if self._country_error is not None and const.scope_country(region) is None:
+            raise self._country_error
+
+    async def _look_up_login_country(self) -> None:
+        """The lookups of :meth:`_resolve_login_country`; a transient failure raises."""
         cached = _cached_country(self._cache)
         option = self._country_option
         if option is not None:
@@ -765,8 +848,10 @@ class EufyCloudApi:
         else:
             try:
                 home = await self._lookup_home_region(code)
+            except _LOOKUP_TRANSIENT:
+                raise
             except EufySecurityError as err:
-                _LOGGER.info("no home cluster for country %s yet: %s", code, err)
+                _LOGGER.info("no home cluster for country %s: %s", code, err)
                 home = None
                 if source == const.COUNTRY_SOURCE_IP:
                     return
@@ -794,22 +879,27 @@ class EufyCloudApi:
             await self._cache.async_save()
 
     async def _resolve_extra_countries(self) -> None:
-        """Look up the home region of each extra country not cached, once per process
-        (``estimate_domain``, no login). A country eufy names no ``mega-`` cluster for,
-        or a lookup that fails, gets no session; only a found region is cached."""
-        if self._extras_resolved or not self._extra_countries:
-            return
-        self._extras_resolved = True
+        """Look up the home region of each extra country neither cached nor answered in
+        this process (``estimate_domain``, no login); callers hold ``_login_lock``.
+
+        A country eufy names no ``mega-`` cluster for, or whose lookup it refuses, gets
+        no session; a lookup that does not answer (the network, a throttle) is asked
+        again on the next call. Only a found region is cached.
+        """
         homes = _cached_extra_homes(self._cache)
         found: dict[str, str] = {}
         for code in self._extra_countries:
-            if code in homes:
+            if code in homes or code in self._extras_answered:
                 continue
             try:
                 home = await self._lookup_home_region(code)
-            except EufySecurityError as err:
+            except _LOOKUP_TRANSIENT as err:
                 _LOGGER.info("no home cluster for extra country %s yet: %s", code, err)
                 continue
+            except EufySecurityError as err:
+                _LOGGER.warning("eufy refused the lookup of country %s (%s); no session", code, err)
+                home = None
+            self._extras_answered.add(code)
             if home is None:
                 _LOGGER.warning("eufy names no cluster for country %s; no session for it", code)
                 continue
@@ -821,7 +911,8 @@ class EufyCloudApi:
 
     async def _lookup_client_country(self) -> str | None:
         """The host's IP country from ``get_client_real_code`` on a fresh key-exchange
-        identity (no login), None when it fails or names no country."""
+        identity (no login), None when eufy names none or refuses the request; a
+        lookup that does not answer (the network, a throttle) raises."""
         region = self._region_override or const.DEFAULT_REGION
         try:
             identity = await self._key_exchange(
@@ -831,8 +922,10 @@ class EufyCloudApi:
             _code, _resp, data = await self._call(
                 self._host("passport", region), const.CLIENT_COUNTRY_PATH, {}, identity
             )
+        except _LOOKUP_TRANSIENT:
+            raise
         except EufySecurityError as err:
-            _LOGGER.info("IP country lookup failed: %s", err)
+            _LOGGER.info("IP country lookup refused: %s", err)
             return None
         return _ab_code(data)
 
@@ -840,21 +933,25 @@ class EufyCloudApi:
         """The region whose cluster ``estimate_domain`` names for ``country``; None when
         it names another kind of domain (not a eufy country). Raises
         :class:`CommunicationError` or :class:`ProtocolError` when it does not answer."""
+        region = self._region_override or const.DEFAULT_REGION
         data = await self._post_plain(
-            const.mega_host(self._region_override or const.DEFAULT_REGION),
+            const.mega_host(region),
             const.ESTIMATE_DOMAIN_PATH,
             {"ab": country, "mode": const.ESTIMATE_DOMAIN_MODE},
+            region=region,
         )
         domain = data.get("domain")
         return const.region_from_mega_domain(domain if isinstance(domain, str) else None)
 
     async def _post_plain(
-        self, host: str, path: str, payload: Mapping[str, Any]
+        self, host: str, path: str, payload: Mapping[str, Any], *, region: str
     ) -> Mapping[str, Any]:
-        """POST a plaintext JSON body with no identity; the answer's ``data`` object.
+        """POST a plaintext JSON body with no identity to ``region``'s cluster; the
+        answer's ``data`` object.
 
-        Nothing is sent while a request hold-off runs. A non-zero body code raises
-        :class:`CloudApiError`.
+        Nothing is sent while a request hold-off runs. HTTP 429 or a throttle body code
+        starts a hold-off as on :meth:`_call`; an answer that is no JSON object raises
+        :class:`CommunicationError`, another non-zero body code :class:`CloudApiError`.
         """
         self._raise_if_held_off(login=False)
         import aiohttp  # noqa: PLC0415 - deferred so a cache-only run never imports it
@@ -875,15 +972,28 @@ class EufyCloudApi:
                 data=json.dumps(dict(payload)),
                 timeout=aiohttp.ClientTimeout(total=const.HTTP_TIMEOUT_SECONDS),
             ) as resp:
-                status, text = resp.status, await resp.text()
-        except (aiohttp.ClientError, TimeoutError) as exc:
+                status = resp.status
+                retry_after = _retry_after(resp.headers.get("Retry-After"))
+                text = await resp.text()
+        except (aiohttp.ClientError, TimeoutError, UnicodeDecodeError) as exc:
             raise CommunicationError(f"cloud request to {path} failed: {exc}") from exc
         _LOGGER.debug("← %s HTTP %s: %s", path, status, text[:500])
+        if status == const.HTTP_TOO_MANY_REQUESTS:
+            await self._hold_off(
+                _HTTP_429_THROTTLE, status, "HTTP 429", path, region=region, retry_after=retry_after
+            )
         if status != 200:
             raise classify_refusal(status, _loose_code(text), _message(_loose_object(text)), path)
-        parsed = _loose_object(text)
+        try:
+            parsed = json.loads(text)
+        except ValueError as exc:
+            raise CommunicationError(f"cloud response to {path} was not JSON") from exc
+        if not isinstance(parsed, dict):
+            raise CommunicationError(f"cloud response to {path} was not an object")
         code = _body_code(parsed.get("code", _SUCCESS), path)
         if code != _SUCCESS:
+            if (throttle := const.THROTTLE_CODES.get(code)) is not None:
+                await self._hold_off(throttle, code, _message(parsed), path, region=region)
             raise CloudApiError(code, _message(parsed), endpoint=path)
         return _mapping(parsed.get("data") or {}, path)
 
@@ -895,7 +1005,8 @@ class EufyCloudApi:
         never a prompt). The cached session stays in use whatever happens: a hold-off, a
         spent budget or no network leaves it for the next :meth:`async_login`; any other
         refusal (a challenge, a credential or body-code error) is recorded so it is not
-        asked again for this country.
+        asked again for this country. The re-login runs unattended: a challenge it meets
+        asks eufy for no e-mailed code and no captcha.
         """
         made = self._session_ab_wanted(region)
         if made is None or not self._password_at_hand(prompt=False):
@@ -911,17 +1022,20 @@ class EufyCloudApi:
         _LOGGER.info(
             "%s cloud session was made with ab %s; logging in once with ab %s", region, made, wanted
         )
-        challenge_region = self._challenge_region
         try:
             await self._do_login(
-                region, verify_code=None, captcha_id=None, captcha_answer=None, fallback=False
+                region,
+                verify_code=None,
+                captcha_id=None,
+                captcha_answer=None,
+                fallback=False,
+                interactive=False,
             )
         except (RateLimitedError, CommunicationError) as err:
             _LOGGER.info(
                 "%s re-login with ab %s not done (%s); kept the session", region, wanted, err
             )
         except EufySecurityError as err:
-            self._challenge_region = challenge_region
             _LOGGER.warning(
                 "%s re-login with ab %s refused (%s); kept the session made with ab %s",
                 region,
@@ -942,19 +1056,41 @@ class EufyCloudApi:
         login_id: str | None = None,
         password: str | None = None,
         fallback: bool = True,
+        interactive: bool = True,
     ) -> None:
         """One password login to ``region`` (``password`` overrides every source).
 
-        The login sends :meth:`login_ab` as ``ab``. With ``fallback``, a country login
+        The login sends :meth:`login_ab` as ``ab``, or, when the scope's session records
+        that ``ab`` as refused (``ab_wanted`` is it, ``ab`` another), that other ``ab``.
+        With ``fallback``, a country login
         the cloud refuses with a plain body code is sent once more with the region as
         ``ab`` (a second login of the budget), and the session records the country as
-        the ``ab`` it settles, so no re-login follows for it. Callers hold ``_login_lock``.
+        the ``ab`` it settles, so no re-login follows for it. Without ``interactive`` a
+        challenge is raised without asking eufy for a code or a captcha and is not
+        recorded as the one to answer. A ``region`` that is no login scope once the
+        country is known raises :class:`NoCachedSessionError` before anything is sent.
+        An extra scope's login refused with a plain body code is recorded
+        (:meth:`refused_regions`); a later login there raises it again without sending.
+        Callers hold ``_login_lock``.
         """
         self._raise_if_held_off(login=True, region=region)
         password, source = (
             (password, "reauthenticating") if password else await self._login_password()
         )
         await self._resolve_login_country()
+        self._raise_if_country_unknown(region)
+        if region not in self.login_scopes():
+            raise NoCachedSessionError(
+                f"{region} is no login scope of this account (now {self.login_scopes()}); "
+                "not logging in"
+            )
+        if region in self.refused_regions():
+            record = self._cache.section("cloud")[_REFUSED_KEY][region]
+            raise _ScopeRefusedError(
+                int(record.get("code") or 0),
+                f"the cloud refused the {region} login; not asked again until a rescan",
+                endpoint=const.LOGIN_PATH,
+            )
         wanted = self.login_ab(region)
         _LOGGER.info(
             "logging in to the eufy cloud as %s (password %s, region %s, ab %s)",
@@ -986,10 +1122,21 @@ class EufyCloudApi:
             "login_id": login_id or "",
         }
         ab = wanted
+        settled = self._cache.cloud_sessions().get(region, {})
+        if settled.get(_AB_WANTED_KEY) == wanted and settled.get(_AB_KEY) not in (None, wanted):
+            # The cloud refused this country for the scope before: send the ab it took.
+            ab = str(settled[_AB_KEY])
+            _LOGGER.info("%s login with ab %s, as the refused ab %s settled", region, ab, wanted)
         try:
             try:
                 code, resp, data = await self._send_login(identity, password, ab, answer)
             except CloudApiError as err:
+                if (
+                    interactive
+                    and type(err) is CloudApiError
+                    and const.scope_country(region) is not None
+                ):
+                    await self._refuse_scope(region, err)
                 fallback_ab = region if const.scope_country(region) is None else None
                 if not (
                     fallback and fallback_ab and ab != fallback_ab and type(err) is CloudApiError
@@ -1014,26 +1161,31 @@ class EufyCloudApi:
                 await self._cache.async_save()
             raise
         if code in const.CAPTCHA_CODES or code in const.VERIFY_CODE_CODES:
-            self._challenge_region = region
+            await self._note_challenge(region, resp, data, interactive=interactive)
         if code in const.CAPTCHA_CODES:
             _LOGGER.info("%s login needs a captcha (code %s)", region, code)
-            await self._raise_captcha_challenge(identity, code, self._extract_login_id(resp, data))
+            await self._raise_captcha_challenge(
+                identity, code, self._extract_login_id(resp, data), request=interactive
+            )
         if code in const.VERIFY_CODE_CODES:
             _LOGGER.info("%s login needs an e-mailed verification code (code %s)", region, code)
-            await self._raise_verify_code_challenge(identity, code, resp, data)
+            await self._raise_verify_code_challenge(identity, code, resp, data, request=interactive)
         if not data:
             raise EmptyResponseError(code, "login returned no data", endpoint=const.LOGIN_PATH)
         step = _two_step(data)
         if step in const.VERIFY_CODE_CODES:
             # Code 0 with ``fa_info.step`` 26052: two-step verification is pending and
             # the token in this answer is not a session yet.
-            self._challenge_region = region
+            await self._note_challenge(region, resp, data, interactive=interactive)
             _LOGGER.info(
                 "%s login needs an e-mailed verification code (fa_info step %s)", region, step
             )
-            await self._raise_verify_code_challenge(identity, step, resp, data)
+            await self._raise_verify_code_challenge(identity, step, resp, data, request=interactive)
         if self._challenge_region == region:
             self._challenge_region = None
+        for key in (_CHALLENGES_KEY, _REFUSED_KEY):
+            if isinstance(entries := self._cache.section("cloud").get(key), dict):
+                entries.pop(region, None)
         self._store_session(identity, _mapping(data, const.LOGIN_PATH), ab=ab, ab_wanted=wanted)
         self._cache.set_password(password)
         await self._cache.async_save()
@@ -1078,15 +1230,19 @@ class EufyCloudApi:
         )
 
     def _login_possible(self) -> bool:
-        """Whether a login to :attr:`region` could be sent now: a password at hand (or a
-        prompt) and no login hold-off or spent budget."""
-        if not self._password_at_hand():
-            return False
-        try:
-            self._raise_if_held_off(login=True, region=self.region)
-        except RateLimitedError:
-            return False
-        return True
+        """Whether a login to some login scope could be sent now: a password at hand (or
+        a prompt) and :meth:`_login_allowed`."""
+        return self._password_at_hand() and self._login_allowed()
+
+    def _login_allowed(self) -> bool:
+        """Whether some login scope's cluster has no login hold-off or spent budget."""
+        for region in self.login_scopes():
+            try:
+                self._raise_if_held_off(login=True, region=region)
+            except RateLimitedError:
+                continue
+            return True
+        return False
 
     def _password_at_hand(self, *, prompt: bool = True) -> bool:
         """Whether a login has a password without asking anyone: a given string, a cached
@@ -1114,16 +1270,51 @@ class EufyCloudApi:
             return await source(), "callable"
         raise AuthenticationError("no password: none was given and none is cached")
 
+    async def _note_challenge(
+        self, region: str, resp: Mapping[str, Any], data: object, *, interactive: bool
+    ) -> None:
+        """Record ``region`` as the scope whose challenge an answer goes to, here and in
+        the cache with its ``login_id``, so a new instance answers there too."""
+        if not interactive:
+            return
+        self._challenge_region = region
+        pending = self._cache.section("cloud").setdefault(_CHALLENGES_KEY, {})
+        pending[region] = self._extract_login_id(resp, data)
+        await self._cache.async_save()
+
+    def _challenge_scope(self, login_id: str | None) -> str | None:
+        """The scope a challenge answer goes to: this instance's last challenge, else
+        the cached one whose ``login_id`` is ``login_id``, else the only one cached;
+        None when none of them is a login scope."""
+        scopes = self.login_scopes()
+        if self._challenge_region in scopes:
+            return self._challenge_region
+        stored = self._cache.section("cloud").get(_CHALLENGES_KEY)
+        pending: dict[str, object] = (
+            {s: lid for s, lid in stored.items() if s in scopes} if isinstance(stored, dict) else {}
+        )
+        if login_id and (match := [s for s, lid in pending.items() if lid == login_id]):
+            return match[-1]
+        return next(iter(pending)) if len(pending) == 1 else None
+
     async def _raise_verify_code_challenge(
-        self, identity: _Identity, code: int, resp: Mapping[str, Any], data: object
+        self,
+        identity: _Identity,
+        code: int,
+        resp: Mapping[str, Any],
+        data: object,
+        *,
+        request: bool = True,
     ) -> NoReturn:
-        """Ask for the login code with the answer's pending token, then raise the challenge.
+        """Ask for the login code with the answer's pending token (only with
+        ``request``), then raise the challenge.
 
         The pending token is used for this one request and never stored as a session.
+        A failed request still raises the challenge, with ``code_requested`` False.
         """
         requested = False
         token = data.get("auth_token") if isinstance(data, Mapping) else None
-        if isinstance(token, str) and token:
+        if request and isinstance(token, str) and token:
             user_id = data.get("user_id") if isinstance(data, Mapping) else None
             pending = _Identity(
                 key_ident=identity.key_ident,
@@ -1132,20 +1323,26 @@ class EufyCloudApi:
                 user_id=str(user_id) if user_id else None,
                 region=identity.region,
             )
-            await self._call(
-                self._host("push", identity.region),
-                const.SEND_VERIFY_CODE_PATH,
-                {
-                    "transaction": str(int(time.time() * 1000)),
-                    "message_type": const.VERIFY_CODE_BY_EMAIL,
-                    "biz_type": const.VERIFY_CODE_BIZ_LOGIN,
-                    "captcha_id": "",
-                    "answer": "",
-                },
-                pending,
-            )
-            requested = True
-            _LOGGER.info("%s cloud asked to e-mail a login verification code", identity.region)
+            try:
+                await self._call(
+                    self._host("push", identity.region),
+                    const.SEND_VERIFY_CODE_PATH,
+                    {
+                        "transaction": str(int(time.time() * 1000)),
+                        "message_type": const.VERIFY_CODE_BY_EMAIL,
+                        "biz_type": const.VERIFY_CODE_BIZ_LOGIN,
+                        "captcha_id": "",
+                        "answer": "",
+                    },
+                    pending,
+                )
+            except EufySecurityError as err:
+                _LOGGER.warning(
+                    "%s cloud refused to e-mail a login verification code: %s", identity.region, err
+                )
+            else:
+                requested = True
+                _LOGGER.info("%s cloud asked to e-mail a login verification code", identity.region)
         raise LoginChallengeError(
             "verify_code",
             login_id=self._extract_login_id(resp, data),
@@ -1154,8 +1351,11 @@ class EufyCloudApi:
             code_requested=requested,
         )
 
-    async def _raise_captcha_challenge(self, identity: _Identity, code: int, login_id: str) -> None:
-        cid, image = await self._fetch_captcha(identity)
+    async def _raise_captcha_challenge(
+        self, identity: _Identity, code: int, login_id: str, *, request: bool = True
+    ) -> None:
+        """Fetch a captcha (only with ``request``), then raise the challenge."""
+        cid, image = await self._fetch_captcha(identity) if request else ("", "")
         raise LoginChallengeError(
             "captcha",
             login_id=login_id,
@@ -1305,6 +1505,7 @@ class EufyCloudApi:
                     raise NoCachedSessionError(
                         f"no usable {region} cloud session cached; not logging in"
                     )
+                await self._resolve_login_country(retry=True)
                 await self._do_login(region, verify_code=None, captcha_id=None, captcha_answer=None)
             identity = self._identities.get(region)
         if identity is None:  # pragma: no cover — login raises rather than return
@@ -1419,13 +1620,22 @@ class EufyCloudApi:
         """The device list fetched from the cloud now, cached; every failure raises.
 
         Asks each login scope of :meth:`regions_to_list` (``rescan_regions``: every
-        scope; the extra countries' home regions are looked up first when not cached)
-        and tags each device with the scope that listed it (:attr:`CloudDevice.region`;
+        scope), after looking up the login country when a login may follow and the
+        extra countries' home regions neither cached nor answered in this process (a
+        rescan asks every one not cached again). Each device
+        is tagged with the scope that listed it (:attr:`CloudDevice.region`;
         a serial two scopes list keeps the first scope's entry). A scope that lists no
         devices is suspended. With every scope suspended nothing is sent and the cached
         (empty) list is returned. Nothing is cached unless every scope asked answered.
         """
-        await self._resolve_extra_countries()
+        async with self._login_lock:
+            if not self.session_replaced and self._login_possible():
+                # The scopes follow the countries: look them up (no login) first.
+                await self._resolve_login_country(retry=True)
+            if rescan_regions:
+                self._extras_answered.clear()
+                self._cache.section("cloud").pop(_REFUSED_KEY, None)
+            await self._resolve_extra_countries()
         regions = self.regions_to_list(rescan=rescan_regions)
         if not regions:
             _LOGGER.info(
@@ -1438,7 +1648,10 @@ class EufyCloudApi:
         counts: dict[str, int] = {}
         listed_by: dict[str, str] = {}
         for region in regions:
-            raw = await self._house_entries(region, _ACCOUNT_DEVICES_BODY, login=True)
+            try:
+                raw = await self._house_entries(region, _ACCOUNT_DEVICES_BODY, login=True)
+            except _ScopeRefusedError:
+                continue  # skipped until a rescan; the other scopes carry on
             counts[region] = len(raw)
             _LOGGER.info("the %s region lists %d device(s)", region, len(raw))
             for entry in raw:
@@ -1454,6 +1667,13 @@ class EufyCloudApi:
                     continue
                 listed_by[serial] = region
                 entries.append({**entry, REGION_KEY: region})
+        # A refused scope keeps the devices it listed last, for its stations' LAN use.
+        refused = self.refused_regions()
+        entries.extend(
+            dict(entry)
+            for entry in self._cache.cached_devices() or ()
+            if entry.get(REGION_KEY) in refused and entry.get("device_sn") not in listed_by
+        )
         self._cache.set_devices(entries)
         listed = self._cache.section("cloud").setdefault("listed", {})
         now = time.time()
@@ -2144,7 +2364,8 @@ class EufyCloudApi:
         """The login, throttle and refresh state as the cache holds it; never contacts the cloud.
 
         The login need and the session expiry cover the regions the next device list
-        asks (:meth:`regions_to_list`). A password counts as available when one is
+        asks (:meth:`regions_to_list`); the login hold-off and the budget wait cover
+        those and :attr:`region`, where a forced login goes. A password counts as available when one is
         cached or a string was given; a password callable is a prompt, so without
         either the need is ``PASSWORD_REQUIRED``. The cache must be loaded.
         """
@@ -2170,15 +2391,18 @@ class EufyCloudApi:
         else:
             need = LoginNeed.PASSWORD_REQUIRED
         request_hold_off = self._held_off("requests")
+        # A forced login or a reauthentication goes to :attr:`region` even when no
+        # scope is in use.
+        logging_in = [*in_use, self.region]
         login_hold_off = max(
-            (left for r in in_use if (left := self._held_off("login", r)) is not None),
+            (left for r in logging_in if (left := self._held_off("login", r)) is not None),
             default=None,
         )
         budget_wait = max(
-            (left for r in in_use if (left := self._login_budget_wait(r)[1]) is not None),
+            (left for r in logging_in if (left := self._login_budget_wait(r)[1]) is not None),
             default=None,
         )
-        count = len(self._cache.recent_logins(const.LOGIN_BUDGET_WINDOW_SECONDS))
+        count = max(self._login_budget_wait(r)[0] for r in const.REGIONS)
         attempts = self._cache.recent_logins(math.inf)
         return CloudStatus(
             login_need=need,
@@ -2220,6 +2444,8 @@ class EufyCloudApi:
             country_code=country if isinstance(country, str) else None,
             in_use=region in in_use,
             suspended=region in self.suspended_regions(),
+            login_refused=region in self.refused_regions(),
+            logins_in_window=self._login_budget_wait(region)[0],
         )
 
     def _station_refresh_status(self, station_sn: str) -> StationRefreshStatus:
@@ -2492,7 +2718,7 @@ class EufyCloudApi:
 
         if status == const.HTTP_TOO_MANY_REQUESTS:
             await self._hold_off(
-                const.Throttle(login_only=False, seconds=const.REQUEST_HOLD_OFF_SECONDS),
+                _HTTP_429_THROTTLE,
                 status,
                 "HTTP 429",
                 path,

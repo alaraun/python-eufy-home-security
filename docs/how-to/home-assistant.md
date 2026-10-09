@@ -164,6 +164,8 @@ provides where it lives.
 | `cloud.country` | the login country (`code`, `source` `option` or `ip`, `home_region`) | on the first login of a process when the country or its home region changed |
 | `cloud.extra_countries` | each extra country's home region | when a login or a device list first needs an extra country not looked up |
 | `cloud.install_ids` | the install id (`openudid`) of each extra country's login scope | minted on that scope's first key exchange, then kept |
+| `cloud.refused` | each extra country's scope whose login the cloud refused with a plain body code (the code, when, and the extra countries then) | on that refusal; cleared by a rescan, a later login there, or a change of the extra countries |
+| `cloud.challenges` | the `login_id` of each login scope's unanswered login challenge (no code, no captcha answer) | when a login raises a challenge; cleared by that scope's next successful login |
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
 | `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), and the key-refresh latch | on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass |
@@ -218,7 +220,13 @@ session means another login, and a lost hold-off means calling a throttled cloud
   in, `await eufy.async_close()` (which saves), then create the entry.
 - **Login challenge:** carry `login_id` (and `captcha_id`) between flow steps, and close
   the instance before the step shows the form. The next step builds a new instance on
-  the same store; it reloads the document and answers with that `login_id`.
+  the same store; it reloads the document and answers with that `login_id`, and the
+  answer goes to the login scope that asked (the store keeps it). With extra countries
+  each scope logs in on its own, so an account with two-step verification answers one
+  challenge per scope: after an answer, `async_login` may raise the next scope's
+  challenge; show the form again. Two logins per scope count in that cluster's budget
+  (3 per 6 h), so the last answer can meet `LoginLimitedError`; after its
+  `retry_after`, `async_login()` asks that scope again with a new code.
 - **Reauth / reconfigure:** these carry a new password. If the entry is still loaded,
   unload it first. Build an instance on the store and call
   `await eufy.async_reauthenticate(password)`, then close, then
@@ -301,7 +309,8 @@ device, the *login scope* that listed it: the region (`eu`) for the login countr
   share its budget; a credential lock (too many wrong passwords) holds off every
   cluster. `async_login()` on a cold cache logs in to every scope the next device list
   asks, so a login challenge surfaces there; its `LoginChallengeError.region` names the
-  scope, and the answer (`async_login(verify_code=…, login_id=…)`) goes back to it.
+  scope, and the answer (`async_login(verify_code=…, login_id=…)`) goes back to it, on
+  this instance or a new one on the same store.
 - While no country is known (no `country`, and eufy names no IP country), both regions
   log in with the region as `ab`, as before.
 - A scope that lists no devices is **suspended**: no later device list, login or push
@@ -320,7 +329,7 @@ For the integration:
 | what | where | use |
 |---|---|---|
 | a device's region | `CloudDevice.region` (`station.device.region`, each sub-device's `CloudDevice`) | a diagnostic attribute; never part of an entity id |
-| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
+| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `login_refused` (an extra country the cloud refused to log in: skipped until a rescan), `logins_in_window` (its cluster's logins in the budget window; the account-wide `CloudStatus.logins_in_window` is the fullest cluster's), `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
 | rescan | `async_discover(rescan_regions=True)` | only on the user's request: the "refresh device list" button and the repair's fix. Timers and automatic refreshes pass `refresh=True` alone, so a suspended region is never retried by itself |
 | scan on every refresh | `EufySecurity(scan_regions=...)` | an options-flow switch, off by default |
 
