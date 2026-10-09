@@ -53,7 +53,7 @@ ECIES blob =
   tag        32   HMAC-SHA256
 ```
 
-Unwrap (from `DecryptECC` / `kdf_func` in the app's ECC library):
+Unwrap:
 
 ```
 S          = ECDH(ecc_private_key, eph_pub).x                     # 32 bytes
@@ -80,9 +80,9 @@ session    = PKCS7-unpad(AES-128-CBC-decrypt(aes_key, iv, ct))   # exactly 32 by
   the reply: it reads the id (`crypto.parse_conn_init`), stores it per station
   (`stations.<serial>.cipher_id`), then loads that cipher's key from the cache, else the
   cloud. A cipher other than the one of the credentials held is not a stale key (no
-  re-fetch latch). The eufy app does the same **[declared: app]**: it fetches a key only
-  when the station's `APP_CMD_GATEWAYINFO` (1100) callback names the id, caches it per
-  owner id and cipher id, and preloads nothing.
+  re-fetch latch). The station's `APP_CMD_GATEWAYINFO` (1100) message names the same id,
+  and a key is needed per owner id and cipher id, never before the station names it
+  **[declared: app]**.
 - An HMAC mismatch, or a key that is not 32 bytes, means the cached key of
   that cipher no longer matches the station. Re-fetch it **once**. No other signal
   tells a stale key apart from a dead link.
@@ -97,14 +97,14 @@ Two subheader bytes of the CONN_INIT reply select its handshake and its encrypti
 | 3 | encryption type | `00`: clear; otherwise AES-128-ECB under the static key over whole blocks |
 
 A HomeBase 3 and a T8170 answer `08 xx FF 01` (144 bytes) **[verified]**. A T8410
-(fw 2.3.2.6) answers version `01` with 133 bytes (seen in a user debug log; byte 3 not logged).
+(fw 2.3.2.6) answers version `01` with 133 bytes (one sample; byte 3 not recorded).
 
 ### RSA CONN_INIT **[declared: app, legacy]**
 
-This is a **legacy** path. The current eufy app/SDK derives every station's session key
-from the cipher's `ecc_private_key` (ECIES, below) and no longer implements an RSA session
-path at all; only an old-firmware station whose CONN_INIT reply is not version 8 (e.g. a
-T8410 on fw 2.3.2.6) still needs it, decrypted with the cipher's cloud RSA `private_key`.
+This is a **legacy** path: a station on current firmware answers version 8 and takes the
+ECIES handshake (above). Only an older-firmware station whose CONN_INIT reply is not
+version 8 (e.g. a T8410 on fw 2.3.2.6) uses it, decrypted with the cipher's cloud RSA
+`private_key`. Not verified on hardware.
 
 ```
 payload (after the encryption type is undone) =

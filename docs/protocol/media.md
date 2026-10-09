@@ -133,16 +133,15 @@ Request and reply shapes: [commands.md](commands.md). Paths come from an event p
 | first bytes | variant | encryption | key |
 |---|---|---|---|
 | `ff d8` | plain JPEG | none | — |
-| `eufysecurity` | V1 | AES-128-ECB over the first 256 bytes | first 16 chars of the app's `genCheckCode(sn, p2p_did, code)` |
-| `v2_eufysecurity` | V2 | AES-256-GCM over the first 256 bytes | the full 32-char `genCheckCode` |
+| `eufysecurity` | V1 | AES-128-ECB over the first 256 bytes | first 16 chars of the check code `p2p.media.pic_check_code(sn, p2p_did, code)` |
+| `v2_eufysecurity` | V2 | AES-256-GCM over the first 256 bytes | the full 32-char check code |
 | `v8_eufysecurity` | V8 | AES-256-GCM over the whole body | ECIES-wrapped per-image key under a cloud cipher (`k` in the push) |
 
 **The V1 header** is `eufysecurity:<serial, 16>:<code, 10 digits>:<body>`: serial at
 bytes 13–28, code at 30–39, body from 41. The first 256 body bytes are AES-128-ECB
 (no padding); the rest is clear JPEG.
 
-**`genCheckCode`** is the app's `gen_pic_code_v1`
-**[verified]**: its output decoded a T8170 still to the camera's picture.
+**The check code** (`p2p.media.pic_check_code`) **[verified]**: its output decoded a T8170 still to the camera's picture.
 With the DID `PREFIX-NNNNNN-SUFFIX`:
 
 1. `s` = a sum over the DID's number `n` (hex digits): `n0 + n1 + n3 + (n3 if n3 < 5

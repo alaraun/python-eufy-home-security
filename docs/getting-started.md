@@ -12,13 +12,14 @@
   reservation), and either all UDP from the station allowed, or one pinned local port
   per station (`local_ports=`) allowed. `eufy-security network` prints what each of
   your stations needs.
-- **Current station/camera firmware.** The library speaks the current P2P session
-  handshake (ECIES, CONN_INIT version 8). A device still on outdated firmware that
-  negotiates the legacy RSA handshake (CONN_INIT version 1) is **not supported**: eufy's
-  cloud serves that path's key corrupted (lowercased), so neither this library nor the
-  eufy app can establish the session — the station reports `key_unusable` and stays
-  unavailable. Update the device's firmware in the eufy app; there is no library-side
-  workaround. See [protocol/session-crypto.md](protocol/session-crypto.md#rsa-conn_init-declared-app-legacy).
+- **Current station/camera firmware.** Current firmware uses the ECIES session
+  handshake (CONN_INIT version 8). A device on older firmware that negotiates the legacy
+  RSA handshake (CONN_INIT version 1) is supported as *declared*, not verified on
+  hardware: it works when eufy's cloud serves the cipher's RSA key intact. Some
+  accounts are served that key lowercased, which cannot be repaired: the library raises
+  `CipherUnusableError` (reason `rsa_unparsable`), the station reports `key_unusable`
+  and stays unavailable. Updating the device's firmware in the eufy app moves it to the
+  ECIES handshake. See [protocol/session-crypto.md](protocol/session-crypto.md#rsa-conn_init-declared-app-legacy).
 
 ## Install
 

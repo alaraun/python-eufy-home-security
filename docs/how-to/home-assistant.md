@@ -129,15 +129,16 @@ is not a two-letter ISO 3166 code; HA's `hass.config.country` always is one (or 
 country as `ab`, only the home cluster of that country (eufy's own lookup) logs in, and
 every request carries the country and the zone as headers. Without `country` the
 library uses the country eufy places the HA host's IP address in; when neither is known
-it logs in as before (`ab` = the region). A cached session made with another `ab` (every
-session from before this, or after the HA country changes) logs in again once per
+it logs in with `ab` = the region. A cached session made with another `ab` (a session
+cached without an `ab`, or one made before the HA country changed) logs in again once per
 region, inside the login budget; when that login is refused, the old session stays in
 use and is not asked again for the same country. See
 [cloud.md § Login country](../protocol/cloud.md#login-country).
 
 **The country is the user's choice.** eufy lists a device only to a login with the
-country it is held under: an account whose own devices sit under `EE` and that accepted
-a home shared from an account in `CH` sees the shared devices only with `CH`, as the
+country it is held under: an account whose own devices sit under one country (`AA`) and
+that accepted a home shared from an account in another (`BB`) sees the shared devices
+only with `BB`, as the
 eufy app does. HA's country and the host's IP are guesses. Offer a country list in the
 config flow and the options (default: HA's country), pass it as
 `country=[first, *extra]`, and rescan after it changes
@@ -168,7 +169,7 @@ provides where it lives.
 | `cloud.challenges` | the `login_id` of each login scope's unanswered login challenge (no code, no captcha answer) | when a login raises a challenge; cleared by that scope's next successful login |
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
-| `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), and the key-refresh latch | on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass |
+| `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`) and its RSA private key when served (`rsa_ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), the key-refresh latch, a standalone camera's device session key (`dsk`, with its expiry) and each camera's preset slots (`presets`) | keys on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass. `dsk` when a wake needs it and less than 5 min of it remain; `presets` on each preset read that differs |
 | `devices` | the `get_devs_list` entries, each reduced to the fields `CloudDevice` reads (serials, type, name, channel, DID, IP, firmware versions, `app_conn`, the product code `device_new_pn`, the member's `admin_user_id` and `member_type`, and `cloud_region`, the region that listed it); the cloud's `params` snapshot only for a device reached on demand. The member's e-mail and phone, MAC addresses and the rest never reach the store | only on `async_discover(refresh=True)`; an entry stored with more fields is reduced on load |
 | `push` | FCM credentials, the registered token, recent push ids and guard-mode times | on push start; delivery state written at most 30 s after it changes, and on close |
 | `refresh_attempts` | when the owner id (account-wide) and each station's cipher key were last force-fetched | with those fetches |
@@ -186,7 +187,9 @@ identity, the password, the throttle state and the `replaced` latch, and drops t
 again with the cached password and fetches the device list and keys again. That is one
 login cycle, within the hold-off and the login budget, and nobody is asked for anything.
 Version 1 (one session, before regions) is migrated instead: its session and devices
-become the region it was logged in to, so the upgrade costs no login. A version-1 cache
+become the region it was logged in to, so the migration itself costs no login. That
+session carries no `ab`, so with a login country known it logs in again once, inside the
+login budget (see the login country above). A version-1 cache
 with an empty device list drops that list, so the next start asks every region once.
 
 Most of it is secret. The password and the auth token open the account, and a
@@ -303,7 +306,7 @@ only the devices its cluster holds for the login's country: the other cluster, o
 another country, answers an empty list, not an error. So the library logs in once per
 country, on that country's home cluster (eufy's `estimate_domain`), and remembers, per
 device, the *login scope* that listed it: the region (`eu`) for the login country,
-`<region>:<country>` (`eu:CH`) for each extra country of `country=[…]`:
+`<region>:<country>` (`eu:FR`) for each extra country of `country=[…]`:
 
 - A cold cache costs one login per country. The login budget (3 per 6 h) and a
   login-count throttle (100028) are kept per cluster, so two countries homed on `eu`
@@ -313,7 +316,7 @@ device, the *login scope* that listed it: the region (`eu`) for the login countr
   scope, and the answer (`async_login(verify_code=…, login_id=…)`) goes back to it, on
   this instance or a new one on the same store.
 - While no country is known (no `country`, and eufy names no IP country), both regions
-  log in with the region as `ab`, as before.
+  log in with the region as `ab`.
 - A scope that lists no devices is **suspended**: no later device list, login or push
   registration asks it. It is asked again only when the user says so:
   `async_discover(rescan_regions=True)` (one fetch that asks every scope), or the
@@ -719,7 +722,7 @@ same state on demand. Map it:
 |---|---|
 | `unreachable`, `probe_unanswered`, `station_closed`, `link_silent` | entities unavailable; the supervisor is already reconnecting. After a grace period, the unreachable repair issue |
 | `key_rejected` | entities unavailable. The first rejection refreshes the key by itself; an `error` that is a `KeyRejectedError` means that refresh did not help (see the error table) |
-| `key_unusable` | entities unavailable. The cipher key cannot be used at all (`CipherUnusableError`; `error.reason`: `rsa_unparsable`/`not_rsa`, or `no_rsa_key`/`no_ecc_key` when the cloud serves no key for the station's handshake) — usually a device on outdated firmware that uses the legacy RSA handshake, whose cloud key eufy serves corrupted or not at all. No re-fetch helps. Raise a repair telling the user to **update the device's firmware** in the eufy app; do not call it a rejected key or suggest a reset. |
+| `key_unusable` | entities unavailable. The cipher key cannot be used at all (`CipherUnusableError`; `error.reason`: `rsa_unparsable`/`not_rsa`, or `no_rsa_key`/`no_ecc_key` when the cloud serves no key for the station's handshake): a device on older firmware that uses the legacy RSA handshake, whose RSA key eufy serves lowercased or not at all. No re-fetch helps. Raise a repair telling the user to **update the device's firmware** in the eufy app (current firmware uses the ECIES handshake); do not call it a rejected key or suggest a reset. |
 | `credentials_unavailable` | entities unavailable. With `error=None` the reason is the `CloudProblem` already emitted; with a `RefreshCooldownError` just wait, no repair |
 | `protocol` | entities unavailable; log it, the supervisor retries |
 | `closed` | the integration's own `async_close`: nothing to do |
