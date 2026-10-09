@@ -14,7 +14,7 @@ import base64
 import binascii
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
@@ -116,6 +116,14 @@ class SettingDef:
             return scope is not Scope.STATION
         return self.scope is scope
 
+    def for_device_type(self, device_type: int | None) -> SettingDef:
+        """This setting as a device of cloud ``device_type`` carries it: an action mask
+        names :func:`mode_action_flags` of its scope and type; anything else is ``self``."""
+        if self.flags is None:
+            return self
+        flags = mode_action_flags(self.scope, device_type)
+        return self if flags == self.flags else replace(self, flags=flags)
+
     def decode_flags(self, raw: str | int) -> tuple[frozenset[str], int]:
         """A reported bitmask as the set of named flags that are on, plus the leftover
         bits no name covers (preserve those on every write).
@@ -214,7 +222,7 @@ _DELAY_DESCRIPTIONS: Final[Mapping[ModeTableField, str]] = MappingProxyType(
 
 MODE_ACTION_FLAGS: Final[Mapping[Scope, Mapping[str, int]]] = MappingProxyType(
     {
-        # ArmingManager.g for a camera (device_type 1, 8, 9, 14, 15, 19, 23 ...): record,
+        # The app's per-mode actions of a camera (device_type 1, 8, 9, 14, 15, 19, 23 ...): record,
         # notification, its own siren, the HomeBase alarm and the light; plus the
         # monitoring-centre report every device gets. No privacy or respond bit.
         Scope.CAMERA: MappingProxyType(
@@ -230,8 +238,9 @@ MODE_ACTION_FLAGS: Final[Mapping[Scope, Mapping[str, int]]] = MappingProxyType(
                 )
             }
         ),
-        # ArmingManager.g for a motion sensor (device_type 10, 127): notification, the
-        # HomeBase alarm and "respond"; plus the monitoring-centre report.
+        # The app's per-mode actions of a sensor: notification and the HomeBase alarm, plus
+        # the monitoring-centre report; "respond" on a motion sensor only
+        # (MOTION_SENSOR_DEVICE_TYPES, see mode_action_flags).
         Scope.SENSOR: MappingProxyType(
             {
                 name: ACTION_FLAGS[name]
@@ -246,6 +255,27 @@ MODE_ACTION_FLAGS: Final[Mapping[Scope, Mapping[str, int]]] = MappingProxyType(
     }
 )
 """The named action bits per device scope; the other bits of a mask are kept on a write."""
+
+#: The cloud device types of a motion sensor: the only sensors with the
+#: ``motion_sensor_respond`` action.
+MOTION_SENSOR_DEVICE_TYPES: Final = frozenset({10, 127})
+
+_OTHER_SENSOR_FLAGS: Final[Mapping[str, int]] = MappingProxyType(
+    {n: b for n, b in MODE_ACTION_FLAGS[Scope.SENSOR].items() if n != "motion_sensor_respond"}
+)
+
+
+def mode_action_flags(scope: Scope, device_type: int | None = None) -> Mapping[str, int]:
+    """The named action bits of a device of ``scope`` with the cloud ``device_type``.
+
+    :data:`MODE_ACTION_FLAGS` of the scope, without ``motion_sensor_respond`` for a sensor
+    whose type is known and not a motion sensor's (:data:`MOTION_SENSOR_DEVICE_TYPES`);
+    empty for a scope without per-mode actions.
+    """
+    known = device_type is not None
+    if scope is Scope.SENSOR and known and device_type not in MOTION_SENSOR_DEVICE_TYPES:
+        return _OTHER_SENSOR_FLAGS
+    return MODE_ACTION_FLAGS.get(scope, MappingProxyType({}))
 
 
 def _mode_suffix(mode: GuardMode) -> str:

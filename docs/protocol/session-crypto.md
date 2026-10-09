@@ -53,7 +53,7 @@ ECIES blob =
   tag        32   HMAC-SHA256
 ```
 
-Unwrap (from `DecryptECC` / `kdf_func` in the app's ECC library):
+Unwrap:
 
 ```
 S          = ECDH(ecc_private_key, eph_pub).x                     # 32 bytes
@@ -80,10 +80,11 @@ session    = PKCS7-unpad(AES-128-CBC-decrypt(aes_key, iv, ct))   # exactly 32 by
   the reply: it reads the id (`crypto.parse_conn_init`), stores it per station
   (`stations.<serial>.cipher_id`), then loads that cipher's key from the cache, else the
   cloud. A cipher other than the one of the credentials held is not a stale key (no
-  re-fetch latch). The eufy app does the same **[declared: app]**: it fetches a key only
-  when the station's `APP_CMD_GATEWAYINFO` (1100) callback names the id, caches it per
-  owner id and cipher id, and preloads nothing.
-- An HMAC mismatch, or a key that is not 32 printable bytes, means the cached key of
+  re-fetch latch): credentials still for another cipher after one re-fetch raise
+  `HandshakeError`. The station's `APP_CMD_GATEWAYINFO` (1100) message names the same id,
+  and a key is needed per owner id and cipher id, never before the station names it
+  **[declared: app]**.
+- An HMAC mismatch, or a key that is not 32 bytes, means the cached key of
   that cipher no longer matches the station. Re-fetch it **once**. No other signal
   tells a stale key apart from a dead link.
 
@@ -97,14 +98,14 @@ Two subheader bytes of the CONN_INIT reply select its handshake and its encrypti
 | 3 | encryption type | `00`: clear; otherwise AES-128-ECB under the static key over whole blocks |
 
 A HomeBase 3 and a T8170 answer `08 xx FF 01` (144 bytes) **[verified]**. A T8410
-(fw 2.3.2.6) answers version `01` with 133 bytes (seen in a user debug log; byte 3 not logged).
+(fw 2.3.2.6) answers version `01` with 133 bytes (one sample; byte 3 not recorded).
 
 ### RSA CONN_INIT **[declared: app, legacy]**
 
-This is a **legacy** path. The current eufy app/SDK derives every station's session key
-from the cipher's `ecc_private_key` (ECIES, below) and no longer implements an RSA session
-path at all; only an old-firmware station whose CONN_INIT reply is not version 8 (e.g. a
-T8410 on fw 2.3.2.6) still needs it, decrypted with the cipher's cloud RSA `private_key`.
+This is a **legacy** path: a station on current firmware answers version 8 and takes the
+ECIES handshake (above). Only an older-firmware station whose CONN_INIT reply is not
+version 8 (e.g. a T8410 on fw 2.3.2.6) uses it, decrypted with the cipher's cloud RSA
+`private_key`. Not verified on hardware.
 
 ```
 payload (after the encryption type is undone) =
@@ -123,10 +124,16 @@ key = RSA-PKCS#1-v1.5-decrypt(private_key, ciphertext) up to its first NUL, firs
   the library takes a key that is not 16 printable bytes as a handshake failure.
 - A `private_key` whose bytes do not parse as a key at all is distinct from a wrong
   key: the cloud serves the same bytes on every fetch, so re-fetching cannot help. The
-  library raises `CipherUnusableError` (cause `key_unusable`) without re-fetching and
-  without the stale-key latch, and retries only after a code change or the cached key
-  being dropped. On some accounts the cloud lowercases the base64 of `private_key`
-  ([cloud.md](cloud.md)), which lands here.
+  library raises `CipherUnusableError` (cause `key_unusable`, reason `rsa_unparsable`,
+  or `not_rsa` for a key of another type) without re-fetching and without the stale-key
+  latch, and retries only after a code change or the cached key being dropped. On some
+  accounts the cloud lowercases the base64 of `private_key` ([cloud.md](cloud.md)),
+  which lands here.
+- Credentials without the key the station's handshake needs (no `private_key` for an
+  RSA CONN_INIT, no `ecc_private_key` for version 8; a cache written before the RSA key
+  was kept holds none) are re-fetched once. Still without it, the library raises
+  `CipherUnusableError` (reason `no_rsa_key` or `no_ecc_key`) without the stale-key
+  latch.
 - Library code: `crypto.parse_conn_init`, `crypto.aes_key_from_conn_init`,
   `crypto.load_rsa_private_key`, `StationSession.rsa_session`. Not observed on hardware:
   whether the T8410's reply is clear (the 133 bytes only fit as clear: ECB needs whole
@@ -210,9 +217,14 @@ replayed within the same session.
 
 - ECB frames that are not state still decode: image replies (`0x051C`), legacy
   scalar results and camera pushes (cmd 2037).
+- On an RSA session ([RSA CONN_INIT](#rsa-conn_init-declared-app-legacy)) only state
+  under its session key (tag `0x01`, encryption type 2) counts; state in clear or under
+  any other tag is refused and counted. A clear frame decodes only under the ECB tag
+  and is never authenticated.
 - A camera push records the cipher of its frame in `SecurityEvent.frame_cipher`.
-  `SecurityEvent.authenticated` is False for an ECB push and True for a GCM push or
-  a cloud push (`frame_cipher` None, TLS). It proves origin, not freshness.
+  `SecurityEvent.authenticated` is False for a push under the static ECB key and True
+  for a GCM push, a push under an RSA session's key (`SecurityEvent.session_ecb`) or a
+  cloud push (`frame_cipher` None, TLS). It proves origin, not freshness.
 - Each refusal is logged at DEBUG (throttled) and counted in
   `StationSession.ecb_state_refused`.
 - A parameter read that times out while ECB dumps were refused says so in its

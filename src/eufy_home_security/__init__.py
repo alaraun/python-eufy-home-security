@@ -11,7 +11,14 @@ if TYPE_CHECKING:
     from ._logging import redact, redact_serial, set_secret_logging, set_wire_logging
     from .client import EufySecurity, ModelStatus, SkippedDevice
     from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
-    from .cloud.status import CloudStatus, LoginNeed, RegionStatus, StationRefreshStatus
+    from .cloud.status import (
+        CloudStatus,
+        DeviceListSource,
+        LoginNeed,
+        RegionStatus,
+        SessionState,
+        StationRefreshStatus,
+    )
     from .devices.model_settings import Setting, SettingControl, SettingKind
     from .devices.recipes import MAX_PRESET_SLOTS, MAX_ZOOM, MIN_ZOOM, PanTilt, PresetPosition
     from .devices.settings import SettingUnit
@@ -40,6 +47,7 @@ if TYPE_CHECKING:
         PushChanged,
         PushMessageType,
         SecurityEvent,
+        StationsChanged,
         StationStateChanged,
         StorageChanged,
         ZoomChanged,
@@ -71,6 +79,7 @@ if TYPE_CHECKING:
         PresetSlotsFullError,
         ProtocolError,
         RateLimitedError,
+        RateLimitOrigin,
         RecordNotFoundError,
         RefreshCooldownError,
         SessionRejectedError,
@@ -120,7 +129,15 @@ _EXPORTS: dict[str, str] = {
     "AccountReport": "diagnostics",
     **dict.fromkeys(("CloudDevice", "CloudInvite", "FirmwareUpdate"), "cloud.models"),
     **dict.fromkeys(
-        ("CloudStatus", "LoginNeed", "RegionStatus", "StationRefreshStatus"), "cloud.status"
+        (
+            "CloudStatus",
+            "DeviceListSource",
+            "LoginNeed",
+            "RegionStatus",
+            "SessionState",
+            "StationRefreshStatus",
+        ),
+        "cloud.status",
     ),
     **dict.fromkeys(("Setting", "SettingControl", "SettingKind"), "devices.model_settings"),
     "SettingUnit": "devices.settings",
@@ -145,6 +162,7 @@ _EXPORTS: dict[str, str] = {
             "CredentialsRefreshed",
             "DetectionType",
             "DevicesChanged",
+            "StationsChanged",
             "DisconnectCause",
             "Event",
             "EventDeduplicator",
@@ -190,6 +208,7 @@ _EXPORTS: dict[str, str] = {
             "NoCachedSessionError",
             "PresetSlotsFullError",
             "ProtocolError",
+            "RateLimitOrigin",
             "RateLimitedError",
             "RecordNotFoundError",
             "RefreshCooldownError",
@@ -280,6 +299,7 @@ __all__ = [
     "CredentialsRefreshed",
     "DetectionType",
     "DeviceBusyError",
+    "DeviceListSource",
     "DeviceTimeoutError",
     "DevicesChanged",
     "DisconnectCause",
@@ -325,6 +345,7 @@ __all__ = [
     "ProtocolError",
     "PushChanged",
     "PushMessageType",
+    "RateLimitOrigin",
     "RateLimitedError",
     "Reach",
     "RecordNotFoundError",
@@ -336,6 +357,7 @@ __all__ = [
     "SessionCache",
     "SessionRejectedError",
     "SessionReplacedError",
+    "SessionState",
     "SessionStats",
     "Setting",
     "SettingControl",
@@ -350,6 +372,7 @@ __all__ = [
     "StationState",
     "StationStateChanged",
     "StationUnreachableError",
+    "StationsChanged",
     "Still",
     "StillFormat",
     "StillNotWrittenError",

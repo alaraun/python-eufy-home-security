@@ -20,6 +20,8 @@ branch maps onto one decision a caller (Home Assistant, in practice) has to make
 
 from __future__ import annotations
 
+from typing import ClassVar, Literal
+
 
 class EufySecurityError(Exception):
     """Base class for every error raised by this library."""
@@ -100,20 +102,40 @@ class KeyExchangeRefusedError(CloudApiError):
         super().__init__(code, message, endpoint=endpoint)
 
 
+type RateLimitOrigin = Literal["cloud", "hold_off", "budget", "cooldown"]
+"""Who refused a call: ``"cloud"`` eufy answered with a throttle code now; ``"hold_off"``
+the library refused it locally because eufy throttled earlier; ``"budget"`` the library's
+own login budget refused it, eufy was not asked; ``"cooldown"`` the library's per-station
+refresh cooldown refused it."""
+
+
 class RateLimitedError(CloudError):
     """The cloud is throttling this account, or the library is holding off after it did.
 
     Once the cloud throttles, every later call is refused locally until the back-off
     expires: requests sent during a block reportedly restart it. ``retry_after`` is
     the seconds left (None when unknown); ``code`` is the body code (or HTTP status)
-    that started it, 0 for a limit the library applies on its own.
+    that started it, 0 for a limit the library applies on its own. ``origin`` says
+    who refused (:data:`RateLimitOrigin`); ``scope`` is the login scope a refused
+    login was for (``"eu"``, ``"eu:CH"``), None when the refusal covers every call
+    or every scope's logins.
     """
 
+    _ORIGIN: ClassVar[RateLimitOrigin] = "cloud"
+
     def __init__(
-        self, message: str = "", *, retry_after: float | None = None, code: int = 0
+        self,
+        message: str = "",
+        *,
+        retry_after: float | None = None,
+        code: int = 0,
+        scope: str | None = None,
+        origin: RateLimitOrigin | None = None,
     ) -> None:
         self.retry_after = retry_after
         self.code = code
+        self.scope = scope
+        self.origin: RateLimitOrigin = origin or self._ORIGIN
         super().__init__(message or "the eufy cloud is rate-limiting this account")
 
 
@@ -121,8 +143,11 @@ class RefreshCooldownError(RateLimitedError):
     """A forced cipher-key refresh was refused by the library's own per-station cooldown.
 
     Not a eufy throttle: nothing was sent and the cloud limits are untouched (``code``
-    is 0). It never becomes a ``CloudProblem``; wait ``retry_after``.
+    is 0, ``origin`` ``"cooldown"``). It never becomes a ``CloudProblem``; wait
+    ``retry_after``.
     """
+
+    _ORIGIN: ClassVar[RateLimitOrigin] = "cooldown"
 
 
 class LoginLimitedError(RateLimitedError):
@@ -154,10 +179,12 @@ class NoCachedSessionError(CloudError):
 
     Raised by calls that must never spend a login, such as the thing
     description fetch: with no cached session, an unloaded session cache or one
-    expiring within the safety margin, they refuse before sending anything. Nothing
-    was sent. It is not an :class:`AuthenticationError` — the credentials are not in
-    question, so it must not start a reauth; the next ordinary call that may log in
-    restores the session.
+    expiring within the safety margin, they refuse before sending anything; when the
+    cloud answers the cached session as expired, they raise it instead of logging in
+    again. Also raised, with nothing sent, for a login asked for a region that is no
+    login scope of the account. It is not an :class:`AuthenticationError` — the
+    credentials are not in question, so it must not start a reauth; the next ordinary
+    call that may log in restores the session.
     """
 
 
@@ -185,7 +212,9 @@ class LoginChallengeError(AuthenticationError):
     calls (it may be empty). ``captcha_image`` is a data URI when the challenge is a
     captcha. For a verification code the library has asked the cloud to e-mail one
     (``code_requested``); False when the login answer gave it no session to ask with.
-    ``region`` is the cloud region whose login asked; the answer goes there.
+    ``region`` is the login scope whose login asked (a region, or an extra country's
+    ``<region>:<country>``); the answer goes there, also from a new client on the
+    same cache.
     """
 
     def __init__(

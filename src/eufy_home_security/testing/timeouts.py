@@ -25,6 +25,7 @@ SHORT_TIMEOUTS: Final[Mapping[str, tuple[str, Any]]] = {
     # a command frame sets it per test.
     "DISCOVERY_ATTEMPTS": ("p2p.session", 1),
     "DISCOVERY_TIMEOUT": ("p2p.session", 2.5),
+    "DISCOVERY_RETRY_DELAY": ("p2p.session", 0.05),
     "HANDSHAKE_TIMEOUT": ("p2p.session", 2.5),
     "COMMAND_TIMEOUT": ("p2p.session", 0.5),
     "COMMAND_RECEIPT_TIMEOUT": ("p2p.session", 1.0),
@@ -39,14 +40,21 @@ SHORT_TIMEOUTS: Final[Mapping[str, tuple[str, Any]]] = {
     "MEDIA_RECORDING_FIRST_FRAME_TIMEOUT": ("p2p.session", 2.0),
     "READBACK_DELAY": ("station", 0.05),
     "PRESET_STREAM_IDLE_SECONDS": ("station", 1.0),
+    "PRESET_SETTLE_SECONDS": ("station", 0.05),
+    "PTZ_SETTLE_SECONDS": ("station", 0.05),
+    "PTZ_BUSY_DELAY": ("station", 0.05),
+    "DEFAULT_PRESET_RESULT_WAIT": ("station", 0.1),
+    "FULL_RESOLUTION_TIMEOUT": ("station", 1.0),
+    "LIVE_OPEN_TIMEOUT": ("devices.recipes", 2.0),
     "CAPTURE_START_TIMEOUT": ("p2p.broadcast", 2.0),
     "LAN_DISCOVERY_TIMEOUT": ("p2p.pppp", 0.5),
 }
 """Each shortened wait: its name, the module that defines it, and the value used.
 
 Left out on purpose: waits whose length is part of what a fake reproduces or a test
-observes (``PARAM_SETTLE``, ``MEDIA_IDLE_TIMEOUT``, ``MEDIA_DRAIN_MAX``, the probe
-schedule, the reprobe and idle-close delays); set those per test where needed.
+observes (``PARAM_SETTLE``, ``MEDIA_IDLE_TIMEOUT``, ``MEDIA_DRAIN_MAX``, the picture-size
+hold ``SETTLE_STATION``/``SETTLE_STANDALONE``, the probe schedule, the reprobe and
+idle-close delays); set those per test where needed.
 """
 
 

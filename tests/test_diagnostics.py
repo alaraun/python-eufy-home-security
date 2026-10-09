@@ -8,6 +8,8 @@ from typing import Any
 
 from eufy_home_security import EufySecurity, redact_serial
 from eufy_home_security.cloud import const
+from eufy_home_security.cloud.api import _SessionExpiredError
+from eufy_home_security.cloud.models import CipherRecord
 from eufy_home_security.diagnostics import (
     CAMERA_INFO_PARAM,
     HOUSE,
@@ -16,7 +18,12 @@ from eufy_home_security.diagnostics import (
     SECURITY_STATIONS,
     house_source,
 )
-from eufy_home_security.exceptions import RateLimitedError
+from eufy_home_security.exceptions import (
+    CloudApiError,
+    NoCachedSessionError,
+    RateLimitedError,
+    SessionReplacedError,
+)
 from eufy_home_security.storage import MemoryStore
 from eufy_home_security.testing import (
     SYNTHETIC,
@@ -67,6 +74,17 @@ def _cloud() -> FakeCloud:
 def _client(cloud: FakeCloud, store: MemoryStore | None = None) -> EufySecurity:
     store = store or warm_store(email=SYNTHETIC.email, cloud=cloud)
     return build_eufy_security(email=SYNTHETIC.email, store=store, cloud=cloud)
+
+
+_RSA_FIELDS = ("rsa", "rsa_case", "rsa_bits", "rsa_reason")
+
+
+def _rsa_check(cloud: FakeCloud, cipher_id: int) -> dict[str, Any]:
+    """The report's RSA fields for ``cipher_id``: :meth:`CipherRecord.check_rsa` of its keys."""
+    record = CipherRecord.from_api({"cipher_id": cipher_id, **cloud.cipher_records[cipher_id]})
+    assert record is not None
+    check = record.check_rsa()
+    return dict(zip(_RSA_FIELDS, (check.state, check.case, check.bits, check.reason), strict=True))
 
 
 def _by_serial(report: dict[str, Any], serial: str) -> dict[str, Any]:
@@ -155,27 +173,31 @@ async def test_one_cipher_sweep_per_owner_reports_key_state_only() -> None:
     assert table[40] == {
         "cipher_id": 40,
         "ecc": "usable",
-        "rsa": "unusable",
-        "rsa_case": "lower",
-        "rsa_bits": None,
-        "rsa_reason": "rsa_unparsable",
+        **_rsa_check(cloud, 40),
         "named_by": ["T8030***2345"],
     }
-    assert (table[98]["rsa"], table[98]["rsa_case"], table[98]["rsa_bits"]) == (
-        "usable",
-        "mixed",
-        1024,
-    )
+    for cipher_id, row in table.items():
+        assert {k: row[k] for k in _RSA_FIELDS} == _rsa_check(cloud, cipher_id)
     assert table[13]["ecc"] == "absent"
     assert _by_serial(report, SYNTHETIC.station_sn)["named_cipher_id"] == 40
 
 
 async def test_the_report_is_json_safe_and_secret_free() -> None:
     cloud = _cloud()
+    cloud.device_invites = [
+        {"id": 3, "device_sn": SYNTHETIC.camera_sn, "product_code": "T8160",
+         "action_user_nick": "Robin", "action_user_email": "robin@example.invalid"},
+    ]  # fmt: skip
     eufy = _client(cloud)
+    await eufy.cache.async_load()
+    token = eufy.cache.cloud_session("eu")["auth_token"]
     dumped = json.dumps((await eufy.async_account_report()).as_dict())
     pem = cloud.cipher_records[98]["private_key"]
     for secret in (
+        SYNTHETIC.email,
+        token,
+        "Robin",
+        "robin@",
         SYNTHETIC.station_sn,
         SYNTHETIC.camera_sn,
         _HB2_SN,
@@ -278,3 +300,58 @@ async def test_served_is_known_only_after_a_discovery() -> None:
     assert after["T8030***2345"] is True
     assert after["T8160***7890"] is True
     assert after["T8010***4321"] is False
+
+
+def _expired() -> _SessionExpiredError:
+    return _SessionExpiredError("cloud session expired (code 26006)", code=26006)
+
+
+async def test_an_expired_region_session_leaves_the_other_regions_asked() -> None:
+    cloud = _cloud()
+    eufy = _client(cloud)
+    cloud.calls.clear()
+    # Every eu request: client country, last login code, the device, house, invitation
+    # (the first of two) and both security lists.
+    cloud.call_errors = [_expired() for _ in range(7)]
+    report = await eufy.async_account_report()
+    assert report.stopped is None
+    eu = [r for r in report.listings if r.region == "eu"]
+    assert eu
+    assert all(r.error and r.error.startswith(NoCachedSessionError.__name__) for r in eu)
+    assert all(r.error is None for r in report.listings if r.region == "us")
+    assert "login" not in cloud.calls
+    assert "security_devices@us" in cloud.calls
+
+
+async def test_a_failed_list_is_recorded_and_the_next_lists_are_asked() -> None:
+    cloud = _cloud()
+    eufy = _client(cloud)
+    cloud.calls.clear()
+    message = f"no list for {SYNTHETIC.station_sn} of {SYNTHETIC.email} ({SYNTHETIC.account_id})"
+    cloud.call_errors = [
+        CloudApiError(12345, "x"),
+        CloudApiError(12345, "x"),
+        CloudApiError(12345, message),
+    ]
+    report = await eufy.async_account_report(ciphers=False)
+    assert report.stopped is None
+    (devices,) = (r for r in report.listings if (r.region, r.source) == ("eu", HOUSE))
+    assert devices.error is not None
+    assert devices.error.startswith(CloudApiError.__name__)
+    for private in (SYNTHETIC.station_sn, SYNTHETIC.email, SYNTHETIC.account_id):
+        assert private not in devices.error
+    assert redact_serial(SYNTHETIC.station_sn) in devices.error
+    (houses,) = (r for r in report.listings if (r.region, r.source) == ("eu", "houses"))
+    assert (houses.entries, houses.error) == (1, None)
+
+
+async def test_a_session_another_client_took_over_stops_the_report() -> None:
+    cloud = _cloud()
+    eufy = _client(cloud)
+    cloud.calls.clear()
+    cloud.call_errors = [SessionReplacedError("cloud session ended (code 26084)", code=26084)]
+    report = await eufy.async_account_report()
+    assert report.stopped is not None
+    assert report.stopped.startswith(SessionReplacedError.__name__)
+    assert cloud.calls == ["client_country"]
+    assert all(r.error is not None and r.error.startswith("not asked") for r in report.listings)

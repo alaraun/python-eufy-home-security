@@ -8,20 +8,29 @@ Only the HTTP round trip (and its MegaCrypto key exchange) is replaced.
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
+import functools
 import itertools
+import json
+import logging
 import time
-from collections.abc import Callable, Coroutine, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 from .._logging import redact_serial
 from ..client import EufySecurity
 from ..cloud import const
 from ..cloud.api import EufyCloudApi, HttpSession, PasswordSource, _Identity
-from ..cloud.api import classify_refusal as _classify_refusal
 from ..devices.types import model_for_serial
-from ..exceptions import CommunicationError, EufySecurityError, LoginLimitedError, RateLimitedError
+from ..exceptions import (
+    CommunicationError,
+    EufySecurityError,
+    LoginLimitedError,
+    RateLimitedError,
+    RefreshCooldownError,
+)
 from ..inclusion import Reach
 from ..storage import MemoryStore, SessionCache, Store
 from .station import FakeStation
@@ -62,6 +71,78 @@ _request_region: contextvars.ContextVar[str] = contextvars.ContextVar(
 _owner_lookup: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "eufy_testing_owner_lookup", default=None
 )
+
+# A refusal's HTTP answer, kept on the error :meth:`FakeCloud.refusal` returns.
+_ANSWER_ATTR = "_fake_cloud_answer"
+# The shared key a replayed request is encrypted under (the library's body cipher needs hex).
+_REPLAY_KEY = "0" * 32
+
+
+@dataclass(frozen=True, slots=True)
+class _HttpAnswer:
+    """A cloud HTTP answer, replayed through the library's own answer handling."""
+
+    status: int
+    body: str = ""
+    retry_after: float | None = None
+
+
+# The answer the current request is replayed against, served by ``_FakeCloudApi._http``.
+_replaying: contextvars.ContextVar[_HttpAnswer | None] = contextvars.ContextVar(
+    "eufy_testing_replaying", default=None
+)
+
+
+class _ReplayResponse:
+    """An ``aiohttp`` response carrying one :class:`_HttpAnswer`."""
+
+    def __init__(self, answer: _HttpAnswer) -> None:
+        self.status = answer.status
+        self.headers = (
+            {} if answer.retry_after is None else {"Retry-After": str(answer.retry_after)}
+        )
+        self._body = answer.body
+
+    async def text(self) -> str:
+        return self._body
+
+    async def __aenter__(self) -> _ReplayResponse:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+
+class _ReplaySession:
+    """An ``aiohttp`` session whose every POST gets one :class:`_HttpAnswer`."""
+
+    def __init__(self, answer: _HttpAnswer) -> None:
+        self._answer = answer
+
+    def post(self, url: str, **kwargs: Any) -> _ReplayResponse:
+        return _ReplayResponse(self._answer)
+
+
+class _Refusal(Exception):  # noqa: N818 - a control-flow signal, not an error
+    """Raised by :meth:`FakeCloud._answer` to have the API refuse with ``error``."""
+
+    def __init__(self, error: EufySecurityError) -> None:
+        super().__init__(error)
+        self.error = error
+
+
+def _answer_of(error: EufySecurityError) -> _HttpAnswer | None:
+    """The cloud answer behind ``error``: a refusal's own, or a throttle code's."""
+    answer = getattr(error, _ANSWER_ATTR, None)
+    if isinstance(answer, _HttpAnswer):
+        return answer
+    if not isinstance(error, RateLimitedError):
+        return None
+    if error.code == const.HTTP_TOO_MANY_REQUESTS:
+        return _HttpAnswer(error.code, retry_after=error.retry_after)
+    if error.code in const.THROTTLE_CODES:
+        return _HttpAnswer(200, json.dumps({"code": error.code, "msg": str(error)}))
+    return None
 
 
 def station_device(
@@ -200,16 +281,17 @@ class FakeCloud:
     ``rsa_cipher_keys`` its RSA one (the cloud's ``private_key``), served for every id
     in ``cipher_ids_held`` (None: any id); a station with neither, or a request naming
     no held id, gets the cloud's empty answer. ``cipher_ids_requested`` records the
-    ids each ``get_ciphers`` request named, in order. ``login_error``, when set, is what a password
-    login meets: a :class:`RateLimitedError` also starts the hold-off the real cloud
-    answer would. ``calls`` records every request that reached the cloud: ``"login"``,
+    ids each ``get_ciphers`` request named, in order. ``login_error``, when set, is what a
+    password login meets, refused as a ``call_errors`` entry is (see below). ``calls``
+    records every request that reached the cloud: ``"login"``,
     ``"devices"``, ``"owner:<serial>"`` (a device-list request made to find a station's
     owner), ``"cipher:<serial>"``, ``"dsk:<serial>"``, ``"push_token"``, ``"things"``,
     with serials redacted. A request to a region other than ``region`` is recorded with
     ``@<region>`` appended (``"login@us"``, ``"devices@us"``).
 
     ``devices`` are listed by the ``region`` cluster; ``region_devices`` holds the
-    device list of each other region (a region not in it lists none). Every region
+    device list of each other region (a region not in it answers ``{"devices": null}``,
+    as a cluster holding none of the account's devices does). Every region
     serves the same account (``user_id``), as the real clusters do.
 
     ``houses`` are the ``house_infos`` the ``region`` cluster's house list answers, and
@@ -226,8 +308,8 @@ class FakeCloud:
 
     ``things`` holds the thing description per product code that ``get_things_list``
     returns (see :func:`thing_description`); a code not in it is omitted from the reply.
-    ``things_error``, when set, is raised by every such request; it is independent of
-    ``call_errors``, which a things request never consumes.
+    ``things_error``, when set, refuses every such request as a ``call_errors`` entry
+    does; it is independent of ``call_errors``, which a things request never consumes.
 
     The login country lookups are answered from ``client_country`` (the IP country) and
     ``country_regions`` (each country's home region) and are not recorded in ``calls``;
@@ -235,13 +317,19 @@ class FakeCloud:
     ``get_last_login_code`` request (recorded as ``"last_login_code"``) answers, and a
     ``get_client_real_code`` request on a session is recorded as ``"client_country"``.
 
-    ``call_errors`` makes the cloud refuse: each entry is raised, in order, by the next
-    request that is not a login (after it is recorded in ``calls``), exactly as the
-    library's own answer classification would raise it, so the real session handling
-    runs on it: a :class:`~..exceptions.SessionReplacedError` latches the session, and
+    ``call_errors`` makes the cloud refuse: each entry refuses, in order, the next
+    request that is not a login (after it is recorded in ``calls``), from inside the
+    library's envelope, so the real session handling runs on it: a
+    :class:`~..exceptions.SessionReplacedError` latches the session, and
     ``refusal(463, 4404)`` is the gateway's lapsed-key answer, which the library meets
     with one key exchange and a retry (so it takes two to make a call fail with
-    :class:`~..exceptions.KeyExchangeRefusedError`). ``dsk_keys`` holds each on-demand
+    :class:`~..exceptions.KeyExchangeRefusedError`). An entry from :meth:`refusal`, and
+    a :class:`RateLimitedError` whose ``code`` is a throttle body code or HTTP 429, is
+    that cloud answer run through the library's answer handling: the library's hold-off
+    starts and the library's error is raised. Another :class:`RateLimitedError` holds
+    off for its ``retry_after`` (the library's default when None, every region's logins
+    for a :class:`LoginLimitedError`) and is raised as is; any other error is raised as
+    is. ``dsk_keys`` holds each on-demand
     station's device session key; a station without one gets a synthetic key.
     """
 
@@ -286,9 +374,22 @@ class FakeCloud:
     """The ``ab`` of the last login per region (``get_last_login_code``)."""
 
     @staticmethod
-    def refusal(status: int, code: int | None = None, message: str = "") -> EufySecurityError:
-        """The error the library raises for a non-200 answer with ``code`` in its body."""
-        return _classify_refusal(status, code, message)
+    def refusal(
+        status: int, code: int | None = None, message: str = "", *, retry_after: float | None = None
+    ) -> EufySecurityError:
+        """The error the library raises for an answer of HTTP ``status`` with ``code`` in its body.
+
+        Served from ``call_errors`` or as ``login_error``, the answer itself runs through
+        the library's answer handling, with its side effects: HTTP 401 with the takeover
+        code latches the session, any other 401 costs one login and a retry, and HTTP 429
+        (``retry_after`` is its ``Retry-After``) or a throttle code starts the hold-off.
+        Raises :class:`ValueError` for an answer the library accepts.
+        """
+        body = {"msg": message} if code is None else {"code": code, "msg": message}
+        answer = _HttpAnswer(status, json.dumps(body), retry_after)
+        error = _classify(answer)
+        setattr(error, _ANSWER_ATTR, answer)
+        return error
 
     @classmethod
     def for_stations(cls, *stations: FakeStation, **kwargs: Any) -> FakeCloud:
@@ -324,7 +425,7 @@ class FakeCloud:
         """The device list ``region``'s cluster answers."""
         return self.devices if region == self.region else self.region_devices.get(region, [])
 
-    async def _answer(self, api: _FakeCloudApi, path: str, payload: Mapping[str, Any]) -> Any:
+    async def _answer(self, path: str, payload: Mapping[str, Any]) -> Any:
         region = _request_region.get()
 
         def note(call: str) -> None:
@@ -333,8 +434,7 @@ class FakeCloud:
         if path == const.LOGIN_PATH:
             note("login")
             if self.login_error is not None:
-                await api.hold_off_for(self.login_error)
-                raise self.login_error
+                raise _Refusal(self.login_error)
             self.last_login_ab[region] = str(payload.get("ab"))
             return {"auth_token": _AUTH_TOKEN, "user_id": self.user_id}
         if path == const.LAST_LOGIN_CODE_PATH:
@@ -379,7 +479,13 @@ class FakeCloud:
             owner_of = _owner_lookup.get()
             note(f"owner:{redact_serial(owner_of)}" if owner_of else "devices")
             self._raise_call_error()
-            return {"devices": [self._with_owner(d) for d in self.devices_of(region)]}
+            region_list = self.devices if region == self.region else self.region_devices.get(region)
+            # A cluster that holds none of the account's devices answers a null list.
+            return {
+                "devices": None
+                if region_list is None
+                else [self._with_owner(d) for d in region_list]
+            }
         if path == const.CIPHERS_PATH:
             serial = str(payload.get("station_sn"))
             note(f"cipher:{redact_serial(serial)}")
@@ -420,13 +526,13 @@ class FakeCloud:
             codes = list(payload.get("product_codes") or [])
             self.things_requested.append(tuple(codes))
             if self.things_error is not None:
-                raise self.things_error
+                raise _Refusal(self.things_error)
             return {"things_list": [self.things[c] for c in codes if c in self.things]}
         raise CommunicationError(f"the fake cloud does not answer {path}")
 
     def _raise_call_error(self) -> None:
         if self.call_errors:
-            raise self.call_errors.pop(0)
+            raise _Refusal(self.call_errors.pop(0))
 
     def _with_owner(self, device: Mapping[str, Any], *, key: str = "device_sn") -> dict[str, Any]:
         entry = dict(device)
@@ -443,19 +549,40 @@ class _FakeCloudApi(EufyCloudApi):
         super().__init__(*args, **kwargs)
         self._fake = fake
 
-    async def hold_off_for(self, error: EufySecurityError) -> None:
-        """Record the hold-off a throttling answer carrying ``error`` starts."""
-        if not isinstance(error, RateLimitedError):
-            return
-        login = isinstance(error, LoginLimitedError)
-        default = const.LOGIN_HOLD_OFF_SECONDS if login else const.REQUEST_HOLD_OFF_SECONDS
-        seconds = min(error.retry_after or default, const.LOCKOUT_HOLD_OFF_SECONDS)
-        throttle = const.THROTTLE_CODES.get(error.code or 0)
-        per_region = throttle is not None and throttle.per_region
-        self._record_hold_off(
-            login_only=login, seconds=seconds, region=_request_region.get() if per_region else None
-        )
-        await self._cache.async_save()
+    def _http(self) -> aiohttp.ClientSession:
+        answer = _replaying.get()
+        if answer is None:
+            return super()._http()
+        return cast("aiohttp.ClientSession", _ReplaySession(answer))
+
+    async def _refuse(
+        self,
+        error: EufySecurityError,
+        path: str,
+        region: str,
+        replay: Callable[[], Awaitable[object]],
+    ) -> NoReturn:
+        """Refuse a request with ``error``, with the side effects the cloud answer has.
+
+        An error with a cloud answer behind it (:func:`_answer_of`) is that answer
+        replayed through the library's own handling, which raises. Another throttle holds
+        off for its ``retry_after`` (the library's default when None) and is raised as is.
+        """
+        answer = _answer_of(error)
+        if answer is not None:
+            token = _replaying.set(answer)
+            try:
+                await replay()
+            finally:
+                _replaying.reset(token)
+            raise ValueError(f"HTTP {answer.status} {answer.body} is not a refusal")
+        if isinstance(error, RateLimitedError) and not isinstance(error, RefreshCooldownError):
+            login = isinstance(error, LoginLimitedError)
+            default = const.LOGIN_HOLD_OFF_SECONDS if login else const.REQUEST_HOLD_OFF_SECONDS
+            throttle = const.Throttle(login_only=login, seconds=error.retry_after or default)
+            with contextlib.suppress(RateLimitedError):
+                await self._hold_off(throttle, error.code, str(error), path, region=region)
+        raise error
 
     async def async_get_station_owner_id(self, station_sn: str, *, refresh: bool = False) -> str:
         token = _owner_lookup.set(station_sn)
@@ -502,7 +629,22 @@ class _FakeCloudApi(EufyCloudApi):
         self._raise_if_held_off(login=False)
         token = _request_region.set(identity.region)
         try:
-            data = await self._fake._answer(self, path, payload or {})
+            data = await self._fake._answer(path, payload or {})
+        except _Refusal as refusal:
+            # The library's envelope, answered with the refusal's HTTP answer.
+            replay = functools.partial(
+                super()._call,
+                host,
+                path,
+                payload,
+                replace(identity, shared_key=_REPLAY_KEY),
+                tolerate=tolerate,
+                category=category,
+                bootstrap=bootstrap,
+                preset_key=preset_key,
+                auth=auth,
+            )
+            await self._refuse(refusal.error, path, identity.region, replay)
         finally:
             _request_region.reset(token)
         return int(const.CloudCode.SUCCESS), {"code": 0, "data": data}, data
@@ -525,6 +667,30 @@ def _run_unsuspended[T](coro: Coroutine[Any, Any, T]) -> T:
     raise RuntimeError("warm_store: a cache writer suspended")
 
 
+def _classify(answer: _HttpAnswer) -> EufySecurityError:
+    """The error the library's answer handling raises for ``answer``, on a scratch cache."""
+    cache = SessionCache(MemoryStore(), SYNTHETIC.email)
+    api = _FakeCloudApi(FakeCloud(), _no_http, cache, SYNTHETIC.email, None)
+    identity = _Identity(
+        key_ident=_KEY_IDENT,
+        shared_key=_REPLAY_KEY,
+        auth_token=_AUTH_TOKEN,
+        user_id=SYNTHETIC.account_id,
+    )
+    logger = logging.getLogger(EufyCloudApi.__module__)
+    disabled, logger.disabled = logger.disabled, True  # no throttle warning: nothing was served
+    token = _replaying.set(answer)
+    try:
+        _run_unsuspended(cache.async_load())
+        _run_unsuspended(EufyCloudApi._call(api, "", "", None, identity))
+    except EufySecurityError as error:
+        return error
+    finally:
+        _replaying.reset(token)
+        logger.disabled = disabled
+    raise ValueError(f"HTTP {answer.status} {answer.body} is not a refusal")
+
+
 async def _async_warm(api: EufyCloudApi, cache: SessionCache, cloud: FakeCloud) -> None:
     await cache.async_load()
     await api.async_login()
@@ -539,21 +705,38 @@ async def _async_warm(api: EufyCloudApi, cache: SessionCache, cloud: FakeCloud) 
     await cache.async_save()
 
 
-def warm_store(*, email: str, cloud: FakeCloud) -> MemoryStore:
+def warm_store(
+    *,
+    email: str,
+    cloud: FakeCloud,
+    country: str | Sequence[str] = "",
+    region: str | None = None,
+    scan_regions: bool = False,
+) -> MemoryStore:
     """A store holding the cache document as after the first login against ``cloud``.
 
     That login asks every region once: ``cloud.region`` lists ``cloud.devices``, and a
     region listing none is suspended (see :class:`~..cloud.api.EufyCloudApi`).
+    ``country``, ``region`` and ``scan_regions`` are the client's options of the same
+    name: pass the ones the client under test gets, so its sessions match the cache.
 
     Written by the library's own cache writers (a password login, the device list,
     each station's owner id and cipher key), so it keeps the real layout. Nothing is
-    recorded in ``cloud.calls`` or ``cloud.cipher_ids_requested``, and
-    ``cloud.login_error`` is not applied.
+    recorded in ``cloud.calls`` or ``cloud.cipher_ids_requested``, and neither
+    ``cloud.login_error`` nor ``cloud.call_errors`` is applied.
     """
     store = MemoryStore()
-    scratch = replace(cloud, login_error=None, calls=[], cipher_ids_requested=[])
+    scratch = replace(cloud, login_error=None, calls=[], cipher_ids_requested=[], call_errors=[])
     cache = SessionCache(store, email)
-    api = scratch.make_api(_no_http, cache, email, SYNTHETIC.password)
+    api = scratch.make_api(
+        _no_http,
+        cache,
+        email,
+        SYNTHETIC.password,
+        country=country,
+        region=region,
+        scan_regions=scan_regions,
+    )
     _run_unsuspended(_async_warm(api, cache, scratch))
     return store
 

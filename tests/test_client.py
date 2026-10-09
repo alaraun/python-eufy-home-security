@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast
@@ -20,7 +20,7 @@ from eufy_home_security import client as client_module
 from eufy_home_security import storage as storage_module
 from eufy_home_security._logging import LogThrottle, redact_serial
 from eufy_home_security.client import EufySecurity
-from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession
+from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession, _SessionExpiredError
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices.model_settings import (
@@ -39,6 +39,7 @@ from eufy_home_security.events import (
     GuardModeChanged,
     PushChanged,
     SecurityEvent,
+    StationsChanged,
 )
 from eufy_home_security.exceptions import (
     AuthenticationError,
@@ -332,6 +333,47 @@ async def test_refresh_updates_the_stations_already_built() -> None:
     assert home.session.expect_channels == {0, 1}
 
 
+async def test_a_discovery_names_its_list_and_the_stations_it_added_or_lost() -> None:
+    """``listed_devices`` holds every device of the list; a later discovery reports a
+    station it built or no longer finds once, with how its list was obtained."""
+    cloud = two_stations()
+    events: list[Event] = []
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        eufy.subscribe(events.append)
+        await eufy.async_discover()
+        first = (eufy.device_list_source, set(eufy.listed_devices))
+        cloud.devices = [d for d in cloud.devices if d["device_sn"] != OTHER_STATION_SN]
+        await eufy.async_discover(refresh=True)
+        await eufy.async_discover(refresh=True)  # still gone: not reported again
+        kept = OTHER_STATION_SN in eufy.stations  # until the client is rebuilt
+        cloud.devices.append(garage_device(SYNTHETIC.did))
+        await eufy.async_discover(refresh=True)  # back: built already, nothing to report
+        listed = set(eufy.listed_devices)
+        await eufy.async_close()
+    assert first == ("cache", {SYNTHETIC.station_sn, SYNTHETIC.camera_sn, OTHER_STATION_SN})
+    assert listed == first[1]
+    assert [e for e in events if isinstance(e, StationsChanged)] == [
+        StationsChanged(removed=(OTHER_STATION_SN,), source="fetched")
+    ]
+    assert kept
+
+
+async def test_a_discovery_reports_a_station_it_built_after_the_first() -> None:
+    cloud = FakeCloud(devices=[station_device(), camera_device()])
+    events: list[Event] = []
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        eufy.subscribe(events.append)
+        await eufy.async_discover()
+        cloud.devices.append(garage_device(SYNTHETIC.did))
+        await eufy.async_discover(refresh=True)
+        await eufy.async_close()
+    assert [e for e in events if isinstance(e, StationsChanged)] == [
+        StationsChanged(added=(OTHER_STATION_SN,), source="fetched")
+    ]
+
+
 ODD_CAMERA_SN = "T8160-BAD_0001"
 VACUUM_SN = "T2266P1000000001"
 ORPHAN_SN = "T8161P1000000009"
@@ -407,7 +449,7 @@ def test_an_address_without_an_at_is_refused_before_any_cloud_client_exists(emai
         EufySecurity(None, email, None, store=MemoryStore(), _cloud_factory=factory)  # type: ignore[arg-type]
 
 
-def test_the_install_state_reaches_the_cloud_client() -> None:
+def test_the_cloud_options_and_install_state_reach_the_cloud_client() -> None:
     install = InstallState()
     seen: dict[str, Any] = {}
 
@@ -415,6 +457,12 @@ def test_the_install_state_reaches_the_cloud_client() -> None:
         seen.update(kwargs)
         return StubCloud(*args, **kwargs)
 
+    options: dict[str, Any] = {
+        "country": ["EE", "CH"],
+        "timezone": "Europe/Tallinn",
+        "region": "us",
+        "scan_regions": True,
+    }
     EufySecurity(
         no_session(),
         SYNTHETIC.email,
@@ -422,8 +470,10 @@ def test_the_install_state_reaches_the_cloud_client() -> None:
         store=MemoryStore(),
         install=install,
         _cloud_factory=factory,
+        **options,
     )
     assert seen["install"] is install
+    assert {key: seen[key] for key in options} == options
 
 
 MEMBER_EMAIL = "member@example.com"
@@ -1126,13 +1176,19 @@ async def test_discover_before_login_keeps_the_stored_cache() -> None:
     """A cloud-backed call before async_login must read the store, not overwrite it."""
     from .cloud.conftest import FakeMega  # noqa: PLC0415 - the cloud harness, only here
 
-    station = {"device_sn": SYNTHETIC.station_sn, "device_type": 18, "p2p_did": SYNTHETIC.did}
+    station = {
+        "device_sn": SYNTHETIC.station_sn,
+        "device_type": 18,
+        "p2p_did": SYNTHETIC.did,
+        "cloud_region": "eu",
+    }
     store = MemoryStore(
         {
             "version": CACHE_VERSION,
             "account": SYNTHETIC.email,
             "openudid": "0011223344556677",
             "devices": [station],
+            "cloud": {"listed": {"eu": {"devices": 1, "at": 1.0}, "us": {"devices": 0, "at": 1.0}}},
         }
     )
     fake_mega = FakeMega()
@@ -1272,9 +1328,13 @@ async def test_cache_summary_is_json_safe_and_secret_free() -> None:
     assert other["cipher_refresh_age"] is None
     status = summary["cloud_status"]
     assert status["login_need"] == "replaced"
-    assert status["logins_in_window"] == 2  # the first device list logs in to each region
-    assert status["regions"]["eu"]["devices"] == len(doc["devices"])
-    assert status["regions"]["us"]["suspended"] is True
+    cloud_status = await eufy.async_cloud_status()
+    assert status["logins_in_window"] == cloud_status.logins_in_window
+    assert cloud_status.regions
+    assert status["regions"].keys() == cloud_status.regions.keys()
+    for region, state in cloud_status.regions.items():
+        # the ages tick between the two calls
+        assert status["regions"][region] == pytest.approx(asdict(state), abs=5)
     assert 0 < status["device_list_refresh_age"] < 120
     assert "stations" not in status
 
@@ -1459,17 +1519,12 @@ async def test_stations_start_concurrently_and_one_failure_does_not_hold_up_anot
     changes = [(e.station_sn, e.connected) for e in events if isinstance(e, ConnectionChanged)]
     # The reachable station came up before the unreachable one's discovery gave up.
     assert changes.index((up.serial, True)) < changes.index((OTHER_STATION_SN, False))
-    # One login and one device list per region for both stations (the first list asks
-    # every region); a cipher fetch only for the station that answered CONN_INIT.
-    assert sorted(cloud.calls) == sorted(
-        [
-            "login",
-            "devices",
-            "login@us",
-            "devices@us",
-            "things",
-            f"cipher:{redact_serial(up.serial)}",
-        ]
+    # One login and one device list for both stations; a cipher fetch only for the
+    # station that answered CONN_INIT. Calls to other regions (``call@region``) are left
+    # to the region tests.
+    home_region_calls = [call for call in cloud.calls if "@" not in call]
+    assert sorted(home_region_calls) == sorted(
+        ["login", "devices", "things", f"cipher:{redact_serial(up.serial)}"]
     )
 
 
@@ -2155,3 +2210,37 @@ async def test_an_all_bundled_account_is_scanned_for_versions_and_stays_quiet(
     assert scan_records(scan_logs) == []
     assert {m.state for m in status} == {"bundled"}
     assert not any(m.newer_vendor_data for m in status)
+
+
+# ── pending invitations ──────────────────────────────────────────────────────
+
+
+def _expired() -> _SessionExpiredError:
+    return _SessionExpiredError("cloud session expired (code 26006)", code=26006)
+
+
+async def test_a_region_that_refuses_keeps_no_other_regions_invitations() -> None:
+    invite = {"id": 4, "house_id": "house-2", "house_name": "Cottage", "action_user_nick": "Kim"}
+    cloud = FakeCloud(region="us", house_invites=[invite])
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+    cloud.calls.clear()
+    cloud.call_errors = [_expired()]  # eu, asked first
+    (pending,) = await eufy.async_pending_invites()
+    assert (pending.region, pending.house_name) == ("us", "Cottage")
+    assert "login" not in cloud.calls
+
+
+async def test_pending_invitations_raise_when_no_region_answers() -> None:
+    """A lapsed session is no reauth: no login was tried."""
+    cloud = FakeCloud()
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+    cloud.calls.clear()
+    cloud.call_errors = [_expired(), _expired()]
+    with pytest.raises(NoCachedSessionError) as caught:
+        await eufy.async_pending_invites()
+    assert not isinstance(caught.value, AuthenticationError)
+    assert "login" not in cloud.calls

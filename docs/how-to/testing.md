@@ -15,7 +15,7 @@ session serves a poll, a snapshot and an arm, and a push reaches an entity.
 | `SYNTHETIC` | The synthetic identities the doubles use: station and camera serial, P2P id, keys, owner id, e-mail, password, a documentation-range address. Never a real identifier. |
 | `FakeStation` | A HomeBase speaking PPPP/XZYH on loopback: discovery, handshake, parameter dumps, arming, settings, camera pushes, images, media. `await start()` binds it, `stop()` silences it. |
 | `FakeCloud` | The eufy cloud answered below the HTTP envelope. The real client's session cache, hold-offs, login budget and owner-id rules still run. |
-| `warm_store(email=, cloud=)` | A `MemoryStore` holding the cache document as after one login, written by the library's own cache writers. |
+| `warm_store(email=, cloud=, country=, region=, scan_regions=)` | A `MemoryStore` holding the cache document as after one login, written by the library's own cache writers. |
 | `build_eufy_security(email=, store=, cloud=, stations=)` | A real `EufySecurity` wired to the fakes at the cloud-HTTP and discovery-port seams. |
 
 ## A test
@@ -56,16 +56,31 @@ async def test_warm_start_needs_no_cloud() -> None:
 - **Cloud answers.** `FakeCloud` fields are live: change `devices`, `owner_ids` or
   `cipher_keys` between steps. `cipher_ids_held` limits the cipher ids the cloud holds
   a key for (None: any); a request for another id gets the empty answer, which the
-  library raises as `CipherUnavailableError`. Set `login_error` to the error a password login meets;
-  a `RateLimitedError` (or `LoginLimitedError`) also starts the hold-off the real answer
-  would, so `async_cloud_status()` reports it.
+  library raises as `CipherUnavailableError`. Set `login_error` to the error a password login meets,
+  and `call_errors` to the errors the next other requests meet, in order.
+- **Cloud refusals.** `FakeCloud.refusal(status, code, message, retry_after=)` is an HTTP
+  answer: served from `call_errors` or `login_error`, it runs through the library's own
+  answer handling, so a 401 with the takeover code latches the session, another 401 costs
+  one login and a retry, a 463 one key exchange and a retry, and a 429 starts the request
+  hold-off (the longer of one hour and its `Retry-After`). A `RateLimitedError` (or
+  `LoginLimitedError`) whose `code` is a throttle body code (`26145`, `100028`, …) or 429
+  is that answer too: the library's hold-off for the code starts and the library's error is
+  raised. One without such a code holds off for its own `retry_after`. Either way
+  `async_cloud_status()` reports the hold-off and later calls are refused locally.
 - **Cloud requests.** `calls` lists each request that reached the cloud, in order:
   `"login"`, `"devices"`, `"owner:<serial>"`, `"cipher:<serial>"`, `"dsk:<serial>"`,
-  `"push_token"`, `"things"`, with serials redacted. A cached answer adds nothing.
+  `"push_token"`, `"things"`, `"houses"`, `"house:<house_id>"`, `"house_invites"`,
+  `"device_invites"`, `"security_stations"`, `"security_devices"`, `"last_login_code"`,
+  `"client_country"`, with serials redacted. A request to a region other than
+  `FakeCloud.region` has `@<region>` appended (`"login@us"`, `"devices@us"`). A cached
+  answer adds nothing.
   `cipher_ids_requested` lists the cipher ids those `get_ciphers` requests named.
 - **Cold or warm.** A `MemoryStore()` is a cold start (one login, one device list, one
-  key per station); `warm_store(...)` is a restart. Reuse one store across two clients
-  to test a restart with whatever the first client cached.
+  key per station); `warm_store(...)` is a restart. Pass it the `country`, `region` and
+  `scan_regions` the client gets (Home Assistant: `country=hass.config.country`): a
+  session made for another login country is logged in again on start. `call_errors`
+  and `login_error` are left for the client. Reuse one store across two clients to test
+  a restart with whatever the first client cached.
 - **Stations.** Pass started fakes keyed by serial. They are reached on loopback and
   must share one discovery port, so use one `FakeStation` per client. A stopped fake is
   an unreachable station: `async_start()` returns its error.
@@ -98,8 +113,9 @@ attempts. A test that meets such a wait on purpose shortens it.
 
 - **All at once:** `testing.short_timeouts()` is a context manager that sets every wait
   in `testing.timeouts.SHORT_TIMEOUTS` to a loopback value and restores them on exit;
-  keyword arguments override single values by name. The library's own suite passes with
-  it applied to every test. As a fixture:
+  keyword arguments override single values by name. Every value outlasts the fakes'
+  loopback answers, so a test that is not about a wait's length runs unchanged with it.
+  As a fixture:
 
   ```python
   @pytest.fixture
@@ -118,6 +134,7 @@ attempts. A test that meets such a wait on purpose shortens it.
 | wait | constant | shortened by `short_timeouts` |
 |---|---|---|
 | discovery attempts, each | `p2p.session.DISCOVERY_ATTEMPTS`, `DISCOVERY_TIMEOUT` | 1 × 2.5 s (a station ignores the first search after a close) |
+| pause between discovery attempts | `p2p.session.DISCOVERY_RETRY_DELAY` | 0.05 s |
 | CONN_INIT reply | `p2p.session.HANDSHAKE_TIMEOUT` | 2.5 s (outlasts one DRW retransmit, 1.5 s) |
 | command result; its late receipt | `p2p.session.COMMAND_TIMEOUT`, `COMMAND_RECEIPT_TIMEOUT` | 0.5 s, 1 s (shorter than a retransmit: a test that drops a command frame sets it itself) |
 | parameter dump | `p2p.session.PARAM_QUERY_TIMEOUT` | 2.5 s |
@@ -128,8 +145,13 @@ attempts. A test that meets such a wait on purpose shortens it.
 | still download, SD info | `p2p.session.STILL_FETCH_TIMEOUT`, `SD_INFO_TIMEOUT` | 1 s |
 | first live / recording frame | `p2p.session.MEDIA_LIVE_FIRST_FRAME_TIMEOUT`, `MEDIA_RECORDING_FIRST_FRAME_TIMEOUT` | 2 s |
 | preset image stream idle, capture start | `station.PRESET_STREAM_IDLE_SECONDS`, `p2p.broadcast.CAPTURE_START_TIMEOUT` | 1 s, 2 s |
+| preset turn, pan/tilt step settle | `station.PRESET_SETTLE_SECONDS`, `PTZ_SETTLE_SECONDS` | 0.05 s each |
+| re-send while the camera moves; default-preset write result | `station.PTZ_BUSY_DELAY`, `DEFAULT_PRESET_RESULT_WAIT` | 0.05 s, 0.1 s |
+| full-resolution live image, live open (1700) | `station.FULL_RESOLUTION_TIMEOUT`, `devices.recipes.LIVE_OPEN_TIMEOUT` | 1 s, 2 s |
 | LAN search (`async_probe_lan`, `async_station_choices`) | `p2p.pppp.LAN_DISCOVERY_TIMEOUT` | 0.5 s |
 
 Not shortened, because a test observes their length: `PARAM_SETTLE` (sub-device blocks
 following a dump), `MEDIA_IDLE_TIMEOUT`, `MEDIA_DRAIN_MAX` (a stopped stream's leftover
-frames), the probe schedule, and the reprobe and idle-close delays. Set them per test.
+frames), `SETTLE_STATION` and `SETTLE_STANDALONE` (how long a picture size must hold;
+a full-resolution image is bounded by `FULL_RESOLUTION_TIMEOUT`), the probe schedule,
+and the reprobe and idle-close delays. Set them per test.

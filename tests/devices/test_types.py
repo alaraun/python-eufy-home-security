@@ -64,6 +64,11 @@ def test_cloud_device_type_homebase3() -> None:
     assert MODELS["T8030"].cloud_device_type == 18
 
 
+@pytest.mark.parametrize("model", ["T8001", "T8002", "T8010", "T8020"])
+def test_the_first_homebases_share_device_type_0(model: str) -> None:
+    assert MODELS[model].cloud_device_type == 0
+
+
 def test_every_model_but_the_live_proven_is_declared_from_the_app() -> None:
     graded = {m.evidence.support for m in MODELS.values() if m.model not in {"T8030", "T8160"}}
     assert graded == {Support.DECLARED}
@@ -80,7 +85,8 @@ def test_every_model_but_the_live_proven_is_declared_from_the_app() -> None:
         ("T8960", DeviceKind.KEYPAD, 11, "Keypad"),
         ("T8200", DeviceKind.DOORBELL, 5, "Doorbell 2K"),
         ("T8500", DeviceKind.LOCK, 52, "BLE Lock No Finger"),
-        ("T90R0", DeviceKind.SENSOR, None, "Siren Sensor T90R0"),
+        ("T90R0", DeviceKind.OTHER, None, "Siren Sensor T90R0"),
+        ("T90K0", DeviceKind.SENSOR, None, "Keyfor Sensor T90K0"),
         ("T87B0", DeviceKind.OTHER, None, "Tracker 87B0"),
     ],
 )
@@ -90,7 +96,7 @@ def test_the_apps_models_are_catalogued(
     found = MODELS[model]
     assert (found.kind, found.cloud_device_type, found.name) == (kind, device_type, name)
     assert found.evidence.support is Support.DECLARED
-    assert "SnConstants" in found.evidence.source
+    assert found.evidence.source.startswith("eufy app 6.1.10 model list: ")
 
 
 def test_a_prefix_the_app_names_as_two_kinds_is_not_catalogued() -> None:
@@ -99,7 +105,7 @@ def test_a_prefix_the_app_names_as_two_kinds_is_not_catalogued() -> None:
 
 def test_a_hand_written_entry_wins_over_the_generated_one() -> None:
     assert MODELS["T8030"].name == "HomeBase 3 (S380)"
-    assert MODELS["T8910"].evidence.source.endswith("MOTION_SENSOR; eufy app SnUtils type map (10)")
+    assert MODELS["T8910"].evidence.source.endswith("MOTION_SENSOR; eufy app device-type map (10)")
 
 
 def test_connects_on_demand_on_demand_prefixes() -> None:

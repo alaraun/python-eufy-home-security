@@ -31,6 +31,7 @@ from ..events import (
     PushChanged,
     PushMessageType,
     SecurityEvent,
+    StationsChanged,
     StationStateChanged,
     StorageChanged,
     ZoomChanged,
@@ -906,6 +907,16 @@ def render_event(event: Event, *, now: datetime, show_serials: bool) -> str:
             return (
                 f"[{stamp}] {fmt_serial(event.station_sn, show_serials)} paired devices "
                 f"changed: {'; '.join(changes) or 'nothing'}"
+            )
+        case StationsChanged():
+            changes = [
+                f"{label} {', '.join(fmt_serial(sn, show_serials) for sn in serials)}"
+                for label, serials in (("added", event.added), ("removed", event.removed))
+                if serials
+            ]
+            return (
+                f"[{stamp}] stations changed ({event.source or 'unknown'} list): "
+                f"{'; '.join(changes) or 'nothing'}"
             )
         case StationStateChanged():
             return (

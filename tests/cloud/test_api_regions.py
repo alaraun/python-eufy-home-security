@@ -39,13 +39,6 @@ def _requests(fake_mega: FakeMega, endpoint: str) -> list[str]:
     return [region for name, region in fake_mega.region_calls if name == endpoint]
 
 
-def test_each_region_has_its_own_security_host() -> None:
-    assert const.security_host("eu") == "security-app-eu.eufylife.com"
-    assert const.security_host("us") == "security-app.eufylife.com"
-    with pytest.raises(ValueError, match="unknown region"):
-        const.security_host("ap")
-
-
 def test_an_unknown_region_override_is_refused(
     http: aiohttp.ClientSession, cache: SessionCache
 ) -> None:
@@ -255,13 +248,15 @@ async def test_a_login_count_throttle_holds_off_only_its_region(
     with aioresponses() as mock:
         fake_mega.install(mock)
         api = _api(http, cache)
-        with pytest.raises(LoginLimitedError):
+        with pytest.raises(LoginLimitedError) as answered:
             await api.async_login()
         fake_mega.region_login_code = {}
-        with pytest.raises(LoginLimitedError, match="eu logins"):
+        with pytest.raises(LoginLimitedError, match="eu logins") as local:
             await api.async_login()  # refused locally
         await _api(http, cache, region="us").async_login()
     assert _requests(fake_mega, "login") == ["eu", "us"]
+    assert (answered.value.origin, answered.value.scope) == ("cloud", "eu")
+    assert (local.value.origin, local.value.scope) == ("hold_off", "eu")
 
 
 async def test_a_credential_lock_holds_off_every_region(
@@ -271,12 +266,14 @@ async def test_a_credential_lock_holds_off_every_region(
     with aioresponses() as mock:
         fake_mega.install(mock)
         api = _api(http, cache)
-        with pytest.raises(LoginLimitedError):
+        with pytest.raises(LoginLimitedError) as answered:
             await api.async_login()
         fake_mega.region_login_code = {}
-        with pytest.raises(LoginLimitedError):
+        with pytest.raises(LoginLimitedError) as local:
             await _api(http, cache, region="us").async_login()  # refused locally
     assert _requests(fake_mega, "login") == ["eu"]
+    assert (answered.value.origin, answered.value.scope) == ("cloud", None)
+    assert (local.value.origin, local.value.scope) == ("hold_off", "us")
 
 
 async def test_the_login_budget_is_counted_per_region(
@@ -289,6 +286,7 @@ async def test_the_login_budget_is_counted_per_region(
         api = _api(http, cache, region="us")
         await api.async_login()
     assert _requests(fake_mega, "login") == ["us"]
+    assert api.cloud_status().regions["us"].next_login_allowed_in == 0.0
 
 
 async def test_push_is_not_registered_once_every_region_is_suspended(
@@ -300,3 +298,20 @@ async def test_push_is_not_registered_once_every_region_is_suspended(
         await api.async_get_devices()
         await api.async_register_push_token("fcm-token")
     assert _requests(fake_mega, "push") == []
+
+
+async def test_the_device_list_source_says_how_each_list_was_obtained(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    sources = []
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache)
+        sources.append(api.device_list_source)
+        await api.async_get_devices()  # eu and us both list nothing: both suspended
+        sources.append(api.device_list_source)
+        await api.async_get_devices()
+        sources.append(api.device_list_source)
+        await api.async_get_devices(refresh=True)
+        sources.append(api.device_list_source)
+    assert sources == [None, "fetched", "cache", "unsent"]

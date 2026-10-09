@@ -88,6 +88,8 @@ _KEPT_ACROSS_VERSIONS = ("password", "throttle", "replaced")
 # What async_forget_account keeps: the throttle state, so removing and re-adding an
 # account cannot reset the cloud's limits (the install identity is kept separately).
 _KEPT_WHEN_FORGOTTEN = ("version", "account", "throttle")
+# ``cloud.install_ids``: each extra country's install id, kept wherever ``openudid`` is.
+INSTALL_IDS_KEY: Final = "install_ids"
 # Older layouts SessionCache migrates on load instead of dropping them.
 _MIGRATED_VERSIONS: Final = (1,)
 # Top-level section of the session-replaced latch.
@@ -180,15 +182,16 @@ async def async_forget_account(store: Store, *, keep_install_identity: bool = Tr
     and owner ids, the device list, the push registration and the refresh stamps.
     Keeps ``throttle`` (with the ``account`` it belongs to), so removing and re-adding
     the account cannot reset the hold-offs or the login budget; those stamps expire by
-    themselves. Keeps ``openudid`` unless ``keep_install_identity`` is False. Never
-    contacts the cloud; call it instead of deleting the store.
+    themselves. Keeps the install identity (``openudid`` and the extra countries'
+    ``cloud.install_ids``) unless ``keep_install_identity`` is False. Never contacts the
+    cloud; call it instead of deleting the store.
     """
     doc = await store.async_load()
     if not doc:
         return
     kept = {key: doc[key] for key in _KEPT_WHEN_FORGOTTEN if key in doc}
-    if keep_install_identity and doc.get("openudid"):
-        kept["openudid"] = doc["openudid"]
+    if keep_install_identity:
+        kept |= _install_identity(doc)
     await store.async_save(kept)
     _LOGGER.info("forgot the cached account data; kept %s", sorted(kept))
 
@@ -212,11 +215,12 @@ class SessionCache:
          "throttle": {"requests": <epoch s>, "login": {"<region>": <epoch s>},
                       "logins": {"<region>": [<epoch s>, …]}}}
 
-    Everything except ``openudid`` is scoped to ``account``: loading the cache for a
-    different account discards the account-scoped part, so one install can never
-    reuse another account's session or keys. A document of another ``version`` keeps
-    only ``openudid``, the password, the throttle state and the session-replaced
-    latch; the rest is fetched again. Version 1 (one session, flat in ``cloud``) is
+    Everything except the install identity (``openudid`` and ``cloud.install_ids``)
+    is scoped to ``account``: loading the cache for a different account discards the
+    account-scoped part, so one install can never reuse another account's session or
+    keys. A document of another ``version`` keeps only the install identity, the
+    password, the throttle state and the session-replaced latch; the rest is fetched
+    again. Version 1 (one session, flat in ``cloud``) is
     migrated: its session and devices belong to the region it was logged in to.
 
     The document holds the account password, the cloud session and each station's
@@ -261,8 +265,7 @@ class SessionCache:
             )
         elif doc.get("version") != CACHE_VERSION or not same_account:
             kept = {k: doc[k] for k in _KEPT_ACROSS_VERSIONS if same_account and k in doc}
-            if doc.get("openudid"):
-                kept["openudid"] = doc["openudid"]
+            kept |= _install_identity(doc)
             _LOGGER.info(
                 "session cache is for %s; keeping only %s",
                 f"version {doc.get('version')}, not {CACHE_VERSION}"
@@ -697,6 +700,20 @@ def _migrate_v1(doc: dict[str, Any]) -> str:
         doc.pop("devices", None)
     doc["cloud"] = migrated
     return region
+
+
+def _install_identity(doc: dict[str, Any]) -> dict[str, Any]:
+    """The install-scoped part of ``doc``: ``openudid`` and ``cloud.install_ids``, as a
+    document fragment. The backend treats each as a device identity it cannot
+    unregister, so they outlive the account's data."""
+    kept: dict[str, Any] = {}
+    if doc.get("openudid"):
+        kept["openudid"] = doc["openudid"]
+    cloud = doc.get("cloud")
+    install_ids = cloud.get(INSTALL_IDS_KEY) if isinstance(cloud, dict) else None
+    if isinstance(install_ids, dict) and install_ids:
+        kept["cloud"] = {INSTALL_IDS_KEY: install_ids}
+    return kept
 
 
 def _per_region(section: dict[str, Any], key: str) -> dict[str, Any]:

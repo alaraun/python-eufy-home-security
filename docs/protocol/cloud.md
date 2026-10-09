@@ -16,10 +16,9 @@ Code: `src/eufy_home_security/cloud/crypto.py` (pure primitives),
 | eufy.com ("basic") | `app-{service}-{region}-pr.eufy.com` | key exchange (`openapi`), login (`passport`), devices (`house`), push token (`push`), also `devicerelation`, `event`, `things` |
 | eufy_security | `security-app-eu.eufylife.com` (`eu`), `security-app.eufylife.com` (`us`) | `/v3/...`, and in particular `/v3/app/cipher/get_ciphers` |
 
-- `region` is `eu` or `us`: the app's two production environments (`MegaEnvironment`
-  `EU_PR`, `US_PR`; the rest are QA) **[app]**. The US security-realm host carries no
-  region (`DEFAULT_SECURITY_CONFIG_DOMAIN`); `security-app-us.eufylife.com` does not
-  resolve.
+- `region` is `eu` or `us`: the app's two production environments (the rest are QA)
+  **[app]**. The US security-realm host carries no region;
+  `security-app-us.eufylife.com` does not resolve.
 - Each region is its own cluster. A login on either succeeds for any account (code 0,
   the same user id, `ab_code` = the `ab` sent, `country_code` and an empty `domain`
   alike on both), but `get_devs_list` lists only the devices homed on that cluster; the
@@ -123,24 +122,32 @@ The eufy app logs in with the user's country, and the library does the same **[a
    country setting; the first code of a list, see *Extra countries* below), else the
    host's IP country: `POST
    app-passport-{region}-pr.eufy.com/passport/get_client_real_code`, body `{}`, on a
-   fresh key-exchange identity before any login, answers `{"ab_code": "EE"}`
+   fresh key-exchange identity before any login, answers `{"ab_code": "<IP country>"}`
    **[verified]**. Neither known: `ab` is the region (`eu`/`us`) and the `country` header
-   `US`, as before.
+   `US`.
 2. **Home cluster**: `POST mega-{region}-pr.eufy.com/passport/estimate_domain`, a
    **plaintext** body `{"ab": "<country>", "mode": 1}` with no identity, answers
    plaintext `data.domain` = `mega-eu-pr.eufy.com` or `mega-us-pr.eufy.com` (and the
    product-domain map), the same from either host **[verified]**. A lowercase or unknown
    code answers another domain (`aiot-api-eu.eufylife.com`): the library then does not
    use the country. Only the home region logs in; the other cluster is not asked.
+   A lookup of either step that does not answer (no network, a non-200 or non-JSON
+   answer, a throttle) leaves the country open: no login is sent until a later lookup
+   answers, which the next login asks again, so a cold cache spends no login on a
+   guessed cluster. A body-code refusal counts as an answer: an IP country is then
+   unknown, an option keeps its code without a home region.
 3. **Login**: `ab` = the country, `country` header = the country, `timezone` header =
    the caller's IANA zone (default `UTC`). A login in the other cluster with the same
    `ab` succeeds but lists nothing there **[verified]**. While no country is known, every
-   region logs in with `ab` = the region and the empty ones are suspended, as before.
-4. **Old sessions**: each cached session records the `ab` it was made with; one made with
+   region logs in with `ab` = the region and the empty ones are suspended.
+4. **Sessions made with another `ab`**: each cached session records the `ab` it was made with; one made with
    another `ab` logs in again once, inside the login budget. A plain body-code
    refusal of a country login (26502 "Failed to request." was seen for `ab` `US` on the
    `eu` cluster) keeps the old session there, or, for a fresh login, retries once with
-   the region as `ab`; either way that country is not asked again for the session.
+   the region as `ab`; either way that country is not asked again for that region: a
+   later login there (an expiry, a forced login) sends the `ab` the session settled on.
+   The one-time re-login runs unattended: when it meets a challenge it asks for no
+   e-mailed code and keeps the old session the same way.
 
 `POST app-passport-{region}-pr.eufy.com/passport/get_last_login_code`, body `{"email":
 …}`, answers `{"ab_code": …}`: the `ab` of the account's last login on that cluster, by
@@ -149,25 +156,31 @@ The app compares it with the chosen country before logging in.
 
 **What a country login lists [verified].** Within one cluster the login's `ab` decides
 which devices the lists show: a login with another country lists the devices held under
-that country and not the others. On a member account that holds a home shared under `EE`
-and a home station shared under `CH`, both on `eu`, the `EE` session lists only the first
-and a `CH` session only the second; the eufy app logged in with `CH` shows the same split.
-The `country` header does not change any list: on one session, `EE`, `CH`, `DE`, `GB` and
+that country and not the others. On a member account that holds a home shared under one
+country (`AA`) and a home station shared under another (`BB`), both on `eu`, the `AA`
+session lists only the first and a `BB` session only the second; the eufy app logged in
+with `BB` shows the same split.
+The `country` header does not change any list: on one session, `AA`, `BB`, `DE`, `GB` and
 `US` headers answered the same house, security and invitation lists. Sessions made with
-different `ab` on the same cluster coexist: a new `CH` login left the `EE` session valid.
-`ab` = the region (`eu`) listed the same devices as `ab` = `EE` on that account.
+different `ab` on the same cluster coexist: a new `BB` login left the `AA` session valid.
+`ab` = the region (`eu`) listed the same devices as `ab` = `AA` on that account.
 
-**Extra countries.** `country` may name several codes (`["EE", "CH"]`). The first is the
+**Extra countries.** `country` may name several codes (`["DE", "FR"]`). The first is the
 login country above; each further one has its home region looked up
 (`estimate_domain`, cached) and logs in once more there with `ab` = that country, as the
-login scope `<region>:<country>` (`eu:CH`). Its devices join the device list tagged with
+login scope `<region>:<country>` (`eu:FR`). Its devices join the device list tagged with
 the scope, and every call about them (lists, ciphers, DSK, push) uses its session. An
 extra scope is listed and suspended like a region; its logins count in its cluster's
 login budget. Each extra scope logs in under its own install id (`openudid`, minted once
-and cached): a `CH` login from another install id left an `EE` session on `eu` valid
-**[verified]**, while `CH` and `EE` under one install id did not both survive
+and cached): a `BB` login from another install id left an `AA` session on `eu` valid
+**[verified]**, while `BB` and `AA` under one install id did not both survive
 **[observed once]**, which reads as one session per install id and cluster. A country eufy names no cluster for gets no session, and a refused extra
-login is not retried with the region as `ab`.
+login is not retried with the region as `ab`: a plain body-code refusal is recorded
+(`cloud.refused`) and that scope is skipped, with no login and no device list, until a
+rescan or a change of the extra countries; the other scopes carry on, and the devices
+it listed last stay in the list. An extra country whose lookup does not
+answer gets no session until a later lookup does: the next login or device-list fetch
+asks again.
 
 ## Login challenges
 
@@ -186,8 +199,17 @@ live account.
 library sends `POST app-push-{region}-pr.eufy.com/app/sendmsg/verify_code` under that
 token, body `{transaction, message_type: 2 (e-mail; 1 SMS, 3 app push), biz_type: 1004
 (login), captcha_id: "", answer: ""}`, before raising `LoginChallengeError`
-(`code_requested`). The token is never stored. The answer is a new login with
+(`code_requested`). When that request fails (an HTTP 401, a body code, the network),
+the challenge is raised all the same with `code_requested` false, so the login can still
+be answered. The token is never stored. The answer is a new login with
 `verify_code` and `login_id` (empty when the challenge carried none).
+
+**Which scope answers.** Each login scope logs in on its own, so each can raise its own
+challenge. The library keeps the scope of every unanswered challenge with its `login_id`
+in the cache (`cloud.challenges`; no code, no captcha answer) and sends an answer to the
+scope whose `login_id` it carries, else to the only one pending, else to the home
+region; that scope's successful login clears it. Two-step verification therefore costs
+two logins per scope, which count in its cluster's login budget.
 
 ## Device list
 
@@ -241,7 +263,8 @@ with four paired cameras) **[verified, one account]**.
   app]**. Both answer code 0 with empty lists on an account whose shares were accepted
   **[verified, one account]**; a pending entry has not been observed.
 - The security realm (the same identity as `get_ciphers`, `category: eufy_security`):
-  `POST security-app-{region}.eufylife.com/v3/app/get_hub_list` (stations) and
+  `POST <security host>/v3/app/get_hub_list` (stations; the region's host from
+  [Hosts](#hosts)) and
   `/v3/app/get_devs_list` (devices), body `{"device_sn": "", "station_sn": "",
   "num": 1000, "page": 0, "orderby": "", "time_zone": <UTC offset ms>,
   "event_num_type": 1, "transaction": …}`. `data` is a list. A station entry names
@@ -270,7 +293,7 @@ sharing changes, so cache it per station. A station event push also carries the 
 ## Station ciphers (security realm)
 
 1. Run the eufy_security key exchange on the logged-in session (token + gtoken, no `category`).
-2. `POST security-app-{region}.eufylife.com/v3/app/cipher/get_ciphers` with that identity and `category: eufy_security`:
+2. `POST <security host>/v3/app/cipher/get_ciphers` (the region's host from [Hosts](#hosts)) with that identity and `category: eufy_security`:
 
 ```json
 {"cipher_ids": [40], "user_id": "<owner user id>", "station_sn": "T8030XXXXXXXXXXX"}
@@ -286,8 +309,8 @@ record **[verified, one account]**: in one response to a shared member, ciphers 
 came back intact (a mixed-case PEM that parses as RSA-1024) and 13, 40 and 212 came back
 **lowercased by the server**, armour included. A lowercased body is irreversible, so
 `load_rsa_private_key` fails and the library raises `CipherUnusableError`. Lowercased on
-cipher 40 (a HomeBase 3's) on two accounts, and reported for a user's standalone T8410
-(cipher 202). The request body field name makes no difference (`station_sn` and `sn`
+cipher 40 (a HomeBase 3's) on two accounts, and on cipher 202 of a standalone T8410
+(one sample). The request body field name makes no difference (`station_sn` and `sn`
 return the same key), and the unversioned endpoint 404s. The MegaCrypto decrypt is not
 the cause: mixed-case fields (device names) and `ecc_private_key` survive intact in the
 same response. Which records eufy lowercases, and whether the station owner is served
@@ -303,7 +326,8 @@ another copy, is **[open]**.
 The empty answer does not tell "wrong user id" from "no such cipher under this owner".
 The library raises `CipherUnavailableError` for it (with the cipher id and whether the
 user id asked was the account's own or `member.admin_user_id`) and does not ask the
-same station and cipher again for an hour (`CIPHER_UNAVAILABLE_BACKOFF`).
+same station and cipher again for an hour (`CIPHER_UNAVAILABLE_BACKOFF`), unless a
+refreshed device list names another owner id for the station.
 
 `EufyCloudApi.async_list_ciphers` reads an owner's whole table this way (default ids
 0–400 in one request, `CIPHER_ID_SWEEP`; it answered the five held records
@@ -377,22 +401,23 @@ asks whether a newer firmware exists for a device. Body:
   updates itself and its paired cameras as one bundle, so every device behind a hub — the
   hub and each camera, each by its own `device_sn` — is queried under the hub's kit type:
   `T8030_Kit` for a HomeBase 3 **[verified]**, `<model>_Kit` for the others (`T9000`,
-  `T7000`, `T8025`) **[app]**. The app derives it from the station, not the device
-  (`getHomebaseOtaType`).
+  `T7000`, `T8025`) **[app]**. The app derives it from the station, not the device.
 - **A device already on the newest published firmware is "up to date", reported oddly:**
   the envelope is `code 0 "success!"` and its `data` decrypts to the error object
   `{"reason": "error: code = 20004 reason =  message = "}`. So body `code` 20004 lives
   *inside* a success, and means no update — not a transport failure **[verified]**.
   The server keys the answer on the device's registered version, so sending an older
   `current_version_name` does not produce a package.
-- **When an update exists**, `data` is `RomVersionData`:
+- **When an update exists**, `data` is the offered version:
   `{device_type, rom_version, rom_version_name, force_upgrade, up_forced, introduction,
   full_package: {file_md5, file_name, file_path, file_size}, …}`. **`full_package.file_path`
   is the image URL** on eufy's CDN, with `file_md5` and `file_size` **[app]**. No update
   has been seen for these devices (they are current), so the populated shape is app-only.
 
 The library exposes this as `EufyCloudApi.async_check_firmware(...)` → a `FirmwareUpdate`
-(or None when up to date) and `EufySecurity.async_firmware_updates()`, which checks the hub
+(or None when up to date: 20004, or a version without a `full_package`; an error object with
+another code raises `CloudApiError` with that code, an answer that is neither
+`EmptyResponseError`) and `EufySecurity.async_firmware_updates()`, which checks the hub
 and each camera and returns what has one. It is an ordinary authenticated call on the
 account's shared throttle, meant for a slow poll, never per start (see below).
 
@@ -413,7 +438,8 @@ per start.
 | FCM credentials and token | install-scoped | Google identity of the install ([events.md](events.md)) |
 
 Rules the library follows: at most one automatic re-login per call, and only on a
-session-expired code — never on a re-key answer (a key exchange instead) and never
+session-expired code (a login-free call raises `NoCachedSessionError` instead) — never
+on a re-key answer (a key exchange instead) and never
 after a kick-out (26084), which blocks automatic logins until a forced one;
 concurrent calls share one login; a cooldown (15 min) on forced cipher re-fetches and,
 separately, on the forced device-list re-read behind an owner-id refresh (inside it
@@ -444,4 +470,6 @@ reports, that is persisted with the session: until it ends the library refuses l
 and sends nothing — every call for a request throttle, logins only for a login
 throttle. Independently, at most 3 login attempts (of any outcome) are sent in a
 rolling 6 h. A refusal is a `RateLimitedError` (`LoginLimitedError` for logins) carrying
-`retry_after`.
+`retry_after`, its `origin` (`cloud`: the answer was a throttle; `hold_off`: refused
+locally after one; `budget`: the library's login budget; `cooldown`: a key-refresh
+cooldown) and, for a refused login, its login `scope`.

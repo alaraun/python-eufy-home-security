@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Any
 
 import pytest
 
+import eufy_home_security.station as station_mod
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.events import HistoryRecord
 from eufy_home_security.exceptions import DeviceTimeoutError, UnsupportedError
@@ -35,6 +36,8 @@ CAMERA = CloudDevice(
 )
 OTHER_SN = "T8160P2000099999"
 FORMAT = "%Y-%m-%d %H:%M:%S"
+#: The tests' reference time; the station's clock is frozen to it (see ``today``).
+NOW = datetime(2026, 9, 16, 12, 0, tzinfo=UTC)  # hygiene: ok
 
 
 @pytest.fixture
@@ -58,6 +61,28 @@ async def station(fake: FakeStation) -> AsyncIterator[Station]:
     await st.async_close()
 
 
+class _AnyDatetime(type):
+    """Keeps ``isinstance(x, datetime)`` true in the station module while it is patched."""
+
+    def __instancecheck__(cls, obj: object) -> bool:
+        return isinstance(obj, datetime)
+
+
+@pytest.fixture
+def today(monkeypatch: pytest.MonkeyPatch) -> datetime:
+    """:data:`NOW`, host-local, with the station's clock frozen to it: rows built from it
+    and the window the station asks for fall on the same days at any hour."""
+    now = NOW.astimezone()
+
+    class Frozen(datetime, metaclass=_AnyDatetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> datetime:  # type: ignore[override]
+            return now if tz is None else now.astimezone(tz)
+
+    monkeypatch.setattr(station_mod, "datetime", Frozen)
+    return now
+
+
 def _row(day: datetime, counter: int, device_sn: str, **extra: object) -> dict[str, object]:
     start = day.replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(minutes=counter)
     return {
@@ -72,9 +97,8 @@ def _row(day: datetime, counter: int, device_sn: str, **extra: object) -> dict[s
 
 
 async def test_recordings_list_valid_clips_of_paired_cameras_newest_first(
-    station: Station, fake: FakeStation
+    station: Station, fake: FakeStation, today: datetime
 ) -> None:
-    today = datetime.now().astimezone()
     yesterday = today - timedelta(days=1)
     fake.rows = [
         _row(today, 3, SYNTHETIC.camera_sn),
@@ -94,9 +118,8 @@ async def test_recordings_list_valid_clips_of_paired_cameras_newest_first(
 
 
 async def test_recordings_since_skip_older_days_and_rows(
-    station: Station, fake: FakeStation
+    station: Station, fake: FakeStation, today: datetime
 ) -> None:
-    today = datetime.now().astimezone()
     fake.rows = [_row(today, 30, SYNTHETIC.camera_sn), _row(today, 10, SYNTHETIC.camera_sn)]
     since = today.replace(hour=12, minute=20, second=0, microsecond=0)
     rows = await station.async_list_recordings(days=7, since=since)
@@ -121,9 +144,8 @@ async def test_recordings_refuse_bad_arguments_and_standalone_lists_none(
 
 
 async def test_a_recordings_page_stops_at_its_limit_and_goes_on_from_its_last_row(
-    station: Station, fake: FakeStation
+    station: Station, fake: FakeStation, today: datetime
 ) -> None:
-    today = datetime.now().astimezone()
     days = [today - timedelta(days=n) for n in range(4)]
     fake.rows = [
         _row(days[0], 9, SYNTHETIC.camera_sn),
@@ -157,9 +179,8 @@ async def test_a_recordings_page_stops_at_its_limit_and_goes_on_from_its_last_ro
 
 
 async def test_a_recordings_page_pages_a_busy_day_only_until_the_limit(
-    station: Station, fake: FakeStation
+    station: Station, fake: FakeStation, today: datetime
 ) -> None:
-    today = datetime.now().astimezone()
     fake.rows = [_row(today, n, OTHER_SN) for n in range(40, 100)]
     fake.rows += [_row(today, n, SYNTHETIC.camera_sn) for n in range(100, 110)]
     fake.rows += [_row(today, n, SYNTHETIC.camera_sn) for n in range(1, 40)]
@@ -169,9 +190,8 @@ async def test_a_recordings_page_pages_a_busy_day_only_until_the_limit(
 
 
 @pytest.fixture
-def four_days(fake: FakeStation) -> list[datetime]:
+def four_days(fake: FakeStation, today: datetime) -> list[datetime]:
     """Today and the three days before it (host-local), two camera rows on each."""
-    today = datetime.now().astimezone()
     days = [today - timedelta(days=n) for n in range(4)]
     fake.rows = [
         _row(d, c, SYNTHETIC.camera_sn)
@@ -260,10 +280,9 @@ def test_a_recording_settles_once_its_end_is_quiet() -> None:
 
 
 async def test_a_downloaded_recording_carries_its_record_and_completeness(
-    station: Station, fake: FakeStation
+    station: Station, fake: FakeStation, today: datetime
 ) -> None:
     fake.recording_frames = 6
-    today = datetime.now().astimezone()
     fake.rows = [_row(today, 7, SYNTHETIC.camera_sn)]
     (record,) = await station.async_list_recordings()
     chunks: list[bytes] = []
@@ -285,10 +304,9 @@ async def test_a_downloaded_recording_carries_its_record_and_completeness(
 
 
 async def test_a_clip_that_grew_during_its_download_is_not_complete(
-    station: Station, fake: FakeStation
+    station: Station, fake: FakeStation, today: datetime
 ) -> None:
     fake.recording_frames = 6
-    today = datetime.now().astimezone()
     fake.rows = [_row(today, 7, SYNTHETIC.camera_sn)]
     (record,) = await station.async_list_recordings()
     fake.rows = [_row(today, 7, SYNTHETIC.camera_sn, frame_num=40)]  # still recording

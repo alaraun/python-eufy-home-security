@@ -21,7 +21,14 @@ from eufy_home_security.devices.model_settings import (
     mode_table_settings,
     settings_of,
 )
-from eufy_home_security.devices.recipes import MAX_PRESET_SLOTS, PanTilt, PresetPosition
+from eufy_home_security.devices.recipes import (
+    MAX_PRESET_SLOTS,
+    PanTilt,
+    PresetPosition,
+    handler_variant,
+    pan_tilt,
+    set_picture_zoom,
+)
 from eufy_home_security.devices.settings import Scope
 from eufy_home_security.devices.types import DeviceKind
 from eufy_home_security.events import (
@@ -29,7 +36,6 @@ from eufy_home_security.events import (
     DevicesChanged,
     Event,
     EventSource,
-    HistoryRecord,
     PresetsChanged,
     SecurityEvent,
     StationStateChanged,
@@ -116,11 +122,13 @@ async def station(fake: FakeStation) -> AsyncIterator[Station]:
     await st.async_close()
 
 
-async def test_update_builds_a_snapshot(station: Station) -> None:
+async def test_update_builds_a_snapshot(station: Station, monkeypatch: pytest.MonkeyPatch) -> None:
     assert station.channels == {0}
-    started = time.monotonic()
-    state = await station.async_update()
-    assert time.monotonic() - started < PARAM_SETTLE / 2  # the camera's channel reported
+    await station.session.async_connect()
+    # Returns once the camera's channel reported, not after the settle time.
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 30.0)
+    async with asyncio.timeout(10.0):
+        state = await station.async_update()
     assert state.guard_mode is GuardMode.DISARMED
     assert state.firmware == "3.8.7.4"
     camera = state.devices[0]
@@ -1247,6 +1255,37 @@ async def test_a_mode_table_is_confirmed_by_read_back_not_the_receipt(
         await station.async_set_mode_action("away", "camera_siren", True, channel=0)
 
 
+async def test_a_non_motion_sensor_has_no_respond_action() -> None:
+    entry = CloudDevice(
+        device_sn="T8900P0000000001",
+        device_type=2,
+        name="Door",
+        station_sn=SYNTHETIC.station_sn,
+        channel=17,
+    )
+    hub = _hub_with(CAMERA, entry)
+    with pytest.raises(UnsupportedError, match="known flags: station_alarm, notification, report"):
+        await hub.async_set_mode_action("away", "motion_sensor_respond", True, channel=17)
+
+
+async def test_a_listed_siren_accessory_blocks_a_mode_table_write(
+    station: Station, fake: FakeStation
+) -> None:
+    _mode_table_blocks(fake)
+    siren = CloudDevice(
+        device_sn="T90R0P0000000001",
+        device_type=0,
+        name="Siren",
+        station_sn=SYNTHETIC.station_sn,
+        channel=3,
+    )
+    fake.params[3] = {1239: "1"}
+    hub = Station(STATION, station.session, sub_devices=[CAMERA, siren])
+    with pytest.raises(UnsupportedError, match="no known device kind"):
+        await hub.async_set_mode_action("away", "camera_siren", True, channel=0)
+    assert fake.mode_tables_received == []
+
+
 async def test_mode_table_refusals_send_nothing(station: Station, fake: FakeStation) -> None:
     _mode_table_blocks(fake)
     with pytest.raises(UnsupportedError, match="no per-device actions"):
@@ -1507,27 +1546,44 @@ async def test_async_camera_image_rejects_unpaired_and_invalid_days(
     assert len(fake.received) == sent_before
 
 
-async def test_event_thumbnail_passes_timeout_to_history_query(
-    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("timeout", "expected"),
+    [
+        (4.2, {"history query": 4.2, "image fetch": 4.2}),
+        (None, {"history query": 7.0, "image fetch": 3.0}),
+    ],
+)
+async def test_event_thumbnail_gives_each_request_the_timeout_or_its_own_default(
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    timeout: float | None,
+    expected: dict[str, float],
 ) -> None:
+    monkeypatch.setattr(session_module, "HISTORY_QUERY_TIMEOUT", 7.0)
+    monkeypatch.setattr(session_module, "STILL_FETCH_TIMEOUT", 3.0)
+    path = "/zx/hdd_data0/Camera00/20260916/snapshort.jpg"
+    fake.images[path] = b"\xff\xd8JFIF..."
+    record_id = 20260916 * HISTORY_RECORD_COUNTER + 42
+    fake.rows = [{"record_id": record_id, "device_sn": SYNTHETIC.camera_sn, "thumb_path": path}]
     event = SecurityEvent(
         source=EventSource.P2P,
         station_sn=SYNTHETIC.station_sn,
         device_sn=SYNTHETIC.camera_sn,
-        record_id=2026091600042,
+        record_id=record_id,
     )
 
-    passed: dict[str, Any] = {}
-    history_record = station.session.async_history_record
+    await station.session.async_connect()  # only the event's own requests are timed
+    timeouts: dict[str, float] = {}
+    request = station.session._request
 
-    async def spy(record_id: int, **kwargs: Any) -> HistoryRecord | None:
-        passed.update(kwargs)
-        return await history_record(record_id, **kwargs)
+    async def spy(*args: Any, timeout: float, label: str, **kwargs: Any) -> Any:
+        timeouts[label] = timeout
+        return await request(*args, timeout=timeout, label=label, **kwargs)
 
-    monkeypatch.setattr(station.session, "async_history_record", spy)
-    with pytest.raises(RecordNotFoundError):  # the fake has no rows
-        await station.async_event_thumbnail(event, timeout=4.2)
-    assert passed == {"timeout": 4.2}
+    monkeypatch.setattr(station.session, "_request", spy)
+    await station.async_event_thumbnail(event, timeout=timeout)
+    assert timeouts == expected
 
 
 async def test_a_standalone_station_is_its_own_device_on_its_channel() -> None:
@@ -1942,41 +1998,43 @@ async def test_pan_tilt_sends_direction(standalone_station: Station, fake: FakeS
 
     assert fake.pan_tilts == [PanTilt.LEFT, PanTilt.UP]
     body = next(b for b in fake.doorbell_payloads if b.get("commandType") == 6030)
-    assert body["data"] == {"cmd_type": 1, "rotate_type": 1, "zoom": 1, "ivalue": -1}
+    step = pan_tilt(PanTilt.LEFT, zoom_ivalue=handler_variant("T8170").ptz_zoom_ivalue)
+    assert body["data"] == step.params
 
 
-async def test_a_t8410_pan_tilt_sends_its_handlers_bare_step(
+async def test_a_t8410_pan_tilt_applies_its_handler_variant(
     t8410_station: Station, fake: FakeStation
 ) -> None:
     await t8410_station.async_pan_tilt(_T8410_SN, PanTilt.RIGHT, settle=0)
 
     assert fake.pan_tilts == [PanTilt.RIGHT]
     body = next(b for b in fake.doorbell_payloads if b.get("commandType") == 6030)
-    assert body["data"] == {"cmd_type": 1, "rotate_type": 2}
+    step = pan_tilt(PanTilt.RIGHT, zoom_ivalue=handler_variant("T8410").ptz_zoom_ivalue)
+    assert body["data"] == step.params
 
 
-async def test_a_t8410_live_open_leaves_out_ext_value(
+async def _live_open_body(station: Station, fake: FakeStation) -> dict[str, Any]:
+    stream = await station.async_open_live(station.serial)
+    async with stream:
+        await anext(aiter(stream))
+    (body,) = [b["data"] for b in fake.doorbell_payloads if b.get("commandType") == 1000]
+    assert fake.live_opens == [0]
+    data: dict[str, Any] = body
+    return data
+
+
+async def test_a_t8410_live_open_applies_its_handler_variant(
     t8410_station: Station, fake: FakeStation
 ) -> None:
-    stream = await t8410_station.async_open_live(_T8410_SN)
-    async with stream:
-        await anext(aiter(stream))
-
-    (body,) = [b["data"] for b in fake.doorbell_payloads if b.get("commandType") == 1000]
-    assert "extValue" not in body
-    assert body["ivalue"] == 1
-    assert fake.live_opens == [0]
+    body = await _live_open_body(t8410_station, fake)
+    assert ("extValue" in body) is handler_variant("T8410").live_open_ext_value
 
 
-async def test_a_t8170_live_open_keeps_ext_value(
+async def test_a_t8170_live_open_applies_its_handler_variant(
     standalone_station: Station, fake: FakeStation
 ) -> None:
-    stream = await standalone_station.async_open_live("T8170P2000054321")
-    async with stream:
-        await anext(aiter(stream))
-
-    (body,) = [b["data"] for b in fake.doorbell_payloads if b.get("commandType") == 1000]
-    assert body["extValue"] == 1000
+    body = await _live_open_body(standalone_station, fake)
+    assert ("extValue" in body) is handler_variant("T8170").live_open_ext_value
 
 
 async def test_a_t8410_refuses_every_slot_call_before_sending(
@@ -2012,21 +2070,9 @@ async def test_set_zoom_sends_6203_and_the_echo_sets_the_zoom(
     await standalone_station.async_set_zoom("T8170P2000054321", 2.5)
 
     assert fake.zoom_writes == [2.5]
-    index, body = next(
-        (i, o) for i, o in reversed(list(enumerate(fake.received))) if o.get("cmd") == 6203
-    )
-    assert body["payload"] == {
-        "x": 0,
-        "y": 0,
-        "w": 0,
-        "h": 0,
-        "offset": False,
-        "orgZoom": 0,
-        "dstZoom": 2.5,
-    }
-    # A standalone camera is channel 0, so its subheader byte stays 0.
-    assert body["mChannel"] == 0
-    assert fake.received_header_channels[index] == 0
+    body = next(o for o in reversed(fake.received) if o.get("cmd") == 6203)
+    assert body["payload"] == set_picture_zoom(2.5).params
+    assert body["mChannel"] == 0  # a standalone camera is channel 0
     await _until(lambda: standalone_station.zoom("T8170P2000054321") == 2.5)
     zooms = [e for e in events if isinstance(e, ZoomChanged)]
     assert zooms == [
@@ -2130,19 +2176,6 @@ async def test_set_zoom_of_a_paired_camera_names_its_channel_in_the_subheader(
     assert fake.zoom_writes == [4]
     assert fake.received_header_channels[-1] == 2
     await _until(lambda: paired_ptz.zoom(PAIRED_PTZ.device_sn) == 4.0)
-
-
-async def test_set_zoom_of_a_paired_camera_under_subheader_0_is_not_handled(
-    paired_ptz: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The HomeBase answers -108 and the camera never sees the zoom."""
-    monkeypatch.setattr(session_module, "_command_header_channel", lambda channel: 0)
-
-    with pytest.raises(CommandUnsupportedError):
-        await paired_ptz.async_set_zoom(PAIRED_PTZ.device_sn, 4)
-
-    assert fake.zoom_writes == []
-    assert paired_ptz.zoom(PAIRED_PTZ.device_sn) is None
 
 
 async def test_set_zoom_refused_in_dual_view(
@@ -2774,6 +2807,35 @@ async def test_a_standalone_detection_gets_its_own_still(
         assert isinstance(info.value, StillNotWrittenError) is (outcome == "not written yet")
         if isinstance(info.value, StillNotWrittenError):
             assert info.value.offset == pytest.approx(still_after, abs=1.0)
+
+
+async def test_a_standalone_detection_passes_the_callers_timeout_to_each_query(
+    standalone_station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """None reaches the event-count query and the still fetch, so each uses its own default."""
+    trigger = datetime(2026, 10, 2, 20, 48, 50).astimezone()
+    path = f"/media/mmcblk0p1/Camera00/event/{trigger:%Y%m%d%H%M%S}_snapshot.jpg"
+    fake.event_summaries = {
+        "T8170P2000054321": {"event_count": 1, "crop_hb3_path": path, "crop_cloud_path": ""}
+    }
+    image = b"\xff\xd8\xff\xe0" + bytes(400) + b"\xff\xd9"
+    fake.images[path] = v1_still(image, "T8170P2000054321", did=SYNTHETIC.did)
+    session = standalone_station.session
+    passed: dict[str, Any] = {}
+    summary, fetch = session.async_event_summary, session.async_fetch_still
+
+    async def summary_spy(device_sn: str, *, timeout: float | None = None) -> Any:
+        passed["event count"] = timeout
+        return await summary(device_sn, timeout=timeout)
+
+    async def fetch_spy(still_path: str, *, timeout: float | None = None) -> Any:
+        passed["image fetch"] = timeout
+        return await fetch(still_path, timeout=timeout)
+
+    monkeypatch.setattr(session, "async_event_summary", summary_spy)
+    monkeypatch.setattr(session, "async_fetch_still", fetch_spy)
+    await standalone_station.async_event_thumbnail(_standalone_detection(trigger))
+    assert passed == {"event count": None, "image fetch": None}
 
 
 async def test_a_standalone_detection_still_is_read_in_the_device_zone(

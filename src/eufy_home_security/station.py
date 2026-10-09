@@ -133,7 +133,6 @@ from .models import (
     GuardMode,
 )
 from .network import LanPath, lan_path_for
-from .p2p import session as p2p_session
 from .p2p._json import json_int
 from .p2p.clip import ClipWriter, MediaClip
 from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
@@ -924,8 +923,8 @@ class Station:
         await asyncio.to_thread(_load_settings, {c for c in codes if c is not None})
 
     def _product_code(self, serial: str) -> str | None:
-        """``serial``'s product code: the cloud's ``device_new_pn`` (canonical), else the
-        serial's catalogued model; ``None`` when neither names one."""
+        """``serial``'s product code (:func:`~.devices.model_settings.product_code_of`):
+        the cloud's ``device_new_pn``, else the serial's rule or catalogued model."""
         new_pn = next(
             (
                 device.raw.get("device_new_pn")
@@ -1501,7 +1500,8 @@ class Station:
             raise ValueError("pass exactly one of device_sn or channel")
         target = self.channel_for(device_sn) if device_sn is not None else cast(int, channel)
         key = mode_action_key(GuardMode.parse(mode), scope_for_kind(self._kind_on(target)))
-        spec = mode_table_setting(key)
+        cloud = self._cloud_by_channel().get(target)
+        spec = mode_table_setting(key).for_device_type(cloud.device_type if cloud else None)
         spec.with_flag(0, flag, on)  # refuses an unknown flag before any traffic
         current = await self._read_back(spec.read_param, target)
         if current is None:
@@ -1758,18 +1758,21 @@ class Station:
 
         Raises :class:`~.exceptions.UnsupportedError`, before anything is sent, when
         the event names another station or carries neither a ``thumb_path`` nor a
-        ``record_id`` with a day; :class:`~.exceptions.RecordNotFoundError` when the
-        history has no row for it, the row is another camera's, or the row has no
-        valid thumbnail yet (the station writes it when the clip is saved: retry
-        later). ``timeout`` bounds the history query and the still fetch each.
+        ``record_id`` with a day; :class:`~.exceptions.StillNotWrittenError` when the
+        history has no row for it or the row has no thumbnail yet (the station writes
+        it when the clip is saved: retry later); :class:`~.exceptions.RecordNotFoundError`
+        when the row is another camera's or its thumbnail path is not a still's.
+        ``timeout`` bounds the history query and the still fetch each; None gives each
+        its own default (:data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`,
+        :data:`~.p2p.session.STILL_FETCH_TIMEOUT`).
 
         On a standalone device (its detections come by cloud push, with no path or
         record) the device's newest event still (event-count query, waking it) is
         returned when its time falls within :data:`STANDALONE_STILL_WINDOW` of the
-        event's; :class:`~.exceptions.RecordNotFoundError` when it is older (not
-        written yet: retry once, later) or newer (a later detection replaced it).
+        event's; :class:`~.exceptions.StillNotWrittenError` when it is older (not
+        written yet: retry once, later), :class:`~.exceptions.RecordNotFoundError` when
+        it is newer (a later detection replaced it).
         """
-        timeout = p2p_session.STILL_FETCH_TIMEOUT if timeout is None else timeout
         self._require_own_event(event)
         if self.session.standalone and event.thumb_path is None:
             return await self._standalone_event_still(event, timeout=timeout)
@@ -1931,7 +1934,9 @@ class Station:
             recorded_at=row.start_time,
         )
 
-    async def _standalone_event_still(self, event: SecurityEvent, *, timeout: float) -> Still:
+    async def _standalone_event_still(
+        self, event: SecurityEvent, *, timeout: float | None
+    ) -> Still:
         """A standalone device's newest event still, when it is ``event``'s."""
         if event.event_time_ms is None:
             raise UnsupportedError("the event carries no time to match a still to")

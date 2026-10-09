@@ -16,7 +16,7 @@ from aioresponses import aioresponses
 from eufy_home_security._logging import set_secret_logging
 from eufy_home_security.cloud import const, crypto
 from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, _check_owner_id, _Identity
-from eufy_home_security.cloud.status import LoginNeed
+from eufy_home_security.cloud.status import LoginNeed, SessionState
 from eufy_home_security.exceptions import (
     AuthenticationError,
     CipherUnavailableError,
@@ -37,7 +37,15 @@ from eufy_home_security.install import InstallState
 from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
-from .conftest import FAKE_AUTH_TOKEN, FAKE_ECC_KEY, FAKE_OWNER_ID, FAKE_PENDING_TOKEN, FakeMega
+from .conftest import (
+    FAKE_AUTH_TOKEN,
+    FAKE_ECC_KEY,
+    FAKE_OWNER_ID,
+    FAKE_PENDING_TOKEN,
+    MEGA_REALM,
+    SECURITY_REALM,
+    FakeMega,
+)
 
 
 def _api(session: aiohttp.ClientSession, cache: SessionCache) -> EufyCloudApi:
@@ -249,6 +257,25 @@ async def test_a_pending_two_step_login_is_a_challenge_not_a_session(
     assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
 
 
+@pytest.mark.parametrize(
+    "failure", [(401, {"code": 401, "msg": "expired"}), (200, {"code": 26502, "msg": "error"})]
+)
+async def test_a_failed_code_request_still_raises_the_challenge(
+    fake_mega: FakeMega, cache: SessionCache, failure: tuple[int, dict[str, Any]]
+) -> None:
+    """The pending login stays answerable when asking for the code fails."""
+    fake_mega.two_step = {"eu"}
+    fake_mega.error_bodies["sendmsg"] = [failure]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(LoginChallengeError) as exc:
+                await _api(session, cache).async_login()
+    assert (exc.value.kind, exc.value.region) == ("verify_code", "eu")
+    assert not exc.value.code_requested
+    assert len(fake_mega.code_requests) == 1
+
+
 async def test_captcha_challenge_fetches_an_image(fake_mega: FakeMega, cache: SessionCache) -> None:
     fake_mega.login_code = int(const.CloudCode.LOGIN_NEED_CAPTCHA)
     fake_mega.login_extra = {"login_id": "lid-7"}
@@ -336,9 +363,11 @@ async def test_request_throttle_holds_off_every_cloud_call(
                 await api.async_get_devices(refresh=True)
             assert not isinstance(caught.value, LoginLimitedError)
             assert caught.value.retry_after == pytest.approx(3600, abs=5)
+            assert (caught.value.origin, caught.value.scope) == ("cloud", None)
             sent = len(mock.requests)
-            with pytest.raises(RateLimitedError):
+            with pytest.raises(RateLimitedError) as local:
                 await api.async_register_push_token("token")
+            assert (local.value.origin, local.value.scope) == ("hold_off", None)
             with pytest.raises(RateLimitedError):
                 await api.async_login(force=True)
             assert len(mock.requests) == sent  # refused locally: nothing reached the cloud
@@ -523,6 +552,35 @@ async def test_an_expired_token_triggers_a_single_relogin(
     assert fake_mega.login_calls == 2  # initial + one automatic re-login
 
 
+async def test_the_session_state_says_why_a_scope_needs_a_login(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """None stored, usable, past its expiry, and ended by the cloud before its expiry."""
+    fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 18}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            states = [api.cloud_status().regions["eu"].session_state]
+            await api.async_get_devices()
+            states.append(api.cloud_status().regions["eu"].session_state)
+            expires = cache.cloud_session("eu")["expires_at"]
+            cache.cloud_session("eu")["expires_at"] = time.time() - 10
+            states.append(_api(session, cache).cloud_status().regions["eu"].session_state)
+            cache.cloud_session("eu")["expires_at"] = expires
+            for _ in range(const.LOGIN_BUDGET - 1):  # the re-login meets the spent budget
+                cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, "eu")
+            fake_mega.code_once["devices"] = int(const.CloudCode.SESSION_TIMEOUT)
+            await api.async_get_devices(refresh=True)  # falls back to the cached list
+            states.append(api.cloud_status().regions["eu"].session_state)
+    assert states == [
+        SessionState.NONE,
+        SessionState.USABLE,
+        SessionState.EXPIRED,
+        SessionState.ENDED,
+    ]
+
+
 _REKEY_ANSWERS = {
     # the gateway's answer once the key identity has lapsed (verified on hardware)
     "http-463-body-4404": (463, {"code": 4404, "msg": "get identity error"}),
@@ -596,9 +654,9 @@ async def test_concurrent_rekey_answers_share_one_key_exchange(
             api = _api(session, cache)
             await api.async_login()
             fake_mega.error_bodies["devices"] = [refusal, refusal]
-            exchanges = len(fake_mega._shared)
+            exchanges = len(fake_mega._shared["mega"])
             await asyncio.gather(*(api.async_get_devices(refresh=True) for _ in range(2)))
-    assert len(fake_mega._shared) == exchanges + 1
+    assert len(fake_mega._shared["mega"]) == exchanges + 1
     assert fake_mega.login_calls == 1
 
 
@@ -625,6 +683,7 @@ async def test_a_replaced_session_latches_until_a_forced_login(
             latched = api.session_replaced
             assert latched
             assert "auth_token" not in cache.cloud_session("eu")
+            assert api.cloud_status().regions["eu"].session_state == SessionState.REPLACED
             assert cache.password == SYNTHETIC.password  # the credentials were never wrong
 
             # Nothing logs in again or reaches the cloud by itself, after a restart too.
@@ -870,6 +929,34 @@ async def test_cipher_fetch_uses_the_owner_id_and_caches(
     assert cipher_body["station_sn"] == SYNTHETIC.station_sn
 
 
+async def test_the_cipher_fetch_runs_on_a_security_realm_identity(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """``get_ciphers`` needs an identity of the security realm, the session's token and
+    ``gtoken``, and ``category``; that realm's key exchange the token and ``gtoken``
+    without ``category`` (the fake refuses anything else)."""
+    fake_mega.devices = [
+        {"device_sn": SYNTHETIC.station_sn, "device_type": 18,
+         "member": {"admin_user_id": FAKE_OWNER_ID}},
+    ]  # fmt: skip
+    fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": FAKE_ECC_KEY}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            assert await api.async_get_cipher_key(SYNTHETIC.station_sn) == FAKE_ECC_KEY
+    assert fake_mega.refused == []
+    (headers,) = fake_mega.headers["ciphers"]
+    assert headers["x-key-ident"] in fake_mega._shared[SECURITY_REALM]
+    assert headers["x-key-ident"] not in fake_mega._shared[MEGA_REALM]
+    assert (headers["category"], headers["gtoken"], headers["x-auth-token"]) == (
+        const.CATEGORY,
+        crypto.gtoken(SYNTHETIC.account_id),
+        FAKE_AUTH_TOKEN,
+    )
+
+
 async def test_cipher_fetch_keeps_the_rsa_private_key(
     fake_mega: FakeMega, cache: SessionCache
 ) -> None:
@@ -890,6 +977,27 @@ async def test_cipher_fetch_keeps_the_rsa_private_key(
     assert keys == cached == CipherKeys(None, "UlNBLWtleQ==")
     assert cache.rsa_cipher_key(SYNTHETIC.station_sn, 40) == "UlNBLWtleQ=="
     cache.drop_cipher_key(SYNTHETIC.station_sn, 40)
+    assert cache.rsa_cipher_key(SYNTHETIC.station_sn, 40) is None
+
+
+async def test_a_cipher_entry_is_read_as_the_cipher_table_reads_it(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """A blank key is no key, and a ``cipher_id`` sent as text matches its number."""
+    fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 18}]
+    fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": "  ", "private_key": "\n"}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(EmptyResponseError, match="no private key"):
+                await api.async_get_cipher_keys(SYNTHETIC.station_sn)
+            fake_mega.cipher_objects = [{"cipher_id": "40", "ecc_private_key": f" {FAKE_ECC_KEY}"}]
+            keys = await api.async_get_cipher_keys(SYNTHETIC.station_sn)
+            (record,) = await api.async_list_ciphers(SYNTHETIC.station_sn, FAKE_OWNER_ID, [40])
+    assert keys == CipherKeys(record.ecc_private_key, record.rsa_private_key)
+    assert keys.ecc_private_key == FAKE_ECC_KEY
     assert cache.rsa_cipher_key(SYNTHETIC.station_sn, 40) is None
 
 
@@ -962,6 +1070,32 @@ async def test_an_empty_cipher_answer_is_not_asked_again_during_the_back_off(
             assert cipher_requests() == [[98], [40], [98]]
 
 
+async def test_the_empty_cipher_back_off_ends_when_the_owner_changes(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """A key asked under a stale owner id is asked again once the owner id is refreshed."""
+    station = {"device_sn": SYNTHETIC.station_sn, "device_type": 18}
+    fake_mega.devices = [{**station, "member": {"admin_user_id": FAKE_OWNER_ID}}]
+    fake_mega.cipher_objects = None
+    new_owner = "0123456789abcdef0123456789abcdef01234567"
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(CipherUnavailableError):
+                await api.async_get_cipher_keys(SYNTHETIC.station_sn, 98)
+            fake_mega.devices = [{**station, "member": {"admin_user_id": new_owner}}]
+            fake_mega.cipher_objects = [{"cipher_id": 98, "ecc_private_key": FAKE_ECC_KEY}]
+            assert await api.async_get_station_owner_id(SYNTHETIC.station_sn, refresh=True) == (
+                new_owner
+            )
+            keys = await api.async_get_cipher_keys(SYNTHETIC.station_sn, 98, refresh=True)
+    assert keys.ecc_private_key == FAKE_ECC_KEY
+    owners = [payload["user_id"] for name, payload in fake_mega.calls if name == "ciphers"]
+    assert owners == [FAKE_OWNER_ID, new_owner]
+
+
 async def test_cipher_refresh_honours_the_cooldown(
     fake_mega: FakeMega, cache: SessionCache
 ) -> None:
@@ -985,6 +1119,7 @@ async def test_cipher_refresh_honours_the_cooldown(
                 await api.async_get_cipher_key(SYNTHETIC.station_sn, refresh=True)
     assert caught.value.code == 0
     assert caught.value.retry_after is not None
+    assert (caught.value.origin, caught.value.scope) == ("cooldown", None)
 
 
 async def test_register_push_token(fake_mega: FakeMega, cache: SessionCache) -> None:
@@ -1180,12 +1315,13 @@ async def test_region_override_wins_over_a_cached_mega_domain(cache: SessionCach
     fake_mega.devices = [_STATION_OF_OWNER]
     fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": FAKE_ECC_KEY}]
     with aioresponses() as mock:
-        fake_mega.install(mock)  # only eu hosts exist: a us host would fail to connect
+        fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             api = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password, region="eu")
             await api.async_login()
             await api.async_get_devices(refresh=True)
             assert await api.async_get_cipher_key(SYNTHETIC.station_sn) == FAKE_ECC_KEY
+    assert {region for _endpoint, region in fake_mega.region_calls} == {"eu"}
 
 
 async def test_login_logs_the_auth_flow_with_secrets_only_when_enabled(
@@ -1285,10 +1421,49 @@ async def test_cloud_status_next_login_matches_the_budget_refusal(cache: Session
         const.LOGIN_BUDGET_WINDOW_SECONDS,
     )
     assert caught.value.retry_after is not None
+    assert (caught.value.origin, caught.value.scope) == ("budget", "eu")
     assert status.next_login_allowed_in == pytest.approx(caught.value.retry_after, abs=1)
+    assert status.regions["eu"].next_login_allowed_in == pytest.approx(
+        caught.value.retry_after, abs=1
+    )
     assert status.last_login_attempt_age == pytest.approx(10, abs=5)
     assert status.login_hold_off is None
     assert status.request_hold_off is None
+
+
+async def test_cloud_status_counts_logins_per_cluster(cache: SessionCache) -> None:
+    """The budget is per cluster: the account-wide count is the fullest cluster's."""
+    now = time.time()
+    cache.section("throttle")["logins"] = {"eu": [now - 60, now - 30], "us": [now - 10]}
+    async with aiohttp.ClientSession() as session:
+        status = EufyCloudApi(session, cache, SYNTHETIC.email, None).cloud_status()
+    assert status.logins_in_window == 2
+    assert {r: s.logins_in_window for r, s in status.regions.items()} == {"eu": 2, "us": 1}
+    assert status.next_login_allowed_in == 0.0
+
+
+@pytest.mark.parametrize("limit", ["budget", "hold-off"])
+async def test_cloud_status_next_login_covers_the_region_with_every_scope_suspended(
+    cache: SessionCache, limit: str
+) -> None:
+    """A forced login goes to the first region even when no scope is in use."""
+    now = time.time()
+    cache.section("cloud")["listed"] = {r: {"devices": 0, "at": now} for r in const.REGIONS}
+    if limit == "budget":
+        cache.section("throttle")["logins"] = {"eu": [now - 10] * const.LOGIN_BUDGET}
+    else:
+        cache.hold_off("login", 600, region="eu")
+    with aioresponses() as mock:
+        async with aiohttp.ClientSession() as session:
+            api = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password)
+            status = api.cloud_status()
+            with pytest.raises(LoginLimitedError) as caught:
+                await api.async_login(force=True)
+        assert not any(url.path == const.LOGIN_PATH for _method, url in mock.requests)
+    assert not any(region.in_use for region in status.regions.values())
+    assert caught.value.retry_after is not None
+    assert status.next_login_allowed_in == pytest.approx(caught.value.retry_after, abs=1)
+    assert (status.login_hold_off is not None) is (limit == "hold-off")
 
 
 @pytest.mark.parametrize(("failing", "spent"), [("login", 1), ("exchange", 0)])

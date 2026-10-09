@@ -47,6 +47,12 @@ FAKE_AUTH_TOKEN = "auth-token-0123456789abcdef"
 FAKE_PENDING_TOKEN = "pending-token-0123456789"
 FAKE_ECC_KEY = "ab" * 32
 
+MEGA_REALM = "mega"
+SECURITY_REALM = "security"
+_REALMS = {const.MEGA_PRESET_KEY: MEGA_REALM, const.SECURITY_PRESET_KEY: SECURITY_REALM}
+# The body code the fake answers a request the gateway would refuse for its headers.
+FAKE_MALFORMED_CODE = 999_001
+
 
 def _url(host: str, path: str) -> str:
     return f"https://{host}{path}"
@@ -67,7 +73,10 @@ class FakeMega:
         # (endpoint, region) of every request, in order.
         self.region_calls: list[tuple[str, str]] = []
         self._server_key = ec.generate_private_key(ec.SECP256R1())
-        self._shared: dict[str, str] = {}  # key_ident -> shared_key hex
+        # Realm -> key_ident -> shared_key hex: each realm knows only its own identities.
+        self._shared: dict[str, dict[str, str]] = {MEGA_REALM: {}, SECURITY_REALM: {}}
+        # (endpoint, problem) of each request refused for a wrong realm or header set.
+        self.refused: list[tuple[str, str]] = []
         self.calls: list[tuple[str, dict[str, Any]]] = []
         # Test-controlled behaviour:
         self.login_code = 0
@@ -281,24 +290,56 @@ class FakeMega:
     def _ident(self, kwargs: dict[str, Any]) -> str:
         return str(kwargs["headers"]["x-key-ident"])
 
-    def _shared_for(self, kwargs: dict[str, Any]) -> str:
-        return self._shared[self._ident(kwargs)]
+    def _shared_for(self, kwargs: dict[str, Any], realm: str = MEGA_REALM) -> str:
+        return self._shared[realm][self._ident(kwargs)]
 
-    def _decrypt_body(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+    def _decrypt_body(self, kwargs: dict[str, Any], realm: str = MEGA_REALM) -> dict[str, Any]:
         raw = kwargs["data"]
         text = raw.decode() if isinstance(raw, bytes) else str(raw)
-        obj = json.loads(crypto.body_decrypt(text, self._shared_for(kwargs)))
+        obj = json.loads(crypto.body_decrypt(text, self._shared_for(kwargs, realm)))
         assert isinstance(obj, Mapping)
         return dict(obj)
 
-    def _failure_once(self, endpoint: str, kwargs: dict[str, Any]) -> CallbackResult | None:
+    def _refuse(self, endpoint: str, problem: str) -> CallbackResult:
+        self.refused.append((endpoint, problem))
+        body = {"code": FAKE_MALFORMED_CODE, "msg": f"fake gateway: {problem}"}
+        return CallbackResult(status=200, body=json.dumps(body))
+
+    def _security_refusal(
+        self, endpoint: str, kwargs: dict[str, Any], *, category: bool
+    ) -> CallbackResult | None:
+        """The security realm's answer to a request it does not serve, None to serve it.
+
+        An identity of the other realm answers code 463 (docs/protocol/cloud.md); every
+        request needs the session's token and ``gtoken`` (MD5 of the user id); the
+        exchange is sent without ``category``, the calls on its identity with it.
+        """
+        headers = kwargs["headers"]
+        if category and self._ident(kwargs) not in self._shared[SECURITY_REALM]:
+            self.refused.append((endpoint, "identity of another realm"))
+            need = int(const.CloudCode.NEED_EXCHANGED_KEY)
+            return CallbackResult(status=200, body=json.dumps({"code": need, "msg": "error"}))
+        user_id = str(self.login_data.get("ap_cloud_user_id") or self.login_data.get("user_id"))
+        if not headers.get("x-auth-token"):
+            return self._refuse(endpoint, "no auth token")
+        if headers.get("gtoken") != crypto.gtoken(user_id):
+            return self._refuse(endpoint, "no gtoken of the user id")
+        if category and headers.get("category") != const.CATEGORY:
+            return self._refuse(endpoint, "no category")
+        if not category and "category" in headers:
+            return self._refuse(endpoint, "a category on the key exchange")
+        return None
+
+    def _failure_once(
+        self, endpoint: str, kwargs: dict[str, Any], realm: str = MEGA_REALM
+    ) -> CallbackResult | None:
         if queued := self.error_bodies.get(endpoint):
             status_code, error_body = queued.pop(0)
             return CallbackResult(status=status_code, body=json.dumps(error_body))
         if (status := self.status_once.pop(endpoint, None)) is not None:
             return CallbackResult(status=status[0], headers=status[1], body="")
         if (body := self.body_once.pop(endpoint, None)) is not None:
-            return CallbackResult(status=200, body=body(self._shared_for(kwargs)))
+            return CallbackResult(status=200, body=body(self._shared_for(kwargs, realm)))
         code = self.code_once.pop(endpoint, None)
         if code is None:
             return None
@@ -313,12 +354,18 @@ class FakeMega:
     # ── endpoint callbacks ───────────────────────────────────────────────────
 
     def _exchange(self, preset: str) -> Any:
+        realm = _REALMS[preset]
+
         def cb(url: str, **kwargs: Any) -> CallbackResult:
+            if realm == SECURITY_REALM and (
+                refused := self._security_refusal("exchange", kwargs, category=False)
+            ):
+                return refused
             body = json.loads(kwargs["data"])
             client_pub = crypto.preset_decrypt(body["client_public_key"], preset)
             client_key = crypto.load_public_key(client_pub)
             shared = self._server_key.exchange(ec.ECDH(), client_key).hex()
-            self._shared[self._ident(kwargs)] = shared
+            self._shared[realm][self._ident(kwargs)] = shared
             server_pub = crypto.public_key_hex(self._server_key)
             data = {"server_public_key": crypto.preset_encrypt(server_pub, preset)}
             return CallbackResult(status=200, body=json.dumps({"code": 0, "data": data}))
@@ -427,20 +474,25 @@ class FakeMega:
         return self._reply(self._shared_for(kwargs), 0, self.invite_data.get(endpoint, {key: []}))
 
     def _security_list(self, url: str, *, endpoint: str, **kwargs: Any) -> CallbackResult:
-        self.calls.append((endpoint, self._decrypt_body(kwargs)))
         self.headers.setdefault(endpoint, []).append(dict(kwargs["headers"]))
-        if failure := self._failure_once(endpoint, kwargs):
+        if refused := self._security_refusal(endpoint, kwargs, category=True):
+            return refused
+        self.calls.append((endpoint, self._decrypt_body(kwargs, SECURITY_REALM)))
+        if failure := self._failure_once(endpoint, kwargs, SECURITY_REALM):
             return failure
         entries = (
             self.security_stations if endpoint == "security_stations" else self.security_devices
         )
-        return self._reply(self._shared_for(kwargs), 0, entries)
+        return self._reply(self._shared_for(kwargs, SECURITY_REALM), 0, entries)
 
     def _get_ciphers(self, url: str, **kwargs: Any) -> CallbackResult:
-        shared = self._shared_for(kwargs)
-        payload = self._decrypt_body(kwargs)
+        self.headers.setdefault("ciphers", []).append(dict(kwargs["headers"]))
+        if refused := self._security_refusal("ciphers", kwargs, category=True):
+            return refused
+        shared = self._shared_for(kwargs, SECURITY_REALM)
+        payload = self._decrypt_body(kwargs, SECURITY_REALM)
         self.calls.append(("ciphers", payload))
-        if failure := self._failure_once("ciphers", kwargs):
+        if failure := self._failure_once("ciphers", kwargs, SECURITY_REALM):
             return failure
         if self.cipher_objects is None:
             return self._reply(shared, 0, None)  # empty success
@@ -449,6 +501,7 @@ class FakeMega:
     def _get_dsk(self, url: str, **kwargs: Any) -> CallbackResult:
         shared = self._shared_for(kwargs)
         self.calls.append(("dsk", self._decrypt_body(kwargs)))
+        self.headers.setdefault("dsk", []).append(dict(kwargs["headers"]))
         if failure := self._failure_once("dsk", kwargs):
             return failure
         if self.dsk_objects is None:
@@ -464,6 +517,7 @@ class FakeMega:
     def _get_rom_version(self, url: str, **kwargs: Any) -> CallbackResult:
         shared = self._shared_for(kwargs)
         self.calls.append(("ota", self._decrypt_body(kwargs)))
+        self.headers.setdefault("ota", []).append(dict(kwargs["headers"]))
         if failure := self._failure_once("ota", kwargs):
             return failure
         if self.rom_version_data is None:  # up to date: code-0 envelope, 20004 in the data

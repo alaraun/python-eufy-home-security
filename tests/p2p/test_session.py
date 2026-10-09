@@ -54,7 +54,7 @@ from eufy_home_security.exceptions import (
 )
 from eufy_home_security.models import STATION_CHANNEL, GuardMode
 from eufy_home_security.p2p import transport as transport_module
-from eufy_home_security.p2p.crypto import CONN_INIT_ECC_VERSION
+from eufy_home_security.p2p.crypto import CONN_INIT_ECC_VERSION, FRAME_PLAIN
 from eufy_home_security.p2p.did import Did, static_key
 from eufy_home_security.p2p.media import (
     MediaDecoder,
@@ -69,6 +69,7 @@ from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN
 from eufy_home_security.p2p.session import (
     PARAM_SETTLE,
     CommandOutcome,
+    CredentialProvider,
     EventSummary,
     Inbound,
     MediaStream,
@@ -122,6 +123,12 @@ async def station() -> AsyncIterator[FakeStation]:
     await fake.start()
     yield fake
     fake.stop()
+
+
+@pytest.fixture
+def short_settle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A parameter read's settle wait shortened (the fake sends every block at once)."""
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 0.05)
 
 
 def make_session(station: FakeStation, provider: Provider) -> StationSession:
@@ -440,8 +447,13 @@ async def test_state_dumps_are_trusted_only_under_gcm(
         assert (255, 1224) not in session.params
 
 
-async def test_alarm_frames_become_param_and_alarm_changes(station: FakeStation) -> None:
-    session = make_session(station, Provider(station))
+@pytest.mark.parametrize("rsa", [False, True], ids=["gcm", "rsa"])
+async def test_alarm_frames_become_param_and_alarm_changes(
+    station: FakeStation, rsa: bool, short_settle: None
+) -> None:
+    """Alarm frames under the session's cipher (GCM, or an RSA session's key) count; one
+    under the static key is refused, and one that does not decrypt is dropped."""
+    session = make_rsa_session(station) if rsa else make_session(station, Provider(station))
     events: list[Event] = []
     try:
         await session.async_get_params()
@@ -456,6 +468,10 @@ async def test_alarm_frames_become_param_and_alarm_changes(station: FakeStation)
         station.send_alarm_frame(siren, 25, 30, channel=1)
         station.send_alarm_frame(light, 1, channel=1)
         station.send_alarm_frame(tone, 0, 0, channel=1, cipher=FrameCipher.ECB)  # forged
+        undecodable = bytes([FrameCipher.GCM, 0, 1, 2, 0, 0])  # no GCM tag, not whole blocks
+        station.send_frame(
+            tone, bytes(40), cipher=FrameCipher.GCM, channel=2, subheader=undecodable, sealed=True
+        )
         station.send_alarm_frame(tone, 16, 0, channel=255)  # stopped from the app
         station.send_alarm_frame(tone, 0, 0, channel=0)  # no alarm on: not a transition
         await wait_until(lambda: (0, 1201) in session.params)
@@ -490,6 +506,7 @@ async def test_alarm_frames_become_param_and_alarm_changes(station: FakeStation)
         ),
     ]
     assert session.ecb_state_refused == 1
+    assert session.stats().dropped_undecodable == 1
 
 
 async def test_arm_ignores_an_ecb_mode_report(station: FakeStation) -> None:
@@ -793,6 +810,21 @@ async def test_ecb_scalar_success_and_rejection(station: FakeStation) -> None:
     finally:
         await rejected.async_close()
     assert info.value.code == -104
+
+
+async def test_an_rsa_session_sends_ecb_scalars_and_reads_results_under_its_key(
+    station: FakeStation,
+) -> None:
+    session = make_rsa_session(station)
+    try:
+        await session.async_send_ecb_scalar(1250, 30, channel=0)
+        station.account_id = "f" * 40  # the next command is not the owner's
+        with pytest.raises(CommandRejectedError) as info:
+            await session.async_send_ecb_scalar(1253, 1)
+    finally:
+        await session.async_close()
+    assert station.ecb_received == [(1250, 0, 30), (1253, 255, 1)]
+    assert info.value.code == -104  # read from the decrypted result
 
 
 async def test_a_string_command_is_stored_on_its_channel_and_a_foreign_one_refused(
@@ -1233,14 +1265,14 @@ async def test_a_reply_queued_while_the_event_loop_was_blocked_is_still_taken(
 ) -> None:
     """A loop blocked past the deadline fires the timer late, ahead of the replies that
     arrived meanwhile; the request waits a grace period for them instead of failing."""
-    timeout = 0.3
+    timeout = 0.2
     sent = station.send_storage
 
     def answer_then_block(*, cipher: int = FrameCipher.GCM) -> None:
         for _ in range(4):  # frames ahead of the record, one datagram each
             station.send_receipt(FrameType.CMD_TRANSFER, 0)
         sent(cipher=cipher)
-        time.sleep(timeout + 1.0)  # another component holds the loop past the deadline
+        time.sleep(timeout + 0.2)  # another component holds the loop past the deadline
 
     monkeypatch.setattr(station, "send_storage", answer_then_block)
     session = make_session(station, Provider(station))
@@ -1256,7 +1288,7 @@ async def test_a_loop_held_twice_past_the_deadline_still_takes_the_reply(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Each stretch the loop is held moves the deadline out, not only the first."""
-    timeout = 0.3
+    timeout = 0.2
     sent = station.send_storage
     loop = asyncio.get_running_loop()
 
@@ -1264,8 +1296,8 @@ async def test_a_loop_held_twice_past_the_deadline_still_takes_the_reply(
         for _ in range(4):
             station.send_receipt(FrameType.CMD_TRANSFER, 0)
         sent(cipher=cipher)
-        time.sleep(timeout + 0.5)
-        loop.call_soon(time.sleep, 1.5)  # held again before the queued reply is read
+        time.sleep(timeout + 0.1)
+        loop.call_soon(time.sleep, 0.3)  # held again before the queued reply is read
 
     monkeypatch.setattr(station, "send_storage", answer_then_block_twice)
     session = make_session(station, Provider(station))
@@ -1275,6 +1307,70 @@ async def test_a_loop_held_twice_past_the_deadline_still_takes_the_reply(
     finally:
         await session.async_close()
     assert info.disk is not None
+
+
+async def test_a_loop_held_before_a_resend_still_takes_the_parameter_dump(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch, short_settle: None
+) -> None:
+    """The held-loop credit covers a request's resend phase too: a dump queued while the
+    loop was held there past the whole timeout is still taken, and not asked for twice."""
+    monkeypatch.setattr(session_module, "PARAM_QUERY_RESEND_AFTER", 0.1)
+    timeout = 0.2
+    sent = station.send_param_dump
+
+    def answer_then_block(*, cipher: int = FrameCipher.GCM) -> None:
+        for _ in range(4):
+            station.send_receipt(FrameType.CMD_TRANSFER, 0)
+        sent(cipher=cipher)
+        time.sleep(timeout + 0.2)
+
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        monkeypatch.setattr(station, "send_param_dump", answer_then_block)
+        dump = await session.async_get_params(timeout=timeout)
+    finally:
+        await session.async_close()
+    assert dump.station == station.params[STATION_CHANNEL]
+    assert station.param_queries == 1
+
+
+async def test_a_loop_held_before_a_command_resend_still_takes_the_result(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A command's result queued while the loop was held in its first wait is taken as
+    APPLIED, and the command is not resent."""
+    station.reply_to_settings = True
+    timeout = 0.2
+    answer = station._on_command
+
+    def answer_then_block(obj: dict[str, Any], subheader: bytes) -> None:
+        for _ in range(4):
+            station.send_receipt(FrameType.PARAM_NOTIFY, 0, dev_type=1)
+        answer(obj, subheader)
+        time.sleep(timeout + 0.2)
+
+    monkeypatch.setattr(station, "_on_command", answer_then_block)
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        outcome = await session.async_send_command(
+            1277, channel=0, payload={"night_sion": 1, "channel": 0}, timeout=timeout
+        )
+    finally:
+        await session.async_close()
+    assert outcome is CommandOutcome.APPLIED
+    assert [o["cmd"] for o in station.received] == [1277]
+
+
+async def test_a_wait_entered_past_its_deadline_still_reads_what_is_queued(
+    station: FakeStation,
+) -> None:
+    """A wait that starts after its deadline yields to the loop once before giving up."""
+    session = make_session(station, Provider(station))
+    future: asyncio.Future[object] = asyncio.get_running_loop().create_future()
+    asyncio.get_running_loop().call_soon(future.set_result, True)
+    assert await session._wait_until(future, time.monotonic() - 1.0, "test")
 
 
 async def test_storage_rejection_and_silence_are_typed_errors(station: FakeStation) -> None:
@@ -1600,7 +1696,7 @@ async def test_discovery_reply_from_another_station_is_ignored(
 ) -> None:
     """Every station answers a broadcast; a session only adopts the reply carrying its own DID."""
     monkeypatch.setattr(session_module, "DISCOVERY_ATTEMPTS", 1)
-    monkeypatch.setattr(session_module, "DISCOVERY_TIMEOUT", 1.0)
+    monkeypatch.setattr(session_module, "DISCOVERY_TIMEOUT", 0.2)
     other = StationSession(
         SYNTHETIC.station_sn,
         Provider(station),
@@ -1707,6 +1803,20 @@ async def test_recording_plays_to_its_end(
         assert [o["cmd"] for o in station.received] == [command]  # no stop: none works
     finally:
         await session.async_close()
+
+
+async def test_an_rsa_recording_ends_on_its_clear_end_of_playback_frame(
+    station: FakeStation,
+) -> None:
+    session = make_rsa_session(station)
+    try:
+        stream = await session.async_open_recording("/zx/clip.zxvideo", 1, idle_timeout=1.0)
+        started = time.monotonic()
+        frames = [frame async for frame in stream]
+        assert time.monotonic() - started < 1.0  # ended by the frame, not the idle timeout
+    finally:
+        await session.async_close()
+    assert len(_video(frames)) == station.recording_frames
 
 
 async def test_unanswered_media_open_is_not_applied(station: FakeStation) -> None:
@@ -3162,7 +3272,7 @@ async def test_async_get_sd_info_raises_timeout_on_no_answer(station: FakeStatio
 
 
 async def test_a_session_key_that_is_not_printable_runs_the_gcm_session(
-    station: FakeStation,
+    station: FakeStation, short_settle: None
 ) -> None:
     """Version 8 with 32 session-key bytes outside printable ASCII: the handshake takes
     them as the GCM key, and commands and the parameter dump run under it."""
@@ -3189,20 +3299,27 @@ class RsaProvider:
     """Credentials of a station answering the RSA CONN_INIT: its RSA key, or none.
 
     ``bad_key`` serves an unparsable ``private_key`` (the cloud lowercases the base64
-    on some accounts); ``calls`` records each ``refresh`` flag asked.
+    on some accounts); ``cached_rsa_key`` False serves none until a refresh (a cache
+    that predates the RSA key); ``calls`` records each ``refresh`` flag asked.
     """
 
     def __init__(
-        self, station: FakeStation, *, rsa_key: bool = True, bad_key: bool = False
+        self,
+        station: FakeStation,
+        *,
+        rsa_key: bool = True,
+        bad_key: bool = False,
+        cached_rsa_key: bool = True,
     ) -> None:
         self.station = station
         self.rsa_key = rsa_key
         self.bad_key = bad_key
+        self.cached_rsa_key = cached_rsa_key
         self.calls: list[bool] = []
 
     async def __call__(self, *, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         self.calls.append(refresh)
-        if not self.rsa_key:
+        if not self.rsa_key or not (refresh or self.cached_rsa_key):
             rsa_key = None
         elif self.bad_key:
             rsa_key = self.station.rsa_private_key_pem.lower()  # lowercased = unparsable
@@ -3211,9 +3328,23 @@ class RsaProvider:
         return P2PCredentials(SYNTHETIC.account_id, "user", "", rsa_private_key=rsa_key)
 
 
+def make_rsa_session(
+    station: FakeStation, provider: CredentialProvider | None = None, **kwargs: Any
+) -> StationSession:
+    """A session to ``station`` answering the RSA CONN_INIT (version 1)."""
+    station.conn_init_version = 1
+    return StationSession(
+        SYNTHETIC.station_sn,
+        provider or RsaProvider(station),
+        host="127.0.0.1",
+        port=station.discovery_port,
+        **kwargs,
+    )
+
+
 @pytest.mark.parametrize("encryption", [0, 1])
 async def test_an_rsa_conn_init_runs_the_session_under_its_aes_key(
-    station: FakeStation, encryption: int
+    station: FakeStation, encryption: int, short_settle: None
 ) -> None:
     """Version 1: the RSA-wrapped 16-character key, then every frame AES-128-ECB under it.
 
@@ -3240,26 +3371,166 @@ async def test_an_rsa_conn_init_runs_the_session_under_its_aes_key(
     assert outcome is CommandOutcome.APPLIED
     assert [o["cmd"] for o in station.received] == [1277]
     assert stats.receipts_by_code == {"0": 2}  # the query's and the command's, in clear
-    assert stats.dropped_undecodable == 0
+    assert (stats.dropped_undecodable, stats.ecb_state_refused) == (0, 0)
     assert (stats.conn_init_version, stats.cipher_id) == (1, station.cipher_id)
 
 
-async def test_an_rsa_conn_init_without_an_rsa_key_fails_the_handshake(
+@pytest.mark.parametrize("tag", [FrameCipher.ECB, FrameCipher.GCM, 0x05])
+async def test_an_rsa_session_takes_no_clear_frame_as_state_or_authenticated(
+    station: FakeStation, tag: int, short_settle: None
+) -> None:
+    """On an RSA session only frames under its key are the station's: a clear parameter
+    dump is refused whatever its cipher tag, and a clear push is never authenticated."""
+    session = make_rsa_session(station)
+    events: list[Event] = []
+    session.subscribe(events.append)
+    clear = bytes([tag, 0, 0xFF, FRAME_PLAIN, 0, 0])
+    dump = {"params": [{"dev_type": 255, "param_type": 1224, "param_value": "63"}]}
+    inner = {"msg_type": 18, "event_type": 3104, "device_sn": SYNTHETIC.camera_sn, "channel": 0}
+    push = {"cmd": 2037, "payload": json.dumps(inner)}
+    try:
+        await session.async_get_params()
+        refused = session.ecb_state_refused
+        for ftype, body in ((FrameType.PARAM_NOTIFY, dump), (FrameType.NOTIFY_PAYLOAD, push)):
+            station.send_frame(
+                ftype, json.dumps(body).encode(), cipher=0, channel=1, subheader=clear
+            )
+        station.push_camera_event()  # under the session key, after the clear frames
+        await wait_until(lambda: any(isinstance(e, SecurityEvent) for e in events))
+    finally:
+        await session.async_close()
+    assert (STATION_CHANNEL, 1224) not in session.params
+    assert session.ecb_state_refused == refused + 1
+    pushes = [e for e in events if isinstance(e, SecurityEvent)]
+    assert not any(e.authenticated for e in pushes if e.event_type == 3104)
+    assert all(e.frame_cipher is FrameCipher.ECB for e in pushes)
+
+
+async def test_a_push_under_the_rsa_session_key_is_authenticated(station: FakeStation) -> None:
+    session = make_rsa_session(station)
+    events: list[Event] = []
+    session.subscribe(events.append)
+    try:
+        await session.async_connect()
+        station.push_camera_event()
+        await wait_until(lambda: any(isinstance(e, SecurityEvent) for e in events))
+    finally:
+        await session.async_close()
+    push = next(e for e in events if isinstance(e, SecurityEvent))
+    assert (push.frame_cipher, push.session_ecb, push.authenticated) == (
+        FrameCipher.ECB,
+        True,
+        True,
+    )
+
+
+async def test_an_rsa_conn_init_without_an_rsa_key_is_unusable_after_one_refresh(
     station: FakeStation,
 ) -> None:
-    station.conn_init_version = 1
-    session = StationSession(
-        SYNTHETIC.station_sn,
-        RsaProvider(station, rsa_key=False),
-        host="127.0.0.1",
-        port=station.discovery_port,
-    )
+    """Credentials without the RSA key are re-fetched once; still without it, the cipher
+    is unusable (not a rejected key) and no stale-key latch is set."""
+    provider = RsaProvider(station, rsa_key=False)
+    latch = MemoryKeyRefreshLatch()
+    session = make_rsa_session(station, provider, key_refresh=latch)
     try:
-        with pytest.raises(HandshakeError, match="no RSA private key"):
+        with pytest.raises(CipherUnusableError, match="no RSA private key") as err:
             await session.async_connect()
     finally:
         await session.async_close()
-    assert not session.rsa_session
+    assert (err.value.reason, err.value.cipher_id) == ("no_rsa_key", station.cipher_id)
+    assert provider.calls == [False, True]
+    assert latch.retry_blocked_for() == 0.0
+
+
+async def test_an_rsa_key_missing_from_the_cache_is_fetched_once(station: FakeStation) -> None:
+    provider = RsaProvider(station, cached_rsa_key=False)
+    session = make_rsa_session(station, provider)
+    try:
+        await session.async_connect()
+        assert session.rsa_session
+    finally:
+        await session.async_close()
+    assert provider.calls == [False, True]
+
+
+async def test_a_refetched_rsa_key_that_does_not_parse_is_unusable(station: FakeStation) -> None:
+    """A rejected key is re-fetched once; a re-fetched key that does not parse raises
+    CipherUnusableError, not KeyRejectedError."""
+    other = FakeStation().rsa_private_key_pem  # a valid key that unwraps noise
+    calls: list[bool] = []
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        calls.append(refresh)
+        key = station.rsa_private_key_pem.lower() if refresh else other
+        return P2PCredentials(SYNTHETIC.account_id, "user", "", rsa_private_key=key)
+
+    session = make_rsa_session(station, provider)
+    try:
+        with pytest.raises(CipherUnusableError) as err:
+            await session.async_connect()
+    finally:
+        await session.async_close()
+    assert (err.value.reason, err.value.cipher_id) == ("rsa_unparsable", station.cipher_id)
+    assert calls == [False, True]
+
+
+async def test_a_cipher_still_mismatching_after_a_refresh_fails_without_the_latch(
+    station: FakeStation,
+) -> None:
+    """Credentials of another cipher than CONN_INIT names, even after one refresh: a
+    handshake error naming both ciphers, and no stale-key latch (no key was rejected)."""
+    calls: list[tuple[bool, int | None]] = []
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        calls.append((refresh, cipher_id))
+        key = station.ecc_private_key_hex
+        return P2PCredentials(SYNTHETIC.account_id, "user", key, cipher_id=station.cipher_id + 1)
+
+    latch = MemoryKeyRefreshLatch()
+    session = StationSession(
+        SYNTHETIC.station_sn,
+        provider,
+        host="127.0.0.1",
+        port=station.discovery_port,
+        key_refresh=latch,
+    )
+    try:
+        with pytest.raises(
+            HandshakeError, match=f"names cipher {station.cipher_id}, the key"
+        ) as err:
+            await session.async_connect()
+    finally:
+        await session.async_close()
+    assert not isinstance(err.value, KeyRejectedError)
+    assert latch.retry_blocked_for() == 0
+    cipher = station.cipher_id
+    assert calls == [(False, cipher), (True, cipher)]
+
+
+async def test_an_ecies_conn_init_without_an_ecc_key_is_unusable(station: FakeStation) -> None:
+    """Version 8 with no ``ecc_private_key`` held, even after one refresh: unusable."""
+    calls: list[bool] = []
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        calls.append(refresh)
+        return P2PCredentials(SYNTHETIC.account_id, "user", "")
+
+    latch = MemoryKeyRefreshLatch()
+    session = StationSession(
+        SYNTHETIC.station_sn,
+        provider,
+        host="127.0.0.1",
+        port=station.discovery_port,
+        key_refresh=latch,
+    )
+    try:
+        with pytest.raises(CipherUnusableError) as err:
+            await session.async_connect()
+    finally:
+        await session.async_close()
+    assert (err.value.reason, err.value.cipher_id) == ("no_ecc_key", station.cipher_id)
+    assert calls == [False, True]
+    assert latch.retry_blocked_for() == 0.0
 
 
 async def test_an_rsa_key_that_does_not_parse_is_unusable_not_rejected(

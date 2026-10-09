@@ -45,6 +45,7 @@ from .exceptions import (
 from .models import FrameCipher, GuardMode
 
 if TYPE_CHECKING:
+    from .cloud.status import DeviceListSource
     from .p2p.storage_info import StorageInfo
     from .station import StationState
 
@@ -508,7 +509,8 @@ class SecurityEvent:
     hashing, so two decodes of the same event compare equal.
 
     ``frame_cipher`` is the cipher of the P2P frame that carried the event, or None
-    when it did not come over P2P (a cloud push); see :attr:`authenticated`.
+    when it did not come over P2P (a cloud push); ``session_ecb`` is True for an ECB
+    frame under an RSA session's key rather than the static key; see :attr:`authenticated`.
 
     Untrusted fields are checked before they are lifted: media paths must be
     station paths (:func:`is_station_media_path`), event times plausible and not
@@ -552,6 +554,7 @@ class SecurityEvent:
     unique_id: str | None = None
     record_id: int | None = None
     frame_cipher: FrameCipher | None = None
+    session_ecb: bool = False
     push_count: int | None = None
     alarm_type: int | None = None
     alarm_delay: int | None = None
@@ -594,16 +597,17 @@ class SecurityEvent:
         """Whether the event's origin is authenticated.
 
         True for a P2P frame under GCM (its tag was verified against the session
-        key) and for a cloud push (``frame_cipher`` None: TLS from eufy's servers).
-        False for a P2P frame under ECB, whose static key anyone on the LAN can
-        derive: such an event is still delivered, but must not drive a security
-        decision (clearing an alarm, attributing an arm).
+        key), for an ECB frame under an RSA session's key (``session_ecb``: only the
+        cipher's owner could unwrap it), and for a cloud push (``frame_cipher`` None:
+        TLS from eufy's servers). False for a P2P frame under the static ECB key,
+        which anyone on the LAN can derive: such an event is still delivered, but must
+        not drive a security decision (clearing an alarm, attributing an arm).
 
         This proves **origin, not freshness**: station → client GCM frames carry no
         sequence number, so a genuine frame can be replayed within one session.
         Order and de-duplicate by ``event_time_ms`` / ``dedupe_key``.
         """
-        return self.frame_cipher is not FrameCipher.ECB
+        return self.frame_cipher is not FrameCipher.ECB or self.session_ecb
 
     @property
     def message_type(self) -> PushMessageType | None:
@@ -986,6 +990,24 @@ class DevicesChanged:
     added: tuple[str, ...] = ()
     removed: tuple[str, ...] = ()
     moved: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class StationsChanged:
+    """A discovery after the first built a station, or no longer lists a built one.
+
+    Emitted by :meth:`~.client.EufySecurity.async_discover` only when something
+    changed. Each field holds station serials, sorted: ``added`` the stations (local or
+    remote) this discovery built; ``removed`` built stations the device list no longer
+    names, each reported once (they stay in ``stations`` until the client is rebuilt).
+    ``source`` says how the list was obtained (``"fetched"``, ``"cache"``,
+    ``"fallback"``, ``"unsent"``). A consumer reloads on it, as on
+    :class:`DevicesChanged`.
+    """
+
+    added: tuple[str, ...] = ()
+    removed: tuple[str, ...] = ()
+    source: DeviceListSource | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -1380,6 +1402,7 @@ type Event = (
     | CredentialsRefreshed
     | AccountMismatch
     | DevicesChanged
+    | StationsChanged
     | StationStateChanged
     | StorageChanged
     | CameraBusyChanged
