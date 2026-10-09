@@ -160,6 +160,7 @@ async def test_no_login_while_the_login_country_lookup_does_not_answer(
     fake_mega: FakeMega,
     cache: SessionCache,
     http: aiohttp.ClientSession,
+    *,
     endpoint: str,
     country: str,
     domain_lookups: int,

@@ -1640,11 +1640,13 @@ class EufyCloudApi:
                     continue
                 listed_by[serial] = region
                 entries.append({**entry, REGION_KEY: region})
+        # A refused scope keeps the devices it listed last, for its stations' LAN use.
         refused = self.refused_regions()
-        for entry in self._cache.cached_devices() or ():
-            # A refused scope keeps the devices it listed last, for its stations' LAN use.
-            if entry.get(REGION_KEY) in refused and entry.get("device_sn") not in listed_by:
-                entries.append(dict(entry))
+        entries.extend(
+            dict(entry)
+            for entry in self._cache.cached_devices() or ()
+            if entry.get(REGION_KEY) in refused and entry.get("device_sn") not in listed_by
+        )
         self._cache.set_devices(entries)
         listed = self._cache.section("cloud").setdefault("listed", {})
         now = time.time()
