@@ -3,6 +3,7 @@ security realm's station and device lists, the cipher-table sweep, and ``login=F
 
 from __future__ import annotations
 
+import logging
 import time
 
 import aiohttp
@@ -113,6 +114,36 @@ async def test_pending_invitations_of_homes_and_devices(
         assert body["is_inviter"] == const.INVITES_RECEIVED
         assert body["transaction"]
     assert _bodies(fake_mega, "device_invites")[0]["categories"] == []
+
+
+async def test_house_and_invitation_answers_are_logged_as_counts(
+    fake_mega: FakeMega, cache: SessionCache, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Names, nicknames and locations stay out of the debug log; the wire dump has them."""
+    fake_mega.houses = [{"house_id": "house-1", "house_name": "Cottage", "latitude": 59.4372}]
+    fake_mega.invite_data = {
+        "house_invites": {"house_invite_records": [
+            {"id": 7, "house_id": "house-9", "house_name": "Lakeside", "action_user_nick": "Kim"},
+        ]},
+        "device_invites": {"invites": [
+            {"id": 3, "action_user_nick": "Robin", "action_user_email": "kim@example.invalid"},
+        ]},
+    }  # fmt: skip
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.cloud.api")
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            await api.async_list_houses("eu")
+            await api.async_list_invites("eu")
+    logged = "\n".join(
+        r.getMessage() for r in caplog.records if r.name == "eufy_home_security.cloud.api"
+    )
+    for private in ("Cottage", "Lakeside", "Kim", "Robin", "59.4372", "kim@"):
+        assert private not in logged
+    for summary in ("<1 house_infos>", "<1 house_invite_records>", "<1 invites>"):
+        assert summary in logged
 
 
 @pytest.mark.parametrize("data", [None, {"house_invite_records": None}, {}])

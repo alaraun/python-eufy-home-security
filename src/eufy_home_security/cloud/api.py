@@ -91,6 +91,17 @@ _SUCCESS: Final = int(const.CloudCode.SUCCESS)
 # The account-wide house device-list body (the house-scoped one names a ``house_id``).
 _ACCOUNT_DEVICES_BODY: Final[Mapping[str, Any]] = MappingProxyType({"device_sn": ""})
 
+# Endpoints whose answer is logged as the count of this list only: their entries carry
+# names, nicknames and locations (the full answer goes to the wire logger).
+_SUMMARISED_LISTS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        const.DEVICES_PATH: "devices",
+        const.HOUSES_PATH: "house_infos",
+        const.HOUSE_INVITES_PATH: "house_invite_records",
+        const.DEVICE_INVITES_PATH: "invites",
+    }
+)
+
 type PasswordSource = str | Callable[[], Awaitable[str]]
 """The account password, or a coroutine function that produces it.
 
@@ -2541,17 +2552,18 @@ class EufyCloudApi:
         code = _body_code(parsed.get("code", _SUCCESS), path)
         if code == _SUCCESS or code in tolerate:
             data = self._decode_data(parsed, identity)
+            listed = _SUMMARISED_LISTS.get(path)
             _LOGGER.debug(
                 "← %s HTTP 200 code %s in %.0f ms: %s",
                 path,
                 code,
                 _ms(started),
-                # The device list is summarised by async_get_devices (full with wire dumps).
-                f"<{len(data.get('devices') or []) if isinstance(data, Mapping) else '?'} devices>"
-                if path == const.DEVICES_PATH
-                else Payload({**parsed, "data": data}),
+                # Lists of devices, homes and invitations as counts (full in the wire dump).
+                Payload({**parsed, "data": data})
+                if listed is None
+                else _list_summary(data, listed),
             )
-            if path == const.DEVICES_PATH:
+            if listed is not None:
                 _WIRE.debug("← %s data %s", path, Payload(data, limit=1_000_000))
             return code, parsed, data
         _LOGGER.debug(
@@ -2633,6 +2645,13 @@ def _device_list(data: object) -> list[Mapping[str, Any]]:
     if not isinstance(data, list):
         raise ProtocolError(f"cloud response to {const.DEVICES_PATH} has no device list")
     return [entry for entry in data if isinstance(entry, Mapping)]
+
+
+def _list_summary(data: object, key: str) -> str:
+    """``data[key]``'s entry count for a log line: 0 for none, ``?`` for no list."""
+    listed = data.get(key) if isinstance(data, Mapping) else data
+    count = 0 if listed is None else len(listed) if isinstance(listed, list) else "?"
+    return f"<{count} {key}>"
 
 
 def _count(value: object) -> int:

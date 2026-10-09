@@ -56,7 +56,7 @@ By default no log line, wire dumps included, carries a secret or an identifier:
 | the account password, e-mailed verification codes, captcha answers, the password's ECDH wrap | `***` (no tail, no length) |
 | tokens, keys, ECDH secrets | `***cdef` |
 | serials | `T8030***2345` (model prefix and last four) |
-| account and user ids, user names, e-mail addresses, device and station names, DIDs, MAC addresses, house ids, the disk serial and label, `openudid`, the FCM `android_id` and message ids, the cloud session's `key_ident`, media paths | `***` plus the last four characters, or only stars for a short value |
+| account and user ids, user names and nicknames, e-mail addresses, device, station and house names, a house's address and coordinates, DIDs, MAC addresses, house ids, the disk serial and label, `openudid`, the FCM `android_id` and message ids, the cloud session's `key_ident`, media paths | `***` plus the last four characters, or only stars for a short value |
 | public IP addresses | `***` plus the last four characters |
 | private, loopback and link-local IP addresses, host names | in full: they show which network path was taken |
 
@@ -67,6 +67,9 @@ The rules:
   for identifiers (`_logging.py`), with case, `_` and `-` ignored. A string that holds
   a JSON object is decoded and masked the same way. Any serial, 40-hex account id or
   e-mail address or station media path (`/zx/…`) left inside a string is redacted too.
+- The device, house and invitation lists (`get_devs_list`, `get_house_list`,
+  `get_house_invite_records`, `get_invites`) are logged as entry counts
+  (`<3 house_infos>`); the full answer goes to the wire logger only.
 - A hexdump stars out serials, DIDs (struct and text form) and 40-hex account ids in
   place, so its offsets stay valid. The rest is encrypted traffic or protocol bytes.
 - Parameter values that identify the house (device and station names, the paired
