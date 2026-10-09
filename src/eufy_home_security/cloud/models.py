@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -9,7 +10,8 @@ from typing import Any, Final, Literal
 
 from .._logging import redact, redact_serial
 from ..devices.types import DeviceModel, model_for_serial, serial_prefix
-from ..exceptions import CipherUnusableError, ProtocolError
+from ..exceptions import CipherUnusableError, CloudApiError, EmptyResponseError, ProtocolError
+from .const import OTA_NO_UPGRADE_CODE, OTA_ROM_PATH
 
 type DeviceSource = Literal["house", "security"]
 type KeyState = Literal["absent", "usable", "unusable"]
@@ -21,6 +23,16 @@ def _str_or_none(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+_OTA_REASON_CODE: Final = re.compile(r"code = (-?\d+)")
+"""The embedded code of an OTA error object: ``"error: code = 20004 reason = …"``."""
+
+
+def _ota_reason_code(reason: str) -> int | None:
+    """The ``code`` embedded in an OTA error object's ``reason`` text."""
+    match = _OTA_REASON_CODE.search(reason)
+    return int(match.group(1)) if match else None
 
 
 def _int_or_none(value: object) -> int | None:
@@ -78,19 +90,31 @@ class FirmwareUpdate:
     def from_api(cls, device_sn: str, data: object) -> FirmwareUpdate | None:
         """Parse a ``get_rom_version`` ``data`` payload; None when up to date.
 
-        The OTA subsystem answers an up-to-date device with an error object
-        (``code`` 20004) or an entry without a ``full_package``; only a payload that
-        carries a downloadable ``full_package.file_path`` is an available update.
+        Up to date: the error object with embedded ``code`` 20004, or a version entry
+        without a ``full_package``. An available update carries a downloadable
+        ``full_package.file_path`` and a ``rom_version_name``.
+
+        Raises :class:`~.exceptions.CloudApiError` for an error object with another
+        code, and :class:`~.exceptions.EmptyResponseError` for a payload that is no
+        object or an offered package without its URL or version.
         """
         if not isinstance(data, Mapping):
-            return None
+            raise EmptyResponseError(0, "no firmware answer", endpoint=OTA_ROM_PATH)
+        reason = data.get("reason")
+        if isinstance(reason, str) and "full_package" not in data:
+            code = _ota_reason_code(reason)
+            if code == OTA_NO_UPGRADE_CODE:
+                return None
+            raise CloudApiError(code or 0, reason, endpoint=OTA_ROM_PATH)
         package = data.get("full_package")
-        if not isinstance(package, Mapping):
+        if package is None:
             return None
-        url = _str_or_none(package.get("file_path"))
+        url = _str_or_none(package.get("file_path")) if isinstance(package, Mapping) else None
         version = _str_or_none(data.get("rom_version_name"))
-        if url is None or version is None:
-            return None
+        if not isinstance(package, Mapping) or url is None or version is None:
+            raise EmptyResponseError(
+                0, "firmware package without its URL or version", endpoint=OTA_ROM_PATH
+            )
         return cls(
             device_sn=device_sn,
             version_name=version,

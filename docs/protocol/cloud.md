@@ -415,7 +415,9 @@ asks whether a newer firmware exists for a device. Body:
   has been seen for these devices (they are current), so the populated shape is app-only.
 
 The library exposes this as `EufyCloudApi.async_check_firmware(...)` → a `FirmwareUpdate`
-(or None when up to date) and `EufySecurity.async_firmware_updates()`, which checks the hub
+(or None when up to date: 20004, or a version without a `full_package`; an error object with
+another code raises `CloudApiError` with that code, an answer that is neither
+`EmptyResponseError`) and `EufySecurity.async_firmware_updates()`, which checks the hub
 and each camera and returns what has one. It is an ordinary authenticated call on the
 account's shared throttle, meant for a slow poll, never per start (see below).
 

@@ -1992,8 +1992,10 @@ class EufyCloudApi:
 
         ``ota_type`` is the device's firmware-kit type (:func:`~.const.firmware_ota_type`)
         and ``current_version_name`` its installed version. A device on the newest
-        published firmware answers with an embedded ``code`` 20004, returned here as None
-        (see :class:`~.models.FirmwareUpdate`). This is a plain authenticated call, so it
+        published firmware answers with an embedded ``code`` 20004, returned here as None;
+        an embedded other code raises :class:`CloudApiError` and an answer that is no
+        verdict :class:`EmptyResponseError` (see :class:`~.models.FirmwareUpdate`). This is
+        a plain authenticated call, so it
         shares the account's throttle and one-re-login retry like every other; make it on
         a timer of the consumer's own choosing, never per start.
         """

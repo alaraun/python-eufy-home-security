@@ -1510,7 +1510,9 @@ name and rename on success; on a failure keep nothing.
 `await eufy.async_firmware_updates()` returns one `FirmwareUpdate` per device the cloud
 OTA offers a newer firmware for (`from eufy_home_security import FirmwareUpdate`).
 **An empty list is the normal, healthy state** — it means every device is on the newest
-published firmware, not that the check failed.
+published firmware, not that the check failed. A check that fails raises (`CloudApiError`
+when the OTA answers an error other than "up to date", `EmptyResponseError` for an answer
+that is no verdict, the usual cloud errors otherwise): keep the entities' last state then.
 
 | field | use in the `update` entity |
 |---|---|

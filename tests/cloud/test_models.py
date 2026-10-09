@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from eufy_home_security.cloud.const import firmware_ota_type
 from eufy_home_security.cloud.models import (
     CACHED_DEVICE_FIELDS,
@@ -17,6 +19,7 @@ from eufy_home_security.cloud.models import (
     device_cache_entry,
     security_device_entry,
 )
+from eufy_home_security.exceptions import CloudApiError, EmptyResponseError
 from eufy_home_security.testing import SYNTHETIC, FakeStation, security_device, security_station
 
 
@@ -335,9 +338,29 @@ def test_device_cache_entry_drops_the_params_snapshot_unless_asked() -> None:
 def test_firmware_update_from_api_up_to_date_is_none() -> None:
     # The OTA "already newest" answer: an error object, not a version with a package.
     reason = {"reason": "error: code = 20004 reason =  message = "}
-    assert FirmwareUpdate.from_api("T8030P2000012345", reason) is None
-    assert FirmwareUpdate.from_api("T8030P2000012345", None) is None
-    assert FirmwareUpdate.from_api("T8030P2000012345", {"rom_version_name": "3.9.0.0"}) is None
+    assert FirmwareUpdate.from_api(SYNTHETIC.station_sn, reason) is None
+    assert FirmwareUpdate.from_api(SYNTHETIC.station_sn, {"rom_version_name": "3.9.0.0"}) is None
+
+
+@pytest.mark.parametrize(
+    ("data", "error", "code"),
+    [
+        ({"reason": "error: code = 20001 reason = busy message = "}, CloudApiError, 20001),
+        ({"reason": "error"}, CloudApiError, 0),
+        (None, EmptyResponseError, 0),
+        ([], EmptyResponseError, 0),
+        ({"rom_version_name": "3.9.0.0", "full_package": {}}, EmptyResponseError, 0),
+        ({"full_package": {"file_path": "https://cdn.example/fw.bin"}}, EmptyResponseError, 0),
+        ({"rom_version_name": "3.9.0.0", "full_package": "x"}, EmptyResponseError, 0),
+    ],
+)
+def test_firmware_update_from_api_raises_for_an_answer_that_is_no_verdict(
+    data: object, error: type[CloudApiError], code: int
+) -> None:
+    # Only 20004 or a version without a package means "up to date"; anything else is an error.
+    with pytest.raises(error) as caught:
+        FirmwareUpdate.from_api(SYNTHETIC.station_sn, data)
+    assert caught.value.code == code
 
 
 def test_firmware_update_from_api_parses_the_package() -> None:
