@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "eufy-home-security"
-version = "0.3.3"
+version = "0.3.4"
 description = "Asyncio client for eufy Security: local P2P to the HomeBase, the eufy cloud, and push events."
 readme = "README.md"
 license = "MIT"

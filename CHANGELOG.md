@@ -4,6 +4,18 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.4](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.3...v0.3.4) (2026-10-09)
+
+
+### Features
+
+* live video declared for every camera whose handler's open the library sends ([#46](https://github.com/alaraun/python-eufy-home-security/issues/46)) ([52041cc](https://github.com/alaraun/python-eufy-home-security/commit/52041ccbdbbc81d59636a0df252fbd17ea8bfaff))
+
+
+### Documentation
+
+* the app routes live opens to WebRTC by the parent's is_connect_webrtc ([#48](https://github.com/alaraun/python-eufy-home-security/issues/48)) ([f822c0b](https://github.com/alaraun/python-eufy-home-security/commit/f822c0bb1b980ee03f0446d7d5cd1973166b91fb))
+
 ## [0.3.3](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.2...v0.3.3) (2026-10-09)
 
 
