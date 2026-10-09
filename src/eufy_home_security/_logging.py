@@ -141,13 +141,16 @@ IDENTIFYING_KEYS: Final = frozenset(
         # account and people
         "account", "accountid", "userid", "uid", "shortuserid", "adminuserid",
         "memberuserid", "actionuserid", "ownerid", "owneruserid", "mvaluestrsub",
-        "username", "nickname", "actionusername", "personname", "mobile", "openudid",
+        "username", "nickname", "nick", "actionusernick", "actionusername", "personname",
+        "mobile", "openudid",
         # devices and the house
         "sn", "s", "serial", "serialnumber", "devicesn", "stationsn", "parentsn", "did",
         "p2pdid", "hddlabel", "curstoragelabel", "oldstoragelabel",
         "name", "devicename", "stationname", "devicealiasname", "homename", "roomname",
         "houseid", "homeid", "roomid", "mac", "btmac", "wifimac", "ssid", "wifissid",
-        "appconn", "p2pconn", "ip", "ipaddr", "localip", "androidid", "fid",
+        "appconn", "p2pconn", "ip", "ipaddr", "localip", "androidid", "fid", "housename",
+        # the house's location
+        "address", "houseaddress", "location", "latitude", "longitude", "lat", "lng", "lon",
         # media on the station's disk
         "file", "filepath", "path", "thumbpath", "storagepath", "croppath", "videopath",
         "coverpath", "cloudpath", "crophb3path", "cropcloudpath", "snapshotcloud", "mp4cloud",
@@ -233,7 +236,7 @@ def _masked(data: object, clear: bool) -> object:
             elif isinstance(v, str | bytes | int) and not isinstance(v, bool) and _sensitive(key):
                 out[key] = str(Secret(v))
             elif (
-                isinstance(v, str | int)
+                isinstance(v, str | int | float)
                 and not isinstance(v, bool)
                 and (_identifying(key) or (named_param and key == "param_value"))
             ):

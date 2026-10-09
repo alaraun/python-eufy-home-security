@@ -37,7 +37,15 @@ from eufy_home_security.install import InstallState
 from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
-from .conftest import FAKE_AUTH_TOKEN, FAKE_ECC_KEY, FAKE_OWNER_ID, FAKE_PENDING_TOKEN, FakeMega
+from .conftest import (
+    FAKE_AUTH_TOKEN,
+    FAKE_ECC_KEY,
+    FAKE_OWNER_ID,
+    FAKE_PENDING_TOKEN,
+    MEGA_REALM,
+    SECURITY_REALM,
+    FakeMega,
+)
 
 
 def _api(session: aiohttp.ClientSession, cache: SessionCache) -> EufyCloudApi:
@@ -615,9 +623,9 @@ async def test_concurrent_rekey_answers_share_one_key_exchange(
             api = _api(session, cache)
             await api.async_login()
             fake_mega.error_bodies["devices"] = [refusal, refusal]
-            exchanges = len(fake_mega._shared)
+            exchanges = len(fake_mega._shared["mega"])
             await asyncio.gather(*(api.async_get_devices(refresh=True) for _ in range(2)))
-    assert len(fake_mega._shared) == exchanges + 1
+    assert len(fake_mega._shared["mega"]) == exchanges + 1
     assert fake_mega.login_calls == 1
 
 
@@ -889,6 +897,34 @@ async def test_cipher_fetch_uses_the_owner_id_and_caches(
     assert cipher_body["station_sn"] == SYNTHETIC.station_sn
 
 
+async def test_the_cipher_fetch_runs_on_a_security_realm_identity(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """``get_ciphers`` needs an identity of the security realm, the session's token and
+    ``gtoken``, and ``category``; that realm's key exchange the token and ``gtoken``
+    without ``category`` (the fake refuses anything else)."""
+    fake_mega.devices = [
+        {"device_sn": SYNTHETIC.station_sn, "device_type": 18,
+         "member": {"admin_user_id": FAKE_OWNER_ID}},
+    ]  # fmt: skip
+    fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": FAKE_ECC_KEY}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            assert await api.async_get_cipher_key(SYNTHETIC.station_sn) == FAKE_ECC_KEY
+    assert fake_mega.refused == []
+    (headers,) = fake_mega.headers["ciphers"]
+    assert headers["x-key-ident"] in fake_mega._shared[SECURITY_REALM]
+    assert headers["x-key-ident"] not in fake_mega._shared[MEGA_REALM]
+    assert (headers["category"], headers["gtoken"], headers["x-auth-token"]) == (
+        const.CATEGORY,
+        crypto.gtoken(SYNTHETIC.account_id),
+        FAKE_AUTH_TOKEN,
+    )
+
+
 async def test_cipher_fetch_keeps_the_rsa_private_key(
     fake_mega: FakeMega, cache: SessionCache
 ) -> None:
@@ -909,6 +945,27 @@ async def test_cipher_fetch_keeps_the_rsa_private_key(
     assert keys == cached == CipherKeys(None, "UlNBLWtleQ==")
     assert cache.rsa_cipher_key(SYNTHETIC.station_sn, 40) == "UlNBLWtleQ=="
     cache.drop_cipher_key(SYNTHETIC.station_sn, 40)
+    assert cache.rsa_cipher_key(SYNTHETIC.station_sn, 40) is None
+
+
+async def test_a_cipher_entry_is_read_as_the_cipher_table_reads_it(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """A blank key is no key, and a ``cipher_id`` sent as text matches its number."""
+    fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 18}]
+    fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": "  ", "private_key": "\n"}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(EmptyResponseError, match="no private key"):
+                await api.async_get_cipher_keys(SYNTHETIC.station_sn)
+            fake_mega.cipher_objects = [{"cipher_id": "40", "ecc_private_key": f" {FAKE_ECC_KEY}"}]
+            keys = await api.async_get_cipher_keys(SYNTHETIC.station_sn)
+            (record,) = await api.async_list_ciphers(SYNTHETIC.station_sn, FAKE_OWNER_ID, [40])
+    assert keys == CipherKeys(record.ecc_private_key, record.rsa_private_key)
+    assert keys.ecc_private_key == FAKE_ECC_KEY
     assert cache.rsa_cipher_key(SYNTHETIC.station_sn, 40) is None
 
 
@@ -979,6 +1036,32 @@ async def test_an_empty_cipher_answer_is_not_asked_again_during_the_back_off(
             fake_mega.cipher_objects = [{"cipher_id": 98, "ecc_private_key": FAKE_ECC_KEY}]
             assert await api.async_get_cipher_key(SYNTHETIC.station_sn, 98) == FAKE_ECC_KEY
             assert cipher_requests() == [[98], [40], [98]]
+
+
+async def test_the_empty_cipher_back_off_ends_when_the_owner_changes(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """A key asked under a stale owner id is asked again once the owner id is refreshed."""
+    station = {"device_sn": SYNTHETIC.station_sn, "device_type": 18}
+    fake_mega.devices = [{**station, "member": {"admin_user_id": FAKE_OWNER_ID}}]
+    fake_mega.cipher_objects = None
+    new_owner = "0123456789abcdef0123456789abcdef01234567"
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(CipherUnavailableError):
+                await api.async_get_cipher_keys(SYNTHETIC.station_sn, 98)
+            fake_mega.devices = [{**station, "member": {"admin_user_id": new_owner}}]
+            fake_mega.cipher_objects = [{"cipher_id": 98, "ecc_private_key": FAKE_ECC_KEY}]
+            assert await api.async_get_station_owner_id(SYNTHETIC.station_sn, refresh=True) == (
+                new_owner
+            )
+            keys = await api.async_get_cipher_keys(SYNTHETIC.station_sn, 98, refresh=True)
+    assert keys.ecc_private_key == FAKE_ECC_KEY
+    owners = [payload["user_id"] for name, payload in fake_mega.calls if name == "ciphers"]
+    assert owners == [FAKE_OWNER_ID, new_owner]
 
 
 async def test_cipher_refresh_honours_the_cooldown(
@@ -1199,12 +1282,13 @@ async def test_region_override_wins_over_a_cached_mega_domain(cache: SessionCach
     fake_mega.devices = [_STATION_OF_OWNER]
     fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": FAKE_ECC_KEY}]
     with aioresponses() as mock:
-        fake_mega.install(mock)  # only eu hosts exist: a us host would fail to connect
+        fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             api = EufyCloudApi(session, cache, SYNTHETIC.email, SYNTHETIC.password, region="eu")
             await api.async_login()
             await api.async_get_devices(refresh=True)
             assert await api.async_get_cipher_key(SYNTHETIC.station_sn) == FAKE_ECC_KEY
+    assert {region for _endpoint, region in fake_mega.region_calls} == {"eu"}
 
 
 async def test_login_logs_the_auth_flow_with_secrets_only_when_enabled(

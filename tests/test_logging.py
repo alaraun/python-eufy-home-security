@@ -147,6 +147,10 @@ def _secrets_restored() -> Iterator[None]:
         ("thumb_path", "/a/b.jpg", "********"),
         ("openudid", "1234", "****"),
         ("android_id", "5678", "****"),
+        ("house_name", "Cottage", "*******"),
+        ("action_user_nick", "Kim Smith", "***mith"),
+        ("nick", "Kim", "***"),
+        ("address", "Main St 1", "***St 1"),
     ],
 )
 @pytest.mark.usefixtures("_secrets_restored")
@@ -160,6 +164,18 @@ def test_payload_masks_identifying_keys(key: str, value: str, expected: str) -> 
 
     set_secret_logging(True)
     assert value in str(Payload(body))
+
+
+@pytest.mark.usefixtures("_secrets_restored")
+def test_payload_masks_a_numeric_location() -> None:
+    body = {"latitude": 59.4372, "longitude": 24.7536, "lat": 1.5, "lng": -2.25, "member_type": 1}
+    result = str(Payload(body))
+    for shown in ("59.4372", "24.7536", "1.5", "2.25"):
+        assert shown not in result
+    assert '"member_type": 1' in result
+
+    set_secret_logging(True)
+    assert "59.4372" in str(Payload(body))
 
 
 @pytest.mark.usefixtures("_secrets_restored")

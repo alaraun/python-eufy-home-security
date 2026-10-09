@@ -7,12 +7,20 @@ from typing import TYPE_CHECKING
 from .._lazy import lazy_exports
 
 if TYPE_CHECKING:
-    from .api import EufyCloudApi
+    from .api import CipherKeys, EufyCloudApi
     from .const import CIPHER_ID_P2P, CloudCode, cluster_host
-    from .models import CipherRecord, CloudDevice, CloudHouse, CloudInvite, LoginCountry
+    from .models import (
+        CipherRecord,
+        CloudDevice,
+        CloudHouse,
+        CloudInvite,
+        LoginCountry,
+        RsaKeyCheck,
+    )
 
 __all__ = [
     "CIPHER_ID_P2P",
+    "CipherKeys",
     "CipherRecord",
     "CloudCode",
     "CloudDevice",
@@ -20,6 +28,7 @@ __all__ = [
     "CloudInvite",
     "EufyCloudApi",
     "LoginCountry",
+    "RsaKeyCheck",
     "cluster_host",
 ]
 
@@ -27,10 +36,18 @@ __getattr__, __dir__ = lazy_exports(
     __name__,
     globals(),
     {
-        "EufyCloudApi": "api",
+        **dict.fromkeys(("CipherKeys", "EufyCloudApi"), "api"),
         **dict.fromkeys(("CIPHER_ID_P2P", "CloudCode", "cluster_host"), "const"),
         **dict.fromkeys(
-            ("CipherRecord", "CloudDevice", "CloudHouse", "CloudInvite", "LoginCountry"), "models"
+            (
+                "CipherRecord",
+                "CloudDevice",
+                "CloudHouse",
+                "CloudInvite",
+                "LoginCountry",
+                "RsaKeyCheck",
+            ),
+            "models",
         ),
     },
 )

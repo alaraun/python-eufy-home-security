@@ -20,7 +20,7 @@ from eufy_home_security import client as client_module
 from eufy_home_security import storage as storage_module
 from eufy_home_security._logging import LogThrottle, redact_serial
 from eufy_home_security.client import EufySecurity
-from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession
+from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession, _SessionExpiredError
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices.model_settings import (
@@ -1126,13 +1126,19 @@ async def test_discover_before_login_keeps_the_stored_cache() -> None:
     """A cloud-backed call before async_login must read the store, not overwrite it."""
     from .cloud.conftest import FakeMega  # noqa: PLC0415 - the cloud harness, only here
 
-    station = {"device_sn": SYNTHETIC.station_sn, "device_type": 18, "p2p_did": SYNTHETIC.did}
+    station = {
+        "device_sn": SYNTHETIC.station_sn,
+        "device_type": 18,
+        "p2p_did": SYNTHETIC.did,
+        "cloud_region": "eu",
+    }
     store = MemoryStore(
         {
             "version": CACHE_VERSION,
             "account": SYNTHETIC.email,
             "openudid": "0011223344556677",
             "devices": [station],
+            "cloud": {"listed": {"eu": {"devices": 1, "at": 1.0}, "us": {"devices": 0, "at": 1.0}}},
         }
     )
     fake_mega = FakeMega()
@@ -2156,3 +2162,37 @@ async def test_an_all_bundled_account_is_scanned_for_versions_and_stays_quiet(
     assert scan_records(scan_logs) == []
     assert {m.state for m in status} == {"bundled"}
     assert not any(m.newer_vendor_data for m in status)
+
+
+# ── pending invitations ──────────────────────────────────────────────────────
+
+
+def _expired() -> _SessionExpiredError:
+    return _SessionExpiredError("cloud session expired (code 26006)", code=26006)
+
+
+async def test_a_region_that_refuses_keeps_no_other_regions_invitations() -> None:
+    invite = {"id": 4, "house_id": "house-2", "house_name": "Cottage", "action_user_nick": "Kim"}
+    cloud = FakeCloud(region="us", house_invites=[invite])
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+    cloud.calls.clear()
+    cloud.call_errors = [_expired()]  # eu, asked first
+    (pending,) = await eufy.async_pending_invites()
+    assert (pending.region, pending.house_name) == ("us", "Cottage")
+    assert "login" not in cloud.calls
+
+
+async def test_pending_invitations_raise_when_no_region_answers() -> None:
+    """A lapsed session is no reauth: no login was tried."""
+    cloud = FakeCloud()
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+    cloud.calls.clear()
+    cloud.call_errors = [_expired(), _expired()]
+    with pytest.raises(NoCachedSessionError) as caught:
+        await eufy.async_pending_invites()
+    assert not isinstance(caught.value, AuthenticationError)
+    assert "login" not in cloud.calls

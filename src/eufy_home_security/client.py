@@ -468,15 +468,24 @@ class EufySecurity:
         """The invitations sent to the account that it has not accepted, in every region
         whose session is held or cached (see :meth:`EufyCloudApi.async_list_invites`).
 
-        Login-free: a region without a session is not asked. The account sees a shared
-        home's devices only once the invitation is accepted in the eufy app, so a
-        consumer can tell the user so. Two cloud requests per region: call it when the
-        device list comes back empty or on a user's request, not on a timer.
+        Login-free: a region without a session is not asked. A region whose request
+        fails is skipped; the error is raised only when no region answered. The account
+        sees a shared home's devices only once the invitation is accepted in the eufy
+        app, so a consumer can tell the user so. Two cloud requests per region: call it
+        when the device list comes back empty or on a user's request, not on a timer.
         """
         await self._ensure_cache_loaded()
         invites: list[CloudInvite] = []
-        for region in self.cloud.regions_with_session():
-            invites += await self.cloud.async_list_invites(region, login=False)
+        errors: list[EufySecurityError] = []
+        regions = self.cloud.regions_with_session()
+        for region in regions:
+            try:
+                invites += await self.cloud.async_list_invites(region, login=False)
+            except EufySecurityError as err:
+                _LOGGER.debug("pending invitations of the %s region not read: %r", region, err)
+                errors.append(err)
+        if errors and len(errors) == len(regions):
+            raise errors[0]
         return invites
 
     async def async_reauthenticate(

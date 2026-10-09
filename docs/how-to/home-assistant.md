@@ -319,6 +319,10 @@ device, the *login scope* that listed it: the region (`eu`) for the login countr
   client option `EufySecurity(scan_regions=True)` (every device-list refresh asks every
   scope; one whose session lapsed costs a login). With every scope suspended a refresh
   sends nothing and returns the cached, empty list. There is no automatic retry.
+- The cached device list is used only while it matches the scopes: a scope never listed
+  (an extra country added, the login country moved to another home region, an override
+  dropped) or a cached device of a scope no longer in use (a country removed) makes the
+  next `async_discover()` fetch the list once.
 - Every cloud call about a device goes to its scope's session: cipher key, DSK, firmware
   check. The push token is registered in every scope that has devices.
 - `EufySecurity(region="eu" | "us")` pins the login country's scope to that region and
@@ -367,11 +371,14 @@ them", including devices the library does not serve:
   one `get_ciphers` request: per cipher id whether the ECC key and the RSA key are
   usable, the RSA key's letter case and size, and which stations named it.
 - Serials redacted; no user id, house id, DID, IP, name, key or parameter value (but
-  the camera-info one).
+  the camera-info one). Error texts have serials, account ids and e-mail addresses
+  redacted.
 
 It never logs in: it asks only regions whose session is held or cached
 (`regions_without_session` lists the rest), and the first throttle, kick-out or
-credential refusal ends it (`stopped`). It sends a few requests per region plus one per
+credential refusal ends it (`stopped`); a region whose session the cloud no longer
+accepts records `NoCachedSessionError` on its lists and the other regions are still
+asked. It sends a few requests per region plus one per
 owner, on the account's shared throttle, and caches nothing: call it from the
 diagnostics download only, never on a timer. `ciphers=False` leaves the cipher sweep out.
 
@@ -381,7 +388,10 @@ An account that a home or device was shared with sees those devices only after i
 accepts the invitation in the eufy app. `await eufy.async_pending_invites()` returns the
 invitations it has not accepted (`CloudInvite`: `kind` `"house"` or `"device"`,
 `house_name` or `device_sn` / `product_code`, `inviter`, `region`), login-free and
-uncached, two requests per region with a session. Ask it when the device list comes
+uncached, two requests per region with a session. A region whose request fails is
+skipped; the call raises only when no region answered, and a session the cloud no
+longer accepts raises `NoCachedSessionError` there (no login was tried: not a reauth).
+Ask it when the device list comes
 back empty (and on a user's rescan), and when it is not empty raise a repair: "accept
 the invitation from *inviter* to *home* in the eufy app, then rescan". `house_name` and
 `inviter` are for that message only: keep them out of logs and diagnostics
@@ -1878,7 +1888,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `CameraWakeError` (a `CommandRejectedError` and a `CommunicationError`; `code` -204, -203 or -205) | the station could not wake the camera: not a station outage, no `UpdateFailed`. From a live view, answer 503 and let the session's wake backoff (`retry_after`) decide when the next attempt goes out; from a button or service action, `raise HomeAssistantError` ("the camera did not wake") |
 | `KeyRejectedError` (a `HandshakeError`; in `ConnectionChanged.error`, `Station.last_error` or the `async_start()` result) | the station rejected a key that was already fetched again once. Not a reauth: raise a fixable repair issue whose fix calls `eufy.async_reset_key_refresh(serial)`, which allows one more fetch. Without it the library tries one fetch a day by itself |
 | `RefreshCooldownError` (a `RateLimitedError`, `code` 0) | the library's own spacing of key fetches, not a eufy throttle: no repair, just wait |
-| `CipherUnavailableError` (an `EmptyResponseError`; `cipher_id`, `owner_source`, `retry_after`) | the cloud has no key for the cipher the station named in its handshake, under the owner id asked (`owner_source`: `"member.admin_user_id"` or `"own user id"`). Not a reauth and not an outage of the station: the share or the station's binding needs the owner. Raise one non-fixable repair issue naming the station and `cipher_id`; clear it on `ConnectionChanged(connected=True)`. The library asks the same station and cipher again only after `retry_after` (an hour); until then every attempt raises this without a request. A reload of the entry asks once more |
+| `CipherUnavailableError` (an `EmptyResponseError`; `cipher_id`, `owner_source`, `retry_after`) | the cloud has no key for the cipher the station named in its handshake, under the owner id asked (`owner_source`: `"member.admin_user_id"` or `"own user id"`). Not a reauth and not an outage of the station: the share or the station's binding needs the owner. Raise one non-fixable repair issue naming the station and `cipher_id`; clear it on `ConnectionChanged(connected=True)`. The library asks the same station and cipher again only after `retry_after` (an hour) or once a refreshed device list names another owner id; until then every attempt raises this without a request. A reload of the entry asks once more |
 | `StillNotWrittenError` (a `RecordNotFoundError`; `offset`) | the device has not written the event's row or still yet: keep what is shown and ask once more later (about 20 s). A plain `RecordNotFoundError` is final for that event: no retry |
 | `KeyExchangeRefusedError` (a `CloudApiError`; `code` 4404 or 463, `status` 463) | the cloud gateway refused the client's key identity and a new key exchange did not restore it. Not a reauth and not a kick-out: no login was attempted and none helps by itself. Carry on from the cache and retry on the next interval; the library re-keys at each attempt. Raise a repair issue only if it persists (hours) |
 

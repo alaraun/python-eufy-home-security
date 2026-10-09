@@ -93,6 +93,17 @@ _HTTP_429_THROTTLE: Final = const.Throttle(login_only=False, seconds=const.REQUE
 # The account-wide house device-list body (the house-scoped one names a ``house_id``).
 _ACCOUNT_DEVICES_BODY: Final[Mapping[str, Any]] = MappingProxyType({"device_sn": ""})
 
+# Endpoints whose answer is logged as the count of this list only: their entries carry
+# names, nicknames and locations (the full answer goes to the wire logger).
+_SUMMARISED_LISTS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        const.DEVICES_PATH: "devices",
+        const.HOUSES_PATH: "house_infos",
+        const.HOUSE_INVITES_PATH: "house_invite_records",
+        const.DEVICE_INVITES_PATH: "invites",
+    }
+)
+
 type PasswordSource = str | Callable[[], Awaitable[str]]
 """The account password, or a coroutine function that produces it.
 
@@ -141,6 +152,13 @@ class _SessionExpiredError(SessionRejectedError):
     """The server no longer accepts the auth token (one re-login is allowed)."""
 
 
+def _no_session_error(region: str, err: _SessionExpiredError) -> NoCachedSessionError:
+    """The error of a call that may not log in when the cloud answers its session expired."""
+    return NoCachedSessionError(
+        f"the {region} cloud session is no longer accepted ({err}); not logging in"
+    )
+
+
 def _two_step(data: object) -> int:
     """``fa_info.step`` of a login answer: 26052 while two-step verification is pending."""
     info = data.get("fa_info") if isinstance(data, Mapping) else None
@@ -172,16 +190,13 @@ def _entries(data: object, path: str, key: str) -> list[Mapping[str, Any]]:
 
 @dataclass(frozen=True, slots=True)
 class CipherKeys:
-    """One station cipher's private keys as ``get_ciphers`` returns them, None when absent:
-    ``ecc_private_key`` (hex) unwraps an ECIES CONN_INIT, ``rsa_private_key`` (the
-    cloud's ``private_key``, base64 PKCS#8) an RSA one."""
+    """One station cipher's private keys as :meth:`CipherRecord.from_api` reads a
+    ``get_ciphers`` entry, None when absent or blank: ``ecc_private_key`` (hex) unwraps
+    an ECIES CONN_INIT, ``rsa_private_key`` (the cloud's ``private_key``, base64 PKCS#8)
+    an RSA one."""
 
     ecc_private_key: str | None
     rsa_private_key: str | None
-
-
-def _key_text(value: object) -> str | None:
-    return value if isinstance(value, str) and value else None
 
 
 _COUNTRY_KEY: Final = "country"
@@ -335,9 +350,9 @@ class EufyCloudApi:
         self._challenge_region: str | None = None
         """The scope whose login raised this instance's last unanswered challenge."""
         self._login_lock = asyncio.Lock()
-        self._cipher_unavailable: dict[tuple[str, int], tuple[float, str]] = {}
-        """(monotonic time, owner id source) of the last empty ``get_ciphers`` answer per
-        (station, cipher id), for the back-off."""
+        self._cipher_unavailable: dict[tuple[str, int], tuple[float, str, str]] = {}
+        """(monotonic time, owner id source, owner id) of the last empty ``get_ciphers``
+        answer per (station, cipher id), for the back-off."""
 
     # ── public properties ────────────────────────────────────────────────────
 
@@ -1523,9 +1538,9 @@ class EufyCloudApi:
         :class:`KeyExchangeRefusedError`. A credential rejection, a throttle, a session
         another client took over, or any other failure propagates at once.
 
-        Without ``login`` nothing logs in: no usable session raises
-        :class:`NoCachedSessionError`, and a session-expired code propagates with the
-        session left for the next ordinary call.
+        Without ``login`` nothing logs in: no usable session, or one the cloud answers
+        as expired, raises :class:`NoCachedSessionError` (never an
+        :class:`AuthenticationError`), the session left for the next ordinary call.
         """
         identity = await self._ensure_session(region, login=login)
         rekeyed = relogged = False
@@ -1543,7 +1558,9 @@ class EufyCloudApi:
                 rekeyed = True
                 identity = await self._rekey(identity, err)
             except _SessionExpiredError as err:
-                if relogged or not login:
+                if not login:
+                    raise _no_session_error(region, err) from err
+                if relogged:
                     raise
                 relogged = True
                 _LOGGER.info("cloud session no longer accepted (%s); logging in once more", err)
@@ -1594,8 +1611,10 @@ class EufyCloudApi:
     ) -> list[CloudDevice]:
         """Every device on the account (``app/house/get_devs_list``), cached.
 
-        Returns the cached list unless ``refresh`` or ``rescan_regions`` is set or
-        nothing is cached (``rescan_regions``: see :meth:`async_fetch_devices`). A
+        Returns the cached list unless ``refresh`` or ``rescan_regions`` is set,
+        nothing is cached, or the cache does not match the login scopes: a scope of
+        :meth:`regions_to_list` was never listed, or a cached device names a scope that
+        is no longer one (``rescan_regions``: see :meth:`async_fetch_devices`). A
         refresh that cannot reach the cloud (a network error or a throttle) falls back
         to the cache when there is one, so a Home Assistant restart during a cloud
         outage still comes up. A refusal from the cloud itself (a kick-out, a key
@@ -1604,7 +1623,7 @@ class EufyCloudApi:
         """
         if not (refresh or rescan_regions):
             cached = self._cache.cached_devices()
-            if cached is not None:
+            if cached is not None and self._cache_covers_scopes(cached):
                 _LOGGER.debug("device list from the cache (%d devices)", len(cached))
                 return [CloudDevice.from_api(d) for d in cached]
         try:
@@ -1615,6 +1634,22 @@ class EufyCloudApi:
                 raise
             _LOGGER.warning("device list refresh failed (%s); using the cached list", err)
             return [CloudDevice.from_api(d) for d in cached]
+
+    def _cache_covers_scopes(self, cached: Sequence[Mapping[str, Any]]) -> bool:
+        """Whether ``cached`` answers for the scopes in use: every scope of
+        :meth:`regions_to_list` has a listing and every device a current scope."""
+        listings = self._listings()
+        missing = [r for r in self.regions_to_list() if r not in listings]
+        scopes = self.login_scopes()
+        stale = {str(d.get(REGION_KEY)) for d in cached if d.get(REGION_KEY) not in scopes}
+        if missing or stale:
+            _LOGGER.debug(
+                "cached device list not used: scope(s) %s never listed, %s no longer in use",
+                ", ".join(missing) or "none",
+                ", ".join(sorted(stale)) or "none",
+            )
+            return False
+        return True
 
     async def async_fetch_devices(self, *, rescan_regions: bool = False) -> list[CloudDevice]:
         """The device list fetched from the cloud now, cached; every failure raises.
@@ -2018,7 +2053,8 @@ class EufyCloudApi:
 
         An empty answer raises :class:`CipherUnavailableError`; for
         :data:`~.const.CIPHER_UNAVAILABLE_BACKOFF` after it, the same station and cipher
-        raise it again without a request (``refresh`` included).
+        raise it again without a request (``refresh`` included) while the station's
+        cached owner id is the one that was asked.
         """
         if not refresh:
             cached = CipherKeys(
@@ -2050,7 +2086,11 @@ class EufyCloudApi:
         try:
             keys = await self._fetch_cipher(station_sn, cipher_id, owner)
         except CipherUnavailableError as err:
-            self._cipher_unavailable[(station_sn, cipher_id)] = (time.monotonic(), err.owner_source)
+            self._cipher_unavailable[(station_sn, cipher_id)] = (
+                time.monotonic(),
+                err.owner_source,
+                owner,
+            )
             raise
         _LOGGER.debug(
             "cipher %d for %s fetched: ecc_private_key %s, RSA key %s",
@@ -2089,12 +2129,13 @@ class EufyCloudApi:
                 endpoint=const.CIPHERS_PATH,
             )
         for item in _cipher_items(data):
-            if isinstance(item, Mapping) and str(item.get("cipher_id")) == str(cipher_id):
-                keys = CipherKeys(
-                    _key_text(item.get("ecc_private_key")), _key_text(item.get("private_key"))
-                )
-                if keys.ecc_private_key or keys.rsa_private_key:
-                    return keys
+            record = CipherRecord.from_api(item)
+            if (
+                record is not None
+                and record.cipher_id == cipher_id
+                and (record.ecc_private_key or record.rsa_private_key)
+            ):
+                return CipherKeys(record.ecc_private_key, record.rsa_private_key)
         raise EmptyResponseError(
             _SUCCESS,
             f"cipher {cipher_id} for {redact_serial(station_sn)} carried no private key",
@@ -2217,9 +2258,9 @@ class EufyCloudApi:
         It never spends a login: it never logs in, never logs in again,
         and never drops or refreshes the session. With no usable session (none
         cached, the cache not loaded, or one expiring within the margin) it raises
-        :class:`NoCachedSessionError` without a request. An expired-token or re-key
-        answer propagates as a :class:`CloudError` and leaves the session for the
-        next ordinary call. A hold-off refuses locally, and a 429 or throttle code
+        :class:`NoCachedSessionError` without a request; an expired-token answer
+        raises it too, and a re-key answer propagates as a :class:`CloudError`, both
+        leaving the session for the next ordinary call. A hold-off refuses locally, and a 429 or throttle code
         starts the account's shared hold-off exactly as every other call does. Only
         a session another client took over is latched and forgotten, as everywhere.
         """
@@ -2249,6 +2290,8 @@ class EufyCloudApi:
         except SessionReplacedError:
             await self._mark_replaced(identity)
             raise
+        except _SessionExpiredError as err:
+            raise _no_session_error(region, err) from err
         if not isinstance(data, Mapping) or not isinstance(data.get("things_list"), list):
             raise ProtocolError(f"cloud response to {const.THINGS_PATH} has no things_list")
         things = [t for t in data["things_list"] if isinstance(t, Mapping)]
@@ -2333,14 +2376,16 @@ class EufyCloudApi:
             )
 
     def _raise_if_cipher_unavailable(self, station_sn: str, cipher_id: int) -> None:
-        """Re-raise the empty answer for this station and cipher while its back-off runs."""
+        """Re-raise the empty answer for this station and cipher while its back-off runs;
+        a different cached owner id since then ends the back-off."""
         key = (station_sn, cipher_id)
         last = self._cipher_unavailable.get(key)
         if last is None:
             return
-        since, source = last
+        since, source, owner = last
         left = const.CIPHER_UNAVAILABLE_BACKOFF - (time.monotonic() - since)
-        if left <= 0:
+        cached_owner = self._cache.station_account_id(station_sn)
+        if left <= 0 or (cached_owner and cached_owner != owner):
             del self._cipher_unavailable[key]
             return
         _LOGGER.debug("cipher %d refused locally: no key last time, %.0fs left", cipher_id, left)
@@ -2749,17 +2794,18 @@ class EufyCloudApi:
         code = _body_code(parsed.get("code", _SUCCESS), path)
         if code == _SUCCESS or code in tolerate:
             data = self._decode_data(parsed, identity)
+            listed = _SUMMARISED_LISTS.get(path)
             _LOGGER.debug(
                 "← %s HTTP 200 code %s in %.0f ms: %s",
                 path,
                 code,
                 _ms(started),
-                # The device list is summarised by async_get_devices (full with wire dumps).
-                f"<{len(data.get('devices') or []) if isinstance(data, Mapping) else '?'} devices>"
-                if path == const.DEVICES_PATH
-                else Payload({**parsed, "data": data}),
+                # Lists of devices, homes and invitations as counts (full in the wire dump).
+                Payload({**parsed, "data": data})
+                if listed is None
+                else _list_summary(data, listed),
             )
-            if path == const.DEVICES_PATH:
+            if listed is not None:
                 _WIRE.debug("← %s data %s", path, Payload(data, limit=1_000_000))
             return code, parsed, data
         _LOGGER.debug(
@@ -2841,6 +2887,13 @@ def _device_list(data: object) -> list[Mapping[str, Any]]:
     if not isinstance(data, list):
         raise ProtocolError(f"cloud response to {const.DEVICES_PATH} has no device list")
     return [entry for entry in data if isinstance(entry, Mapping)]
+
+
+def _list_summary(data: object, key: str) -> str:
+    """``data[key]``'s entry count for a log line: 0 for none, ``?`` for no list."""
+    listed = data.get(key) if isinstance(data, Mapping) else data
+    count = 0 if listed is None else len(listed) if isinstance(listed, list) else "?"
+    return f"<{count} {key}>"
 
 
 def _count(value: object) -> int:

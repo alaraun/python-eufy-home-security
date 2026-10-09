@@ -542,6 +542,29 @@ async def test_calls_about_an_extra_country_go_to_its_session_on_its_cluster(
     assert _requests(fake_mega, "security_stations") == ["eu"]
 
 
+async def test_cipher_dsk_and_firmware_of_an_extra_country_station_use_its_session(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    _with_an_extra_country(fake_mega)
+    fake_mega.cipher_objects = [{"cipher_id": const.CIPHER_ID_P2P, "ecc_private_key": "ab" * 32}]
+    fake_mega.dsk_objects = [{"dsk_key": "dsk-0123", "expiration": time.time() + 3600}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country=["EE", "CH"])
+        await api.async_login()
+        await api.async_fetch_devices()
+        fake_mega.region_calls.clear()
+        await api.async_get_cipher_key(_EXTRA_STATION_SN)
+        await api.async_get_dsk_key(_EXTRA_STATION_SN)
+        await api.async_check_firmware(
+            _EXTRA_STATION_SN, ota_type="T8010", current_version_name="1.0.0"
+        )
+    for endpoint in ("ciphers", "dsk", "ota"):
+        (headers,) = fake_mega.headers[endpoint]
+        assert (headers["country"], headers["x-auth-token"]) == ("CH", f"{FAKE_AUTH_TOKEN}-CH")
+        assert _requests(fake_mega, endpoint) == ["eu"]
+
+
 async def test_an_extra_country_eufy_names_no_cluster_for_gets_no_session(
     fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
 ) -> None:
@@ -679,3 +702,32 @@ async def test_an_extra_country_logs_in_under_its_own_install_id(
     assert install_ids[0] == cache.openudid != install_ids[1]
     assert cache.section("cloud")["install_ids"] == {"eu:CH": install_ids[1]}
     assert {d.device_sn for d in devices} == {SYNTHETIC.station_sn, _EXTRA_STATION_SN}
+
+
+@pytest.mark.parametrize(
+    ("before", "after"), [(["EE"], ["EE", "CH"]), (["EE", "CH"], ["EE"])], ids=["added", "removed"]
+)
+async def test_a_cached_list_that_misses_or_outlives_a_scope_is_fetched_again(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    before: list[str],
+    after: list[str],
+) -> None:
+    """A cached list is served only when it covers every scope to list and no other."""
+    _with_an_extra_country(fake_mega)
+    listed = {SYNTHETIC.station_sn} | ({_EXTRA_STATION_SN} if "CH" in after else set())
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country=before)
+        await api.async_login()
+        await api.async_get_devices()
+        fake_mega.region_calls.clear()
+        api = _api(http, cache, country=after)
+        await api.async_login()
+        devices = await api.async_get_devices()
+        assert {d.device_sn for d in devices} == listed
+        assert len(_requests(fake_mega, "devices")) == len(after)
+        fake_mega.region_calls.clear()
+        assert {d.device_sn for d in await api.async_get_devices()} == listed
+    assert _requests(fake_mega, "devices") == []  # the refetched list is a hit

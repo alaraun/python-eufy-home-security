@@ -325,7 +325,8 @@ another copy, is **[open]**.
 The empty answer does not tell "wrong user id" from "no such cipher under this owner".
 The library raises `CipherUnavailableError` for it (with the cipher id and whether the
 user id asked was the account's own or `member.admin_user_id`) and does not ask the
-same station and cipher again for an hour (`CIPHER_UNAVAILABLE_BACKOFF`).
+same station and cipher again for an hour (`CIPHER_UNAVAILABLE_BACKOFF`), unless a
+refreshed device list names another owner id for the station.
 
 `EufyCloudApi.async_list_ciphers` reads an owner's whole table this way (default ids
 0–400 in one request, `CIPHER_ID_SWEEP`; it answered the five held records
@@ -435,7 +436,8 @@ per start.
 | FCM credentials and token | install-scoped | Google identity of the install ([events.md](events.md)) |
 
 Rules the library follows: at most one automatic re-login per call, and only on a
-session-expired code — never on a re-key answer (a key exchange instead) and never
+session-expired code (a login-free call raises `NoCachedSessionError` instead) — never
+on a re-key answer (a key exchange instead) and never
 after a kick-out (26084), which blocks automatic logins until a forced one;
 concurrent calls share one login; a cooldown (15 min) on forced cipher re-fetches and,
 separately, on the forced device-list re-read behind an owner-id refresh (inside it
