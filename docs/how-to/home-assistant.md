@@ -158,12 +158,12 @@ provides where it lives.
 
 | section | contents | refreshed |
 |---|---|---|
-| `openudid` | this install's eufy device identity, minted once | never; the only part kept when the account changes |
+| `openudid` | this install's eufy device identity, minted once | never; kept, with `cloud.install_ids`, when the account changes |
 | `password` | the account password of the last successful login | on every successful login; dropped as soon as the cloud rejects it |
 | `cloud.sessions.<region>` | per cloud region, and per extra country as `<region>:<country>`: key ident, shared key, auth token, user id, expiry, the `ab` the login sent and the one it asked for (`ab_wanted`), the login answer's `mega_domain` and `country_code` | on a login to that region: a miss, an expiry, or a session-expired answer. A re-key answer (HTTP 463) replaces only the key ident and shared key, by a key exchange, no login. A kick-out (26084) drops that region's session |
 | `cloud.country` | the login country (`code`, `source` `option` or `ip`, `home_region`) | on the first login of a process when the country or its home region changed |
 | `cloud.extra_countries` | each extra country's home region | when a login or a device list first needs an extra country not looked up |
-| `cloud.install_ids` | the install id (`openudid`) of each extra country's login scope | minted on that scope's first key exchange, then kept |
+| `cloud.install_ids` | the install id (`openudid`) of each extra country's login scope | minted on that scope's first key exchange, then kept wherever `openudid` is |
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
 | `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), and the key-refresh latch | on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass |
@@ -172,14 +172,15 @@ provides where it lives.
 | `refresh_attempts` | when the owner id (account-wide) and each station's cipher key were last force-fetched | with those fetches |
 | `throttle` | hold-off end times (requests, logins) and recent login attempts | when the cloud throttles, and on every login |
 
-Everything except `openudid` belongs to one account. A `EufySecurity` built for a
-different e-mail on the same store discards it and starts over (it keeps `openudid`).
+Everything except the install identity (`openudid` and `cloud.install_ids`) belongs to
+one account. A `EufySecurity` built for a different e-mail on the same store discards it
+and starts over (it keeps the install identity).
 
 The layout version is exported as `CACHE_LAYOUT_VERSION`. A deploy script can compare it
 before and after an upgrade and warn while the account is throttled or kicked out.
 
-A library update that changes the document's layout (its `version`) keeps `openudid`,
-the password, the throttle state and the `replaced` latch, and drops the rest. The next cloud call logs in
+A library update that changes the document's layout (its `version`) keeps the install
+identity, the password, the throttle state and the `replaced` latch, and drops the rest. The next cloud call logs in
 again with the cached password and fetches the device list and keys again. That is one
 login cycle, within the hold-off and the login budget, and nobody is asked for anything.
 Version 1 (one session, before regions) is migrated instead: its session and devices
@@ -261,8 +262,8 @@ async def async_remove_entry(hass, entry):
 It removes the password, the session, the station keys and owner ids, the device list,
 the push registration and the refresh stamps, and the kick-out latch (re-adding the
 account is the user's decision). It keeps `throttle`, so removing and re-adding the
-integration cannot walk a throttled account back into the cloud, and `openudid`
-(`keep_install_identity=False` drops it too). Throttle stamps expire by themselves. It
+integration cannot walk a throttled account back into the cloud, and the install identity,
+`openudid` and `cloud.install_ids` (`keep_install_identity=False` drops them too). Throttle stamps expire by themselves. It
 never contacts the cloud. No live instance may be open on the store, which holds in
 `async_remove_entry`.
 
