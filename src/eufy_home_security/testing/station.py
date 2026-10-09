@@ -968,7 +968,13 @@ class FakeStation:
             return  # taken, never answered: the session reports it as not acted on
         if code == 0 and self.apply_settings:
             self.params.setdefault(channel, {})[ftype] = str(value)
-        self.send_frame(ftype, struct.pack("<i", code) + b"\x00" * 12, cipher=FrameCipher.ECB)
+        result = struct.pack("<i", code) + b"\x00" * 12
+        if self.rsa_session:  # the result under the session's key, like every frame
+            subheader = bytes([FrameCipher.ECB, 0, 0xFF, FRAME_SESSION_ECB, 0, 0])
+            result = ecb_encrypt(RSA_SESSION_KEY, result)
+            self.send_frame(ftype, result, cipher=FrameCipher.ECB, subheader=subheader)
+        else:
+            self.send_frame(ftype, result, cipher=FrameCipher.ECB)
 
     # ── media ────────────────────────────────────────────────────────────────
 

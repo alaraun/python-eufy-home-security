@@ -153,6 +153,14 @@ def test_parse_conn_init_reads_a_clear_payload_and_pads_a_partial_block() -> Non
         crypto.parse_conn_init(body, b"\x01", static)
 
 
+def test_parse_conn_init_rejects_an_undecryptable_or_short_payload() -> None:
+    static = static_key(SYNTHETIC.station_sn, SYNTHETIC.did)
+    with pytest.raises(HandshakeError, match="ECB decrypt failed"):
+        crypto.parse_conn_init(bytes(32), bytes([1, 0, 0xFF, 1, 0, 0]), static[:15])
+    with pytest.raises(HandshakeError, match="too short"):
+        crypto.parse_conn_init(bytes(3), bytes([1, 0, 0xFF, crypto.FRAME_PLAIN, 0, 0]), static)
+
+
 def test_session_key_from_conn_init_recovers_the_key() -> None:
     static = static_key(SYNTHETIC.station_sn, SYNTHETIC.did)
     session_key = bytes((65 + i % 26) for i in range(32))

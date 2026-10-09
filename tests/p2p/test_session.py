@@ -69,6 +69,7 @@ from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN
 from eufy_home_security.p2p.session import (
     PARAM_SETTLE,
     CommandOutcome,
+    CredentialProvider,
     EventSummary,
     Inbound,
     MediaStream,
@@ -801,6 +802,21 @@ async def test_ecb_scalar_success_and_rejection(station: FakeStation) -> None:
     finally:
         await rejected.async_close()
     assert info.value.code == -104
+
+
+async def test_an_rsa_session_sends_ecb_scalars_and_reads_results_under_its_key(
+    station: FakeStation,
+) -> None:
+    session = make_rsa_session(station)
+    try:
+        await session.async_send_ecb_scalar(1250, 30, channel=0)
+        station.account_id = "f" * 40  # the next command is not the owner's
+        with pytest.raises(CommandRejectedError) as info:
+            await session.async_send_ecb_scalar(1253, 1)
+    finally:
+        await session.async_close()
+    assert station.ecb_received == [(1250, 0, 30), (1253, 255, 1)]
+    assert info.value.code == -104  # read from the decrypted result
 
 
 async def test_a_string_command_is_stored_on_its_channel_and_a_foreign_one_refused(
@@ -1780,6 +1796,20 @@ async def test_recording_plays_to_its_end(
         assert [o["cmd"] for o in station.received] == [command]  # no stop: none works
     finally:
         await session.async_close()
+
+
+async def test_an_rsa_recording_ends_on_its_clear_end_of_playback_frame(
+    station: FakeStation,
+) -> None:
+    session = make_rsa_session(station)
+    try:
+        stream = await session.async_open_recording("/zx/clip.zxvideo", 1, idle_timeout=1.0)
+        started = time.monotonic()
+        frames = [frame async for frame in stream]
+        assert time.monotonic() - started < 1.0  # ended by the frame, not the idle timeout
+    finally:
+        await session.async_close()
+    assert len(_video(frames)) == station.recording_frames
 
 
 async def test_unanswered_media_open_is_not_applied(station: FakeStation) -> None:
@@ -3292,7 +3322,7 @@ class RsaProvider:
 
 
 def make_rsa_session(
-    station: FakeStation, provider: RsaProvider | None = None, **kwargs: Any
+    station: FakeStation, provider: CredentialProvider | None = None, **kwargs: Any
 ) -> StationSession:
     """A session to ``station`` answering the RSA CONN_INIT (version 1)."""
     station.conn_init_version = 1
@@ -3414,6 +3444,51 @@ async def test_an_rsa_key_missing_from_the_cache_is_fetched_once(station: FakeSt
     finally:
         await session.async_close()
     assert provider.calls == [False, True]
+
+
+async def test_a_refetched_rsa_key_that_does_not_parse_is_unusable(station: FakeStation) -> None:
+    """A rejected key is re-fetched once; a re-fetched key that does not parse raises
+    CipherUnusableError, not KeyRejectedError."""
+    other = FakeStation().rsa_private_key_pem  # a valid key that unwraps noise
+    calls: list[bool] = []
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        calls.append(refresh)
+        key = station.rsa_private_key_pem.lower() if refresh else other
+        return P2PCredentials(SYNTHETIC.account_id, "user", "", rsa_private_key=key)
+
+    session = make_rsa_session(station, provider)
+    try:
+        with pytest.raises(CipherUnusableError) as err:
+            await session.async_connect()
+    finally:
+        await session.async_close()
+    assert (err.value.reason, err.value.cipher_id) == ("rsa_unparsable", station.cipher_id)
+    assert calls == [False, True]
+
+
+async def test_a_cipher_still_mismatching_after_a_reload_fails_the_handshake(
+    station: FakeStation,
+) -> None:
+    """Credentials of another cipher than CONN_INIT names, even after a refresh: the
+    handshake fails naming both ciphers."""
+    calls: list[tuple[bool, int | None]] = []
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        calls.append((refresh, cipher_id))
+        key = station.ecc_private_key_hex
+        return P2PCredentials(SYNTHETIC.account_id, "user", key, cipher_id=station.cipher_id + 1)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, provider, host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        with pytest.raises(KeyRejectedError, match=f"names cipher {station.cipher_id}, the key"):
+            await session.async_connect()
+    finally:
+        await session.async_close()
+    cipher = station.cipher_id
+    assert calls == [(False, cipher), (True, cipher), (False, cipher)]
 
 
 async def test_an_ecies_conn_init_without_an_ecc_key_is_unusable(station: FakeStation) -> None:
