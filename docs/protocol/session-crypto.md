@@ -80,7 +80,8 @@ session    = PKCS7-unpad(AES-128-CBC-decrypt(aes_key, iv, ct))   # exactly 32 by
   the reply: it reads the id (`crypto.parse_conn_init`), stores it per station
   (`stations.<serial>.cipher_id`), then loads that cipher's key from the cache, else the
   cloud. A cipher other than the one of the credentials held is not a stale key (no
-  re-fetch latch). The station's `APP_CMD_GATEWAYINFO` (1100) message names the same id,
+  re-fetch latch): credentials still for another cipher after one re-fetch raise
+  `HandshakeError`. The station's `APP_CMD_GATEWAYINFO` (1100) message names the same id,
   and a key is needed per owner id and cipher id, never before the station names it
   **[declared: app]**.
 - An HMAC mismatch, or a key that is not 32 bytes, means the cached key of

@@ -3474,11 +3474,11 @@ async def test_a_refetched_rsa_key_that_does_not_parse_is_unusable(station: Fake
     assert calls == [False, True]
 
 
-async def test_a_cipher_still_mismatching_after_a_reload_fails_the_handshake(
+async def test_a_cipher_still_mismatching_after_a_refresh_fails_without_the_latch(
     station: FakeStation,
 ) -> None:
-    """Credentials of another cipher than CONN_INIT names, even after a refresh: the
-    handshake fails naming both ciphers."""
+    """Credentials of another cipher than CONN_INIT names, even after one refresh: a
+    handshake error naming both ciphers, and no stale-key latch (no key was rejected)."""
     calls: list[tuple[bool, int | None]] = []
 
     async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
@@ -3486,16 +3486,25 @@ async def test_a_cipher_still_mismatching_after_a_reload_fails_the_handshake(
         key = station.ecc_private_key_hex
         return P2PCredentials(SYNTHETIC.account_id, "user", key, cipher_id=station.cipher_id + 1)
 
+    latch = MemoryKeyRefreshLatch()
     session = StationSession(
-        SYNTHETIC.station_sn, provider, host="127.0.0.1", port=station.discovery_port
+        SYNTHETIC.station_sn,
+        provider,
+        host="127.0.0.1",
+        port=station.discovery_port,
+        key_refresh=latch,
     )
     try:
-        with pytest.raises(KeyRejectedError, match=f"names cipher {station.cipher_id}, the key"):
+        with pytest.raises(
+            HandshakeError, match=f"names cipher {station.cipher_id}, the key"
+        ) as err:
             await session.async_connect()
     finally:
         await session.async_close()
+    assert not isinstance(err.value, KeyRejectedError)
+    assert latch.retry_blocked_for() == 0
     cipher = station.cipher_id
-    assert calls == [(False, cipher), (True, cipher), (False, cipher)]
+    assert calls == [(False, cipher), (True, cipher)]
 
 
 async def test_an_ecies_conn_init_without_an_ecc_key_is_unusable(station: FakeStation) -> None:

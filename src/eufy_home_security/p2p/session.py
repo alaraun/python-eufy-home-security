@@ -1354,7 +1354,9 @@ class StationSession:
         :class:`CipherUnusableError` without a re-fetch or latch (the cloud serves the
         same bytes again); credentials without the key the station's handshake needs
         are re-fetched once, and still without it raise :class:`CipherUnusableError`
-        (reason ``no_rsa_key`` or ``no_ecc_key``) without the latch. After
+        (reason ``no_rsa_key`` or ``no_ecc_key``) without the latch. Credentials for
+        another cipher than the station names are re-fetched once, and still for another
+        cipher raise :class:`HandshakeError` without the latch. After
         :meth:`async_close` every call raises :class:`StationUnreachableError`: a closed
         session has no owner left to close it again.
         """
@@ -3370,9 +3372,7 @@ class StationSession:
             )
             creds = await self._load_credentials(refresh=False)
         if creds.cipher_id != named:
-            raise HandshakeError(
-                f"CONN_INIT names cipher {named}, the key is cipher {creds.cipher_id}"
-            )
+            raise _CipherMismatchError(named, creds.cipher_id)
         missing = _MissingKeyError(named, rsa=conn_init.rsa)
         if not missing.held_by(creds):
             raise missing
@@ -3405,6 +3405,11 @@ class StationSession:
         creds = await self._load_credentials(refresh=True)
         if isinstance(err, _MissingKeyError) and not err.held_by(creds):
             raise err.unusable() from err  # no key came back: nothing for the latch
+        if isinstance(err, _CipherMismatchError) and creds.cipher_id != err.named:
+            # Another cipher's key is no stale key of this one: nothing for the latch.
+            raise HandshakeError(
+                f"{err}; the re-fetched credentials are for cipher {creds.cipher_id} too"
+            ) from err
         await self._key_refresh.async_refreshed()  # only now: the fetch returned a key
         self._key_refreshes += 1
         return creds
@@ -4553,6 +4558,14 @@ class _MissingKeyError(HandshakeError):
 
     def unusable(self) -> CipherUnusableError:
         return CipherUnusableError(str(self), cipher_id=self.cipher_id, reason=self.reason)
+
+
+class _CipherMismatchError(HandshakeError):
+    """The credentials are for another cipher than the one CONN_INIT names."""
+
+    def __init__(self, named: int, held: int) -> None:
+        self.named = named
+        super().__init__(f"CONN_INIT names cipher {named}, the key is cipher {held}")
 
 
 class _StallClock:
