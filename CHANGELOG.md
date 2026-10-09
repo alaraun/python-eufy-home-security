@@ -4,6 +4,23 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.0](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.8...v0.3.0) (2026-10-09)
+
+
+### Features
+
+* every product the eufy app names is in the model list ([#36](https://github.com/alaraun/python-eufy-home-security/issues/36)) ([36df33a](https://github.com/alaraun/python-eufy-home-security/commit/36df33ae9dff25f20d0b05592df6173ff5be79af))
+
+
+### Bug Fixes
+
+* an extra country logs in under its own install id ([#35](https://github.com/alaraun/python-eufy-home-security/issues/35)) ([2e79411](https://github.com/alaraun/python-eufy-home-security/commit/2e79411aa5d3d286e94da19700259e095b877d8a))
+
+
+### Miscellaneous Chores
+
+* release 0.3.0 ([#38](https://github.com/alaraun/python-eufy-home-security/issues/38)) ([acd4167](https://github.com/alaraun/python-eufy-home-security/commit/acd4167ed84d25c390bae5e0de02fb13f19b9e85))
+
 ## [0.2.8](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.7...v0.2.8) (2026-10-08)
 
 
