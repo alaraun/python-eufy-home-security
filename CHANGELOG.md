@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.3](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.2...v0.3.3) (2026-10-09)
+
+
+### Features
+
+* ECC media key for live streams ([#44](https://github.com/alaraun/python-eufy-home-security/issues/44)) ([df76f0e](https://github.com/alaraun/python-eufy-home-security/commit/df76f0e4224a9f91f6727bfc96f79499b93b13fd))
+
 ## [0.3.2](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.1...v0.3.2) (2026-10-09)
 
 
