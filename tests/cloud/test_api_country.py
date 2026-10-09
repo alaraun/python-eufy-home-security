@@ -180,6 +180,37 @@ async def test_no_login_while_the_login_country_lookup_does_not_answer(
     assert api.login_country.home_region == "eu"
 
 
+async def test_a_reauthentication_logs_in_on_the_home_region_of_a_country_not_yet_known(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    fake_mega.client_country = "US"
+    fake_mega.country_regions = {"US": "us"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache)
+        await api.async_reauthenticate(SYNTHETIC.password)
+    assert (_requests(fake_mega, "login"), _login_abs(fake_mega)) == (["us"], ["US"])
+    assert api.login_scopes() == api.regions_with_session() == ["us"]
+
+
+async def test_a_login_held_off_on_one_region_logs_in_no_region_the_country_leaves_out(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """The country is looked up before the scopes to log in to are chosen, even while
+    the first region's logins are held off."""
+    await _logged_in_by_region(fake_mega, cache, http)
+    del cache.section("cloud")["sessions"]["us"]
+    cache.hold_off("login", 3600, region="eu")
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache)
+        await api.async_login()
+    assert _login_abs(fake_mega) == []
+    assert api.login_scopes() == ["eu"]
+
+
 async def test_a_session_made_with_another_ab_logs_in_again_once(
     fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
 ) -> None:

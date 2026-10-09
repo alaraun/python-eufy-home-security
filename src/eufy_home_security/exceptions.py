@@ -154,7 +154,8 @@ class NoCachedSessionError(CloudError):
 
     Raised by calls that must never spend a login, such as the thing
     description fetch: with no cached session, an unloaded session cache or one
-    expiring within the safety margin, they refuse before sending anything. Nothing
+    expiring within the safety margin, they refuse before sending anything. Also
+    raised for a login asked for a region that is no login scope of the account. Nothing
     was sent. It is not an :class:`AuthenticationError` — the credentials are not in
     question, so it must not start a reauth; the next ordinary call that may log in
     restores the session.

@@ -544,7 +544,8 @@ class EufyCloudApi:
     ) -> None:
         """One real login to :attr:`region` with ``password``, whatever the cache holds.
 
-        A challenge answer goes to the region that asked. Success replaces that
+        The login country is looked up first when not known, so :attr:`region` is its
+        home region. A challenge answer goes to the region that asked. Success replaces that
         region's session and the cached password, and releases every
         station's key-refresh latch. A rejection raises :class:`AuthenticationError`:
         the new password is not cached and the cached one is left as it was. Hold-offs
@@ -559,6 +560,10 @@ class EufyCloudApi:
         answering = bool(verify_code or (captcha_id and captcha_answer))
         async with self._login_lock:
             self._take_over_or_raise_if_replaced(take_over)
+            if self._login_allowed():
+                # The region follows the country: look it up (no login) first.
+                await self._resolve_login_country(retry=True)
+                await self._resolve_extra_countries()
             await self._do_login(
                 (self._challenge_region if answering else None) or self.region,
                 verify_code=verify_code,
@@ -991,7 +996,9 @@ class EufyCloudApi:
         ``ab`` (a second login of the budget), and the session records the country as
         the ``ab`` it settles, so no re-login follows for it. Without ``interactive`` a
         challenge is raised without asking eufy for a code or a captcha and is not
-        recorded as the one to answer. Callers hold ``_login_lock``.
+        recorded as the one to answer. A ``region`` that is no login scope once the
+        country is known raises :class:`NoCachedSessionError` before anything is sent.
+        Callers hold ``_login_lock``.
         """
         self._raise_if_held_off(login=True, region=region)
         password, source = (
@@ -999,6 +1006,11 @@ class EufyCloudApi:
         )
         await self._resolve_login_country()
         self._raise_if_country_unknown(region)
+        if region not in self.login_scopes():
+            raise NoCachedSessionError(
+                f"{region} is no login scope of this account (now {self.login_scopes()}); "
+                "not logging in"
+            )
         wanted = self.login_ab(region)
         _LOGGER.info(
             "logging in to the eufy cloud as %s (password %s, region %s, ab %s)",
@@ -1129,15 +1141,19 @@ class EufyCloudApi:
         )
 
     def _login_possible(self) -> bool:
-        """Whether a login to :attr:`region` could be sent now: a password at hand (or a
-        prompt) and no login hold-off or spent budget."""
-        if not self._password_at_hand():
-            return False
-        try:
-            self._raise_if_held_off(login=True, region=self.region)
-        except RateLimitedError:
-            return False
-        return True
+        """Whether a login to some login scope could be sent now: a password at hand (or
+        a prompt) and :meth:`_login_allowed`."""
+        return self._password_at_hand() and self._login_allowed()
+
+    def _login_allowed(self) -> bool:
+        """Whether some login scope's cluster has no login hold-off or spent budget."""
+        for region in self.login_scopes():
+            try:
+                self._raise_if_held_off(login=True, region=region)
+            except RateLimitedError:
+                continue
+            return True
+        return False
 
     def _password_at_hand(self, *, prompt: bool = True) -> bool:
         """Whether a login has a password without asking anyone: a given string, a cached
