@@ -465,10 +465,18 @@ class _FakeCloudApi(EufyCloudApi):
             _owner_lookup.reset(token)
 
     async def _key_exchange(
-        self, host: str, path: str, preset_key: str, *, auth: _Identity | None = None
+        self,
+        host: str,
+        path: str,
+        preset_key: str,
+        *,
+        auth: _Identity | None = None,
+        region: str = const.DEFAULT_REGION,
     ) -> _Identity:
         self._fake.key_exchanges += 1
-        return _Identity(key_ident=f"{_KEY_IDENT}-{next(_IDENTS)}", shared_key=_SHARED_KEY)
+        return _Identity(
+            key_ident=f"{_KEY_IDENT}-{next(_IDENTS)}", shared_key=_SHARED_KEY, region=region
+        )
 
     async def _lookup_client_country(self) -> str | None:
         """Answered from ``client_country``; no key exchange, nothing recorded in ``calls``."""

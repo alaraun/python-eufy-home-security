@@ -163,7 +163,10 @@ login country above; each further one has its home region looked up
 login scope `<region>:<country>` (`eu:CH`). Its devices join the device list tagged with
 the scope, and every call about them (lists, ciphers, DSK, push) uses its session. An
 extra scope is listed and suspended like a region; its logins count in its cluster's
-login budget. A country eufy names no cluster for gets no session, and a refused extra
+login budget. Each extra scope logs in under its own install id (`openudid`, minted once
+and cached): a `CH` login from another install id left an `EE` session on `eu` valid
+**[verified]**, while `CH` and `EE` under one install id did not both survive
+**[observed once]**, which reads as one session per install id and cluster. A country eufy names no cluster for gets no session, and a refused extra
 login is not retried with the region as `ab`.
 
 ## Login challenges

@@ -129,6 +129,10 @@ class FakeMega:
         # Login ``ab`` -> the devices only a session made with it lists (its own token).
         self.country_devices: dict[str, list[dict[str, Any]]] = {}
         self._token_ab: dict[str, str] = {}
+        # One session per (region, openudid), as live: a login ends the earlier session of
+        # its install id on that cluster, whose token then answers HTTP 401.
+        self.one_session_per_install = False
+        self._install_token: dict[tuple[str, str], str] = {}
         self._login_calls = 0
 
     # ── registration on an aioresponses mock ─────────────────────────────────
@@ -344,9 +348,12 @@ class FakeMega:
         ab = str(payload.get("ab"))
         self.last_login_ab[region] = ab
         data = {**self.login_data, "fa_info": {"info": "", "step": 0}}
-        if ab in self.country_devices:
+        if self.one_session_per_install:
+            data["auth_token"] = f"{FAKE_AUTH_TOKEN}-{ab}-{self._login_calls}"
+            self._install_token[(region, str(kwargs["headers"]["openudid"]))] = data["auth_token"]
+        elif ab in self.country_devices:
             data["auth_token"] = f"{FAKE_AUTH_TOKEN}-{ab}"
-            self._token_ab[data["auth_token"]] = ab
+        self._token_ab[data["auth_token"]] = ab
         return self._reply(shared, 0, data)
 
     def _client_country(self, url: str, **kwargs: Any) -> CallbackResult:
@@ -391,7 +398,13 @@ class FakeMega:
         if "house_id" in payload:
             listed = self.house_devices.get(str(payload["house_id"]), [])
             return self._reply(self._shared_for(kwargs), 0, {"devices": listed})
-        if (ab := self._token_ab.get(str(kwargs["headers"].get("x-auth-token")))) is not None:
+        token = str(kwargs["headers"].get("x-auth-token"))
+        if (
+            self.one_session_per_install
+            and self._install_token.get((region, str(kwargs["headers"]["openudid"]))) != token
+        ):
+            return CallbackResult(status=401, body=json.dumps({"code": 401, "msg": "expired"}))
+        if (ab := self._token_ab.get(token)) in self.country_devices:
             return self._reply(self._shared_for(kwargs), 0, {"devices": self.country_devices[ab]})
         if region and region != self.region:
             return self._reply(

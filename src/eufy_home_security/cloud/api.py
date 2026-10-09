@@ -24,6 +24,7 @@ import asyncio
 import json
 import logging
 import math
+import secrets
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -185,6 +186,8 @@ _AB_WANTED_KEY: Final = "ab_wanted"
 """A cached session's settled ``ab``: what was asked for (differs after a refused country login)."""
 _EXTRA_HOMES_KEY: Final = "extra_countries"
 """``cloud.extra_countries``: each looked-up extra country's home region."""
+_INSTALL_IDS_KEY: Final = "install_ids"
+"""``cloud.install_ids``: the ``openudid`` of each extra country's login scope."""
 
 
 def _country_code(value: object) -> str | None:
@@ -963,7 +966,7 @@ class EufyCloudApi:
         _LOGGER.debug(
             "login: password %s, openudid %s, %d login(s) in the budget window",
             Credential(password),
-            Identifier(self._cache.openudid),
+            Identifier(self._install_id(region)),
             len(
                 self._cache.recent_logins(
                     const.LOGIN_BUDGET_WINDOW_SECONDS, const.scope_region(region)
@@ -971,9 +974,11 @@ class EufyCloudApi:
             ),
         )
         identity = await self._key_exchange(
-            self._host("openapi", region), const.KEY_EXCHANGE_PATH, const.MEGA_PRESET_KEY
+            self._host("openapi", region),
+            const.KEY_EXCHANGE_PATH,
+            const.MEGA_PRESET_KEY,
+            region=region,
         )
-        identity.region = region
         answer = {
             "answer": captcha_answer or "",
             "captcha_id": captcha_id or "",
@@ -1363,7 +1368,10 @@ class EufyCloudApi:
             )
             try:
                 fresh = await self._key_exchange(
-                    self._host("openapi", region), const.KEY_EXCHANGE_PATH, const.MEGA_PRESET_KEY
+                    self._host("openapi", region),
+                    const.KEY_EXCHANGE_PATH,
+                    const.MEGA_PRESET_KEY,
+                    region=region,
                 )
             except _RekeyRequiredError as refused:
                 raise KeyExchangeRefusedError(
@@ -1371,7 +1379,6 @@ class EufyCloudApi:
                 ) from refused
             fresh.auth_token = failed.auth_token
             fresh.user_id = failed.user_id
-            fresh.region = region
             self._identities[region] = fresh
             self._cache.cloud_session(region).update(
                 {"key_ident": fresh.key_ident, "shared_key": fresh.shared_key}
@@ -1949,10 +1956,10 @@ class EufyCloudApi:
             const.SECURITY_KEY_EXCHANGE_PATH,
             const.SECURITY_PRESET_KEY,
             auth=base,
+            region=base.region,
         )
         sec.auth_token = base.auth_token
         sec.user_id = base.user_id
-        sec.region = base.region
         return sec
 
     # ── push token ─────────────────────────────────────────────────────────
@@ -2091,11 +2098,15 @@ class EufyCloudApi:
             )
         count, left = self._login_budget_wait(region)
         if left is not None:
+            cluster = const.scope_region(region)
             _LOGGER.debug(
-                "%s login refused locally: budget of %d spent", region, const.LOGIN_BUDGET
+                "%s login refused locally: the %s budget of %d is spent",
+                region,
+                cluster,
+                const.LOGIN_BUDGET,
             )
             raise LoginLimitedError(
-                f"{count} {region} logins in the last "
+                f"{count} logins on the {cluster} cluster in the last "
                 f"{const.LOGIN_BUDGET_WINDOW_SECONDS / 3600:.0f} h already; "
                 f"next allowed in {left:.0f}s",
                 retry_after=left,
@@ -2289,9 +2300,16 @@ class EufyCloudApi:
         return data
 
     async def _key_exchange(
-        self, host: str, path: str, preset_key: str, *, auth: _Identity | None = None
+        self,
+        host: str,
+        path: str,
+        preset_key: str,
+        *,
+        auth: _Identity | None = None,
+        region: str = const.DEFAULT_REGION,
     ) -> _Identity:
-        """Run one ECDH key exchange; returns a transport identity (no token yet).
+        """Run one ECDH key exchange; returns a transport identity (no token yet) for the
+        login scope ``region``, whose install id (:meth:`_install_id`) it carries.
 
         ``auth`` signs the exchange with a session (the security realm needs one).
         """
@@ -2307,7 +2325,7 @@ class EufyCloudApi:
             host,
             path,
             None,
-            _Identity(key_ident=exchange.key_ident, shared_key=""),
+            _Identity(key_ident=exchange.key_ident, shared_key="", region=region),
             bootstrap=exchange,
             preset_key=preset_key,
             auth=auth,
@@ -2322,7 +2340,20 @@ class EufyCloudApi:
             crypto.preset_decrypt(server_pub, preset_key),
             Secret(shared_key),
         )
-        return _Identity(key_ident=exchange.key_ident, shared_key=shared_key)
+        return _Identity(key_ident=exchange.key_ident, shared_key=shared_key, region=region)
+
+    def _install_id(self, region: str) -> str:
+        """The ``openudid`` of scope ``region``: the install's own for a region; for an
+        extra country a separate id minted once and kept (``cloud.install_ids``). eufy
+        holds one session per install id and cluster, so a second country's login under
+        the same id would end the first's session."""
+        if const.scope_country(region) is None:
+            return self._cache.openudid
+        ids = self._cache.section("cloud").setdefault(_INSTALL_IDS_KEY, {})
+        value = ids.get(region)
+        if not isinstance(value, str) or not value:
+            value = ids[region] = secrets.token_hex(8)
+        return value
 
     def _headers(
         self,
@@ -2347,7 +2378,7 @@ class EufyCloudApi:
             "model-type": const.MODEL_TYPE,
             "phone-model": const.PHONE_MODEL,
             "phone_model": const.PHONE_MODEL,
-            "openudid": self._cache.openudid,
+            "openudid": self._install_id(identity.region),
             "x-encryption-info": const.ENCRYPTION_INFO,
             "x-key-ident": identity.key_ident,
             "x-request-ts": ts,

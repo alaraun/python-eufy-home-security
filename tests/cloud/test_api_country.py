@@ -364,3 +364,22 @@ async def test_an_extra_country_login_refused_is_not_retried_with_the_region(
         with pytest.raises(CloudApiError):
             await _api(http, cache, country=["EE", "CH"]).async_login()
     assert _login_abs(fake_mega) == ["CH"]
+
+
+async def test_an_extra_country_logs_in_under_its_own_install_id(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """eufy keeps one session per install id and cluster: a second country's login
+    under the install's own id would end the first's session."""
+    _with_an_extra_country(fake_mega)
+    fake_mega.one_session_per_install = True
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country=["EE", "CH"])
+        await api.async_login()
+        devices = await api.async_fetch_devices()
+    install_ids = [h["openudid"] for h in fake_mega.headers["login"]]
+    assert _login_abs(fake_mega) == ["EE", "CH"]  # nothing ended, nothing re-made
+    assert install_ids[0] == cache.openudid != install_ids[1]
+    assert cache.section("cloud")["install_ids"] == {"eu:CH": install_ids[1]}
+    assert {d.device_sn for d in devices} == {SYNTHETIC.station_sn, _EXTRA_STATION_SN}
