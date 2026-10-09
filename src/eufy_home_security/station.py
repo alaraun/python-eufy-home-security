@@ -1501,7 +1501,8 @@ class Station:
             raise ValueError("pass exactly one of device_sn or channel")
         target = self.channel_for(device_sn) if device_sn is not None else cast(int, channel)
         key = mode_action_key(GuardMode.parse(mode), scope_for_kind(self._kind_on(target)))
-        spec = mode_table_setting(key)
+        cloud = self._cloud_by_channel().get(target)
+        spec = mode_table_setting(key).for_device_type(cloud.device_type if cloud else None)
         spec.with_flag(0, flag, on)  # refuses an unknown flag before any traffic
         current = await self._read_back(spec.read_param, target)
         if current is None:

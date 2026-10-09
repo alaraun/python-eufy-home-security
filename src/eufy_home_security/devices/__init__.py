@@ -11,9 +11,11 @@ from .command_types import COMMAND_NAMES, command_name
 from .model_settings import Setting, SettingControl, SettingKind, WireCommand, WritePath
 from .settings import (
     MODE_ACTION_FLAGS,
+    MOTION_SENSOR_DEVICE_TYPES,
     SCOPE_DEFAULT_CHANNEL,
     Scope,
     SettingUnit,
+    mode_action_flags,
     mode_action_key,
     mode_delay_key,
     scope_for_kind,
@@ -38,6 +40,7 @@ __all__ = [
     "FALLBACK_PROFILES",
     "MODELS",
     "MODE_ACTION_FLAGS",
+    "MOTION_SENSOR_DEVICE_TYPES",
     "ON_DEMAND_EVIDENCE",
     "ON_DEMAND_PREFIXES",
     "PROFILES",
@@ -59,6 +62,7 @@ __all__ = [
     "WritePath",
     "command_name",
     "connects_on_demand",
+    "mode_action_flags",
     "mode_action_key",
     "mode_delay_key",
     "model_for_serial",

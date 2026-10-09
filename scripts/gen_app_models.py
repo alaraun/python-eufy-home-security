@@ -39,8 +39,10 @@ _TYPE_PUT = re.compile(
     r"new String\[\]\{([^}]*)\}\);"
 )
 
-#: Kind by the words of the app's constant name, first match wins.
+#: Kind by the words of the app's constant name, first match wins. A siren accessory
+#: (``SIREN_SENSOR``) is no sensor: it sounds, it does not trigger.
 KIND_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("other", ("SIREN",)),
     ("station", ("STATION",)),
     ("keypad", ("KEYPAD",)),
     ("lock", ("LOCK",)),

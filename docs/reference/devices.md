@@ -142,7 +142,7 @@ Support legend (models, capabilities and guard modes):
 | T8920 | Water Sensor | sensor |  | declared | eufy app 6.1.10 model list: WATER_SENSOR (kind read from the constant's name) |
 | T8931 | Smoke Sensor | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR (kind read from the constant's name) |
 | T8960 | Keypad | keypad | 11 | declared | eufy app 6.1.10 model list: KEYPAD; device-type map (11) (kind read from the constant's name) |
-| T8970 | Siren Sensor | sensor |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR (kind read from the constant's name) |
+| T8970 | Siren Sensor | other |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR (kind read from the constant's name) |
 | T8B00 | Battery Solo Cam 8B00 | camera | 64 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8B00; device-type map (64) (kind read from the constant's name) |
 | T8D00 | Baby Mom Device Breast Pump Both | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_BOTH (kind read from the constant's name) |
 | T8D02 | Baby Mom Device Breast Pump With Heating | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_WITH_HEATING (kind read from the constant's name) |
@@ -170,8 +170,8 @@ Support legend (models, capabilities and guard modes):
 | T90K0 | Keyfor Sensor T90K0 | sensor |  | declared | eufy app 6.1.10 model list: KEYFOR_SENSOR_T90K0 (kind read from the constant's name) |
 | T90M0 | Motion Sensor T90M0 | sensor |  | declared | eufy app 6.1.10 model list: MOTION_SENSOR_T90M0 (kind read from the constant's name) |
 | T90P0 | Panic Sensor T90P0 | sensor |  | declared | eufy app 6.1.10 model list: PANIC_SENSOR_T90P0 (kind read from the constant's name) |
-| T90R0 | Siren Sensor T90R0 | sensor |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR_T90R0 (kind read from the constant's name) |
-| T90R1 | Outdoor Siren Sensor | sensor |  | declared | eufy app 6.1.10 model list: OUTDOOR_SIREN_SENSOR (kind read from the constant's name) |
+| T90R0 | Siren Sensor T90R0 | other |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR_T90R0 (kind read from the constant's name) |
+| T90R1 | Outdoor Siren Sensor | other |  | declared | eufy app 6.1.10 model list: OUTDOOR_SIREN_SENSOR (kind read from the constant's name) |
 | T90S0 | Smoke Sensor T90S0 | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR_T90S0 (kind read from the constant's name) |
 
 Models without a profile below offer no capability (all *unknown*).

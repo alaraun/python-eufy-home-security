@@ -49,10 +49,10 @@ handler. Then prove it on hardware (step 4). Keep the handler scripts out of the
 Every product the eufy app names is already in the model list, *declared*:
 `scripts/gen_app_models.py` reads the app's model constants (one constant per serial
 prefix, e.g. `CAMERA2C = "T8113"`), its device-type map and the `TYPE_*` ints that map
-refers to, and writes `devices/app_models.py`. The
-kind comes from the constant's name (`STATION`, `KEYPAD`, `LOCK`, `DOORBELL`, `SENSOR`,
-then `CAM`/`CAMERA`/`FLOODLIGHT`/`WALLLIGHT` → camera, anything else `other`); a prefix
-whose constants read as two kinds is left out and reported. Regenerate it with each app
+refers to, and writes `devices/app_models.py`. The kind comes from the constant's name
+(`SIREN` → `other`, then `STATION`, `KEYPAD`, `LOCK`, `DOORBELL`, `SENSOR`, then
+`CAM`/`CAMERA`/`FLOODLIGHT`/`WALLLIGHT` → camera, anything else `other`); a prefix whose
+constants read as two kinds is left out and reported. Regenerate it with each app
 release, from that build's source files:
 
 ```

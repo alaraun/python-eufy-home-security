@@ -142,7 +142,7 @@ APP_MODELS: Final[tuple[tuple[str, str, str, int | None], ...]] = (
     ("T8920", "WATER_SENSOR", "sensor", None),
     ("T8931", "SMOKE_SENSOR", "sensor", None),
     ("T8960", "KEYPAD", "keypad", 11),
-    ("T8970", "SIREN_SENSOR", "sensor", None),
+    ("T8970", "SIREN_SENSOR", "other", None),
     ("T8B00", "BATTERY_SOLO_CAM_8B00", "camera", 64),
     ("T8D00", "BABY_MOM_DEVICE_BREAST_PUMP_BOTH", "other", None),
     ("T8D02", "BABY_MOM_DEVICE_BREAST_PUMP_WITH_HEATING", "other", None),
@@ -170,7 +170,7 @@ APP_MODELS: Final[tuple[tuple[str, str, str, int | None], ...]] = (
     ("T90K0", "KEYFOR_SENSOR_T90K0", "sensor", None),
     ("T90M0", "MOTION_SENSOR_T90M0", "sensor", None),
     ("T90P0", "PANIC_SENSOR_T90P0", "sensor", None),
-    ("T90R0", "SIREN_SENSOR_T90R0", "sensor", None),
-    ("T90R1", "OUTDOOR_SIREN_SENSOR", "sensor", None),
+    ("T90R0", "SIREN_SENSOR_T90R0", "other", None),
+    ("T90R1", "OUTDOOR_SIREN_SENSOR", "other", None),
     ("T90S0", "SMOKE_SENSOR_T90S0", "sensor", None),
 )

@@ -85,7 +85,8 @@ def test_every_model_but_the_live_proven_is_declared_from_the_app() -> None:
         ("T8960", DeviceKind.KEYPAD, 11, "Keypad"),
         ("T8200", DeviceKind.DOORBELL, 5, "Doorbell 2K"),
         ("T8500", DeviceKind.LOCK, 52, "BLE Lock No Finger"),
-        ("T90R0", DeviceKind.SENSOR, None, "Siren Sensor T90R0"),
+        ("T90R0", DeviceKind.OTHER, None, "Siren Sensor T90R0"),
+        ("T90K0", DeviceKind.SENSOR, None, "Keyfor Sensor T90K0"),
         ("T87B0", DeviceKind.OTHER, None, "Tracker 87B0"),
     ],
 )
