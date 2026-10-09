@@ -64,9 +64,42 @@ def test_cloud_device_type_homebase3() -> None:
     assert MODELS["T8030"].cloud_device_type == 18
 
 
-def test_models_known_only_from_the_cloud_list_are_unknown() -> None:
-    # declared is reserved for eufy app sources
-    assert MODELS["T8910"].evidence.support is Support.UNKNOWN
+def test_every_model_but_the_live_proven_is_declared_from_the_app() -> None:
+    graded = {m.evidence.support for m in MODELS.values() if m.model not in {"T8030", "T8160"}}
+    assert graded == {Support.DECLARED}
+    declared = [m for m in MODELS.values() if m.evidence.support is Support.DECLARED]
+    assert all("eufy app" in m.evidence.source for m in declared)
+
+
+@pytest.mark.parametrize(
+    ("model", "kind", "device_type", "name"),
+    [
+        ("T8113", DeviceKind.CAMERA, 8, "Camera 2C"),
+        ("T8142", DeviceKind.CAMERA, 15, "Camera 2C Pro"),
+        ("T8123", DeviceKind.CAMERA, 61, "Battery Solo Cam Spotlight 2K"),
+        ("T8960", DeviceKind.KEYPAD, 11, "Keypad"),
+        ("T8200", DeviceKind.DOORBELL, 5, "Doorbell 2K"),
+        ("T8500", DeviceKind.LOCK, 52, "BLE Lock No Finger"),
+        ("T90R0", DeviceKind.SENSOR, None, "Siren Sensor T90R0"),
+        ("T87B0", DeviceKind.OTHER, None, "Tracker 87B0"),
+    ],
+)
+def test_the_apps_models_are_catalogued(
+    model: str, kind: DeviceKind, device_type: int | None, name: str
+) -> None:
+    found = MODELS[model]
+    assert (found.kind, found.cloud_device_type, found.name) == (kind, device_type, name)
+    assert found.evidence.support is Support.DECLARED
+    assert "SnConstants" in found.evidence.source
+
+
+def test_a_prefix_the_app_names_as_two_kinds_is_not_catalogued() -> None:
+    assert "T8215" not in MODELS  # a battery doorbell and a battery SoloCam constant
+
+
+def test_a_hand_written_entry_wins_over_the_generated_one() -> None:
+    assert MODELS["T8030"].name == "HomeBase 3 (S380)"
+    assert MODELS["T8910"].evidence.source.endswith("MOTION_SENSOR; eufy app SnUtils type map (10)")
 
 
 def test_connects_on_demand_on_demand_prefixes() -> None:

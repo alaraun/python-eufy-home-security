@@ -1,13 +1,20 @@
-"""Device models, keyed by serial-number prefix."""
+"""Device models, keyed by serial-number prefix.
+
+The hand-written entries below carry what was observed or looked up per model; every
+other product the eufy app names comes from :mod:`.app_models` (generated from the app,
+graded *declared*).
+"""
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
 
+from .app_models import APP_MODELS, APP_VERSION
 from .support import Evidence, Support
 
 SERIAL_PREFIX_LEN: Final = 5
@@ -90,14 +97,14 @@ _register(
     ),
     DeviceModel(
         model="T8910",
-        name="Outdoor motion sensor",
+        name="Motion sensor",
         kind=DeviceKind.SENSOR,
         cloud_device_type=10,
         evidence=Evidence(
-            Support.UNKNOWN,
-            "cloud device list: a T8910 paired to a HomeBase 3 reports device_type 10; "
+            Support.DECLARED,
+            f"{_APP_SN_CONSTANTS} MOTION_SENSOR; eufy app SnUtils type map (10)",
+            "a T8910 paired to a HomeBase 3 reports device_type 10 in the cloud device list; "
             "its battery is in the station's parameter dump",
-            "no eufy app source ties the prefix to a model; the name is inferred from the type",
         ),
     ),
     DeviceModel(
@@ -147,6 +154,39 @@ _register(
         ),
     ),
 )
+
+_ACRONYMS: Final = frozenset({"AI", "AUS", "BLE", "EU", "NVR", "PT", "SPB", "TMO"})
+_PREFIX_TOKEN: Final = re.compile(r"T[0-9][0-9A-Z]{3}")
+
+
+def _display_name(constant: str) -> str:
+    """A readable name for an app constant: ``CAMERA2C_PRO`` → ``Camera 2C Pro``."""
+    words = []
+    for token in constant.split("_"):
+        lead = len(token) - len(token.lstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
+        if token in _ACRONYMS or lead == 0 or _PREFIX_TOKEN.fullmatch(token):
+            words.append(token)
+        elif lead == len(token):
+            words.append(token.capitalize())
+        else:
+            words += [token[:lead].capitalize(), token[lead:]]
+    return " ".join(words)
+
+
+def _app_model(prefix: str, constant: str, kind: str, device_type: int | None) -> DeviceModel:
+    source = f"eufy app {APP_VERSION} SnConstants {constant}"
+    if device_type is not None:
+        source += f"; SnUtils type map ({device_type})"
+    return DeviceModel(
+        model=prefix,
+        name=_display_name(constant),
+        kind=DeviceKind(kind),
+        cloud_device_type=device_type,
+        evidence=Evidence(Support.DECLARED, source, "kind read from the constant's name"),
+    )
+
+
+_register(_models, *(_app_model(*row) for row in APP_MODELS if row[0] not in _models))
 
 MODELS: Final[Mapping[str, DeviceModel]] = MappingProxyType(_models)
 

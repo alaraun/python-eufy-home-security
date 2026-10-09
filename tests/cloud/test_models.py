@@ -77,9 +77,9 @@ def test_model_of_a_catalogued_camera() -> None:
 
 
 def test_model_of_an_uncatalogued_device_keeps_the_prefix() -> None:
-    device = CloudDevice.from_api({"device_sn": "T8400P2000000001", "device_type": 30})
+    device = CloudDevice.from_api({"device_sn": "T9998P2000000001", "device_type": 30})
     assert device.model is None
-    assert device.model_id == "T8400"
+    assert device.model_id == "T9998"
     assert device.model_name is None
 
 
