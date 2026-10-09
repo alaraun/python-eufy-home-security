@@ -4,6 +4,44 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.1](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.0...v0.3.1) (2026-10-09)
+
+
+### Features
+
+* a rate-limit error names who refused it (origin) and the login scope it was for; RegionStatus.next_login_allowed_in per scope ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* EufySecurity.device_list_source and listed_devices say how the last device list was obtained and what it named; StationsChanged reports stations a discovery built or no longer finds ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* mode_action_flags gives a sensor's per-mode actions by device type; only motion sensors get the respond action, and sirens are kind other ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* RegionStatus reports each scope's session state, login refusal and logins in the budget window ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* the cloud package exports CipherKeys and RsaKeyCheck ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* warm_store takes the client's country and region; FakeCloud plays refusals and throttles through the library's own handling; short_timeouts covers the preset, pan/tilt, live-open and discovery-retry waits ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* without a product code from the cloud, the serial names the product variant (T8410C, T8420X, T8210C, T8510P, T8520P, T8W11C) ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+
+
+### Bug Fixes
+
+* a cached device list that misses a login scope is fetched again, and the cached-list fallback leaves out the devices of scopes no longer in use ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* a failed verification-code request still raises the login challenge, and the one-time country re-login never asks for an e-mailed code ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* a firmware check that gets no verdict raises instead of reading as up to date ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* a login challenge raised for an extra country is answered there, also on a new client instance ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* a login-free call whose session the cloud answers as expired raises NoCachedSessionError, not an authentication error; pending invitations survive one failing region ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* a reply queued while the event loop was held is read in every wait phase of a request ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* an extra country whose login eufy refuses is skipped until a rescan instead of failing every login, and a refused login country is not sent again on later logins ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* async_event_thumbnail gives each of its queries its own default timeout ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* cloud_status counts logins per cluster and covers the first region when every scope is suspended ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* credentials without the key the station's handshake needs raise CipherUnusableError (no_rsa_key, no_ecc_key) after one refresh, and credentials for another cipher set no stale-key latch ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* house names, nicknames and locations are masked in debug logs, and error texts in the account report are scrubbed ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* on an RSA session only frames under the session key count as station state, and pushes under that key are authenticated ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* the CLI reports a bad country, e-mail or port as a usage error and gives specific advice for SessionRejectedError and CipherUnusableError ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* the empty-cipher back-off ends when the station's owner id changes ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* the extra countries' install ids are kept wherever openudid is ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+* the login country is looked up before a login picks its region; a lookup that gets no answer spends no login and is asked again ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+
+
+### Documentation
+
+* the RSA handshake is declared and works with an intact key; cloud docs use neutral example countries ([7290f42](https://github.com/alaraun/python-eufy-home-security/commit/7290f42e0d3b0012f35ecc903f3a46d4343e8eaa))
+
 ## [0.3.0](https://github.com/alaraun/python-eufy-home-security/compare/v0.2.8...v0.3.0) (2026-10-09)
 
 
