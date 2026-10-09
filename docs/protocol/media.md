@@ -319,11 +319,18 @@ reproduces it (`devices/_live_open_data.py`, `devices.live_open`). From the eufy
 | 1350/1003 `DeviceMsgBean`, plain payload (`station`) | 1 | 50 / 47 |
 | another open (dual-lens `stitch_mode`, bare 1003 `cryptoKey`, version-dependent) | 18 | 6 / 6 |
 
-Behind a NVR, a T9000, a T7000 or a HomeBase 4 (and on its own for a T8223, T8224, T8215
-or T8172) the handlers mark their requests `webRtc` (the handler's `isSupportWebRtc` lists
-those parents): the app sends them over WebRTC, which the library does not implement. A
-request the handler does not mark follows the parent's `is_connect_webrtc` (2: WebRTC, 0:
-P2P, 1: per device, through `is_connect_webrtc_sub_device_list`).
+Behind a NVR, a T9000, a T7000 or a HomeBase 4 the handlers send a 1350/1003 the library
+does not build (`stitch_mode`, `camera_type` from `chn_list`), or flag the request `webRtc`;
+none matches a library open.
+
+The app chooses WebRTC or P2P from the parent's `is_connect_webrtc`, not from the handler's
+flag: 2 opens every child over WebRTC; 0 or no such property, P2P; 1, WebRTC for the children
+`is_connect_webrtc_sub_device_list` and the child's own `is_connect_webrtc` select. The
+thing descriptions declare 2 for a NVR and a T9000, none for a HomeBase 2, and for a
+HomeBase 3 1 with a sub-device list from firmware 3.7.4.3 and 2 from 4.2.0.0. The library
+opens over P2P only and does not read the property. A HomeBase 3 at 3.8.7.4 answers a P2P
+open for a T8170, a model its declared sub-device list names (verified); P2P on a HomeBase 3
+at 4.2.0.0 or later, a NVR or a T9000 is not observed.
 The library sends the recorded open: on the device's own session every one of the three;
 behind a station only `station` (a 1700 open behind a station needs the route the app
 takes to the device, not implemented). Any other open raises `UnsupportedError` before
