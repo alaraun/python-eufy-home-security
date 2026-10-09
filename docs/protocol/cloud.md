@@ -175,7 +175,10 @@ login budget. Each extra scope logs in under its own install id (`openudid`, min
 and cached): a `CH` login from another install id left an `EE` session on `eu` valid
 **[verified]**, while `CH` and `EE` under one install id did not both survive
 **[observed once]**, which reads as one session per install id and cluster. A country eufy names no cluster for gets no session, and a refused extra
-login is not retried with the region as `ab`. An extra country whose lookup does not
+login is not retried with the region as `ab`: a plain body-code refusal is recorded
+(`cloud.refused`) and that scope is skipped, with no login and no device list, until a
+rescan or a change of the extra countries; the other scopes carry on, and the devices
+it listed last stay in the list. An extra country whose lookup does not
 answer gets no session until a later lookup does: the next login or device-list fetch
 asks again.
 

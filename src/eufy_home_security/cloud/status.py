@@ -61,6 +61,9 @@ class RegionStatus:
     suspended: bool
     """This region's last device list was empty: asked again only on a rescan, or on
     every fetch with ``scan_regions``."""
+    login_refused: bool = False
+    """The cloud refused this extra country's login with a plain body code: no login
+    or device list asks it again until a rescan or a change of the extra countries."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

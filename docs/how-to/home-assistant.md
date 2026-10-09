@@ -164,6 +164,7 @@ provides where it lives.
 | `cloud.country` | the login country (`code`, `source` `option` or `ip`, `home_region`) | on the first login of a process when the country or its home region changed |
 | `cloud.extra_countries` | each extra country's home region | when a login or a device list first needs an extra country not looked up |
 | `cloud.install_ids` | the install id (`openudid`) of each extra country's login scope | minted on that scope's first key exchange, then kept |
+| `cloud.refused` | each extra country's scope whose login the cloud refused with a plain body code (the code, when, and the extra countries then) | on that refusal; cleared by a rescan, a later login there, or a change of the extra countries |
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
 | `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), and the key-refresh latch | on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass |
@@ -320,7 +321,7 @@ For the integration:
 | what | where | use |
 |---|---|---|
 | a device's region | `CloudDevice.region` (`station.device.region`, each sub-device's `CloudDevice`) | a diagnostic attribute; never part of an entity id |
-| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
+| per-region state | `(await eufy.async_cloud_status()).regions[<region>]`: `devices` (None = never listed), `suspended`, `in_use`, `login_refused` (an extra country the cloud refused to log in: skipped until a rescan), `listed_age`, `session_expires_in`, `country_code` | diagnostics; a repair issue when every region is suspended ("the account lists no devices in any eufy region") with a *rescan* fix |
 | rescan | `async_discover(rescan_regions=True)` | only on the user's request: the "refresh device list" button and the repair's fix. Timers and automatic refreshes pass `refresh=True` alone, so a suspended region is never retried by itself |
 | scan on every refresh | `EufySecurity(scan_regions=...)` | an options-flow switch, off by default |
 

@@ -133,6 +133,10 @@ class _RekeyRequiredError(CloudApiError):
         super().__init__(code, message, endpoint=endpoint)
 
 
+class _ScopeRefusedError(CloudApiError):
+    """The cloud refused an extra country's login: the scope is skipped until a rescan."""
+
+
 class _SessionExpiredError(SessionRejectedError):
     """The server no longer accepts the auth token (one re-login is allowed)."""
 
@@ -190,6 +194,10 @@ _EXTRA_HOMES_KEY: Final = "extra_countries"
 """``cloud.extra_countries``: each looked-up extra country's home region."""
 _INSTALL_IDS_KEY: Final = "install_ids"
 """``cloud.install_ids``: the ``openudid`` of each extra country's login scope."""
+
+_REFUSED_KEY: Final = "refused"
+"""``cloud.refused``: per extra scope whose login the cloud refused, the body ``code``,
+when (``at``) and the extra countries given then (``countries``)."""
 
 _LOOKUP_TRANSIENT: Final = (CommunicationError, RateLimitedError)
 """Failures of a country lookup that leave the answer open: asked again later."""
@@ -415,14 +423,47 @@ class EufyCloudApi:
         ]
 
     def regions_to_list(self, *, rescan: bool = False) -> list[str]:
-        """The scopes the next device-list fetch asks: every scope on a ``rescan`` or
-        with ``scan_regions``, else every scope not suspended. A ``region`` override
-        leaves out the other region and the extra countries homed there."""
+        """The scopes the next device-list fetch asks: every scope on a ``rescan``; else
+        every scope whose login was not refused (:meth:`refused_regions`) and, without
+        ``scan_regions``, not suspended. A ``region`` override leaves out the other
+        region and the extra countries homed there."""
         scopes = self.login_scopes()
-        if rescan or self._scan_regions:
+        if rescan:
             return scopes
-        suspended = self.suspended_regions()
-        return [r for r in scopes if r not in suspended]
+        skipped = set(self.refused_regions())
+        if not self._scan_regions:
+            skipped.update(self.suspended_regions())
+        return [r for r in scopes if r not in skipped]
+
+    def refused_regions(self) -> list[str]:
+        """The extra countries' scopes whose login the cloud refused with a plain body
+        code: no login and no device list asks them again until a rescan or a change of
+        the extra countries."""
+        refused = self._cache.section("cloud").get(_REFUSED_KEY)
+        if not isinstance(refused, dict):
+            return []
+        countries = sorted(self._extra_countries)
+        return [
+            r
+            for r in self._extra_scopes()
+            if isinstance(record := refused.get(r), dict) and record.get("countries") == countries
+        ]
+
+    async def _refuse_scope(self, region: str, err: CloudApiError) -> NoReturn:
+        """Record the refusal of extra scope ``region``'s login, warn, and raise it."""
+        self._cache.section("cloud").setdefault(_REFUSED_KEY, {})[region] = {
+            "code": err.code,
+            "at": time.time(),
+            "countries": sorted(self._extra_countries),
+        }
+        await self._cache.async_save()
+        _LOGGER.warning(
+            "the cloud refused the %s login (%s); %s is skipped until a rescan",
+            region,
+            err,
+            region,
+        )
+        raise _ScopeRefusedError(err.code, err.message, endpoint=err.endpoint) from err
 
     def device_region(self, device_sn: str) -> str:
         """The scope serving ``device_sn``: the one that listed it, else :attr:`region`."""
@@ -441,7 +482,8 @@ class EufyCloudApi:
             return [self._region_override, *(s for s in served if s != self._region_override)]
         if not self._listings():
             return [self.region]
-        return self.regions_with_devices()
+        refused = self.refused_regions()
+        return [r for r in self.regions_with_devices() if r not in refused]
 
     def regions_with_session(self) -> list[str]:
         """The scopes a call can reach without a login: a session held or cached and
@@ -532,7 +574,12 @@ class EufyCloudApi:
                     continue
                 pending.append(region)
             for region in self._login_order(pending):
-                await self._do_login(region, verify_code=None, captcha_id=None, captcha_answer=None)
+                try:
+                    await self._do_login(
+                        region, verify_code=None, captcha_id=None, captcha_answer=None
+                    )
+                except _ScopeRefusedError:
+                    continue  # skipped until a rescan; the other scopes carry on
 
     async def async_reauthenticate(
         self,
@@ -1017,6 +1064,8 @@ class EufyCloudApi:
         challenge is raised without asking eufy for a code or a captcha and is not
         recorded as the one to answer. A ``region`` that is no login scope once the
         country is known raises :class:`NoCachedSessionError` before anything is sent.
+        An extra scope's login refused with a plain body code is recorded
+        (:meth:`refused_regions`); a later login there raises it again without sending.
         Callers hold ``_login_lock``.
         """
         self._raise_if_held_off(login=True, region=region)
@@ -1029,6 +1078,13 @@ class EufyCloudApi:
             raise NoCachedSessionError(
                 f"{region} is no login scope of this account (now {self.login_scopes()}); "
                 "not logging in"
+            )
+        if region in self.refused_regions():
+            record = self._cache.section("cloud")[_REFUSED_KEY][region]
+            raise _ScopeRefusedError(
+                int(record.get("code") or 0),
+                f"the cloud refused the {region} login; not asked again until a rescan",
+                endpoint=const.LOGIN_PATH,
             )
         wanted = self.login_ab(region)
         _LOGGER.info(
@@ -1070,6 +1126,12 @@ class EufyCloudApi:
             try:
                 code, resp, data = await self._send_login(identity, password, ab, answer)
             except CloudApiError as err:
+                if (
+                    interactive
+                    and type(err) is CloudApiError
+                    and const.scope_country(region) is not None
+                ):
+                    await self._refuse_scope(region, err)
                 fallback_ab = region if const.scope_country(region) is None else None
                 if not (
                     fallback and fallback_ab and ab != fallback_ab and type(err) is CloudApiError
@@ -1116,6 +1178,9 @@ class EufyCloudApi:
             await self._raise_verify_code_challenge(identity, step, resp, data, request=interactive)
         if self._challenge_region == region:
             self._challenge_region = None
+        refused = self._cache.section("cloud").get(_REFUSED_KEY)
+        if isinstance(refused, dict):
+            refused.pop(region, None)
         self._store_session(identity, _mapping(data, const.LOGIN_PATH), ab=ab, ab_wanted=wanted)
         self._cache.set_password(password)
         await self._cache.async_save()
@@ -1542,6 +1607,7 @@ class EufyCloudApi:
                 await self._resolve_login_country(retry=True)
             if rescan_regions:
                 self._extras_answered.clear()
+                self._cache.section("cloud").pop(_REFUSED_KEY, None)
             await self._resolve_extra_countries()
         regions = self.regions_to_list(rescan=rescan_regions)
         if not regions:
@@ -1555,7 +1621,10 @@ class EufyCloudApi:
         counts: dict[str, int] = {}
         listed_by: dict[str, str] = {}
         for region in regions:
-            raw = await self._house_entries(region, _ACCOUNT_DEVICES_BODY, login=True)
+            try:
+                raw = await self._house_entries(region, _ACCOUNT_DEVICES_BODY, login=True)
+            except _ScopeRefusedError:
+                continue  # skipped until a rescan; the other scopes carry on
             counts[region] = len(raw)
             _LOGGER.info("the %s region lists %d device(s)", region, len(raw))
             for entry in raw:
@@ -1571,6 +1640,11 @@ class EufyCloudApi:
                     continue
                 listed_by[serial] = region
                 entries.append({**entry, REGION_KEY: region})
+        refused = self.refused_regions()
+        for entry in self._cache.cached_devices() or ():
+            # A refused scope keeps the devices it listed last, for its stations' LAN use.
+            if entry.get(REGION_KEY) in refused and entry.get("device_sn") not in listed_by:
+                entries.append(dict(entry))
         self._cache.set_devices(entries)
         listed = self._cache.section("cloud").setdefault("listed", {})
         now = time.time()
@@ -2337,6 +2411,7 @@ class EufyCloudApi:
             country_code=country if isinstance(country, str) else None,
             in_use=region in in_use,
             suspended=region in self.suspended_regions(),
+            login_refused=region in self.refused_regions(),
         )
 
     def _station_refresh_status(self, station_sn: str) -> StationRefreshStatus:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -14,7 +15,7 @@ from aioresponses import aioresponses
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.models import LoginCountry
-from eufy_home_security.exceptions import CloudApiError, CommunicationError, RateLimitedError
+from eufy_home_security.exceptions import CommunicationError, RateLimitedError
 from eufy_home_security.storage import SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
@@ -534,18 +535,61 @@ async def test_an_extra_country_lookup_that_failed_is_asked_again_by_the_next_fe
     assert _EXTRA_STATION_SN in {d.device_sn for d in devices}
 
 
-async def test_an_extra_country_login_refused_is_not_retried_with_the_region(
+@pytest.mark.parametrize("asked_again_by", ["rescan", "country list change"])
+async def test_a_refused_extra_country_is_skipped_until_asked_again(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    http: aiohttp.ClientSession,
+    caplog: pytest.LogCaptureFixture,
+    asked_again_by: str,
+) -> None:
+    """A plain refusal of an extra country's login is not retried with the region and
+    blocks neither the other scopes nor the device list."""
+    _with_an_extra_country(fake_mega)
+    countries = ["EE", "CH"]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache, country="EE").async_get_devices()
+        fake_mega.calls.clear()
+        fake_mega.code_once["login"] = _PLAIN_REFUSAL
+        with caplog.at_level(logging.WARNING, logger="eufy_home_security.cloud.api"):
+            await _api(http, cache, country=countries).async_login()
+            api = _api(http, cache, country=countries)
+            await api.async_login()
+            devices = await api.async_get_devices(refresh=True)
+        assert _login_abs(fake_mega) == ["CH"]  # once, no fallback, not asked again
+        assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
+        status = api.cloud_status().regions["eu:CH"]
+        assert (status.login_refused, status.in_use) == (True, False)
+        assert sum("eu:CH" in r.getMessage() for r in caplog.records) == 1
+        if asked_again_by == "rescan":
+            devices = await api.async_fetch_devices(rescan_regions=True)
+        else:
+            countries = ["EE", "CH", "AQ"]
+            api = _api(http, cache, country=countries)
+            devices = await api.async_get_devices(refresh=True)
+    assert _login_abs(fake_mega) == ["CH", "CH"]
+    assert _EXTRA_STATION_SN in {d.device_sn for d in devices}
+    assert not api.cloud_status().regions["eu:CH"].login_refused
+
+
+async def test_a_refused_extra_scope_keeps_the_devices_it_listed_last(
     fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
 ) -> None:
     _with_an_extra_country(fake_mega)
     with aioresponses() as mock:
         fake_mega.install(mock)
-        await _api(http, cache, country="EE").async_login()
-        fake_mega.calls.clear()
+        api = _api(http, cache, country=["EE", "CH"])
+        await api.async_get_devices()
+        cache.cloud_session("eu:CH")["expires_at"] = time.time() - 10
         fake_mega.code_once["login"] = _PLAIN_REFUSAL
-        with pytest.raises(CloudApiError):
-            await _api(http, cache, country=["EE", "CH"]).async_login()
-    assert _login_abs(fake_mega) == ["CH"]
+        api = _api(http, cache, country=["EE", "CH"])
+        devices = await api.async_get_devices(refresh=True)
+    assert {d.device_sn: d.region for d in devices} == {
+        SYNTHETIC.station_sn: "eu",
+        _EXTRA_STATION_SN: "eu:CH",
+    }
+    assert api.refused_regions() == ["eu:CH"]
 
 
 async def test_an_extra_country_logs_in_under_its_own_install_id(
