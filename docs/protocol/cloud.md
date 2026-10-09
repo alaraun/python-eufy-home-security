@@ -125,7 +125,7 @@ The eufy app logs in with the user's country, and the library does the same **[a
    app-passport-{region}-pr.eufy.com/passport/get_client_real_code`, body `{}`, on a
    fresh key-exchange identity before any login, answers `{"ab_code": "<IP country>"}`
    **[verified]**. Neither known: `ab` is the region (`eu`/`us`) and the `country` header
-   `US`, as before.
+   `US`.
 2. **Home cluster**: `POST mega-{region}-pr.eufy.com/passport/estimate_domain`, a
    **plaintext** body `{"ab": "<country>", "mode": 1}` with no identity, answers
    plaintext `data.domain` = `mega-eu-pr.eufy.com` or `mega-us-pr.eufy.com` (and the
@@ -135,7 +135,7 @@ The eufy app logs in with the user's country, and the library does the same **[a
 3. **Login**: `ab` = the country, `country` header = the country, `timezone` header =
    the caller's IANA zone (default `UTC`). A login in the other cluster with the same
    `ab` succeeds but lists nothing there **[verified]**. While no country is known, every
-   region logs in with `ab` = the region and the empty ones are suspended, as before.
+   region logs in with `ab` = the region and the empty ones are suspended.
 4. **Old sessions**: each cached session records the `ab` it was made with; one made with
    another `ab` logs in again once, inside the login budget. A plain body-code
    refusal of a country login (26502 "Failed to request." was seen for `ab` `US` on the

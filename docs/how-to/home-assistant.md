@@ -129,8 +129,8 @@ is not a two-letter ISO 3166 code; HA's `hass.config.country` always is one (or 
 country as `ab`, only the home cluster of that country (eufy's own lookup) logs in, and
 every request carries the country and the zone as headers. Without `country` the
 library uses the country eufy places the HA host's IP address in; when neither is known
-it logs in as before (`ab` = the region). A cached session made with another `ab` (every
-session from before this, or after the HA country changes) logs in again once per
+it logs in with `ab` = the region. A cached session made with another `ab` (a session
+cached without an `ab`, or one made before the HA country changed) logs in again once per
 region, inside the login budget; when that login is refused, the old session stays in
 use and is not asked again for the same country. See
 [cloud.md § Login country](../protocol/cloud.md#login-country).
@@ -306,7 +306,7 @@ device, the *login scope* that listed it: the region (`eu`) for the login countr
   asks, so a login challenge surfaces there; its `LoginChallengeError.region` names the
   scope, and the answer (`async_login(verify_code=…, login_id=…)`) goes back to it.
 - While no country is known (no `country`, and eufy names no IP country), both regions
-  log in with the region as `ab`, as before.
+  log in with the region as `ab`.
 - A scope that lists no devices is **suspended**: no later device list, login or push
   registration asks it. It is asked again only when the user says so:
   `async_discover(rescan_regions=True)` (one fetch that asks every scope), or the
