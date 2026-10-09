@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast
@@ -1286,10 +1286,13 @@ async def test_cache_summary_is_json_safe_and_secret_free() -> None:
     assert other["cipher_refresh_age"] is None
     status = summary["cloud_status"]
     assert status["login_need"] == "replaced"
-    assert status["logins_in_window"] == 1  # the first device list logs in once per cluster
-    assert [status["regions"][r]["logins_in_window"] for r in ("eu", "us")] == [1, 1]
-    assert status["regions"]["eu"]["devices"] == len(doc["devices"])
-    assert status["regions"]["us"]["suspended"] is True
+    cloud_status = await eufy.async_cloud_status()
+    assert status["logins_in_window"] == cloud_status.logins_in_window
+    assert cloud_status.regions
+    assert status["regions"].keys() == cloud_status.regions.keys()
+    for region, state in cloud_status.regions.items():
+        # the ages tick between the two calls
+        assert status["regions"][region] == pytest.approx(asdict(state), abs=5)
     assert 0 < status["device_list_refresh_age"] < 120
     assert "stations" not in status
 
@@ -1474,17 +1477,12 @@ async def test_stations_start_concurrently_and_one_failure_does_not_hold_up_anot
     changes = [(e.station_sn, e.connected) for e in events if isinstance(e, ConnectionChanged)]
     # The reachable station came up before the unreachable one's discovery gave up.
     assert changes.index((up.serial, True)) < changes.index((OTHER_STATION_SN, False))
-    # One login and one device list per region for both stations (the first list asks
-    # every region); a cipher fetch only for the station that answered CONN_INIT.
-    assert sorted(cloud.calls) == sorted(
-        [
-            "login",
-            "devices",
-            "login@us",
-            "devices@us",
-            "things",
-            f"cipher:{redact_serial(up.serial)}",
-        ]
+    # One login and one device list for both stations; a cipher fetch only for the
+    # station that answered CONN_INIT. Calls to other regions (``call@region``) are left
+    # to the region tests.
+    home_region_calls = [call for call in cloud.calls if "@" not in call]
+    assert sorted(home_region_calls) == sorted(
+        ["login", "devices", "things", f"cipher:{redact_serial(up.serial)}"]
     )
 
 

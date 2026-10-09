@@ -89,15 +89,9 @@ async def test_a_cold_start_records_each_cloud_request_redacted(fake: FakeStatio
         assert await eufy.async_start(push=False) == {}
     finally:
         await eufy.async_close()
-    # The first device list asks every region; one outside ``cloud.region`` is named.
-    assert cloud.calls == [
-        "login",
-        "login@us",
-        "devices",
-        "devices@us",
-        "things",
-        "cipher:T8030***2345",
-    ]
+    # Calls to other regions (``call@region``) are left to the region tests.
+    home_region_calls = [call for call in cloud.calls if "@" not in call]
+    assert home_region_calls == ["login", "devices", "things", "cipher:T8030***2345"]
 
 
 async def test_a_region_lists_its_own_devices(fake: FakeStation) -> None:

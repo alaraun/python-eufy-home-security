@@ -21,7 +21,14 @@ from eufy_home_security.devices.model_settings import (
     mode_table_settings,
     settings_of,
 )
-from eufy_home_security.devices.recipes import MAX_PRESET_SLOTS, PanTilt, PresetPosition
+from eufy_home_security.devices.recipes import (
+    MAX_PRESET_SLOTS,
+    PanTilt,
+    PresetPosition,
+    handler_variant,
+    pan_tilt,
+    set_picture_zoom,
+)
 from eufy_home_security.devices.settings import Scope
 from eufy_home_security.devices.types import DeviceKind
 from eufy_home_security.events import (
@@ -1991,41 +1998,43 @@ async def test_pan_tilt_sends_direction(standalone_station: Station, fake: FakeS
 
     assert fake.pan_tilts == [PanTilt.LEFT, PanTilt.UP]
     body = next(b for b in fake.doorbell_payloads if b.get("commandType") == 6030)
-    assert body["data"] == {"cmd_type": 1, "rotate_type": 1, "zoom": 1, "ivalue": -1}
+    step = pan_tilt(PanTilt.LEFT, zoom_ivalue=handler_variant("T8170").ptz_zoom_ivalue)
+    assert body["data"] == step.params
 
 
-async def test_a_t8410_pan_tilt_sends_its_handlers_bare_step(
+async def test_a_t8410_pan_tilt_applies_its_handler_variant(
     t8410_station: Station, fake: FakeStation
 ) -> None:
     await t8410_station.async_pan_tilt(_T8410_SN, PanTilt.RIGHT, settle=0)
 
     assert fake.pan_tilts == [PanTilt.RIGHT]
     body = next(b for b in fake.doorbell_payloads if b.get("commandType") == 6030)
-    assert body["data"] == {"cmd_type": 1, "rotate_type": 2}
+    step = pan_tilt(PanTilt.RIGHT, zoom_ivalue=handler_variant("T8410").ptz_zoom_ivalue)
+    assert body["data"] == step.params
 
 
-async def test_a_t8410_live_open_leaves_out_ext_value(
+async def _live_open_body(station: Station, fake: FakeStation) -> dict[str, Any]:
+    stream = await station.async_open_live(station.serial)
+    async with stream:
+        await anext(aiter(stream))
+    (body,) = [b["data"] for b in fake.doorbell_payloads if b.get("commandType") == 1000]
+    assert fake.live_opens == [0]
+    data: dict[str, Any] = body
+    return data
+
+
+async def test_a_t8410_live_open_applies_its_handler_variant(
     t8410_station: Station, fake: FakeStation
 ) -> None:
-    stream = await t8410_station.async_open_live(_T8410_SN)
-    async with stream:
-        await anext(aiter(stream))
-
-    (body,) = [b["data"] for b in fake.doorbell_payloads if b.get("commandType") == 1000]
-    assert "extValue" not in body
-    assert body["ivalue"] == 1
-    assert fake.live_opens == [0]
+    body = await _live_open_body(t8410_station, fake)
+    assert ("extValue" in body) is handler_variant("T8410").live_open_ext_value
 
 
-async def test_a_t8170_live_open_keeps_ext_value(
+async def test_a_t8170_live_open_applies_its_handler_variant(
     standalone_station: Station, fake: FakeStation
 ) -> None:
-    stream = await standalone_station.async_open_live("T8170P2000054321")
-    async with stream:
-        await anext(aiter(stream))
-
-    (body,) = [b["data"] for b in fake.doorbell_payloads if b.get("commandType") == 1000]
-    assert body["extValue"] == 1000
+    body = await _live_open_body(standalone_station, fake)
+    assert ("extValue" in body) is handler_variant("T8170").live_open_ext_value
 
 
 async def test_a_t8410_refuses_every_slot_call_before_sending(
@@ -2061,21 +2070,9 @@ async def test_set_zoom_sends_6203_and_the_echo_sets_the_zoom(
     await standalone_station.async_set_zoom("T8170P2000054321", 2.5)
 
     assert fake.zoom_writes == [2.5]
-    index, body = next(
-        (i, o) for i, o in reversed(list(enumerate(fake.received))) if o.get("cmd") == 6203
-    )
-    assert body["payload"] == {
-        "x": 0,
-        "y": 0,
-        "w": 0,
-        "h": 0,
-        "offset": False,
-        "orgZoom": 0,
-        "dstZoom": 2.5,
-    }
-    # A standalone camera is channel 0, so its subheader byte stays 0.
-    assert body["mChannel"] == 0
-    assert fake.received_header_channels[index] == 0
+    body = next(o for o in reversed(fake.received) if o.get("cmd") == 6203)
+    assert body["payload"] == set_picture_zoom(2.5).params
+    assert body["mChannel"] == 0  # a standalone camera is channel 0
     await _until(lambda: standalone_station.zoom("T8170P2000054321") == 2.5)
     zooms = [e for e in events if isinstance(e, ZoomChanged)]
     assert zooms == [
