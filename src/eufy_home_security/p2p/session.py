@@ -215,7 +215,8 @@ LOOP_STALL_STEP = 0.25
 """A reply wait checks this often (seconds) whether the event loop was held."""
 LOOP_STALL_LATENESS = 0.1
 """A wait step ending at least this late means something else held the event loop; the
-reply deadline moves out by the lateness (replies that arrived meanwhile are still queued)."""
+reply deadline moves out by the step's duration (replies that arrived meanwhile are still
+queued)."""
 LOOP_STALL_MAX = 30.0
 """The most a reply deadline moves out for a held event loop, in all."""
 PARAM_QUERY_TIMEOUT = 8.0
@@ -1701,7 +1702,14 @@ class StationSession:
             try:
                 indices = [self._send_secure(body, dev_type=header)]
                 started = time.monotonic()
-                await _wait_any(waiter.future, receipt, min(COMMAND_RESEND_AFTER, timeout))
+                clock, label = _StallClock(), f"cmd {command}"
+                await self._wait_until(
+                    waiter.future,
+                    started + min(COMMAND_RESEND_AFTER, timeout),
+                    label,
+                    clock=clock,
+                    event=receipt,
+                )
                 if not waiter.future.done() and not receipt.is_set() and not self._acked(indices):
                     _LOGGER.debug(
                         "%s: cmd %d (%s): no receipt or ACK after %.1fs; resending",
@@ -1711,7 +1719,7 @@ class StationSession:
                         COMMAND_RESEND_AFTER,
                     )
                     indices.append(self._send_secure(body, dev_type=header))
-                await self._wait_until(waiter.future, started + timeout, f"cmd {command}")
+                await self._wait_until(waiter.future, started + timeout, label, clock=clock)
                 if not waiter.future.done() and not receipt.is_set() and self._acked(indices):
                     _LOGGER.debug(
                         "%s: cmd %d (%s) acknowledged without a receipt; waiting for it",
@@ -1719,10 +1727,12 @@ class StationSession:
                         command,
                         self._param(command, channel).label,
                     )
-                    await _wait_any(
+                    await self._wait_until(
                         waiter.future,
-                        receipt,
-                        started + COMMAND_RECEIPT_TIMEOUT - time.monotonic(),
+                        started + COMMAND_RECEIPT_TIMEOUT,
+                        label,
+                        clock=clock,
+                        event=receipt,
                     )
             finally:
                 self._remove_waiter(waiter)
@@ -4164,8 +4174,9 @@ class StationSession:
                 send()
             started = time.monotonic()
             deadline = started + timeout
+            clock = _StallClock()
             if resend_after is not None and resend_after < timeout:
-                await asyncio.wait({waiter.future}, timeout=resend_after)
+                await self._wait_until(waiter.future, started + resend_after, label, clock=clock)
                 if not waiter.future.done():
                     _LOGGER.debug(
                         "%s: %s unanswered after %.1fs; resending",
@@ -4174,7 +4185,7 @@ class StationSession:
                         resend_after,
                     )
                     send()
-            if not await self._wait_until(waiter.future, deadline, label):
+            if not await self._wait_until(waiter.future, deadline, label, clock=clock):
                 _LOGGER.debug("%s: %s: no reply within %.0fs", self._log_name, label, timeout)
                 raise DeviceTimeoutError(f"no reply from the station within {timeout:.0f}s")
             _LOGGER.debug(
@@ -4189,35 +4200,54 @@ class StationSession:
                 self._remove_waiter(waiter)
 
     async def _wait_until(
-        self, future: asyncio.Future[object], deadline: float, label: str
+        self,
+        future: asyncio.Future[object],
+        deadline: float,
+        label: str,
+        *,
+        clock: _StallClock | None = None,
+        event: asyncio.Event | None = None,
     ) -> bool:
-        """Wait for ``future`` until ``deadline`` (monotonic); whether it is done.
+        """Wait for ``future`` (or ``event``) until ``deadline`` (monotonic); whether
+        ``future`` is done.
 
         The wait runs in steps of :data:`LOOP_STALL_STEP`. A step that ends at least
         :data:`LOOP_STALL_LATENESS` late means something else held the event loop, and
         replies that arrived meanwhile are still queued (read one datagram per loop turn):
-        the deadline moves out by that lateness, up to :data:`LOOP_STALL_MAX` in all, so
-        the station gets its full timeout of time in which this client could hear it.
+        the deadline moves out by that step's whole duration (the hold may have taken all
+        of it), up to :data:`LOOP_STALL_MAX` in all, so the station gets its full timeout
+        of time in which this client could hear it, and a held last step still leaves a
+        step to read the queue. ``clock`` carries that credit across the wait phases of
+        one request. A wait entered past its deadline still yields to the loop once.
         """
-        credited = 0.0
-        while not future.done():
-            started = time.monotonic()
-            left = deadline + credited - started
-            if left <= 0:
-                break
-            step = min(left, LOOP_STALL_STEP)
-            await asyncio.wait({future}, timeout=step)
-            late = time.monotonic() - started - step
-            if late >= LOOP_STALL_LATENESS and credited < LOOP_STALL_MAX:
-                extra = min(late, LOOP_STALL_MAX - credited)
-                credited += extra
-                _LOGGER.debug(
-                    "%s: %s: the event loop was held %.1fs; deadline moved out by %.1fs",
-                    self._log_name,
-                    label,
-                    late,
-                    extra,
-                )
+        clock = _StallClock() if clock is None else clock
+        flag = None if event is None else asyncio.ensure_future(event.wait())
+        waits: set[asyncio.Future[Any]] = {future} if flag is None else {future, flag}
+        first = True
+        try:
+            while not future.done() and (event is None or not event.is_set()):
+                started = time.monotonic()
+                left = deadline + clock.credited - started
+                if left <= 0 and not first:
+                    break
+                first = False
+                step = min(max(left, 0.0), LOOP_STALL_STEP)
+                await asyncio.wait(waits, timeout=step, return_when=asyncio.FIRST_COMPLETED)
+                held = time.monotonic() - started
+                late = held - step
+                if late >= LOOP_STALL_LATENESS and clock.credited < LOOP_STALL_MAX:
+                    extra = min(held, LOOP_STALL_MAX - clock.credited)
+                    clock.credited += extra
+                    _LOGGER.debug(
+                        "%s: %s: the event loop was held %.1fs; deadline moved out by %.1fs",
+                        self._log_name,
+                        label,
+                        held,
+                        extra,
+                    )
+        finally:
+            if flag is not None:
+                flag.cancel()
         return future.done()
 
     async def _listen(
@@ -4495,16 +4525,13 @@ def _raise_waiter_error(waiter: _Waiter) -> None:
         raise error
 
 
-async def _wait_any(future: asyncio.Future[object], event: asyncio.Event, timeout: float) -> None:
-    """Wait until ``future`` is done or ``event`` is set, for at most ``timeout`` seconds."""
-    if future.done() or event.is_set() or timeout <= 0:
-        return
-    flag = asyncio.ensure_future(event.wait())
-    either: set[asyncio.Future[Any]] = {future, flag}
-    try:
-        await asyncio.wait(either, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
-    finally:
-        flag.cancel()
+class _StallClock:
+    """The event-loop hold credited to one request, shared by its wait phases."""
+
+    __slots__ = ("credited",)
+
+    def __init__(self) -> None:
+        self.credited = 0.0
 
 
 def _or(value: float | None, default: float) -> float:

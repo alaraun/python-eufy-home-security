@@ -1277,6 +1277,71 @@ async def test_a_loop_held_twice_past_the_deadline_still_takes_the_reply(
     assert info.disk is not None
 
 
+async def test_a_loop_held_before_a_resend_still_takes_the_parameter_dump(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The held-loop credit covers a request's resend phase too: a dump queued while the
+    loop was held there past the whole timeout is still taken, and not asked for twice."""
+    monkeypatch.setattr(session_module, "PARAM_QUERY_RESEND_AFTER", 0.1)
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 0.05)
+    timeout = 0.2
+    sent = station.send_param_dump
+
+    def answer_then_block(*, cipher: int = FrameCipher.GCM) -> None:
+        for _ in range(4):
+            station.send_receipt(FrameType.CMD_TRANSFER, 0)
+        sent(cipher=cipher)
+        time.sleep(timeout + 0.2)
+
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        monkeypatch.setattr(station, "send_param_dump", answer_then_block)
+        dump = await session.async_get_params(timeout=timeout)
+    finally:
+        await session.async_close()
+    assert dump.station == station.params[STATION_CHANNEL]
+    assert station.param_queries == 1
+
+
+async def test_a_loop_held_before_a_command_resend_still_takes_the_result(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A command's result queued while the loop was held in its first wait is taken as
+    APPLIED, and the command is not resent."""
+    station.reply_to_settings = True
+    timeout = 0.2
+    answer = station._on_command
+
+    def answer_then_block(obj: dict[str, Any], subheader: bytes) -> None:
+        for _ in range(4):
+            station.send_receipt(FrameType.PARAM_NOTIFY, 0, dev_type=1)
+        answer(obj, subheader)
+        time.sleep(timeout + 0.2)
+
+    monkeypatch.setattr(station, "_on_command", answer_then_block)
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        outcome = await session.async_send_command(
+            1277, channel=0, payload={"night_sion": 1, "channel": 0}, timeout=timeout
+        )
+    finally:
+        await session.async_close()
+    assert outcome is CommandOutcome.APPLIED
+    assert [o["cmd"] for o in station.received] == [1277]
+
+
+async def test_a_wait_entered_past_its_deadline_still_reads_what_is_queued(
+    station: FakeStation,
+) -> None:
+    """A wait that starts after its deadline yields to the loop once before giving up."""
+    session = make_session(station, Provider(station))
+    future: asyncio.Future[object] = asyncio.get_running_loop().create_future()
+    asyncio.get_running_loop().call_soon(future.set_result, True)
+    assert await session._wait_until(future, time.monotonic() - 1.0, "test")
+
+
 async def test_storage_rejection_and_silence_are_typed_errors(station: FakeStation) -> None:
     station.storage_reply_code = -104
     session = make_session(station, Provider(station))
