@@ -1,0 +1,86 @@
+{
+  "cases": [
+    {
+      "identifier": "open_live_stream",
+      "payload": {
+        "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+        "userId": "0123456789abcdef0123456789abcdef01234567",
+        "entryType": 0,
+        "cameraType": 0,
+        "streamType": 0
+      },
+      "device": {
+        "device_sn": "T8410P5000054321",
+        "parent_sn": "T8410P5000054321",
+        "device_channel": 0,
+        "main_sw_version": "2.3.2.6"
+      },
+      "p2p": {
+        "cmd": 1700,
+        "subCmd": 1000,
+        "timeout": 15000,
+        "params": {
+          "cmd": 1000,
+          "mChannel": 0,
+          "account_id": "0123456789abcdef0123456789abcdef01234567",
+          "mValueStrSub": "0123456789abcdef0123456789abcdef01234567",
+          "mValue3": 0,
+          "mValue5": 0,
+          "restore": 0,
+          "video_type": 12,
+          "encryptkey": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+          "entrytype": 0,
+          "accountId": "0123456789abcdef0123456789abcdef01234567",
+          "camera_type": 0,
+          "ivalue": 1,
+          "streamtype": 0
+        },
+        "rtcSendRoute": 1
+      }
+    },
+    {
+      "identifier": "close_live_stream",
+      "payload": 0,
+      "device": {
+        "device_sn": "T8410P5000054321",
+        "parent_sn": "T8410P5000054321",
+        "device_channel": 0,
+        "main_sw_version": "2.3.2.6"
+      },
+      "p2p": {
+        "cmd": 1004,
+        "rtcSendRoute": 1
+      }
+    },
+    {
+      "identifier": "ptz_action_control",
+      "payload": {
+        "cmdType": 1,
+        "rotateType": 2,
+        "zoom": 1
+      },
+      "device": {
+        "device_sn": "T8410P5000054321",
+        "parent_sn": "T8410P5000054321",
+        "device_channel": 0,
+        "main_sw_version": "2.3.2.6"
+      },
+      "p2p": {
+        "cmd": 1700,
+        "subCmd": 6030,
+        "params": {
+          "cmd_type": 1,
+          "rotate_type": 2,
+          "zoom": 1,
+          "ivalue": -1
+        }
+      }
+    }
+  ],
+  "handler": {
+    "large_version": 146,
+    "plugin_path_date": "2026/09/29",
+    "sha256": "fb805cce1eb92b029095c302ebbde516d19283bd90ff9108d399056b89d5167c"
+  },
+  "product_code": "T8410C"
+}

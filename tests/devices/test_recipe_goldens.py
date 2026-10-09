@@ -84,8 +84,9 @@ def _builder_params() -> Iterator[Any]:
         yield pytest.param(product_code, case, id=f"{product_code}-{identifier}")
 
 
-def test_the_golden_files_for_the_t8170_t8410_and_the_homebase_t8160_are_present() -> None:
-    assert [path.name for path in GOLDEN_FILES] == ["T8160.json", "T8170.json", "T8410.json"]
+def test_the_golden_files_for_the_t8170_t8410_t8410c_and_the_homebase_t8160_are_present() -> None:
+    names = [path.name for path in GOLDEN_FILES]
+    assert names == ["T8160.json", "T8170.json", "T8410.json", "T8410C.json"]
 
 
 def test_every_golden_identifier_is_mapped_to_a_builder() -> None:
