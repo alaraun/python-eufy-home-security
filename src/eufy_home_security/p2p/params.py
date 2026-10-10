@@ -5,7 +5,8 @@ list interleaves the parameters of every device in the home, each tagged with a
 ``dev_type``: 255 is the station itself (guard mode, storage, firmware, LAN IP),
 and 0/1/… are the paired sub-devices (cameras, sensors), each with its own
 battery, RSSI and name. Flattening would collapse per-device values (three
-different battery params), so a dump is grouped by ``dev_type``.
+different battery params), so a dump is grouped by ``dev_type``. A second list,
+:data:`BYPASS_KEY`, adds a paired device's own params under its channel.
 
 :class:`ParamDump` is a mutable accumulator: several frames merge into one view.
 """
@@ -33,6 +34,10 @@ ACTIVE_MODE_PARAM = 1151
 SUB_DEVICE_SERIALS_PARAM = PARAM_SUB_DEVICE_SERIALS
 #: The shape a 1072 entry must have to be taken as a serial.
 _SERIAL_SHAPE = re.compile(r"T[0-9A-Z]{15}")
+#: The dump's second list: a paired device's own params (``channel``, ``device_sn``,
+#: ``param_type``, base64 ``param_value``) that the station's ``params`` table lacks,
+#: such as a T8170's 2730/2731 qualities behind a HomeBase 3. The eufy app reads both.
+BYPASS_KEY = "db_bypass_str"
 #: Frame-level (not per-param) fields worth keeping.
 _META_KEYS = ("main_sw_version", "sec_sw_version", "hb_bind_type", "app_cloud_encrypt")
 
@@ -61,6 +66,7 @@ class ParamDump:
         if not isinstance(params, list):
             params = []
         merged = 0
+        own: set[tuple[int, int]] = set()
         for param in params:
             if not isinstance(param, Mapping):
                 continue
@@ -75,10 +81,46 @@ class ParamDump:
                 continue
             for target in aliases.get(dev, (dev,)) if aliases else (dev,):
                 self.devices.setdefault(target, {})[pid] = value
+                own.add((target, pid))
             merged += 1
+        merged += self._ingest_bypass(obj.get(BYPASS_KEY), aliases, own)
         for key in _META_KEYS:
             if key in obj:
                 self.meta[key] = obj[key]
+        return merged
+
+    def _ingest_bypass(
+        self,
+        entries: object,
+        aliases: Mapping[int, Sequence[int]] | None,
+        own: set[tuple[int, int]],
+    ) -> int:
+        """Merge :data:`BYPASS_KEY` entries: a paired device's own params, by channel.
+
+        Each value is base64 of the param's string and is stored decoded. An entry
+        without an int channel and id, or whose value is not base64 of UTF-8 text, is
+        skipped; an id this object's ``params`` already set for that channel keeps the
+        ``params`` value.
+        """
+        if not isinstance(entries, list):
+            return 0
+        merged = 0
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            pid = json_int(entry.get("param_type"))
+            channel = json_int(entry.get("channel"))
+            raw = entry.get("param_value")
+            if pid is None or channel is None or not isinstance(raw, str):
+                continue
+            try:
+                value = base64.b64decode(raw, validate=True).decode()
+            except (ValueError, UnicodeDecodeError):
+                continue
+            for target in aliases.get(channel, (channel,)) if aliases else (channel,):
+                if (target, pid) not in own:
+                    self.devices.setdefault(target, {})[pid] = value
+            merged += 1
         return merged
 
     @property

@@ -11,6 +11,7 @@ from hypothesis import strategies as st
 
 from eufy_home_security.models import GuardMode
 from eufy_home_security.p2p.params import ParamDump, standalone_aliases
+from eufy_home_security.testing import SYNTHETIC
 
 
 def _param(dev: int, pid: int, value: str) -> dict[str, object]:
@@ -58,6 +59,54 @@ def test_ingest_aliases_and_standalone_aliases() -> None:
     assert 48 not in dump.devices
     assert dump.guard_mode == GuardMode.HOME
     assert standalone_aliases(48, 0) == {48: (255, 0)}
+
+
+def _b64(text: str) -> str:
+    return base64.b64encode(text.encode()).decode()
+
+
+def _bypass(channel: int, pid: int, value: str) -> dict[str, object]:
+    return {
+        "channel": channel,
+        "device_sn": SYNTHETIC.camera_sn,
+        "param_type": pid,
+        "param_value": _b64(value),
+    }
+
+
+def test_ingest_files_bypass_entries_under_their_channel_decoded() -> None:
+    """``db_bypass_str`` adds a paired device's own params, base64-decoded once."""
+    quality = _b64(json.dumps({"mode_0": {"quality": 2}, "mode_1": {"quality": 0}, "cur_mode": 0}))
+    dump = ParamDump()
+    merged = dump.ingest(
+        {
+            "params": [_param(255, 1224, "1"), _param(2, 1705, "3")],
+            "db_bypass_str": [
+                _bypass(2, 2730, quality),
+                _bypass(2, 6243, "0"),
+                {"channel": 2, "param_type": 6015, "param_value": "not base64!"},
+                {"channel": None, "param_type": 6248, "param_value": _b64("0")},
+                "junk",
+            ],
+        }
+    )
+    assert merged == 4
+    assert dump.devices[2] == {1705: "3", 2730: quality, 6243: "0"}
+    assert dump.station == {1224: "1"}
+
+
+def test_bypass_entry_keeps_the_params_value_of_the_same_id() -> None:
+    dump = ParamDump()
+    dump.ingest(
+        {"params": [_param(2, 1019, "1")], "db_bypass_str": [_bypass(2, 1019, "0")]},
+        aliases={2: (2, 7)},
+    )
+    assert dump.devices[2] == {1019: "1"}
+    assert dump.devices[7] == {1019: "1"}
+    later = ParamDump()
+    later.ingest({"params": [_param(2, 1019, "1")]})
+    later.ingest({"db_bypass_str": [_bypass(2, 1019, "0")]})
+    assert later.devices[2] == {1019: "0"}
 
 
 def test_guard_mode_property() -> None:

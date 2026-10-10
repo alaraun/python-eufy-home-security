@@ -254,10 +254,21 @@ chunks:
 ```json
 {"params": [{"dev_type": 255, "param_type": 1224, "param_value": "1"},
             {"dev_type": 0,   "param_type": 1101, "param_value": "92"}, ...],
+ "db_bypass_str": [{"channel": 2, "device_sn": "<camera>", "param_type": 2730,
+                    "param_value": "<base64 of the param's string>"}, ...],
  "main_sw_version": "3.8.7.4", "sec_sw_version": "1.4.0.8", "hb_bind_type": ..., "app_cloud_encrypt": ...}
 ```
 
 - `param_value` is a **string** (ints as decimal text, some values base64).
+- **`db_bypass_str` [verified].** A second list with a paired device's own params, keyed
+  by `channel` (and `device_sn`), each value base64 of the param's own string. On a
+  HomeBase 3 (fw 3.8.7.4) a paired T8170 (fw 3.3.5.4) has 52 entries here and none of
+  them in `params`: among them 2730 and 2731 (streaming and recording quality, base64
+  JSON `{"mode_0":{"quality":q},"mode_1":{…},"cur_mode":0}`), 6243 (view mode), 6015,
+  6248, 6287. 2730 follows a 1350/2730 write in the next dump. The eufy app reads both
+  lists; the library files these under the channel, base64-decoded once, and keeps a
+  `params` value of the same id in the same object. The T8160s on that station have no
+  entries.
 - **Group by `dev_type`.** The same `param_type` appears once per device (three
   batteries, for example), so flattening loses data.
 - **A standalone device has no 255 block [verified].** A T8170 (fw 3.3.5.4) answers
