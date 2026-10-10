@@ -107,7 +107,7 @@ Untagged statements in a section inherit that section's tag.
 | **device_type** | The cloud model code: 18 for a HomeBase 3 in the device list (event records for the same station say 43), 19 for eufyCam 3. |
 | **owner account_id** | The station owner's cloud user id (`member.admin_user_id` in the device list). Every P2P command must carry it, and the cipher 40 fetch must name it. For a shared member it is **not** the logged-in user's id. A command with any other id is acknowledged and then silently dropped. |
 | **cipher 40** | The cloud cipher record (`cipher_id` 40) whose `ecc_private_key` (P-256) unwraps the P2P session key from CONN_INIT on a HomeBase 3. The station names the id in CONN_INIT (a T8170 names 98); the key belongs to the id under the owner's account and is served to the owner or a member who names the owner ([cloud.md](cloud.md)). |
-| **static key** | 16 ASCII bytes `serial[-7:] + "-" + did_number + "-" + did_suffix[0]`. The AES-128-ECB key for CONN_INIT, legacy scalar commands and ECB-tagged station frames. |
+| **static key** | 16 ASCII bytes `serial[-7:] + did_text[7:16]` (for `EUPRAMA-123456-ABCDE`: `"-123456-A"`). The AES-128-ECB key for CONN_INIT, legacy scalar commands and ECB-tagged station frames. |
 | **session key** | 32 ASCII bytes unwrapped from CONN_INIT. The AES-256-GCM key for commands and GCM-tagged station frames, in both directions. One per connection. |
 | **CommandType** | The app's command number. XZYH frame types reuse the same numbering, so `0x0546` = 1350, `0x044F` = 1103. |
 | **openudid** | A 16-hex per-install id sent to the cloud. Mint one per install, persist it, and never reuse another install's. |

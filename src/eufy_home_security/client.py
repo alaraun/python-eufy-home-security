@@ -99,8 +99,9 @@ class SkippedDevice:
     """A device on the account that the library builds nothing for, and why.
 
     ``reason`` is ``"bad_serial"`` (its serial cannot name it in an id, see
-    :func:`~.identity.is_device_serial`), ``"bad_did"`` (a station whose P2P id is not
-    of the form :meth:`~.p2p.did.Did.parse` accepts), ``"no_did"`` (its own parent but
+    :func:`~.identity.is_device_serial`), ``"bad_did"`` (a station whose P2P id local P2P
+    does not accept, see :meth:`~.p2p.did.Did.parse`; the eufy app's P2P stack refuses
+    it too), ``"no_did"`` (its own parent but
     without a P2P id, so not a station: a non-security product, say) or ``"orphan"``
     (paired to a station that is not on the list, or was itself skipped).
     """
@@ -1325,7 +1326,7 @@ def _group(
             return
         level, why = {
             "bad_serial": (logging.WARNING, "its serial is not letters and digits"),
-            "bad_did": (logging.WARNING, "a P2P id of a form the library does not support"),
+            "bad_did": (logging.WARNING, "its P2P id is not one local P2P accepts"),
             "no_did": (logging.INFO, "not a station (no P2P id) and paired to none"),
             "orphan": (logging.WARNING, "its station is not on the account's device list"),
         }[reason]

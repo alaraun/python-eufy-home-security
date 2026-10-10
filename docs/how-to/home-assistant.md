@@ -2150,8 +2150,9 @@ async def async_get_config_entry_diagnostics(hass, entry):
   integration; it lists names only and is safe to show.
 - Add `eufy.skipped_devices` (`SkippedDevice(device_sn_redacted, reason)`: `bad_serial`,
   `bad_did`, `no_did`, `orphan`). A `bad_serial`, `bad_did` or `orphan` deserves a
-  non-fixable repair issue; `bad_did` is a station whose P2P id has a form the library
-  does not support, and its paired devices are listed as `orphan`;
+  non-fixable repair issue; `bad_did` is a station whose P2P id local P2P does not
+  accept (the eufy app does not connect to it either), and its paired devices are
+  listed as `orphan`;
   `no_did` is a device the library does not serve (a robot vacuum on the same account).
 - Add per station `dataclasses.asdict(station.stats())` (`SessionStats`): it carries no
   identifiers and needs no redaction. For "events stopped", compare

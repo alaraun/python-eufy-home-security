@@ -18,7 +18,7 @@ ECIES, CONN_INIT), `p2p/messages.py` (ECB scalar frames).
 ## Static key **[verified]**
 
 ```
-key = serial[-7:] + "-" + did_number + "-" + did_suffix[0]        # exactly 16 ASCII bytes
+key = serial[-7:] + did_text[7:16]        # exactly 16 ASCII bytes
 ```
 
 | input | value | part |
@@ -27,8 +27,11 @@ key = serial[-7:] + "-" + did_number + "-" + did_suffix[0]        # exactly 16 A
 | DID | `EUPRAMA-123456-ABCDE` | `123456`, `A` |
 | key | `XXXXXXX-123456-A` | hex `585858585858582d3132333435362d41` |
 
-The number is the decimal DID number as text. The key is derivable offline, with no
-cloud call.
+`did_text` is the DID as the cloud's device list gives it (`p2p_did`): the key is a
+slice of that text, not a reformatted number. For the usual 7-letter prefix and 6-digit
+number this is `"-" + number + "-" + suffix[0]` **[verified]**; for other shapes the
+slice follows the eufy app **[declared]**. The key is derivable offline, with no cloud
+call.
 
 **ECB details.** AES-128-ECB, no IV. The client zero-pads to a 16-byte boundary.
 Station JSON payloads carry trailing NUL padding, so decode the leading JSON object

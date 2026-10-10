@@ -461,7 +461,7 @@ async def test_discover_skips_and_lists_devices_it_cannot_build(
         "WARNING",
         "WARNING",
     ]
-    assert "P2P id of a form the library does not support" in skipped[2].getMessage()
+    assert "its P2P id is not one local P2P accepts" in skipped[2].getMessage()
     assert LONG_DID not in caplog.text
     assert "skipping device empty:" in skipped[0].getMessage()
     assert all(ODD_CAMERA_SN not in r.getMessage() for r in skipped)  # redacted
