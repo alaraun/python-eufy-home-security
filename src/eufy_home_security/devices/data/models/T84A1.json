@@ -1,6 +1,6 @@
 {
  "product_code": "T84A1",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -116,7 +116,11 @@
    "kind": "bool",
    "page": "SettingsHome",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1288
    },
    "write": {
@@ -154,6 +158,28 @@
   },
   "camera_on_off": {
    "access": "ro",
+   "contexts": [
+    {
+     "entry": {
+      "note": "no handler write path"
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "default": "1",
    "kind": "string",
    "note": "handler ignores the value",
@@ -358,7 +384,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -389,6 +419,7 @@
    },
    "read": {
     "map": {
+     "": -1,
      "eyJzbm9vemVfdGltZSI6MH0=": -1,
      "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
      "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
@@ -507,7 +538,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1045
    },
    "write": {
@@ -605,6 +640,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 8,
      "2": 9,
@@ -743,11 +779,55 @@
   },
   "motion_detection_status": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": false,
+        "0": false,
+        "1": true
+       },
+       "param": 1011
+      },
+      "write": {
+       "cmd": 1011,
+       "params": {
+        "enable": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1011,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6040
    },
    "write": {
@@ -770,6 +850,7 @@
    "kind": "bool",
    "read": {
     "map": {
+     "": false,
      "0": true,
      "1": false
     },
@@ -803,7 +884,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1013
    },
    "write": {
@@ -870,6 +955,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "1": 0,
      "2": 2
     },
@@ -911,6 +997,7 @@
    },
    "read": {
     "map": {
+     "": 2,
      "2": 2,
      "3": 5
     },
@@ -988,7 +1075,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1241
    },
    "write": {
@@ -1099,7 +1190,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1403
    },
    "write": {
@@ -1117,6 +1212,27 @@
   },
   "spotlight_switch": {
    "access": "ro",
+   "contexts": [
+    {
+     "entry": {
+      "note": "no handler write path"
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "kind": "string",
    "note": "handler ignores the value",
    "read": null
@@ -1193,7 +1309,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1214
    },
    "write": {

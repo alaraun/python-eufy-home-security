@@ -1,6 +1,6 @@
 {
  "product_code": "T8960",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "charging_status": {
    "access": "ro",
@@ -53,7 +53,11 @@
    "kind": "bool",
    "page": "SOSStrongReminder",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 61214
    },
    "write": {

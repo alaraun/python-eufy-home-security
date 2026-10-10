@@ -1,6 +1,6 @@
 {
  "product_code": "T8900",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "automation_config": {
    "access": "ro",

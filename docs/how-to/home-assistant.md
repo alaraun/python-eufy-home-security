@@ -969,7 +969,7 @@ per-mode settings; a paired camera or sensor adds 15 per-mode delays and actions
 |---|---|---|---|
 | T8030 | 75 | 13 | 62 |
 | T8160 | 103 | 31 | 72 |
-| T8170 | 146 | 39 | 107 |
+| T8170 | 147 | 40 | 107 |
 | T8910 | 11 | 2 | 9 |
 
 Every model's keys, values, units and labels are listed in

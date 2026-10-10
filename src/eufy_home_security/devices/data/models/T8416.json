@@ -1,6 +1,6 @@
 {
  "product_code": "T8416",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -185,6 +185,58 @@
   },
   "audio_recording_on_off": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": true,
+        "0": true,
+        "1": false
+       },
+       "param": 1288
+      },
+      "write": {
+       "cmd": 1350,
+       "subCmd": 1288,
+       "params": {
+        "record_mute": {
+         "$map": {
+          "false": 1,
+          "true": 0
+         }
+        },
+        "channel": "$channel"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1288,
+        "paramValue": {
+         "$map": {
+          "false": "1",
+          "true": "0"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "default": true,
    "group": "C",
@@ -193,7 +245,11 @@
    "order": 1,
    "page": "AudioSettings",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6012
    },
    "write": {
@@ -219,7 +275,11 @@
    "order": 1,
    "page": "PanTiltSettings",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6099
    },
    "write": {
@@ -341,6 +401,38 @@
   },
   "detection_sensitivity": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": null,
+       "param": 6041
+      },
+      "write": {
+       "cmd": 1700,
+       "subCmd": 6041,
+       "params": {
+        "value": "$v",
+        "channel": "$channel"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 6041,
+        "paramValue": "$v:str"
+       },
+       "extUpdates": [
+        {
+         "cmd": 1276,
+         "paramValue": "$v:str"
+        }
+       ]
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "control": "slider",
    "default": 3,
    "group": "F",
@@ -366,25 +458,6 @@
      "cmd": 1276,
      "paramValue": "$v:str"
     }
-   },
-   "write_standalone": {
-    "cmd": 1700,
-    "subCmd": 6041,
-    "params": {
-     "value": "$v",
-     "channel": "$channel"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 6041,
-     "paramValue": "$v:str"
-    },
-    "extUpdates": [
-     {
-      "cmd": 1276,
-      "paramValue": "$v:str"
-     }
-    ]
    }
   },
   "detection_type_set": {
@@ -518,7 +591,11 @@
    "order": 1,
    "page": "VideoSettings",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6010
    },
    "write": {
@@ -650,6 +727,7 @@
    "kind": "bool",
    "read": {
     "map": {
+     "": true,
      "0": true,
      "1": false
     },
@@ -710,7 +788,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -742,6 +824,7 @@
    },
    "read": {
     "map": {
+     "": -1,
      "eyJzbm9vemVfdGltZSI6MH0=": -1,
      "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
      "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
@@ -860,7 +943,11 @@
    "kind": "bool",
    "name": "Privacy Zones",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6248
    },
    "write": {
@@ -1092,6 +1179,35 @@
   },
   "led_on_off": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": false,
+        "0": false,
+        "1": true
+       },
+       "param": 6014
+      },
+      "write": {
+       "cmd": 1700,
+       "subCmd": 6014,
+       "params": {
+        "value": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 6014,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "control": "switch",
    "default": false,
    "group": "C",
@@ -1100,7 +1216,11 @@
    "order": 1,
    "page": "SettingsGeneral",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1045
    },
    "write": {
@@ -1119,18 +1239,6 @@
       "paramValue": "$v:str"
      }
     ]
-   },
-   "write_standalone": {
-    "cmd": 1700,
-    "subCmd": 6014,
-    "params": {
-     "value": "$v:int"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 6014,
-     "paramValue": "$v:str"
-    }
    }
   },
   "live_bottom_hor_toolbar_list": {
@@ -1217,13 +1325,24 @@
    "page": "VideoSettings",
    "read": {
     "map": {
+     "": 0,
      "MA==": 0,
      "MQ==": 6,
      "Mg==": 2,
      "Mw==": 5,
      "NA==": 4
     },
-    "param": 2730
+    "param": 2730,
+    "view": {
+     "by": 6243,
+     "map": {
+      "0": 0,
+      "1": 6,
+      "2": 2,
+      "3": 5,
+      "4": 4
+     }
+    }
    },
    "values": [
     0,
@@ -1360,7 +1479,11 @@
    "order": 1,
    "page": "AudioSettings",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1240
    },
    "write": {
@@ -1383,6 +1506,46 @@
   },
   "motion_detection_status": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": false,
+        "0": false,
+        "1": true
+       },
+       "param": 1011
+      },
+      "write": {
+       "cmd": 1011,
+       "params": {
+        "enable": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1011,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "default": true,
    "group": "B",
@@ -1391,7 +1554,11 @@
    "order": 1,
    "page": "MotionDetection",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6040
    },
    "write": {
@@ -1458,7 +1625,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1145
    },
    "write": {
@@ -1534,6 +1705,7 @@
    "name": "Night Vision",
    "read": {
     "map": {
+     "": 100,
      "0": 100,
      "1": 102,
      "3": 101
@@ -1602,7 +1774,11 @@
    "kind": "bool",
    "name": "All Other Motion",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6027
    },
    "write": {
@@ -1732,6 +1908,7 @@
    "page": "SettingsNotification",
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "120": 2,
      "180": 3,
@@ -1781,6 +1958,78 @@
   },
   "notification_type": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "note": null,
+      "read": {
+       "map": {
+        "": 0,
+        "1": 0,
+        "2": 2,
+        "3": 1
+       },
+       "param": 1289
+      },
+      "write": {
+       "cmd": 1350,
+       "subCmd": 1289,
+       "params": {
+        "notification_style": {
+         "$map": {
+          "0": 1,
+          "1": 3,
+          "2": 2
+         }
+        }
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1289,
+        "paramValue": {
+         "$map": {
+          "0": "1",
+          "1": "3",
+          "2": "2"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    },
+    {
+     "entry": {
+      "note": null,
+      "read": {
+       "map": {
+        "": 0,
+        "1": 0,
+        "2": 2,
+        "3": 1
+       },
+       "param": 6020
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "control": "select",
    "default": 0,
    "group": "E",
@@ -1925,12 +2174,22 @@
    "page": "VideoSettings",
    "read": {
     "map": {
+     "": 2,
      "1": 6,
      "2": 2,
      "3": 5,
      "4": 4
     },
-    "param": 2731
+    "param": 2731,
+    "view": {
+     "by": "cur_mode",
+     "map": {
+      "1": 6,
+      "2": 2,
+      "3": 5,
+      "4": 4
+     }
+    }
    },
    "values": [
     4,
@@ -1981,7 +2240,11 @@
    "order": 1,
    "page": "VideoSettings",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1207
    },
    "write": {
@@ -2004,6 +2267,53 @@
   },
   "set_alarm_type": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1350,
+       "params": {
+        "channel": "$channel",
+        "type": 10,
+        "time_out": 0,
+        "user_name": ""
+       },
+       "subCmd": 1201
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "T9000"
+     ]
+    },
+    {
+     "entry": {
+      "write": {
+       "cmd": 1350,
+       "params": {
+        "channel": "$channel",
+        "type": 0,
+        "time_out": 0,
+        "user_name": ""
+       },
+       "subCmd": 1202
+      }
+     },
+     "names": [
+      "NVR",
+      "T7000"
+     ]
+    }
+   ],
    "control": "select",
    "default": 0,
    "kind": "enum",
@@ -2083,7 +2393,11 @@
    "order": 1,
    "page": "SoundDetection",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6208
    },
    "write": {
@@ -2137,7 +2451,11 @@
    "order": 1,
    "page": "SoundDetection",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6043
    },
    "write": {
@@ -2167,6 +2485,7 @@
    "page": "SoundDetection",
    "read": {
     "map": {
+     "": 0,
      "128": 0,
      "256": 1
     },
@@ -2209,7 +2528,11 @@
    "order": 1,
    "page": "AudioSettings",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1241
    },
    "write": {
@@ -2386,7 +2709,11 @@
    "order": 1,
    "page": "PanTiltSettings",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6031
    },
    "write": {
@@ -2440,6 +2767,7 @@
     "0": "Dual",
     "1": "Single"
    },
+   "note": "round trip does not return the written value",
    "order": 1,
    "page": "VideoSettings",
    "read": null,

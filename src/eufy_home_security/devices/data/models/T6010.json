@@ -1,6 +1,6 @@
 {
  "product_code": "T6010",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "change_wifi_is_support": {
    "access": "ro",

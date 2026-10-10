@@ -1,6 +1,6 @@
 {
  "product_code": "T81A0",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -121,6 +121,7 @@
    },
    "read": {
     "map": {
+     "": 1,
      "1": 0,
      "2": 1,
      "3": 2
@@ -162,7 +163,11 @@
    "kind": "bool",
    "page": "SettingsHome",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1288
    },
    "write": {
@@ -431,7 +436,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -462,6 +471,7 @@
    },
    "read": {
     "map": {
+     "": -1,
      "eyJzbm9vemVfdGltZSI6MH0=": -1,
      "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
      "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
@@ -580,7 +590,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1045
    },
    "write": {
@@ -648,6 +662,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 6,
      "2": 2,
@@ -813,11 +828,55 @@
   },
   "motion_detection_status": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": false,
+        "0": false,
+        "1": true
+       },
+       "param": 1011
+      },
+      "write": {
+       "cmd": 1011,
+       "params": {
+        "enable": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1011,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6040
    },
    "write": {
@@ -845,6 +904,7 @@
    "page": "CustomizeRecording",
    "read": {
     "map": {
+     "": false,
      "0": true,
      "1": false
     },
@@ -878,7 +938,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1013
    },
    "write": {
@@ -895,11 +959,37 @@
   },
   "nightvision_type": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1350,
+       "subCmd": 1277,
+       "params": {
+        "night_sion": null,
+        "channel": "$channel"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1277,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1277
    },
    "write": {
@@ -957,6 +1047,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "1": 0,
      "2": 2
     },
@@ -1041,6 +1132,7 @@
    "page": "MotionDetection",
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 1,
      "2": 3
@@ -1092,6 +1184,7 @@
    },
    "read": {
     "map": {
+     "": 2,
      "2": 2,
      "3": 5
     },
@@ -1199,7 +1292,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1241
    },
    "write": {
@@ -1216,6 +1313,50 @@
   },
   "speaker_volume": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1230,
+       "params": {
+        "value": {
+         "$map": {
+          "2": 100,
+          "1": 85,
+          "0": 70
+         }
+        }
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 6342,
+        "paramValue": {
+         "$map": {
+          "2": "100",
+          "1": "85",
+          "0": "70"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "select",
    "default": 1,
    "kind": "enum",
@@ -1256,6 +1397,39 @@
   },
   "spotlight_brightness_level": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1401,
+       "params": {
+        "value": "$v"
+       },
+       "update": {
+        "data": "$v",
+        "needUpdate": true,
+        "cmd": 1401,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "slider",
    "default": 50,
    "kind": "range",
@@ -1284,7 +1458,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1403
    },
    "write": {
@@ -1302,11 +1480,49 @@
   },
   "spotlight_switch": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1400,
+       "params": {
+        "value": "$v:int",
+        "open": "$v:int",
+        "type": 2
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1400,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1400
    },
    "write": {
@@ -1455,7 +1671,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1214
    },
    "write": {

@@ -1,6 +1,6 @@
 {
  "product_code": "T90E0",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "alarm_volume_value": {
    "access": "rw",
@@ -58,7 +58,14 @@
     "4": "Ding"
    },
    "read": {
-    "map": null,
+    "map": {
+     "": 0,
+     "0": 0,
+     "1": 1,
+     "2": 2,
+     "3": 3,
+     "4": 4
+    },
     "param": 1507
    },
    "values": [

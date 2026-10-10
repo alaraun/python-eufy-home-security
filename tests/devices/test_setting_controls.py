@@ -27,19 +27,22 @@ CHILD = WriteContext(
 def data_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     monkeypatch.setattr(model_settings, "_root", lambda: tmp_path)
     (tmp_path / "INDEX.json").write_text(
-        json.dumps({"schema_version": 2, "codes": ["T0001"]}), encoding="utf-8"
+        json.dumps({"schema_version": 3, "codes": ["T0001"]}), encoding="utf-8"
     )
     model_settings._load.cache_clear()
+    model_settings._resolved.cache_clear()
     model_settings.bundled_codes.cache_clear()
     yield tmp_path
     model_settings._load.cache_clear()
+    model_settings._resolved.cache_clear()
     model_settings.bundled_codes.cache_clear()
 
 
 def _load(root: Path, settings: dict[str, object]) -> dict[str, Setting]:
-    doc = {"schema_version": 2, "product_code": "T0001", "settings": settings}
+    doc = {"schema_version": 3, "product_code": "T0001", "settings": settings}
     (root / "T0001.json").write_text(json.dumps(doc), encoding="utf-8")
     model_settings._load.cache_clear()
+    model_settings._resolved.cache_clear()
     return dict(settings_of("T0001"))
 
 

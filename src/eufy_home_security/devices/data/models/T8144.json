@@ -1,6 +1,6 @@
 {
  "product_code": "T8144",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -39,7 +39,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1015
    },
    "write": {
@@ -157,6 +161,7 @@
    "page": "SettingsHome",
    "read": {
     "map": {
+     "": false,
      "0": true,
      "1": false
     },
@@ -429,7 +434,11 @@
    "kind": "bool",
    "name": "Continuous Recording",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6010
    },
    "write": {
@@ -506,6 +515,7 @@
    "kind": "bool",
    "read": {
     "map": {
+     "": true,
      "0": true,
      "1": false
     },
@@ -569,7 +579,11 @@
    "kind": "bool",
    "name": "Pre-recording",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6257
    },
    "write": {
@@ -591,7 +605,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -622,6 +640,7 @@
    },
    "read": {
     "map": {
+     "": -1,
      "eyJzbm9vemVfdGltZSI6MH0=": -1,
      "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
      "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
@@ -880,7 +899,11 @@
    "kind": "bool",
    "name": "Status LED",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1045
    },
    "write": {
@@ -949,8 +972,21 @@
     "6": "720P"
    },
    "name": "Streaming Quality",
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "": 0
+    },
+    "param": 2730,
+    "view": {
+     "by": "cur_mode",
+     "map": {
+      "0": 0,
+      "1": 6,
+      "2": 2,
+      "3": 5
+     }
+    }
+   },
    "values": [
     5,
     2,
@@ -1022,7 +1058,11 @@
    "kind": "bool",
    "name": "Microphone",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1240
    },
    "write": {
@@ -1085,6 +1125,7 @@
    "page": "CustomizeRecording",
    "read": {
     "map": {
+     "": false,
      "0": true,
      "1": false
     },
@@ -1118,7 +1159,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1145
    },
    "write": {
@@ -1192,6 +1237,7 @@
    "name": "Night Vision",
    "read": {
     "map": {
+     "": 11,
      "0": 11,
      "1": 6,
      "5": 7
@@ -1243,6 +1289,7 @@
    "name": "Night Vision",
    "read": {
     "map": {
+     "": 104,
      "0": 104,
      "1": 102,
      "2": 103
@@ -1292,6 +1339,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "1": 0,
      "2": 2,
      "3": 1
@@ -1388,7 +1436,11 @@
     "1": "External Solar Panel"
    },
    "read": {
-    "map": null,
+    "map": {
+     "": 0,
+     "0": 0,
+     "1": 1
+    },
     "param": 1293
    },
    "values": [
@@ -1422,6 +1474,7 @@
    "page": "MotionDetection",
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 1,
      "2": 3
@@ -1533,10 +1586,18 @@
    "name": "Recording Quality",
    "read": {
     "map": {
+     "": 2,
      "2": 2,
      "3": 5
     },
-    "param": 2731
+    "param": 2731,
+    "view": {
+     "by": "cur_mode",
+     "map": {
+      "2": 2,
+      "3": 5
+     }
+    }
    },
    "values": [
     5,
@@ -1653,7 +1714,11 @@
    "kind": "bool",
    "name": "Speaker",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1241
    },
    "write": {
@@ -1733,7 +1798,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1400
    },
    "write": {
@@ -1856,7 +1925,12 @@
    },
    "name": "Watermark",
    "read": {
-    "map": null,
+    "map": {
+     "": 1,
+     "0": 0,
+     "1": 1,
+     "2": 2
+    },
     "param": 1214
    },
    "values": [

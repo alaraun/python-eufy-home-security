@@ -1,6 +1,6 @@
 {
  "product_code": "T8025",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "4g_signal_strenght_level": {
    "access": "ro",
@@ -352,6 +352,28 @@
   },
   "device_name": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1216,
+       "params": {
+        "deviceName": "$v"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1216,
+        "paramValue": "$v"
+       },
+       "payloadFrom": "mapOf",
+       "sendRequestUrl": "app/devicemanage/update_device_info"
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "control": "text",
    "kind": "string",
    "note": "round trip does not return the written value",
@@ -380,7 +402,11 @@
    "control": "switch",
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -485,7 +511,11 @@
    "control": "switch",
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1670
    },
    "write": {
@@ -757,6 +787,7 @@
    },
    "read": {
     "map": {
+     "": 1,
      "EU": 0,
      "US": 1
     },

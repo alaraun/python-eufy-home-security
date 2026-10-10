@@ -1,6 +1,6 @@
 {
  "product_code": "T7400",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "ai_empower": {
    "access": "ro",

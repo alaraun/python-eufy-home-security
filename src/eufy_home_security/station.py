@@ -272,7 +272,7 @@ def _read(
     raw = params.get(setting.read_param)
     if setting._mode_table is not None:
         return report_value(raw)
-    value = setting.decode(raw)
+    value = setting.decode(raw, params)
     if value is None and raw is not None and not raw.lstrip("-").isdigit():
         quality = report_value(raw, params.get(VIEW_MODE_PARAM))
         if quality is not None:
@@ -905,7 +905,12 @@ class Station:
         paired = serial != self.serial
         memo = self._settings_memo.get((serial, code))
         if memo is None:
-            bundled = settings_of(code)
+            # The handler's codecs follow the device's context: the station itself is
+            # its own parent, a paired device sits behind this station's kind.
+            if serial == self.serial:
+                bundled = settings_of(code, standalone=True)
+            else:
+                bundled = settings_of(code, self._connect_type_of(serial))
             if not bundled and self._listed_settings is not None:
                 # Not memoised: a listing can arrive after the first lookup.
                 listed = tuple(self._listed_settings(code))
@@ -1436,6 +1441,7 @@ class Station:
         if setting._mode_table is not None:
             await self._async_set_mode_table_value(setting._mode_table, int(public), ctx.channel)
             return CommandOutcome.APPLIED
+        ctx = await self._with_write_params(setting, ctx)
         if setting.bit is not None:
             current = await self._current_mask(setting, ctx.channel)
             wanted = setting.mask_with(current, bool(public))
@@ -1468,11 +1474,33 @@ class Station:
         if setting.kind is not SettingKind.FLAGS or not setting.writable:
             raise UnsupportedError(f"{key} is not a writable flags setting")
         setting.with_flag(0, flag, on=on)  # refuses an unknown member before any traffic
+        ctx = await self._with_write_params(setting, ctx)
         current = await self._current_mask(setting, ctx.channel)
         wanted = setting.with_flag(current, flag, on=on)
         if wanted != current:
             await self._async_write(setting, wanted, ctx)
         return wanted
+
+    async def _with_write_params(self, setting: Setting, ctx: WriteContext) -> WriteContext:
+        """``ctx`` with the current values of the parameters ``setting``'s write takes
+        (:attr:`~.devices.model_settings.Setting.write_params`): from the session's
+        parameters, else from a fresh read. Raises :class:`CommandNotAppliedError` when
+        the device does not report one, since the handler would send null in its place."""
+        needed = setting.write_params
+        if not needed:
+            return ctx
+        block = self.session.merged_params().devices.get(ctx.channel, {})
+        if not needed <= block.keys():
+            dump = await self.session.async_get_params(expect_channels=(ctx.channel,))
+            block = {**block, **dump.devices.get(ctx.channel, {})}
+        missing = sorted(needed - block.keys())
+        if missing:
+            raise CommandNotAppliedError(
+                missing[0],
+                f"{setting.key}: the write takes parameter {missing[0]}, which the device "
+                f"on channel {ctx.channel} does not report; refusing to send it without",
+            )
+        return replace(ctx, params={p: block[p] for p in needed})
 
     async def _current_mask(self, setting: Setting, channel: int) -> int:
         """The mask ``setting``'s parameter holds now, from a fresh read; raises

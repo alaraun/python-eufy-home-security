@@ -1,6 +1,6 @@
 {
  "product_code": "T8442",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -129,34 +129,53 @@
   },
   "audio_recording_on_off": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": false,
+        "0": false,
+        "1": true
+       },
+       "param": 6012
+      },
+      "write": {
+       "cmd": 1700,
+       "subCmd": 6012,
+       "params": {
+        "enable": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 6012,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "note": "round trip does not return the written value",
    "page": "SettingsHome",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1288
+   },
    "write": {
     "cmd": 1350,
     "subCmd": 1288,
     "params": {
      "record_mute": "$v:int",
-     "channel": 3
+     "channel": "$channel"
     },
     "update": {
      "needUpdate": true,
      "cmd": 1288,
-     "paramValue": "$v:str"
-    }
-   },
-   "write_standalone": {
-    "cmd": 1700,
-    "subCmd": 6012,
-    "params": {
-     "enable": "$v:int"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 6012,
      "paramValue": "$v:str"
     }
    }
@@ -167,7 +186,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6081
    },
    "write": {
@@ -378,7 +401,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6010
    },
    "write": {
@@ -520,7 +547,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -550,6 +581,7 @@
    },
    "read": {
     "map": {
+     "": -1,
      "eyJzbm9vemVfdGltZSI6MH0=": -1,
      "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
      "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
@@ -808,7 +840,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6014
    },
    "write": {
@@ -881,6 +917,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 8,
      "2": 9,
@@ -987,7 +1024,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1240
    },
    "write": {
@@ -1040,7 +1081,11 @@
     "1": "Continue recording"
    },
    "read": {
-    "map": null,
+    "map": {
+     "": 1,
+     "0": 0,
+     "1": 1
+    },
     "param": 6050
    },
    "values": [
@@ -1092,7 +1137,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1145
    },
    "write": {
@@ -1134,7 +1183,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6024
    },
    "write": {
@@ -1156,7 +1209,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6023
    },
    "write": {
@@ -1178,7 +1235,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6022
    },
    "write": {
@@ -1200,7 +1261,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6026
    },
    "write": {
@@ -1222,7 +1287,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6025
    },
    "write": {
@@ -1253,6 +1322,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "120": 2,
      "180": 3,
@@ -1312,6 +1382,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "1": 0,
      "2": 2,
      "3": 1
@@ -1365,6 +1436,7 @@
    },
    "read": {
     "map": {
+     "": 2,
      "1": 11,
      "2": 2
     },
@@ -1408,7 +1480,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1207
    },
    "write": {
@@ -1425,6 +1501,37 @@
   },
   "set_alarm_type": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1350,
+       "params": {
+        "channel": "$channel",
+        "type": 10,
+        "time_out": 0,
+        "user_name": ""
+       },
+       "subCmd": 1202
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "select",
    "default": 0,
    "kind": "enum",
@@ -1494,7 +1601,11 @@
    "kind": "bool",
    "page": "SoundDetection",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6043
    },
    "write": {
@@ -1522,6 +1633,7 @@
    "page": "SoundDetection",
    "read": {
     "map": {
+     "": 0,
      "1": 1,
      "2": 0
     },
@@ -1560,7 +1672,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1241
    },
    "write": {
@@ -1614,6 +1730,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "100": 4,
      "30": 1,
      "5": 0,
@@ -1672,7 +1789,11 @@
    "kind": "bool",
    "page": "SpotlightSettings",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6086
    },
    "write": {
@@ -1694,7 +1815,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6080
    },
    "write": {
@@ -1717,6 +1842,7 @@
    "kind": "bool",
    "read": {
     "map": {
+     "": false,
      "false": false,
      "true": true
     },

@@ -8,9 +8,12 @@ See docs/reference/models-schema.md.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
+
+from eufy_home_security.devices.recipes import PARENT_CONNECT_TYPES
 
 # The TD readers live in the library; the generator reaches them through this module.
 from eufy_home_security.devices.td import (  # noqa: F401 - re-exported
@@ -26,7 +29,9 @@ type Value = bool | int | float | str
 type Recipe = dict[str, Any]
 type Path = tuple[str | int, ...]
 
-VOLATILE_KEYS = frozenset({"transaction", "buildTimestamp"})
+# ``webRtc``: the app's request executor takes the route from the device
+# (``isWebrtc(device)``), not from the recipe; its request config has no such field.
+VOLATILE_KEYS = frozenset({"transaction", "buildTimestamp", "webRtc"})
 RANGE_FULL_POINTS = 41
 FIXED_CLOCK_MS = 1700000000000  # the driver's Date.now()
 # Two probes for open domains, so a leaf that only happens to equal one probe is no slot.
@@ -58,8 +63,38 @@ class Context:
 
 
 CHILD = Context("child", "T0000CHILDSN0001", "T0000STATION0001", 3)
+"""A device paired to a parent that is no station kind (the handler's ``SINGLE``)."""
 STANDALONE = Context("standalone", "T0000ALONESN0001", "T0000ALONESN0001", 0)
 CONTEXTS = (CHILD, STANDALONE)
+ALT_CHANNEL = {CHILD.name: 5, STANDALONE.name: 2}
+"""The second channel each context is swept on: a leaf that follows it is ``$channel``."""
+
+# One parent serial per connect type; the handler's ``getConnectType`` reads the prefix.
+CONNECT_PARENTS: Mapping[str, str] = {
+    kind.value: f"{prefix}P0000000001" for prefix, kind in sorted(PARENT_CONNECT_TYPES.items())
+}
+
+
+def child_context(connect: str | None) -> Context:
+    """The station-child context under a parent of connect type ``connect`` (None: a
+    parent of no station kind)."""
+    if connect is None:
+        return CHILD
+    return replace(CHILD, station_sn=CONNECT_PARENTS[connect])
+
+
+def standalone_context(product_code: str) -> Context:
+    """The standalone context of a model: its own parent. A station model's serial
+    carries its prefix, which makes the handler's connect type that station's kind."""
+    if product_code[:5] in PARENT_CONNECT_TYPES:
+        serial = f"{product_code[:5]}P0000000002"
+        return replace(STANDALONE, device_sn=serial, station_sn=serial)
+    return STANDALONE
+
+
+def alt_channel(context: Context) -> Context:
+    """``context`` on its second channel."""
+    return replace(context, channel=ALT_CHANNEL[context.name])
 
 
 class GeneratorError(Exception):
@@ -72,7 +107,6 @@ class WriteCodec:
 
     access: str = "ro"
     write: Recipe | None = None
-    write_standalone: Recipe | None = None
     write_table: dict[str, Recipe] | None = None
     note: str | None = None
     form: str | None = None
@@ -158,11 +192,17 @@ def _same(a: Any, b: Any) -> bool:
 
 type Samples = Sequence[tuple[Value, Recipe | None]]
 
-FAKE_SERIALS = tuple(sorted({s for c in CONTEXTS for s in (c.device_sn, c.station_sn)}))
+FAKE_SERIALS = tuple(
+    sorted(
+        {s for c in CONTEXTS for s in (c.device_sn, c.station_sn)}
+        | set(CONNECT_PARENTS.values())
+        | {f"{prefix}P0000000002" for prefix in PARENT_CONNECT_TYPES}
+    )
+)
 SINGLE_PROBE_KINDS = frozenset({"string", "other"})  # open domains, probed only
 
 
-def _str_form(value: Value) -> str:
+def str_form(value: Value) -> str:
     """The string the handler writes for a value (bools as ``"0"``/``"1"``)."""
     if isinstance(value, bool):
         return str(int(value))
@@ -185,7 +225,7 @@ def _value_slot(column: Sequence[Any], values: Sequence[Value]) -> str | None:
     pairs = list(zip(column, values, strict=True))
     if all(_same(leaf, v) for leaf, v in pairs):
         return "$v"
-    if all(isinstance(leaf, str) and leaf == _str_form(v) for leaf, v in pairs):
+    if all(isinstance(leaf, str) and leaf == str_form(v) for leaf, v in pairs):
         return "$v:str"
     if all(
         isinstance(leaf, int) and not isinstance(leaf, bool) and leaf == _int_form(v)
@@ -211,19 +251,20 @@ def _affine(column: Sequence[Any], values: Sequence[Value]) -> list[int | float]
     return [intify(round(a, 9)), intify(round(b, 9))]
 
 
-def _channel_paths(child: Samples, standalone: Samples) -> dict[str, set[Path]]:
-    """Per value key: leaf paths that are the context channel (3 as child, 0 standalone)."""
-    alone = {value_key(v): r for v, r in standalone}
+def _channel_paths(
+    samples: Samples, alt: Samples, channel: int, alt_channel: int
+) -> dict[str, set[Path]]:
+    """Per value key: leaf paths of one context that hold its channel, ``channel`` in
+    ``samples`` and ``alt_channel`` in ``alt`` (the same context on its second channel)."""
+    others = {value_key(v): r for v, r in alt}
     out: dict[str, set[Path]] = {}
-    for v, rc in child:
-        rs = alone.get(value_key(v))
-        if rc is None or rs is None:
+    for v, r in samples:
+        ra = others.get(value_key(v))
+        if r is None or ra is None:
             continue
-        flat = dict(leaves(rs))
+        flat = dict(leaves(ra))
         out[value_key(v)] = {
-            p
-            for p, leaf in leaves(rc)
-            if _same(leaf, CHILD.channel) and _same(flat.get(p), STANDALONE.channel)
+            p for p, leaf in leaves(r) if _same(leaf, channel) and _same(flat.get(p), alt_channel)
         }
     return out
 
@@ -296,33 +337,21 @@ def _fit(kind: str, samples: Samples, channel: Mapping[str, set[Path]]) -> _Fit:
     return _Fit(form, write=_replace(first, subst))
 
 
-def infer_write(kind: str, child: Samples, standalone: Samples) -> WriteCodec:
-    """Write codec from slotted samples ``[(value, recipe or None)]`` of both contexts.
+def infer_write(
+    kind: str, samples: Samples, alt: Samples, channel: int, alt_channel: int
+) -> WriteCodec:
+    """Write codec of one context from slotted samples ``[(value, recipe or None)]``,
+    swept on ``channel`` and again on ``alt_channel`` (``alt``) to find the channel leaves.
 
-    The child context's codec is ``write`` (or ``write_table``); the standalone codec is
-    kept as ``write_standalone`` only when it differs. A setting without a codec in the
-    child context is read-only with a note naming why.
+    The codec is ``write`` (or ``write_table``). A setting without one is read-only with a
+    note naming why.
     """
-    if _has_embedded_serial(child) or _has_embedded_serial(standalone):
+    if _has_embedded_serial(samples):
         return WriteCodec(note="serial embedded in a string")
-    channel = _channel_paths(child, standalone)
-    main = _fit(kind, child, channel)
-    if main.form is None:
-        return WriteCodec(note=main.note)
-    alone = _fit(kind, standalone, channel)
-    result = WriteCodec(access="rw", form=main.form, write=main.write, write_table=main.table)
-    if alone.form is None:
-        result.extra["standalone_note"] = alone.note
-    elif main.table is not None:
-        if alone.table != main.table:
-            result.extra["write_table_standalone"] = alone.table or {}
-            result.extra["standalone_form"] = alone.form
-    elif alone.write != main.write:
-        if alone.table is not None:
-            result.extra["write_table_standalone"] = alone.table
-        else:
-            result.write_standalone = alone.write
-    return result
+    fit = _fit(kind, samples, _channel_paths(samples, alt, channel, alt_channel))
+    if fit.form is None:
+        return WriteCodec(note=fit.note)
+    return WriteCodec(access="rw", form=fit.form, write=fit.write, write_table=fit.table)
 
 
 MISSING: Any = object()  # no getProperty reply for a written value
@@ -340,7 +369,7 @@ class ReadSample:
     decoded: Any
 
 
-def _decodes_to(decoded: Any, value: Value) -> bool:
+def decodes_to(decoded: Any, value: Value) -> bool:
     """getProperty returned the written value (string compare; bools also as 0/1)."""
     if decoded is None or decoded is MISSING:
         return False
@@ -364,10 +393,10 @@ def infer_read(
     cmds = {s.cmd for s in samples}
     if len(cmds) != 1 or not all(isinstance(s.cmd, int) for s in samples):
         return None, ROUND_TRIP_NOTE
-    if not all(_decodes_to(s.decoded, s.value) for s in samples):
+    if not all(decodes_to(s.decoded, s.value) for s in samples):
         return None, ROUND_TRIP_NOTE
     (cmd,) = cmds
-    if all(str(s.param_value) == _str_form(s.value) for s in samples):
+    if all(str(s.param_value) == str_form(s.value) for s in samples):
         return {"param": cmd, "map": None}, None
     if kind == "range":
         return None, RANGE_READ_NOTE
@@ -383,6 +412,23 @@ def infer_read(
 SN_SLOTS = frozenset({"$device_sn", "$station_sn"})
 SCALAR_SLOTS = frozenset({"$v", "$v:str", "$v:int", "$channel", *SN_SLOTS})
 OBJECT_SLOTS = frozenset({"$map", "$affine"})
+PARAM_SLOT = re.compile(r"\$param:(\d+):(int|str)")
+"""A leaf the handler takes from the device's current parameter ``<id>``, as int or str."""
+
+
+def param_slot(param: int, form: str) -> str:
+    return f"$param:{param}:{form}"
+
+
+def param_leaf(raw: str | None, form: str) -> Any:
+    """A ``$param`` leaf for parameter value ``raw``, as the handler forms it: an absent or
+    non-integer value gives null for ``int``, an absent value null for ``str``."""
+    if raw is None or form == "str":
+        return raw
+    try:
+        return int(raw)
+    except ValueError:
+        return None
 
 
 def coerce(setting: Mapping[str, Any], payload: Any) -> Value:
@@ -396,22 +442,17 @@ def coerce(setting: Mapping[str, Any], payload: Any) -> Value:
     raise ValueError(f"not a scalar payload: {payload!r}")
 
 
-def write_template(setting: Mapping[str, Any], value: Value, context: str) -> Recipe:
-    """The write template of a setting for one value in a context (``child``/``standalone``)."""
+def write_template(setting: Mapping[str, Any], value: Value) -> Recipe:
+    """The write template of a setting for one value."""
     if setting.get("access") != "rw":
         raise ValueError("setting is read-only")
     key = value_key(value)
-    alone = context == STANDALONE.name
-    tables = [setting.get("write_table_standalone")] if alone else []
-    tables.append(setting.get("write_table"))
-    for table in tables:
-        if isinstance(table, dict):
-            if key not in table:
-                raise ValueError(f"value {key} not in the write table")
-            recipe: Recipe = table[key]
-            return recipe
-    if alone and isinstance(setting.get("write_standalone"), dict):
-        return setting["write_standalone"]  # type: ignore[no-any-return]
+    table = setting.get("write_table")
+    if isinstance(table, dict):
+        if key not in table:
+            raise ValueError(f"value {key} not in the write table")
+        recipe: Recipe = table[key]
+        return recipe
     if isinstance(setting.get("write"), dict):
         return setting["write"]  # type: ignore[no-any-return]
     raise ValueError("setting has no write codec")
@@ -421,12 +462,13 @@ def render(
     setting: Mapping[str, Any],
     value: Value,
     *,
-    context: str,
     channel: int,
     device_sn: str = "$device_sn",
     station_sn: str = "$station_sn",
+    params: Mapping[int, str] | None = None,
 ) -> Recipe:
-    """The recipe a setting's write codec gives for a public value in a device context.
+    """The recipe a setting's write codec gives for a public value on ``channel``, with
+    ``params`` the device's current parameters (none: every ``$param`` leaf is null).
 
     Raises ValueError for an unknown placeholder, an unmapped value or a read-only setting.
     """
@@ -447,7 +489,7 @@ def render(
         if slot_name == "$v":
             return value
         if slot_name == "$v:str":
-            return _str_form(value)
+            return str_form(value)
         if slot_name == "$v:int":
             if isinstance(value, float) and not value.is_integer():
                 raise ValueError(f"$v:int of a fraction: {value!r}")
@@ -456,6 +498,8 @@ def render(
             return channel
         if slot_name in SN_SLOTS:
             return serials[slot_name]
+        if m := PARAM_SLOT.fullmatch(slot_name):
+            return param_leaf((params or {}).get(int(m[1])), m[2])
         raise ValueError(f"unknown placeholder {slot_name!r}")
 
     def form(x: dict[str, Any]) -> Any:
@@ -474,20 +518,16 @@ def render(
             return intify(round(a * value + b, 9))
         raise ValueError(f"unknown placeholder object {name!r}")
 
-    return fill(write_template(setting, value, context))  # type: ignore[no-any-return]
+    return fill(write_template(setting, value))  # type: ignore[no-any-return]
 
 
 def codec_fields(result: WriteCodec) -> dict[str, Any]:
     """The setting-entry keys of a write codec (``access`` plus what is present)."""
     out: dict[str, Any] = {"access": result.access}
-    for key in ("write", "write_standalone", "write_table", "note"):
+    for key in ("write", "write_table", "note"):
         value = getattr(result, key)
         if value is not None:
             out[key] = value
-    if "write_table_standalone" in result.extra:
-        out["write_table_standalone"] = result.extra["write_table_standalone"]
-    if result.access == "rw" and "standalone_note" in result.extra:
-        out["note"] = f"standalone: {result.extra['standalone_note']}"
     return out
 
 
@@ -496,8 +536,8 @@ def dump(obj: Any) -> str:
     return json.dumps(_sorted(obj), indent=1, ensure_ascii=False) + "\n"
 
 
-RECIPE_KEYS = frozenset({"write", "write_standalone"})
-TABLE_KEYS = frozenset({"write_table", "write_table_standalone"})
+RECIPE_KEYS = frozenset({"write"})
+TABLE_KEYS = frozenset({"write_table"})
 
 
 def _sorted(obj: Any, *, keep: bool = False) -> Any:

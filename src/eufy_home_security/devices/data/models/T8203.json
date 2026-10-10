@@ -1,6 +1,6 @@
 {
  "product_code": "T8203",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -112,6 +112,7 @@
    "page": "SettingsHome",
    "read": {
     "map": {
+     "": true,
      "0": true,
      "1": false
     },
@@ -215,6 +216,7 @@
    },
    "read": {
     "map": {
+     "": 6,
      "0": 5,
      "2": 6
     },
@@ -384,6 +386,7 @@
    "kind": "bool",
    "read": {
     "map": {
+     "": false,
      "false": false,
      "true": true
     },
@@ -414,7 +417,11 @@
    "kind": "bool",
    "page": "PackageLiveCheckAssistance",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 2714
    },
    "write": {
@@ -437,6 +444,7 @@
    "kind": "bool",
    "read": {
     "map": {
+     "": false,
      "false": false,
      "true": true
     },
@@ -486,7 +494,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -663,6 +675,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 8,
      "2": 9,
@@ -777,6 +790,47 @@
   },
   "notification_jump_to": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "http": {
+        "path": "v3/app/upload_devs_params",
+        "method": "post",
+        "domain": "eufy_security",
+        "body": {
+         "device_sn": "$device_sn",
+         "station_sn": "$device_sn",
+         "params": [
+          {
+           "param_type": 2038,
+           "param_value": {
+            "$map": {
+             "0": "1",
+             "1": "2"
+            }
+           }
+          }
+         ]
+        },
+        "update": {
+         "needUpdate": true,
+         "cmd": 2038,
+         "paramValue": {
+          "$map": {
+           "0": "1",
+           "1": "2"
+          }
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "control": "select",
    "default": 0,
    "kind": "enum",
@@ -797,38 +851,6 @@
      "body": {
       "device_sn": "$device_sn",
       "station_sn": "$station_sn",
-      "params": [
-       {
-        "param_type": 2038,
-        "param_value": {
-         "$map": {
-          "0": "1",
-          "1": "2"
-         }
-        }
-       }
-      ]
-     },
-     "update": {
-      "needUpdate": true,
-      "cmd": 2038,
-      "paramValue": {
-       "$map": {
-        "0": "1",
-        "1": "2"
-       }
-      }
-     }
-    }
-   },
-   "write_standalone": {
-    "http": {
-     "path": "v3/app/upload_devs_params",
-     "method": "post",
-     "domain": "eufy_security",
-     "body": {
-      "device_sn": "$device_sn",
-      "station_sn": "$device_sn",
       "params": [
        {
         "param_type": 2038,
@@ -1166,6 +1188,44 @@
   },
   "video_quality_encode_format": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": 0,
+        "1": 1,
+        "6": 0
+       },
+       "param": 1705
+      },
+      "write": {
+       "cmd": 1705,
+       "params": {
+        "quality": {
+         "$map": {
+          "0": 6,
+          "1": 1
+         }
+        }
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1705,
+        "paramValue": {
+         "$map": {
+          "0": "6",
+          "1": "1"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB3"
+     ]
+    }
+   ],
    "control": "select",
    "default": 0,
    "kind": "enum",
@@ -1175,6 +1235,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 1,
      "5": 0
     },
@@ -1212,7 +1273,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1704
    },
    "write": {
@@ -1258,6 +1323,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "12": 0,
      "5": 1
     },

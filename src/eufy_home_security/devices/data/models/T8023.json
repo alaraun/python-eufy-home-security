@@ -1,6 +1,6 @@
 {
  "product_code": "T8023",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "alarm_tones_mode": {
    "access": "rw",
@@ -239,7 +239,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {

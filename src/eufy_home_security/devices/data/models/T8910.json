@@ -1,6 +1,6 @@
 {
  "product_code": "T8910",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "battery_low_threshold": {
    "access": "ro",
@@ -122,7 +122,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 61010
    },
    "write": {

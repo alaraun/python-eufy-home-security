@@ -23,7 +23,7 @@ def _load(name: str) -> ModuleType:
     return module
 
 
-_load("gen_models_codec")
+CHANNEL = _load("gen_models_codec").CHILD.channel  # the channel the replies were swept on
 controls = _load("gen_models_controls")
 
 
@@ -56,7 +56,7 @@ def test_a_read_modify_write_bool_becomes_a_bit_switch() -> None:
         ("notification_ignore_switch", False): {"params": {"arm_push_mode": other}},
     }
     counts: dict[str, int] = {}
-    controls.apply_bits(settings, cands, replies, counts)
+    controls.apply_bits(settings, cands, replies, counts, channel=CHANNEL)
     entry = settings["notification_ignore_switch"]
     assert entry["bit"] == 256
     assert entry["read"] == {"param": 1283, "map": None}
@@ -74,7 +74,7 @@ def test_a_bool_the_handler_writes_blind_stays_a_plain_switch() -> None:
         ("k", False): {"params": {"arm_push_mode": 0}},
     }
     counts: dict[str, int] = {}
-    controls.apply_bits(settings, cands, replies, counts)
+    controls.apply_bits(settings, cands, replies, counts, channel=CHANNEL)
     assert "bit" not in settings["k"]
     assert counts == {"bit:handler writes blind": 1}
 
@@ -114,7 +114,7 @@ def test_an_enum_the_handler_ors_becomes_flags() -> None:
     cands = controls.flag_candidates(settings, gates=set())
     singles, joined = _replies("detection_type_set", {"1": 3, "2": 4, "3": 8})
     counts: dict[str, int] = {}
-    controls.apply_flags(settings, cands, singles, joined, counts)
+    controls.apply_flags(settings, cands, singles, joined, counts, channel=CHANNEL)
     entry = settings["detection_type_set"]
     assert entry["kind"] == "flags"
     assert entry["flags"] == {"1": 3, "2": 4, "3": 8}
@@ -127,7 +127,14 @@ def test_an_enum_the_handler_ors_becomes_flags() -> None:
 def test_an_enum_the_handler_does_not_or_stays_an_enum() -> None:
     settings = {"k": _detection()}
     singles, joined = _replies("k", {"1": 3, "2": 4, "3": 8}, joined_or=False)
-    controls.apply_flags(settings, controls.flag_candidates(settings, set()), singles, joined, {})
+    controls.apply_flags(
+        settings,
+        controls.flag_candidates(settings, set()),
+        singles,
+        joined,
+        {},
+        channel=CHANNEL,
+    )
     assert settings["k"]["kind"] == "enum"
 
 
