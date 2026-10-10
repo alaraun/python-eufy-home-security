@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.8](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.7...v0.3.8) (2026-10-10)
+
+
+### Features
+
+* stop a live capture early and keep the clip ([#58](https://github.com/alaraun/python-eufy-home-security/issues/58)) ([391c059](https://github.com/alaraun/python-eufy-home-security/commit/391c059cc6b59712ce4079cb75c7ab53af6094fb))
+
 ## [0.3.7](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.6...v0.3.7) (2026-10-10)
 
 
