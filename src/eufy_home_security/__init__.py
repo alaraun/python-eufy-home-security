@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from .exceptions import (
         AuthenticationError,
         CameraWakeError,
+        CaptureStoppedError,
         CipherUnavailableError,
         CipherUnusableError,
         CloudApiError,
@@ -185,6 +186,7 @@ _EXPORTS: dict[str, str] = {
         (
             "AuthenticationError",
             "CameraWakeError",
+            "CaptureStoppedError",
             "CipherUnavailableError",
             "CipherUnusableError",
             "CloudApiError",
@@ -280,6 +282,7 @@ __all__ = [
     "CameraBusyChanged",
     "CameraImage",
     "CameraWakeError",
+    "CaptureStoppedError",
     "CipherUnavailableError",
     "CipherUnusableError",
     "ClipWriter",

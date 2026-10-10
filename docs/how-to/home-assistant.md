@@ -1446,8 +1446,8 @@ HEVC and AAC untouched, starting at a keyframe) written through the integration'
 `MediaClip`: `video_frames`, `audio_frames`, `keyframes`, `bytes_written`,
 `duration_s` (by the camera's clock), `width`/`height` (the last frame's), `resizes`,
 `started_at` (aware), `device_sn`, `record_id` (downloads), `expected_frames` (the
-record's `frame_num`), `ended_early` (a capture whose stream ended first), `complete`,
-`content_type`.
+record's `frame_num`), `ended_early` (a capture whose stream ended first), `stopped` (a
+capture ended by its `stop` event; complete), `complete`, `content_type`.
 
 #### The station's recordings
 
@@ -1491,7 +1491,7 @@ record's `frame_num`), `ended_early` (a capture whose stream ended first), `comp
 
 #### A live clip
 
-`StreamBroadcast.async_capture(seconds, write, *, start_timeout=30)` taps the broadcast
+`StreamBroadcast.async_capture(seconds, write, *, start_timeout=30, stop=None)` taps the broadcast
 the camera entity already serves:
 
 - no second camera stream: a capture beside a live view shares it; a capture with no
@@ -1503,6 +1503,12 @@ the camera entity already serves:
 - a stream that ends first returns what it got with `ended_early`; no keyframe within
   `start_timeout` raises `DeviceTimeoutError`; the open's error (asleep, −204, budget)
   is raised as is; `broadcast.captures` counts running captures.
+- **Stop early:** pass an `asyncio.Event` as `stop` and set it (a "stop recording"
+  action). The capture ends at the next frame, finalises the TS as for a full clip and
+  returns it with `stopped` True, `ended_early` False, `complete` True. A stop before
+  the first keyframe raises `CaptureStoppedError` (nothing was written: "nothing
+  recorded"). The camera stays open for viewers and other captures; it closes when the
+  stopped capture was the last holder. Cancelling the call instead loses the clip.
 
 #### Storing them
 
@@ -1925,6 +1931,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `RefreshCooldownError` (a `RateLimitedError`, `code` 0) | the library's own spacing of key fetches, not a eufy throttle: no repair, just wait |
 | `CipherUnavailableError` (an `EmptyResponseError`; `cipher_id`, `owner_source`, `retry_after`) | the cloud has no key for the cipher the station named in its handshake, under the owner id asked (`owner_source`: `"member.admin_user_id"` or `"own user id"`). Not a reauth and not an outage of the station: the share or the station's binding needs the owner. Raise one non-fixable repair issue naming the station and `cipher_id`; clear it on `ConnectionChanged(connected=True)`. The library asks the same station and cipher again only after `retry_after` (an hour) or once a refreshed device list names another owner id; until then every attempt raises this without a request. A reload of the entry asks once more |
 | `StillNotWrittenError` (a `RecordNotFoundError`; `offset`) | the device has not written the event's row or still yet: keep what is shown and ask once more later (about 20 s). A plain `RecordNotFoundError` is final for that event: no retry |
+| `CaptureStoppedError` | a live capture's `stop` was set before its first keyframe: nothing was recorded, nothing to store. Not an error for the user who pressed stop |
 | `KeyExchangeRefusedError` (a `CloudApiError`; `code` 4404 or 463, `status` 463) | the cloud gateway refused the client's key identity and a new key exchange did not restore it. Not a reauth and not a kick-out: no login was attempted and none helps by itself. Carry on from the cache and retry on the next interval; the library re-keys at each attempt. Raise a repair issue only if it persists (hours) |
 
 Errors that happen in the background (a key or owner-id refresh inside a running session,

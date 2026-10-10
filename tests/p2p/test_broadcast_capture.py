@@ -7,7 +7,11 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from eufy_home_security.exceptions import DeviceTimeoutError, StationUnreachableError
+from eufy_home_security.exceptions import (
+    CaptureStoppedError,
+    DeviceTimeoutError,
+    StationUnreachableError,
+)
 from eufy_home_security.p2p.broadcast import StreamBroadcast
 from eufy_home_security.p2p.media import MediaFrame, MediaKind, VideoCodec
 from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
@@ -198,6 +202,75 @@ async def test_closing_the_broadcast_ends_a_running_capture() -> None:
     await broadcast.aclose()
     clip = await asyncio.wait_for(capture, 3)
     assert clip.ended_early
+
+
+async def test_a_stopped_capture_returns_what_it_wrote_as_complete() -> None:
+    stream = FakeStream(camera(20), hold=True, pace=0.002)
+    _, open_stream = _opener(stream)
+    broadcast = StreamBroadcast(open_stream, name="test")  # type: ignore[arg-type]
+    stop = asyncio.Event()
+    sink = Sink()
+    capture = asyncio.create_task(broadcast.async_capture(60.0, sink, stop=stop))
+    await asyncio.sleep(0.2)
+    stop.set()
+    clip = await asyncio.wait_for(capture, 3)
+    assert clip.stopped
+    assert not clip.ended_early
+    assert clip.complete
+    assert 0 < clip.duration_s < 60
+    assert clip.bytes_written == len(sink.data)
+    assert len(sink.data) % TS_PACKET_LEN == 0
+    await asyncio.sleep(0.05)
+    assert stream.closed, "the stopped capture was the last holder"
+
+
+async def test_a_stopped_capture_leaves_a_viewer_and_another_capture_running() -> None:
+    stream = FakeStream(camera(20), hold=True, pace=0.002)
+    opened, open_stream = _opener(stream)
+    broadcast = StreamBroadcast(open_stream, name="test")  # type: ignore[arg-type]
+    viewer = broadcast.subscribe()
+    try:
+        await asyncio.wait_for(anext(viewer), 3)
+        stop = asyncio.Event()
+        stopped = asyncio.create_task(broadcast.async_capture(60.0, Sink(), stop=stop))
+        other = asyncio.create_task(broadcast.async_capture(60.0, Sink()))
+        await asyncio.sleep(0.1)
+        stop.set()
+        assert (await asyncio.wait_for(stopped, 3)).stopped
+        assert broadcast.running
+        assert broadcast.captures == 1
+        assert not other.done()
+        assert len(opened) == 1
+    finally:
+        await viewer.aclose()
+        await broadcast.aclose()
+    assert (await asyncio.wait_for(other, 3)).ended_early
+
+
+async def test_a_stop_before_the_first_keyframe_raises_capture_stopped() -> None:
+    frames = [video(5000 + i * 66) for i in range(5)]
+    stream = FakeStream(frames, hold=True)
+    _, open_stream = _opener(stream)
+    broadcast = StreamBroadcast(open_stream, name="test")  # type: ignore[arg-type]
+    stop = asyncio.Event()
+    sink = Sink()
+    capture = asyncio.create_task(broadcast.async_capture(10.0, sink, stop=stop))
+    await asyncio.sleep(0.05)
+    stop.set()
+    with pytest.raises(CaptureStoppedError):
+        await asyncio.wait_for(capture, 3)
+    assert not sink.data
+    await asyncio.sleep(0.05)
+    assert stream.closed
+
+
+async def test_a_capture_that_reaches_its_length_is_not_stopped() -> None:
+    _, open_stream = _opener(FakeStream(camera(6), hold=True))
+    broadcast = StreamBroadcast(open_stream, name="test")  # type: ignore[arg-type]
+    clip = await broadcast.async_capture(1.0, Sink(), stop=asyncio.Event())
+    assert clip.complete
+    assert not clip.stopped
+    assert not clip.ended_early
 
 
 pytestmark = pytest.mark.asyncio
