@@ -24,6 +24,7 @@ from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession, 
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices.model_settings import (
+    PARENTLESS_ONLY,
     bundled_td_version,
     settings_of,
 )
@@ -2185,7 +2186,7 @@ async def test_newer_vendor_data_is_logged_once_and_the_bundled_settings_stay(
     assert cloud.things_requested == [("T8030", "T8160", UNBUNDLED)] * 2
     newer = f"vendor data for T8160 is newer than bundled (td {bundled + 1} > {bundled})"
     assert [r.getMessage() for r in scan_logs.records].count(newer) == 1
-    assert all(by_key[k] == v for k, v in settings_of("T8160").items())
+    assert all(by_key[k] == v for k, v in settings_of("T8160").items() if k not in PARENTLESS_ONLY)
     from eufy_home_security import ModelStatus  # noqa: PLC0415 - the public export
 
     assert status == (

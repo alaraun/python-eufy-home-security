@@ -26,6 +26,7 @@ from .devices.capabilities import (
 from .devices.live_open import LiveOpen, has_live_open, library_live_open
 from .devices.live_open import app_version as live_open_app_version
 from .devices.model_settings import (
+    PARENTLESS_ONLY,
     Setting,
     SettingKind,
     Value,
@@ -758,6 +759,12 @@ def _ranks(names: Sequence[str | None]) -> dict[str | None, int]:
     return ranks
 
 
+def _without_parentless_only(settings: tuple[Setting, ...]) -> tuple[Setting, ...]:
+    """``settings`` less those the eufy app offers only for a device without a parent
+    (:data:`~.devices.model_settings.PARENTLESS_ONLY`)."""
+    return tuple(s for s in settings if s.key not in PARENTLESS_ONLY)
+
+
 def _sorted_settings(settings: Mapping[str, Setting]) -> tuple[Setting, ...]:
     """``settings`` by (group, page, order, key): a group ranks where its first setting
     stands in (order, key) order, pages sort by name; settings without a group, page or
@@ -872,7 +879,9 @@ class Station:
         """The settings of the station (``None``, or its own serial) or of a paired
         device: its model's settings sorted by (group, page, order, key), then for a
         paired device the per-mode delays and actions of its kind
-        (:func:`~.devices.model_settings.mode_table_settings`). A model the library has
+        (:func:`~.devices.model_settings.mode_table_settings`). A paired device's list
+        leaves out the settings the eufy app offers only without a parent
+        (:data:`~.devices.model_settings.PARENTLESS_ONLY`). A model the library has
         no settings file for lists the read-only settings of its cloud thing description
         when the client's model scan found one (``note`` "not in bundled data"), else
         ``()``.
@@ -893,14 +902,17 @@ class Station:
         code = self._product_code(serial)
         if code is None:
             return ()
+        paired = serial != self.serial
         memo = self._settings_memo.get((serial, code))
         if memo is None:
             bundled = settings_of(code)
             if not bundled and self._listed_settings is not None:
                 # Not memoised: a listing can arrive after the first lookup.
-                return tuple(self._listed_settings(code))
+                listed = tuple(self._listed_settings(code))
+                return _without_parentless_only(listed) if paired else listed
             memo = _sorted_settings(bundled)
-            if memo and serial != self.serial:
+            if memo and paired:
+                memo = _without_parentless_only(memo)
                 model = model_for_serial(serial)
                 memo += mode_table_settings(scope_for_kind(model.kind if model else None))
             self._settings_memo[(serial, code)] = memo
