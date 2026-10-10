@@ -60,12 +60,14 @@ from .exceptions import (
     EufySecurityError,
     ModelDataError,
     NoCachedSessionError,
+    ProtocolError,
     SessionReplacedError,
 )
 from .identity import StationClaims, is_device_serial
 from .inclusion import Reach, StationChoice
 from .models import GuardMode
 from .network import LanPath, check_local_ports, lan_address, lan_path_for, with_discovery
+from .p2p.did import Did
 from .p2p.pppp import BROADCAST, DISCOVERY_PORT
 from .p2p.session import (
     DEFAULT_STATION_SESSIONS,
@@ -89,6 +91,7 @@ _LOGGER = logging.getLogger(__name__)
 _SKIP_THROTTLE = LogThrottle()  # one line per skipped device, not one per discovery
 
 type ModelState = Literal["bundled", "cloud-listed", "unknown"]
+type SkipReason = Literal["bad_serial", "bad_did", "no_did", "orphan"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,14 +99,15 @@ class SkippedDevice:
     """A device on the account that the library builds nothing for, and why.
 
     ``reason`` is ``"bad_serial"`` (its serial cannot name it in an id, see
-    :func:`~.identity.is_device_serial`), ``"no_did"`` (its own parent but without a
-    P2P id, so not a station: a non-security product, say) or ``"orphan"`` (paired to
-    a station that is not on the list, or was itself skipped).
+    :func:`~.identity.is_device_serial`), ``"bad_did"`` (a station whose P2P id is not
+    of the form :meth:`~.p2p.did.Did.parse` accepts), ``"no_did"`` (its own parent but
+    without a P2P id, so not a station: a non-security product, say) or ``"orphan"``
+    (paired to a station that is not on the list, or was itself skipped).
     """
 
     device_sn_redacted: str
     """The serial through :func:`~._logging.redact_serial` (``"empty"`` for none)."""
-    reason: Literal["bad_serial", "no_did", "orphan"]
+    reason: SkipReason
 
 
 @dataclass(frozen=True, slots=True)
@@ -1306,20 +1310,22 @@ def _group(
     """The stations in a device list, the devices paired to each, and the skipped rest.
 
     A device whose serial cannot name it in an id (see
-    :func:`~.identity.is_device_serial`) is left out, with a warning: a consumer
-    would otherwise fail on it while setting up every other device. A station left
-    out takes its devices with it (they are orphans). A device that is its own
-    parent but has no P2P id is no station and is left out quietly.
+    :func:`~.identity.is_device_serial`) or a station whose P2P id does not parse
+    (:meth:`~.p2p.did.Did.parse`) is left out, with a warning: a consumer would
+    otherwise fail on it while setting up every other device. A station left out
+    takes its devices with it (they are orphans). A device that is its own parent but
+    has no P2P id is no station and is left out quietly.
     """
     skipped: list[SkippedDevice] = []
 
-    def skip(device: CloudDevice, reason: Literal["bad_serial", "no_did", "orphan"]) -> None:
+    def skip(device: CloudDevice, reason: SkipReason) -> None:
         label = redact_serial(device.device_sn) if device.device_sn else "empty"
         skipped.append(SkippedDevice(label, reason))
         if not _SKIP_THROTTLE.should_log((reason, device.device_sn)):
             return
         level, why = {
             "bad_serial": (logging.WARNING, "its serial is not letters and digits"),
+            "bad_did": (logging.WARNING, "a P2P id of a form the library does not support"),
             "no_did": (logging.INFO, "not a station (no P2P id) and paired to none"),
             "orphan": (logging.WARNING, "its station is not on the account's device list"),
         }[reason]
@@ -1327,10 +1333,12 @@ def _group(
 
     usable = []
     for device in devices:
-        if is_device_serial(device.device_sn):
-            usable.append(device)
-        else:
+        if not is_device_serial(device.device_sn):
             skip(device, "bad_serial")
+        elif device.is_station and not _did_parses(device.p2p_did):
+            skip(device, "bad_did")
+        else:
+            usable.append(device)
     stations = [d for d in usable if d.is_station]
     serials = {d.device_sn for d in stations}
     children: dict[str, list[CloudDevice]] = {}
@@ -1344,6 +1352,15 @@ def _group(
         else:
             skip(device, "orphan")
     return stations, children, tuple(skipped)
+
+
+def _did_parses(did: str | None) -> bool:
+    """Whether ``did`` is a P2P id a session can be built on."""
+    try:
+        Did.parse(did or "")
+    except ProtocolError:
+        return False
+    return True
 
 
 async def _best_effort(what: str, stop: Callable[[], Awaitable[None]]) -> None:
