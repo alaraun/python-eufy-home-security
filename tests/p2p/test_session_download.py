@@ -75,7 +75,8 @@ async def test_a_recording_downloads_whole_on_an_extra_session_closed_after(
         stats = session.stats()
         assert (stats.recording_downloads, stats.extra_live_sessions_open) == (1, 0)
         assert stats.extra_live_sessions == 0, "a download is not a live stream"
-        assert stats.media_opens == 0, "this session's own slot stayed free"
+        assert stats.media_opens == 1, "the extra session's open counts here"
+        assert stats.media_slot_channel is None
         assert not station.live_cameras, "no camera was woken"
     finally:
         await session.async_close()

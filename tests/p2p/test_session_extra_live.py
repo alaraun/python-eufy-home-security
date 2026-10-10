@@ -68,7 +68,10 @@ async def test_a_second_camera_streams_on_an_extra_session_closed_with_it(
         await _first_keyframe(first)
         stats = session.stats()
         assert (stats.extra_live_sessions, stats.extra_live_sessions_open) == (1, 0)
-        assert stats.media_opens == 1  # the extra session's open is its own
+        # The extra session's media counts here: both opens, both streams' records.
+        assert stats.media_opens == 2
+        assert stats.media_video_codecs["hevc"] > 0
+        assert "keyframe" in [s.outcome for s in stats.media_first_records]
         await first.aclose()
     finally:
         await session.async_close()

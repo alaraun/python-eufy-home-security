@@ -546,6 +546,17 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
   stream, `rsa_prefix` on an ECC one, `e2e` always) before its first keyframe fails with
   `UnsupportedError` naming the variant. `SessionStats.media_frames_by_variant` counts
   every media record received by `"video:<variant>"` / `"audio:<variant>"`.
+- **Diagnostics of a stream that plays no picture.** `SessionStats` also carries
+  `media_video_codecs` (video records by the codec header byte 5 names; `"code:<n>"`
+  for a code the library does not know, which a muxer takes as HEVC, logged once per
+  stream), `media_first_records` (the latest stream's first 12 video records:
+  variant, subheader bytes, keyframe flag, codec, lengths, size, the first 5 body
+  bytes as delivered, and what the stream did with each), and
+  `media_keyframes_rejected` with `media_rejected_keyframe`: a keyframe that did not
+  decrypt to Annex-B, with `probe` naming the body layouts that do start with a start
+  code (`raw@<n>`: clear from offset n; `ecb@<n>`: one 128-byte ECB run from n under
+  the stream key; the layout above is `ecb@129`). No key material is kept. An extra
+  live session's media counts into its station session's figures.
 
 ## Streaming quality **[verified]**
 
