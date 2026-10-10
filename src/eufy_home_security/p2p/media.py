@@ -61,6 +61,11 @@ _KEYFRAME_ENC_PREFIX = 128
 KEYFRAME_MIN = KEYFRAME_RSA_LEN + _KEYFRAME_MARKER + _KEYFRAME_ENC_PREFIX  # 257
 _KEYFRAME_AES_KEY_LEN = 16
 _KEYFRAME_FLAG_OFFSET = 4
+_VIDEO_CODEC_OFFSET = 5
+
+#: Every decrypted keyframe begins with an Annex-B start code; one that does not was
+#: decrypted with the wrong key (a wrong RSA key unwraps to 16 bytes about once in 100).
+ANNEX_B_STARTS = (b"\x00\x00\x00\x01", b"\x00\x00\x01")
 
 #: ECC video record: the 22-byte video header, the ECIES-wrapped stream key, the GCM tag
 #: and IV, then the AES-256-GCM body (``video_encrypt_gcm`` in the app).
@@ -186,6 +191,104 @@ def media_variant_label(frame_type: int, payload: bytes, subheader: bytes) -> st
     if frame_type == AUDIO_FRAME_TYPE:
         return f"audio:{audio_variant(subheader, payload)}"
     return None
+
+
+def video_codec_label(payload: bytes) -> str:
+    """The codec a VIDEO_FRAME header names: ``"hevc"``, ``"h264"`` or ``"code:<n>"``."""
+    if len(payload) <= _VIDEO_CODEC_OFFSET:
+        return "short"
+    code = payload[_VIDEO_CODEC_OFFSET]
+    codec = VideoCodec.from_code(code)
+    return codec.value if codec is not None else f"code:{code}"
+
+
+@dataclass(frozen=True, slots=True)
+class MediaRecordShape:
+    """The layout of one VIDEO_FRAME record, for diagnostics.
+
+    Header and framing fields only: no key material and no picture bytes beyond the
+    first NAL header. JSON-safe through ``dataclasses.asdict``.
+    """
+
+    variant: str
+    """:class:`VideoVariant` value, from the subheader."""
+    subheader: str
+    """The XZYH subheader's first 8 bytes, hex."""
+    key_flag: int
+    """Header byte 4 (1: flagged keyframe)."""
+    codec: str
+    """:func:`video_codec_label`."""
+    datalen: int
+    """The header's u32le body length."""
+    record_len: int
+    """The record's length on the wire, header included."""
+    width: int
+    height: int
+    head: str
+    """The first 5 bytes of the body as delivered (decrypted when it was), hex: the
+    Annex-B start code and the first NAL header, or what stands in their place."""
+    outcome: str
+    """What the stream did with the record: ``"frame"``, ``"keyframe"``,
+    ``"not_annex_b"``, ``"foreign_key"``, ``"waiting_keyframe"``, ``"queue_full"``,
+    ``"undecodable"``, ``"error"`` or ``"other_camera"``."""
+    probe: str = ""
+    """For a keyframe that did not decrypt to Annex-B: the body layouts that do start
+    with a start code (:func:`keyframe_layout_probe`)."""
+
+
+#: Bytes of a body a :class:`MediaRecordShape` shows: a 4-byte start code and a NAL header.
+SHAPE_HEAD_LEN = 5
+_SHAPE_SUBHEADER = 8
+
+
+def video_record_shape(
+    payload: bytes, subheader: bytes | None, *, outcome: str, head: bytes = b"", probe: str = ""
+) -> MediaRecordShape:
+    """The :class:`MediaRecordShape` of a VIDEO_FRAME record; ``head`` is the delivered
+    body's start (empty: the raw body after the header is shown)."""
+    size = len(payload) >= VIDEO_HEADER_LEN
+    datalen = struct.unpack_from("<I", payload, 0)[0] if size else 0
+    width, height = struct.unpack_from("<HH", payload, 10) if size else (0, 0)
+    shown = head or payload[VIDEO_HEADER_LEN:]
+    return MediaRecordShape(
+        variant=video_variant(subheader).value if subheader else "none",
+        subheader=bytes(subheader or b"")[:_SHAPE_SUBHEADER].hex(),
+        key_flag=payload[_KEYFRAME_FLAG_OFFSET] if len(payload) > _KEYFRAME_FLAG_OFFSET else -1,
+        codec=video_codec_label(payload),
+        datalen=datalen,
+        record_len=len(payload),
+        width=width,
+        height=height,
+        head=bytes(shown[:SHAPE_HEAD_LEN]).hex(),
+        outcome=outcome,
+        probe=probe,
+    )
+
+
+_PROBE_RAW_OFFSETS = (0, KEYFRAME_RSA_LEN, KEYFRAME_RSA_LEN + _KEYFRAME_MARKER)
+_PROBE_ECB_OFFSETS = (KEYFRAME_RSA_LEN, KEYFRAME_RSA_LEN + _KEYFRAME_MARKER)
+
+
+def keyframe_layout_probe(aes_key: bytes, video_body: bytes) -> str:
+    """Which layouts of a keyframe body start with an Annex-B start code.
+
+    ``raw@<n>``: the body from offset ``n`` as is; ``ecb@<n>``: one 128-byte AES-ECB
+    block run from ``n`` under ``aes_key``. Space-separated, ``"none"`` when no layout
+    does; the library's own layout is ``ecb@129``.
+    """
+    hits = [
+        f"raw@{offset}"
+        for offset in _PROBE_RAW_OFFSETS
+        if bytes(video_body[offset : offset + 4]).startswith(ANNEX_B_STARTS)
+    ]
+    if len(aes_key) == _KEYFRAME_AES_KEY_LEN:
+        for offset in _PROBE_ECB_OFFSETS:
+            run = bytes(video_body[offset : offset + _KEYFRAME_ENC_PREFIX])
+            if len(run) == _KEYFRAME_ENC_PREFIX and ecb_decrypt(aes_key, run).startswith(
+                ANNEX_B_STARTS
+            ):
+                hits.append(f"ecb@{offset}")
+    return " ".join(hits) or "none"
 
 
 def starts_picture_group(data: bytes) -> bool:
@@ -398,7 +501,7 @@ def parse_video_frame(payload: bytes, *, variant: VideoVariant | None = None) ->
             is_keyframe=is_keyframe_record(payload),
             data=payload[ECC_VIDEO_HEADER_LEN:],
             timestamp_ms=timestamp_ms,
-            codec=VideoCodec.from_code(payload[5]),
+            codec=VideoCodec.from_code(payload[_VIDEO_CODEC_OFFSET]),
             width=width,
             height=height,
             counter=counter,
@@ -413,7 +516,7 @@ def parse_video_frame(payload: bytes, *, variant: VideoVariant | None = None) ->
         is_keyframe=video_record_is_key(payload, variant),
         data=body,
         timestamp_ms=timestamp_ms,
-        codec=VideoCodec.from_code(payload[5]),
+        codec=VideoCodec.from_code(payload[_VIDEO_CODEC_OFFSET]),
         width=width,
         height=height,
         counter=counter,

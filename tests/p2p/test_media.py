@@ -662,3 +662,47 @@ def test_v1_still_validation_raises_value_error() -> None:
         testing_station.v1_still(image, "123456789012345", did=SYNTHETIC.did)
     with pytest.raises(ValueError, match="a 10-char code"):
         testing_station.v1_still(image, SYNTHETIC.camera_sn, did=SYNTHETIC.did, code="123456789")
+
+
+@pytest.mark.parametrize(
+    ("code", "label"),
+    [(media.VIDEO_CODEC_HEVC, "hevc"), (media.VIDEO_CODEC_H264, "h264"), (7, "code:7")],
+)
+def test_video_codec_label_names_an_unknown_code_by_its_number(code: int, label: str) -> None:
+    record = testing_station.video_record(b"x", keyframe=False, codec=code)
+    assert media.video_codec_label(record) == label
+    assert media.video_codec_label(record[:5]) == "short"
+
+
+def test_keyframe_layout_probe_names_every_layout_that_starts_annex_b() -> None:
+    aes_key = bytes(range(16))
+    _, private = media.generate_media_rsa_key()
+    body = testing_station.media_keyframe(private.public_key(), aes_key)
+    assert media.keyframe_layout_probe(aes_key, body) == "ecb@129"
+    assert media.keyframe_layout_probe(b"", body) == "none"  # no stream key yet
+    clear = testing_station.MEDIA_KEYFRAME
+    assert media.keyframe_layout_probe(aes_key, clear) == "raw@0"
+    unmarked = body[:128] + body[129:]  # the encrypted run right after the wrapped key
+    assert media.keyframe_layout_probe(aes_key, unmarked) == "ecb@128"
+
+
+def test_video_record_shape_shows_the_header_fields_and_the_body_head() -> None:
+    record = testing_station.video_record(
+        testing_station.MEDIA_PFRAME, keyframe=False, codec=media.VIDEO_CODEC_H264
+    )
+    shape = media.video_record_shape(record, bytes([1, 0, 0, 0, 0, 0]), outcome="frame")
+    assert shape == media.MediaRecordShape(
+        variant="plain",
+        subheader="010000000000",
+        key_flag=0,
+        codec="h264",
+        datalen=len(testing_station.MEDIA_PFRAME),
+        record_len=len(record),
+        width=testing_station.MEDIA_WIDTH,
+        height=testing_station.MEDIA_HEIGHT,
+        head=testing_station.MEDIA_PFRAME[:5].hex(),
+        outcome="frame",
+    )
+    assert media.video_record_shape(record, None, outcome="frame", head=b"\0\0\0\1\x67").head == (
+        "0000000167"
+    )

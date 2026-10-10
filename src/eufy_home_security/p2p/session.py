@@ -128,14 +128,17 @@ from .crypto import (
 )
 from .did import Did, static_key
 from .media import (
+    ANNEX_B_STARTS,
     KEYFRAME_MIN,
     KEYFRAME_RSA_LEN,
     PLAYBACK_ENDED,
+    SHAPE_HEAD_LEN,
     VIDEO_HEADER_LEN,
     MediaDecoder,
     MediaFrame,
     MediaKeyType,
     MediaKind,
+    MediaRecordShape,
     Still,
     StillFormat,
     VideoVariant,
@@ -146,11 +149,14 @@ from .media import (
     download_video_payload,
     generate_media_ecc_key,
     generate_media_rsa_key,
+    keyframe_layout_probe,
     media_variant_label,
     record_view_payload,
     start_realtime_media_payload,
     stop_realtime_media_payload,
+    video_codec_label,
     video_record_is_key,
+    video_record_shape,
     video_variant,
 )
 from .messages import (
@@ -283,6 +289,8 @@ normally ends earlier, on the station's end-of-playback frame; this is the fallb
 (a download, a lost end frame)."""
 MEDIA_QUEUE_FRAMES = 250
 """Frames (video and audio together) held for a slow reader before new ones are dropped."""
+MEDIA_SHAPE_RECORDS = 12
+"""Video records per stream whose shape :class:`SessionStats` keeps (diagnostics)."""
 MEDIA_DRAIN_GAP = 0.5
 """Opening a stream waits until no media frame has arrived for this long. A recording
 closed early on this session keeps streaming to its end (no command stops a playback,
@@ -347,9 +355,6 @@ _STATE_FRAME_TYPES = frozenset(
     {FrameType.PARAM_NOTIFY, FrameType.ALARM_MODE_NOTIFY, *ALARM_FRAME_VALUES}
 )
 """Frames carrying station state: trusted only under GCM once a session key exists."""
-_ANNEX_B_STARTS = (b"\x00\x00\x00\x01", b"\x00\x00\x01")
-"""Every decrypted keyframe begins with an Annex-B start code; one that does not was
-decrypted with the wrong key (a wrong RSA key unwraps to 16 bytes about once in 100)."""
 _CLEAR_REPLY_TYPES = frozenset({FrameType.DB_SYNC, FrameType.MEDIA_DOWNLOAD})
 """Reply frame types a standalone device may send as clear JSON under the ECB tag."""
 
@@ -511,6 +516,18 @@ class SessionStats:
     media_frames_by_variant: Mapping[str, int]
     """Media records received, by protection: ``"video:<VideoVariant>"`` and
     ``"audio:<AudioVariant>"`` (:func:`~.media.media_variant_label`)."""
+    media_video_codecs: Mapping[str, int]
+    """Video records received, by the codec their header names
+    (:func:`~.media.video_codec_label`; ``"code:<n>"`` for a code the library does not
+    know, which a muxer takes as HEVC)."""
+    media_keyframes_rejected: int
+    """Keyframes dropped because they did not decrypt to Annex-B."""
+    media_first_records: tuple[MediaRecordShape, ...]
+    """The latest stream's first :data:`MEDIA_SHAPE_RECORDS` video records: layout and
+    what the stream did with each (:class:`~.media.MediaRecordShape`)."""
+    media_rejected_keyframe: MediaRecordShape | None
+    """The latest keyframe counted in :attr:`media_keyframes_rejected`, with the body
+    layouts that do start with a start code (``probe``)."""
     stills_by_format: Mapping[str, int]
     """Stills fetched, by :class:`~.media.StillFormat` value."""
     still_late_replies: int
@@ -522,7 +539,7 @@ class SessionStats:
     counters are not included above)."""
     extra_live_sessions: int
     """Extra sessions opened for a live stream while this session's media slot was busy
-    (their own media counters are not included above)."""
+    (their media is counted in the ``media_*`` fields above)."""
     extra_live_sessions_open: int
     """Extra sessions open now, live streams and recording downloads together (at most
     :attr:`StationSession.max_sessions` - 2)."""
@@ -579,6 +596,31 @@ class Inbound:
 
 
 type Matcher = Callable[[Inbound], object | None]
+
+
+class _MediaCounters:
+    """The media counters behind :class:`SessionStats`; a station session's extra live
+    sessions count into their owner's."""
+
+    __slots__ = (
+        "codecs",
+        "failures",
+        "first_records",
+        "keyframes_rejected",
+        "opens",
+        "rejected_keyframe",
+        "variants",
+    )
+
+    def __init__(self) -> None:
+        self.opens = 0
+        self.failures: Counter[str] = Counter()
+        self.variants: Counter[str] = Counter()
+        self.codecs: Counter[str] = Counter()
+        self.keyframes_rejected = 0
+        self.first_records: list[MediaRecordShape] = []
+        """The latest stream's first video records (the stream appends to it)."""
+        self.rejected_keyframe: MediaRecordShape | None = None
 
 
 def _count_capped(counter: Counter[str], key: str, *, limit: int = STAT_KEY_LIMIT) -> None:
@@ -646,6 +688,11 @@ class MediaStream:
         stream's key."""
         self._open_index: int | None = None
         self._throttle = LogThrottle()
+        self._shapes: list[MediaRecordShape] = []
+        """The first :data:`MEDIA_SHAPE_RECORDS` video records' shapes (diagnostics)."""
+        session._media_counters.first_records = self._shapes
+        self._head = b""
+        self._probe = ""
 
     @property
     def closed(self) -> bool:
@@ -742,33 +789,60 @@ class MediaStream:
         camera: int | None = None,
         subheader: bytes | None = None,
     ) -> None:
-        # Without a subheader the record's protection follows its keyframe flag.
         if self._closed:
             return
+        self._head = b""
+        self._probe = ""
+        outcome = self._take(frame_type, payload, camera, subheader)
+        if frame_type != FrameType.VIDEO_FRAME:
+            return
+        counters = self._session._media_counters
+        rejected = outcome == "not_annex_b"
+        if len(self._shapes) >= MEDIA_SHAPE_RECORDS and not rejected:
+            return
+        shape = video_record_shape(
+            payload, subheader, outcome=outcome, head=self._head, probe=self._probe
+        )
+        if len(self._shapes) < MEDIA_SHAPE_RECORDS:
+            self._shapes.append(shape)
+        if rejected:
+            counters.keyframes_rejected += 1
+            counters.rejected_keyframe = shape
+
+    def _take(
+        self,
+        frame_type: int,
+        payload: bytes,
+        camera: int | None,
+        subheader: bytes | None,
+    ) -> str:
+        """Queue the frame a media record carries, or drop it; returns what was done
+        (:attr:`~.media.MediaRecordShape.outcome`)."""
+        # Without a subheader the record's protection follows its keyframe flag.
         is_video = frame_type == FrameType.VIDEO_FRAME
         if self.command == CMD_START_REALTIME_MEDIA and camera not in (None, self.channel):
             self._other_camera_frame(camera, is_video)
-            return
+            return "other_camera"
         self._last_rx = time.monotonic()
         variant = video_variant(subheader) if is_video and subheader else None
         if variant is not None and not self._decoder.decodes(variant):
             self._undecodable_video(variant)
-            return
+            return "undecodable"
         # Decide what to drop before decoding: a keyframe unwrap and its copies are
         # the expensive part, and they are wasted on a frame that is thrown away.
         if len(self._frames) >= MEDIA_QUEUE_FRAMES:
             self._need_keyframe = self._need_keyframe or is_video
             if self._started:
                 self.dropped += 1
-            return
+            return "queue_full"
         is_key = is_video and video_record_is_key(payload, variant)
         # An ECC record without the keyframe flag is told only after its decrypt.
         if is_video and self._need_keyframe and not is_key and variant is not VideoVariant.ECC:
             if self._started:
                 self.dropped += 1
-            return
+            return "waiting_keyframe"
         if not is_video and not self._started:
-            return  # audio before the first picture would put the tracks out of step
+            return "waiting_keyframe"  # audio before the first picture: tracks out of step
         carries_key = is_key and variant in (None, VideoVariant.RSA_PREFIX)
         wrapped = _wrapped_key(payload) if carries_key else None
         if wrapped is not None and self._wrapped_key not in (None, wrapped):
@@ -776,14 +850,20 @@ class MediaStream:
             # so the need for a keyframe is not re-armed.
             if self._throttle.should_log("foreign-keyframe"):
                 _LOGGER.debug("dropping a keyframe wrapped to another stream's key")
-            return
+            return "foreign_key"
+        outcome = "foreign_key"
         try:
             frame = self._decoder.decode(frame_type, payload, subheader)
             if (
                 frame is not None
                 and frame.is_keyframe
-                and not frame.data.startswith(_ANNEX_B_STARTS)
+                and not frame.data.startswith(ANNEX_B_STARTS)
             ):
+                outcome = "not_annex_b"
+                self._head = frame.data[:SHAPE_HEAD_LEN]
+                self._probe = keyframe_layout_probe(
+                    self._decoder.aes_key, payload[VIDEO_HEADER_LEN:]
+                )
                 raise _ForeignKeyframeError("keyframe did not decrypt to Annex-B")
         except _ForeignKeyframeError as err:
             self._need_keyframe = True  # the P-frames after it would not decode
@@ -797,23 +877,34 @@ class MediaStream:
                         "(before its first keyframe): %s",
                         err,
                     )
-                return
+                return outcome
             # Past the pinned-key check, so wrapped like this stream's keyframes: corrupt.
             if self._throttle.should_log(("bad-media", frame_type)):
                 _LOGGER.warning("undecodable media frame 0x%04x: %s", frame_type, err)
-            return
+            return outcome
         except ProtocolError as err:
             if is_video:
                 self._need_keyframe = True  # the P-frames after it would not decode
             if self._throttle.should_log(("bad-media", frame_type)):
                 _LOGGER.warning("undecodable media frame 0x%04x: %s", frame_type, err)
-            return
+            return "error"
         if frame is None:
-            return
+            return "undecodable"
+        self._head = frame.data[:SHAPE_HEAD_LEN]
         if frame.kind is MediaKind.VIDEO and self._need_keyframe and not frame.is_keyframe:
             if self._started:
                 self.dropped += 1
-            return
+            return "waiting_keyframe"
+        if (
+            frame.kind is MediaKind.VIDEO
+            and frame.codec is None
+            and self._throttle.should_log("unknown-codec")
+        ):
+            _LOGGER.warning(
+                "video header names codec %s, which the library does not know; "
+                "a muxer that needs a codec assumes HEVC",
+                video_codec_label(payload),
+            )
         if frame.is_keyframe:
             if not self._started:
                 _LOGGER.debug(
@@ -830,6 +921,7 @@ class MediaStream:
                 self._wrapped_key = wrapped
         self._frames.append(frame)
         self._wake.set()
+        return "keyframe" if frame.is_keyframe else "frame"
 
     def _end(self) -> None:
         """The station says the recording is over: deliver what is queued, then stop."""
@@ -1055,9 +1147,7 @@ class StationSession:
         self._retired_wrong_port_drops = 0
         """Wrong-port drops of transports this session no longer holds."""
         self._account_mismatch_seen = False
-        self._media_opens = 0
-        self._media_failures: Counter[str] = Counter()
-        self._media_variants: Counter[str] = Counter()
+        self._media_counters = _MediaCounters()
         self._stills_by_format: Counter[str] = Counter()
         self._trigger_frame_lock = asyncio.Lock()
         """At most one short-lived trigger-frame session per station at a time."""
@@ -1366,6 +1456,7 @@ class StationSession:
         """A snapshot of this session's health counters (see :class:`SessionStats`)."""
         now = time.monotonic()
         live_drops = self._transport.wrong_port_drops if self._transport is not None else 0
+        media = self._media_counters
         return SessionStats(
             connected=self.announced,
             connects=self._connects,
@@ -1384,9 +1475,13 @@ class StationSession:
             receipts_by_code=dict(self._receipts_by_code),
             wrong_port_drops=self._retired_wrong_port_drops + live_drops,
             account_mismatch_seen=self._account_mismatch_seen,
-            media_opens=self._media_opens,
-            media_failures_by_type=dict(self._media_failures),
-            media_frames_by_variant=dict(self._media_variants),
+            media_opens=media.opens,
+            media_failures_by_type=dict(media.failures),
+            media_frames_by_variant=dict(media.variants),
+            media_video_codecs=dict(media.codecs),
+            media_keyframes_rejected=media.keyframes_rejected,
+            media_first_records=tuple(media.first_records),
+            media_rejected_keyframe=media.rejected_keyframe,
             stills_by_format=dict(self._stills_by_format),
             still_late_replies=self.still_late_replies,
             still_file_mismatches=self.still_file_mismatches,
@@ -2872,6 +2967,7 @@ class StationSession:
             if len(self._extra_live) < limit - 1:
                 extra = self._short_lived_session()
                 extra._live_owner = self
+                extra._media_counters = self._media_counters  # diagnostics count here
                 extra._wake_failures = self._wake_failures  # one wake backoff per camera
                 self._extra_live.add(extra)
                 if slot:
@@ -3108,7 +3204,7 @@ class StationSession:
                 except BaseException:
                     self._set_media(None)
                     raise
-                self._media_opens += 1
+                self._media_counters.opens += 1
                 return stream
 
     async def _wait_for_media_slot(self, wait: bool, deadline: float, timeout: float) -> None:
@@ -3618,7 +3714,7 @@ class StationSession:
     def _count_media_failure(self, error: Exception) -> None:
         """Count a stream that ended in ``error``, unless the client closed the session."""
         if not self._closed:
-            self._media_failures[type(error).__name__] += 1
+            self._media_counters.failures[type(error).__name__] += 1
 
     def _emit_down(
         self, cause: DisconnectCause, error: EufySecurityError | None, reason: str
@@ -3764,7 +3860,9 @@ class StationSession:
                 inbound.type, inbound.frame.payload, inbound.frame.subheader
             )
             if label is not None:
-                _count_capped(self._media_variants, label)
+                _count_capped(self._media_counters.variants, label)
+            if inbound.type == FrameType.VIDEO_FRAME:
+                _count_capped(self._media_counters.codecs, video_codec_label(inbound.frame.payload))
             if stream is not None:
                 stream._feed(
                     inbound.type,

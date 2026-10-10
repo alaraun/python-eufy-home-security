@@ -2187,8 +2187,9 @@ async def test_a_corrupt_keyframe_with_the_pinned_key_still_warns(
     _, rsa_key = generate_media_rsa_key()
     body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
     corrupt = body[:129] + bytes(16) + body[145:]  # same wrapped key, garbled first block
+    session = make_session(station, Provider(station))
     stream = MediaStream(
-        make_session(station, Provider(station)),
+        session,
         command=1003,
         channel=0,
         decoder=MediaDecoder(rsa_key),
@@ -2204,6 +2205,17 @@ async def test_a_corrupt_keyframe_with_the_pinned_key_still_warns(
     assert not stream._frames  # video waits for the next keyframe
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings == ["undecodable media frame 0x0514: keyframe did not decrypt to Annex-B"]
+    stats = session.stats()
+    assert [(s.outcome, s.variant, s.key_flag, s.codec) for s in stats.media_first_records] == [
+        ("keyframe", "none", 1, "hevc"),
+        ("not_annex_b", "none", 1, "hevc"),
+        ("waiting_keyframe", "none", 0, "hevc"),
+    ]
+    assert stats.media_first_records[0].head == MEDIA_KEYFRAME[:5].hex()
+    assert stats.media_keyframes_rejected == 1
+    assert stats.media_rejected_keyframe == stats.media_first_records[1]
+    assert stats.media_rejected_keyframe.probe == "none"  # no layout yields a start code
+    assert stats.media_rejected_keyframe.record_len == len(corrupt) + 22
 
 
 async def test_trigger_frame_plays_on_a_short_lived_session_and_closes_it(
