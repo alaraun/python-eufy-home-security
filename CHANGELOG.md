@@ -4,6 +4,19 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.5](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.4...v0.3.5) (2026-10-10)
+
+
+### Features
+
+* keep parameter-dump keys the library does not read; status --received ([#51](https://github.com/alaraun/python-eufy-home-security/issues/51)) ([c2ac52e](https://github.com/alaraun/python-eufy-home-security/commit/c2ac52eb138d4c26cbbf3ef3d328fd504bb131a3))
+
+
+### Bug Fixes
+
+* leave out a paired device's settings the app offers only without a parent ([#52](https://github.com/alaraun/python-eufy-home-security/issues/52)) ([f0ff19d](https://github.com/alaraun/python-eufy-home-security/commit/f0ff19d6e956e4eb23ed5a9061d9fefc0d89cce3))
+* read a paired camera's own parameters from the dump's db_bypass_str ([#49](https://github.com/alaraun/python-eufy-home-security/issues/49)) ([5eda9b4](https://github.com/alaraun/python-eufy-home-security/commit/5eda9b423c3d06bd355ca62e343aefca20928b97))
+
 ## [0.3.4](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.3...v0.3.4) (2026-10-09)
 
 
