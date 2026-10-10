@@ -83,7 +83,7 @@ def _plain_write(entry: Mapping[str, Any]) -> bool:
 
 
 def _templates(entry: Mapping[str, Any]) -> list[str]:
-    return [k for k in ("write", "write_standalone") if k in entry]
+    return [k for k in ("write",) if k in entry]
 
 
 def _param_of(entry: Mapping[str, Any]) -> int | None:
@@ -168,6 +168,8 @@ def apply_bits(
     candidates: Mapping[str, tuple[int, int]],
     replies: Mapping[tuple[str, bool], Recipe | None],
     counts: dict[str, int],
+    *,
+    channel: int,
 ) -> None:
     """Give each candidate the handler read-modify-writes a ``bit`` and a mask template."""
     for ident, (bit, param) in candidates.items():
@@ -177,15 +179,12 @@ def apply_bits(
         new = copy.deepcopy(entry)
         for key in _templates(new):
             new[key] = _swap_maps(new[key], _mask_slot({0, bit}))
-        ctx = codec.CHILD
         try:
             good = (
                 on is not None
                 and off is not None
-                and _params(codec.render(new, other | bit, context=ctx.name, channel=ctx.channel))
-                == _params(on)
-                and _params(codec.render(new, other, context=ctx.name, channel=ctx.channel))
-                == _params(off)
+                and _params(codec.render(new, other | bit, channel=channel)) == _params(on)
+                and _params(codec.render(new, other, channel=channel)) == _params(off)
             )
         except ValueError:
             good = False
@@ -237,6 +236,8 @@ def apply_flags(
     singles: Mapping[str, Sequence[tuple[Any, Recipe | None]]],
     joined: Mapping[tuple[str, str], Recipe | None],
     counts: dict[str, int],
+    *,
+    channel: int,
 ) -> None:
     """Turn each candidate whose joined payloads render the OR of its members into flags."""
     for ident, values in candidates.items():
@@ -292,9 +293,8 @@ def apply_flags(
         all_bits = 0
         for b in members.values():
             all_bits |= b
-        ctx = codec.CHILD
         try:
-            rendered = codec.render(new, all_bits, context=ctx.name, channel=ctx.channel)
+            rendered = codec.render(new, all_bits, channel=channel)
             same = _numeric_leaves(rendered) == _numeric_leaves(joined.get((ident, ",".join(keys))))
         except ValueError:
             same = False
@@ -398,21 +398,20 @@ def _uses_value_directly(template: Any) -> bool:
 def _renders_alike(
     old: Mapping[str, Any], new: Mapping[str, Any], values: Sequence[Any], shown: Sequence[int]
 ) -> bool:
-    for ctx in codec.CONTEXTS:
-        for v, n in zip(values, shown, strict=True):
-            try:
-                a = codec.render(old, v, context=ctx.name, channel=ctx.channel)
-                b = codec.render(new, n, context=ctx.name, channel=ctx.channel)
-            except ValueError:
-                return False
-            if json.dumps(a, sort_keys=True) != json.dumps(b, sort_keys=True):
-                return False
+    for v, n in zip(values, shown, strict=True):
+        try:
+            a = codec.render(old, v, channel=codec.CHILD.channel)
+            b = codec.render(new, n, channel=codec.CHILD.channel)
+        except ValueError:
+            return False
+        if json.dumps(a, sort_keys=True) != json.dumps(b, sort_keys=True):
+            return False
     return True
 
 
 # ── duplicate codecs ────────────────────────────────────────────────────────
 
-_WRITE_KEYS = ("kind", "write", "write_standalone", "write_table", "values", "min", "max")
+_WRITE_KEYS = ("kind", "write", "write_table", "values", "min", "max")
 
 
 def _write_sig(entry: Mapping[str, Any]) -> str:
@@ -457,23 +456,20 @@ def absorbed_by(ident: str, settings: Mapping[str, Any]) -> str | None:
     return max(bases, key=len) if bases else None
 
 
-def drop_same_codec_variants(settings: Settings, counts: dict[str, int]) -> None:
-    """Remove an rw variant whose codec, labels and control equal its primary's.
-
-    Kept: a variant that differs in anything but placement, one whose placement the
-    primary lacks, one another setting's ``applies_when`` names, and one whose key does
-    not extend its primary's (``absorbed_by`` must find the primary from the file alone).
-    """
-    gates = {e["applies_when"][0] for e in settings.values() if e.get("applies_when")}
-    for ident in list(settings):
-        entry = settings[ident]
+def same_codec_variants(settings: Settings) -> list[str]:
+    """The rw variants :func:`drop_same_codec_variants` removes, in removal order."""
+    trial = dict(settings)
+    gates = {e["applies_when"][0] for e in trial.values() if e.get("applies_when")}
+    out = []
+    for ident in list(trial):
+        entry = trial[ident]
         primary = entry.get("variant_of")
         if primary is None or entry.get("access") != "rw" or ident in gates:
             continue
-        rest = {k: v for k, v in settings.items() if k != ident}
+        rest = {k: v for k, v in trial.items() if k != ident}
         if absorbed_by(ident, rest) != primary:
             continue
-        base = settings[primary]
+        base = trial[primary]
         if any(k in entry and entry[k] != base.get(k) for k in _PLACEMENT_KEYS):
             continue
         skip = {"variant_of", *_PLACEMENT_KEYS}
@@ -481,8 +477,25 @@ def drop_same_codec_variants(settings: Settings, counts: dict[str, int]) -> None
         theirs = {k: v for k, v in base.items() if k not in skip}
         if json.dumps(mine, sort_keys=True) != json.dumps(theirs, sort_keys=True):
             continue
-        del settings[ident]
-        _count(counts, "dropped:same codec variant")
+        del trial[ident]
+        out.append(ident)
+    return out
+
+
+def drop_same_codec_variants(
+    settings: Settings, counts: dict[str, int], only: Sequence[str] | None = None
+) -> None:
+    """Remove an rw variant whose codec, labels and control equal its primary's (of
+    those, only the ones in ``only`` when given).
+
+    Kept: a variant that differs in anything but placement, one whose placement the
+    primary lacks, one another setting's ``applies_when`` names, and one whose key does
+    not extend its primary's (``absorbed_by`` must find the primary from the file alone).
+    """
+    for ident in same_codec_variants(settings):
+        if only is None or ident in only:
+            del settings[ident]
+            _count(counts, "dropped:same codec variant")
 
 
 # ── reference payloads ──────────────────────────────────────────────────────
@@ -507,7 +520,7 @@ def reference_value(entry: Mapping[str, Any], row: Mapping[str, Any]) -> Any:
 
     def renders(value: Any) -> bool:
         try:
-            got = codec.render(entry, value, context=row["context"], channel=row["channel"])
+            got = codec.render(entry, value, channel=row["channel"])
         except ValueError:
             return False
         return _params(got) == want

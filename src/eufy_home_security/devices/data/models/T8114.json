@@ -1,6 +1,6 @@
 {
  "product_code": "T8114",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -39,7 +39,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1015
    },
    "write": {
@@ -157,6 +161,7 @@
    "page": "SettingsHome",
    "read": {
     "map": {
+     "": false,
      "0": true,
      "1": false
     },
@@ -357,6 +362,7 @@
    },
    "read": {
     "map": {
+     "": 6,
      "0": 5,
      "2": 6
     },
@@ -476,7 +482,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -507,6 +517,7 @@
    },
    "read": {
     "map": {
+     "": -1,
      "eyJzbm9vemVfdGltZSI6MH0=": -1,
      "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
      "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
@@ -712,7 +723,11 @@
    "kind": "bool",
    "name": "Status LED",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1045
    },
    "write": {
@@ -799,7 +814,11 @@
    "kind": "bool",
    "name": "Microphone",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1240
    },
    "write": {
@@ -855,6 +874,7 @@
    "page": "CustomizeRecording",
    "read": {
     "map": {
+     "": false,
      "0": true,
      "1": false
     },
@@ -888,7 +908,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1145
    },
    "write": {
@@ -909,7 +933,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1013
    },
    "write": {
@@ -936,6 +964,7 @@
    },
    "read": {
     "map": {
+     "": 100,
      "0": 100,
      "1": 102
     },
@@ -980,6 +1009,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "1": 0,
      "2": 2,
      "3": 1
@@ -1038,7 +1068,11 @@
     "1": "External Solar Panel"
    },
    "read": {
-    "map": null,
+    "map": {
+     "": 0,
+     "0": 0,
+     "1": 1
+    },
     "param": 1293
    },
    "values": [
@@ -1072,6 +1106,7 @@
    "page": "MotionDetection",
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 1,
      "2": 3
@@ -1135,6 +1170,26 @@
   },
   "set_alarm_type__v1": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1350,
+       "params": {
+        "channel": "$channel",
+        "type": 10,
+        "time_out": 0,
+        "user_name": ""
+       },
+       "subCmd": 1202
+      }
+     },
+     "names": [
+      "NVR",
+      "T7000"
+     ]
+    }
+   ],
    "control": "select",
    "default": 0,
    "kind": "enum",
@@ -1187,7 +1242,11 @@
    "kind": "bool",
    "name": "Speaker",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1241
    },
    "write": {
@@ -1214,6 +1273,7 @@
    },
    "read": {
     "map": {
+     "": 1,
      "90": 0,
      "92": 1,
      "93": 2
@@ -1355,7 +1415,12 @@
    },
    "name": "Watermark",
    "read": {
-    "map": null,
+    "map": {
+     "": 1,
+     "0": 0,
+     "1": 1,
+     "2": 2
+    },
     "param": 1214
    },
    "values": [

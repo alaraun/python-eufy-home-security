@@ -1,6 +1,6 @@
 {
  "product_code": "T90R1",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "audio_alert_volume": {
    "access": "ro",

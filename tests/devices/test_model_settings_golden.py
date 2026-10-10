@@ -1,9 +1,9 @@
 """The runtime encoder agrees with the generator's renderer.
 
 For the four reference models, every rw setting and every value of its domain renders
-through :meth:`Setting.encode` to what ``scripts/gen_models_codec.render`` gives, in the
-station-child and the standalone context; a value the renderer refuses, the runtime
-refuses too. The v1 reference rows encode to their recorded cmd/subCmd/params. The
+through :meth:`Setting.encode` to what ``scripts/gen_models_codec.render`` gives, in
+every context the file resolves (base, standalone, each station kind); a value the
+renderer refuses, the runtime refuses too. The v1 reference rows encode to their recorded cmd/subCmd/params. The
 scripts are loaded by path, so ``src/`` never imports them.
 """
 
@@ -12,6 +12,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -27,6 +29,7 @@ from eufy_home_security.devices.model_settings import (
     WritePath,
     settings_of,
 )
+from eufy_home_security.devices.recipes import ConnectType
 from eufy_home_security.exceptions import UnsupportedError
 from eufy_home_security.p2p.messages import is_ecb_scalar
 
@@ -37,6 +40,7 @@ REFERENCE = json.loads(
 )
 MODELS = ("T8030", "T8160", "T8170", "T8910")
 MAX_RANGE_POINTS = 41
+PARAM_VALUE = "12"  # the value every ``$param`` leaf's parameter holds in these checks
 
 
 def _load(name: str) -> ModuleType:
@@ -53,10 +57,39 @@ codec = _load("gen_models_codec")
 gen_models = _load("gen_models")
 
 
-def _entries(product_code: str) -> dict[str, Any]:
+def _entries(product_code: str, context: str | None = None) -> dict[str, Any]:
+    """The file's entries as ``context`` sees them (None: the base)."""
     doc = json.loads((MODELS_DIR / f"{product_code}.json").read_text(encoding="utf-8"))
-    entries: dict[str, Any] = doc["settings"]
+    entries: dict[str, Any] = {}
+    for key, entry in doc["settings"].items():
+        out = {k: v for k, v in entry.items() if k != "contexts"}
+        for item in entry.get("contexts", []) if context is not None else ():
+            if context in item["names"]:
+                for k, v in item["entry"].items():
+                    if v is None:
+                        out.pop(k, None)
+                    else:
+                        out[k] = v
+        entries[key] = out
     return entries
+
+
+def _contexts(product_code: str) -> list[tuple[str | None, Any, Mapping[str, Setting]]]:
+    """``(context name, generator context, runtime settings)`` for every context."""
+    out: list[tuple[str | None, Any, Mapping[str, Setting]]] = [
+        (None, codec.CHILD, settings_of(product_code)),
+        (
+            "standalone",
+            codec.standalone_context(product_code),
+            settings_of(product_code, standalone=True),
+        ),
+    ]
+    out.extend(
+        (c.value, codec.child_context(c.value), settings_of(product_code, c))
+        for c in ConnectType
+        if c is not ConnectType.SINGLE
+    )
+    return out
 
 
 def _canon(x: Any) -> str:
@@ -96,12 +129,17 @@ def _domain(setting: Setting) -> list[Value]:
             return [0, 1]
 
 
-def _context(ctx: Any) -> WriteContext:
+def _params(setting: Setting) -> dict[int, str]:
+    return dict.fromkeys(setting.write_params, PARAM_VALUE)
+
+
+def _context(ctx: Any, setting: Setting) -> WriteContext:
     return WriteContext(
-        standalone=ctx is codec.STANDALONE,
+        standalone=ctx.name == codec.STANDALONE.name,
         channel=ctx.channel,
         device_sn=ctx.device_sn,
         station_sn=ctx.station_sn,
+        params=_params(setting),
     )
 
 
@@ -127,7 +165,7 @@ def _updates(recipe: dict[str, Any]) -> list[tuple[int, str]]:
 
 
 def _check(setting: Setting, entry: dict[str, Any], value: Value, ctx: Any) -> None:
-    wctx = _context(ctx)
+    wctx = _context(ctx, setting)
     if setting.domain is not None:
         _check_domain(setting, entry, value, ctx)
         return
@@ -135,19 +173,18 @@ def _check(setting: Setting, entry: dict[str, Any], value: Value, ctx: Any) -> N
         want = codec.render(
             entry,
             value,
-            context=ctx.name,
             channel=ctx.channel,
             device_sn=ctx.device_sn,
             station_sn=ctx.station_sn,
+            params=_params(setting),
         )
     except ValueError:
         with pytest.raises((ValueError, UnsupportedError)):
             setting.encode(value, wctx)
         return
-    if ctx is codec.STANDALONE and setting.note and "standalone: " in setting.note:
-        with pytest.raises(UnsupportedError):
-            setting.encode(value, wctx)
-        return
+    if setting.write_params and setting.bit is None:
+        with pytest.raises(ValueError, match="is not reported"):
+            setting.encode(value, replace(wctx, params={}))
     if setting.bit is not None:
         with pytest.raises(ValueError, match="shares its parameter"):
             setting.encode(True, wctx)
@@ -161,7 +198,7 @@ def _check(setting: Setting, entry: dict[str, Any], value: Value, ctx: Any) -> N
     if wire.path is WritePath.ECB:
         scalar: Any = params
         if body is not None:
-            template = codec.write_template(entry, value, ctx.name)["params"]
+            template = codec.write_template(entry, value)["params"]
             fields = [v for k, v in body.items() if template[k] != "$channel"]
             assert len({json.dumps(v) for v in fields}) == 1
             scalar = fields[0]
@@ -180,11 +217,10 @@ def _check(setting: Setting, entry: dict[str, Any], value: Value, ctx: Any) -> N
 def _check_domain(setting: Setting, entry: dict[str, Any], value: Value, ctx: Any) -> None:
     """A domain setting sends the handler's command as a string frame carrying the
     device form of ``value``, and the handler's updates for that device form."""
-    wire = setting.encode(value, _context(ctx))
+    wire = setting.encode(value, _context(ctx, setting))
     want = codec.render(
         entry,
         wire.text,
-        context=ctx.name,
         channel=ctx.channel,
         device_sn=ctx.device_sn,
         station_sn=ctx.station_sn,
@@ -197,13 +233,13 @@ def _check_domain(setting: Setting, entry: dict[str, Any], value: Value, ctx: An
 
 @pytest.mark.parametrize("product_code", MODELS)
 def test_runtime_encode_matches_the_renderer(product_code: str) -> None:
-    entries = _entries(product_code)
-    settings = settings_of(product_code)
     checked = 0
-    for key, setting in settings.items():
-        if not setting.writable:
-            continue
-        for ctx in codec.CONTEXTS:
+    for name, ctx, settings in _contexts(product_code):
+        entries = _entries(product_code, name)
+        assert set(settings) == set(entries)
+        for key, setting in settings.items():
+            if not setting.writable:
+                continue
             for value in _domain(setting):
                 _check(setting, entries[key], value, ctx)
                 checked += 1
@@ -213,11 +249,12 @@ def test_runtime_encode_matches_the_renderer(product_code: str) -> None:
 @pytest.mark.parametrize("product_code", MODELS)
 def test_refused_settings_are_rw_in_the_file(product_code: str) -> None:
     """Every rw entry is writable unless the runtime names the transport it does not send."""
-    entries = _entries(product_code)
-    for key, setting in settings_of(product_code).items():
-        assert setting.writable <= (entries[key]["access"] == "rw")
-        if entries[key]["access"] == "rw" and not setting.writable:
-            assert setting.note, key
+    for name, _, settings in _contexts(product_code):
+        entries = _entries(product_code, name)
+        for key, setting in settings.items():
+            assert setting.writable <= (entries[key]["access"] == "rw")
+            if entries[key]["access"] == "rw" and not setting.writable:
+                assert setting.note, key
 
 
 def test_v1_reference_rows_encode_identically() -> None:
@@ -228,15 +265,17 @@ def test_v1_reference_rows_encode_identically() -> None:
     ]
     assert len(rows) == 136
     for row in rows:
-        key = gen_models.reference_key(_entries(row["product_code"]), row["identifier"])
-        entry = _entries(row["product_code"])[key]
-        setting = settings_of(row["product_code"])[key]
         alone = row["context"] == codec.STANDALONE.name
+        context = "standalone" if alone else None
+        key = gen_models.reference_key(_entries(row["product_code"]), row["identifier"])
+        entry = _entries(row["product_code"], context)[key]
+        setting = settings_of(row["product_code"], standalone=alone)[key]
         ctx = WriteContext(
             standalone=alone,
             channel=row["channel"],
             device_sn="$device_sn",
             station_sn="$station_sn",
+            params=_params(setting),
         )
         shaped = gen_models.controls.reference_value(entry, row)
         if setting.bit is not None:

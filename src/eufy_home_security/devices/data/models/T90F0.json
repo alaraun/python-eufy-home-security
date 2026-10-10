@@ -1,6 +1,6 @@
 {
  "product_code": "T90F0",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "automation_config": {
    "access": "ro",
@@ -114,6 +114,7 @@
    },
    "read": {
     "map": {
+     "": 1,
      "300": 1,
      "60": 0,
      "600": 2,
@@ -187,7 +188,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1828
    },
    "write": {

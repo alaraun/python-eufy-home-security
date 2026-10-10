@@ -1,6 +1,6 @@
 {
  "product_code": "T8441",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -122,34 +122,53 @@
   },
   "audio_recording_on_off": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": false,
+        "0": false,
+        "1": true
+       },
+       "param": 6012
+      },
+      "write": {
+       "cmd": 1700,
+       "subCmd": 6012,
+       "params": {
+        "enable": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 6012,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "note": "round trip does not return the written value",
    "page": "SettingsHome",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1288
+   },
    "write": {
     "cmd": 1350,
     "subCmd": 1288,
     "params": {
      "record_mute": "$v:int",
-     "channel": 3
+     "channel": "$channel"
     },
     "update": {
      "needUpdate": true,
      "cmd": 1288,
-     "paramValue": "$v:str"
-    }
-   },
-   "write_standalone": {
-    "cmd": 1700,
-    "subCmd": 6012,
-    "params": {
-     "enable": "$v:int"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 6012,
      "paramValue": "$v:str"
     }
    }
@@ -160,7 +179,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6081
    },
    "write": {
@@ -269,7 +292,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6010
    },
    "write": {
@@ -379,6 +406,7 @@
    },
    "read": {
     "map": {
+     "": -1,
      "eyJzbm9vemVfdGltZSI6MH0=": -1,
      "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
      "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
@@ -583,7 +611,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6014
    },
    "write": {
@@ -652,6 +684,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 8,
      "2": 9,

@@ -29,6 +29,7 @@ def _load() -> ModuleType:
 codec = _load()
 CHILD_SN = codec.CHILD.device_sn
 STATION_SN = codec.CHILD.station_sn
+ALT = codec.ALT_CHANNEL[codec.CHILD.name]
 
 
 def _rec(param: Any, update: Any = None, channel: int = 3) -> dict[str, Any]:
@@ -65,7 +66,9 @@ def test_value_forms_v_str_and_int() -> None:
     result = codec.infer_write(
         "range",
         _pairs([1, 2, 3], lambda v, ch: _rec(v, str(v), ch)),
-        _pairs([1, 2, 3], lambda v, ch: _rec(v, str(v), ch), 0),
+        _pairs([1, 2, 3], lambda v, ch: _rec(v, str(v), ch), ALT),
+        3,
+        ALT,
     )
     assert result.access == "rw"
     assert result.write["params"]["x"] == "$v"
@@ -73,7 +76,9 @@ def test_value_forms_v_str_and_int() -> None:
     flags = codec.infer_write(
         "bool",
         _pairs([False, True], lambda v, ch: _rec(int(v), str(int(v)), ch)),
-        _pairs([False, True], lambda v, ch: _rec(int(v), str(int(v)), ch), 0),
+        _pairs([False, True], lambda v, ch: _rec(int(v), str(int(v)), ch), ALT),
+        3,
+        ALT,
     )
     assert flags.write["params"]["x"] == "$v:int"
     assert flags.write["update"]["paramValue"] == "$v:str"
@@ -84,7 +89,9 @@ def test_enum_leaf_that_translates_becomes_a_complete_map() -> None:
     result = codec.infer_write(
         "enum",
         _pairs([0, 1, 3], lambda v, ch: _rec(wire[v], str(wire[v]), ch)),
-        _pairs([0, 1, 3], lambda v, ch: _rec(wire[v], str(wire[v]), ch), 0),
+        _pairs([0, 1, 3], lambda v, ch: _rec(wire[v], str(wire[v]), ch), ALT),
+        3,
+        ALT,
     )
     assert result.access == "rw"
     assert result.form == "map"
@@ -93,7 +100,9 @@ def test_enum_leaf_that_translates_becomes_a_complete_map() -> None:
     flags = codec.infer_write(
         "bool",
         _pairs([False, True], lambda v, ch: _rec("on" if v else "off", None, ch)),
-        _pairs([False, True], lambda v, ch: _rec("on" if v else "off", None, ch), 0),
+        _pairs([False, True], lambda v, ch: _rec("on" if v else "off", None, ch), ALT),
+        3,
+        ALT,
     )
     assert flags.write["params"]["x"] == {"$map": {"false": "off", "true": "on"}}
 
@@ -102,7 +111,9 @@ def test_range_leaf_linear_in_the_value_becomes_affine() -> None:
     result = codec.infer_write(
         "range",
         _pairs([1, 2, 3], lambda v, ch: _rec(v * 10 + 5, None, ch)),
-        _pairs([1, 2, 3], lambda v, ch: _rec(v * 10 + 5, None, ch), 0),
+        _pairs([1, 2, 3], lambda v, ch: _rec(v * 10 + 5, None, ch), ALT),
+        3,
+        ALT,
     )
     assert result.access == "rw"
     assert result.form == "affine"
@@ -113,7 +124,9 @@ def test_range_leaf_not_linear_is_read_only() -> None:
     result = codec.infer_write(
         "range",
         _pairs([1, 2, 3], lambda v, ch: _rec(v * v, None, ch)),
-        _pairs([1, 2, 3], lambda v, ch: _rec(v * v, None, ch), 0),
+        _pairs([1, 2, 3], lambda v, ch: _rec(v * v, None, ch), ALT),
+        3,
+        ALT,
     )
     assert result.access == "ro"
     assert result.note == "non-linear range"
@@ -124,7 +137,7 @@ def test_recipe_shape_that_varies_with_the_value_becomes_a_table() -> None:
     def build(v: int, ch: int) -> dict[str, Any]:
         return {"cmd": 1000 + v, "params": {"channel": ch, **({"extra": 1} if v else {})}}
 
-    result = codec.infer_write("enum", _pairs([0, 1], build), _pairs([0, 1], build, 0))
+    result = codec.infer_write("enum", _pairs([0, 1], build), _pairs([0, 1], build, ALT), 3, ALT)
     assert result.access == "rw"
     assert result.form == "table"
     assert result.write is None
@@ -138,7 +151,9 @@ def test_recipe_independent_of_the_value_is_read_only() -> None:
     result = codec.infer_write(
         "enum",
         _pairs([0, 1, 2], lambda v, ch: _rec(7, None, ch)),
-        _pairs([0, 1, 2], lambda v, ch: _rec(7, None, ch), 0),
+        _pairs([0, 1, 2], lambda v, ch: _rec(7, None, ch), ALT),
+        3,
+        ALT,
     )
     assert (result.access, result.note, result.write) == ("ro", "handler ignores the value", None)
 
@@ -147,14 +162,18 @@ def test_single_probe_is_writable_only_when_a_leaf_carries_it() -> None:
     carried = codec.infer_write(
         "string",
         [("probe", _rec("probe", None))],
-        [("probe", _rec("probe", None, 0))],
+        [("probe", _rec("probe", None, ALT))],
+        3,
+        ALT,
     )
     assert carried.access == "rw"
     assert carried.write["params"]["x"] == "$v"
     ignored = codec.infer_write(
         "string",
         [("probe", _rec("fixed", None))],
-        [("probe", _rec("fixed", None, 0))],
+        [("probe", _rec("fixed", None, ALT))],
+        3,
+        ALT,
     )
     assert (ignored.access, ignored.note) == ("ro", "handler ignores the value")
 
@@ -169,7 +188,7 @@ def test_open_domain_recipe_whose_shape_follows_the_probe_is_read_only() -> None
         return {"cmd": 1, "params": dict(enumerate(v))}
 
     result = codec.infer_write(
-        "string", _pairs(["ab", "abc"], build), _pairs(["ab", "abc"], build, 0)
+        "string", _pairs(["ab", "abc"], build), _pairs(["ab", "abc"], build, ALT), 3, ALT
     )
     assert (result.access, result.note) == ("ro", "handler expects a structured value")
 
@@ -179,14 +198,16 @@ def test_open_domain_leaf_that_reencodes_the_probe_is_read_only() -> None:
     result = codec.infer_write(
         "string",
         _pairs(["a", "b"], lambda v, ch: _rec(v, f"enc({v})", ch)),
-        _pairs(["a", "b"], lambda v, ch: _rec(v, f"enc({v})", ch), 0),
+        _pairs(["a", "b"], lambda v, ch: _rec(v, f"enc({v})", ch), ALT),
+        3,
+        ALT,
     )
     assert (result.access, result.note) == ("ro", "handler transforms the value")
 
 
 def test_single_value_enum_keeps_its_recipe_literal() -> None:
     """A one-value enum has nothing to slot; leaves equal to the value stay literal."""
-    result = codec.infer_write("enum", [(0, _rec(0, "0"))], [(0, _rec(0, "0", 0))])
+    result = codec.infer_write("enum", [(0, _rec(0, "0"))], [(0, _rec(0, "0", ALT))], 3, ALT)
     assert result.access == "rw"
     assert result.form == "fixed"
     assert result.write == {
@@ -197,7 +218,9 @@ def test_single_value_enum_keeps_its_recipe_literal() -> None:
 
 
 def test_no_recipe_at_all_is_read_only() -> None:
-    result = codec.infer_write("bool", [(False, None), (True, None)], [(False, None), (True, None)])
+    result = codec.infer_write(
+        "bool", [(False, None), (True, None)], [(False, None), (True, None)], 3, ALT
+    )
     assert (result.access, result.note) == ("ro", "no handler write path")
 
 
@@ -205,38 +228,41 @@ def test_recipe_for_only_some_values_is_read_only() -> None:
     result = codec.infer_write(
         "bool",
         [(False, None), (True, _rec(1))],
-        [(False, None), (True, _rec(1, None, 0))],
+        [(False, None), (True, _rec(1, None, ALT))],
+        3,
+        ALT,
     )
     assert (result.access, result.note) == ("ro", "handler rejects some values")
 
 
-def test_channel_slot_needs_three_in_child_and_zero_in_standalone() -> None:
-    swapped = codec.infer_write(
+def test_channel_slot_needs_the_leaf_to_follow_the_channel() -> None:
+    """A leaf is ``$channel`` only when it holds the channel on both sweeps."""
+    follows = codec.infer_write(
         "range",
         _pairs([1, 2], lambda v, ch: _rec(v, None, ch)),
-        _pairs([1, 2], lambda v, ch: _rec(v, None, ch), 0),
+        _pairs([1, 2], lambda v, ch: _rec(v, None, ch), ALT),
+        3,
+        ALT,
     )
-    assert swapped.write["params"]["channel"] == "$channel"
-    assert swapped.write_standalone is None
+    assert follows.write["params"]["channel"] == "$channel"
     fixed = codec.infer_write(
         "range",
         _pairs([1, 2], lambda v, ch: _rec(v, None, 3)),
-        _pairs([1, 2], lambda v, ch: _rec(v, None, 3), 0),
+        _pairs([1, 2], lambda v, ch: _rec(v, None, 3), ALT),
+        3,
+        ALT,
     )
     assert fixed.write["params"]["channel"] == 3
-    assert fixed.write_standalone is None
 
 
-def test_standalone_variant_is_kept_only_when_it_differs() -> None:
-    def child(v: int, ch: int) -> dict[str, Any]:
-        return {"cmd": 1000, "params": {"channel": ch, "x": v}}
+def test_channel_slot_found_in_a_recipe_the_other_context_lacks() -> None:
+    """The channel is found within one context, whatever another context sends."""
 
-    def standalone(v: int, ch: int) -> dict[str, Any]:
-        return {"cmd": 2000, "params": {"x": v}}
+    def build(v: int, ch: int) -> dict[str, Any]:
+        return {"cmd": 1350, "params": {"sensitivity": v, "channel": ch}}
 
-    result = codec.infer_write("range", _pairs([1, 2], child), _pairs([1, 2], standalone, 0))
-    assert result.write == {"cmd": 1000, "params": {"channel": 3, "x": "$v"}}
-    assert result.write_standalone == {"cmd": 2000, "params": {"x": "$v"}}
+    result = codec.infer_write("range", _pairs([1, 2], build), _pairs([1, 2], build, ALT), 3, ALT)
+    assert result.write == {"cmd": 1350, "params": {"sensitivity": "$v", "channel": "$channel"}}
 
 
 def test_serial_inside_a_longer_string_is_read_only() -> None:
@@ -244,7 +270,9 @@ def test_serial_inside_a_longer_string_is_read_only() -> None:
     result = codec.infer_write(
         "bool",
         _pairs([False, True], lambda v, ch: {"cmd": 1, "params": {"id": embedded, "x": v}}),
-        _pairs([False, True], lambda v, ch: {"cmd": 1, "params": {"x": v}}, 0),
+        _pairs([False, True], lambda v, ch: {"cmd": 1, "params": {"id": embedded, "x": v}}, ALT),
+        3,
+        ALT,
     )
     assert (result.access, result.note) == ("ro", "serial embedded in a string")
 
@@ -321,19 +349,20 @@ MODELS = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models"
 
 
 def test_generated_t8160_read_codecs_invert_the_write_maps() -> None:
-    """Wire 2 reads as public 3, an inverted flag reads inverted, 90/95/100 read as 0/1/2."""
+    """Wire 2 reads as public 3, an inverted flag reads inverted, 90/95/100 read as 0/1/2;
+    an empty value reads as the handler decodes it."""
     settings = json.loads((MODELS / "T8160.json").read_text(encoding="utf-8"))["settings"]
     assert settings["power_manager_mode"]["read"] == {
         "param": 1246,
-        "map": {"0": 0, "1": 1, "2": 3},
+        "map": {"": 0, "0": 0, "1": 1, "2": 3},
     }
     assert settings["motion_stop_end_early"]["read"] == {
         "param": 1251,
-        "map": {"0": True, "1": False},
+        "map": {"": False, "0": True, "1": False},
     }
     assert settings["speaker_volume"]["read"] == {
         "param": 1230,
-        "map": {"90": 0, "95": 1, "100": 2},
+        "map": {"": 1, "90": 0, "95": 1, "100": 2},
     }
     assert settings["video_clip_length"]["read"] == {"param": 1249, "map": None}
     assert settings["trigger_interval_time"]["read"] == {"param": 1250, "map": None}
@@ -355,11 +384,11 @@ def _rw(write: Any, **extra: Any) -> dict[str, Any]:
 
 def test_render_value_slots_and_their_type_tags() -> None:
     setting = _rw({"cmd": 1, "params": {"a": "$v", "b": "$v:str", "c": "$v:int"}})
-    assert codec.render(setting, 7, context="child", channel=3) == {
+    assert codec.render(setting, 7, channel=3) == {
         "cmd": 1,
         "params": {"a": 7, "b": "7", "c": 7},
     }
-    assert codec.render(setting, "7", context="child", channel=3)["params"] == {
+    assert codec.render(setting, "7", channel=3)["params"] == {
         "a": "7",
         "b": "7",
         "c": 7,
@@ -368,16 +397,16 @@ def test_render_value_slots_and_their_type_tags() -> None:
 
 def test_render_bool_value_tags_use_zero_and_one() -> None:
     setting = {"kind": "bool", "access": "rw", "write": {"p": ["$v", "$v:str", "$v:int"]}}
-    assert codec.render(setting, True, context="child", channel=3) == {"p": [True, "1", 1]}
+    assert codec.render(setting, True, channel=3) == {"p": [True, "1", 1]}
 
 
 def test_render_map_and_unmapped_value() -> None:
     setting = _rw({"mode": {"$map": {"0": 0, "3": 2}}})
-    assert codec.render(setting, 3, context="child", channel=3) == {"mode": 2}
+    assert codec.render(setting, 3, channel=3) == {"mode": 2}
     flag = {"kind": "bool", "access": "rw", "write": {"f": {"$map": {"false": 1, "true": 0}}}}
-    assert codec.render(flag, False, context="child", channel=3) == {"f": 1}
+    assert codec.render(flag, False, channel=3) == {"f": 1}
     with pytest.raises(ValueError, match="not in \\$map"):
-        codec.render(setting, 1, context="child", channel=3)
+        codec.render(setting, 1, channel=3)
 
 
 def test_render_affine_gives_an_int_when_integral() -> None:
@@ -386,53 +415,40 @@ def test_render_affine_gives_an_int_when_integral() -> None:
         "access": "rw",
         "write": {"x": {"$affine": [10, 5]}, "y": {"$affine": [0.5, 0]}},
     }
-    out = codec.render(setting, 3, context="child", channel=3)
+    out = codec.render(setting, 3, channel=3)
     assert out == {"x": 35, "y": 1.5}
     assert isinstance(out["x"], int)
 
 
 def test_render_channel_and_serial_slots() -> None:
     setting = _rw({"ch": "$channel", "sn": "$device_sn", "st": "$station_sn", "v": "$v"})
-    assert codec.render(setting, 1, context="child", channel=1) == {
+    assert codec.render(setting, 1, channel=1) == {
         "ch": 1,
         "sn": "$device_sn",
         "st": "$station_sn",
         "v": 1,
     }
-    assert codec.render(
-        setting, 1, context="standalone", channel=0, device_sn="SN-A", station_sn="SN-B"
-    ) == {"ch": 0, "sn": "SN-A", "st": "SN-B", "v": 1}
+    assert codec.render(setting, 1, channel=0, device_sn="SN-A", station_sn="SN-B") == {
+        "ch": 0,
+        "sn": "SN-A",
+        "st": "SN-B",
+        "v": 1,
+    }
 
 
 def test_render_fixed_recipe_is_returned_as_is() -> None:
     setting = _rw({"cmd": 9, "params": {"mode": 4}})
-    assert codec.render(setting, 4, context="child", channel=3) == {"cmd": 9, "params": {"mode": 4}}
+    assert codec.render(setting, 4, channel=3) == {"cmd": 9, "params": {"mode": 4}}
 
 
-def test_render_picks_write_table_then_standalone_then_write() -> None:
+def test_render_picks_the_write_table_before_the_write() -> None:
     table = {"1": {"cmd": 1}, "2": {"cmd": 2, "params": {"v": "$v"}}}
-    setting = _rw({"cmd": 0}, write_table=table, write_standalone={"cmd": 5})
-    del setting["write"]
-    assert codec.render(setting, 2, context="standalone", channel=0) == {
-        "cmd": 2,
-        "params": {"v": 2},
-    }
+    setting = _rw({"cmd": 0}, write_table=table)
+    assert codec.render(setting, 2, channel=0) == {"cmd": 2, "params": {"v": 2}}
     with pytest.raises(ValueError, match="not in the write table"):
-        codec.render(setting, 3, context="child", channel=3)
-    plain = _rw({"cmd": 0, "c": "$channel"}, write_standalone={"cmd": 5, "c": "$channel"})
-    assert codec.render(plain, 1, context="standalone", channel=0) == {"cmd": 5, "c": 0}
-    assert codec.render(plain, 1, context="child", channel=3) == {"cmd": 0, "c": 3}
-
-
-def test_render_standalone_write_table_wins_in_standalone_context() -> None:
-    setting = _rw(
-        None,
-        write_table={"1": {"cmd": 1}},
-        write_table_standalone={"1": {"cmd": 11}},
-    )
-    del setting["write"]
-    assert codec.render(setting, 1, context="standalone", channel=0) == {"cmd": 11}
-    assert codec.render(setting, 1, context="child", channel=3) == {"cmd": 1}
+        codec.render(setting, 3, channel=3)
+    plain = _rw({"cmd": 0, "c": "$channel"})
+    assert codec.render(plain, 1, channel=3) == {"cmd": 0, "c": 3}
 
 
 @pytest.mark.parametrize(
@@ -441,12 +457,12 @@ def test_render_standalone_write_table_wins_in_standalone_context() -> None:
 )
 def test_render_rejects_unknown_placeholders(write: dict[str, Any]) -> None:
     with pytest.raises(ValueError, match="unknown placeholder"):
-        codec.render(_rw(write), 1, context="child", channel=3)
+        codec.render(_rw(write), 1, channel=3)
 
 
 def test_render_rejects_read_only_settings() -> None:
     with pytest.raises(ValueError, match="read-only"):
-        codec.render({"kind": "bool", "access": "ro"}, True, context="child", channel=3)
+        codec.render({"kind": "bool", "access": "ro"}, True, channel=3)
 
 
 def test_coerce_turns_int_payloads_of_bool_settings_into_bools() -> None:

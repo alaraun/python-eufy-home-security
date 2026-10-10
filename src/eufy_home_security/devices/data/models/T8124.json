@@ -1,6 +1,6 @@
 {
  "product_code": "T8124",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -130,13 +130,69 @@
   },
   "audio_recording_on_off": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": true,
+        "0": true,
+        "1": false
+       },
+       "param": 1288
+      },
+      "write": {
+       "cmd": 1350,
+       "subCmd": 1288,
+       "params": {
+        "record_mute": {
+         "$map": {
+          "false": 1,
+          "true": 0
+         }
+        },
+        "channel": "$channel"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1288,
+        "paramValue": {
+         "$map": {
+          "false": "1",
+          "true": "0"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
    "name": "Audio Recording",
    "page": "SettingsHome",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6012
    },
    "write": {
@@ -229,6 +285,49 @@
   },
   "detection_sensitivity": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": null,
+       "param": 1210
+      },
+      "write": {
+       "cmd": 1210,
+       "params": {
+        "value": "$v:str",
+        "channel": "$channel"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1210,
+        "paramValue": "$v:str"
+       },
+       "extUpdates": [
+        {
+         "cmd": 6070,
+         "paramValue": "$v:str"
+        }
+       ]
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "slider",
    "default": 4,
    "kind": "range",
@@ -263,6 +362,7 @@
    },
    "read": {
     "map": {
+     "": 6,
      "0": 5,
      "2": 6
     },
@@ -392,7 +492,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -423,6 +527,7 @@
    },
    "read": {
     "map": {
+     "": -1,
      "eyJzbm9vemVfdGltZSI6MH0=": -1,
      "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
      "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
@@ -611,12 +716,48 @@
   },
   "led_on_off": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1045,
+       "params": {
+        "ledStatus": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1045,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "default": false,
    "kind": "bool",
    "name": "Status LED",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1045
    },
    "write": {
@@ -707,6 +848,62 @@
   },
   "live_streaming_resolution": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": 0,
+        "0": 0,
+        "1": 8,
+        "2": 9,
+        "3": 10
+       },
+       "param": 1705
+      },
+      "write": {
+       "cmd": 1705,
+       "params": {
+        "quality": {
+         "$map": {
+          "0": 0,
+          "10": 3,
+          "9": 2,
+          "8": 1
+         }
+        }
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1705,
+        "paramValue": {
+         "$map": {
+          "0": "0",
+          "10": "3",
+          "9": "2",
+          "8": "1"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "select",
    "default": 0,
    "kind": "enum",
@@ -719,6 +916,7 @@
    "name": "Streaming Quality",
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 8,
      "2": 9,
@@ -802,7 +1000,11 @@
    "kind": "bool",
    "name": "Microphone",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1240
    },
    "write": {
@@ -832,11 +1034,55 @@
   },
   "motion_detection_status": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": false,
+        "0": false,
+        "1": true
+       },
+       "param": 1011
+      },
+      "write": {
+       "cmd": 1011,
+       "params": {
+        "enable": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1011,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "kind": "bool",
    "name": "Motion Detection",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6040
    },
    "write": {
@@ -865,6 +1111,7 @@
    "page": "CustomizeRecording",
    "read": {
     "map": {
+     "": false,
      "0": true,
      "1": false
     },
@@ -904,7 +1151,12 @@
    },
    "name": "Night Vision",
    "read": {
-    "map": null,
+    "map": {
+     "": 1,
+     "0": 0,
+     "1": 1,
+     "2": 2
+    },
     "param": 1277
    },
    "values": [
@@ -940,6 +1192,7 @@
    "name": "Night Vision",
    "read": {
     "map": {
+     "": 100,
      "0": 100,
      "1": 102,
      "2": 103
@@ -989,6 +1242,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "1": 0,
      "2": 2,
      "3": 1
@@ -1062,6 +1316,7 @@
    "page": "MotionDetection",
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 1,
      "2": 3
@@ -1120,6 +1375,7 @@
    "name": "Recording Quality",
    "read": {
     "map": {
+     "": 5,
      "2": 2,
      "3": 5
     },
@@ -1162,7 +1418,14 @@
     "5": "2K HD"
    },
    "name": "Recording Quality",
-   "read": null,
+   "read": {
+    "map": {
+     "": 2,
+     "1": 5,
+     "2": 2
+    },
+    "param": 1286
+   },
    "values": [
     5,
     2
@@ -1292,7 +1555,11 @@
    "kind": "bool",
    "name": "Speaker",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1241
    },
    "write": {
@@ -1319,6 +1586,7 @@
    },
    "read": {
     "map": {
+     "": 1,
      "100": 0,
      "70": 2,
      "80": 1
@@ -1385,7 +1653,11 @@
    "kind": "bool",
    "name": "Lighting",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1403
    },
    "write": {
@@ -1402,31 +1674,44 @@
   },
   "spotlight_switch": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1700,
+       "subCmd": 1400,
+       "params": {
+        "type": 2,
+        "time": 60,
+        "value": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1400,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "control": "switch",
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1400
    },
    "write": {
     "cmd": 1400,
     "params": {
      "open": "$v:int"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1400,
-     "paramValue": "$v:str"
-    }
-   },
-   "write_standalone": {
-    "cmd": 1700,
-    "subCmd": 1400,
-    "params": {
-     "type": 2,
-     "time": 60,
-     "value": "$v:int"
     },
     "update": {
      "needUpdate": true,
@@ -1609,7 +1894,11 @@
    "kind": "bool",
    "name": "Watermark",
    "read": {
-    "map": null,
+    "map": {
+     "": true,
+     "0": false,
+     "1": true
+    },
     "param": 1214
    },
    "write": {

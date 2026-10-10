@@ -1,6 +1,6 @@
 {
  "product_code": "T8P10",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -73,6 +73,7 @@
    "page": "SettingsHome",
    "read": {
     "map": {
+     "": false,
      "0": true,
      "1": false
     },
@@ -221,7 +222,11 @@
    "kind": "bool",
    "page": "NVREventRecordingScreen",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 9201
    },
    "write": {
@@ -370,7 +375,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -401,6 +410,7 @@
    },
    "read": {
     "map": {
+     "": -1,
      "eyJzbm9vemVfdGltZSI6MH0=": -1,
      "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
      "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
@@ -654,7 +664,15 @@
      "2": 8,
      "4": 10
     },
-    "param": 2730
+    "param": 2730,
+    "view": {
+     "by": "cur_mode",
+     "map": {
+      "0": 0,
+      "2": 8,
+      "4": 10
+     }
+    }
    },
    "values": [
     0,
@@ -762,7 +780,11 @@
    "kind": "bool",
    "name": "Microphone",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1240
    },
    "write": {
@@ -898,7 +920,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1145
    },
    "write": {
@@ -972,6 +998,7 @@
    "name": "Night Vision",
    "read": {
     "map": {
+     "": 11,
      "0": 11,
      "1": 6,
      "2": 7
@@ -1023,6 +1050,7 @@
    "name": "Night Vision",
    "read": {
     "map": {
+     "": 104,
      "0": 104,
      "1": 102,
      "2": 103
@@ -1075,6 +1103,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "120": 2,
      "180": 3,
@@ -1133,6 +1162,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "1": 0,
      "2": 2,
      "3": 1
@@ -1267,7 +1297,11 @@
    "kind": "bool",
    "name": "Speaker",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1241
    },
    "write": {
@@ -1348,7 +1382,11 @@
    "kind": "bool",
    "name": "Lighting",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1403
    },
    "write": {
@@ -1370,7 +1408,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1400
    },
    "write": {
@@ -1457,7 +1499,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6031
    },
    "write": {
@@ -1575,6 +1621,7 @@
    "name": "Watermark",
    "read": {
     "map": {
+     "": 0,
      "MA==": 0,
      "MQ==": 1,
      "Mg==": 3,

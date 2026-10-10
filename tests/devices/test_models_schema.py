@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 
 from eufy_home_security.devices import model_settings
+from eufy_home_security.devices.recipes import ConnectType
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models"
@@ -26,8 +27,10 @@ INDEX: dict[str, Any] = json.loads((MODELS / "INDEX.json").read_text(encoding="u
 CODES: list[str] = INDEX["codes"]
 
 KINDS = {"enum", "bool", "range", "string", "other", "flags"}
-WRITE_KEYS = ("write", "write_standalone", "write_table", "write_table_standalone")
+WRITE_KEYS = ("write", "write_table")
 SCALAR_SLOTS = {"$v", "$v:str", "$v:int", "$channel", "$device_sn", "$station_sn"}
+PARAM_SLOT = re.compile(r"\$param:\d+:(int|str)")
+CONTEXTS = {"standalone"} | {c.value for c in ConnectType if c is not ConnectType.SINGLE}
 OBJECT_SLOTS = {"$map", "$affine"}
 RO_NOTES = {
     "no handler write path",
@@ -62,6 +65,7 @@ SETTING_KEYS = {
     "flags",
     "bit",
     "domain",
+    "contexts",
     *WRITE_KEYS,
 }
 CONTROLS = {
@@ -130,6 +134,20 @@ def _strings(x: Any) -> Iterator[str]:
         yield x
 
 
+def _in_context(setting: dict[str, Any], context: str | None) -> dict[str, Any]:
+    """``setting`` as ``context`` sees it (None: the base): its contexts item applied,
+    null fields removed."""
+    out = {k: v for k, v in setting.items() if k != "contexts"}
+    for item in setting.get("contexts", []) if context is not None else ():
+        if context in item["names"]:
+            for k, v in item["entry"].items():
+                if v is None:
+                    out.pop(k, None)
+                else:
+                    out[k] = v
+    return out
+
+
 def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> None:
     assert IDENT.fullmatch(ident), ident
     assert set(s) <= SETTING_KEYS, sorted(set(s) - SETTING_KEYS)
@@ -168,26 +186,21 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
     present = [k for k in WRITE_KEYS if k in s]
     if s["access"] == "rw":
         assert ("write" in s) != ("write_table" in s), "rw needs exactly one of write/write_table"
-        for table_key in ("write_table", "write_table_standalone"):
-            if table_key in s:
-                assert set(s[table_key]) == keys
+        if "write_table" in s:
+            assert set(s["write_table"]) == keys
         if "note" in s:
             parts = s["note"].split("; ")
-            assert all(
-                p == ROUND_TRIP_NOTE or p.removeprefix("standalone: ") in RO_NOTES for p in parts
-            ), s["note"]
+            assert all(p == ROUND_TRIP_NOTE or p in RO_NOTES for p in parts), s["note"]
     else:
         assert present == [], present
-        assert s["read"] is None
+        assert s.get("read") is None
         assert s.get("note", next(iter(RO_NOTES))) in RO_NOTES
-    templates = [s[k] for k in ("write", "write_standalone") if k in s]
-    templates += [
-        r for k in ("write_table", "write_table_standalone") if k in s for r in s[k].values()
-    ]
+    templates = [s["write"]] if "write" in s else []
+    templates += list(s.get("write_table", {}).values())
     for template in templates:
         for name, arg in _slots(template):
             if arg is None:
-                assert name in SCALAR_SLOTS, name
+                assert name in SCALAR_SLOTS or PARAM_SLOT.fullmatch(name), name
                 continue
             assert name in OBJECT_SLOTS, name
             if name == "$map":
@@ -196,12 +209,18 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
             else:
                 assert kind == "range"
                 assert len(arg) == 2
-    read = s["read"]
+    read = s.get("read")
     if read is not None:
-        assert set(read) == {"param", "map"}
+        assert {"param", "map"} <= set(read) <= {"param", "map", "view"}
         assert isinstance(read["param"], int)
         assert not isinstance(read["param"], bool)
         assert read["map"] is None or isinstance(read["map"], dict)
+        if "view" in read:
+            view = read["view"]
+            assert kind == "enum", ident
+            assert set(view) == {"by", "map"}
+            assert view["by"] is None or view["by"] == "cur_mode" or type(view["by"]) is int
+            assert set(view["map"].values()) <= set(s["values"])
     if "labels" in s and kind != "flags":
         assert set(s["labels"]) <= {_key(v) for v in s.get("values", [])}
     if "bit" in s or kind == "flags":
@@ -234,7 +253,7 @@ def test_model_file_matches_the_schema(code: str) -> None:
     text = path.read_text(encoding="utf-8")
     doc = json.loads(text, object_pairs_hook=dict)
     assert set(doc) == {"schema_version", "product_code", "source", "settings"}
-    assert doc["schema_version"] == 2
+    assert doc["schema_version"] == 3
     assert doc["product_code"] == code
     source = doc["source"]
     assert set(source) == {"td_version", "handler", "handler_date", "app_version"}
@@ -245,7 +264,20 @@ def test_model_file_matches_the_schema(code: str) -> None:
     settings = doc["settings"]
     assert settings
     for ident, setting in settings.items():
-        _check_setting(ident, setting, settings)
+        _check_setting(ident, _in_context(setting, None), settings)
+    named = set()
+    for setting in settings.values():
+        for item in setting.get("contexts", []):
+            assert set(item) == {"names", "entry"}
+            assert item["names"] == sorted(item["names"]), item["names"]
+            assert set(item["names"]) <= CONTEXTS, item["names"]
+            assert item["entry"], "a contexts item changes nothing"
+            assert "contexts" not in item["entry"]
+            named.update(item["names"])
+    for context in sorted(named):
+        resolved = {k: _in_context(v, context) for k, v in settings.items()}
+        for ident, setting in resolved.items():
+            _check_setting(ident, setting, resolved)
     assert text == codec.dump(doc)
     assert [s for s in _strings(doc) if SERIAL.search(s)] == []
 
@@ -254,7 +286,7 @@ def test_models_holds_exactly_the_indexed_codes() -> None:
     assert len(CODES) == 107
     assert sorted(set(CODES)) == CODES
     assert (INDEX["schema_version"], (MODELS / "INDEX.json").read_text("utf-8")) == (
-        2,
+        3,
         codec.dump(INDEX),
     )
     names = {p.name for p in MODELS.iterdir() if p.is_file()}

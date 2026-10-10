@@ -1,6 +1,6 @@
 {
  "product_code": "T8531",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -114,12 +114,42 @@
   },
   "audio_recording_on_off": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "access": "ro",
+      "control": null,
+      "note": "no handler write path",
+      "read": null,
+      "write": null
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
    "page": "SettingsHome",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6012
    },
    "write": {
@@ -180,6 +210,26 @@
   },
   "camera_on_off": {
    "access": "ro",
+   "contexts": [
+    {
+     "entry": {
+      "note": "no handler write path"
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "default": "1",
    "kind": "string",
    "note": "handler ignores the value",
@@ -200,7 +250,14 @@
     "5": "Human Only",
     "6": "All Motions"
    },
-   "read": null,
+   "read": {
+    "map": {
+     "": 5,
+     "3": 5,
+     "32771": 6
+    },
+    "param": 1298
+   },
    "values": [
     5,
     6
@@ -279,6 +336,7 @@
    },
    "read": {
     "map": {
+     "": 6,
      "0": 5,
      "2": 6
     },
@@ -401,7 +459,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -432,6 +494,7 @@
    },
    "read": {
     "map": {
+     "": -1,
      "eyJzbm9vemVfdGltZSI6MH0=": -1,
      "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
      "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
@@ -614,11 +677,41 @@
   },
   "led_on_off": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "access": "ro",
+      "control": null,
+      "note": "no handler write path",
+      "read": null,
+      "write": null
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "switch",
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6014
    },
    "write": {
@@ -685,6 +778,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 8,
      "2": 9,
@@ -787,7 +881,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1240
    },
    "write": {
@@ -833,7 +931,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1277
    },
    "write": {
@@ -852,6 +954,32 @@
   },
   "notification_type": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "access": "ro",
+      "control": null,
+      "note": "no handler write path",
+      "read": null,
+      "write": null
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "select",
    "default": 0,
    "kind": "enum",
@@ -862,6 +990,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "1": 0,
      "2": 2,
      "3": 1
@@ -948,6 +1077,57 @@
   },
   "record_resolution": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": 2,
+        "1": 5,
+        "2": 2
+       },
+       "param": 1286
+      },
+      "write": {
+       "cmd": 1350,
+       "subCmd": 1286,
+       "params": {
+        "record_quality": {
+         "$map": {
+          "5": 1,
+          "2": 2
+         }
+        }
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1286,
+        "paramValue": {
+         "$map": {
+          "5": "1",
+          "2": "2"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "select",
    "default": 2,
    "kind": "enum",
@@ -955,8 +1135,19 @@
     "2": "Full HD(1080P)",
     "5": "2K HD"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "": 2
+    },
+    "param": 2731,
+    "view": {
+     "by": "cur_mode",
+     "map": {
+      "2": 2,
+      "3": 5
+     }
+    }
+   },
    "values": [
     5,
     2
@@ -974,11 +1165,6 @@
      "mode": 0,
      "primary_view": 0,
      "channel": "$channel"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 2731,
-     "paramValue": "e30="
     }
    }
   },
@@ -1028,7 +1214,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6244
    },
    "write": {
@@ -1051,6 +1241,36 @@
   },
   "smart_lock_rain_mode_switch": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmdCode": 52,
+       "payload": {
+        "$map": {
+         "false": "A10400F15365A200A30107A40100",
+         "true": "A10400F15365A200A30107A40101"
+        }
+       },
+       "type": "ble",
+       "version": 2,
+       "subVersion": 3,
+       "needEncrypt": true,
+       "encryptType": 1,
+       "functionType": 2,
+       "mqttCmdCode": 9,
+       "parsePayloadAction": "smartlock_operate_lock_action_notify",
+       "cmd": 1940,
+       "timeout": 15,
+       "resultFrom": 1,
+       "payloadFrom": "mapOf"
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "control": "switch",
    "default": false,
    "kind": "bool",
@@ -1078,27 +1298,6 @@
     "parsePayloadAction": "smartlock_operate_lock_action_notify",
     "resultFrom": 1,
     "payloadFrom": "mapOf"
-   },
-   "write_standalone": {
-    "cmdCode": 52,
-    "payload": {
-     "$map": {
-      "false": "A10400F15365A200A30107A40100",
-      "true": "A10400F15365A200A30107A40101"
-     }
-    },
-    "type": "ble",
-    "version": 2,
-    "subVersion": 3,
-    "needEncrypt": true,
-    "encryptType": 1,
-    "functionType": 2,
-    "mqttCmdCode": 9,
-    "parsePayloadAction": "smartlock_operate_lock_action_notify",
-    "cmd": 1940,
-    "timeout": 15,
-    "resultFrom": 1,
-    "payloadFrom": "mapOf"
    }
   },
   "speaker_on_off": {
@@ -1107,7 +1306,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1241
    },
    "write": {
@@ -1264,7 +1467,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1214
    },
    "write": {

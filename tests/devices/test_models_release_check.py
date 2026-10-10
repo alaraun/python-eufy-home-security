@@ -41,9 +41,17 @@ gen_models = _load("gen_models")
 ACCEPTED: dict[tuple[str, str], str] = gen_models.RELEASE_ACCEPTED
 
 
-def _settings(product_code: str) -> dict[str, Any]:
+def _settings(product_code: str, context: str | None = None) -> dict[str, Any]:
+    """The file's entries as ``context`` sees them (None: the base context)."""
     doc = json.loads((MODELS / f"{product_code}.json").read_text(encoding="utf-8"))
-    settings: dict[str, Any] = doc["settings"]
+    settings: dict[str, Any] = {}
+    for key, entry in doc["settings"].items():
+        out = {k: v for k, v in entry.items() if k != "contexts"}
+        for item in entry.get("contexts", []) if context is not None else ():
+            if context in item["names"]:
+                out.update(item["entry"])
+                out = {k: v for k, v in out.items() if v is not None}
+        settings[key] = out
     return settings
 
 
@@ -55,13 +63,18 @@ def _canon(x: Any) -> str:
 def _render(row: dict[str, Any]) -> dict[str, Any]:
     """The row's recipe as its bundled setting renders it, the payload restated in the
     shaped form the way the generator's check does."""
-    settings = _settings(row["product_code"])
+    settings = _settings(row["product_code"], _context(row))
     setting = settings[gen_models.reference_key(settings, row["identifier"])]
     value = gen_models.controls.reference_value(setting, row)
     if setting.get("kind") != "flags" and setting.get("bit") is None:
         value = codec.coerce(setting, value)
-    recipe = codec.render(setting, value, context=row["context"], channel=row["channel"])
+    recipe = codec.render(setting, value, channel=row["channel"])
     return {k: recipe[k] for k in FIELDS if k in recipe}
+
+
+def _context(row: dict[str, Any]) -> str | None:
+    """A row's context in the file: ``child`` rows are the base, ``standalone`` its own."""
+    return "standalone" if row["context"] == "standalone" else None
 
 
 def _standalone_rows(item: dict[str, Any]) -> dict[Any, dict[str, Any]]:
@@ -98,7 +111,7 @@ def test_every_v1_setting_exists_in_the_bundled_models() -> None:
         p: gen_models.reference_key(_settings(p[0]), p[1])
         for p in pairs
         if p[1] not in _settings(p[0])
-    } == {("T8170", "detection_sensitivity_test_mode"): "detection_sensitivity"}
+    } == {}
 
 
 def test_mismatching_rows_are_exactly_the_accepted_list() -> None:
@@ -116,7 +129,10 @@ def test_generator_and_test_share_one_comparison() -> None:
     found = {
         (pn, ident)
         for pn, rows in by_model.items()
-        for ident, _ in gen_models.reference_mismatches(_settings(pn), rows)
+        for context in (None, "standalone")
+        for ident, _ in gen_models.reference_mismatches(
+            _settings(pn, context), [r for r in rows if _context(r) == context]
+        )
     }
     assert found == _mismatches()
 
@@ -131,7 +147,7 @@ def test_hardware_rows_render_their_command_id(item: dict[str, Any]) -> None:
     detection_sensitivity and live_streaming_resolution they differ from the payloads.
     """
     key = (item["product_code"], item["identifier"])
-    setting = _settings(item["product_code"])[item["identifier"]]
+    setting = _settings(item["product_code"], "standalone")[item["identifier"]]
     assert setting["access"] == "rw"
     rows = _standalone_rows(item)
     for payload in item["payloads"]:

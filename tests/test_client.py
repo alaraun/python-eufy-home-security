@@ -28,6 +28,7 @@ from eufy_home_security.devices.model_settings import (
     bundled_td_version,
     settings_of,
 )
+from eufy_home_security.devices.recipes import connect_type
 from eufy_home_security.events import (
     AlarmChanged,
     CloudProblem,
@@ -279,6 +280,7 @@ async def test_a_newly_paired_model_is_read_off_the_loop_once(
     from eufy_home_security.devices import model_settings  # noqa: PLC0415
 
     model_settings._load.cache_clear()
+    model_settings._resolved.cache_clear()
     model_settings.bundled_codes.cache_clear()
     loop_thread = threading.current_thread()
     reads: list[tuple[str, bool]] = []
@@ -1952,7 +1954,8 @@ async def test_stations_read_the_model_settings_after_discovery() -> None:
     home = stations[SYNTHETIC.station_sn]
     assert {s.key for s in home.settings_for()} == set(settings_of("T8030"))
     camera = {s.key: s for s in home.settings_for(SYNTHETIC.camera_sn)}
-    assert camera["watermark_set"] is settings_of("T8160")["watermark_set"]
+    behind = connect_type(SYNTHETIC.station_sn, SYNTHETIC.camera_sn)
+    assert camera["watermark_set"] is settings_of("T8160", behind)["watermark_set"]
 
 
 # ── cloud session probe ──────────────────────────────────────────────────────

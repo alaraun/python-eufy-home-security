@@ -1,6 +1,6 @@
 {
  "product_code": "T90M0",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "automation_config": {
    "access": "ro",
@@ -130,7 +130,12 @@
    },
    "page": "SensorMotionTestMode",
    "read": {
-    "map": null,
+    "map": {
+     "": 1,
+     "0": 0,
+     "1": 1,
+     "2": 2
+    },
     "param": 1609
    },
    "values": [
@@ -156,7 +161,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 61010
    },
    "write": {

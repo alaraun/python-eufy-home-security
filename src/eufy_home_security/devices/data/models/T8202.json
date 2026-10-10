@@ -1,6 +1,6 @@
 {
  "product_code": "T8202",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "activityzone_config": {
    "access": "ro",
@@ -105,7 +105,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 2015
    },
    "write": {
@@ -146,6 +150,7 @@
     "3": "4",
     "4": "5"
    },
+   "note": "round trip does not return the written value",
    "read": null,
    "values": [
     0,
@@ -247,7 +252,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6010
    },
    "write": {
@@ -344,7 +353,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 6287
    },
    "write": {
@@ -501,7 +514,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1026
    },
    "write": {
@@ -568,6 +585,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 8,
      "2": 9,
@@ -704,6 +722,47 @@
   },
   "notification_jump_to": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "http": {
+        "path": "v3/app/upload_devs_params",
+        "method": "post",
+        "domain": "eufy_security",
+        "body": {
+         "device_sn": "$device_sn",
+         "station_sn": "$device_sn",
+         "params": [
+          {
+           "param_type": 2038,
+           "param_value": {
+            "$map": {
+             "0": "1",
+             "1": "2"
+            }
+           }
+          }
+         ]
+        },
+        "update": {
+         "needUpdate": true,
+         "cmd": 2038,
+         "paramValue": {
+          "$map": {
+           "0": "1",
+           "1": "2"
+          }
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "control": "select",
    "kind": "enum",
    "labels": {
@@ -723,38 +782,6 @@
      "body": {
       "device_sn": "$device_sn",
       "station_sn": "$station_sn",
-      "params": [
-       {
-        "param_type": 2038,
-        "param_value": {
-         "$map": {
-          "0": "1",
-          "1": "2"
-         }
-        }
-       }
-      ]
-     },
-     "update": {
-      "needUpdate": true,
-      "cmd": 2038,
-      "paramValue": {
-       "$map": {
-        "0": "1",
-        "1": "2"
-       }
-      }
-     }
-    }
-   },
-   "write_standalone": {
-    "http": {
-     "path": "v3/app/upload_devs_params",
-     "method": "post",
-     "domain": "eufy_security",
-     "body": {
-      "device_sn": "$device_sn",
-      "station_sn": "$device_sn",
       "params": [
        {
         "param_type": 2038,
@@ -865,6 +892,7 @@
    },
    "read": {
     "map": {
+     "": 2,
      "1": 0,
      "2": 2,
      "3": 1
@@ -945,6 +973,7 @@
    },
    "read": {
     "map": {
+     "": 5,
      "1": 11,
      "2": 2,
      "3": 5
@@ -1105,7 +1134,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 2033
    },
    "write": {
@@ -1127,7 +1160,11 @@
    "default": false,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 2029
    },
    "write": {
@@ -1149,7 +1186,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 2040
    },
    "write": {
@@ -1176,6 +1217,7 @@
    },
    "read": {
     "map": {
+     "": 1,
      "1": 0,
      "2": 1
     },
@@ -1214,7 +1256,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 1214
    },
    "write": {

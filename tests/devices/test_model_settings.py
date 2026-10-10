@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import functools
 import json
 import operator
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -22,6 +24,7 @@ from eufy_home_security.devices.model_settings import (
     product_code_of,
     settings_of,
 )
+from eufy_home_security.devices.recipes import ConnectType
 from eufy_home_security.devices.settings import Scope, SettingUnit, mode_table_setting
 from eufy_home_security.exceptions import ModelDataError, UnsupportedError
 from eufy_home_security.p2p.mode_actions import ACTION_FLAGS
@@ -257,14 +260,16 @@ def test_guard_mode_is_not_a_writable_setting(code: str) -> None:
     assert setting.note == "guard mode: use Station.async_set_guard_mode"
 
 
-def test_standalone_only_refusal_keeps_the_child_write() -> None:
-    setting = _setting("T85V0", "device_rain_mode")
-    assert setting.writable
-    assert setting.note is not None
-    assert setting.note.endswith("standalone: MQTT")
-    assert setting.encode(True, CHILD).path is WritePath.SUB_1350
-    with pytest.raises(UnsupportedError, match="standalone"):
-        setting.encode(True, ALONE)
+def test_a_write_the_standalone_handler_sends_by_mqtt_is_refused_standalone_only() -> None:
+    child = settings_of("T85V0")["device_rain_mode"]
+    assert child.writable
+    assert child.encode(True, CHILD).path is WritePath.SUB_1350
+    alone = settings_of("T85V0", standalone=True)["device_rain_mode"]
+    assert not alone.writable
+    assert alone.note is not None
+    assert alone.note.endswith("MQTT")
+    with pytest.raises(UnsupportedError, match="MQTT"):
+        alone.encode(True, ALONE)
 
 
 def test_read_only_setting_refuses_encode() -> None:
@@ -398,13 +403,15 @@ def data_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]
     _write_index(tmp_path, ["T0001"])
     yield tmp_path
     model_settings._load.cache_clear()
+    model_settings._resolved.cache_clear()
     model_settings.bundled_codes.cache_clear()
 
 
-def _write_index(root: Path, codes: object, schema_version: int = 2) -> None:
+def _write_index(root: Path, codes: object, schema_version: int = 3) -> None:
     index = {"schema_version": schema_version, "codes": codes}
     (root / "INDEX.json").write_text(json.dumps(index), encoding="utf-8")
     model_settings._load.cache_clear()
+    model_settings._resolved.cache_clear()
     model_settings.bundled_codes.cache_clear()
 
 
@@ -417,21 +424,22 @@ GOOD_ENTRY = {"access": "ro", "kind": "bool", "read": None}
         "{not json",
         json.dumps([]),
         json.dumps({"schema_version": 1, "product_code": "T0001", "settings": {}}),
-        json.dumps({"schema_version": 2, "product_code": "T0002", "settings": {}}),
-        json.dumps({"schema_version": 2, "product_code": "T0001"}),
+        json.dumps({"schema_version": 2, "product_code": "T0001", "settings": {}}),
+        json.dumps({"schema_version": 3, "product_code": "T0002", "settings": {}}),
+        json.dumps({"schema_version": 3, "product_code": "T0001"}),
         json.dumps(
-            {"schema_version": 2, "product_code": "T0001", "settings": {"x": {"kind": "bool"}}}
+            {"schema_version": 3, "product_code": "T0001", "settings": {"x": {"kind": "bool"}}}
         ),
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "product_code": "T0001",
                 "settings": {"x": {**GOOD_ENTRY, "kind": "colour"}},
             }
         ),
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "product_code": "T0001",
                 "settings": {"x": {**GOOD_ENTRY, "access": "rw", "write": "1350"}},
             }
@@ -445,7 +453,7 @@ def test_malformed_file_names_the_file(data_root: Path, doc: str) -> None:
 
 
 def _write_model(root: Path, settings: dict[str, object]) -> None:
-    doc = {"schema_version": 2, "product_code": "T0001", "settings": settings}
+    doc = {"schema_version": 3, "product_code": "T0001", "settings": settings}
     (root / "T0001.json").write_text(json.dumps(doc), encoding="utf-8")
 
 
@@ -471,12 +479,118 @@ def test_variant_of_must_name_another_setting(data_root: Path, target: str) -> N
 
 def test_identifiers_outside_the_pattern_are_skipped(data_root: Path) -> None:
     doc = {
-        "schema_version": 2,
+        "schema_version": 3,
         "product_code": "T0001",
         "settings": {"ok_1": GOOD_ENTRY, "Bad-Key": GOOD_ENTRY},
     }
     (data_root / "T0001.json").write_text(json.dumps(doc), encoding="utf-8")
     assert list(settings_of("T0001")) == ["ok_1"]
+
+
+def _b64_json(obj: object) -> str:
+    return base64.b64encode(json.dumps(obj).encode()).decode()
+
+
+def _report(first: int, second: int, cur_mode: int) -> str:
+    return _b64_json(
+        {"mode_0": {"quality": first}, "mode_1": {"quality": second}, "cur_mode": cur_mode}
+    )
+
+
+_QUALITY = {
+    "kind": "enum",
+    "values": [1, 2],
+    "access": "rw",
+    "control": "select",
+    "write": {
+        "cmd": 1350,
+        "subCmd": 2731,
+        "params": {"quality": {"$map": {"1": 3, "2": 2}}, "mode": "$param:6243:int"},
+    },
+    "read": {"param": 2731, "map": {}, "view": {"by": 6243, "map": {"2": 2, "3": 1}}},
+}
+
+
+def test_a_context_replaces_the_fields_it_names_and_null_removes_one(data_root: Path) -> None:
+    base = {**GOOD_ENTRY, "read": {"param": 6020, "map": None}, "note": "base note"}
+    hb = {"read": {"param": 1289, "map": None}, "note": None}
+    alone = {"read": None}
+    _write_model(
+        data_root,
+        {
+            "x": {
+                **base,
+                "contexts": [
+                    {"names": ["HB2", "HB3"], "entry": hb},
+                    {"names": ["standalone"], "entry": alone},
+                ],
+            }
+        },
+    )
+    assert (settings_of("T0001")["x"].read_param, settings_of("T0001")["x"].note) == (
+        6020,
+        "base note",
+    )
+    behind = settings_of("T0001", ConnectType.HB3)["x"]
+    assert (behind.read_param, behind.note) == (1289, None)
+    assert settings_of("T0001", ConnectType.HB1)["x"].read_param == 6020
+    assert settings_of("T0001", ConnectType.SINGLE)["x"].read_param == 6020
+    assert settings_of("T0001", standalone=True)["x"].read_param is None
+
+
+@pytest.mark.parametrize(
+    ("by", "raw", "view_mode", "value"),
+    [
+        (6243, _report(3, 2, 0), "0", 1),
+        (6243, _report(3, 2, 0), "12", 2),
+        (6243, _report(3, 2, 2), None, 1),
+        ("cur_mode", _report(3, 2, 0), "12", 1),
+        ("cur_mode", _report(3, 2, 1), None, 1),
+        ("cur_mode", _report(3, 2, 2), "0", 2),
+        (None, _report(3, 2, 2), "12", 1),
+        (None, _b64_json({"mode_1": {"quality": 2}}), None, None),
+        (None, _b64_json({"mode_0": {"quality": 7}}), None, None),
+        (6243, "not base64!", "0", None),
+    ],
+)
+def test_a_per_view_read_takes_the_current_view_s_quality(
+    data_root: Path, by: object, raw: str, view_mode: str | None, value: int | None
+) -> None:
+    read = {"param": 2731, "map": {}, "view": {"by": by, "map": {"2": 2, "3": 1}}}
+    _write_model(data_root, {"q": {**_QUALITY, "read": read}})
+    block = {} if view_mode is None else {6243: view_mode}
+    assert settings_of("T0001")["q"].decode(raw, block) == value
+
+
+def test_a_per_view_read_comes_after_the_map(data_root: Path) -> None:
+    read = {"param": 2730, "map": {"Mw==": 2}, "view": {"by": None, "map": {"3": 1}}}
+    _write_model(data_root, {"q": {**_QUALITY, "read": read}})
+    setting = settings_of("T0001")["q"]
+    assert setting.decode("Mw==") == 2
+    assert setting.decode(_report(3, 3, 0)) == 1
+
+
+def test_a_param_leaf_takes_the_device_s_current_value(data_root: Path) -> None:
+    _write_model(data_root, {"q": _QUALITY})
+    setting = settings_of("T0001")["q"]
+    assert setting.write_params == {6243}
+    wire = setting.encode(1, replace(CHILD, params={6243: "12"}))
+    assert (wire.cmd, wire.params) == (2731, {"quality": 3, "mode": 12})
+    with pytest.raises(ValueError, match="6243 is not reported"):
+        setting.encode(1, CHILD)
+    with pytest.raises(ValueError, match="6243 is not an int"):
+        setting.encode(1, replace(CHILD, params={6243: "dual"}))
+
+
+@pytest.mark.parametrize(
+    "view",
+    [{"by": "mode_1", "map": {}}, {"by": True, "map": {}}, {"by": None}, "6243"],
+)
+def test_a_malformed_view_names_the_file(data_root: Path, view: object) -> None:
+    read = {"param": 2731, "map": {}, "view": view}
+    _write_model(data_root, {"q": {**_QUALITY, "read": read}})
+    with pytest.raises(ModelDataError, match=r"T0001\.json"):
+        settings_of("T0001")
 
 
 _MODES = ("away", "home", "custom_1", "custom_2", "custom_3")
@@ -530,7 +644,7 @@ def test_bundled_td_version_comes_from_the_files_source_block() -> None:
 
 
 def test_a_code_missing_from_the_index_has_no_settings(data_root: Path) -> None:
-    doc = {"schema_version": 2, "product_code": "T0002", "settings": {"ok_1": GOOD_ENTRY}}
+    doc = {"schema_version": 3, "product_code": "T0002", "settings": {"ok_1": GOOD_ENTRY}}
     (data_root / "T0002.json").write_text(json.dumps(doc), encoding="utf-8")
     assert settings_of("T0002") == {}
     assert bundled_codes() == ("T0001",)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import dataclasses
+import functools
 import json
 import math
 import time
@@ -203,9 +204,9 @@ async def test_guard_mode_accepts_names(station: Station, fake: FakeStation) -> 
 CAMERA_CH1 = dataclasses.replace(CAMERA, channel=1)
 
 
-@pytest.fixture
-async def child(fake: FakeStation) -> AsyncIterator[Station]:
-    """A T8030 with the synthetic T8160 paired on channel 1; settings writes answered."""
+async def _child_station(fake: FakeStation, camera: CloudDevice) -> Station:
+    """A T8030 with ``camera`` paired on channel 1 (the fake's camera block moved
+    there); settings writes answered."""
     fake.params[1] = fake.params.pop(0)
     fake.reply_to_settings = True
 
@@ -215,10 +216,55 @@ async def child(fake: FakeStation) -> AsyncIterator[Station]:
     session = StationSession(
         SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
     )
-    st = Station(STATION, session, sub_devices=[CAMERA_CH1])
+    st = Station(STATION, session, sub_devices=[camera])
     await st.async_update()
+    return st
+
+
+@pytest.fixture
+async def child(fake: FakeStation) -> AsyncIterator[Station]:
+    """A T8030 with the synthetic T8160 paired on channel 1; settings writes answered."""
+    st = await _child_station(fake, CAMERA_CH1)
     yield st
     await st.async_close()
+
+
+@pytest.fixture
+async def paired_t8170(fake: FakeStation) -> AsyncIterator[Station]:
+    """A T8030 with a T8170 paired on channel 1; settings writes answered."""
+    st = await _child_station(fake, dataclasses.replace(CAMERA_CH1, device_sn=_T8170_SN))
+    yield st
+    await st.async_close()
+
+
+async def test_a_write_takes_the_view_mode_the_device_reports(
+    paired_t8170: Station, fake: FakeStation
+) -> None:
+    """The T8170's 2731 write carries ``mode`` = the camera's 6243, as the app sends it."""
+    fake.params[1][6243] = "12"
+    await paired_t8170.async_update()
+    await paired_t8170.async_set_setting("record_resolution", 1, device_sn=_T8170_SN)
+    last = fake.received[-1]
+    assert (last["cmd"], last["mChannel"]) == (2731, 1)
+    assert last["payload"] == {"quality": 3, "mode": 12, "primary_view": 0}
+
+
+async def test_a_write_reads_a_view_mode_the_session_lacks(
+    paired_t8170: Station, fake: FakeStation
+) -> None:
+    fake.params[1][6243] = "0"  # reported only after the session's last dump
+    await paired_t8170.async_set_setting("record_resolution", 2, device_sn=_T8170_SN)
+    assert fake.received[-1]["payload"] == {"quality": 2, "mode": 0, "primary_view": 0}
+
+
+async def test_a_write_whose_view_mode_is_not_reported_sends_nothing(
+    paired_t8170: Station, fake: FakeStation
+) -> None:
+    fake.params[1].pop(6243, None)
+    sent = len(fake.received)
+    with pytest.raises(CommandNotAppliedError, match="parameter 6243"):
+        await paired_t8170.async_set_setting("record_resolution", 1, device_sn=_T8170_SN)
+    assert all(r["cmd"] != 2731 for r in fake.received[sent:])
 
 
 def _cached(station: Station, channel: int, param: int) -> str | None:
@@ -1230,6 +1276,39 @@ def test_setting_refuses_a_key_the_device_does_not_have() -> None:
         _state_of({3: {1101: "50"}}).devices[3].setting("watermark_set")  # unknown model
     with pytest.raises(ValueError, match="at most one"):
         state.setting("power_manager_mode", device_sn=SYNTHETIC.camera_sn, channel=0)
+
+
+def _view_report(first: int, second: int) -> str:
+    report = {"mode_0": {"quality": first}, "mode_1": {"quality": second}, "cur_mode": 0}
+    return base64.b64encode(json.dumps(report).encode()).decode()
+
+
+@pytest.mark.parametrize(
+    ("view_mode", "view", "recording"), [("0", 1, 1), ("12", 0, 2)], ids=["single", "dual"]
+)
+def test_a_t8170_behind_a_homebase_3_reads_the_app_s_paired_forms(
+    view_mode: str, view: int, recording: int
+) -> None:
+    """Behind a HomeBase 3 the app's handler reads sensitivity from 1276, the
+    notification type from 1289, the view mode from 6243 and the recording quality
+    from 2731's current view; an empty snooze is Off."""
+    hub = _hub_with(dataclasses.replace(CAMERA, device_sn=_T8170_SN, channel=2))
+    block = {
+        1276: "7",
+        6070: "4",
+        1289: "1",
+        6020: "3",
+        1271: "",
+        6243: view_mode,
+        2731: _view_report(3, 2),
+    }
+    state = hub._state(_dump_of({2: block}))
+    read = functools.partial(state.setting, device_sn=_T8170_SN)
+    assert read("detection_sensitivity") == 7
+    assert read("notification_type") == 0
+    assert read("device_snooze_time") == -1
+    assert read("view_mode") == view
+    assert read("record_resolution") == recording
 
 
 def test_a_standalone_device_reads_its_own_settings() -> None:
@@ -3149,10 +3228,15 @@ def test_a_per_view_quality_report_reads_as_the_current_view(
     assert state.devices[0].setting("live_streaming_resolution") == expected
 
 
-@pytest.mark.parametrize("raw", ["not base64!", base64.b64encode(b"[1]").decode(), ""])
+@pytest.mark.parametrize("raw", ["not base64!", base64.b64encode(b"[1]").decode()])
 def test_an_undecodable_quality_report_reads_as_unknown(raw: str) -> None:
     state = _standalone_t8170()._state(_dump_of({0: {2730: raw}}))
     assert state.devices[0].setting("live_streaming_resolution") is None
+
+
+def test_an_empty_quality_report_reads_as_the_handler_decodes_it() -> None:
+    state = _standalone_t8170()._state(_dump_of({0: {2730: ""}}))
+    assert state.devices[0].setting("live_streaming_resolution") == 0  # Auto
 
 
 async def test_a_t8170_quality_write_reads_back_through_its_per_view_report(

@@ -1,6 +1,6 @@
 {
  "product_code": "T8970",
- "schema_version": 2,
+ "schema_version": 3,
  "settings": {
   "audio_alert_volume": {
    "access": "rw",
@@ -13,6 +13,7 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "5": 1
     },

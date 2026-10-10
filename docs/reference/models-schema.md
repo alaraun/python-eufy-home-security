@@ -1,10 +1,10 @@
-# Settings files (schema v2)
+# Settings files (schema v3)
 
 `src/eufy_home_security/devices/data/models/<PN>.json` holds one file per product
 code (107). Each file lists the model's settings, as the vendor's thing description (TD)
 declares them, with the write and read codecs the vendor's handler
 (`<PN>Handle.mix.js`) gives. `scripts/gen_models.py` generates the files and
-`INDEX.json` beside them, `{"schema_version": 2, "codes": [...]}`: the sorted product
+`INDEX.json` beside them, `{"schema_version": 3, "codes": [...]}`: the sorted product
 codes of every file in the directory. The library reads a model's file only when the
 index lists its code; the tests and the wheel check pin the file set to the index. They
 ship in the wheel.
@@ -13,7 +13,7 @@ ship in the wheel.
 
 | Key | Meaning |
 |---|---|
-| `schema_version` | `2` |
+| `schema_version` | `3` |
 | `product_code` | The file stem, e.g. `T8160` |
 | `source` | `td_version` (int), `handler` (file name), `handler_date` (`YYYY-MM-DD`, from the handler's plugin path), `app_version` (the app build the labels and layout come from) |
 | `settings` | Object keyed by the TD identifier (`[a-z0-9_]+`, verbatim) |
@@ -30,11 +30,10 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `min`, `max`, `step`, `default` | From the TD where it gives them |
 | `unit` | The TD unit normalised to `s`, `ms`, `d` or `%`, else the unit the app's control shows on the page the setting is on (the custom-recording sliders: `s`); absent otherwise |
 | `access` | `rw`: the handler has a value-dependent write. `ro`: it has none |
-| `write` | Recipe template for the station-child context |
-| `write_standalone` | Template for a standalone device (`parent_sn` = `device_sn`), present only when it differs from `write` |
+| `write` | Recipe template (base context, below) |
 | `write_table` | `{"<value>": recipe}` when the recipe's shape depends on the value. It replaces `write` |
-| `write_table_standalone` | The same table for a standalone device, present only when it differs from `write_table` |
-| `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. `null`: not readable |
+| `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. Either may carry `view` (below). `null`: not readable |
+| `contexts` | What other contexts change (below); absent when every context sees the base entry |
 | `labels` | `{"<value>": "<title>"}` from the app's titles, else the cleaned TD description |
 | `group`, `order` | Section and position on the app's settings page. Always present together |
 | `page` | The app page the setting lives on |
@@ -51,6 +50,36 @@ An `rw` setting has exactly one of `write` and `write_table`. An `ro` setting ha
 write key and `read: null`. A `flags` setting and a `bit` setting read the raw mask
 (`read.map` null).
 
+### Contexts
+
+The handler's codecs depend on how the app reaches the device. The entry itself is the
+**base** context: a device whose parent is no station kind (the handler's `SINGLE`).
+`contexts` lists the others that differ, as
+`[{"names": [<context>, ...], "entry": {<field>: <value or null>}}]`: one item per
+distinct change, its `entry` holding the fields that context replaces (`null`: the field
+is absent there, so `"read": null` is not readable). The names are `standalone` (a
+device that is its own station, `parent_sn` = `device_sn`) and the station kinds of
+`ConnectType` (`HB1`, `HB2`, `HB3`, `HB4`, `M8020`–`M8025`, `NVR`, `T7000`, `T9000`) for a
+device paired to such a station. Every context lists the same settings. The generator
+sweeps the handler in each context on two channels; a T8170 behind a HomeBase 3, for
+example, reads `detection_sensitivity` from 1276 and `notification_type` from 1289
+instead of the standalone 6070 and 6020.
+
+### Per-view reads
+
+A multi-view camera reports a quality parameter (2730, 2731) as base64 JSON with one
+quality per view, `{"mode_0": {"quality": q}, "mode_1": {…}, "cur_mode": m}`.
+`read.view` is `{"by": <rule>, "map": {"<quality>": <public value>}}`: the value is the
+current view's `quality` through `map`. `by` names the current view: a parameter id
+(6243, the view mode: `12` selects `mode_1`, any other value or none `mode_0`),
+`"cur_mode"` (the report's `cur_mode`: 0, 1 or none select `mode_0`, any other
+`mode_1`) or null (always `mode_0`). The library tries `read.map` (or the identity) first
+and the view read when that gives no value. The generator adds `view` to an enum whose
+write sends a `quality` per value when the handler's getProperty picks the quality of
+the view that rule names in each of three probes (the value's quality in one view,
+another value's in the other, with view mode 0 or 12 and `cur_mode` 0 or 2); the map
+keys that are such reports are dropped.
+
 ### Shaping
 
 After the codecs are inferred, the generator reshapes a setting only when the handler's
@@ -66,6 +95,11 @@ own recipes prove the new form sends the same bytes:
 - **variant**: a setting whose write equals that of a shorter key it extends
   (`detection_sensitivity_test_mode`) is `variant_of` that key; when only the longer one
   reads the parameter the shared write updates, the shorter one takes that read.
+- **update of an absent value**: an `update` or `extUpdates` item whose value is an
+  empty JSON object (`"{}"` or its base64 `"e30="`) is left out. It is the handler's
+  read-modify-write of a parameter the sweep's device does not hold, and written to the
+  parameter cache it would replace the device's real value; the next dump has the new
+  value.
 - **dropped variant**: an `rw` variant whose key extends its primary's and whose entry
   equals the primary's in everything but `variant_of` and a placement (`page`, `group`,
   `order`) it lacks is left out of the file: it would be a second entity for the same
@@ -90,8 +124,9 @@ Recipe templates are the handler's recipe with the value positions replaced:
 | `{"$affine": [a, b]}` | `a * value + b`, an int when integral |
 | `"$channel"` | The device's channel (3 as a station child, 0 standalone in the samples) |
 | `"$device_sn"`, `"$station_sn"` | The device's and its station's serial |
+| `"$param:<id>:int"`, `"$param:<id>:str"` | The device's current value of parameter `<id>`, as an int or as the string. A leaf the handler fills from the device's parameters: null in every sweep (the parameter absent) and that value with the parameter set to two values the model's writes give it. A T8170's 2731 write sends `"mode": "$param:6243:int"` |
 
-`write_table` and `write_standalone` use the same forms. Volatile keys (`transaction`,
+`write_table` uses the same forms. Volatile keys (`transaction`,
 `buildTimestamp`) are dropped. All other keys of the handler's recipe are kept: `cmd`,
 `subCmd`, `params`, `update`, `extUpdates`, and transport keys such as `http`, `ble` and
 `mqttCmdCode`.
@@ -109,7 +144,6 @@ Recipe templates are the handler's recipe with the value positions replaced:
 | `non-linear range` | A range whose leaf is not `a * value + b` |
 | `serial embedded in a string` | A serial appears inside a longer string and cannot be slotted |
 | `round trip does not return the written value` | `rw` with `read: null`: getProperty does not decode the written value back |
-| `standalone: …` | `rw` as a station child, with the reason the standalone context has no codec |
 
 A TD property that is not writable is `ro` without a note.
 
@@ -169,17 +203,25 @@ setting's value is the whole mask; `Station.async_set_flag(key, member, on)` mov
 member the same way, and `Setting.decode_flags(raw)` gives the members that are on plus
 the bits no member names.
 
+`settings_of(code, connect, standalone=)` resolves a file for one context: `standalone`
+for a device that is its own station, else the station kind `connect` the device is
+paired to (None or `SINGLE`: the base). `Station.settings_for` passes the device's own.
+
 `Setting.validate(value)` checks a value against the domain (an enum also takes its
-label), `Setting.encode(value, ctx)` renders the write recipe for a station child or a
-standalone device into a `WireCommand`, and `Setting.decode(raw)` turns a dumped
-parameter value into the public value. The library does not send a write, and the
+label), `Setting.encode(value, ctx)` renders the write recipe for the device `ctx`
+describes into a `WireCommand`, and `Setting.decode(raw, block)` turns a dumped
+parameter value into the public value (`block`: the device's other parameters, for a
+per-view read). `Setting.write_params` names the parameters a write's `$param` leaves
+take; `encode` takes their values from `WriteContext.params` and raises `ValueError`
+when one is missing. `Station.async_set_setting` fills them from the session's
+parameters, else from a fresh dump, and raises `CommandNotAppliedError` when the device
+does not report one (the handler would send null; a HomeBase 3 refuses a 2731 write with
+`"mode": null`). The library does not send a write, and the
 setting is not `writable`, when its recipe goes over another transport: the note then
 names it (`cloud request`, `multi-command write`, `app-local`, `Bluetooth`, `MQTT`,
 `no P2P command`, `1700 data body not supported`, `scalar body on a non-ECB command`).
 `arming_selected_mode` is never written as a setting (`guard mode: use
-Station.async_set_guard_mode`). A setting writable as a station child but not
-standalone keeps `writable` and carries `standalone: <reason>` in its note; a
-standalone write of it raises `UnsupportedError`.
+Station.async_set_guard_mode`).
 
 The per-mode delays and action masks (`alarm_delay_<mode>`, `leaving_delay_<mode>`,
 `camera_action_<mode>`, `sensor_action_<mode>`) are not in these files. They are the

@@ -12,6 +12,8 @@ the result: call it off the event loop (``asyncio.to_thread``) the first time.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import functools
 import importlib.resources
 import json
@@ -28,7 +30,14 @@ from typing import Any, Final, cast
 from ..exceptions import ModelDataError, UnsupportedError
 from ..p2p.mode_actions import ACTION_FLAGS
 from .labels import setting_name
-from .settings import MODE_TABLE_SETTINGS, Scope, SettingDef, SettingUnit
+from .recipes import ConnectType
+from .settings import (
+    DUAL_VIEW,
+    MODE_TABLE_SETTINGS,
+    Scope,
+    SettingDef,
+    SettingUnit,
+)
 from .timezones import TIMEZONE_DOMAIN, decode_zone, encode_zone, zone_ids
 from .types import model_for_serial, serial_product_code
 
@@ -53,7 +62,7 @@ __all__ = [
 type Value = bool | int | float | str
 type Recipe = Mapping[str, Any]
 
-SCHEMA_VERSION: Final = 2
+SCHEMA_VERSION: Final = 3
 _DATA_PACKAGE: Final = "eufy_home_security.devices.data.models"
 _INDEX: Final = "INDEX.json"  # the generator's list of the bundled codes
 IDENTIFIER: Final = re.compile(r"[a-z0-9_]+")
@@ -76,6 +85,8 @@ nothing). A device paired to a station reports none of them.
 """
 _PRODUCT_CODE: Final = re.compile(r"[A-Za-z0-9]{1,32}")
 _SN_SLOTS: Final = frozenset({"$device_sn", "$station_sn"})
+_PARAM_SLOT: Final = re.compile(r"\$param:(\d+):(int|str)")
+_CUR_MODE: Final = "cur_mode"
 _SUB_1350: Final = 1350
 _RECIPE_1700: Final = 1700
 
@@ -135,12 +146,14 @@ class WritePath(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class WriteContext:
-    """The device a write is rendered for: standalone or station child, its channel, serials."""
+    """The device a write is rendered for: standalone or station child, its channel,
+    serials, and its current parameters (``params``, id -> value) for ``$param`` leaves."""
 
     standalone: bool
     channel: int
     device_sn: str
     station_sn: str
+    params: Mapping[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -213,12 +226,14 @@ class Setting:
     bit: int | None = None
     domain: str | None = None
     _write: Recipe | None = field(default=None, repr=False)
-    _write_standalone: Recipe | None = field(default=None, repr=False)
     _write_table: Mapping[str, Recipe] | None = field(default=None, repr=False)
-    _write_table_standalone: Mapping[str, Recipe] | None = field(default=None, repr=False)
     _read_param: int | None = field(default=None, repr=False)
     _read_map: Mapping[str, Value] | None = field(default=None, repr=False)
-    _standalone_refused: bool = field(default=False, repr=False)
+    _read_view: tuple[int | str | None, Mapping[str, Value]] | None = field(
+        default=None, repr=False
+    )
+    """A per-view read: which view the report's quality comes from, and quality -> value."""
+    _write_params: frozenset[int] = field(default=frozenset(), repr=False)
     _mode_table: SettingDef | None = field(default=None, repr=False)
     """The hand-written mode-table entry a mode-table setting is written through."""
 
@@ -226,6 +241,12 @@ class Setting:
     def read_param(self) -> int | None:
         """The parameter id that reports this setting's value; None when not readable."""
         return self._read_param
+
+    @property
+    def write_params(self) -> frozenset[int]:
+        """The device parameters a write takes values from (``$param`` leaves): pass
+        their current values in :attr:`WriteContext.params`."""
+        return self._write_params
 
     def validate(self, value: object) -> Value:
         """``value`` as the setting's public value; raises ValueError outside the domain."""
@@ -259,10 +280,28 @@ class Setting:
                 return title
         return None
 
-    def decode(self, raw: str | None) -> Value | None:
-        """The public value of parameter value ``raw``; None when unreadable or unknown."""
+    def decode(
+        self, raw: str | None, block: Mapping[int, str | None] | None = None
+    ) -> Value | None:
+        """The public value of parameter value ``raw``; None when unreadable or unknown.
+
+        ``block`` is the device's other parameters: a per-view read takes the view mode
+        from it.
+        """
         if raw is None or self._read_param is None:
             return None
+        value = self._decode(raw)
+        if value is None and self._read_view is not None:
+            by, qualities = self._read_view
+            quality = _view_quality(raw, by, block or {})
+            mapped = None if quality is None else qualities.get(quality)
+            if mapped is not None and (
+                self.kind is not SettingKind.ENUM or self._in_values(mapped)
+            ):
+                return mapped
+        return value
+
+    def _decode(self, raw: str) -> Value | None:
         if self.domain is not None:
             return _domain_decode(self.domain, raw)
         if self.bit is not None or self.kind is SettingKind.FLAGS:
@@ -294,9 +333,8 @@ class Setting:
     def encode(self, value: object, ctx: WriteContext) -> WireCommand:
         """The wire command that writes ``value`` to the device ``ctx`` describes.
 
-        Raises UnsupportedError when the setting is not writable (in a standalone
-        context: when its standalone write is refused) and ValueError for a value outside
-        the domain or one the codec has no rendering for.
+        Raises UnsupportedError when the setting is not writable and ValueError for a
+        value outside the domain or one the codec has no rendering for.
         """
         if not self.writable:
             raise UnsupportedError(f"{self.key} is not writable: {self.note or 'read-only'}")
@@ -352,13 +390,14 @@ class Setting:
     def _encode_value(self, public: Value, ctx: WriteContext) -> WireCommand:
         if self.domain is not None:
             return self._encode_domain(str(public), ctx)
-        template = self._template(public, standalone=ctx.standalone)
+        template = self._template(public)
         recipe = _render(
             template,
             public,
             channel=ctx.channel,
             device_sn=ctx.device_sn,
             station_sn=ctx.station_sn,
+            params=ctx.params,
         )
         return _classify(template, recipe)
 
@@ -366,13 +405,14 @@ class Setting:
         """A domain setting's write: the device form of ``public`` as a string frame of
         the handler's command, with the handler's parameter-cache updates."""
         device = _domain_encode(cast(str, self.domain), public)
-        template = self._template(device, standalone=ctx.standalone)
+        template = self._template(device)
         recipe = _render(
             template,
             device,
             channel=ctx.channel,
             device_sn=ctx.device_sn,
             station_sn=ctx.station_sn,
+            params=ctx.params,
         )
         return WireCommand(
             path=WritePath.STRING,
@@ -385,24 +425,22 @@ class Setting:
 
     def _render_recipe(self, value: Value, ctx: WriteContext) -> dict[str, Any]:
         """The full rendered recipe (every key of the template), for comparisons."""
-        template = self._template(value, standalone=ctx.standalone)
+        template = self._template(value)
         return _render(
-            template, value, channel=ctx.channel, device_sn=ctx.device_sn, station_sn=ctx.station_sn
+            template,
+            value,
+            channel=ctx.channel,
+            device_sn=ctx.device_sn,
+            station_sn=ctx.station_sn,
+            params=ctx.params,
         )
 
-    def _template(self, value: Value, *, standalone: bool) -> Recipe:
-        if standalone and self._standalone_refused:
-            raise UnsupportedError(f"{self.key} is not writable standalone: {self.note}")
+    def _template(self, value: Value) -> Recipe:
         key = _value_key(value)
-        tables = [self._write_table_standalone] if standalone else []
-        tables.append(self._write_table)
-        for table in tables:
-            if table is not None:
-                if key not in table:
-                    raise ValueError(f"value {key} not in the write table")
-                return table[key]
-        if standalone and self._write_standalone is not None:
-            return self._write_standalone
+        if self._write_table is not None:
+            if key not in self._write_table:
+                raise ValueError(f"value {key} not in the write table")
+            return self._write_table[key]
         if self._write is not None:
             return self._write
         raise ValueError("setting has no write codec")
@@ -515,11 +553,18 @@ def _str_form(value: Value) -> str:
 
 
 def _render(
-    template: Recipe, value: Value, *, channel: int, device_sn: str, station_sn: str
+    template: Recipe,
+    value: Value,
+    *,
+    channel: int,
+    device_sn: str,
+    station_sn: str,
+    params: Mapping[int, str],
 ) -> dict[str, Any]:
     """Fill a write template's placeholders for ``value`` (docs/reference/models-schema.md).
 
-    Raises ValueError for an unknown placeholder or a value the template does not map.
+    Raises ValueError for an unknown placeholder, a value the template does not map, or a
+    ``$param`` leaf whose parameter ``params`` lacks (the handler would send null).
     """
     serials = {"$device_sn": device_sn, "$station_sn": station_sn}
 
@@ -547,6 +592,16 @@ def _render(
             return channel
         if slot in _SN_SLOTS:
             return serials[slot]
+        if m := _PARAM_SLOT.fullmatch(slot):
+            raw = params.get(int(m[1]))
+            if raw is None:
+                raise ValueError(f"parameter {m[1]} is not reported")
+            if m[2] == "str":
+                return raw
+            try:
+                return int(raw)
+            except ValueError:
+                raise ValueError(f"parameter {m[1]} is not an int: {raw!r}") from None
         raise ValueError(f"unknown placeholder {slot!r}")
 
     def form(x: Mapping[str, Any]) -> Any:
@@ -567,6 +622,54 @@ def _render(
 
     rendered: dict[str, Any] = fill(template)
     return rendered
+
+
+def _view_quality(raw: str, by: int | str | None, block: Mapping[int, str | None]) -> str | None:
+    """The quality a per-view report gives for the current view, as a decimal string.
+
+    ``raw`` is base64 JSON ``{"mode_0": {"quality": q}, "mode_1": {…}, "cur_mode": m}``.
+    ``by`` names the view: a parameter id (its value :data:`DUAL_VIEW` selects
+    ``mode_1``, anything else ``mode_0``), ``"cur_mode"`` (0 or 1 selects ``mode_0``, any
+    other int ``mode_1``) or None (``mode_0``). None when the report does not decode or
+    lacks that view.
+    """
+    text = raw.strip()
+    try:
+        report = json.loads(base64.b64decode(text + "=" * (-len(text) % 4), validate=True))
+    except (ValueError, binascii.Error):
+        return None
+    if not isinstance(report, dict):
+        return None
+    second = False
+    if by == _CUR_MODE:
+        mode = _number(str(report.get(_CUR_MODE, 0)))
+        second = mode is not None and mode not in (0, 1)
+    elif isinstance(by, int):
+        second = _number(str(block.get(by))) == DUAL_VIEW
+    view = report.get("mode_1" if second else "mode_0")
+    quality = view.get("quality") if isinstance(view, dict) else None
+    if isinstance(quality, bool) or not isinstance(quality, int):
+        return None
+    return str(quality)
+
+
+def _template_params(templates: list[Recipe | None]) -> frozenset[int]:
+    """The parameter ids of every ``$param`` leaf in ``templates``."""
+    found: set[int] = set()
+
+    def walk(x: Any) -> None:
+        if isinstance(x, Mapping):
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+        elif isinstance(x, str) and (m := _PARAM_SLOT.fullmatch(x)):
+            found.add(int(m[1]))
+
+    for template in templates:
+        walk(template)
+    return frozenset(found)
 
 
 def _channel_fields(template: Recipe) -> frozenset[str]:
@@ -771,7 +874,7 @@ def bundled_codes() -> tuple[str, ...]:
         data = json.loads(_root().joinpath(_INDEX).read_text(encoding="utf-8"))
         codes = data["codes"]
         if data.get("schema_version") != SCHEMA_VERSION or not isinstance(codes, list):
-            raise ValueError("not a schema-2 index")
+            raise ValueError(f"not a schema-{SCHEMA_VERSION} index")
         if not all(isinstance(c, str) and canonical_code(c) == c for c in codes):
             raise ValueError("a code is not canonical")
     except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError) as err:
@@ -779,15 +882,29 @@ def bundled_codes() -> tuple[str, ...]:
     return tuple(sorted(codes))
 
 
-def settings_of(product_code: str) -> Mapping[str, Setting]:
+STANDALONE_CONTEXT: Final = "standalone"
+"""The context name of a device that is its own station (``parent_sn`` = its serial)."""
+
+
+def settings_of(
+    product_code: str, connect: ConnectType | None = None, *, standalone: bool = False
+) -> Mapping[str, Setting]:
     """The settings of a model keyed by identifier; empty for a code without a file.
 
-    Product codes match case-insensitively. Reads package data on the first call per
-    code (memoised). Raises ModelDataError when the bundled file is malformed.
+    The codecs follow the handler's context: ``standalone`` for a device that is its own
+    station, else a device paired to a station of kind ``connect`` (None or ``SINGLE``:
+    a parent of no station kind). Product codes match case-insensitively. Reads package
+    data on the first call per code (memoised). Raises ModelDataError when the bundled
+    file is malformed.
     """
     if not _PRODUCT_CODE.fullmatch(product_code):
         return MappingProxyType({})
-    return _load(product_code.upper()).settings
+    context = STANDALONE_CONTEXT if standalone else _context_name(connect)
+    return _resolved(product_code.upper(), context)
+
+
+def _context_name(connect: ConnectType | None) -> str | None:
+    return None if connect in (None, ConnectType.SINGLE) else cast(ConnectType, connect).value
 
 
 def bundled_td_version(product_code: str) -> int | None:
@@ -801,7 +918,7 @@ def bundled_td_version(product_code: str) -> int | None:
 
 @dataclass(frozen=True, slots=True)
 class _Model:
-    settings: Mapping[str, Setting]
+    entries: Mapping[str, Mapping[str, Any]]
     td_version: int | None
 
 
@@ -821,9 +938,22 @@ def _load(code: str) -> _Model:
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as err:
         raise ModelDataError(f"{name}: {err}") from err
     try:
-        return _Model(MappingProxyType(_parse(code, data)), _source_version(data))
+        entries = _entries(code, data)
+        for context in (None, *_context_names(entries)):
+            _parse(code, entries, context)
     except (KeyError, TypeError, ValueError) as err:
         raise ModelDataError(f"{name}: {err}") from err
+    return _Model(MappingProxyType(entries), _source_version(data))
+
+
+@functools.cache
+def _resolved(code: str, context: str | None) -> Mapping[str, Setting]:
+    """The settings of ``code`` in ``context`` (None: the base); the file was checked
+    in every context it names when it was loaded."""
+    entries = _load(code).entries
+    if not entries:
+        return MappingProxyType({})
+    return MappingProxyType(_parse(code, entries, context))
 
 
 def _source_version(data: Mapping[str, Any]) -> int | None:
@@ -832,7 +962,8 @@ def _source_version(data: Mapping[str, Any]) -> int | None:
     return version if isinstance(version, int) and not isinstance(version, bool) else None
 
 
-def _parse(code: str, data: Any) -> dict[str, Setting]:
+def _entries(code: str, data: Any) -> dict[str, dict[str, Any]]:
+    """The checked top level of a settings file: its entries by identifier."""
     if not isinstance(data, dict):
         raise TypeError("not a JSON object")
     if data.get("schema_version") != SCHEMA_VERSION:
@@ -842,15 +973,64 @@ def _parse(code: str, data: Any) -> dict[str, Setting]:
     entries = data["settings"]
     if not isinstance(entries, dict):
         raise TypeError("settings is not an object")
-    settings = {
-        key: _setting(code, key, entry)
-        for key, entry in entries.items()
-        if IDENTIFIER.fullmatch(key)
-    }
+    if not all(isinstance(e, dict) for e in entries.values()):
+        raise TypeError("a setting is not an object")
+    return {k: e for k, e in entries.items() if IDENTIFIER.fullmatch(k)}
+
+
+def _context_names(entries: Mapping[str, Mapping[str, Any]]) -> set[str]:
+    """Every context the entries' ``contexts`` items name."""
+    names: set[str] = set()
+    for key, entry in entries.items():
+        items = entry.get("contexts") or []
+        if not isinstance(items, list):
+            raise TypeError(f"{key}: contexts is not a list")
+        for item in items:
+            if not isinstance(item, dict) or not isinstance(item.get("names"), list):
+                raise TypeError(f"{key}: a contexts item has no names")
+            if not isinstance(item.get("entry"), dict):
+                raise TypeError(f"{key}: a contexts item has no entry")
+            names.update(str(n) for n in item["names"])
+    return names
+
+
+def _in_context(entry: Mapping[str, Any], context: str | None) -> dict[str, Any]:
+    """``entry`` with the fields its ``contexts`` item for ``context`` changes; a null
+    field there is absent in that context."""
+    out = {k: v for k, v in entry.items() if k != "contexts"}
+    if context is None:
+        return out
+    for item in entry.get("contexts") or ():
+        if context in item["names"]:
+            for k, v in item["entry"].items():
+                if v is None:
+                    out.pop(k, None)
+                else:
+                    out[k] = v
+    return out
+
+
+def _parse(
+    code: str, entries: Mapping[str, Mapping[str, Any]], context: str | None
+) -> dict[str, Setting]:
+    settings = {key: _setting(code, key, _in_context(e, context)) for key, e in entries.items()}
     for key, setting in settings.items():
         if setting.variant_of is not None and setting.variant_of not in settings:
             raise ValueError(f"{key}: variant_of {setting.variant_of!r} is not a setting")
     return settings
+
+
+def _view_spec(view: Any) -> tuple[int | str | None, Mapping[str, Value]] | None:
+    """A read's ``view`` object as ``(by, quality -> value)``; None when absent."""
+    if view is None:
+        return None
+    if not isinstance(view, dict) or not isinstance(view.get("map"), dict):
+        raise TypeError("read.view is not {by, map}")
+    by = view.get("by")
+    if not (by is None or by == _CUR_MODE or (isinstance(by, int) and not isinstance(by, bool))):
+        raise ValueError(f"read.view.by {by!r}")
+    qualities = {str(k): _scalar(v, "read view value") for k, v in view["map"].items()}
+    return by, MappingProxyType(qualities)
 
 
 def _recipe(entry: Mapping[str, Any], key: str) -> Recipe | None:
@@ -969,12 +1149,14 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     read = entry.get("read")
     read_param: int | None = None
     read_map: dict[str, Value] | None = None
+    read_view = None
     if read is not None:
         if not isinstance(read, dict) or not isinstance(read.get("param"), int):
             raise TypeError("read is not {param, map}")
         read_param = read["param"]
         if read.get("map") is not None:
             read_map = {str(k): _scalar(v, "read value") for k, v in read["map"].items()}
+        read_view = _view_spec(read.get("view"))
     when = entry.get("applies_when")
     applies_when = None
     if when is not None:
@@ -990,23 +1172,15 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     if variant_of is not None and (variant_of == key or not IDENTIFIER.fullmatch(variant_of)):
         raise ValueError(f"variant_of {variant_of!r}")
     write = _recipe(entry, "write")
-    write_standalone = _recipe(entry, "write_standalone")
     table = _table(entry, "write_table")
-    table_standalone = _table(entry, "write_table_standalone")
     writable = access == "rw"
     note = _optional_str(entry, "note")
     refusal = None
-    standalone_refused = False
     if writable:
         if key == _GUARD_MODE_KEY:
             refusal = _GUARD_MODE_NOTE
         else:
             refusal = _first_refusal([write, *(table or {}).values()])
-        if refusal is None:
-            alone = _first_refusal([write_standalone, *(table_standalone or {}).values()])
-            if alone is not None:
-                note = _join_note(note, f"standalone: {alone}")
-                standalone_refused = True
     if refusal is not None:
         writable, note = False, _join_note(note, refusal)
     control, flags, bit = _control_fields(kind, entry, access == "rw")
@@ -1044,10 +1218,9 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         bit=bit,
         domain=domain,
         _write=write,
-        _write_standalone=write_standalone,
         _write_table=table,
-        _write_table_standalone=table_standalone,
         _read_param=read_param,
         _read_map=None if read_map is None else MappingProxyType(read_map),
-        _standalone_refused=standalone_refused,
+        _read_view=read_view,
+        _write_params=_template_params([write, *(table or {}).values()]),
     )
