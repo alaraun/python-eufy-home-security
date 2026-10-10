@@ -17,6 +17,7 @@ import eufy_home_security.station as station_mod
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices.live_open import LiveOpen, live_open
 from eufy_home_security.devices.model_settings import (
+    PARENTLESS_ONLY,
     Setting,
     SettingKind,
     mode_table_settings,
@@ -1083,6 +1084,22 @@ def _standalone_t8170() -> Station:
     return Station(device, station.session)
 
 
+def test_a_paired_device_lacks_the_settings_the_app_offers_only_without_a_parent() -> None:
+    """Time zone, time format, switching notification and NAS: the station and a
+    standalone device keep them, a paired device's list leaves them out."""
+    hub = _hub_with(CAMERA)
+    t8160 = set(settings_of("T8160"))
+    assert t8160 & PARENTLESS_ONLY  # the model file lists some of them
+    camera = {s.key for s in hub.settings_for(SYNTHETIC.camera_sn)}
+    assert not camera & PARENTLESS_ONLY
+    assert t8160 - PARENTLESS_ONLY <= camera
+    assert set(settings_of("T8030")) & PARENTLESS_ONLY <= {s.key for s in hub.settings_for()}
+    with pytest.raises(UnsupportedError, match="unknown setting"):
+        hub.setting("time_format_set", device_sn=SYNTHETIC.camera_sn)
+    standalone = _standalone_t8170()
+    assert set(settings_of("T8170")) & PARENTLESS_ONLY <= {s.key for s in standalone.settings_for()}
+
+
 def test_settings_for_lists_the_model_then_the_mode_tables() -> None:
     sensor = CloudDevice(
         device_sn=SENSOR_SN,
@@ -1094,7 +1111,7 @@ def test_settings_for_lists_the_model_then_the_mode_tables() -> None:
     unknown = dataclasses.replace(sensor, device_sn="T9999P0000000002", channel=3)
     hub = _hub_with(CAMERA, sensor, unknown)
     camera = hub.settings_for(SYNTHETIC.camera_sn)
-    own = settings_of("T8160")
+    own = {k: v for k, v in settings_of("T8160").items() if k not in PARENTLESS_ONLY}
     modes = mode_table_settings(Scope.CAMERA)
     assert camera[len(own) :] == modes
     assert {s.key for s in camera[: len(own)]} == set(own)

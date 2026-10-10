@@ -34,6 +34,7 @@ from .types import model_for_serial, serial_product_code
 
 __all__ = [
     "IDENTIFIER",
+    "PARENTLESS_ONLY",
     "Setting",
     "SettingControl",
     "SettingKind",
@@ -57,6 +58,22 @@ _DATA_PACKAGE: Final = "eufy_home_security.devices.data.models"
 _INDEX: Final = "INDEX.json"  # the generator's list of the bundled codes
 IDENTIFIER: Final = re.compile(r"[a-z0-9_]+")
 """A setting key: a vendor identifier this library lists."""
+PARENTLESS_ONLY: Final = frozenset(
+    {
+        "timezone_set",
+        "time_format_set",
+        "switching_notification",
+        "hb_connect_nas_switch",
+        "hb_connect_nas_storage_type",
+    }
+)
+"""Setting keys the eufy app offers only for a device without a parent station.
+
+The app's settings screens gate each on the device having no parent: the time settings
+(time zone, time format), the switching-notification block, and the edge connection that
+leads to the NAS settings (with a parent that cell shows the parent's name and opens
+nothing). A device paired to a station reports none of them.
+"""
 _PRODUCT_CODE: Final = re.compile(r"[A-Za-z0-9]{1,32}")
 _SN_SLOTS: Final = frozenset({"$device_sn", "$station_sn"})
 _SUB_1350: Final = 1350
