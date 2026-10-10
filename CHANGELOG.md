@@ -4,6 +4,18 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.7](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.6...v0.3.7) (2026-10-10)
+
+
+### Features
+
+* media diagnostics for a live view that shows no picture ([#56](https://github.com/alaraun/python-eufy-home-security/issues/56)) ([00993cc](https://github.com/alaraun/python-eufy-home-security/commit/00993ccf7c1c880b3d06139873fc3188c1164641))
+
+
+### Bug Fixes
+
+* a station with an unsupported P2P id is skipped; P2P ids follow the eufy app's bounds ([#55](https://github.com/alaraun/python-eufy-home-security/issues/55)) ([39e00b4](https://github.com/alaraun/python-eufy-home-security/commit/39e00b4500ed0188550eb3ab969d01a1c19fdb95))
+
 ## [0.3.6](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.5...v0.3.6) (2026-10-10)
 
 
