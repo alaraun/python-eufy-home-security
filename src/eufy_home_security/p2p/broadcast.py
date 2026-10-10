@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from types import TracebackType
 from typing import Literal, Protocol
 
-from ..exceptions import DeviceTimeoutError
+from ..exceptions import CaptureStoppedError, DeviceTimeoutError
 from .clip import ClipWriter, MediaClip, mux_frames
 from .encoder import SETTLE_STANDALONE, SETTLE_STATION, StreamEncoder
 from .media import MediaFrame, MediaKind
@@ -91,7 +91,7 @@ CAPTURE_START_TIMEOUT = 30.0
 class _Tap:
     """One live capture's copy of the camera's frames."""
 
-    __slots__ = ("dropped", "need_keyframe", "queue", "started_at")
+    __slots__ = ("dropped", "need_keyframe", "queue", "started_at", "stopped")
 
     def __init__(self) -> None:
         self.queue: asyncio.Queue[MediaFrame | None] = asyncio.Queue(maxsize=CAPTURE_QUEUE_FRAMES)
@@ -99,6 +99,18 @@ class _Tap:
         self.dropped = 0
         self.started_at: datetime | None = None
         """When the first keyframe reached the capture (UTC): the clip's first frame."""
+        self.stopped = False
+        """The capture's ``stop`` event was set: :meth:`frames` yields nothing more."""
+
+    def stop(self) -> None:
+        """End the capture at once; frames still queued are not written."""
+        self.stopped = True
+        self.end()
+
+    async def stop_on(self, event: asyncio.Event) -> None:
+        """:meth:`stop` once ``event`` is set."""
+        await event.wait()
+        self.stop()
 
     def offer(self, frame: MediaFrame) -> None:
         """Queue ``frame``; when full, skip video until the next keyframe."""
@@ -138,7 +150,7 @@ class _Tap:
                     frame = await self.queue.get()
             except TimeoutError:
                 return
-            if frame is None:
+            if frame is None or self.stopped:
                 return
             yield frame
 
@@ -363,7 +375,12 @@ class StreamBroadcast:
         return len(self._taps)
 
     async def async_capture(
-        self, seconds: float, write: ClipWriter, *, start_timeout: float | None = None
+        self,
+        seconds: float,
+        write: ClipWriter,
+        *,
+        start_timeout: float | None = None,
+        stop: asyncio.Event | None = None,
     ) -> MediaClip:
         """Write ``seconds`` of the live stream, from its next keyframe, as one MPEG-TS clip.
 
@@ -376,6 +393,12 @@ class StreamBroadcast:
         order (see :mod:`~.clip`); a writer slower than the camera loses video to the
         next keyframe rather than stalling the stream.
 
+        Setting ``stop`` ends the capture early at the next frame boundary (frames still
+        queued for a slow writer are not written) and returns the clip with ``stopped``;
+        it is ``complete``. A stop before the first keyframe raises
+        :class:`~..exceptions.CaptureStoppedError`. The camera stays open while viewers
+        or other captures hold it.
+
         A stream that ends, or stops delivering, before ``seconds`` returns what it got
         with ``ended_early``; the camera is given ``start_timeout`` (None:
         :data:`CAPTURE_START_TIMEOUT`, read at call time) beyond ``seconds``
@@ -387,27 +410,38 @@ class StreamBroadcast:
             raise ValueError(f"seconds must be a positive number, not {seconds!r}")
         tap = _Tap()
         self._taps.add(tap)
+        loop = asyncio.get_running_loop()
+        watcher = None if stop is None else loop.create_task(tap.stop_on(stop))
         try:
             if self._grace_until is not None and self.running:
                 self._end_grace()
                 self._ended_by_resize = False
             self._ensure_pump()
             extra = CAPTURE_START_TIMEOUT if start_timeout is None else start_timeout
-            deadline = asyncio.get_running_loop().time() + seconds + extra
+            deadline = loop.time() + seconds + extra
             muxer, reached = await mux_frames(
                 tap.frames(deadline), write, max_ms=round(seconds * 1000)
             )
         finally:
+            if watcher is not None:
+                watcher.cancel()
             self._taps.discard(tap)
             if not self._subscribers and not self._taps and not self._in_grace():
                 await self._stop()
         if tap.dropped:
             _LOGGER.debug("%s: a capture fell behind and lost %d frames", self._name, tap.dropped)
+        stopped = tap.stopped and not reached
         if not muxer.started:
+            if stopped:
+                raise CaptureStoppedError("the capture was stopped before its first keyframe")
             if self._error is not None:
                 raise self._error
             raise DeviceTimeoutError("the live stream delivered no keyframe for the capture")
-        return muxer.clip(started_at=tap.started_at, ended_early=not reached)
+        if stopped:
+            _LOGGER.debug("%s: a capture was stopped after %.1f s", self._name, muxer.duration_s)
+        return muxer.clip(
+            started_at=tap.started_at, ended_early=not reached and not stopped, stopped=stopped
+        )
 
     async def _stop(self) -> None:
         """Stop the pump and the camera stream, leaving subscribers untouched."""

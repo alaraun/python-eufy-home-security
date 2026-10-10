@@ -378,6 +378,10 @@ class RecordNotFoundError(EufySecurityError):
     """
 
 
+class CaptureStoppedError(EufySecurityError):
+    """A live capture was stopped on request before its first keyframe: nothing was written."""
+
+
 class StillNotWrittenError(RecordNotFoundError):
     """The device has not written the event's row or still yet: ask again later.
 

@@ -60,6 +60,9 @@ class MediaClip:
     """A download's video frames by the history record (``frame_num``); None when unknown."""
     ended_early: bool = False
     """A live capture whose stream ended before the asked duration."""
+    stopped: bool = False
+    """A live capture ended by its ``stop`` event before the asked duration; it counts
+    as complete."""
     content_type: str = CLIP_CONTENT_TYPE
 
     @property
@@ -127,7 +130,13 @@ class _ClipMuxer:
             return 0.0
         return max(0, self.last_ms - self.first_ms) / 1000
 
-    def clip(self, *, started_at: datetime | None = None, ended_early: bool = False) -> MediaClip:
+    def clip(
+        self,
+        *,
+        started_at: datetime | None = None,
+        ended_early: bool = False,
+        stopped: bool = False,
+    ) -> MediaClip:
         return MediaClip(
             video_frames=self.video_frames,
             audio_frames=self.audio_frames,
@@ -139,6 +148,7 @@ class _ClipMuxer:
             resizes=self.resizes,
             started_at=started_at,
             ended_early=ended_early,
+            stopped=stopped,
         )
 
 
