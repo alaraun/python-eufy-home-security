@@ -415,6 +415,8 @@ class FakeStation:
     """The cipher the parameter dump answers under (ECB: the firmware the session refuses)."""
     sub_blocks_after: float | None = None
     """Send the sub-device blocks this many seconds AFTER the station block (None: before)."""
+    dump_extra: dict[str, Any] = field(default_factory=dict)
+    """Further top-level keys of the station block's dump object (``db_bypass_str``, say)."""
     unhandled_commands: set[int] = field(default_factory=lambda: {1051})
     """Commands answered with receipt -108 and nothing else, as the real station answers
     ``DOWNLOAD_CANCEL`` (1051) and the ``GET_*`` commands."""
@@ -1209,6 +1211,8 @@ class FakeStation:
                 for pid, value in self.params[dev_type].items()
             ]
             body = {"params": params, "main_sw_version": "3.8.7.4"}
+            if dev_type == STATION_CHANNEL:
+                body.update(self.dump_extra)
             self.send_json(FrameType.PARAM_NOTIFY, body, cipher=cipher)
 
         subs = [d for d in sorted(self.params) if d != 255]

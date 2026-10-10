@@ -993,6 +993,8 @@ class StationSession:
         cloud snapshot's ``update_time`` (an older snapshot never overwrites it)."""
         self._meta: dict[str, Any] = {}
         """The dump's frame-level fields (firmware versions), latest value of each."""
+        self._unread_dump_keys: set[str] = set()
+        """Top-level dump keys the parser does not read, each logged once."""
         self._dump_listeners: list[Callable[[], None]] = []
         self._notify_listeners: list[Callable[[Mapping[str, Any], FrameCipher], None]] = []
         self._push_channels: set[int] = set()
@@ -1298,6 +1300,11 @@ class StationSession:
     @expect_channels.setter
     def expect_channels(self, channels: Iterable[int]) -> None:
         self._expect_channels = frozenset(channels)
+
+    @property
+    def unread_dump_keys(self) -> frozenset[str]:
+        """Top-level keys of this session's parameter dumps that the library does not read."""
+        return frozenset(self._unread_dump_keys)
 
     def merged_params(self) -> ParamDump:
         """A copy of :attr:`params` and the latest frame-level fields, as one dump."""
@@ -3941,6 +3948,14 @@ class StationSession:
         ``stamps`` date values by parameter id (a cloud snapshot); others date from ``now``.
         """
         self._meta.update(dump.meta)
+        for unread in sorted(dump.unread.keys() - self._unread_dump_keys):
+            self._unread_dump_keys.add(unread)
+            _LOGGER.info(
+                "%s: parameter dump carries key %r (%s), which the library does not read",
+                self._log_name,
+                unread,
+                type(dump.unread[unread]).__name__,
+            )
         flat = dump.flatten()
         changed = sum(
             1 for key, new in flat.items() if key in self._params and self._params[key] != new
