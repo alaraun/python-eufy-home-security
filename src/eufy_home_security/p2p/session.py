@@ -954,6 +954,8 @@ class StationSession:
         self._host = host
         self._search_host = host
         self._expected_did = Did.parse(did) if isinstance(did, str) else did
+        # The static key slices the id's text as the cloud lists it (see static_key).
+        self._did_text = did if isinstance(did, str) else None
         self._port = port
         self._local_port = local_port
 
@@ -3356,7 +3358,7 @@ class StationSession:
             raise last_error
 
         try:
-            ecb_key = static_key(self.serial, did)
+            ecb_key = static_key(self.serial, self._did_text or did)
         except ProtocolError as err:
             # Not a HandshakeError: re-fetching the cipher key cannot fix a serial or
             # DID that does not yield a static key.

@@ -3,7 +3,7 @@
 None of these is real. Real serials, P2P ids, account ids and LAN addresses must
 never appear in a repository (the library checks its own tree against a private
 denylist). The fake serial and DID are shaped like real ones so key derivation still
-yields the 16-byte static key: ``serial[-7:] + "-" + did_number + "-" + suffix[0]``.
+yields the 16-byte static key: ``serial[-7:] + did_text[7:16]``.
 """
 
 from __future__ import annotations

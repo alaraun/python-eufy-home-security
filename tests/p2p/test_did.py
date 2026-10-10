@@ -51,7 +51,20 @@ def test_static_key_rejects_a_non_16_byte_result() -> None:
     with pytest.raises(ProtocolError):
         static_key("T8030", SYNTHETIC.did)  # serial too short
     with pytest.raises(ProtocolError):
-        static_key(SYNTHETIC.station_sn, Did(prefix="EUPRAMA", number=9999999, suffix="ABCDE"))
+        static_key(SYNTHETIC.station_sn, "AB-1-C")  # text shorter than 16
+
+
+@pytest.mark.parametrize(
+    ("did", "tail"),
+    [
+        ("EUPRAMA-123456-ABCDE", "-123456-A"),
+        ("ABC-123456-ABCDE", "456-ABCDE"),  # the text is sliced, not reformatted
+        ("ABCDEFG-1234567-ABCDE", "-1234567-"),
+        ("ABCDEFG-000012345-QWERT", "-00001234"),  # leading zeros as written
+    ],
+)
+def test_static_key_is_the_serial_tail_over_the_did_text(did: str, tail: str) -> None:
+    assert static_key(SYNTHETIC.station_sn, did) == (SYNTHETIC.station_sn[-7:] + tail).encode()
 
 
 def test_a_small_number_keeps_its_leading_zeros() -> None:
@@ -72,17 +85,27 @@ def test_a_small_number_keeps_its_leading_zeros() -> None:
         "EUPRAMA-123456-ABCDE\n",
         "EUPRAMA- 123456-ABCDE",
         "EUPRAMA-١٢٣٤٥٦-ABCDE",  # non-ASCII digits
-        "EUPRAMA-12345-ABCDE",  # five digits
-        "EUPRAMA-1234567-ABCDE",
-        "EUPRAMA-123456-ABCD",  # four-letter suffix
         "eupRAMA-123456-ABCDE",
-        "EUPRAMAXX-123456-ABCDE",  # nine-letter prefix
+        "EUPRAMAX-123456-ABCDE",  # eight-letter prefix
+        "EUPRAMA-123456-ABCDEFGH",  # eight-letter suffix
+        "EUPRAMA-123456-ABCDE12345",  # digits in the suffix
+        "EUPRAMA-2147483648-ABCDE",  # 2**31
+        "EUPRAMA--ABCDE",
         "ÉUPRAMA-123456-ABCDE",
     ],
 )
 def test_parse_rejects_non_canonical_text(text: str) -> None:
     with pytest.raises(ProtocolError):
         Did.parse(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["EUPRAMA-12345-ABCDE", "EUPRAMA-123456789-ABCDE", "A-0-B", "ABCDEFG-2147483647-ABCDEFG"],
+)
+def test_parse_accepts_every_form_the_app_connects_to(text: str) -> None:
+    did = Did.parse(text)
+    assert Did.from_struct(did.to_struct()) == did
 
 
 def test_non_ascii_or_malformed_fields_raise_protocol_error() -> None:
@@ -95,14 +118,14 @@ def test_non_ascii_or_malformed_fields_raise_protocol_error() -> None:
     with pytest.raises(ProtocolError):
         Did(prefix="ÉUPRAMA", number=1, suffix="ABCDE").to_struct()
     with pytest.raises(ProtocolError):
-        Did(prefix="EUPRAMA", number=1, suffix="ABCDEFG").to_struct()  # would truncate
+        Did(prefix="EUPRAMA", number=1, suffix="ABCDEFGH").to_struct()  # would truncate
 
 
-_PREFIX = st.text(alphabet=string.ascii_uppercase, min_size=1, max_size=8)
-_SUFFIX = st.text(alphabet=string.ascii_uppercase, min_size=5, max_size=5)
+_PREFIX = st.text(alphabet=string.ascii_uppercase, min_size=1, max_size=7)
+_SUFFIX = st.text(alphabet=string.ascii_uppercase, min_size=1, max_size=7)
 
 
-@given(prefix=_PREFIX, number=st.integers(0, 999_999), suffix=_SUFFIX)
+@given(prefix=_PREFIX, number=st.integers(0, 2**31 - 1), suffix=_SUFFIX)
 @settings(max_examples=100)
 def test_struct_and_text_round_trip_for_any_valid_did(
     prefix: str, number: int, suffix: str

@@ -43,12 +43,15 @@ and the `p2p_did`, `p2p_license` and `signaling_servers` fields from the device 
 ## DID struct (20 bytes)
 
 ```
-off  0..7   prefix, ASCII, NUL-padded      "EUPRAMA\0"
-off  8..11  number, u32 big-endian          123456 → 00 01 E2 40
-off 12..16  suffix, 5 ASCII                 "ABCDE"
-off 17..19  zero padding
-text form   EUPRAMA-123456-ABCDE
+off  0..7   prefix, 1..7 ASCII capitals, NUL-padded   "EUPRAMA\0"
+off  8..11  number, u32 big-endian, below 2**31       123456 → 00 01 E2 40
+off 12..19  suffix, 1..7 ASCII capitals, NUL-padded   "ABCDE\0\0\0"
+text form   EUPRAMA-123456-ABCDE (the number at least six digits, zero-padded)
 ```
+
+These are the bounds the eufy app's P2P stack accepts **[declared]**; it refuses any
+other id (a longer prefix or suffix, digits in the suffix) before sending a packet. The
+library skips a station with such an id (`skipped_devices`, reason `bad_did`).
 
 ## Discovery and punch
 

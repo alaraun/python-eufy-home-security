@@ -380,6 +380,9 @@ async def test_a_discovery_reports_a_station_it_built_after_the_first() -> None:
 ODD_CAMERA_SN = "T8160-BAD_0001"
 VACUUM_SN = "T2266P1000000001"
 ORPHAN_SN = "T8161P1000000009"
+LONG_DID_STATION_SN = "T8030P3000000001"
+LONG_DID_CAMERA_SN = "T8113P3000000002"
+LONG_DID = "TESTPRA-000123456-ABCDE12345"  # 9 digits, 10-character suffix
 
 
 class BadSerialCloud(StubCloud):
@@ -406,6 +409,16 @@ class BadSerialCloud(StubCloud):
             CloudDevice(device_sn=VACUUM_SN, device_type=0, name="Vacuum"),
             CloudDevice(
                 device_sn=ORPHAN_SN, device_type=19, name="Lost", station_sn="T8030P9999999999"
+            ),
+            CloudDevice(
+                device_sn=LONG_DID_STATION_SN, device_type=18, name="Far", p2p_did=LONG_DID
+            ),
+            CloudDevice(
+                device_sn=LONG_DID_CAMERA_SN,
+                device_type=7,
+                name="Behind far",
+                station_sn=LONG_DID_STATION_SN,
+                channel=0,
             ),
         ]
 
@@ -434,11 +447,22 @@ async def test_discover_skips_and_lists_devices_it_cannot_build(
     assert [(s.device_sn_redacted, s.reason) for s in eufy.skipped_devices] == [
         ("empty", "bad_serial"),
         (redact_serial(ODD_CAMERA_SN), "bad_serial"),
+        (redact_serial(LONG_DID_STATION_SN), "bad_did"),
         (redact_serial(VACUUM_SN), "no_did"),
         (redact_serial(ORPHAN_SN), "orphan"),
+        (redact_serial(LONG_DID_CAMERA_SN), "orphan"),
     ]
     skipped = [r for r in caplog.records if "skipping device" in r.getMessage()]
-    assert [r.levelname for r in skipped] == ["WARNING", "WARNING", "INFO", "WARNING"]
+    assert [r.levelname for r in skipped] == [
+        "WARNING",
+        "WARNING",
+        "WARNING",
+        "INFO",
+        "WARNING",
+        "WARNING",
+    ]
+    assert "its P2P id is not one local P2P accepts" in skipped[2].getMessage()
+    assert LONG_DID not in caplog.text
     assert "skipping device empty:" in skipped[0].getMessage()
     assert all(ODD_CAMERA_SN not in r.getMessage() for r in skipped)  # redacted
 
