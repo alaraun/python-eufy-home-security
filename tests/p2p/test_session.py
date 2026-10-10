@@ -419,6 +419,24 @@ async def test_arm_takes_only_its_own_reply_as_the_result(station: FakeStation) 
     assert not any(isinstance(e, GuardModeChanged) and e.mode == GuardMode.HOME for e in events)
 
 
+async def test_a_dump_key_the_library_does_not_read_is_kept_and_logged_once(
+    station: FakeStation, caplog: pytest.LogCaptureFixture
+) -> None:
+    station.dump_extra = {"future_list": [{"channel": 0}], "db_bypass_str": []}
+    session = make_session(station, Provider(station))
+    caplog.set_level(logging.INFO, logger="eufy_home_security.p2p.session")
+    try:
+        dump = await session.async_get_params(expect_channels={0})
+        await session.async_get_params(expect_channels={0})
+    finally:
+        await session.async_close()
+    assert dump.unread == {"future_list": [{"channel": 0}]}
+    assert any("future_list" in obj for obj in dump.received)
+    assert session.unread_dump_keys == {"future_list"}
+    logged = [r for r in caplog.records if "future_list" in r.getMessage()]
+    assert len(logged) == 1
+
+
 @pytest.mark.parametrize(("cipher", "trusted"), [(FrameCipher.GCM, True), (FrameCipher.ECB, False)])
 async def test_state_dumps_are_trusted_only_under_gcm(
     station: FakeStation, cipher: FrameCipher, trusted: bool

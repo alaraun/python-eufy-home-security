@@ -269,6 +269,10 @@ chunks:
   lists; the library files these under the channel, base64-decoded once, and keeps a
   `params` value of the same id in the same object. The T8160s on that station have no
   entries.
+- **Keys the library does not read (library).** Any other top-level key is kept as
+  received (`ParamDump.unread`, `ParamDump.received`), logged once per session at INFO
+  and listed in `StationSession.unread_dump_keys`; `eufy-security status --received`
+  prints the dump's objects as decrypted.
 - **Group by `dev_type`.** The same `param_type` appears once per device (three
   batteries, for example), so flattening loses data.
 - **A standalone device has no 255 block [verified].** A T8170 (fw 3.3.5.4) answers

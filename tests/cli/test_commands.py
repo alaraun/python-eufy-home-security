@@ -171,6 +171,17 @@ async def test_status_human_json_raw(
     assert "SET_ARMING" in capsys.readouterr().out
 
 
+async def test_status_received_prints_every_key_of_the_dump(
+    fake: FakeStation, tmp_path: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake.dump_extra = {"future_list": [1]}
+    assert await run(["--host", "127.0.0.1", "status", "--received"], tmp_path) == 0
+    objects = json.loads(capsys.readouterr().out)
+    station_block = next(o for o in objects if "future_list" in o)
+    assert station_block["future_list"] == [1]
+    assert any(p["param_type"] == 1224 for p in station_block["params"])
+
+
 class ListedCloud(StubCloud):
     """The stub cloud with the camera on an unbundled product code the cloud describes."""
 

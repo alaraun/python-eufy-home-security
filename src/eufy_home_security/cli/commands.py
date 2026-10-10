@@ -327,7 +327,10 @@ async def cmd_status(ctx: Context) -> int:
         station = await _select_refreshing(ctx, eufy, serial or ctx.args.station)
         state = await station.async_update(wake=True)  # an explicit read wakes it
         name = station.name
-        if ctx.args.json:
+        if ctx.args.received:
+            dump = await station.session.async_get_params(expect_channels=station.channels)
+            print(json.dumps(dump.received, indent=2))
+        elif ctx.args.json:
             print(json.dumps(render.status_json(state, name=name), indent=2))
         elif ctx.args.raw:
             print(render.render_raw_params(state))

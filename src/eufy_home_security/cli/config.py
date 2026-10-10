@@ -179,6 +179,11 @@ def build_parser() -> argparse.ArgumentParser:
     shape = status.add_mutually_exclusive_group()
     shape.add_argument("--json", action="store_true", help="machine-readable output")
     shape.add_argument("--raw", action="store_true", help="every parameter, with names, per device")
+    shape.add_argument(
+        "--received",
+        action="store_true",
+        help="the parameter dump's JSON objects as decrypted, every key (carries identifiers)",
+    )
 
     command("coverage", "where the model settings and the station's dump disagree")
 

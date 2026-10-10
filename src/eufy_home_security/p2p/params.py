@@ -40,6 +40,9 @@ _SERIAL_SHAPE = re.compile(r"T[0-9A-Z]{15}")
 BYPASS_KEY = "db_bypass_str"
 #: Frame-level (not per-param) fields worth keeping.
 _META_KEYS = ("main_sw_version", "sec_sw_version", "hb_bind_type", "app_cloud_encrypt")
+#: Every top-level key :meth:`ParamDump.ingest` reads; any other lands in
+#: :attr:`ParamDump.unread`.
+READ_KEYS: frozenset[str] = frozenset({"params", BYPASS_KEY, *_META_KEYS})
 
 
 class ParamDump:
@@ -48,6 +51,10 @@ class ParamDump:
     def __init__(self) -> None:
         self.devices: dict[int, dict[int, str]] = {}
         self.meta: dict[str, Any] = {}
+        #: Each ingested object as decoded, in arrival order.
+        self.received: list[Mapping[str, Any]] = []
+        #: Top-level keys outside :data:`READ_KEYS`, with the last value received.
+        self.unread: dict[str, Any] = {}
 
     def ingest(
         self, obj: Mapping[str, Any], *, aliases: Mapping[int, Sequence[int]] | None = None
@@ -60,8 +67,13 @@ class ParamDump:
 
         Tolerant of malformed dumps: a non-list ``params``, a non-object entry, an
         id that is not an int or decimal string, or a value that is not a string
-        or int is skipped. Int values are stored as their decimal string.
+        or int is skipped. Int values are stored as their decimal string. ``obj`` is
+        kept in :attr:`received`; its keys outside :data:`READ_KEYS` in :attr:`unread`.
         """
+        self.received.append(obj)
+        for key, extra in obj.items():
+            if key not in READ_KEYS:
+                self.unread[key] = extra
         params = obj.get("params")
         if not isinstance(params, list):
             params = []

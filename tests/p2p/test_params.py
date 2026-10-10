@@ -109,6 +109,16 @@ def test_bypass_entry_keeps_the_params_value_of_the_same_id() -> None:
     assert later.devices[2] == {1019: "0"}
 
 
+def test_ingest_keeps_the_objects_and_the_keys_it_does_not_read() -> None:
+    first = {"params": [_param(255, 1224, "1")], "main_sw_version": "3.8.7.4", "new_key": {"a": 1}}
+    second = {"params": [], "new_key": {"a": 2}, "db_bypass_str": []}
+    dump = ParamDump()
+    dump.ingest(first)
+    dump.ingest(second)
+    assert dump.received == [first, second]
+    assert dump.unread == {"new_key": {"a": 2}}
+
+
 def test_guard_mode_property() -> None:
     dump = ParamDump()
     dump.ingest({"params": [_param(255, 1224, "1")]})
