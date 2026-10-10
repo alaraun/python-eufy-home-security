@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.6](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.5...v0.3.6) (2026-10-10)
+
+
+### Bug Fixes
+
+* read and write a device's settings in the context the app sees it ([#53](https://github.com/alaraun/python-eufy-home-security/issues/53)) ([b457637](https://github.com/alaraun/python-eufy-home-security/commit/b4576370323db7f5897773618183e5f2066e70c0))
+
 ## [0.3.5](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.4...v0.3.5) (2026-10-10)
 
 
