@@ -44,7 +44,7 @@ import os
 import time
 from collections import Counter, deque
 from collections.abc import AsyncIterator, Callable, Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from enum import StrEnum
 from typing import Any, Protocol, cast
@@ -141,16 +141,19 @@ from .media import (
     MediaRecordShape,
     Still,
     StillFormat,
+    VideoCodec,
     VideoVariant,
     _ForeignKeyframeError,
     classify_still,
     decode_record_play_ctrl,
     decode_v1_still,
     download_video_payload,
+    drop_empty_nals,
     generate_media_ecc_key,
     generate_media_rsa_key,
     keyframe_layout_probe,
     media_variant_label,
+    picture_codec,
     record_view_payload,
     start_realtime_media_payload,
     stop_realtime_media_payload,
@@ -522,6 +525,13 @@ class SessionStats:
     know, which a muxer takes as HEVC)."""
     media_keyframes_rejected: int
     """Keyframes dropped because they did not decrypt to Annex-B."""
+    media_codec_overrides: Mapping[str, int]
+    """Keyframes whose picture is another codec than their header names, as
+    ``"<header>-><picture>"`` (``"hevc->h264"``); the stream is muxed as the picture."""
+    media_empty_nals: int
+    """Empty NAL units removed from video frames before muxing."""
+    media_frames_without_nal: int
+    """Video frames dropped because no NAL unit was left in them."""
     media_first_records: tuple[MediaRecordShape, ...]
     """The latest stream's first :data:`MEDIA_SHAPE_RECORDS` video records: layout and
     what the stream did with each (:class:`~.media.MediaRecordShape`)."""
@@ -603,9 +613,12 @@ class _MediaCounters:
     sessions count into their owner's."""
 
     __slots__ = (
+        "codec_overrides",
         "codecs",
+        "empty_nals",
         "failures",
         "first_records",
+        "frames_without_nal",
         "keyframes_rejected",
         "opens",
         "rejected_keyframe",
@@ -617,6 +630,9 @@ class _MediaCounters:
         self.failures: Counter[str] = Counter()
         self.variants: Counter[str] = Counter()
         self.codecs: Counter[str] = Counter()
+        self.codec_overrides: Counter[str] = Counter()
+        self.empty_nals = 0
+        self.frames_without_nal = 0
         self.keyframes_rejected = 0
         self.first_records: list[MediaRecordShape] = []
         """The latest stream's first video records (the stream appends to it)."""
@@ -693,6 +709,8 @@ class MediaStream:
         session._media_counters.first_records = self._shapes
         self._head = b""
         self._probe = ""
+        self._codec: VideoCodec | None = None
+        """The codec the stream's last keyframe picture showed (:func:`~.media.picture_codec`)."""
 
     @property
     def closed(self) -> bool:
@@ -895,6 +913,11 @@ class MediaStream:
             if self._started:
                 self.dropped += 1
             return "waiting_keyframe"
+        if frame.kind is MediaKind.VIDEO:
+            checked = self._checked_video(frame)
+            if checked is None:
+                return "no_nal"
+            frame = checked
         if (
             frame.kind is MediaKind.VIDEO
             and frame.codec is None
@@ -936,6 +959,43 @@ class MediaStream:
         self._closed = True
         self._wake.set()
         self._session._detach_media(self)
+
+    def _checked_video(self, frame: MediaFrame) -> MediaFrame | None:
+        """``frame`` as it may be muxed: empty NAL units removed, the codec its picture
+        shows. None (and video dropped to the next keyframe) when no NAL unit is left."""
+        counters = self._session._media_counters
+        data, empty = drop_empty_nals(frame.data)
+        counters.empty_nals += empty
+        if not data:
+            counters.frames_without_nal += 1
+            self._need_keyframe = True
+            if self._throttle.should_log("no-nal"):
+                _LOGGER.debug(
+                    "media (cmd %d ch%d): dropping a video frame with no NAL unit",
+                    self.command,
+                    self.channel,
+                )
+            return None
+        if frame.is_keyframe:
+            shown = picture_codec(data)
+            if shown is not None and shown is not frame.codec:
+                header = frame.codec.value if frame.codec is not None else "unknown"
+                _count_capped(counters.codec_overrides, f"{header}->{shown.value}")
+                if self._throttle.should_log(("codec-override", shown)):
+                    _LOGGER.debug(
+                        "media (cmd %d ch%d): the video header names %s, the picture is %s; "
+                        "muxing as %s",
+                        self.command,
+                        self.channel,
+                        header,
+                        shown.value,
+                        shown.value,
+                    )
+            self._codec = shown or self._codec
+        codec = self._codec or frame.codec
+        if data is frame.data and codec is frame.codec:
+            return frame
+        return replace(frame, data=data, codec=codec)
 
     def _undecodable_video(self, variant: VideoVariant) -> None:
         """Fail a stream whose video arrives in a protection its key does not decode;
@@ -1128,6 +1188,8 @@ class StationSession:
         self.ecb_state_refused = 0
         """ECB-ciphered state frames (0x044F, 0x047F, the alarm frames) refused on a GCM
         session."""
+        self._ecb_dumps_refused = 0
+        """The parameter dumps (0x044F) among :attr:`ecb_state_refused`."""
         self.still_file_mismatches = 0
         """1308 replies whose ``file`` differed from the requested path."""
         self.still_late_replies = 0
@@ -1479,6 +1541,9 @@ class StationSession:
             media_failures_by_type=dict(media.failures),
             media_frames_by_variant=dict(media.variants),
             media_video_codecs=dict(media.codecs),
+            media_codec_overrides=dict(media.codec_overrides),
+            media_empty_nals=media.empty_nals,
+            media_frames_without_nal=media.frames_without_nal,
             media_keyframes_rejected=media.keyframes_rejected,
             media_first_records=tuple(media.first_records),
             media_rejected_keyframe=media.rejected_keyframe,
@@ -1630,7 +1695,7 @@ class StationSession:
         dump = ParamDump()
         channels = self._expect_channels if expect_channels is None else expect_channels
         expected = {STATION_CHANNEL, *channels}
-        refused_before = self.ecb_state_refused
+        refused_before = self._ecb_dumps_refused
 
         def complete() -> bool:
             # Only the station itself expected: nothing tells the last block, so settle.
@@ -1638,7 +1703,7 @@ class StationSession:
 
         def collect(inbound: Inbound) -> None:
             if inbound.type == FrameType.PARAM_NOTIFY and (obj := inbound.json()) is not None:
-                dump.ingest(obj, aliases=self._block_aliases)
+                self._ingest_dump(dump, obj)
 
         def done(inbound: Inbound) -> ParamDump | None:
             collect(inbound)
@@ -1661,11 +1726,11 @@ class StationSession:
                         label="parameter query",
                     )
                 except DeviceTimeoutError as err:
-                    refused = self.ecb_state_refused - refused_before
+                    refused = self._ecb_dumps_refused - refused_before
                     if not refused:
                         raise
                     raise DeviceTimeoutError(
-                        f"{err}; {refused} ECB-ciphered state frame(s) arrived and were refused "
+                        f"{err}; {refused} ECB-ciphered parameter dump(s) arrived and were refused "
                         "(this firmware may answer the parameter query under ECB only)"
                     ) from err
                 self._last_probe = time.monotonic()
@@ -4017,12 +4082,25 @@ class StationSession:
         )
         self._bus.emit(AccountMismatch(station_sn=self.serial))
 
+    def _ingest_dump(self, dump: ParamDump, obj: Mapping[str, Any]) -> None:
+        """Merge a station's 0x044F object; a standalone device's lone block under an
+        unknown label is filed as its own (:meth:`~.params.ParamDump.ingest` ``other``)."""
+        other = self._station_blocks if self._block_aliases else None
+        dump.ingest(obj, aliases=self._block_aliases, other=other)
+        for label in dump.relabelled:
+            if self._throttle.should_log(("relabelled-block", label)):
+                _LOGGER.debug(
+                    "%s: parameter block labelled %d filed as the device's own",
+                    self._log_name,
+                    label,
+                )
+
     def _handle_params(self, inbound: Inbound) -> None:
         obj = inbound.json()
         if obj is None:
             return
         dump = ParamDump()
-        dump.ingest(obj, aliases=self._block_aliases)
+        self._ingest_dump(dump, obj)
         self._merge_dump(dump, "read" if self._probing else "unsolicited", time.time())
         now = time.monotonic()
         straggler = self._probe_ended_at is not None and now - self._probe_ended_at < PARAM_SETTLE
@@ -4272,6 +4350,8 @@ class StationSession:
         elif frame.cipher != FrameCipher.ECB or self._session_key is None:
             return False
         self.ecb_state_refused += 1
+        if frame.type == FrameType.PARAM_NOTIFY:
+            self._ecb_dumps_refused += 1
         if self._throttle.should_log(("ecb-state", frame.type)):
             _LOGGER.debug(
                 "%s: refusing %s state frame 0x%04x (%d refused)",

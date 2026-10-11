@@ -230,7 +230,8 @@ class MediaRecordShape:
     outcome: str
     """What the stream did with the record: ``"frame"``, ``"keyframe"``,
     ``"not_annex_b"``, ``"foreign_key"``, ``"waiting_keyframe"``, ``"queue_full"``,
-    ``"undecodable"``, ``"error"`` or ``"other_camera"``."""
+    ``"undecodable"``, ``"error"``, ``"other_camera"`` or ``"no_nal"`` (no NAL unit left
+    once the empty ones are removed)."""
     probe: str = ""
     """For a keyframe that did not decrypt to Annex-B: the body layouts that do start
     with a start code (:func:`keyframe_layout_probe`)."""
@@ -360,6 +361,79 @@ class VideoCodec(StrEnum):
         if code == VIDEO_CODEC_H264:
             return cls.H264
         return None
+
+
+_START_CODE = b"\x00\x00\x01"
+#: NAL units :func:`picture_codec` reads before giving up.
+_CODEC_NALS = 8
+#: HEVC NAL types that open a picture group: IRAP pictures (16-21), VPS, SPS, PPS.
+_HEVC_GOP_TYPES = frozenset({*range(16, 22), 32, 33, 34})
+#: H.264 NAL types that open a picture group: IDR picture, SPS.
+_H264_GOP_TYPES = frozenset({5, 7})
+
+
+def annex_b_nals(data: bytes) -> list[tuple[int, int]]:
+    """``(start code offset, NAL header offset)`` of each NAL unit in Annex-B ``data``."""
+    out: list[tuple[int, int]] = []
+    i = data.find(_START_CODE)
+    while i != -1:
+        code = i - 1 if i > 0 and data[i - 1] == 0 else i
+        out.append((code, i + len(_START_CODE)))
+        i = data.find(_START_CODE, i + len(_START_CODE))
+    return out
+
+
+def _nal_codec(header: bytes) -> VideoCodec | None:
+    """The codec a picture-group NAL header belongs to; None for any other NAL.
+
+    The two sets are disjoint: an H.264 SPS or IDR read as HEVC is an unspecified type or
+    a non-zero layer, an HEVC parameter set or IRAP read as H.264 a type other than 5 or 7.
+    """
+    if len(header) < 2 or header[0] & 0x80:
+        return None
+    b0, b1 = header[0], header[1]
+    layer = ((b0 & 1) << 5) | (b1 >> 3)
+    if (b0 >> 1) & 0x3F in _HEVC_GOP_TYPES and layer == 0 and b1 & 7:
+        return VideoCodec.HEVC
+    if b0 & 0x1F in _H264_GOP_TYPES and b0 & 0x60:
+        return VideoCodec.H264
+    return None
+
+
+def picture_codec(data: bytes) -> VideoCodec | None:
+    """The codec a keyframe's Annex-B NAL headers show, or None when none tells.
+
+    A HomeBase 2 camera streams H.264 while its video header names HEVC, so the picture,
+    not the header, decides the codec a stream is muxed with.
+    """
+    for _, nal in annex_b_nals(data)[:_CODEC_NALS]:
+        codec = _nal_codec(data[nal : nal + 2])
+        if codec is not None:
+            return codec
+    return None
+
+
+def drop_empty_nals(data: bytes) -> tuple[bytes, int]:
+    """Annex-B ``data`` without its empty NAL units, and how many were dropped.
+
+    A NAL unit is empty when its start code is followed by the next one or by the end.
+    ``data`` without a start code, or with no empty unit, is returned as is; a frame of
+    empty units only comes back empty.
+    """
+    spans = annex_b_nals(data)
+    if not spans:
+        return data, 0
+    ends = [code for code, _ in spans[1:]] + [len(data)]
+    keep: list[tuple[int, int]] = []
+    for (code, nal), end in zip(spans, ends, strict=True):
+        if end > nal and (data[end - 1] or data[nal:end].strip(b"\x00")):
+            keep.append((code, end))
+    empty = len(spans) - len(keep)
+    if not empty:
+        return data, 0
+    if not keep:
+        return b"", empty
+    return data[: spans[0][0]] + b"".join(data[code:end] for code, end in keep), empty
 
 
 def ms_to_pts(milliseconds: int) -> int:

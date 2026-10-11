@@ -2218,6 +2218,76 @@ async def test_a_corrupt_keyframe_with_the_pinned_key_still_warns(
     assert stats.media_rejected_keyframe.record_len == len(corrupt) + 22
 
 
+#: An H.264 keyframe (SPS, PPS, IDR) and P-frame, as a HomeBase 2 camera sends them.
+H264_KEYFRAME = (
+    b"\x00\x00\x00\x01\x67\x4d\x00\x1f"
+    + b"\x00\x00\x00\x01\x68\xee\x3c\x80"
+    + b"\x00\x00\x00\x01\x65"
+    + bytes((i * 5 + 1) & 0xFF for i in range(300))
+)
+H264_PFRAME = b"\x00\x00\x00\x01\x41\x9a" + bytes(range(1, 60))
+
+
+def _rsa_stream(station: FakeStation) -> tuple[StationSession, MediaStream, Any]:
+    _, rsa_key = generate_media_rsa_key()
+    session = make_session(station, Provider(station))
+    stream = MediaStream(
+        session,
+        command=1003,
+        channel=0,
+        decoder=MediaDecoder(rsa_key),
+        stop_body=lambda: (0, b""),
+        first_frame_timeout=1.0,
+        idle_timeout=1.0,
+    )
+    return session, stream, rsa_key
+
+
+async def test_a_stream_takes_its_codec_from_the_keyframe_picture(station: FakeStation) -> None:
+    session, stream, rsa_key = _rsa_stream(station)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)), clear=H264_KEYFRAME)
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))  # header: HEVC
+    stream._feed(FrameType.VIDEO_FRAME, video_record(H264_PFRAME, keyframe=False))
+    key, pframe = await anext(stream), await anext(stream)
+    assert (key.codec, pframe.codec) == (VideoCodec.H264, VideoCodec.H264)
+    assert key.data == H264_KEYFRAME
+    stats = session.stats()
+    assert stats.media_codec_overrides == {"hevc->h264": 1}
+    assert [s.codec for s in stats.media_first_records] == ["hevc", "hevc"]  # the headers
+
+
+async def test_a_keyframe_whose_picture_matches_its_header_keeps_the_header_codec(
+    station: FakeStation,
+) -> None:
+    session, stream, rsa_key = _rsa_stream(station)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    assert (await anext(stream)).codec is VideoCodec.HEVC
+    assert session.stats().media_codec_overrides == {}
+
+
+async def test_empty_nal_units_never_reach_the_reader(station: FakeStation) -> None:
+    session, stream, rsa_key = _rsa_stream(station)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)), clear=H264_KEYFRAME)
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    with_empty = H264_PFRAME + b"\x00\x00\x00\x01"  # a trailing start code: an empty unit
+    stream._feed(FrameType.VIDEO_FRAME, video_record(with_empty, keyframe=False))
+    only_empty = b"\x00\x00\x00\x01\x00\x00\x00\x01"
+    stream._feed(FrameType.VIDEO_FRAME, video_record(only_empty, keyframe=False))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(H264_PFRAME, keyframe=False))
+    frames = [await anext(stream), await anext(stream)]
+    assert [f.data for f in frames] == [H264_KEYFRAME, H264_PFRAME]
+    assert not stream._frames, "after a frame with no NAL unit, video waits for a keyframe"
+    stats = session.stats()
+    assert (stats.media_empty_nals, stats.media_frames_without_nal) == (3, 1)
+    assert [s.outcome for s in stats.media_first_records] == [
+        "keyframe",
+        "frame",
+        "no_nal",
+        "waiting_keyframe",
+    ]
+
+
 async def test_trigger_frame_plays_on_a_short_lived_session_and_closes_it(
     station: FakeStation,
 ) -> None:
@@ -2655,6 +2725,52 @@ async def test_a_standalone_block_is_filed_under_the_station_and_its_channel(
     finally:
         await session.async_close()
         station.stop()
+
+
+async def test_a_standalone_block_under_an_unknown_label_is_the_devices_own() -> None:
+    # A T8442 labels its one block 1000, not its cloud device type 46.
+    station = FakeStation(receipt_len=STANDALONE_RECEIPT_LEN, params={1000: {1101: "64"}})
+    await station.start()
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn,
+        provider,
+        host="127.0.0.1",
+        port=station.discovery_port,
+        block_aliases={46: (255, 0)},
+        expect_channels={0},
+    )
+    try:
+        dump = await session.async_get_params(timeout=2.0)
+        assert dump.devices[255] == dump.devices[0] == {1101: "64"}
+        assert dump.relabelled == {1000}
+    finally:
+        await session.async_close()
+        station.stop()
+
+
+async def test_a_parameter_timeout_blames_ecb_only_for_a_refused_dump(
+    station: FakeStation,
+) -> None:
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        station.answer_params = False
+        loop = asyncio.get_running_loop()
+        loop.call_later(0.1, lambda: station.send_alarm_mode(1, cipher=FrameCipher.ECB))
+        with pytest.raises(DeviceTimeoutError) as exc:
+            await session.async_get_params(timeout=0.5)
+        assert "ECB" not in str(exc.value)
+        assert session.ecb_state_refused == 1
+
+        loop.call_later(0.1, lambda: station.send_param_dump(cipher=FrameCipher.ECB))
+        with pytest.raises(DeviceTimeoutError, match="ECB-ciphered parameter dump"):
+            await session.async_get_params(timeout=0.5)
+    finally:
+        await session.async_close()
 
 
 async def test_on_demand_session_closes_idle_and_reconnects(

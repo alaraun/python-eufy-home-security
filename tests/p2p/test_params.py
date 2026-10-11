@@ -223,3 +223,32 @@ def test_any_json_ingests_and_reads_without_raising(params: Any) -> None:
     dump.flatten()
     dump.sub_device_serials()
     assert all(isinstance(v, str) for p in dump.devices.values() for v in p.values())
+
+
+def test_a_lone_block_under_an_unknown_label_is_filed_under_other() -> None:
+    dump = ParamDump()
+    dump.ingest(
+        {"params": [_param(1000, 1101, "77"), _param(1000, 1224, "0")]},
+        aliases={46: (255, 0)},
+        other=(255, 0),
+    )
+    assert dump.devices[255] == dump.devices[0] == {1101: "77", 1224: "0"}
+    assert 1000 not in dump.devices
+    assert dump.relabelled == {1000}
+
+
+def test_other_leaves_known_labels_and_mixed_objects_alone() -> None:
+    known = ParamDump()
+    known.ingest({"params": [_param(46, 1101, "1")]}, aliases={46: (255, 0)}, other=(255, 0))
+    station = ParamDump()
+    station.ingest({"params": [_param(255, 1101, "2")]}, other=(255, 0))
+    mixed = ParamDump()
+    mixed.ingest(
+        {"params": [_param(1000, 1101, "3"), _param(1, 1101, "4")]},
+        aliases={46: (255, 0)},
+        other=(255, 0),
+    )
+    assert known.devices == {255: {1101: "1"}, 0: {1101: "1"}}
+    assert station.devices == {255: {1101: "2"}}
+    assert mixed.devices == {1000: {1101: "3"}, 1: {1101: "4"}}
+    assert known.relabelled == station.relabelled == mixed.relabelled == set()

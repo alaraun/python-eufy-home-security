@@ -55,15 +55,25 @@ class ParamDump:
         self.received: list[Mapping[str, Any]] = []
         #: Top-level keys outside :data:`READ_KEYS`, with the last value received.
         self.unread: dict[str, Any] = {}
+        #: Block labels filed under ``other`` (see :meth:`ingest`).
+        self.relabelled: set[int] = set()
 
     def ingest(
-        self, obj: Mapping[str, Any], *, aliases: Mapping[int, Sequence[int]] | None = None
+        self,
+        obj: Mapping[str, Any],
+        *,
+        aliases: Mapping[int, Sequence[int]] | None = None,
+        other: Sequence[int] | None = None,
     ) -> int:
         """Merge one decoded 0x044F object; return the number of params merged.
 
         ``aliases`` files a block under other ``dev_type`` values instead of its own: a
         standalone device's block (labelled its cloud ``device_type``) goes under the
         station (255) and the device's own channel (see :func:`standalone_aliases`).
+        ``other`` is where an object's block goes when it is the only block and its
+        label is neither 255 nor in ``aliases``: a standalone device that labels its
+        block with another value (a T8442 uses 1000). The label lands in
+        :attr:`relabelled`.
 
         Tolerant of malformed dumps: a non-list ``params``, a non-object entry, an
         id that is not an int or decimal string, or a value that is not a string
@@ -79,6 +89,16 @@ class ParamDump:
             params = []
         merged = 0
         own: set[tuple[int, int]] = set()
+        targets = dict(aliases or {})
+        if other:
+            labels = {json_int(p.get("dev_type", 0)) for p in params if isinstance(p, Mapping)} - {
+                None
+            }
+            if len(labels) == 1:
+                (label,) = labels
+                if label is not None and label != STATION_CHANNEL and label not in targets:
+                    targets[label] = tuple(other)
+                    self.relabelled.add(label)
         for param in params:
             if not isinstance(param, Mapping):
                 continue
@@ -91,7 +111,7 @@ class ParamDump:
                 value = str(value)
             elif not isinstance(value, str):
                 continue
-            for target in aliases.get(dev, (dev,)) if aliases else (dev,):
+            for target in targets.get(dev, (dev,)):
                 self.devices.setdefault(target, {})[pid] = value
                 own.add((target, pid))
             merged += 1

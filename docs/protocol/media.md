@@ -397,7 +397,16 @@ off 22..     body: datalen bytes on a P-frame; on a keyframe the rest of the rec
 ```
 
 The codec byte matches the read-only `support_video_codec` property of the thing
-description (`0:H264, 1:H265`). Every camera observed streams HEVC.
+description (`0:H264, 1:H265`). It is not always the codec of the picture: an eufyCam 2C
+Pro behind a HomeBase 2 (fw 3.4.2.6h) names HEVC and streams H.264 (SPS `0x67`, P-slices
+`0x41`) [reporter's diagnostics]. A stream therefore takes its codec from the first NAL
+unit of each keyframe that opens a picture group (an HEVC VPS/SPS/PPS or IRAP picture of
+layer 0, an H.264 SPS or IDR), and falls back to byte 5 when none does
+(`media.picture_codec`); the muxer declares that codec.
+
+Empty NAL units (a start code followed by another or by the end of the frame) are
+removed before muxing, and a frame left with none is dropped with the video waiting for
+the next keyframe: a consumer's parser may index into an empty unit.
 
 **Audio frame payload:**
 
@@ -552,6 +561,8 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
   stream), `media_first_records` (the latest stream's first 12 video records:
   variant, subheader bytes, keyframe flag, codec, lengths, size, the first 5 body
   bytes as delivered, and what the stream did with each), and
+  `media_codec_overrides` (keyframes whose picture is another codec than their header,
+  as `"hevc->h264"`), `media_empty_nals` and `media_frames_without_nal`,
   `media_keyframes_rejected` with `media_rejected_keyframe`: a keyframe that did not
   decrypt to Annex-B, with `probe` naming the body layouts that do start with a start
   code (`raw@<n>`: clear from offset n; `ecb@<n>`: one 128-byte ECB run from n under

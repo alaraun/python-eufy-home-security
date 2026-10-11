@@ -281,6 +281,10 @@ chunks:
   so a hub's block cannot be told apart by that number; the library applies the rule
   only to a station whose cloud `parent_sn` is its own serial, and files that block
   under 255 and under the device's channel (`params.standalone_aliases`).
+  A standalone T8442 (fw 2.1.0.2) labels its one block `1000` instead of its cloud
+  `device_type` 46 [reporter's log]: on a standalone session, an object whose only block
+  carries a label that is neither 255 nor the cloud `device_type` is filed the same way
+  (`ParamDump.relabelled` names the label).
 - The dump is complete for the station once `dev_type 255` includes 1224. Keep
   listening about 1 s longer for sub-device blocks — unless every paired channel has
   already reported: on a HomeBase 3 the sub-device blocks ride in the same frame as

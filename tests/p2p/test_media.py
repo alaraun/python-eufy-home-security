@@ -706,3 +706,65 @@ def test_video_record_shape_shows_the_header_fields_and_the_body_head() -> None:
     assert media.video_record_shape(record, None, outcome="frame", head=b"\0\0\0\1\x67").head == (
         "0000000167"
     )
+
+
+SC = b"\x00\x00\x00\x01"
+
+
+@pytest.mark.parametrize(
+    ("data", "codec"),
+    [
+        (SC + b"\x40\x01\x0c" + SC + b"\x42\x01\x01", media.VideoCodec.HEVC),  # VPS, SPS
+        (SC + b"\x26\x01\xaf", media.VideoCodec.HEVC),  # IDR_W_RADL alone
+        (SC + b"\x67\x4d\x00" + SC + b"\x68\xee", media.VideoCodec.H264),  # SPS, PPS
+        (SC + b"\x27\x4d\x00", media.VideoCodec.H264),  # SPS with nal_ref_idc 1
+        (SC + b"\x09\xf0" + SC + b"\x65\x88", media.VideoCodec.H264),  # AUD, then IDR
+        (b"\x00\x00\x01\x67\x42\x00", media.VideoCodec.H264),  # 3-byte start code
+        (SC + b"\x41\x9a\x00", None),  # an H.264 P-slice tells nothing
+        (SC + b"\x02\x01\xd0", None),  # an HEVC trailing picture tells nothing
+        (b"HEVCDATA", None),
+    ],
+)
+def test_picture_codec_reads_the_parameter_sets_and_irap_pictures(
+    data: bytes, codec: media.VideoCodec | None
+) -> None:
+    assert media.picture_codec(data) is codec
+
+
+def test_no_h264_picture_group_header_reads_as_hevc_and_back() -> None:
+    profiles = (0x42, 0x4D, 0x58, 0x64)  # the byte after an SPS header: profile_idc
+    for ref_idc in (1, 2, 3):
+        for nal_type in (5, 7):
+            for b1 in profiles:
+                header = bytes(((ref_idc << 5) | nal_type, b1))
+                assert media._nal_codec(header) is media.VideoCodec.H264
+    for nal_type in (*range(16, 22), 32, 33, 34):
+        for tid in range(1, 8):
+            header = bytes((nal_type << 1, tid))
+            assert media._nal_codec(header) is media.VideoCodec.HEVC
+
+
+def test_drop_empty_nals_keeps_a_clean_frame_as_is() -> None:
+    frame = SC + b"\x41\x9a\x01" + b"\x00\x00\x01\x41\x02"
+    assert media.drop_empty_nals(frame)[0] is frame
+    assert media.drop_empty_nals(b"P-FRAME!") == (b"P-FRAME!", 0)  # no start code: untouched
+
+
+@pytest.mark.parametrize(
+    ("data", "clean", "dropped"),
+    [
+        (SC + b"\x41\x01" + SC, SC + b"\x41\x01", 1),  # trailing start code
+        (SC + SC + b"\x41\x01", SC + b"\x41\x01", 1),  # back-to-back start codes
+        (
+            SC + b"\x41\x01" + SC + b"\x00\x00" + SC + b"\x41\x02",
+            SC + b"\x41\x01" + SC + b"\x41\x02",
+            1,
+        ),
+        (SC + SC, b"", 2),
+        (b"", b"", 0),
+    ],
+)
+def test_drop_empty_nals_removes_units_with_no_bytes(
+    data: bytes, clean: bytes, dropped: int
+) -> None:
+    assert media.drop_empty_nals(data) == (clean, dropped)
