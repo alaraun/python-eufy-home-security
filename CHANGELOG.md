@@ -4,6 +4,19 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.10](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.9...v0.3.10) (2026-10-11)
+
+
+### Features
+
+* MediaClip.codec names the clip's video codec; the documented MP4 remux tags hvc1 for HEVC only ([140b555](https://github.com/alaraun/python-eufy-home-security/commit/140b555e18fe63528c7d9c9de936ed0adec1cd21))
+* SessionStats.media_failures_by_channel counts failed media opens per camera channel ([140b555](https://github.com/alaraun/python-eufy-home-security/commit/140b555e18fe63528c7d9c9de936ed0adec1cd21))
+
+
+### Bug Fixes
+
+* a station whose RSA CONN_INIT names cipher 0, or wraps its static key, comes up; its state is taken unauthenticated ([140b555](https://github.com/alaraun/python-eufy-home-security/commit/140b555e18fe63528c7d9c9de936ed0adec1cd21))
+
 ## [0.3.9](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.8...v0.3.9) (2026-10-11)
 
 
