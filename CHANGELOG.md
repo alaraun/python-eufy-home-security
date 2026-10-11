@@ -4,6 +4,15 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.9](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.8...v0.3.9) (2026-10-11)
+
+
+### Bug Fixes
+
+* a live stream takes its codec from the keyframe picture; a HomeBase 2 camera streams H.264 under an HEVC header ([d736e44](https://github.com/alaraun/python-eufy-home-security/commit/d736e444ba14ff029c216a1b82a299830b7edada))
+* a standalone device whose parameter block carries an unknown label (T8442: 1000) is read as its own ([d736e44](https://github.com/alaraun/python-eufy-home-security/commit/d736e444ba14ff029c216a1b82a299830b7edada))
+* empty NAL units are removed from video before muxing ([d736e44](https://github.com/alaraun/python-eufy-home-security/commit/d736e444ba14ff029c216a1b82a299830b7edada))
+
 ## [0.3.8](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.7...v0.3.8) (2026-10-10)
 
 
