@@ -54,7 +54,12 @@ from eufy_home_security.exceptions import (
 )
 from eufy_home_security.models import STATION_CHANNEL, GuardMode
 from eufy_home_security.p2p import transport as transport_module
-from eufy_home_security.p2p.crypto import CONN_INIT_ECC_VERSION, FRAME_PLAIN
+from eufy_home_security.p2p.crypto import (
+    CONN_INIT_ECC_VERSION,
+    FRAME_PLAIN,
+    FRAME_SESSION_ECB,
+    FRAME_STATIC_ECB,
+)
 from eufy_home_security.p2p.did import Did, static_key
 from eufy_home_security.p2p.media import (
     MediaDecoder,
@@ -1892,6 +1897,7 @@ async def test_rejected_media_open_raises_the_code(station: FakeStation) -> None
     stats = session.stats()
     assert stats.media_opens == 1
     assert stats.media_failures_by_type == {"CommandRejectedError": 1}
+    assert stats.media_failures_by_channel == {"0": {"CommandRejectedError": 1}}
 
 
 async def test_a_wake_failure_receipt_fails_the_live_open_at_once(
@@ -3476,7 +3482,10 @@ class RsaProvider:
             rsa_key = self.station.rsa_private_key_pem.lower()  # lowercased = unparsable
         else:
             rsa_key = self.station.rsa_private_key_pem
-        return P2PCredentials(SYNTHETIC.account_id, "user", "", rsa_private_key=rsa_key)
+        named = self.station.cipher_id if cipher_id is None else cipher_id
+        return P2PCredentials(
+            SYNTHETIC.account_id, "user", "", cipher_id=named, rsa_private_key=rsa_key
+        )
 
 
 def make_rsa_session(
@@ -3573,6 +3582,62 @@ async def test_a_push_under_the_rsa_session_key_is_authenticated(station: FakeSt
         True,
         True,
     )
+
+
+DOORBELL_SN = "T8200P2000054321"
+"""A synthetic serial of a model outside the app's static-key fallback list."""
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        (SYNTHETIC.station_sn, 42, True, None, FRAME_SESSION_ECB),
+        (SYNTHETIC.station_sn, 0, False, None, FRAME_STATIC_ECB),
+        (DOORBELL_SN, 0, False, FRAME_PLAIN, FRAME_PLAIN),
+    ],
+    ids=["static-key-wrapped", "no-cipher-homebase", "no-cipher-clear"],
+)
+async def test_a_static_key_rsa_session_takes_the_station_state_unauthenticated(
+    station: FakeStation, case: tuple[str, int, bool, int | None, int], short_settle: None
+) -> None:
+    """An RSA session whose key is the static key takes the station's state under the
+    static key or in clear and authenticates no push. It sends type 2 after a wrapped
+    key; with no cipher named, type 1 to a HomeBase-family model, clear to any other."""
+    serial, cipher_id, rsa_key, station_encryption, sent = case
+    station.serial = serial
+    station.static_key = static_key(serial, station.did)
+    station.static_key_session = True
+    station.cipher_id = cipher_id
+    station.station_encryption = station_encryption
+    station.reply_to_settings = True
+    session = StationSession(
+        serial,
+        RsaProvider(station, rsa_key=rsa_key),
+        host="127.0.0.1",
+        port=station.discovery_port,
+    )
+    station.conn_init_version = 1
+    events: list[Event] = []
+    session.subscribe(events.append)
+    try:
+        await session.async_connect()
+        dump = await session.async_get_params()
+        outcome = await session.async_send_command(
+            1277, channel=0, payload={"night_sion": 1, "channel": 0}
+        )
+        station.push_camera_event()
+        await wait_until(lambda: any(isinstance(e, SecurityEvent) for e in events))
+        stats = session.stats()
+        assert session.rsa_session
+    finally:
+        await session.async_close()
+    assert stats.static_key_session
+    assert dump.station == station.params[STATION_CHANNEL]
+    assert outcome is CommandOutcome.APPLIED
+    assert station.client_encryptions == {sent}
+    assert (stats.ecb_state_refused, stats.cipher_id) == (0, cipher_id)
+    push = next(e for e in events if isinstance(e, SecurityEvent))
+    assert (push.session_ecb, push.authenticated) == (False, False)
 
 
 async def test_an_rsa_conn_init_without_an_rsa_key_is_unusable_after_one_refresh(

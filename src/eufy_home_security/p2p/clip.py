@@ -4,7 +4,7 @@ A clip is what a consumer stores as a video file: a stored recording downloaded 
 station's disk (:meth:`~eufy_home_security.station.Station.async_download_recording`)
 or a stretch of a live stream (:meth:`~.broadcast.StreamBroadcast.async_capture`). Both
 come as :class:`~.media.MediaFrame` sequences; this module muxes them with the same
-:class:`~.encoder.StreamEncoder` the live view uses (HEVC and AAC carried untouched,
+:class:`~.encoder.StreamEncoder` the live view uses (HEVC or H.264 and AAC carried untouched,
 starting at the first keyframe, following a picture-size change) and hands the bytes to
 the consumer's ``write`` coroutine in chunks of :data:`CLIP_CHUNK_BYTES`.
 
@@ -20,7 +20,7 @@ from datetime import datetime
 from typing import Final
 
 from .encoder import StreamEncoder
-from .media import MediaFrame, MediaKind
+from .media import MediaFrame, MediaKind, VideoCodec
 
 __all__ = ["CLIP_CHUNK_BYTES", "CLIP_CONTENT_TYPE", "ClipWriter", "MediaClip"]
 
@@ -50,6 +50,10 @@ class MediaClip:
     """The last video frame's size."""
     resizes: int
     """Picture-size changes the clip carries (a camera's opening ramp, a zoom)."""
+    codec: VideoCodec | None = None
+    """The video codec the clip carries (HEVC, or H.264 from a camera that sends it);
+    None when no video was written. Pick the MP4 sample tag by it: ``hvc1`` for HEVC
+    only (see ``docs/how-to/home-assistant.md``)."""
     started_at: datetime | None = None
     """When the first frame was recorded: a recording's history ``started_at``, a live
     capture's arrival time of its first keyframe (UTC); None when unknown."""
@@ -146,6 +150,7 @@ class _ClipMuxer:
             width=self.width,
             height=self.height,
             resizes=self.resizes,
+            codec=self._encoder.codec if self.video_frames else None,
             started_at=started_at,
             ended_early=ended_early,
             stopped=stopped,

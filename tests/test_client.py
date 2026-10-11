@@ -1616,6 +1616,22 @@ async def test_the_credential_provider_remembers_the_cipher_a_station_names() ->
         assert "cipher_40_cached" not in station
 
 
+async def test_a_station_naming_no_cipher_gets_credentials_without_a_cipher_fetch() -> None:
+    """Cipher 0 (an RSA CONN_INIT with no session key) needs no cipher keys: only the
+    owner id is fetched."""
+    cloud = FakeCloud(
+        owner_ids={SYNTHETIC.station_sn: OWNER_ID}, cipher_keys={SYNTHETIC.station_sn: "aa" * 32}
+    )
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        await eufy.async_login()
+        cloud.calls.clear()
+        creds = await eufy._credential_provider(SYNTHETIC.station_sn)(refresh=False, cipher_id=0)
+    assert (creds.cipher_id, creds.ecc_private_key, creds.rsa_private_key) == (0, "", None)
+    assert creds.account_id == OWNER_ID
+    assert not [call for call in cloud.calls if call.startswith("cipher:")]
+
+
 async def test_the_credential_provider_stores_a_named_default_cipher() -> None:
     cloud = FakeCloud(
         owner_ids={SYNTHETIC.station_sn: OWNER_ID}, cipher_keys={SYNTHETIC.station_sn: "aa" * 32}

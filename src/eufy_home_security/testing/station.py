@@ -40,6 +40,7 @@ from ..devices.types import model_for_serial
 from ..models import STATION_CHANNEL
 from ..p2p.crypto import (
     CONN_INIT_ECC_VERSION,
+    CONN_INIT_RSA_BLOB_LEN,
     FRAME_PLAIN,
     FRAME_SESSION_ECB,
     FRAME_STATIC_ECB,
@@ -409,6 +410,13 @@ class FakeStation:
     conn_init_encryption: int = FRAME_PLAIN
     """The RSA CONN_INIT's encryption type (subheader byte 3): 0 clear, the 133 bytes the
     app reads as is; otherwise ECB under the static key, padded to 144."""
+    static_key_session: bool = False
+    """An RSA station whose session key is its static key: with :attr:`cipher_id` 0 its
+    CONN_INIT carries no wrapped key (a T8200), otherwise it wraps the static key (a
+    T84A1). Its sealed frames go out under encryption type 1."""
+    station_encryption: int | None = None
+    """Encryption type of an RSA station's sealed frames when set (0: clear); else 1 on a
+    static-key session, 2 otherwise."""
     answer_conn_init: bool = True
     answer_params: bool = True
     params_cipher: int = FrameCipher.GCM
@@ -513,6 +521,8 @@ class FakeStation:
         """The ``payload`` object of every 1003 received through a ``DeviceMsgBean``."""
         self.pings = 0
         """App 1139 pings received (empty 0x0473 frames)."""
+        self.client_encryptions: set[int] = set()
+        """Encryption types of the client's frames an RSA session took under its key."""
         self._last_ping = 0.0
 
     @property
@@ -523,6 +533,30 @@ class FakeStation:
     def rsa_session(self) -> bool:
         """Whether this station answers with the RSA CONN_INIT (:attr:`conn_init_version`)."""
         return self.conn_init_version != CONN_INIT_ECC_VERSION
+
+    @property
+    def rsa_key(self) -> bytes:
+        """An RSA session's AES-128 key: the static key or :data:`RSA_SESSION_KEY`."""
+        return self.static_key if self.static_key_session else RSA_SESSION_KEY
+
+    @property
+    def _sealed_encryption(self) -> int:
+        if self.station_encryption is not None:
+            return self.station_encryption
+        return FRAME_STATIC_ECB if self.static_key_session else FRAME_SESSION_ECB
+
+    def _rsa_seal(self, plain: bytes) -> bytes:
+        if self._sealed_encryption == FRAME_PLAIN:
+            return plain
+        return ecb_encrypt(self.rsa_key, plain)
+
+    @property
+    def _session_encryptions(self) -> frozenset[int]:
+        """Encryption types of client frames an RSA session takes: 2, and on a
+        static-key session 1 and 0 (clear) too."""
+        if self.static_key_session:
+            return frozenset({FRAME_SESSION_ECB, FRAME_STATIC_ECB, FRAME_PLAIN})
+        return frozenset({FRAME_SESSION_ECB})
 
     @property
     def rsa_cipher_key(self) -> rsa.RSAPrivateKey:
@@ -662,9 +696,10 @@ class FakeStation:
         elif (
             self.rsa_session
             and subheader[0] == FrameCipher.ECB
-            and subheader[3] == FRAME_SESSION_ECB
+            and subheader[3] in self._session_encryptions
         ):
-            plain = ecb_decrypt(RSA_SESSION_KEY, payload)
+            self.client_encryptions.add(subheader[3])
+            plain = payload if subheader[3] == FRAME_PLAIN else ecb_decrypt(self.rsa_key, payload)
             if ftype in _SESSION_FRAME_TYPES:
                 self._on_session_frame(ftype, subheader, plain)
             else:
@@ -682,8 +717,11 @@ class FakeStation:
             body = ecb_encrypt(self.static_key, cipher_id + blob)
             subheader = bytes([CONN_INIT_ECC_VERSION, 0, 0xFF, FRAME_STATIC_ECB, 0, 0])
         else:
-            wrapped = self.rsa_cipher_key.public_key().encrypt(RSA_SESSION_KEY, padding.PKCS1v15())
-            body = cipher_id + wrapped + b"\x00"
+            if self.static_key_session and self.cipher_id == 0:
+                body = cipher_id + bytes(CONN_INIT_RSA_BLOB_LEN)  # no key: 132 bytes
+            else:
+                public = self.rsa_cipher_key.public_key()
+                body = cipher_id + public.encrypt(self.rsa_key, padding.PKCS1v15()) + b"\x00"
             if self.conn_init_encryption != FRAME_PLAIN:
                 body = ecb_encrypt(self.static_key, body)
             subheader = bytes([self.conn_init_version, 0, 0xFF, self.conn_init_encryption, 0, 0])
@@ -1051,8 +1089,8 @@ class FakeStation:
             self.params.setdefault(channel, {})[ftype] = str(value)
         result = struct.pack("<i", code) + b"\x00" * 12
         if self.rsa_session:  # the result under the session's key, like every frame
-            subheader = bytes([FrameCipher.ECB, 0, 0xFF, FRAME_SESSION_ECB, 0, 0])
-            result = ecb_encrypt(RSA_SESSION_KEY, result)
+            subheader = bytes([FrameCipher.ECB, 0, 0xFF, self._sealed_encryption, 0, 0])
+            result = self._rsa_seal(result)
             self.send_frame(ftype, result, cipher=FrameCipher.ECB, subheader=subheader)
         else:
             self.send_frame(ftype, result, cipher=FrameCipher.ECB)
@@ -1326,7 +1364,7 @@ class FakeStation:
     def _seal(self, plain: bytes) -> bytes:
         """A body under the session's cipher: GCM, or an RSA session's AES-128-ECB."""
         if self.rsa_session:
-            return ecb_encrypt(RSA_SESSION_KEY, plain)
+            return self._rsa_seal(plain)
         return _gcm_broadcast(self.session_key, plain)
 
     def send_frame(
@@ -1345,7 +1383,7 @@ class FakeStation:
         if self.rsa_session and cipher == FrameCipher.GCM and ftype != FrameType.CONN_INIT:
             if sealed is None:
                 sealed = subheader is None
-            encryption = FRAME_SESSION_ECB if sealed else FRAME_PLAIN
+            encryption = self._sealed_encryption if sealed else FRAME_PLAIN
             if subheader is None:
                 subheader = bytes([FrameCipher.ECB, 0, 0xFF, encryption, 0, 0])
             else:

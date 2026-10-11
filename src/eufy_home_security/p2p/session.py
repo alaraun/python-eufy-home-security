@@ -111,11 +111,13 @@ from ._json import json_int
 from .alarm import ALARM_FRAME_VALUES, decode_alarm_frame
 from .clip import ClipWriter, MediaClip, mux_frames
 from .crypto import (
+    CONN_INIT_NO_CIPHER,
     CONN_INIT_RSA_BLOB_LEN,
     FRAME_PLAIN,
     FRAME_SESSION_ECB,
     FRAME_STATIC_ECB,
     GCM_SEQ_START,
+    STATIC_KEY_FALLBACK_MODELS,
     ConnInit,
     aes_key_from_conn_init,
     ecb_decrypt,
@@ -516,6 +518,8 @@ class SessionStats:
     media_failures_by_type: Mapping[str, int]
     """Streams that ended in an error, by exception class name (a session closed by the
     client is not counted)."""
+    media_failures_by_channel: Mapping[str, Mapping[str, int]]
+    """The same failures by camera channel (``"3"``), then by exception class name."""
     media_frames_by_variant: Mapping[str, int]
     """Media records received, by protection: ``"video:<VideoVariant>"`` and
     ``"audio:<AudioVariant>"`` (:func:`~.media.media_variant_label`)."""
@@ -564,6 +568,9 @@ class SessionStats:
     for the ECIES handshake, any other value for the legacy RSA one; None before a reply."""
     cipher_id: int | None = None
     """The cipher the station named in its last CONN_INIT reply; None before a reply."""
+    static_key_session: bool = False
+    """Whether the current RSA session runs under the static key
+    (:attr:`StationSession.static_key_session`)."""
 
 
 @dataclass(slots=True)
@@ -617,6 +624,7 @@ class _MediaCounters:
         "codecs",
         "empty_nals",
         "failures",
+        "failures_by_channel",
         "first_records",
         "frames_without_nal",
         "keyframes_rejected",
@@ -628,6 +636,7 @@ class _MediaCounters:
     def __init__(self) -> None:
         self.opens = 0
         self.failures: Counter[str] = Counter()
+        self.failures_by_channel: dict[int, Counter[str]] = {}
         self.variants: Counter[str] = Counter()
         self.codecs: Counter[str] = Counter()
         self.codec_overrides: Counter[str] = Counter()
@@ -754,7 +763,7 @@ class MediaStream:
                 else:
                     indices = [] if self._open_index is None else [self._open_index]
                     timed_out = self._session._unanswered_error(self.command, 0, indices)
-                self._session._count_media_failure(timed_out)
+                self._session._count_media_failure(timed_out, self.channel)
                 raise timed_out
             self._wake.clear()
             with contextlib.suppress(TimeoutError):
@@ -1039,7 +1048,7 @@ class MediaStream:
     def _fail(self, error: Exception) -> None:
         if self._closed:
             return
-        self._session._count_media_failure(error)
+        self._session._count_media_failure(error, self.channel)
         _LOGGER.debug("media (cmd %d ch%d) failed: %s", self.command, self.channel, error)
         self._closed = True
         self._error = error
@@ -1250,6 +1259,26 @@ class StationSession:
         """Whether the station answered the RSA CONN_INIT, so the session runs
         AES-128-ECB under the key it carried instead of GCM."""
         return self._aes_key is not None
+
+    @property
+    def static_key_session(self) -> bool:
+        """Whether the RSA session's key is the static key: its CONN_INIT names no cipher,
+        or the key it carries is the static key. Such a session authenticates nothing
+        (the static key follows from the serial and DID): like the app, it takes the
+        station's frames under every encryption type (clear, 1, 2), and none of its
+        pushes is authenticated."""
+        return self._aes_key is not None and self._aes_key == self._static_key
+
+    @property
+    def _session_encryption(self) -> int:
+        """Encryption type of the frames an RSA session sends: 2 under a delivered key;
+        with no cipher named, 1 (static key) to a model of
+        :data:`~.crypto.STATIC_KEY_FALLBACK_MODELS` and 0 (clear) to any other."""
+        if self._cipher_id != CONN_INIT_NO_CIPHER:
+            return FRAME_SESSION_ECB
+        if self.serial.startswith(STATIC_KEY_FALLBACK_MODELS):
+            return FRAME_STATIC_ECB
+        return FRAME_PLAIN
 
     @property
     def max_sessions(self) -> int:
@@ -1539,6 +1568,10 @@ class StationSession:
             account_mismatch_seen=self._account_mismatch_seen,
             media_opens=media.opens,
             media_failures_by_type=dict(media.failures),
+            media_failures_by_channel={
+                str(channel): dict(counts)
+                for channel, counts in sorted(media.failures_by_channel.items())
+            },
             media_frames_by_variant=dict(media.variants),
             media_video_codecs=dict(media.codecs),
             media_codec_overrides=dict(media.codec_overrides),
@@ -1557,6 +1590,7 @@ class StationSession:
             media_slot_channel=self.media_slot_channel,
             conn_init_version=self._conn_init_version,
             cipher_id=self._cipher_id,
+            static_key_session=self.static_key_session,
         )
 
     # ── lifecycle ────────────────────────────────────────────────────────────
@@ -2161,13 +2195,13 @@ class StationSession:
         key = self._require_static_key()
         encryption = FRAME_STATIC_ECB
         if self._aes_key is not None:  # an RSA session: every command under its key
-            key, encryption = self._aes_key, FRAME_SESSION_ECB
+            key, encryption = self._aes_key, self._session_encryption
 
         def match(inbound: Inbound) -> tuple[int, int | None] | None:
             frame = inbound.frame
             if inbound.type != command or len(frame.payload) < 4:
                 return None
-            if self._session_ecb_frame(frame) and len(frame.payload) % 16 == 0:
+            if self._session_key_frame(frame) and len(frame.payload) % 16 == 0:
                 plain = ecb_decrypt(cast(bytes, self._aes_key), frame.payload)
                 return decode_ecb_scalar_result(plain), frame.cipher
             return decode_ecb_scalar_result(frame.payload), frame.cipher
@@ -3596,10 +3630,11 @@ class StationSession:
         self._creds = creds
         self._account_mismatch_reported = False  # a new connection may report it again
         _LOGGER.debug(
-            "%s: %s session key %s",
+            "%s: %s session key %s%s",
             self._log_name,
             "AES-128-ECB" if conn_init.rsa else "GCM",
             Secret(session_key),
+            " (the static key)" if self.static_key_session else "",
         )
         _LOGGER.info("%s: P2P session established via %s", self._log_name, Address(self._host))
         return creds
@@ -3622,6 +3657,11 @@ class StationSession:
             frame_encryption(frame.subheader),
             named,
         )
+        if conn_init.rsa and named == CONN_INIT_NO_CIPHER:
+            # No session key: the app fetches no cipher and keeps the static key.
+            if creds is None or creds.cipher_id != named:
+                creds = await self._load_credentials(refresh=False)
+            return creds, conn_init, static
         if creds is None:
             creds = await self._load_credentials(refresh=False)
         elif named != creds.cipher_id:
@@ -3776,10 +3816,14 @@ class StationSession:
         """Keep the counters of a transport this session is letting go of."""
         self._retired_wrong_port_drops += transport.wrong_port_drops
 
-    def _count_media_failure(self, error: Exception) -> None:
-        """Count a stream that ended in ``error``, unless the client closed the session."""
+    def _count_media_failure(self, error: Exception, channel: int) -> None:
+        """Count a stream of ``channel`` that ended in ``error``, unless the client closed
+        the session."""
         if not self._closed:
-            self._media_counters.failures[type(error).__name__] += 1
+            name = type(error).__name__
+            counters = self._media_counters
+            counters.failures[name] += 1
+            counters.failures_by_channel.setdefault(channel, Counter())[name] += 1
 
     def _emit_down(
         self, cause: DisconnectCause, error: EufySecurityError | None, reason: str
@@ -4019,7 +4063,8 @@ class StationSession:
                 except Exception:
                     _LOGGER.exception("%s: notify listener failed", self._log_name)
             session_ecb = self._session_ecb_frame(inbound.frame)
-            if (cipher is FrameCipher.GCM or session_ecb) and self._note_storage(obj):
+            own = cipher is FrameCipher.GCM or self._station_frame(inbound.frame)
+            if own and self._note_storage(obj):
                 return
             event = decode_camera_push(
                 obj, station_sn=self.serial, frame_cipher=cipher, session_ecb=session_ecb
@@ -4179,7 +4224,7 @@ class StationSession:
         key, count (:meth:`_refuse_ecb_state`)."""
         if self._refuse_ecb_state(frame):
             return
-        if self._session_ecb_frame(frame):
+        if self._session_key_frame(frame):
             if len(frame.payload) % 16:
                 self._dropped_undecodable += 1
                 return
@@ -4340,12 +4385,13 @@ class StationSession:
         GCM state is authenticated. ECB image replies, scalar results and camera
         pushes are not state and still decode. On an RSA session only state under its
         session key (ECB tag, encryption type 2) is the station's own and decodes; any
-        other state frame is refused, whatever its cipher tag.
+        other state frame is refused, whatever its cipher tag. A static-key session
+        takes clear and type 1 state too (:meth:`_station_frame`).
         """
         if frame.type not in _STATE_FRAME_TYPES:
             return False
         if self._aes_key is not None:
-            if self._session_ecb_frame(frame):
+            if self._station_frame(frame):
                 return False
         elif frame.cipher != FrameCipher.ECB or self._session_key is None:
             return False
@@ -4624,14 +4670,15 @@ class StationSession:
     def _send_session_ecb(
         self, plaintext: bytes, *, frame_type: int, dev_type: int, flag: int
     ) -> int:
-        """An RSA session's frame: AES-128-ECB under the session key, zero-padded."""
+        """An RSA session's frame: AES-128-ECB under the session key, zero-padded, or
+        clear when the session sends encryption type 0."""
         key = cast(bytes, self._aes_key)
         seq = self._ecb_seq
         self._ecb_seq = (seq + 1) & 0xFF
-        subheader = bytes(
-            [FrameCipher.ECB, seq, dev_type & 0xFF, FRAME_SESSION_ECB, flag & 0xFF, 0x00]
-        )
-        frame = encode_frame(frame_type, ecb_encrypt(key, plaintext), subheader)
+        encryption = self._session_encryption
+        subheader = bytes([FrameCipher.ECB, seq, dev_type & 0xFF, encryption, flag & 0xFF, 0x00])
+        body = plaintext if encryption == FRAME_PLAIN else ecb_encrypt(key, plaintext)
+        frame = encode_frame(frame_type, body, subheader)
         if _WIRE.isEnabledFor(logging.DEBUG):
             obj = decode_json_payload(plaintext)
             _WIRE.debug(
@@ -4654,7 +4701,7 @@ class StationSession:
         """An RSA session's end-of-playback value: the first ``u32le`` of a clear body,
         or of one under its key."""
         body = frame.payload
-        if self._session_ecb_frame(frame):
+        if self._session_key_frame(frame):
             if not body or len(body) % 16:
                 return None
             body = ecb_decrypt(cast(bytes, self._aes_key), body)
@@ -4663,13 +4710,31 @@ class StationSession:
         return int.from_bytes(body[:4], "little") if len(body) >= 4 else None
 
     def _session_ecb_frame(self, frame: Frame) -> bool:
-        """Whether ``frame`` is ECB under an RSA session's key: authenticated by the key
-        only the cipher's owner could unwrap, unlike the static key."""
+        """Whether ``frame`` is ECB under an RSA session's key and so authenticated by the
+        key only the cipher's owner could unwrap; never on a static-key session."""
         return (
             self._aes_key is not None
+            and not self.static_key_session
             and frame.cipher == FrameCipher.ECB
             and frame_encryption(frame.subheader) == FRAME_SESSION_ECB
         )
+
+    def _session_key_frame(self, frame: Frame) -> bool:
+        """Whether ``frame`` is ECB under an RSA session's key: encryption type 2, or
+        type 1 on a static-key session, where both name the same key."""
+        if self._aes_key is None or frame.cipher != FrameCipher.ECB:
+            return False
+        encryption = frame_encryption(frame.subheader)
+        if encryption == FRAME_SESSION_ECB:
+            return True
+        return encryption == FRAME_STATIC_ECB and self.static_key_session
+
+    def _station_frame(self, frame: Frame) -> bool:
+        """Whether an RSA session takes ``frame`` as the station's own: under its key, or
+        clear on a static-key session, where clear authenticates no less than its key."""
+        if self._session_key_frame(frame):
+            return True
+        return self.static_key_session and self._plain_rsa_frame(frame)
 
     def _plain_rsa_frame(self, frame: Frame) -> bool:
         """Whether ``frame`` is an RSA session's clear frame (ECB tag, encryption type 0)."""

@@ -216,6 +216,13 @@ CONN_INIT_ECC_VERSION = 8
 session; the eufy app takes any other version as the RSA handshake."""
 CONN_INIT_RSA_BLOB_LEN = 128
 """RSA-1024 ciphertext bytes the app decrypts after the cipher id."""
+CONN_INIT_NO_CIPHER = 0
+"""The cipher id of an RSA CONN_INIT that carries no session key: the app fetches no key.
+Its commands then go under the static key (encryption type 1) to a model of
+:data:`STATIC_KEY_FALLBACK_MODELS`, in clear (type 0) to any other."""
+STATIC_KEY_FALLBACK_MODELS = ("T8001", "T8002", "T8010", "T8030", "T8021", "T8025")
+"""Serial prefixes the app sends commands to under the static key while it holds no
+session key; every other model gets them in clear."""
 AES_SESSION_KEY_LEN = 16
 """Length of the RSA handshake's session key: 16 ASCII characters, an AES-128 key."""
 FRAME_PLAIN = 0

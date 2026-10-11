@@ -22,7 +22,7 @@ from types import MappingProxyType, TracebackType
 from typing import TYPE_CHECKING, Any, Literal, Self
 
 from ._logging import Identifier, LogThrottle, Secret, redact_serial
-from .cloud.api import EufyCloudApi, HttpSession, PasswordSource
+from .cloud.api import CipherKeys, EufyCloudApi, HttpSession, PasswordSource
 from .cloud.const import CLOUD_STATE_REFRESH, firmware_ota_type
 from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
 from .cloud.status import CloudStatus, DeviceListSource
@@ -67,6 +67,7 @@ from .identity import StationClaims, is_device_serial
 from .inclusion import Reach, StationChoice
 from .models import GuardMode
 from .network import LanPath, check_local_ports, lan_address, lan_path_for, with_discovery
+from .p2p.crypto import CONN_INIT_NO_CIPHER
 from .p2p.did import Did
 from .p2p.pppp import BROADCAST, DISCOVERY_PORT
 from .p2p.session import (
@@ -792,7 +793,12 @@ class EufySecurity:
             last_login = _last_login(cache)
             try:
                 account_id = await cloud.async_get_station_owner_id(station_sn, refresh=refresh)
-                keys = await cloud.async_get_cipher_keys(station_sn, cipher_id, refresh=refresh)
+                # A station naming no cipher runs under its static key: nothing to fetch.
+                keys = (
+                    CipherKeys(ecc_private_key=None, rsa_private_key=None)
+                    if cipher_id == CONN_INIT_NO_CIPHER
+                    else await cloud.async_get_cipher_keys(station_sn, cipher_id, refresh=refresh)
+                )
             except CloudError as err:
                 self._cloud_failed(err, station_sn)
                 raise

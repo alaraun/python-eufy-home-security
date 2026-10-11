@@ -185,6 +185,11 @@ class StreamEncoder:
         return self._mux is not None and self._mux.has_audio
 
     @property
+    def codec(self) -> VideoCodec | None:
+        """The video codec the started stream carries; None before it started."""
+        return None if self._mux is None else self._mux.codec
+
+    @property
     def resizes(self) -> int:
         """How many size changes this stream has followed."""
         return self._resizes

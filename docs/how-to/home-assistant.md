@@ -415,7 +415,9 @@ the invitation from *inviter* to *home* in the eufy app, then rescan". `house_na
 
 Each station's `stats()` (`SessionStats`) also carries `conn_init_version` (8: ECIES,
 anything else: the legacy RSA handshake) and the `cipher_id` it named, once a CONN_INIT
-reply arrived.
+reply arrived. `static_key_session` is True on an RSA session whose key is the static key
+(cipher 0, or a station that wraps its static key): it works, but none of its pushes is
+authenticated (see `docs/protocol/session-crypto.md`).
 
 ### Firmware updates
 
@@ -1445,6 +1447,7 @@ HEVC and AAC untouched, starting at a keyframe) written through the integration'
 
 `MediaClip`: `video_frames`, `audio_frames`, `keyframes`, `bytes_written`,
 `duration_s` (by the camera's clock), `width`/`height` (the last frame's), `resizes`,
+`codec` (`VideoCodec` the clip carries, None without video; picks the MP4 tag below),
 `started_at` (aware), `device_sn`, `record_id` (downloads), `expected_frames` (the
 record's `frame_num`), `ended_early` (a capture whose stream ended first), `stopped` (a
 capture ended by its `stop` event; complete), `complete`, `content_type`.
@@ -1512,11 +1515,16 @@ the camera entity already serves:
 
 #### Storing them
 
-Remuxing to MP4 is a stream copy with Home Assistant's ffmpeg (no decode; `hvc1` makes
-the HEVC playable in Safari and in HA's media browser):
+Remuxing to MP4 is a stream copy with Home Assistant's ffmpeg (no decode). Pick the
+video tag by `MediaClip.codec`: `-tag:v hvc1` for `VideoCodec.HEVC` (it makes the HEVC
+playable in Safari and in HA's media browser), no tag for `VideoCodec.H264` (ffmpeg's
+`avc1` default; ffmpeg refuses `hvc1` on H.264 and writes nothing):
 
 ```
+# HEVC
 ffmpeg -hide_banner -loglevel error -y -i clip.ts -map 0 -c copy -tag:v hvc1 -movflags +faststart -f mp4 clip.mp4
+# H.264
+ffmpeg -hide_banner -loglevel error -y -i clip.ts -map 0 -c copy -movflags +faststart -f mp4 clip.mp4
 ```
 
 The camera's frame timing varies (VFR); the MP4 carries it as is. Write to a temporary
@@ -2163,8 +2171,9 @@ async def async_get_config_entry_diagnostics(hass, entry):
   `no_did` is a device the library does not serve (a robot vacuum on the same account).
 - Add per station `dataclasses.asdict(station.stats())` (`SessionStats`): it carries no
   identifiers and needs no redaction. For "live view shows no picture", look at
-  `media_video_codecs`, `media_codec_overrides`, `media_first_records` and
-  `media_rejected_keyframe`
+  `media_video_codecs`, `media_codec_overrides`, `media_first_records`,
+  `media_rejected_keyframe` and `media_failures_by_channel` (which camera channel's
+  opens failed, by error class)
   (see `docs/protocol/media.md`). For "events stopped", compare
   `seconds_since_last_event` with `seconds_since_last_probe` and look at
   `ecb_state_refused`, `dropped_undecodable` and `wrong_port_drops`; for a flapping

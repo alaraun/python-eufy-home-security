@@ -19,24 +19,28 @@ from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
 AAC = b"\xff\xf1\x60\x40\x01\x7f\xfc" + b"\x11" * 16
 
 
-def video(ms: int, *, keyframe: bool = False, width: int = 2304) -> MediaFrame:
+def video(
+    ms: int, *, keyframe: bool = False, width: int = 2304, codec: VideoCodec = VideoCodec.HEVC
+) -> MediaFrame:
     return MediaFrame(
         MediaKind.VIDEO,
         b"\x00\x00\x00\x01\x26\x01" + b"\xa5" * 40,
         is_keyframe=keyframe,
         timestamp_ms=ms,
-        codec=VideoCodec.HEVC,
+        codec=codec,
         width=width,
         height=1296,
     )
 
 
-def camera(seconds: float, *, start_ms: int = 5000, gop: int = 15) -> list[MediaFrame]:
+def camera(
+    seconds: float, *, start_ms: int = 5000, gop: int = 15, codec: VideoCodec = VideoCodec.HEVC
+) -> list[MediaFrame]:
     """``seconds`` of 15 fps video with audio, joined mid-GOP (a P-frame first)."""
-    frames = [video(start_ms - 66)]
+    frames = [video(start_ms - 66, codec=codec)]
     for i in range(round(seconds * 15)):
         ms = start_ms + i * 66
-        frames.append(video(ms, keyframe=i % gop == 0))
+        frames.append(video(ms, keyframe=i % gop == 0, codec=codec))
         frames.append(MediaFrame(MediaKind.AUDIO, AAC, timestamp_ms=ms))
     return frames
 
@@ -141,6 +145,14 @@ async def test_a_capture_holds_the_camera_after_the_last_viewer_leaves() -> None
     assert clip.complete
     await asyncio.sleep(0.05)
     assert stream.closed
+
+
+@pytest.mark.parametrize("codec", list(VideoCodec))
+async def test_a_capture_names_the_codec_it_carries(codec: VideoCodec) -> None:
+    _, open_stream = _opener(FakeStream(camera(1, codec=codec)))
+    broadcast = StreamBroadcast(open_stream, name="test")  # type: ignore[arg-type]
+    clip = await broadcast.async_capture(10.0, Sink())
+    assert clip.codec is codec
 
 
 async def test_a_stream_that_ends_early_returns_what_it_got() -> None:

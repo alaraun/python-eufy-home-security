@@ -143,6 +143,28 @@ key = RSA-PKCS#1-v1.5-decrypt(private_key, ciphertext) up to its first NUL, firs
   blocks), the shape of its receipts, and whether any account serves its `private_key`
   with the case intact.
 
+### Static-key RSA sessions **[declared: app]**
+
+Two RSA replies leave the session with nothing beyond the static key:
+
+| reply | station (reporter logs) | app | library |
+|---|---|---|---|
+| cipher id ≥ 1, the RSA blob unwraps to the static key | T84A1 (cipher 42) | key = the unwrapped string, sends type 2 | same; `static_key_session` |
+| cipher id 0 (`CONN_INIT_NO_CIPHER`), no key in the blob | T8200 (132 bytes, encryption 0) | fetches no cipher key and sets none | fetches no cipher key; `static_key_session` |
+
+- With no key set the app's sender falls back per model: a serial starting with one of
+  `STATIC_KEY_FALLBACK_MODELS` (`T8001`, `T8002`, `T8010`, `T8030`, `T8021`, `T8025`)
+  gets its commands AES-128-ECB under the static key (type 1), any other model in clear
+  (type 0, the body unpadded). The library sends the same.
+- The app decrypts every station frame by its own encryption type (0 clear, 1 static
+  key, 2 the session key) and applies no trust rule. On these sessions the library takes
+  the station's state under any of the three, since the session key authenticates no
+  more than the static key does. `SecurityEvent.authenticated` stays False for their
+  pushes, and `session_ecb` is never set.
+- Whether the T84A1 wraps exactly its static key is inferred from the logged key tails
+  (2 bytes, two sessions); the comparison runs on the full key. Neither case is verified
+  on hardware.
+
 ### One session per connection **[verified]**
 
 - Send **exactly one** CONN_INIT per PPPP connection, and derive the key from its reply.
@@ -223,7 +245,8 @@ replayed within the same session.
 - On an RSA session ([RSA CONN_INIT](#rsa-conn_init-declared-app-legacy)) only state
   under its session key (tag `0x01`, encryption type 2) counts; state in clear or under
   any other tag is refused and counted. A clear frame decodes only under the ECB tag
-  and is never authenticated.
+  and is never authenticated. A [static-key RSA session](#static-key-rsa-sessions-declared-app)
+  takes state in clear and under types 1 and 2, all unauthenticated.
 - A camera push records the cipher of its frame in `SecurityEvent.frame_cipher`.
   `SecurityEvent.authenticated` is False for a push under the static ECB key and True
   for a GCM push, a push under an RSA session's key (`SecurityEvent.session_ecb`) or a

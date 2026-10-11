@@ -152,6 +152,16 @@ def test_encode_ecb_scalar_frame_value_layout() -> None:
     assert messages.encode_ecb_scalar_frame(SYNTHETIC.static_key, 1250, 0, "OWNERID")[12] == 255
 
 
+def test_encode_ecb_scalar_frame_in_clear_sends_the_body_unpadded() -> None:
+    frame = messages.encode_ecb_scalar_frame(
+        SYNTHETIC.static_key, 1250, 7, "OWNERID", encryption=crypto.FRAME_PLAIN
+    )
+    assert frame[13] == crypto.FRAME_PLAIN
+    assert struct.unpack_from("<I", frame, 6)[0] == 132  # value + account field, no padding
+    assert struct.unpack_from("<I", frame, 16)[0] == 7
+    assert frame[20:27] == b"OWNERID"
+
+
 def test_encode_ecb_scalar_frame_body_layout_follows_the_handler() -> None:
     # channel-value command leads with the channel u32
     pir = messages.encode_ecb_scalar_frame(SYNTHETIC.static_key, 1210, 6, "OWNERID", channel=1)

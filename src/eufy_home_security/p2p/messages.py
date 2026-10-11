@@ -503,7 +503,7 @@ def encode_ecb_scalar_frame(
     Layout: cleartext ``"XZYH" | type=cmd | len | 01 seq channel <encryption> 00 00``
     then an AES-128-ECB body of ``[u32 channel]?[u32 value][char[128] account_id\\0]``
     under ``static_key`` (``encryption`` 1), or under an RSA session's key
-    (``encryption`` 2). The channel byte routes to the sub-device (255 = station); the
+    (``encryption`` 2); with ``encryption`` 0 the body goes in clear, unpadded. The channel byte routes to the sub-device (255 = station); the
     account id in the body is what the station authorises against. A command outside
     the scalar handlers raises :class:`UnsupportedError` (the app never sends it this way).
 
@@ -534,7 +534,7 @@ def encode_ecb_scalar_frame(
         )
     body = prefix + struct.pack("<I", value & 0xFFFFFFFF) + acct
     body += b"\x00" * (_ECB_ACCOUNT_LEN - len(acct))
-    body_wire = crypto.ecb_encrypt(static_key, body)
+    body_wire = body if encryption == crypto.FRAME_PLAIN else crypto.ecb_encrypt(static_key, body)
     subheader = bytes([FrameCipher.ECB, seq & 0xFF, channel, encryption & 0xFF, 0x00, 0x00])
     return encode_frame(cmd, body_wire, subheader)
 
