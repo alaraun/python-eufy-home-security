@@ -102,7 +102,6 @@ from .exceptions import (
     UnsupportedError,
 )
 from .images import (
-    HEVC_CONTENT_TYPE,
     JPEG_CONTENT_TYPE,
     CameraImage,
     ImageSource,
@@ -142,7 +141,7 @@ from .network import LanPath, lan_path_for
 from .p2p._json import json_int
 from .p2p.clip import ClipWriter, MediaClip
 from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
-from .p2p.media import MediaFrame, MediaKeyType, Still, media_key_type_for
+from .p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
 from .p2p.messages import decode_preset_picture, record_id_day
 from .p2p.mode_actions import MODE_TABLE_PARAMS, ModeTableField, mode_table_from_params
 from .p2p.params import (
@@ -1179,6 +1178,12 @@ class Station:
     def max_sessions(self, value: int) -> None:
         self.session.max_sessions = value
 
+    def video_codec(self, device_sn: str) -> VideoCodec | None:
+        """The codec ``device_sn``'s latest keyframe picture showed (live, a capture, a
+        trigger frame or a download), or None before any media of it in this run. A
+        player can choose by it (WebRTC carries H.264 to every browser, HEVC not)."""
+        return self.session.video_codec(self.channel_for(device_sn))
+
     @property
     def media_slot_camera(self) -> str | None:
         """Serial of the camera whose live view holds the station session's one media slot.
@@ -1794,7 +1799,8 @@ class Station:
         wait: bool = False,
         **kwargs: Any,
     ) -> bytes:
-        """One full-resolution picture as Annex-B HEVC (a single decodable keyframe).
+        """One full-resolution picture as one decodable Annex-B keyframe in the camera's
+        codec (HEVC or H.264: :func:`~.p2p.media.picture_codec` tells which).
 
         With ``recording`` it is :meth:`async_trigger_frame`: the recording's first
         keyframe, the moment that triggered the event, taken on a short-lived session
@@ -1825,7 +1831,8 @@ class Station:
         trailing_frames: int = 0,
         first_frame_timeout: float | None = None,
     ) -> bytes:
-        """A recording's trigger frame (its first keyframe) as Annex-B HEVC, by path.
+        """A recording's trigger frame (its first keyframe) as Annex-B, by path, in the
+        camera's codec (:func:`~.p2p.media.picture_codec` tells which).
 
         Played on a short-lived second session that is closed as soon as the frames
         are in, so this station's session is neither flooded nor stalled (see
@@ -1943,9 +1950,9 @@ class Station:
 
         * ``THUMBNAIL``: :meth:`async_event_thumbnail`, a JPEG.
         * ``TRIGGER_FRAME``: :meth:`async_event_trigger_frame`, the recording's first
-          keyframe as HEVC at full resolution; the camera stays asleep. Not on a
+          keyframe at full resolution (its :attr:`~.images.CameraImage.codec`); the camera stays asleep. Not on a
           standalone device (it lists no recordings, see :meth:`image_sources`).
-        * ``LIVE``: a live keyframe of the event's camera now, as HEVC; wakes a battery
+        * ``LIVE``: a live keyframe of the event's camera now; wakes a battery
           camera. ``full_resolution`` as for :meth:`async_camera_image`.
 
         Each source fails on its own: a consumer that wants "the thumbnail at once, then
@@ -1974,11 +1981,10 @@ class Station:
             )
         if source is ImageSource.TRIGGER_FRAME:
             data = await self.async_event_trigger_frame(event)
-            return CameraImage(
+            return CameraImage.keyframe(
                 source=source,
                 device_sn=device_sn,
                 data=data,
-                content_type=HEVC_CONTENT_TYPE,
                 record_id=event.record_id or None,
             )
         return await self._live_image(device_sn, channel, full_resolution=full_resolution)
@@ -2040,15 +2046,19 @@ class Station:
             still = await self.async_fetch_still(cast(str, row.thumb_path))
             if not still.is_image:
                 raise UnsupportedError(f"the record's thumbnail is not a JPEG ({still.format})")
-            data, content_type = still.data, JPEG_CONTENT_TYPE
-        else:
-            data = await self.async_trigger_frame(cast(str, row.storage_path), channel=channel)
-            content_type = HEVC_CONTENT_TYPE
-        return CameraImage(
+            return CameraImage(
+                source=source,
+                device_sn=device_sn,
+                data=still.data,
+                content_type=JPEG_CONTENT_TYPE,
+                record_id=row.record_id or None,
+                recorded_at=row.start_time,
+            )
+        data = await self.async_trigger_frame(cast(str, row.storage_path), channel=channel)
+        return CameraImage.keyframe(
             source=source,
             device_sn=device_sn,
             data=data,
-            content_type=content_type,
             record_id=row.record_id or None,
             recorded_at=row.start_time,
         )
@@ -2166,11 +2176,11 @@ class Station:
                 frame.width,
                 frame.height,
             )
-            return CameraImage(
+            return CameraImage.keyframe(
                 source=ImageSource.LIVE,
                 device_sn=device_sn,
                 data=frame.data,
-                content_type=HEVC_CONTENT_TYPE,
+                codec=frame.codec,
                 width=frame.width or None,
                 height=frame.height or None,
             )
@@ -2571,12 +2581,8 @@ class Station:
                 channel, PRESET_SETTLE_SECONDS if settle is None else settle, wait=wait
             )
             await self._refresh_presets_while_awake(device_sn)
-            return CameraImage(
-                source=ImageSource.LIVE,
-                device_sn=device_sn,
-                data=data,
-                content_type=HEVC_CONTENT_TYPE,
-                preset=preset,
+            return CameraImage.keyframe(
+                source=ImageSource.LIVE, device_sn=device_sn, data=data, preset=preset
             )
 
         return await self._run_capture(device_sn, preset, capture)
@@ -2875,7 +2881,7 @@ class Station:
 
         The station plays it off its disk on an extra session (the camera is not woken;
         see :meth:`~.p2p.session.StationSession.async_download_recording`): about as fast
-        as it was recorded or faster, the original HEVC and AAC untouched. The clip
+        as it was recorded or faster, the original video (HEVC or H.264) and AAC untouched. The clip
         carries the record's ``started_at``, ``record_id`` and its frame count, so
         :attr:`~.p2p.clip.MediaClip.complete` says whether everything arrived.
 

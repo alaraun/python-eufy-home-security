@@ -90,14 +90,18 @@ image = await station.async_preset_image(device_sn, preset=1)  # pan/tilt: turn,
   does not block other requests on the session: commands issued meanwhile go out
   at once, and the open re-checks for quiet before it sends. As a
   backstop, a stream pins the wrapped key of its first keyframe that decrypts to
-  Annex-B HEVC and drops keyframes wrapped under any other key. Before that first
+  Annex-B and drops keyframes wrapped under any other key. Before that first
   keyframe, a keyframe that does not decode under the stream's RSA key (see
   [keyframe decryption](#keyframe-decryption-verified)) is dropped the same way,
   logged at DEBUG; it is a WARNING only when no keyframe decodes by
   `first_frame_timeout`. A keyframe with the pinned wrapped key that still does not
-  decrypt to Annex-B is corrupt and logged as a WARNING.
+  decrypt to Annex-B is the rest of the keyframe before it when it follows that one
+  directly ([keyframes in parts](#keyframes-in-parts-app)); otherwise it is corrupt
+  and logged as a WARNING (`media_keyframes_rejected`, its shape with
+  `since_keyframe_ms` in `media_rejected_keyframe`).
 - Video and audio are delivered from the first keyframe on, video already
-  decrypted: Annex-B HEVC that a decoder accepts as is. Audio is ADTS AAC.
+  decrypted: Annex-B in the camera's codec (HEVC or H.264, `MediaFrame.codec`, read
+  from the keyframe's picture) that a decoder accepts as is. Audio is ADTS AAC.
 - A slow reader does not stall the session: past 250 buffered frames (video and
   audio together), new frames are dropped, video until the next keyframe, and
   counted in `stream.dropped`. A keyframe that does not decode also drops video
@@ -472,16 +476,16 @@ body[0:128]     RSA-1024 PKCS#1 v1.5 ciphertext of the 16-byte AES-128 key
 body[128]       1-byte marker (0x00)
 body[129:257]   AES-128-ECB ciphertext of the first 128 bytes of the frame (8 blocks,
                 no IV, no chaining): VPS, SPS, PPS and the slice header
-body[257:]      clear HEVC (the rest of the IDR slice)
+body[257:]      the clear rest of the frame (HEVC or H.264)
 ```
 
 ```
 aes_key = RSA_PKCS1v15_decrypt(client_priv, body[0:128])
-frame   = AES128_ECB_decrypt(aes_key, body[129:257]) ‖ body[257:]      # Annex-B HEVC
+frame   = AES128_ECB_decrypt(aes_key, body[129:257]) ‖ body[257:]      # Annex-B
 ```
 
 - Concatenate decrypted keyframes and clear P-frames in order to get a playable
-  `.hevc` elementary stream. Mux with the AAC track, or decode one keyframe to a JPEG.
+  `.hevc` or `.h264` elementary stream. Mux with the AAC track, or decode one keyframe to a JPEG.
 - A body shorter than 257 bytes cannot carry the prefix. Pass it through unchanged.
 - **A keyframe wrapped for another key rarely fails the unwrap.** OpenSSL 3.2 and
   later use implicit rejection for PKCS#1 v1.5: decrypting with the wrong private
@@ -493,6 +497,23 @@ frame   = AES128_ECB_decrypt(aes_key, body[129:257]) ‖ body[257:]      # Annex
   never kept as the stream key.
 - This is the app's own `aes_decrypt` (whole-block AES-ECB) applied to a fixed
   128-byte prefix. With a longer prefix the clear tail decodes as garbage.
+### Keyframes in parts **[app]**
+
+The eufy app's live player holds each video frame until the next one arrives. A record
+whose data, after its decrypt, does not start with an Annex-B start code is appended to
+the held frame instead of starting a new one; the next record that does start with one
+sends the held frame to the decoder. A camera can so send one keyframe in several
+records, each with the keyframe flag, the same wrapped key and its own encrypted first
+128 bytes.
+
+The library does the same for keyframes: a keyframe-flagged record that follows a
+keyframe directly and does not decrypt to Annex-B is joined to it
+(`media_keyframe_continuations`, shape outcome `continuation`), and a keyframe is
+delivered when the next record arrives, or after `MEDIA_KEYFRAME_HOLD` (0.2 s) when none
+does. P-frames are not held. Expected on HomeBase 2 cameras, whose diagnostics show
+about half of the keyframe-flagged records without a start code under the keyframe's
+own wrapped key; not verified on hardware.
+
 ### Media key: RSA or ECC **[verified]**
 
 The open's `key` field decides how the station protects the stream; the rest of the

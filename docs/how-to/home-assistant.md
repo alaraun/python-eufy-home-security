@@ -1083,11 +1083,11 @@ descriptions from it rather than restating them.
 | `ImageSource` | what | size | camera | typical |
 |---|---|---|---|---|
 | `THUMBNAIL` | the still the station stored with the event (`image/jpeg`) | 640×360 | stays asleep | about 0.4 s |
-| `TRIGGER_FRAME` | the first keyframe of the event's recording (`video/hevc`) | the recording's resolution: 3840×2160 on a T8160 | stays asleep | about 1–1.5 s, plus the decode |
-| `LIVE` | a keyframe of the live stream now (`video/hevc`) | 3840×2160 on a T8160 | **wakes a battery camera** | a few seconds (the camera wakes first) |
+| `TRIGGER_FRAME` | the first keyframe of the event's recording (`video/hevc` or `video/h264`) | the recording's resolution: 3840×2160 on a T8160 | stays asleep | about 1–1.5 s, plus the decode |
+| `LIVE` | a keyframe of the live stream now (`video/hevc` or `video/h264`) | 3840×2160 on a T8160 | **wakes a battery camera** | a few seconds (the camera wakes first) |
 
 Two calls, each returning a `CameraImage(source, device_sn, data, content_type,
-record_id, recorded_at, preset, width, height)`, with `is_jpeg` and `high_resolution`
+record_id, recorded_at, preset, width, height, codec)`, with `is_jpeg` and `high_resolution`
 (`width`/`height`: a live keyframe's picture size, None for the other sources;
 `preset`: the slot of a preset image, else None):
 
@@ -1121,15 +1121,18 @@ record_id, recorded_at, preset, width, height)`, with `is_jpeg` and `high_resolu
 A "refresh image" button per camera calls `async_camera_image(device_sn, <the chosen
 HD or thumbnail source>)` and never `LIVE` unless the live option is on.
 
-**Decoding HEVC to JPEG stays in the integration** (Home Assistant ships ffmpeg; the
-library has no native dependencies). Pipe `data` into:
+**Decoding a keyframe to JPEG stays in the integration** (Home Assistant ships ffmpeg;
+the library has no native dependencies). Pipe `data` into ffmpeg with the image's codec
+as the input format (`-f {image.codec}`: `hevc` or `h264`, see
+[Video codecs](#video-codecs)):
 
 ```
-ffmpeg -hide_banner -loglevel error -f hevc -i pipe:0 -frames:v 1 [-vf scale=1920:-2] -q:v 2 -f image2 -c:v mjpeg pipe:1
+ffmpeg -hide_banner -loglevel error -f <codec> -i pipe:0 -frames:v 1 [-vf scale=1920:-2] -q:v 2 -f image2 -c:v mjpeg pipe:1
 ```
 
 Check that the output starts with `FF D8`, bound the run (about 20 s), and keep the
-previous image on any failure. Never serve `video/hevc` as the camera image.
+previous image on any failure. Never serve `video/hevc` or `video/h264` as the camera
+image.
 
 **Other rules:**
 - **Offer what `station.image_sources(device_sn)` lists.** Behind a station it is all
@@ -1174,8 +1177,8 @@ previous image on any failure. Never serve `video/hevc` as the camera image.
 
 A camera's live video reaches Home Assistant as **MPEG-TS over HTTP**. That one URL
 feeds both of HA's consumers — the `stream` component (HLS, recording, snapshots) and
-go2rtc (WebRTC) — and neither decodes video, so the camera's own HEVC travels to the
-browser untouched.
+go2rtc (WebRTC) — and neither decodes video, so the camera's own video (HEVC or H.264,
+see [Video codecs](#video-codecs)) travels to the browser untouched.
 
 **Nothing on the HA host decodes or re-encodes video, and that is not an optimisation.**
 A typical HA host cannot do it: on an RK3328 board, decoding one 4K HEVC stream alone
@@ -1366,8 +1369,8 @@ HA wires both consumers to the same URL by itself:
 
 | path | via | video | audio | latency |
 |---|---|---|---|---|
-| HLS, recording, snapshots | the `stream` component (demux/remux, no decode) | HEVC passthrough | AAC passthrough | 4–8 s |
-| WebRTC | go2rtc, which dials `stream_source()` | HEVC (Chrome 136+, Safari 18+; **not** Firefox) | needs Opus | 0.1–0.3 s |
+| HLS, recording, snapshots | the `stream` component (demux/remux, no decode) | HEVC or H.264 passthrough | AAC passthrough | 4–8 s |
+| WebRTC | go2rtc, which dials `stream_source()` | HEVC (Chrome 136+, Safari 18+; **not** Firefox); H.264 everywhere | needs Opus | 0.1–0.3 s |
 
 Note HA's go2rtc is built **WebRTC-only**: its `mp4`, `hls` and `mpegts` modules are not
 loaded and `/api/stream.mp4` returns 404. Do not plan to read media back out of it.
@@ -1433,11 +1436,36 @@ These are handled inside `StreamBroadcast`; none need integration code:
   are not read, which would end the stream for everyone.
 - **The codec is read per stream**, not assumed: a camera that sends H.264 is declared
   as H.264.
+- **A keyframe sent in parts** (a HomeBase 2 camera splits a large one over several
+  records) is joined into one picture before it is delivered.
+
+### Video codecs
+
+Cameras send **HEVC or H.264**, decided per camera, not per integration: a HomeBase 3's
+cameras and the T8170 send HEVC; a HomeBase 2's cameras, some battery doorbells (T8210)
+and Solo cameras send H.264, and a HomeBase 2 camera's header even names HEVC for its
+H.264 picture. The library reads the codec from the picture and says so on every
+output; hard-code neither codec anywhere.
+
+| output | where the codec is | what to do with it |
+|---|---|---|
+| live MPEG-TS (`StreamBroadcast`) | declared in the TS itself | nothing: HLS and go2rtc read it |
+| `MediaClip` (download, capture) | `clip.codec` | MP4 remux: `-tag:v {clip.codec.mp4_tag}` only when it is not None |
+| `CameraImage` (trigger frame, live, preset) | `image.codec`, `image.content_type` | JPEG decode: `-f {image.codec}` |
+| `station.async_snapshot`, `async_trigger_frame`, `async_event_trigger_frame` (bytes) | `picture_codec(data)` | as `CameraImage` |
+| `MediaFrame` (a raw `MediaStream`) | `frame.codec` | as the TS muxer does |
+| a camera, before opening anything | `station.video_codec(device_sn)`: the codec of its latest keyframe in this run, None before any | pick a player: WebRTC carries H.264 to every browser, HEVC only to Chrome 136+ and Safari 18+ |
+
+`VideoCodec` values are ffmpeg's raw input format names (`hevc`, `h264`);
+`VideoCodec.content_type` is `video/hevc` / `video/h264`, `VideoCodec.mp4_tag` is
+`hvc1` / None. `picture_codec`, `VideoCodec` and the content-type constants are exported
+from the package root. For diagnostics, `station.stats()` has `media_video_codecs` (by
+header), `media_codec_overrides` (header vs picture) and `media_codecs_by_channel`.
 
 ### Recordings and clips
 
 Two producers of video files, one shape: an MPEG-TS clip (`video/mp2t`, the camera's
-HEVC and AAC untouched, starting at a keyframe) written through the integration's own
+video and AAC untouched, starting at a keyframe) written through the integration's own
 `write` coroutine, returned with a `MediaClip` that says what was written.
 
 | | call | camera | typical (T8160, 3840×2160) |
@@ -1516,9 +1544,9 @@ the camera entity already serves:
 #### Storing them
 
 Remuxing to MP4 is a stream copy with Home Assistant's ffmpeg (no decode). Pick the
-video tag by `MediaClip.codec`: `-tag:v hvc1` for `VideoCodec.HEVC` (it makes the HEVC
-playable in Safari and in HA's media browser), no tag for `VideoCodec.H264` (ffmpeg's
-`avc1` default; ffmpeg refuses `hvc1` on H.264 and writes nothing):
+video tag by `MediaClip.codec.mp4_tag`: `-tag:v hvc1` for HEVC (it makes the HEVC
+playable in Safari and in HA's media browser), no tag for H.264 (ffmpeg's `avc1`
+default; ffmpeg refuses `hvc1` on H.264 and writes nothing):
 
 ```
 # HEVC

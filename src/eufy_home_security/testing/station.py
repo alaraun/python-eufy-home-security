@@ -126,6 +126,22 @@ def media_keyframe(
     return public.encrypt(aes_key, padding.PKCS1v15()) + b"\x00" + prefix + clear[128:]
 
 
+def media_keyframe_parts(
+    public: rsa.RSAPublicKey, aes_key: bytes, parts: int, clear: bytes = MEDIA_KEYFRAME
+) -> list[bytes]:
+    """A keyframe split into ``parts`` record bodies as a HomeBase 2 camera sends a large
+    one: each part carries the same RSA-wrapped key and marker, then its own first 128
+    bytes under AES-128-ECB and its clear rest."""
+    wrapped = public.encrypt(aes_key, padding.PKCS1v15())
+    size = -(-len(clear) // parts)
+    bodies = []
+    for start in range(0, len(clear), size):
+        chunk = clear[start : start + size]
+        enc = Cipher(algorithms.AES(aes_key), modes.ECB()).encryptor()  # noqa: S305 (protocol)
+        bodies.append(wrapped + b"\x00" + enc.update(chunk[:128]) + enc.finalize() + chunk[128:])
+    return bodies
+
+
 def video_record(
     body: bytes,
     *,
@@ -461,6 +477,8 @@ class FakeStation:
     keyframes; ECC and E2E records are sent as their subheader names them, the body
     undecodable."""
     keyframe_flag: bool = True
+    keyframe_parts: int = 1
+    """Send each RSA keyframe in this many records (:func:`media_keyframe_parts`)."""
     """Set the keyframe flag (header byte 4) on keyframes; False leaves it 0, so only
     the first NAL unit tells a keyframe."""
     audio_media_version: int = _AUDIO_MEDIA_VERSION
@@ -1148,10 +1166,10 @@ class FakeStation:
         ecc: EccMediaKey | None = None,
     ) -> None:
         # ``public`` None: an ECC stream, every record sealed with ``ecc``.
-        keyframe = (
-            media_keyframe(public, os.urandom(16))
+        keyframes = (
+            media_keyframe_parts(public, os.urandom(16), self.keyframe_parts)
             if public is not None and self.video_variant is VideoVariant.RSA_PREFIX
-            else MEDIA_KEYFRAME
+            else [MEDIA_KEYFRAME]
         )
         # Joined mid-GOP, like a real stream: a P-frame comes before the first keyframe.
         clock = MEDIA_CLOCK_START
@@ -1172,16 +1190,17 @@ class FakeStation:
             if is_key and sizes:
                 size = sizes[min(sent // MEDIA_GOP, len(sizes) - 1)]
             clock += MEDIA_FRAME_MS
-            self.send_video(
-                keyframe if is_key else pframe,
-                keyframe=is_key,
-                camera=camera,
-                counter=sent + 1,
-                timestamp_ms=clock,
-                width=size[0],
-                height=size[1],
-                ecc=ecc,
-            )
+            for body in keyframes if is_key else [pframe]:
+                self.send_video(
+                    body,
+                    keyframe=is_key,
+                    camera=camera,
+                    counter=sent + 1,
+                    timestamp_ms=clock,
+                    width=size[0],
+                    height=size[1],
+                    ecc=ecc,
+                )
             audio = audio_record(MEDIA_AUDIO, counter=sent + 1, timestamp_ms=clock)
             self.send_frame(
                 FrameType.AUDIO_FRAME,

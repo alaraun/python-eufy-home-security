@@ -387,7 +387,7 @@ class StreamBroadcast:
         Opens the camera when nothing streams (a battery camera wakes) and holds it
         open like a subscriber until the clip is done, sharing the one camera stream
         with every viewer and other capture. The clip has its own muxer: the tables and
-        a keyframe first, the camera's HEVC and AAC untouched, a picture-size change
+        a keyframe first, the camera's video (HEVC or H.264) and AAC untouched, a picture-size change
         carried at the next keyframe, its own timestamps whatever a viewer joined.
         ``seconds`` is camera time from that keyframe. ``write`` receives the bytes in
         order (see :mod:`~.clip`); a writer slower than the camera loses video to the

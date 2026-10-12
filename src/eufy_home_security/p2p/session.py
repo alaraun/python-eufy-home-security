@@ -160,6 +160,7 @@ from .media import (
     start_realtime_media_payload,
     stop_realtime_media_payload,
     video_codec_label,
+    video_header_ms,
     video_record_is_key,
     video_record_shape,
     video_variant,
@@ -296,6 +297,9 @@ MEDIA_QUEUE_FRAMES = 250
 """Frames (video and audio together) held for a slow reader before new ones are dropped."""
 MEDIA_SHAPE_RECORDS = 12
 """Video records per stream whose shape :class:`SessionStats` keeps (diagnostics)."""
+MEDIA_KEYFRAME_HOLD = 0.2
+"""How long a keyframe waits for a continuation record when no other record follows
+(:class:`MediaStream`); the next record of any kind releases it at once."""
 MEDIA_DRAIN_GAP = 0.5
 """Opening a stream waits until no media frame has arrived for this long. A recording
 closed early on this session keeps streaming to its end (no command stops a playback,
@@ -529,6 +533,11 @@ class SessionStats:
     know, which a muxer takes as HEVC)."""
     media_keyframes_rejected: int
     """Keyframes dropped because they did not decrypt to Annex-B."""
+    media_keyframe_continuations: int
+    """Keyframe-flagged records joined to the keyframe before them: the rest of a
+    keyframe a camera sends in several records (a HomeBase 2 camera)."""
+    media_codecs_by_channel: Mapping[str, str]
+    """The codec each camera channel's latest keyframe picture showed (``{"2": "h264"}``)."""
     media_codec_overrides: Mapping[str, int]
     """Keyframes whose picture is another codec than their header names, as
     ``"<header>-><picture>"`` (``"hevc->h264"``); the stream is muxed as the picture."""
@@ -622,11 +631,13 @@ class _MediaCounters:
     __slots__ = (
         "codec_overrides",
         "codecs",
+        "codecs_by_channel",
         "empty_nals",
         "failures",
         "failures_by_channel",
         "first_records",
         "frames_without_nal",
+        "keyframe_continuations",
         "keyframes_rejected",
         "opens",
         "rejected_keyframe",
@@ -640,9 +651,11 @@ class _MediaCounters:
         self.variants: Counter[str] = Counter()
         self.codecs: Counter[str] = Counter()
         self.codec_overrides: Counter[str] = Counter()
+        self.codecs_by_channel: dict[int, VideoCodec] = {}
         self.empty_nals = 0
         self.frames_without_nal = 0
         self.keyframes_rejected = 0
+        self.keyframe_continuations = 0
         self.first_records: list[MediaRecordShape] = []
         """The latest stream's first video records (the stream appends to it)."""
         self.rejected_keyframe: MediaRecordShape | None = None
@@ -660,7 +673,11 @@ class MediaStream:
     """One open camera stream: iterate it for :class:`~.media.MediaFrame`, close it to stop.
 
     Video and audio start at a keyframe, because the frames before one reference
-    pictures the reader never saw. When a slow reader lets :data:`MEDIA_QUEUE_FRAMES`
+    pictures the reader never saw. A keyframe is delivered once the next record shows it
+    is whole: a keyframe-flagged record right after it that does not start with a start
+    code is the rest of that picture and is joined to it, as the app's player does (a
+    HomeBase 2 camera splits a large keyframe); otherwise it goes out with the next
+    record, or after :data:`MEDIA_KEYFRAME_HOLD` when none follows. When a slow reader lets :data:`MEDIA_QUEUE_FRAMES`
     pile up, or a keyframe does not decode, video is dropped until the next keyframe
     (reader lag counted in :attr:`dropped`), so whatever is delivered still decodes.
     The first keyframe that decodes pins the stream's wrapped key: a later keyframe
@@ -720,6 +737,15 @@ class MediaStream:
         self._probe = ""
         self._codec: VideoCodec | None = None
         """The codec the stream's last keyframe picture showed (:func:`~.media.picture_codec`)."""
+        self._held: MediaFrame | None = None
+        """The latest keyframe, not yet queued: a continuation record may follow."""
+        self._held_parts: list[bytes] = []
+        self._held_at = 0.0
+        self._held_tail = False
+        """Whether the last video record was the held keyframe or one of its parts."""
+        self._after_held = False
+        self._last_key_ms: int | None = None
+        """The header time of the latest keyframe that decoded."""
 
     @property
     def closed(self) -> bool:
@@ -735,9 +761,14 @@ class MediaStream:
             if self._error is not None:
                 error, self._error = self._error, None
                 raise error
+            now = time.monotonic()
+            if self._held is not None and (
+                self._closed or now >= self._held_at + MEDIA_KEYFRAME_HOLD
+            ):
+                self._release_held()
+                continue
             if self._closed:
                 raise StopAsyncIteration
-            now = time.monotonic()
             if not self._started:
                 remaining = self._opened_at + self._first_frame_timeout - now
             else:
@@ -765,6 +796,8 @@ class MediaStream:
                     timed_out = self._session._unanswered_error(self.command, 0, indices)
                 self._session._count_media_failure(timed_out, self.channel)
                 raise timed_out
+            if self._held is not None:
+                remaining = min(remaining, self._held_at + MEDIA_KEYFRAME_HOLD - now)
             self._wake.clear()
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._wake.wait(), remaining)
@@ -806,6 +839,7 @@ class MediaStream:
         )
         self._closed = True
         self._frames.clear()
+        self._held = None
         self._wake.set()
         self._session._detach_media(self)
 
@@ -820,6 +854,8 @@ class MediaStream:
             return
         self._head = b""
         self._probe = ""
+        if frame_type == FrameType.VIDEO_FRAME:
+            self._after_held, self._held_tail = self._held_tail, False
         outcome = self._take(frame_type, payload, camera, subheader)
         if frame_type != FrameType.VIDEO_FRAME:
             return
@@ -833,6 +869,9 @@ class MediaStream:
         if len(self._shapes) < MEDIA_SHAPE_RECORDS:
             self._shapes.append(shape)
         if rejected:
+            if self._last_key_ms is not None and len(payload) >= VIDEO_HEADER_LEN:
+                since = video_header_ms(payload) - self._last_key_ms
+                shape = replace(shape, since_keyframe_ms=since)
             counters.keyframes_rejected += 1
             counters.rejected_keyframe = shape
 
@@ -886,6 +925,9 @@ class MediaStream:
                 and frame.is_keyframe
                 and not frame.data.startswith(ANNEX_B_STARTS)
             ):
+                if self._after_held and self._held is not None:
+                    self._continue_held(frame)
+                    return "continuation"
                 outcome = "not_annex_b"
                 self._head = frame.data[:SHAPE_HEAD_LEN]
                 self._probe = keyframe_layout_probe(
@@ -951,9 +993,38 @@ class MediaStream:
             self._started = True
             if self._wrapped_key is None:
                 self._wrapped_key = wrapped
+        self._release_held()
+        if frame.kind is MediaKind.VIDEO and frame.is_keyframe:
+            self._last_key_ms = frame.timestamp_ms
+            self._held, self._held_parts = frame, [frame.data]
+            self._held_at, self._held_tail = time.monotonic(), True
+            self._wake.set()  # the reader's wait now ends at the hold deadline
+            return "keyframe"
         self._frames.append(frame)
         self._wake.set()
-        return "keyframe" if frame.is_keyframe else "frame"
+        return "frame"
+
+    def _continue_held(self, part: MediaFrame) -> None:
+        """Join a keyframe-flagged record that does not start with a start code to the
+        held keyframe: the rest of its picture."""
+        data, empty = drop_empty_nals(part.data)
+        counters = self._session._media_counters
+        counters.empty_nals += empty
+        counters.keyframe_continuations += 1
+        self._held_parts.append(data)
+        self._held_at, self._held_tail = time.monotonic(), True
+
+    def _release_held(self) -> None:
+        """Queue the held keyframe, joined with its continuation parts."""
+        held = self._held
+        if held is None:
+            return
+        self._held = None
+        if len(self._held_parts) > 1:
+            held = replace(held, data=b"".join(self._held_parts))
+        self._held_parts = []
+        self._frames.append(held)
+        self._wake.set()
 
     def _end(self) -> None:
         """The station says the recording is over: deliver what is queued, then stop."""
@@ -965,6 +1036,7 @@ class MediaStream:
             self.channel,
             time.monotonic() - self._opened_at,
         )
+        self._release_held()
         self._closed = True
         self._wake.set()
         self._session._detach_media(self)
@@ -1001,6 +1073,8 @@ class MediaStream:
                         shown.value,
                     )
             self._codec = shown or self._codec
+            if shown is not None:
+                counters.codecs_by_channel[self.channel] = shown
         codec = self._codec or frame.codec
         if data is frame.data and codec is frame.codec:
             return frame
@@ -1259,6 +1333,10 @@ class StationSession:
         """Whether the station answered the RSA CONN_INIT, so the session runs
         AES-128-ECB under the key it carried instead of GCM."""
         return self._aes_key is not None
+
+    def video_codec(self, channel: int) -> VideoCodec | None:
+        """The codec the latest keyframe picture of ``channel`` showed; None before any."""
+        return self._media_counters.codecs_by_channel.get(channel)
 
     @property
     def static_key_session(self) -> bool:
@@ -1574,10 +1652,15 @@ class StationSession:
             },
             media_frames_by_variant=dict(media.variants),
             media_video_codecs=dict(media.codecs),
+            media_codecs_by_channel={
+                str(channel): codec.value
+                for channel, codec in sorted(media.codecs_by_channel.items())
+            },
             media_codec_overrides=dict(media.codec_overrides),
             media_empty_nals=media.empty_nals,
             media_frames_without_nal=media.frames_without_nal,
             media_keyframes_rejected=media.keyframes_rejected,
+            media_keyframe_continuations=media.keyframe_continuations,
             media_first_records=tuple(media.first_records),
             media_rejected_keyframe=media.rejected_keyframe,
             stills_by_format=dict(self._stills_by_format),
@@ -2836,7 +2919,8 @@ class StationSession:
         trailing_frames: int = 0,
         first_frame_timeout: float | None = None,
     ) -> bytes:
-        """A recording's first keyframe, the moment that triggered the event, as Annex-B HEVC.
+        """A recording's first keyframe, the moment that triggered the event, as Annex-B in
+        the camera's codec (:func:`~.media.picture_codec`).
 
         With ``trailing_frames`` the P-frames that follow it (up to that many, never
         past the next keyframe) are appended. The camera is not woken.
@@ -2866,6 +2950,7 @@ class StationSession:
         parts: list[bytes] = []
         async with self._trigger_frame_lock:
             short = self._short_lived_session()
+            short._media_counters.codecs_by_channel = self._media_counters.codecs_by_channel
             self._trigger_frame_sessions += 1
             started = time.monotonic()
             try:

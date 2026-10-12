@@ -63,7 +63,13 @@ from eufy_home_security.models import STATION_CHANNEL, GuardMode
 from eufy_home_security.network import HostSource
 from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p.did import static_key
-from eufy_home_security.p2p.media import MediaFrame, MediaKeyType, MediaKind, StillFormat
+from eufy_home_security.p2p.media import (
+    MediaFrame,
+    MediaKeyType,
+    MediaKind,
+    StillFormat,
+    VideoCodec,
+)
 from eufy_home_security.p2p.messages import HISTORY_RECORD_COUNTER, STANDALONE_RECEIPT_LEN
 from eufy_home_security.p2p.params import ParamDump
 from eufy_home_security.p2p.session import (
@@ -1662,9 +1668,12 @@ async def test_async_camera_image_raises_when_no_usable_row_in_window(
 async def test_async_camera_image_live_does_not_query_history(
     station: Station, fake: FakeStation
 ) -> None:
+    assert station.video_codec(SYNTHETIC.camera_sn) is None
     image = await station.async_camera_image(SYNTHETIC.camera_sn, source=ImageSource.LIVE)
     assert image.source is ImageSource.LIVE
     assert image.data == MEDIA_KEYFRAME
+    assert (image.codec, image.content_type) == (VideoCodec.HEVC, "video/hevc")
+    assert station.video_codec(SYNTHETIC.camera_sn) is VideoCodec.HEVC
     assert not fake.history_queries
 
 

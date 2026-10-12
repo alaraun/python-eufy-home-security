@@ -578,12 +578,15 @@ def _append(path: Path, data: bytes) -> None:
 
 
 async def _save_stream(stream: MediaStream, prefix: Path, *, seconds: float | None) -> None:
-    """Write a stream to ``PREFIX.hevc`` / ``PREFIX.aac``; ``seconds`` counts from the first frame.
+    """Write a stream to ``PREFIX.hevc`` or ``PREFIX.h264`` (by the codec of its first video
+    frame) and ``PREFIX.aac``; ``seconds`` counts from the first frame.
 
     Frames are flushed as they arrive, so memory stays flat and a stream that fails
     part-way still leaves what came before the failure on disk.
     """
-    paths = {"video": Path(f"{prefix}.hevc"), "audio": Path(f"{prefix}.aac")}
+    from ..p2p.media import MediaKind, VideoCodec  # noqa: PLC0415 (keeps the CLI light)
+
+    paths = {"video": Path(f"{prefix}.{VideoCodec.HEVC}"), "audio": Path(f"{prefix}.aac")}
     pending = {kind: bytearray() for kind in paths}
     frames = dict.fromkeys(paths, 0)
     size = dict.fromkeys(paths, 0)
@@ -602,6 +605,10 @@ async def _save_stream(stream: MediaStream, prefix: Path, *, seconds: float | No
             async for frame in stream:
                 if deadline is None and seconds is not None:
                     deadline = time.monotonic() + seconds
+                if frame.kind is MediaKind.VIDEO and not frames["video"] and frame.codec:
+                    await asyncio.to_thread(paths["video"].unlink)
+                    paths["video"] = Path(f"{prefix}.{frame.codec}")
+                    await asyncio.to_thread(paths["video"].write_bytes, b"")
                 pending[frame.kind] += frame.data
                 frames[frame.kind] += 1
                 size[frame.kind] += len(frame.data)
@@ -650,9 +657,12 @@ async def cmd_snapshot(ctx: Context) -> int:
     async def action(station: Station) -> int:
         blob = await station.async_snapshot(**_media_target(ctx), recording=ctx.args.recording)
         await asyncio.to_thread(out.write_bytes, blob)
+        from ..p2p.media import VideoCodec, picture_codec  # noqa: PLC0415 (keeps the CLI light)
+
+        codec = picture_codec(blob) or VideoCodec.HEVC
         print(
-            f"Wrote a {len(blob)}-byte HEVC keyframe to {out} "
-            f"(to a JPEG: ffmpeg -i {out} -frames:v 1 still.jpg)"
+            f"Wrote a {len(blob)}-byte {codec.name} keyframe to {out} "
+            f"(to a JPEG: ffmpeg -f {codec} -i {out} -frames:v 1 still.jpg)"
         )
         return 0
 

@@ -6,14 +6,15 @@ A camera behind a station has three image sources (``docs/protocol/media.md``):
   stays asleep;
 * the **trigger frame**: the first keyframe of the event's recording, at the camera's
   recording resolution (3840x2160 on a T8160). Full quality, the camera stays asleep, but
-  it takes a playback on a short-lived session and arrives as HEVC, not JPEG;
+  it takes a playback on a short-lived session and arrives as a video keyframe (HEVC or
+  H.264, the camera's codec), not JPEG;
 * a **live** keyframe: the same resolution, now, but it wakes a battery camera.
 
 :data:`IMAGE_SOURCES` describes each one as data, so a consumer can build its options
 and their descriptions from it. :class:`CameraImage` is what
 :meth:`~eufy_home_security.station.Station.async_event_image` and
-:meth:`~eufy_home_security.station.Station.async_camera_image` return. Turning HEVC
-into JPEG is left to the consumer (Home Assistant has ffmpeg); the library has no native
+:meth:`~eufy_home_security.station.Station.async_camera_image` return; a keyframe image
+names its :attr:`CameraImage.codec`. Turning a keyframe into JPEG is left to the consumer (Home Assistant has ffmpeg); the library has no native
 dependencies.
 """
 
@@ -24,11 +25,14 @@ from enum import StrEnum
 from typing import Final
 
 from .devices.support import Support
+from .p2p.media import VideoCodec, picture_codec
 
 #: The MIME type of a JPEG image.
 JPEG_CONTENT_TYPE: Final = "image/jpeg"
 #: The MIME type of an Annex-B HEVC keyframe.
 HEVC_CONTENT_TYPE: Final = "video/hevc"
+#: The MIME type of an Annex-B H.264 keyframe.
+H264_CONTENT_TYPE: Final = "video/h264"
 
 
 class ImageSource(StrEnum):
@@ -47,7 +51,9 @@ class ImageSourceInfo:
     high_resolution: bool
     """Whether it has the camera's recording resolution (the thumbnail is 640x360)."""
     content_type: str
-    """What :attr:`CameraImage.data` holds: a JPEG, or an HEVC keyframe to decode."""
+    """What :attr:`CameraImage.data` holds: a JPEG, or a keyframe to decode. For a
+    keyframe source this names HEVC; an H.264 camera's image says
+    :data:`H264_CONTENT_TYPE` (:attr:`CameraImage.content_type` decides)."""
     wakes_camera: bool
     """Whether it wakes a battery camera (spends its battery)."""
     needs_recording: bool
@@ -94,8 +100,8 @@ IMAGE_SOURCES: Final[dict[ImageSource, ImageSourceInfo]] = {
 class CameraImage:
     """One camera image and where it came from.
 
-    ``data`` is a JPEG when :attr:`is_jpeg`, else an Annex-B HEVC keyframe (a trigger frame
-    or a live keyframe) that a decoder accepts as is. A thumbnail that is not a plain JPEG
+    ``data`` is a JPEG when :attr:`is_jpeg`, else an Annex-B keyframe (a trigger frame or a
+    live keyframe) in :attr:`codec` that a decoder accepts as is (``ffmpeg -f <codec>``). A thumbnail that is not a plain JPEG
     (an obfuscated still) is never returned: it raises instead.
     """
 
@@ -113,6 +119,38 @@ class CameraImage:
     """The picture width a live keyframe's frame header names; None for the other sources."""
     height: int | None = None
     """The picture height a live keyframe's frame header names; None for the other sources."""
+    codec: VideoCodec | None = None
+    """A keyframe's codec, read from its picture; None for a JPEG."""
+
+    @classmethod
+    def keyframe(
+        cls,
+        *,
+        source: ImageSource,
+        device_sn: str,
+        data: bytes,
+        codec: VideoCodec | None = None,
+        record_id: int | None = None,
+        recorded_at: str | None = None,
+        preset: int | None = None,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> CameraImage:
+        """A keyframe image: the codec its picture shows, else ``codec``, else HEVC, and
+        the matching content type."""
+        shown = picture_codec(data) or codec or VideoCodec.HEVC
+        return cls(
+            source=source,
+            device_sn=device_sn,
+            data=data,
+            content_type=shown.content_type,
+            record_id=record_id,
+            recorded_at=recorded_at,
+            preset=preset,
+            width=width,
+            height=height,
+            codec=shown,
+        )
 
     @property
     def is_jpeg(self) -> bool:

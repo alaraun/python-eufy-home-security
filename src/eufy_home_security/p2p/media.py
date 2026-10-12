@@ -54,7 +54,7 @@ MEDIA_CLOCK_HZ = 1000
 PTS_CLOCK_HZ = 90_000
 
 #: Keyframe body layout: an RSA-wrapped AES key, a marker byte, then an AES-ECB
-#: header prefix over exactly 8 blocks, then clear HEVC.
+#: header prefix over exactly 8 blocks, then the clear rest (HEVC or H.264).
 KEYFRAME_RSA_LEN = 128
 _KEYFRAME_MARKER = 1
 _KEYFRAME_ENC_PREFIX = 128
@@ -230,16 +230,25 @@ class MediaRecordShape:
     outcome: str
     """What the stream did with the record: ``"frame"``, ``"keyframe"``,
     ``"not_annex_b"``, ``"foreign_key"``, ``"waiting_keyframe"``, ``"queue_full"``,
-    ``"undecodable"``, ``"error"``, ``"other_camera"`` or ``"no_nal"`` (no NAL unit left
-    once the empty ones are removed)."""
+    ``"undecodable"``, ``"error"``, ``"other_camera"``, ``"no_nal"`` (no NAL unit left
+    once the empty ones are removed) or ``"continuation"`` (the rest of the keyframe
+    before it, joined to it)."""
     probe: str = ""
     """For a keyframe that did not decrypt to Annex-B: the body layouts that do start
     with a start code (:func:`keyframe_layout_probe`)."""
+    since_keyframe_ms: int | None = None
+    """For a keyframe that did not decrypt to Annex-B: its header time minus the latest
+    good keyframe's (0: a part of that same picture)."""
 
 
 #: Bytes of a body a :class:`MediaRecordShape` shows: a 4-byte start code and a NAL header.
 SHAPE_HEAD_LEN = 5
 _SHAPE_SUBHEADER = 8
+
+
+def video_header_ms(payload: bytes) -> int:
+    """The stream-clock time (ms) of a VIDEO_FRAME record's media header."""
+    return int(struct.unpack_from("<I", payload, 14)[0])
 
 
 def video_record_shape(
@@ -346,12 +355,26 @@ def generate_media_rsa_key() -> tuple[str, rsa.RSAPrivateKey]:
 
 
 class VideoCodec(StrEnum):
-    """The codec of a video stream, from the video header's byte 5."""
+    """The codec of a video stream or keyframe: the video header's byte 5, corrected by
+    the picture itself (:func:`picture_codec`). The value is ffmpeg's raw input format
+    name (``-f hevc`` / ``-f h264``)."""
 
     HEVC = "hevc"
-    """H.265. What eufy cameras emit."""
+    """H.265: a HomeBase 3's cameras, the T8170, most current models."""
     H264 = "h264"
-    """H.264. Declared by the thing description's ``support_video_codec`` enum."""
+    """H.264: a HomeBase 2's cameras, some battery doorbells (T8210) and Solo cameras."""
+
+    @property
+    def content_type(self) -> str:
+        """The MIME type of an Annex-B keyframe or stream in this codec."""
+        return f"video/{self.value}"
+
+    @property
+    def mp4_tag(self) -> str | None:
+        """The MP4 sample entry tag to force in a stream-copy remux (``-tag:v``): ``hvc1``
+        for HEVC (Safari and HA's media browser play only that); None for H.264, whose
+        ``avc1`` default is right and which ffmpeg refuses to tag ``hvc1``."""
+        return "hvc1" if self is VideoCodec.HEVC else None
 
     @classmethod
     def from_code(cls, code: int) -> VideoCodec | None:
@@ -623,7 +646,7 @@ class MediaKind(StrEnum):
     """What a :class:`MediaFrame` carries."""
 
     VIDEO = "video"
-    """Annex-B HEVC."""
+    """Annex-B video in the frame's :attr:`MediaFrame.codec`."""
     AUDIO = "audio"
     """One ADTS AAC-LC frame."""
 
@@ -824,7 +847,7 @@ class MediaDecoder:
         return bytes(payload[:AUDIO_HEADER_LEN]) + body
 
     def decrypt_keyframe(self, video_body: bytes) -> bytes:
-        """Decrypt a keyframe body to Annex-B HEVC.
+        """Decrypt a keyframe body to Annex-B (HEVC or H.264).
 
         Only a fixed header prefix is encrypted: ``body[0:128]`` is the RSA-wrapped
         16-byte AES-128 key (constant for the stream), ``body[128]`` a marker, and

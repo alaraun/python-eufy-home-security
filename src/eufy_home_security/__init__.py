@@ -90,7 +90,15 @@ if TYPE_CHECKING:
         UnsupportedError,
     )
     from .identity import StationClaims, entity_unique_id
-    from .images import IMAGE_SOURCES, CameraImage, ImageSource, ImageSourceInfo
+    from .images import (
+        H264_CONTENT_TYPE,
+        HEVC_CONTENT_TYPE,
+        IMAGE_SOURCES,
+        JPEG_CONTENT_TYPE,
+        CameraImage,
+        ImageSource,
+        ImageSourceInfo,
+    )
     from .inclusion import Reach, StationChoice
     from .install import InstallState
     from .models import FrameCipher, GuardMode
@@ -98,7 +106,7 @@ if TYPE_CHECKING:
     from .p2p.broadcast import DEFAULT_QUEUE_CHUNKS, FrameStream, ResizePolicy, StreamBroadcast
     from .p2p.clip import CLIP_CONTENT_TYPE, ClipWriter, MediaClip
     from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
-    from .p2p.media import MediaKeyType, Still, StillFormat
+    from .p2p.media import MediaKeyType, Still, StillFormat, VideoCodec, picture_codec
     from .p2p.pppp import LAN_DISCOVERY_TIMEOUT
     from .p2p.session import (
         DEFAULT_STATION_SESSIONS,
@@ -223,12 +231,25 @@ _EXPORTS: dict[str, str] = {
         "exceptions",
     ),
     **dict.fromkeys(("StationClaims", "entity_unique_id"), "identity"),
-    **dict.fromkeys(("IMAGE_SOURCES", "CameraImage", "ImageSource", "ImageSourceInfo"), "images"),
+    **dict.fromkeys(
+        (
+            "H264_CONTENT_TYPE",
+            "HEVC_CONTENT_TYPE",
+            "IMAGE_SOURCES",
+            "JPEG_CONTENT_TYPE",
+            "CameraImage",
+            "ImageSource",
+            "ImageSourceInfo",
+        ),
+        "images",
+    ),
     "InstallState": "install",
     **dict.fromkeys(("Reach", "StationChoice"), "inclusion"),
     **dict.fromkeys(("FrameCipher", "GuardMode"), "models"),
     **dict.fromkeys(("HostSource", "LanPath", "PathWarning", "suggest_local_ports"), "network"),
-    **dict.fromkeys(("MediaKeyType", "Still", "StillFormat"), "p2p.media"),
+    **dict.fromkeys(
+        ("MediaKeyType", "Still", "StillFormat", "VideoCodec", "picture_codec"), "p2p.media"
+    ),
     "LAN_DISCOVERY_TIMEOUT": "p2p.pppp",
     **dict.fromkeys(
         (
@@ -263,7 +284,10 @@ __all__ = [
     "CLIP_CONTENT_TYPE",
     "DEFAULT_QUEUE_CHUNKS",
     "DEFAULT_STATION_SESSIONS",
+    "H264_CONTENT_TYPE",
+    "HEVC_CONTENT_TYPE",
     "IMAGE_SOURCES",
+    "JPEG_CONTENT_TYPE",
     "LAN_DISCOVERY_TIMEOUT",
     "MAX_PRESET_SLOTS",
     "MAX_ZOOM",
@@ -387,10 +411,12 @@ __all__ = [
     "StreamBroadcast",
     "SubDeviceState",
     "UnsupportedError",
+    "VideoCodec",
     "ZoomChanged",
     "__version__",
     "async_forget_account",
     "entity_unique_id",
+    "picture_codec",
     "redact",
     "redact_serial",
     "set_secret_logging",

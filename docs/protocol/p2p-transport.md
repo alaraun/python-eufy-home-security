@@ -190,7 +190,7 @@ Both are framed by the magic `ba ab ba ab` **[verified on captures]**:
   fragment index at 50; stream kind at 54, 1 video / 0 audio) and up to 1280 bytes of
   the frame. The HomeBase acks every few packets with 24-byte datagrams back to the
   camera's port.
-  - **Audio** (ADTS AAC) and **P-frames** (Annex-B HEVC) are sent **in clear**.
+  - **Audio** (ADTS AAC) and **P-frames** (Annex-B HEVC or H.264) are sent **in clear**.
   - **Keyframes**: the first 128 bytes are encrypted under a key that does not appear on
     the wire; the rest is clear. The HomeBase decrypts that prefix and re-encrypts it
     under the client stream's AES key ([media.md](media.md#keyframe-decryption-verified));

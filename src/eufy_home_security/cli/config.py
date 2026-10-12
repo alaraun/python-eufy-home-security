@@ -275,7 +275,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="turn a pan/tilt camera to stored slot N first (needs --device)",
     )
     live.add_argument(
-        "--out", required=True, type=Path, help="output prefix: writes PREFIX.hevc and PREFIX.aac"
+        "--out",
+        required=True,
+        type=Path,
+        help="output prefix: writes PREFIX.hevc (or .h264) and PREFIX.aac",
     )
 
     recording = command("recording", "save a stored recording off the station's disk")
@@ -285,15 +288,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--download", action="store_true", help="use the download command (1024), not playback"
     )
     recording.add_argument(
-        "--out", required=True, type=Path, help="output prefix: writes PREFIX.hevc and PREFIX.aac"
+        "--out",
+        required=True,
+        type=Path,
+        help="output prefix: writes PREFIX.hevc (or .h264) and PREFIX.aac",
     )
 
-    snapshot = command("snapshot", "one full-resolution keyframe as HEVC (live, or a recording's)")
+    snapshot = command(
+        "snapshot", "one full-resolution keyframe, HEVC or H.264 (live, or a recording's)"
+    )
     media_target(snapshot)
     snapshot.add_argument(
         "--recording", metavar="PATH", help="take the recording's first keyframe (no camera wake)"
     )
-    snapshot.add_argument("--out", required=True, type=Path, help="file to write (.hevc)")
+    snapshot.add_argument("--out", required=True, type=Path, help="file to write (.hevc or .h264)")
 
     monitor = command("monitor", "print events as they arrive, until Ctrl+C")
     monitor.add_argument("--no-push", action="store_true", help="skip cloud push (FCM)")

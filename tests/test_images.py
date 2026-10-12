@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import pytest
+
 from eufy_home_security.images import (
+    H264_CONTENT_TYPE,
     HEVC_CONTENT_TYPE,
     IMAGE_SOURCES,
     JPEG_CONTENT_TYPE,
     CameraImage,
     ImageSource,
 )
+from eufy_home_security.p2p.media import VideoCodec
 from eufy_home_security.testing import SYNTHETIC
 
 
@@ -53,3 +57,31 @@ def test_camera_image_properties_follow_the_content_type_and_source() -> None:
     )
     assert not hevc.is_jpeg
     assert hevc.high_resolution
+
+
+H264_IDR = b"\x00\x00\x00\x01\x67\x4d\x00\x1f" + b"\x00\x00\x00\x01\x65" + bytes(40)
+HEVC_IDR = b"\x00\x00\x00\x01\x40\x01" + bytes(40)
+
+
+@pytest.mark.parametrize(
+    ("data", "named", "codec"),
+    [
+        (H264_IDR, VideoCodec.HEVC, VideoCodec.H264),  # the picture outranks a header's name
+        (HEVC_IDR, None, VideoCodec.HEVC),
+        (b"not annex-b", VideoCodec.H264, VideoCodec.H264),
+        (b"not annex-b", None, VideoCodec.HEVC),
+    ],
+)
+def test_a_keyframe_image_names_the_codec_of_its_picture(
+    data: bytes, named: VideoCodec | None, codec: VideoCodec
+) -> None:
+    image = CameraImage.keyframe(
+        source=ImageSource.LIVE, device_sn=SYNTHETIC.camera_sn, data=data, codec=named, width=640
+    )
+    assert (image.codec, image.content_type, image.width) == (codec, codec.content_type, 640)
+    assert not image.is_jpeg
+
+
+def test_codec_content_types_and_mp4_tags() -> None:
+    assert (VideoCodec.HEVC.content_type, VideoCodec.HEVC.mp4_tag) == (HEVC_CONTENT_TYPE, "hvc1")
+    assert (VideoCodec.H264.content_type, VideoCodec.H264.mp4_tag) == (H264_CONTENT_TYPE, None)
