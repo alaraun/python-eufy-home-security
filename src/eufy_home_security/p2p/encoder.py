@@ -72,6 +72,10 @@ SILENT_AAC_FRAME_MS = 64
 _FILL_MAX_CATCH_UP_MS = 1000
 """A video gap longer than this is not back-filled with silence frame by frame."""
 
+HEADER_MAX_BYTES = 8 * 1024 * 1024
+"""Past this size :attr:`StreamEncoder.header` stops growing with the current picture
+group and keeps its keyframe only (a 4K picture group is about 1 MB)."""
+
 
 @dataclass(frozen=True, slots=True)
 class EncodedStream:
@@ -91,15 +95,17 @@ class EncodedStream:
     """
     restarted: bool = False
     """True on the keyframe that resumes a followed stream at a new size (``data`` holds
-    the tables and that keyframe, the same bytes as :attr:`StreamEncoder.header`)."""
+    the tables and that keyframe, which start a new :attr:`StreamEncoder.header`)."""
 
 
 class StreamEncoder:
     """Mux a camera's live frames into MPEG-TS once their size has settled.
 
-    One instance per stream. ``tables_every`` repeats PAT/PMT so a consumer that joins
-    mid-stream can tune in; :attr:`header` holds the tables and the opening keyframe for
-    exactly that purpose.
+    One instance per stream. PAT/PMT go out before every keyframe and every
+    ``tables_every`` video frames. :attr:`header` is the current picture group: the
+    tables, the latest keyframe and everything muxed since. A consumer that joins
+    mid-stream gets it first and decodes every frame after it; the P-frames that follow a
+    keyframe reference the frames before them, so the keyframe alone is not enough.
 
     ``follow_resize=True`` keeps a started stream across a size change: the muxer, its
     continuity counters and its clock carry on, video is dropped until the first keyframe
@@ -124,7 +130,8 @@ class StreamEncoder:
         "_fill_audio",
         "_fill_ms",
         "_follow_resize",
-        "_header",
+        "_gop",
+        "_gop_bytes",
         "_mux",
         "_resizes",
         "_size",
@@ -164,7 +171,8 @@ class StreamEncoder:
         self._awaiting_keyframe = False
         self._resizes = 0
         self._video_seen = 0
-        self._header = b""
+        self._gop: list[bytes] = []
+        self._gop_bytes = 0
 
     @property
     def started(self) -> bool:
@@ -196,8 +204,18 @@ class StreamEncoder:
 
     @property
     def header(self) -> bytes:
-        """Tables and the opening keyframe, for a consumer that joins mid-stream."""
-        return self._header
+        """The current picture group (tables, latest keyframe, what followed it), for a
+        consumer that joins mid-stream; empty before the stream starts."""
+        return b"".join(self._gop)
+
+    def _note(self, data: bytes, *, keyframe: bool) -> bytes:
+        """Keep ``data`` in the current picture group (a keyframe starts a new one)."""
+        if keyframe:
+            self._gop, self._gop_bytes = [data], len(data)
+        elif data and self._gop and self._gop_bytes + len(data) <= HEADER_MAX_BYTES:
+            self._gop.append(data)
+            self._gop_bytes += len(data)
+        return data
 
     def feed(self, frame: MediaFrame) -> EncodedStream:
         """Offer one frame; returns the bytes to send, if any.
@@ -214,7 +232,7 @@ class StreamEncoder:
             mux = self._mux
             if mux is None or not mux.has_audio:
                 return EncodedStream()
-            return EncodedStream(data=mux.audio(frame.data, frame.pts))
+            return EncodedStream(data=self._note(mux.audio(frame.data, frame.pts), keyframe=False))
 
         now = self._clock()
         size = (frame.width, frame.height)
@@ -231,17 +249,17 @@ class StreamEncoder:
                     # References pictures the decoder never received: drop until the
                     # keyframe that carries the new size's parameter sets.
                     self._awaiting_keyframe = True
-                    return EncodedStream(data=silence)
+                    return EncodedStream(data=self._note(silence, keyframe=False))
                 self._awaiting_keyframe = False
                 if size != self._size:
                     self._size = size
                     self._resizes += 1
-                self._video_seen = 0  # the resuming keyframe carries the tables
-                data = self._encode(mux, frame)
-                self._header = data
+                self._note(silence, keyframe=False)
+                data = self._note(self._encode(mux, frame), keyframe=True)
                 return EncodedStream(data=silence + data, restarted=True)
-            silence = self._silence(mux, frame.timestamp_ms)
-            return EncodedStream(data=silence + self._encode(mux, frame))
+            silence = self._note(self._silence(mux, frame.timestamp_ms), keyframe=False)
+            data = self._note(self._encode(mux, frame), keyframe=frame.is_keyframe)
+            return EncodedStream(data=silence + data)
 
         if size != self._size:
             self._size, self._size_since = size, now
@@ -256,9 +274,7 @@ class StreamEncoder:
         if declare and not self._audio_seen:
             self._fill_ms = frame.timestamp_ms
         self._started = True
-        self._video_seen = 0
-        data = self._encode(mux, frame)
-        self._header = data
+        data = self._note(self._encode(mux, frame), keyframe=True)
         return EncodedStream(data=data, started=True)
 
     def _silence(self, mux: TSMuxer, video_ms: int) -> bytes:
@@ -282,6 +298,8 @@ class StreamEncoder:
 
     def _encode(self, mux: TSMuxer, frame: MediaFrame) -> bytes:
         out = b""
+        if frame.is_keyframe:
+            self._video_seen = 0  # a keyframe goes out behind the tables
         if self._video_seen % self._tables_every == 0:
             out += mux.tables()
         self._video_seen += 1

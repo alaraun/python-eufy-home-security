@@ -154,9 +154,9 @@ async def test_a_resynced_subscriber_restarts_at_the_header() -> None:
     agen = broadcast.subscribe()
     await anext(agen)
     await asyncio.sleep(0.2)
-    # The next chunk after a resync is the header itself.
+    # The next chunk after a resync is the header: the current picture group so far.
     following = await anext(agen)
-    assert following == broadcast.header
+    assert broadcast.header.startswith(following)
     await agen.aclose()
     await broadcast.aclose()
 
@@ -208,7 +208,7 @@ async def test_a_resolution_change_is_followed_by_default() -> None:
     )
     chunks = [chunk async for chunk in broadcast.subscribe()]
     assert len(chunks) == 5, "header (start keyframe), keyframe, P, resumed keyframe, P"
-    assert chunks[3] == broadcast.header, "the resumed keyframe is the new header"
+    assert broadcast.header == b"".join(chunks[3:]), "the resumed keyframe starts the header"
     assert broadcast.resizes == 1
     assert not broadcast.ended_by_resize
     assert broadcast.error is None
@@ -252,7 +252,7 @@ async def test_a_resize_grace_keeps_the_camera_open_for_a_reconnect() -> None:
     assert broadcast.running, "the camera stays open through the grace time"
     assert not stream.closed
     second = await asyncio.wait_for(drain(broadcast, 2), 2)
-    assert second[0] == broadcast.header, "the reconnect starts at the new size's keyframe"
+    assert broadcast.header.startswith(second[0]), "the reconnect starts at the new size's keyframe"
     assert opens == 1, "no second open, so no wake"
     assert not _ended_by_resize(broadcast), "a new subscriber clears it"
     await broadcast.aclose()
@@ -324,8 +324,8 @@ async def test_the_default_stream_starts_at_the_first_keyframe_with_an_audio_tra
     """No audio has arrived at the first keyframe; the track is declared and filled."""
     broadcast = StreamBroadcast(lambda: _as_stream(settled(8)), name="test")
     chunks = [chunk async for chunk in broadcast.subscribe()]
-    assert chunks[0] == broadcast.header
-    assert b"\x0f\xe1\x01" in broadcast.header, "ADTS AAC on the audio PID in the PMT"
+    assert chunks[0].startswith(b"\x47")  # the tables, then the start keyframe
+    assert b"\x0f\xe1\x01" in chunks[0], "ADTS AAC on the audio PID in the PMT"
     assert any(b"\xff\xf1" in chunk for chunk in chunks[1:]), "silent AAC carried"
 
 

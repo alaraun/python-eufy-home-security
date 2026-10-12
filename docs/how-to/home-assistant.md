@@ -1225,7 +1225,7 @@ across all clients, a T8170 4, and a live open wakes a battery camera.
 | member | what |
 |---|---|
 | `subscribe()` | an async generator of muxed TS bytes; close it (or stop iterating) to unsubscribe |
-| `header` | tables plus the opening keyframe, sent to each new subscriber automatically |
+| `header` | the current picture group (tables, the latest keyframe and everything since), sent to each new subscriber automatically |
 | `size` | the frame size being streamed, once it has settled; follows a size change |
 | `settle` | the settle window in use: 0 by default (see *Starting*) |
 | `error` | why the last stream ended, or `None` if it ended cleanly |
@@ -1429,8 +1429,10 @@ These are handled inside `StreamBroadcast`; none need integration code:
   unbounded: it jitters backwards by a millisecond or two, the 33-bit PES clock wraps
   every 26.5 hours, and the station's millisecond clock wraps every 49.7 days. Jitter is
   clamped, wraps are passed through.
-- **Parameter sets** are re-emitted at every keyframe, so a viewer joining mid-stream
-  decodes at once rather than waiting.
+- **A viewer joining mid-stream** first gets the current picture group: the tables, the
+  latest keyframe and every frame since, so every frame it receives decodes. The
+  P-frames after a keyframe reference the frames before them; a keyframe alone followed
+  by the live frames would show about a picture group of broken video.
 - **Slow readers.** A subscriber that cannot keep up has its backlog dropped and resumes
   at a keyframe. It never stalls the camera — the station stops sending when its frames
   are not read, which would end the stream for everyone.

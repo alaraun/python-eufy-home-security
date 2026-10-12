@@ -168,6 +168,23 @@ def test_the_header_replays_tables_and_the_opening_keyframe() -> None:
     assert enc.header[0] == 0x47
 
 
+def test_the_header_is_the_current_picture_group() -> None:
+    """A late joiner gets the latest keyframe and every frame after it: the P-frames
+    reference the ones before them, so a keyframe alone would leave them undecodable."""
+    clock = FakeClock()
+    enc = StreamEncoder(clock=clock, audio=True, tables_every=1000)
+    enc.feed(MediaFrame(MediaKind.AUDIO, b"\xff\xf1aac", timestamp_ms=990))  # declares AAC
+    _start(clock, enc)
+    first = [enc.feed(video(ms=1040 + i * 40)).data for i in range(3)]
+    assert enc.header.endswith(b"".join(first))
+    key = enc.feed(video(keyframe=True, ms=1200)).data
+    after = [enc.feed(video(ms=1240 + i * 40)).data for i in range(2)]
+    audio = enc.feed(MediaFrame(MediaKind.AUDIO, b"\xff\xf1aac", timestamp_ms=1300)).data
+    assert enc.header == key + b"".join(after) + audio
+    assert enc.header[0] == 0x47
+    assert len(key) > len(after[0]) + TS_PACKET_LEN, "the keyframe goes out behind the tables"
+
+
 def test_tables_are_repeated_so_a_late_joiner_can_tune_in() -> None:
     clock = FakeClock()
     enc = StreamEncoder(clock=clock, tables_every=3)
