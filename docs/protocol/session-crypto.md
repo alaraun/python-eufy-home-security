@@ -126,12 +126,11 @@ key = RSA-PKCS#1-v1.5-decrypt(private_key, ciphertext) up to its first NUL, firs
 - A wrong RSA key decrypts to noise rather than failing (PKCS#1 implicit rejection);
   the library takes a key that is not 16 printable bytes as a handshake failure.
 - A `private_key` whose bytes do not parse as a key at all is distinct from a wrong
-  key: the cloud serves the same bytes on every fetch, so re-fetching cannot help. The
-  library raises `CipherUnusableError` (cause `key_unusable`, reason `rsa_unparsable`,
-  or `not_rsa` for a key of another type) without re-fetching and without the stale-key
-  latch, and retries only after a code change or the cached key being dropped. On some
-  accounts the cloud lowercases the base64 of `private_key` ([cloud.md](cloud.md)),
-  which lands here.
+  key: the cloud serves the same bytes on every fetch, so re-fetching cannot help. On
+  some accounts the cloud lowercases the base64 of `private_key` ([cloud.md](cloud.md)),
+  which lands here. The app's key callback catches the parse failure and sets no session
+  key; the library does the same, without re-fetching or the stale-key latch, and runs
+  a [static-key RSA session](#static-key-rsa-sessions-declared-app).
 - Credentials without the key the station's handshake needs (no `private_key` for an
   RSA CONN_INIT, no `ecc_private_key` for version 8; a cache written before the RSA key
   was kept holds none) are re-fetched once. Still without it, the library raises
@@ -145,17 +144,19 @@ key = RSA-PKCS#1-v1.5-decrypt(private_key, ciphertext) up to its first NUL, firs
 
 ### Static-key RSA sessions **[declared: app]**
 
-Two RSA replies leave the session with nothing beyond the static key:
+Three RSA handshakes leave the session with nothing beyond the static key:
 
 | reply | station (reporter logs) | app | library |
 |---|---|---|---|
 | cipher id ≥ 1, the RSA blob unwraps to the static key | T84A1 (cipher 42) | key = the unwrapped string, sends type 2 | same; `static_key_session` |
 | cipher id 0 (`CONN_INIT_NO_CIPHER`), no key in the blob | T8200 (132 bytes, encryption 0) | fetches no cipher key and sets none | fetches no cipher key; `static_key_session` |
+| cipher id ≥ 1, the cipher's RSA `private_key` does not parse | T84A1 (cipher 199, a lowercased key) | the key callback catches the parse error and sets no key | sets no key; `static_key_session` |
 
 - With no key set the app's sender falls back per model: a serial starting with one of
   `STATIC_KEY_FALLBACK_MODELS` (`T8001`, `T8002`, `T8010`, `T8030`, `T8021`, `T8025`)
   gets its commands AES-128-ECB under the static key (type 1), any other model in clear
-  (type 0, the body unpadded). The library sends the same.
+  (type 0, the body unpadded). The library sends the same. Station frames of type 2
+  decrypt under the static key while no key is set.
 - The app decrypts every station frame by its own encryption type (0 clear, 1 static
   key, 2 the session key) and applies no trust rule. On these sessions the library takes
   the station's state under any of the three, since the session key authenticates no

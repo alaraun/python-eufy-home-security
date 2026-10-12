@@ -429,7 +429,9 @@ format 26884 MiB → "26.25 GB". Its total is `disk_size_1024 / 1024`.
 **Library API.** `await station.async_get_storage()` (or the session's) sends the read
 under the command lock and returns a `StorageInfo`; a non-zero `mIntRet` raises
 `CommandRejectedError`, a reply without `body` `ProtocolError`, silence
-`DeviceTimeoutError`. The reply is matched by `cmd` 1307 with inner `cmd` 11001 under
+`DeviceTimeoutError`. A non-zero command receipt raises at once (`CommandRejectedError`,
+`CommandUnsupportedError` for -108): a HomeBase mini (T8023) answers receipt -1 and sends
+no record **[reporter log]**. The reply is matched by `cmd` 1307 with inner `cmd` 11001 under
 either cipher (a fresh session gets it under ECB). `station.storage` holds the last
 record (None until one arrives), and the answer and every unsolicited GCM record —
 another client's query, the push after a format — whose parsed value differs from the

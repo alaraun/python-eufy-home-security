@@ -444,6 +444,8 @@ class FakeStation:
     unhandled_commands: set[int] = field(default_factory=lambda: {1051})
     """Commands answered with receipt -108 and nothing else, as the real station answers
     ``DOWNLOAD_CANCEL`` (1051) and the ``GET_*`` commands."""
+    refused_commands: dict[int, int] = field(default_factory=dict)
+    """Command → the non-zero receipt code it is answered with, and nothing else."""
     rejection_delay: float = 0.0
     """Seconds before a -108 receipt (the real station: 11 to 17 s)."""
     relayed_channels: set[int] = field(default_factory=set)
@@ -804,6 +806,9 @@ class FakeStation:
                 self.send_receipt(
                     FrameType.CMD_TRANSFER, RECEIPT_NOT_HANDLED, delay=self.rejection_delay
                 )
+                return
+            if (refused := self.refused_commands.get(obj.get("cmd", -1))) is not None:
+                self.send_receipt(FrameType.CMD_TRANSFER, refused)
                 return
             if obj.get("cmd") == 1003 and self.live_open_receipt_code != RECEIPT_TAKEN:
                 # As a HomeBase that cannot wake the camera: no queue receipt, one

@@ -736,7 +736,7 @@ same state on demand. Map it:
 |---|---|
 | `unreachable`, `probe_unanswered`, `station_closed`, `link_silent` | entities unavailable; the supervisor is already reconnecting. After a grace period, the unreachable repair issue |
 | `key_rejected` | entities unavailable. The first rejection refreshes the key by itself; an `error` that is a `KeyRejectedError` means that refresh did not help (see the error table) |
-| `key_unusable` | entities unavailable. The cipher key cannot be used at all (`CipherUnusableError`; `error.reason`: `rsa_unparsable`/`not_rsa`, or `no_rsa_key`/`no_ecc_key` when the cloud serves no key for the station's handshake): a device on older firmware that uses the legacy RSA handshake, whose RSA key eufy serves lowercased or not at all. No re-fetch helps. Raise a repair telling the user to **update the device's firmware** in the eufy app (current firmware uses the ECIES handshake); do not call it a rejected key or suggest a reset. |
+| `key_unusable` | entities unavailable. The cipher key cannot be used at all (`CipherUnusableError`; `error.reason`: `no_rsa_key`/`no_ecc_key` when the cloud serves no key for the station's handshake): a device on older firmware that uses the legacy RSA handshake, whose RSA key eufy does not serve. An RSA key that eufy serves lowercased (`rsa_unparsable`) is not this case: the session runs under the static key, as in the eufy app (`static_key_session`). No re-fetch helps. Raise a repair telling the user to **update the device's firmware** in the eufy app (current firmware uses the ECIES handshake); do not call it a rejected key or suggest a reset. |
 | `credentials_unavailable` | entities unavailable. With `error=None` the reason is the `CloudProblem` already emitted; with a `RefreshCooldownError` just wait, no repair |
 | `protocol` | entities unavailable; log it, the supervisor retries |
 | `closed` | the integration's own `async_close`: nothing to do |
@@ -906,6 +906,9 @@ A closed session (`async_close`) never reconnects on its own — build a new
       `storage.emmc` set (no `disk`); it **wakes a battery camera**, so read it when the
       camera is awake anyway (at setup, or fold it into a preset/live capture) rather
       than on a timer. `storage.emmc.used_percent` is the "eMMC used" figure.
+    - A station that refuses the query (a HomeBase mini, T8023, answers receipt -1)
+      raises `CommandRejectedError` at once. Treat that as "no storage figures from this
+      station": stop polling it until the next setup rather than logging an error per poll.
     - Poll it on its own slow interval (about 30 min: disk use moves slowly) rather than
       in the parameter-dump coordinator, and apply `StorageChanged(station_sn, storage)`
       in between: the station pushes a new record when a format finishes, and whenever

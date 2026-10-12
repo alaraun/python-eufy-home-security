@@ -1418,6 +1418,23 @@ async def test_storage_rejection_and_silence_are_typed_errors(station: FakeStati
         await session.async_close()
 
 
+async def test_a_refused_storage_query_fails_at_its_receipt(station: FakeStation) -> None:
+    """A station that refuses the storage query sends receipt -1 and no record: the
+    query fails at once with that code instead of waiting out its timeout."""
+    station.refused_commands = {1307: -1}
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        started = time.monotonic()
+        with pytest.raises(CommandRejectedError) as rejected:
+            await session.async_get_storage(timeout=5)
+        assert time.monotonic() - started < 2
+    finally:
+        await session.async_close()
+    assert (rejected.value.command, rejected.value.code) == (1307, -1)
+    assert not isinstance(rejected.value, CommandUnsupportedError)
+
+
 async def test_pushes_become_events(station: FakeStation) -> None:
     session = make_session(station, Provider(station))
     events: list[Event] = []
@@ -3649,18 +3666,27 @@ DOORBELL_SN = "T8200P2000054321"
 @pytest.mark.parametrize(
     "case",
     [
-        (SYNTHETIC.station_sn, 42, True, None, FRAME_SESSION_ECB),
-        (SYNTHETIC.station_sn, 0, False, None, FRAME_STATIC_ECB),
-        (DOORBELL_SN, 0, False, FRAME_PLAIN, FRAME_PLAIN),
+        (SYNTHETIC.station_sn, 42, "intact", None, FRAME_SESSION_ECB),
+        (SYNTHETIC.station_sn, 0, "absent", None, FRAME_STATIC_ECB),
+        (DOORBELL_SN, 0, "absent", FRAME_PLAIN, FRAME_PLAIN),
+        (SYNTHETIC.station_sn, 42, "unparsable", None, FRAME_STATIC_ECB),
+        (DOORBELL_SN, 42, "unparsable", None, FRAME_PLAIN),
     ],
-    ids=["static-key-wrapped", "no-cipher-homebase", "no-cipher-clear"],
+    ids=[
+        "static-key-wrapped",
+        "no-cipher-homebase",
+        "no-cipher-clear",
+        "unparsable-key-homebase",
+        "unparsable-key-clear",
+    ],
 )
 async def test_a_static_key_rsa_session_takes_the_station_state_unauthenticated(
-    station: FakeStation, case: tuple[str, int, bool, int | None, int], short_settle: None
+    station: FakeStation, case: tuple[str, int, str, int | None, int], short_settle: None
 ) -> None:
     """An RSA session whose key is the static key takes the station's state under the
     static key or in clear and authenticates no push. It sends type 2 after a wrapped
-    key; with no cipher named, type 1 to a HomeBase-family model, clear to any other."""
+    key; with no session key (no cipher named, or a cipher key that does not parse),
+    type 1 to a HomeBase-family model, clear to any other."""
     serial, cipher_id, rsa_key, station_encryption, sent = case
     station.serial = serial
     station.static_key = static_key(serial, station.did)
@@ -3670,7 +3696,7 @@ async def test_a_static_key_rsa_session_takes_the_station_state_unauthenticated(
     station.reply_to_settings = True
     session = StationSession(
         serial,
-        RsaProvider(station, rsa_key=rsa_key),
+        RsaProvider(station, rsa_key=rsa_key != "absent", bad_key=rsa_key == "unparsable"),
         host="127.0.0.1",
         port=station.discovery_port,
     )
@@ -3727,9 +3753,11 @@ async def test_an_rsa_key_missing_from_the_cache_is_fetched_once(station: FakeSt
     assert provider.calls == [False, True]
 
 
-async def test_a_refetched_rsa_key_that_does_not_parse_is_unusable(station: FakeStation) -> None:
-    """A rejected key is re-fetched once; a re-fetched key that does not parse raises
-    CipherUnusableError, not KeyRejectedError."""
+async def test_a_refetched_rsa_key_that_does_not_parse_leaves_the_static_key(
+    station: FakeStation,
+) -> None:
+    """A rejected key is re-fetched once; a re-fetched key that does not parse leaves
+    the session under the static key, neither KeyRejectedError nor CipherUnusableError."""
     other = FakeStation().rsa_private_key_pem  # a valid key that unwraps noise
     calls: list[bool] = []
 
@@ -3740,11 +3768,10 @@ async def test_a_refetched_rsa_key_that_does_not_parse_is_unusable(station: Fake
 
     session = make_rsa_session(station, provider)
     try:
-        with pytest.raises(CipherUnusableError) as err:
-            await session.async_connect()
+        await session.async_connect()
+        assert session.static_key_session
     finally:
         await session.async_close()
-    assert (err.value.reason, err.value.cipher_id) == ("rsa_unparsable", station.cipher_id)
     assert calls == [False, True]
 
 
@@ -3807,12 +3834,12 @@ async def test_an_ecies_conn_init_without_an_ecc_key_is_unusable(station: FakeSt
     assert latch.retry_blocked_for() == 0.0
 
 
-async def test_an_rsa_key_that_does_not_parse_is_unusable_not_rejected(
+async def test_an_rsa_key_that_does_not_parse_leaves_the_static_key_unfetched(
     station: FakeStation,
 ) -> None:
-    """A key that cannot be parsed raises CipherUnusableError, not KeyRejectedError:
-    no re-fetch (the cloud serves the same bytes), no stale-key latch; the cipher is
-    named on the error, and a reconnect fails the same way with no fetch latch set."""
+    """A key that cannot be parsed is not re-fetched (the cloud serves the same bytes)
+    and sets no stale-key latch; like the app, the session runs under the static key,
+    and a reconnect does the same."""
     station.conn_init_version = 1
     provider = RsaProvider(station, bad_key=True)
     latch = MemoryKeyRefreshLatch()
@@ -3824,17 +3851,16 @@ async def test_an_rsa_key_that_does_not_parse_is_unusable_not_rejected(
         key_refresh=latch,
     )
     try:
-        with pytest.raises(CipherUnusableError, match="does not parse") as first:
-            await session.async_connect()
-        assert first.value.cipher_id == station.cipher_id
-        assert first.value.reason == "rsa_unparsable"
+        await session.async_connect()
+        assert session.static_key_session
         assert provider.calls == [False]  # read once after CONN_INIT, never re-fetched
         assert latch.retry_blocked_for() == 0.0  # and no latch was set
 
-        with pytest.raises(CipherUnusableError):  # a reconnect still fails, still no latch
-            await session.async_connect()
-        assert provider.calls == [False, False]
+        session._teardown("test reconnect")
+        await session.async_connect()
+        assert session.static_key_session
+        assert provider.calls[0] is False
+        assert True not in provider.calls
         assert latch.retry_blocked_for() == 0.0
-        assert not session.rsa_session
     finally:
         await session.async_close()

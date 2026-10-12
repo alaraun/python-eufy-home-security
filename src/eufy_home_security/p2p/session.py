@@ -1198,6 +1198,9 @@ class StationSession:
         self._creds: P2PCredentials | None = None
         self._cipher_id: int | None = None
         """The cipher the station named in its last CONN_INIT (None before one arrived)."""
+        self._rsa_keyless = False
+        """Whether the last RSA handshake left no session key: no cipher named, or its
+        RSA key does not parse. The session then runs under the static key."""
         self._conn_init_version: int | None = None
         """The version (subheader byte 0) of the last CONN_INIT reply."""
         self._did: Did | None = None
@@ -1341,7 +1344,7 @@ class StationSession:
     @property
     def static_key_session(self) -> bool:
         """Whether the RSA session's key is the static key: its CONN_INIT names no cipher,
-        or the key it carries is the static key. Such a session authenticates nothing
+        the cipher's RSA key does not parse, or the key it carries is the static key. Such a session authenticates nothing
         (the static key follows from the serial and DID): like the app, it takes the
         station's frames under every encryption type (clear, 1, 2), and none of its
         pushes is authenticated."""
@@ -1350,9 +1353,9 @@ class StationSession:
     @property
     def _session_encryption(self) -> int:
         """Encryption type of the frames an RSA session sends: 2 under a delivered key;
-        with no cipher named, 1 (static key) to a model of
-        :data:`~.crypto.STATIC_KEY_FALLBACK_MODELS` and 0 (clear) to any other."""
-        if self._cipher_id != CONN_INIT_NO_CIPHER:
+        without one (no cipher named, or a key that does not parse), 1 (static key) to a
+        model of :data:`~.crypto.STATIC_KEY_FALLBACK_MODELS` and 0 (clear) to any other."""
+        if not self._rsa_keyless:
             return FRAME_SESSION_ECB
         if self.serial.startswith(STATIC_KEY_FALLBACK_MODELS):
             return FRAME_STATIC_ECB
@@ -1690,9 +1693,10 @@ class StationSession:
         raises :class:`KeyRejectedError` without fetching, until a handshake
         succeeds (which clears it), ``KEY_REFRESH_SLOW_RETRY`` passes (one more fetch),
         or the latch is released. A re-fetched key that is rejected too raises
-        :class:`KeyRejectedError`. A key that does not parse at all raises
-        :class:`CipherUnusableError` without a re-fetch or latch (the cloud serves the
-        same bytes again); credentials without the key the station's handshake needs
+        :class:`KeyRejectedError`. An RSA key that does not parse at all is neither
+        re-fetched (the cloud serves the same bytes again) nor latched: like the eufy app,
+        the session runs under the static key (:attr:`static_key_session`). Credentials
+        without the key the station's handshake needs
         are re-fetched once, and still without it raise :class:`CipherUnusableError`
         (reason ``no_rsa_key`` or ``no_ecc_key``) without the latch. Credentials for
         another cipher than the station names are re-fetched once, and still for another
@@ -2394,7 +2398,9 @@ class StationSession:
         Read-only. The reply carries no correlation id, so a record the station sends
         to this session for another client's query in the same moment answers it too
         (it is the same record). Raises :class:`CommandRejectedError` for a non-zero
-        result, :class:`ProtocolError` for a reply without a ``body``, and
+        result or a non-zero command receipt (:class:`CommandUnsupportedError` for
+        ``NOT_HANDLED``; a station that refuses the query sends no record),
+        :class:`ProtocolError` for a reply without a ``body``, and
         :class:`DeviceTimeoutError` when nothing answers. The record also becomes
         :attr:`storage` and, when it changed, a :class:`~..events.StorageChanged`.
 
@@ -2414,6 +2420,10 @@ class StationSession:
         )
 
         def match(inbound: Inbound) -> StorageInfo | None:
+            if inbound.type == FrameType.CMD_TRANSFER and (code := inbound.receipt()) is not None:
+                if code != RECEIPT_TAKEN:
+                    raise _receipt_error(CMD_STORAGE, code)
+                return None
             if inbound.type != FrameType.NOTIFY_PAYLOAD:
                 return None
             if (obj := inbound.json()) is None or (record := storage_record(obj)) is None:
@@ -3734,6 +3744,7 @@ class StationSession:
         named = conn_init.cipher_id
         self._cipher_id = named
         self._conn_init_version = conn_init.version
+        self._rsa_keyless = False
         _LOGGER.debug(
             "%s: CONN_INIT reply (%d bytes, version %d, encryption %s) names cipher %d",
             self._log_name,
@@ -3746,6 +3757,7 @@ class StationSession:
             # No session key: the app fetches no cipher and keeps the static key.
             if creds is None or creds.cipher_id != named:
                 creds = await self._load_credentials(refresh=False)
+            self._rsa_keyless = True
             return creds, conn_init, static
         if creds is None:
             creds = await self._load_credentials(refresh=False)
@@ -3768,9 +3780,17 @@ class StationSession:
         try:
             return creds, conn_init, aes_key_from_conn_init(conn_init, rsa_key)
         except CipherUnusableError as exc:
-            if exc.cipher_id is None:
-                exc.cipher_id = named
-            raise
+            # The app sets no session key when the RSA key fails to parse and runs the
+            # session under the static key, as for a CONN_INIT naming no cipher.
+            _LOGGER.info(
+                "%s: cipher %d's RSA key cannot be used (%s); the session runs under the "
+                "static key, as in the eufy app",
+                self._log_name,
+                named,
+                exc.reason,
+            )
+            self._rsa_keyless = True
+            return creds, conn_init, static
 
     async def _refetch_rejected_key(self, err: HandshakeError) -> P2PCredentials:
         """Re-fetch the credentials after ``err``, unless the stale-key latch holds it back."""

@@ -308,7 +308,8 @@ CONN_INIT is not version 8 (the legacy RSA handshake). Whether it is usable depe
 record **[verified, one account]**: in one response to a shared member, ciphers 98 and 155
 came back intact (a mixed-case PEM that parses as RSA-1024) and 13, 40 and 212 came back
 **lowercased by the server**, armour included. A lowercased body is irreversible, so
-`load_rsa_private_key` fails and the library raises `CipherUnusableError`. Lowercased on
+`load_rsa_private_key` fails; like the app, the library then sets no session key and runs
+the session under the static key ([session-crypto.md](session-crypto.md)). Lowercased on
 cipher 40 (a HomeBase 3's) on two accounts, and on cipher 202 of a standalone T8410
 (one sample). The request body field name makes no difference (`station_sn` and `sn`
 return the same key), and the unversioned endpoint 404s. The MegaCrypto decrypt is not

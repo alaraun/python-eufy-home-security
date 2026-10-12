@@ -302,9 +302,11 @@ class CipherUnusableError(HandshakeError):
     """The cipher's key material cannot establish a session — and re-fetching won't help.
 
     Unlike a stale key (a well-formed key the station no longer accepts, which a
-    re-fetch may cure), the key itself is unusable: it does not parse as a key. The
-    cloud serves the same bytes on every fetch, so the library does **not** re-fetch
-    it and sets **no** re-fetch latch; the cipher is tried again only after the library
+    re-fetch may cure), the key itself is unusable: it does not parse as a key, or the
+    cloud serves none for the station's handshake. A session raises it only for a
+    missing key: an RSA key that does not parse leaves the session under the static key,
+    as in the eufy app. The cloud serves the same bytes on every fetch, so the library
+    does **not** re-fetch a key that does not parse and sets **no** re-fetch latch; the cipher is tried again only after the library
     changes or the cached key is dropped. ``cipher_id`` is the cipher the station
     named (``None`` until the session attaches it); ``reason`` is a short machine tag.
     """
