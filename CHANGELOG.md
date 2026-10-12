@@ -4,6 +4,15 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.12](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.11...v0.3.12) (2026-10-12)
+
+
+### Bug Fixes
+
+* a live viewer joining mid-stream gets the whole current picture group; no broken first seconds ([2c71ecc](https://github.com/alaraun/python-eufy-home-security/commit/2c71ecc9ddf65c6517d7ee5f4c08097de1082938))
+* a station whose cipher RSA key does not parse connects under the static key, as in the eufy app ([d75f7b3](https://github.com/alaraun/python-eufy-home-security/commit/d75f7b3d829c0140fc2123f471fd26a4e5daaadc))
+* a storage query the station refuses fails at its receipt instead of timing out ([d75f7b3](https://github.com/alaraun/python-eufy-home-security/commit/d75f7b3d829c0140fc2123f471fd26a4e5daaadc))
+
 ## [0.3.11](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.10...v0.3.11) (2026-10-12)
 
 
