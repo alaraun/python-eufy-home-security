@@ -1,11 +1,19 @@
-"""The station's storage record: disk and eMMC figures from ``1307`` / ``11001`` (pure).
+"""Station storage queries and their records: disk and eMMC figures (pure).
 
-The app's HDD screen asks ``{"cmd": 1307, "payload": {"version": 1, "cmd": 11001}}``
-and the station answers with a ``0x0547`` whose ``payload.body`` holds the internal
-disk (``hdd_info``), an external disk (``move_disk_info``) and the built-in eMMC
-(``emmc_info``). Every size in the record is **MiB**. The station also pushes the
-record unasked (when a format finishes, and as the answer to another client's query),
-so :func:`storage_record` recognises it wherever it arrives.
+The eufy app asks each station model its own storage query (:func:`storage_query`):
+
+- ``1307`` / ``11001`` (:attr:`StorageQuery.DISK_INFO`): ``{"cmd": 1307, "payload":
+  {"cmd": 11001, "version": 0, "mChannel": 255}}``, answered with a ``0x0547`` whose
+  ``payload.body`` holds the internal disk (``hdd_info``), an external disk
+  (``move_disk_info``) and the built-in eMMC (``emmc_info``), every size in **MiB**. The
+  station also pushes the record unasked (when a format finishes, and as the answer to
+  another client's query), so :func:`storage_record` recognises it wherever it arrives.
+- ``55000`` (:attr:`StorageQuery.HUB_STORAGE`, a HomeBase 2 from firmware 3.3.7.7):
+  ``{"cmd": 55000, "payload": {"account_id", "type": 1, "value": 0}}``, answered with a
+  ``0x0547`` ``{"cmd": 55000, "hdd_exist", "emmc_status", "usb_status", "payload":
+  {"emmc_total", "emmc_free", "hdd_total", "hdd_free"}}`` (:func:`parse_hub_storage`).
+- ``1144`` (:attr:`StorageQuery.SD_INFO`, ``SDINFO_EX``): a bare command frame, answered
+  by a frame of the same type with three ``int32`` (:func:`parse_sd_card_info`).
 
 The record comes off the network: every field is validated on its own, and a missing
 or malformed one becomes ``None`` rather than an error. See
@@ -14,9 +22,12 @@ or malformed one becomes ``None`` rather than an error. See
 
 from __future__ import annotations
 
+import math
 import struct
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
+from types import MappingProxyType
 from typing import Any, Final
 
 from ..exceptions import ProtocolError
@@ -28,10 +39,14 @@ CMD_STORAGE: Final = 1307
 STORAGE_QUERY_INFO: Final = 11001
 #: Verb: format a disk (destructive; the library never sends it).
 STORAGE_FORMAT: Final = 11003
-#: A standalone camera's built-in eMMC query (``SDINFO_EX``): a bare command frame of
-#: this type answered by a frame of the same type with three ``int32`` (see
+#: The eMMC query (``SDINFO_EX``, ``GET_SD_INFO_EXT``): a bare command frame of this
+#: type answered by a frame of the same type with three ``int32`` (see
 #: :func:`parse_sd_card_info`).
 CMD_SD_INFO: Final = 1144
+#: The HomeBase 2 storage query (``APP_CMD_GET_HUB_STORAGE_INFO``).
+CMD_HUB_STORAGE: Final = 55000
+#: The first HomeBase 2 firmware the app asks :data:`CMD_HUB_STORAGE` (older: 1144).
+HUB_STORAGE_FIRMWARE: Final = "3.3.7.7"
 
 MIB_PER_GIB: Final = 1024
 _MAX_MIB: Final = 1 << 40
@@ -40,11 +55,89 @@ _TEMPERATURE_RANGE: Final = (-40, 150)
 _MAX_TEXT: Final = 256
 _PARTED_READY: Final = 1
 _PARTED_FORMATTING: Final = 2
+_HEALTH_FAULTS: Final = frozenset({1, 2, 3})
+
+
+class StorageQuery(StrEnum):
+    """Which storage query a station answers, as the eufy app picks it per model."""
+
+    DISK_INFO = "disk_info"
+    """``1307`` / ``11001``: the HomeBase 3 family's storage record."""
+    HUB_STORAGE = "hub_storage"
+    """``55000``: a HomeBase 2 from firmware :data:`HUB_STORAGE_FIRMWARE`."""
+    SD_INFO = "sd_info"
+    """``1144`` (``SDINFO_EX``): the eMMC figures alone."""
+    NONE = "none"
+    """The app asks this model no storage query."""
+
+
+STORAGE_QUERY_BY_MODEL: Final[Mapping[str, StorageQuery]] = MappingProxyType(
+    {
+        "T8030": StorageQuery.DISK_INFO,
+        "T8025": StorageQuery.DISK_INFO,
+        "T9000": StorageQuery.DISK_INFO,
+        "T8N00": StorageQuery.DISK_INFO,
+        "T8001": StorageQuery.SD_INFO,
+        "T8002": StorageQuery.SD_INFO,
+        "T8020": StorageQuery.SD_INFO,
+        "T8023": StorageQuery.SD_INFO,
+        "T8024": StorageQuery.NONE,
+    }
+)
+"""The query each station handler of the app builds for ``get_storage_info``, by serial
+prefix **[declared: app]**. A HomeBase 2 (``T8010``) depends on its firmware, see
+:func:`storage_query`."""
+
+_HOMEBASE_2: Final = "T8010"
+
+
+def compare_versions(a: str, b: str) -> int:
+    """-1, 0 or 1 as the app's ``compareVersions``: dot-separated parts compared as
+    numbers, a part that is not a number (``"6h"``) or is missing counting as 0."""
+    left, right = a.split("."), b.split(".")
+    for i in range(max(len(left), len(right))):
+        x = _version_part(left[i]) if i < len(left) else 0.0
+        y = _version_part(right[i]) if i < len(right) else 0.0
+        if x != y:
+            return 1 if x > y else -1
+    return 0
+
+
+def _version_part(part: str) -> float:
+    try:
+        value = float(part) if part.strip() else 0.0
+    except ValueError:
+        return 0.0
+    return value if math.isfinite(value) else 0.0
+
+
+def storage_query(serial: str, firmware: str | None, *, standalone: bool) -> StorageQuery:
+    """The storage query the app sends the station ``serial`` on ``firmware``.
+
+    A HomeBase 2 gets :attr:`~StorageQuery.HUB_STORAGE` from firmware
+    :data:`HUB_STORAGE_FIRMWARE` and :attr:`~StorageQuery.SD_INFO` before it (or with no
+    firmware known); other models follow :data:`STORAGE_QUERY_BY_MODEL`. A model it does
+    not list gets :attr:`~StorageQuery.SD_INFO` when standalone (the app's default for a
+    device that is not a station) and :attr:`~StorageQuery.DISK_INFO` otherwise.
+    """
+    model = serial[:5]
+    if model == _HOMEBASE_2:
+        if compare_versions(firmware or "", HUB_STORAGE_FIRMWARE) >= 0:
+            return StorageQuery.HUB_STORAGE
+        return StorageQuery.SD_INFO
+    if (query := STORAGE_QUERY_BY_MODEL.get(model)) is not None:
+        return query
+    return StorageQuery.SD_INFO if standalone else StorageQuery.DISK_INFO
 
 
 def storage_query_payload() -> dict[str, int]:
-    """The ``payload`` of a storage read, as the app sends it."""
-    return {"version": 1, "cmd": STORAGE_QUERY_INFO}
+    """The ``payload`` of a ``1307`` storage read, as the app's handlers send it."""
+    return {"cmd": STORAGE_QUERY_INFO, "version": 0, "mChannel": 255}
+
+
+def hub_storage_query_payload(account_id: str) -> dict[str, Any]:
+    """The ``payload`` of a :data:`CMD_HUB_STORAGE` read, as the app sends it."""
+    return {"account_id": account_id, "type": 1, "value": 0}
 
 
 # ── validation ───────────────────────────────────────────────────────────────
@@ -122,7 +215,7 @@ class StorageMedium:
     temperature_c: int | None = None
     """``cur_temperate``, °C."""
     health: int | None = None
-    """``health``: 0 is healthy; other codes are not named by the app."""
+    """``health``: the app flags 1, 2 and 3 as a fault and names no other code."""
     work_status: int | None = None
     """``work_status``: 0 idle; other codes unknown."""
     parted_status: int | None = None
@@ -177,8 +270,9 @@ class StorageMedium:
 
     @property
     def healthy(self) -> bool | None:
-        """``health == 0``; None when the record has no health code."""
-        return None if self.health is None else self.health == 0
+        """False for a fault code the app flags (``health`` 1, 2, 3), else True; None
+        when the record has no health code."""
+        return None if self.health is None else self.health not in _HEALTH_FAULTS
 
     @property
     def formatting(self) -> bool | None:
@@ -367,6 +461,74 @@ def parse_sd_card_info(payload: bytes) -> EmmcInfo | None:
     )
 
 
+#: ``emmc_status`` / ``usb_status`` codes for which the app shows the medium as empty.
+_HUB_STATUS_EMPTY: Final = frozenset({1, 26})
+
+
+def _mb(obj: Mapping[str, Any], key: str) -> int | None:
+    """A size the station sends as a JSON number (int or float), rounded; None when
+    missing, negative or garbage."""
+    value = obj.get(key)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        value = json_int(value)
+    if value is None or not math.isfinite(value) or not 0 <= value <= _MAX_MIB:
+        return None
+    return round(value)
+
+
+def _hub_medium[M: StorageMedium](
+    cls: type[M], total: int | None, free: int | None, status: int | None
+) -> M | None:
+    if not total:
+        return None
+    free = total if status in _HUB_STATUS_EMPTY or free is None else min(free, total)
+    used = total - free
+    return cls(size_mib=total, used_mib=used, filesystem_used_mib=used, work_status=status)
+
+
+def parse_hub_storage(obj: Mapping[str, Any]) -> StorageInfo | None:
+    """A :class:`StorageInfo` from a :data:`CMD_HUB_STORAGE` ``0x0547`` JSON object, or
+    None when ``obj`` is not one.
+
+    ``payload`` (an object or a JSON string) carries ``emmc_total``, ``emmc_free``,
+    ``hdd_total`` and ``hdd_free`` in the station's **MB** (the app shows them as MB,
+    and as GB divided by 1000); they fill ``size_mib`` / ``used_mib`` as they come. The
+    top level carries ``emmc_status``, ``usb_status`` (the disk's) and ``hdd_exist``.
+    Like the app, a medium whose status is 1 or 26 counts as empty, and a disk counts
+    only with ``hdd_total`` > 0 and ``hdd_exist`` 1 (or absent). Each status becomes
+    the medium's ``work_status``.
+    """
+    if json_int(obj.get("cmd")) != CMD_HUB_STORAGE:
+        return None
+    payload = obj.get("payload")
+    if isinstance(payload, str):
+        try:
+            payload = loads_json(payload)
+        except ProtocolError:
+            return None
+    if not isinstance(payload, Mapping):
+        return None
+    emmc = _hub_medium(
+        EmmcInfo, _mb(payload, "emmc_total"), _mb(payload, "emmc_free"), _int(obj, "emmc_status")
+    )
+    disk = None
+    if _int(obj, "hdd_exist") in (None, 1):
+        disk = _hub_medium(
+            DiskInfo, _mb(payload, "hdd_total"), _mb(payload, "hdd_free"), _int(obj, "usb_status")
+        )
+    return StorageInfo(emmc=emmc, disk=disk)
+
+
+def result_code(obj: Mapping[str, Any]) -> int:
+    """A storage reply's result code: ``mIntRet`` or ``code`` (absent = 0, not an
+    integer = -1)."""
+    for key in ("mIntRet", "code"):
+        if key in obj:
+            parsed = json_int(obj[key])
+            return -1 if parsed is None else parsed
+    return 0
+
+
 @dataclass(frozen=True, slots=True)
 class StorageRecord:
     """A ``1307`` / ``11001`` reply: its result code and its ``body`` (None when absent)."""
@@ -391,10 +553,4 @@ def storage_record(obj: Mapping[str, Any]) -> StorageRecord | None:
             return None
     if not isinstance(payload, Mapping) or json_int(payload.get("cmd")) != STORAGE_QUERY_INFO:
         return None
-    code = 0
-    for key in ("mIntRet", "code"):
-        if key in payload:
-            parsed = json_int(payload[key])
-            code = -1 if parsed is None else parsed
-            break
-    return StorageRecord(code, _object(payload, "body"))
+    return StorageRecord(result_code(payload), _object(payload, "body"))

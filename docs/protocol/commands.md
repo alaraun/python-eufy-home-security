@@ -395,12 +395,36 @@ is **URL-safe** and may be unpadded. Content and formats: [media.md](media.md).
 
 ## Storage (1307) **[verified]**
 
-The app's HDD screen, reproduced by the library (read-only):
+### Which station answers which storage query **[declared: app]**
+
+Each station handler of the app builds its own `get_storage_info` request
+(`storage_info.storage_query`, table `STORAGE_QUERY_BY_MODEL`):
+
+| station | query |
+|---|---|
+| T8030 (HomeBase 3), T8025, T9000, T8N00 | `1307` / `11001` (this section) |
+| T8010 (HomeBase 2), listed `main_sw_version` ≥ 3.3.7.7 | `55000` ([below](#homebase-2-storage-55000-declared-app)) |
+| T8010 on older firmware, T8001, T8002, T8020, T8023 | `1144` ([below](#a-standalone-cameras-emmc-1144-get_sd_info_ext-verified)) |
+| T8024 | none |
+| a standalone device not listed | `1144`; any other station not listed: `1307` |
+
+Versions compare as the app's `compareVersions`: dot-separated parts as numbers, a part
+that is not a number (`6h`) counting as 0. Sent to a HomeBase 2 or a T8023, the `1307`
+query is refused with receipt −1 and no record **[reporter logs]**. The app's request
+client waits 30 s for a reply and ends the wait at a non-zero receipt; the library's
+`STORAGE_TIMEOUT` is the same.
+
+### The record (1307 / 11001)
+
+The app's HDD screen, reproduced by the library (read-only), with the handler's
+parameters:
 
 ```json
 {"account_id": "<owner user id>", "cmd": 1307, "mChannel": 0, "mValue3": 0,
- "payload": {"version": 1, "cmd": 11001}}
+ "payload": {"cmd": 11001, "version": 0, "mChannel": 255}}
 ```
+
+A HomeBase 3 answers it as it answers `{"version": 1, "cmd": 11001}` **[verified]**.
 
 Receipt 0, then a `0x0547` in about 0.2 s: `{"cmd": 1307, "payload": {"cmd": 11001,
 "mIntRet": 0, "old_storage_label": "", "cur_storage_label": "", "body": {...}}}`.
@@ -429,9 +453,8 @@ format 26884 MiB → "26.25 GB". Its total is `disk_size_1024 / 1024`.
 **Library API.** `await station.async_get_storage()` (or the session's) sends the read
 under the command lock and returns a `StorageInfo`; a non-zero `mIntRet` raises
 `CommandRejectedError`, a reply without `body` `ProtocolError`, silence
-`DeviceTimeoutError`. A non-zero command receipt raises at once (`CommandRejectedError`,
-`CommandUnsupportedError` for -108): a HomeBase mini (T8023) answers receipt -1 and sends
-no record **[reporter log]**. The reply is matched by `cmd` 1307 with inner `cmd` 11001 under
+`DeviceTimeoutError` after `STORAGE_TIMEOUT` (30 s). A non-zero command receipt raises
+at once (`CommandRejectedError`, `CommandUnsupportedError` for -108). The reply is matched by `cmd` 1307 with inner `cmd` 11001 under
 either cipher (a fresh session gets it under ECB). `station.storage` holds the last
 record (None until one arrives), and the answer and every unsolicited GCM record —
 another client's query, the push after a format — whose parsed value differs from the
@@ -466,7 +489,7 @@ field one record gains later is not lost.
 | `data_partition_mib`, `swap_mib` | `data_partition_size`, `swap_size` if present | same |
 | `wear_percent` | `eol_percent` if present | `eol_percent` (life used, 0-100) |
 | `temperature_c` | `cur_temperate` (°C) | `cur_temperate` if present |
-| `health` / `healthy`, `work_status` | `health` (0 = healthy), `work_status` (0 idle) | same |
+| `health` / `healthy`, `work_status` | `health` (the app flags 1, 2, 3 as a fault; `healthy` is False for those), `work_status` (0 idle) | same |
 | `parted_status`, `ready`, `formatting` | `parted_status` (1 ready, 2 formatting) | same, if present |
 | `model`, `disk_type`, `path` | `device_module`, `hdd_type`, `disk_path` | same, if present |
 | `serial`, `label` | `serial_number`, `hdd_label` — left out of `repr`; redact them in logs | same, if present |
@@ -481,6 +504,28 @@ and the rest still parses; `used_mib` is None when one of its terms is. **No dis
 `external` is None unless `move_disk_info` names a path or a size. That rule follows
 the record's shape; a station without an internal disk, and any external disk, have
 not been seen.
+
+### HomeBase 2 storage (55000) **[declared: app]**
+
+A HomeBase 2 from firmware 3.3.7.7 is asked `APP_CMD_GET_HUB_STORAGE_INFO` (55000):
+
+```json
+{"account_id": "<owner user id>", "cmd": 55000, "mChannel": 0, "mValue3": 0,
+ "payload": {"account_id": "<owner user id>", "type": 1, "value": 0}}
+```
+
+The answer is a `0x0547` (the app parses it as `HbCard`):
+`{"cmd": 55000, "hdd_exist": 1, "emmc_status": 0, "usb_status": 0, "payload":
+{"emmc_total", "emmc_free", "hdd_total", "hdd_free"}}`. The sizes are numbers in **MB**
+(the app shows them as MB, or ÷1000 as GB). The app shows a medium whose status is 1 or
+26 as empty (free = total) and a disk only when `hdd_exist` is 1.
+
+**Library API.** `station.async_get_storage()` sends it on such a station
+(`session.async_get_hub_storage()`), and returns a `StorageInfo` with `emmc` and, when
+`hdd_total` > 0 and `hdd_exist` is 1 (or absent), `disk`: `size_mib` = total, `used_mib`
+= total − free (0 for status 1 or 26), `work_status` = `emmc_status` / `usb_status`.
+The sizes keep the station's MB in the `*_mib` fields, as the `1144` figures do. Not
+verified on hardware: the reply's exact layout comes from the app's parser.
 
 ### A standalone camera's eMMC (1144 `GET_SD_INFO_EXT`) **[verified]**
 
@@ -505,7 +550,10 @@ reply body was `00000000 e41b0000 c41b0000` = `[0, 7140, 7108]` (a ~7.14 GB eMMC
 code −1. The field order is by observation (free never exceeds total, so with status 0
 `[status, total, free]` is the only consistent reading of `[0, 7140, 7108]`).
 
-**Library API.** On a standalone camera `station.async_get_storage()` sends this query
+The app sends the same query to an older HomeBase 2 and to the T8001, T8002, T8020 and
+T8023 (see the table above); its layout there is not verified.
+
+**Library API.** On a standalone camera and those stations `station.async_get_storage()` sends this query
 instead (`session.async_get_sd_info()`): a bare `1144` frame, its answer bound by frame
 type on channel 0 and parsed from the 12-byte body. It returns a `StorageInfo` with only
 `emmc` set: an `EmmcInfo` (`size_mib` = total, `used_mib` = `total − free`,

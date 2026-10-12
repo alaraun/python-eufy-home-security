@@ -227,6 +227,22 @@ def v1_still(
     return header + ecb_encrypt(key, image[:V1_ENCRYPTED_LEN]) + image[V1_ENCRYPTED_LEN:]
 
 
+def synthetic_hub_storage() -> dict[str, Any]:
+    """A HomeBase 2 ``55000`` reply without its ``cmd``, with synthetic figures (MB): a
+    16 GB eMMC 4000 MB used and a 1 TB disk 250000 MB used."""
+    return {
+        "hdd_exist": 1,
+        "emmc_status": 0,
+        "usb_status": 0,
+        "payload": {
+            "emmc_total": 16000.0,
+            "emmc_free": 12000.0,
+            "hdd_total": 1000000.0,
+            "hdd_free": 750000.0,
+        },
+    }
+
+
 def synthetic_storage_body(*, label: str = SYNTHETIC.disk_label) -> dict[str, Any]:
     """A storage record ``body`` (``1307`` / ``11001``) with synthetic figures (MiB).
 
@@ -376,6 +392,9 @@ class FakeStation:
     """Send database and still replies as clear JSON under the ECB tag, as a T8170 does."""
     storage: dict[str, Any] = field(default_factory=synthetic_storage_body)
     """The storage record ``body`` a ``1307`` / ``11001`` is answered with."""
+    hub_storage: dict[str, Any] | None = None
+    """The ``55000`` reply (without ``cmd``, see :func:`synthetic_hub_storage`) a
+    HomeBase 2 storage query is answered with; None: no answer."""
     sd_info: tuple[int, int, int] | None = None
     """``(status, total, free)`` a standalone ``SDINFO_EX`` (``1144``) is answered with as
     three ``int32``; None: no answer (the frame is ignored)."""
@@ -962,6 +981,9 @@ class FakeStation:
         elif cmd == 1307:
             if (obj.get("payload") or {}).get("cmd") == 11001:
                 self.send_storage(cipher=self.storage_reply_cipher)
+        elif cmd == 55000:
+            if self.hub_storage is not None:
+                self.send_json(FrameType.NOTIFY_PAYLOAD, {"cmd": 55000, **self.hub_storage})
         elif cmd in (1003, 1024, 1025):
             if self.media_reply_code is not None:
                 self.send_json(

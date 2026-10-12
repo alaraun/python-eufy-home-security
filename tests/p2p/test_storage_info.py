@@ -10,6 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from eufy_home_security.p2p.storage_info import (
+    CMD_HUB_STORAGE,
     CMD_SD_INFO,
     CMD_STORAGE,
     STORAGE_QUERY_INFO,
@@ -17,18 +18,124 @@ from eufy_home_security.p2p.storage_info import (
     EmmcInfo,
     StorageInfo,
     StorageMedium,
+    StorageQuery,
+    compare_versions,
+    hub_storage_query_payload,
+    parse_hub_storage,
     parse_sd_card_info,
     parse_storage_info,
+    result_code,
+    storage_query,
     storage_query_payload,
     storage_record,
 )
 from eufy_home_security.testing import SYNTHETIC
-from eufy_home_security.testing.station import synthetic_storage_body
+from eufy_home_security.testing.station import synthetic_hub_storage, synthetic_storage_body
 
 
-def test_query_payload_is_the_apps() -> None:
-    assert storage_query_payload() == {"version": 1, "cmd": 11001}
-    assert (CMD_STORAGE, STORAGE_QUERY_INFO) == (1307, 11001)
+def test_query_payloads_are_the_apps() -> None:
+    """The handlers' params: 1307 v2 ``{cmd: 11001, version: 0, mChannel: 255}``,
+    55000 v9 ``{account_id, type: 1, value: 0}``."""
+    assert storage_query_payload() == {"cmd": 11001, "version": 0, "mChannel": 255}
+    assert (CMD_STORAGE, STORAGE_QUERY_INFO, CMD_HUB_STORAGE) == (1307, 11001, 55000)
+    assert hub_storage_query_payload("u1") == {"account_id": "u1", "type": 1, "value": 0}
+
+
+@pytest.mark.parametrize(
+    ("serial", "firmware", "standalone", "query"),
+    [
+        ("T8030P2000054321", "3.8.7.4", False, StorageQuery.DISK_INFO),
+        ("T8025P2000054321", None, False, StorageQuery.DISK_INFO),
+        ("T9000P2000054321", None, False, StorageQuery.DISK_INFO),
+        ("T8N00P2000054321", None, False, StorageQuery.DISK_INFO),
+        ("T8010P2000054321", "3.4.2.6h", False, StorageQuery.HUB_STORAGE),
+        ("T8010P2000054321", "3.3.7.7", False, StorageQuery.HUB_STORAGE),
+        ("T8010P2000054321", "3.3.7.6", False, StorageQuery.SD_INFO),
+        ("T8010P2000054321", None, False, StorageQuery.SD_INFO),
+        ("T8001P2000054321", None, False, StorageQuery.SD_INFO),
+        ("T8002P2000054321", None, False, StorageQuery.SD_INFO),
+        ("T8020P2000054321", None, False, StorageQuery.SD_INFO),
+        ("T8023P2000054321", None, False, StorageQuery.SD_INFO),
+        ("T8024P2000054321", None, True, StorageQuery.NONE),
+        ("T8170P2000054321", None, True, StorageQuery.SD_INFO),
+        ("T8040P2000054321", None, False, StorageQuery.DISK_INFO),
+    ],
+)
+def test_the_storage_query_is_the_one_the_apps_handler_builds(
+    serial: str, firmware: str | None, standalone: bool, query: StorageQuery
+) -> None:
+    assert storage_query(serial, firmware, standalone=standalone) is query
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "result"),
+    [
+        ("3.4.2.6h", "3.3.7.7", 1),
+        ("3.3.7.7", "3.3.7.7", 0),
+        ("3.3.7", "3.3.7.7", -1),
+        ("3.3.7.7h", "3.3.7.7", -1),
+        ("", "3.3.7.7", -1),
+        ("10.0", "9.9.9", 1),
+    ],
+)
+def test_versions_compare_as_in_the_app(a: str, b: str, result: int) -> None:
+    """Parts compare as numbers; a part that is not one (``"7h"``) counts as 0."""
+    assert compare_versions(a, b) == result
+
+
+def test_a_hub_storage_reply_gives_the_emmc_and_the_disk() -> None:
+    info = parse_hub_storage({"cmd": 55000, **synthetic_hub_storage()})
+    assert info is not None
+    emmc, disk = info.emmc, info.disk
+    assert emmc is not None
+    assert disk is not None
+    assert (emmc.size_mib, emmc.used_mib, emmc.free_mib, emmc.used_percent) == (
+        16000,
+        4000,
+        12000,
+        25.0,
+    )
+    assert (disk.size_mib, disk.used_mib, disk.work_status) == (1000000, 250000, 0)
+    assert info.external is None
+
+
+@pytest.mark.parametrize(
+    ("top", "disk_used"),
+    [({"usb_status": 26}, 0), ({"usb_status": 1}, 0), ({"usb_status": 3}, 250000)],
+    ids=["status-26-empty", "status-1-empty", "other-status"],
+)
+def test_a_hub_storage_status_the_app_shows_as_empty_counts_nothing_used(
+    top: dict[str, Any], disk_used: int
+) -> None:
+    info = parse_hub_storage({"cmd": 55000, **synthetic_hub_storage(), **top})
+    assert info is not None
+    assert info.disk is not None
+    assert info.disk.used_mib == disk_used
+
+
+def test_a_hub_storage_reply_without_a_disk_or_as_a_string() -> None:
+    reply = synthetic_hub_storage()
+    no_disk = parse_hub_storage({"cmd": 55000, **reply, "hdd_exist": 0})
+    assert no_disk is not None
+    assert no_disk.disk is None
+    assert no_disk.emmc is not None
+    as_text = parse_hub_storage({"cmd": "55000", **reply, "payload": json.dumps(reply["payload"])})
+    assert as_text == parse_hub_storage({"cmd": 55000, **reply})
+    empty = parse_hub_storage({"cmd": 55000, "payload": {"emmc_total": 0, "hdd_total": 0}})
+    assert empty == StorageInfo()
+    assert parse_hub_storage({"cmd": 1307, **reply}) is None
+    assert parse_hub_storage({"cmd": 55000, "payload": "{no"}) is None
+    assert result_code({"mIntRet": -1}) == -1
+    assert result_code({"code": "x"}) == -1
+    assert result_code({}) == 0
+
+
+@pytest.mark.parametrize(
+    ("health", "healthy"), [(0, True), (1, False), (2, False), (3, False), (4, True)]
+)
+def test_a_medium_is_unhealthy_for_the_codes_the_app_flags(health: int, healthy: bool) -> None:
+    """The app's storage parser shows health 1 and 2 (and 3) as a fault, nothing else."""
+    assert EmmcInfo(health=health).healthy is healthy
 
 
 def test_a_full_record_parses_into_the_apps_figures() -> None:

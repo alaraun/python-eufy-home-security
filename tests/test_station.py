@@ -92,6 +92,7 @@ from eufy_home_security.testing.station import (
     MEDIA_KEYFRAME,
     MEDIA_RECORDING_PFRAME,
     FakeStation,
+    synthetic_hub_storage,
     v1_still,
 )
 
@@ -3213,6 +3214,72 @@ async def test_async_get_storage_on_homebase_retains_1307_path(
     assert info.disk is not None
     assert info.disk.used_mib == 14500  # synthetic_storage_body()'s default
     assert station.storage == info
+
+
+async def _station_of_model(fake: FakeStation, serial: str, firmware: str | None) -> Station:
+    """A station ``serial`` listed with ``firmware``, on ``fake``."""
+    fake.serial = serial
+    fake.static_key = static_key(serial, fake.did)
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(serial, credentials, host="127.0.0.1", port=fake.discovery_port)
+    device = dataclasses.replace(STATION, device_sn=serial, main_sw_version=firmware)
+    return Station(device, session)
+
+
+def _sent_storage_queries(fake: FakeStation) -> list[int]:
+    return [obj["cmd"] for obj in fake.received if obj.get("cmd") in (1307, 55000)]
+
+
+async def test_a_homebase_2_from_3_3_7_7_reads_the_hub_storage_query(fake: FakeStation) -> None:
+    """The app's HomeBase 2 handler asks 55000 from firmware 3.3.7.7 (listed 3.4.2.6h)."""
+    fake.hub_storage = synthetic_hub_storage()
+    station = await _station_of_model(fake, "T8010P2000054321", "3.4.2.6h")
+    try:
+        info = await station.async_get_storage()
+    finally:
+        await station.async_close()
+    assert _sent_storage_queries(fake) == [55000]
+    sent = next(obj for obj in fake.received if obj.get("cmd") == 55000)
+    assert sent["payload"] == {"account_id": SYNTHETIC.account_id, "type": 1, "value": 0}
+    assert info.emmc is not None
+    assert info.emmc.size_mib == 16000
+    assert info.disk is not None
+    assert info.disk.used_mib == 250000
+    assert station.storage == info
+
+
+@pytest.mark.parametrize(
+    ("serial", "firmware"),
+    [("T8010P2000054321", "3.3.7.6"), ("T8023P2000054321", "1.2.3.4")],
+    ids=["older-homebase-2", "homebase-mini"],
+)
+async def test_stations_the_app_asks_sd_info_read_the_emmc(
+    fake: FakeStation, serial: str, firmware: str
+) -> None:
+    fake.sd_info = (0, 8000, 6000)
+    station = await _station_of_model(fake, serial, firmware)
+    try:
+        info = await station.async_get_storage()
+    finally:
+        await station.async_close()
+    assert _sent_storage_queries(fake) == []
+    assert info.emmc is not None
+    assert info.emmc.used_percent == 25.0
+    assert info.disk is None
+
+
+async def test_a_station_the_app_asks_no_storage_query_is_unsupported(fake: FakeStation) -> None:
+    station = await _station_of_model(fake, "T8024P2000054321", None)
+    try:
+        with pytest.raises(CommandUnsupportedError):
+            await station.async_get_storage()
+    finally:
+        await station.async_close()
+    assert _sent_storage_queries(fake) == []
+    assert fake.received == []
 
 
 # ── Standalone writes and per-view reports ─────────────────────────────────────

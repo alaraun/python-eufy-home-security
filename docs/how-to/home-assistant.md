@@ -906,9 +906,13 @@ A closed session (`async_close`) never reconnects on its own — build a new
       `storage.emmc` set (no `disk`); it **wakes a battery camera**, so read it when the
       camera is awake anyway (at setup, or fold it into a preset/live capture) rather
       than on a timer. `storage.emmc.used_percent` is the "eMMC used" figure.
-    - A station that refuses the query (a HomeBase mini, T8023, answers receipt -1)
-      raises `CommandRejectedError` at once. Treat that as "no storage figures from this
-      station": stop polling it until the next setup rather than logging an error per poll.
+    - The library sends each model the query the eufy app sends it: a HomeBase 2 gets
+      its eMMC and disk totals (sizes in MB, no recordings or wear figures), a HomeBase
+      mini (T8023) and the older small HomeBases their eMMC only, like a standalone
+      camera. A T8024 raises `CommandUnsupportedError` without sending anything, and a
+      station that refuses the query raises `CommandRejectedError` at its receipt
+      (within 30 s). Treat both as "no storage figures from this station": stop polling
+      it until the next setup rather than logging an error per poll.
     - Poll it on its own slow interval (about 30 min: disk use moves slowly) rather than
       in the parameter-dump coordinator, and apply `StorageChanged(station_sn, storage)`
       in between: the station pushes a new record when a format finishes, and whenever

@@ -98,6 +98,7 @@ from eufy_home_security.testing.station import (
     SESSION_KEY,
     FakeStation,
     media_keyframe,
+    synthetic_hub_storage,
     v1_still,
     video_record,
 )
@@ -1242,7 +1243,7 @@ async def test_storage_is_read_kept_and_announced_on_change(station: FakeStation
         before = session.storage
         info = await session.async_get_storage()
         request = next(obj for obj in station.received if obj["cmd"] == 1307)
-        assert request["payload"] == {"version": 1, "cmd": 11001}
+        assert request["payload"] == {"cmd": 11001, "version": 0, "mChannel": 255}
         disk = info.disk
         assert disk is not None
         assert disk.used_mib == 14500
@@ -1418,20 +1419,45 @@ async def test_storage_rejection_and_silence_are_typed_errors(station: FakeStati
         await session.async_close()
 
 
-async def test_a_refused_storage_query_fails_at_its_receipt(station: FakeStation) -> None:
-    """A station that refuses the storage query sends receipt -1 and no record: the
+@pytest.mark.parametrize("command", [1307, 55000])
+async def test_a_refused_storage_query_fails_at_its_receipt(
+    station: FakeStation, command: int
+) -> None:
+    """A station that refuses a storage query sends receipt -1 and no record: the
     query fails at once with that code instead of waiting out its timeout."""
-    station.refused_commands = {1307: -1}
+    station.refused_commands = {command: -1}
     session = make_session(station, Provider(station))
+    read = session.async_get_storage if command == 1307 else session.async_get_hub_storage
     try:
         await session.async_connect()
         started = time.monotonic()
         with pytest.raises(CommandRejectedError) as rejected:
-            await session.async_get_storage(timeout=5)
+            await read(timeout=5)
         assert time.monotonic() - started < 2
     finally:
         await session.async_close()
-    assert (rejected.value.command, rejected.value.code) == (1307, -1)
+    assert (rejected.value.command, rejected.value.code) == (command, -1)
+
+
+async def test_a_hub_storage_read_takes_only_its_own_reply(station: FakeStation) -> None:
+    """A 1307 record arriving while 55000 is in flight is not its answer; the 55000
+    reply is, and a non-zero ``mIntRet`` in it is a rejection."""
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        station.send_storage()
+        with pytest.raises(DeviceTimeoutError):
+            await session.async_get_hub_storage(timeout=0.3)
+        station.hub_storage = synthetic_hub_storage()
+        info = await session.async_get_hub_storage(timeout=2)
+        assert info.emmc is not None
+        assert session.storage == info
+        station.hub_storage = {**synthetic_hub_storage(), "mIntRet": -3}
+        with pytest.raises(CommandRejectedError) as rejected:
+            await session.async_get_hub_storage(timeout=2)
+    finally:
+        await session.async_close()
+    assert (rejected.value.command, rejected.value.code) == (55000, -3)
     assert not isinstance(rejected.value, CommandUnsupportedError)
 
 

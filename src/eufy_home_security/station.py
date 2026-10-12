@@ -93,6 +93,7 @@ from .events import (
 from .exceptions import (
     CommandNotAppliedError,
     CommandRejectedError,
+    CommandUnsupportedError,
     DeviceBusyError,
     DeviceTimeoutError,
     EufySecurityError,
@@ -142,7 +143,7 @@ from .p2p._json import json_int
 from .p2p.clip import ClipWriter, MediaClip
 from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
 from .p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
-from .p2p.messages import decode_preset_picture, record_id_day
+from .p2p.messages import RECEIPT_NOT_HANDLED, decode_preset_picture, record_id_day
 from .p2p.mode_actions import MODE_TABLE_PARAMS, ModeTableField, mode_table_from_params
 from .p2p.params import (
     ACTIVE_MODE_PARAM,
@@ -158,7 +159,7 @@ from .p2p.session import (
     SessionStats,
     StationSession,
 )
-from .p2p.storage_info import StorageInfo
+from .p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
 
 if TYPE_CHECKING:
     from .storage import SessionCache
@@ -2736,13 +2737,26 @@ class Station:
     async def async_get_storage(self, *, timeout: float | None = None) -> StorageInfo:
         """Read the storage record: internal disk, external disk and eMMC figures.
 
-        Read-only (the app's HDD screen). On a standalone camera (a T8170), which does
-        not answer the HomeBase storage record, this reads its built-in eMMC through
-        ``SDINFO_EX`` (``1144``) instead, so :attr:`~.p2p.storage_info.StorageInfo.emmc`
-        alone is set. Wakes a battery camera. The result is also kept as :attr:`storage`.
+        Read-only (the app's HDD screen). The query is the one the eufy app sends this
+        model (:func:`~.p2p.storage_info.storage_query`, by serial and the listed
+        firmware): the ``1307`` record on the HomeBase 3 family, ``55000`` on a HomeBase 2
+        from firmware 3.3.7.7, and ``SDINFO_EX`` (``1144``) on a standalone camera, an
+        older HomeBase 2 and the small HomeBases, which sets
+        :attr:`~.p2p.storage_info.StorageInfo.emmc` alone. A model the app asks nothing
+        raises :class:`CommandUnsupportedError` without sending. Wakes a battery camera.
+        The result is also kept as :attr:`storage`.
         """
-        if self.session.standalone:
+        query = storage_query(
+            self.serial, self.device.main_sw_version, standalone=self.session.standalone
+        )
+        if query is StorageQuery.SD_INFO:
             return await self.session.async_get_sd_info(timeout=timeout)
+        if query is StorageQuery.HUB_STORAGE:
+            return await self.session.async_get_hub_storage(timeout=timeout)
+        if query is StorageQuery.NONE:
+            raise CommandUnsupportedError(
+                CMD_STORAGE, RECEIPT_NOT_HANDLED, "the eufy app asks this station no storage query"
+            )
         return await self.session.async_get_storage(timeout=timeout)
 
     @property

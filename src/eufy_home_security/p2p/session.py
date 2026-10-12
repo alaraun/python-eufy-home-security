@@ -208,11 +208,15 @@ from .notify import decode_camera_push, stamped_accounts
 from .params import ACTIVE_MODE_PARAM, GUARD_MODE_PARAM, ParamDump
 from .pppp import DISCOVERY_PORT, DrwChunk
 from .storage_info import (
+    CMD_HUB_STORAGE,
     CMD_SD_INFO,
     CMD_STORAGE,
     StorageInfo,
+    hub_storage_query_payload,
+    parse_hub_storage,
     parse_sd_card_info,
     parse_storage_info,
+    result_code,
     storage_query_payload,
     storage_record,
 )
@@ -312,6 +316,10 @@ MEDIA_DRAIN_MAX = 5.0
 EVENT_COUNT_RESEND = 2.0
 """How often an unanswered event-count query (10013) is sent again: a just-woken T8170
 ignores one sent immediately but answers one sent 5 s later within 0.3 s."""
+STORAGE_TIMEOUT = 30.0
+"""Seconds a JSON storage query waits for its reply: the app's default request timeout.
+A station that refuses the query ends the wait sooner with its receipt (a HomeBase 2
+sent -1 after 18 s)."""
 SD_INFO_RESEND = 2.0
 """How often the eMMC query (1144) is resent: a just-woken T8170 ignores it briefly."""
 SD_INFO_TIMEOUT = 15.0
@@ -2395,13 +2403,15 @@ class StationSession:
     async def async_get_storage(self, *, timeout: float | None = None) -> StorageInfo:
         """Read the station's storage record (``1307`` / ``11001``): disk and eMMC figures.
 
-        Read-only. The reply carries no correlation id, so a record the station sends
-        to this session for another client's query in the same moment answers it too
-        (it is the same record). Raises :class:`CommandRejectedError` for a non-zero
-        result or a non-zero command receipt (:class:`CommandUnsupportedError` for
-        ``NOT_HANDLED``; a station that refuses the query sends no record),
-        :class:`ProtocolError` for a reply without a ``body``, and
-        :class:`DeviceTimeoutError` when nothing answers. The record also becomes
+        The query of the HomeBase 3 family; see
+        :func:`~.storage_info.storage_query` for which station answers which. Read-only.
+        The reply carries no correlation id, so a record the station sends to this
+        session for another client's query in the same moment answers it too (it is the
+        same record). Raises :class:`CommandRejectedError` for a non-zero result or a
+        non-zero command receipt (:class:`CommandUnsupportedError` for ``NOT_HANDLED``;
+        a station that refuses the query sends no record), :class:`ProtocolError` for a
+        reply without a ``body``, and :class:`DeviceTimeoutError` when nothing answers
+        within ``timeout`` (default :data:`STORAGE_TIMEOUT`). The record also becomes
         :attr:`storage` and, when it changed, a :class:`~..events.StorageChanged`.
 
         The answer to this query is taken under either cipher: on a fresh session the
@@ -2409,35 +2419,76 @@ class StationSession:
         session asked for, and disk figures are not security state. Records nobody here
         asked for are kept only under GCM.
         """
-        timeout = _or(timeout, COMMAND_TIMEOUT)
+
+        def parse(obj: Mapping[str, Any]) -> StorageInfo | None:
+            if (record := storage_record(obj)) is None:
+                return None
+            _raise_for_code(CMD_STORAGE, record.code)
+            if record.body is None:
+                raise ProtocolError("the storage record carries no body")
+            return parse_storage_info(record.body)
+
+        return await self._read_storage(
+            CMD_STORAGE, lambda _account: storage_query_payload(), parse, timeout, "storage"
+        )
+
+    async def async_get_hub_storage(self, *, timeout: float | None = None) -> StorageInfo:
+        """Read a HomeBase 2's storage (``55000``, ``APP_CMD_GET_HUB_STORAGE_INFO``).
+
+        The query the app sends a HomeBase 2 from firmware 3.3.7.7 **[declared: app]**:
+        the eMMC and disk totals and free space (:func:`~.storage_info.parse_hub_storage`).
+        Read-only; errors, timeout and the kept :attr:`storage` as for
+        :meth:`async_get_storage`.
+        """
+
+        def parse(obj: Mapping[str, Any]) -> StorageInfo | None:
+            info = parse_hub_storage(obj)
+            if info is not None:
+                _raise_for_code(CMD_HUB_STORAGE, result_code(obj))
+            return info
+
+        return await self._read_storage(
+            CMD_HUB_STORAGE, hub_storage_query_payload, parse, timeout, "hub storage"
+        )
+
+    async def _read_storage(
+        self,
+        command: int,
+        payload: Callable[[str], Mapping[str, Any]],
+        parse: Callable[[Mapping[str, Any]], StorageInfo | None],
+        timeout: float | None,
+        label: str,
+    ) -> StorageInfo:
+        """Send the JSON storage query ``command`` and take the reply ``parse`` accepts.
+
+        Like the app's request client, a non-zero command receipt ends the wait with
+        that code, and the reply may take up to :data:`STORAGE_TIMEOUT`.
+        """
+        timeout = _or(timeout, STORAGE_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
         body = device_msg(
             creds.account_id,
-            CMD_STORAGE,
-            storage_query_payload(),
+            command,
+            dict(payload(creds.account_id)),
             transaction=str(int(time.time() * 1000)),
         )
 
         def match(inbound: Inbound) -> StorageInfo | None:
             if inbound.type == FrameType.CMD_TRANSFER and (code := inbound.receipt()) is not None:
                 if code != RECEIPT_TAKEN:
-                    raise _receipt_error(CMD_STORAGE, code)
+                    raise _receipt_error(command, code)
                 return None
-            if inbound.type != FrameType.NOTIFY_PAYLOAD:
+            if inbound.type != FrameType.NOTIFY_PAYLOAD or (obj := inbound.json()) is None:
                 return None
-            if (obj := inbound.json()) is None or (record := storage_record(obj)) is None:
-                return None
-            _raise_for_code(CMD_STORAGE, record.code)
-            if record.body is None:
-                raise ProtocolError("the storage record carries no body")
-            info = parse_storage_info(record.body)
-            self._keep_storage(info)
+            info = parse(obj)
+            if info is not None:
+                self._keep_storage(info)
             return info
 
-        async with self._op("storage read"):
+        async with self._op(f"{label} read"):
             info = await self._request(
-                lambda: self._send_secure(body), match, timeout=timeout, label="storage query"
+                lambda: self._send_secure(body), match, timeout=timeout, label=f"{label} query"
             )
         return cast(StorageInfo, info)
 
