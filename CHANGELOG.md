@@ -4,6 +4,19 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.11](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.10...v0.3.11) (2026-10-12)
+
+
+### Features
+
+* CameraImage.codec and its content type follow the picture (video/hevc or video/h264); Station.video_codec names a camera's codec ([b99651e](https://github.com/alaraun/python-eufy-home-security/commit/b99651e42d1646a6691ba3849e2269b64c2d5276))
+* VideoCodec, picture_codec and the image content types are exported; VideoCodec.content_type and mp4_tag ([b99651e](https://github.com/alaraun/python-eufy-home-security/commit/b99651e42d1646a6691ba3849e2269b64c2d5276))
+
+
+### Bug Fixes
+
+* a keyframe a camera sends in several records (HomeBase 2) is joined into one picture instead of dropped ([b99651e](https://github.com/alaraun/python-eufy-home-security/commit/b99651e42d1646a6691ba3849e2269b64c2d5276))
+
 ## [0.3.10](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.9...v0.3.10) (2026-10-11)
 
 
