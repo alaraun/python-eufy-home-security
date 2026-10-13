@@ -4,6 +4,24 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.15](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.14...v0.3.15) (2026-10-13)
+
+
+### Features
+
+* history listing with the verb the app sends a station outside the HomeBase 3 family ([8b45ef0](https://github.com/alaraun/python-eufy-home-security/commit/8b45ef0606cead735a3cbcfac5f835492f5b1f2c))
+* Station.has_battery tells whether a camera model runs on a battery ([3369719](https://github.com/alaraun/python-eufy-home-security/commit/33697193ab1193e20f5d79a0a6060c1cd103a23c))
+
+
+### Bug Fixes
+
+* a video PES carries a DTS, so the opening keyframe keeps one in libavformat ([86d2e14](https://github.com/alaraun/python-eufy-home-security/commit/86d2e1493b30c1ef7b378ddac97e77589799d890))
+
+
+### Documentation
+
+* PTZ_BUSY_CODE keeps its docstring; a standalone camera's history verb is graded in the HA guide ([0dd0dc3](https://github.com/alaraun/python-eufy-home-security/commit/0dd0dc3cca9835368a7d777e5e57cf696b25c030))
+
 ## [0.3.14](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.13...v0.3.14) (2026-10-13)
 
 
