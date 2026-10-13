@@ -177,6 +177,7 @@ from .messages import (
     CMD_STOP_REALTIME_MEDIA,
     DB_EVENT_COUNT,
     DB_QUERY_HISTORY,
+    DB_QUERY_LOCAL_EVENTS,
     ECB_RESULT_CODES,
     LIVE_OPEN_SUBHEADER_FLAG,
     PARAM_QUERY_ALL,
@@ -198,8 +199,11 @@ from .messages import (
     event_count_payload,
     flatten_history_rows,
     gcm_subheader,
+    history_cursor_time,
     history_query_payload,
+    history_query_verb,
     image_request_payload,
+    local_events_query_payload,
     record_id_day,
     string_command_body,
 )
@@ -353,6 +357,8 @@ cap a station with odd firmware — or anything on the LAN able to inject pushes
 them without bound.
 """
 HISTORY_PAGE_SIZE = 50
+HISTORY_LOCAL_PAGE_SIZE = 20
+"""The page the app asks of a station queried with ``DB_QUERY_LOCAL_EVENTS``."""
 """Records per history page (the app asks 30, then 50)."""
 HISTORY_MAX_PAGES = 1000
 """Pages read for one day before giving up on a station that never runs out."""
@@ -2651,7 +2657,7 @@ class StationSession:
         count: int | None = None,
         before: int | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
-        page_size: int = HISTORY_PAGE_SIZE,
+        page_size: int | None = None,
         timeout: float | None = None,
     ) -> list[HistoryRecord]:
         """History records across all devices from ``start_date`` to ``end_date``, newest first.
@@ -2663,13 +2669,20 @@ class StationSession:
         arrive, and ``count`` then counts the kept ones, so paging stops as soon as
         enough rows pass the filter.
 
-        Uses the app's verb (``DB_QUERY_HISTORY`` = 10011) the way the app does: one
-        day at a time (``start_date`` = the day, ``end_date`` = the next day), paging
-        with ``count`` = ``page_size`` and ``start_id`` = the previous page's oldest
-        ``record_id`` until a page comes back short. The station answers a query
-        with the rows of a single day only, so a multi-day window asked in one
-        query misses every day after the first; a day with more rows than one page
-        is cut short without the paging. ``timeout`` bounds each query (None:
+        Uses the verb the app sends this station's model
+        (:func:`~.messages.history_query_verb`) the way the app does: one day at a
+        time (``start_date`` = the day, ``end_date`` = the next day), paging with
+        ``count`` = ``page_size`` (None: :data:`HISTORY_PAGE_SIZE`, or
+        :data:`HISTORY_LOCAL_PAGE_SIZE` under ``DB_QUERY_LOCAL_EVENTS``) until a page
+        comes back short. Under ``DB_QUERY_HISTORY`` (10011, the HomeBase 3 family)
+        the cursor is ``start_id`` = the previous page's oldest ``record_id``; under
+        ``DB_QUERY_LOCAL_EVENTS`` (10017, every other station, **[declared: app]**,
+        unverified on hardware) it is ``start_time`` = the previous page's oldest
+        ``start_time``, and a page whose first row repeats ends the day. The station
+        answers a query with the rows of a single day only, so a multi-day window
+        asked in one query misses every day after the first; a day with more rows
+        than one page is cut short without the paging. ``timeout`` bounds each query
+        (None:
         :data:`HISTORY_QUERY_TIMEOUT`); a query left unanswered is sent once more with
         the same cursor, and :class:`DeviceTimeoutError` is raised when that one times
         out too. Raises :class:`ValueError`, before sending,
@@ -2677,6 +2690,9 @@ class StationSession:
         or a ``page_size`` below 2 (a page repeats the cursor row, so a page of 1
         cannot move).
         """
+        verb = history_query_verb(self.serial)
+        if page_size is None:
+            page_size = HISTORY_PAGE_SIZE if verb == DB_QUERY_HISTORY else HISTORY_LOCAL_PAGE_SIZE
         if page_size < 2:
             raise ValueError("page_size must be at least 2")
         if count is not None and count < 1:
@@ -2694,6 +2710,7 @@ class StationSession:
                 day,
                 records,
                 seen,
+                verb=verb,
                 count=count,
                 start_id=before if day == cursor_day else None,
                 keep=keep,
@@ -2726,6 +2743,7 @@ class StationSession:
         records: list[HistoryRecord],
         seen: set[int],
         *,
+        verb: int = DB_QUERY_HISTORY,
         count: int | None,
         start_id: int | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
@@ -2734,19 +2752,47 @@ class StationSession:
     ) -> None:
         """Add one day's records to ``records``, page by page, until the day or ``count``
         runs out; ``seen`` holds the ``record_id`` values already met. With
-        ``start_id`` the day is paged from that row, which is left out; only rows
-        ``keep`` accepts are added."""
+        ``start_id`` the day is paged from that row, which is left out (under
+        ``DB_QUERY_LOCAL_EVENTS`` the day is paged from its newest row and the rows
+        from ``start_id`` up are left out); only rows ``keep`` accepts are added."""
         cursor = start_id or 0
         if start_id:
             seen.add(start_id)  # the first page starts with the cursor row
+        local = verb == DB_QUERY_LOCAL_EVENTS
+        time_cursor = "0"
+        first_id: int | None = None
         for _ in range(HISTORY_MAX_PAGES):
-            page, oldest = await self._history_page(day, cursor, page_size, timeout, resend=True)
-            fresh = [r for r in page if not r.record_id or r.record_id not in seen]
+            page, oldest = await self._history_page(
+                day,
+                cursor if not local else 0,
+                page_size,
+                timeout,
+                resend=True,
+                verb=verb,
+                start_time=time_cursor,
+            )
+            wanted = page
+            if local and start_id:
+                wanted = [r for r in page if not r.record_id or r.record_id < start_id]
+            fresh = [r for r in wanted if not r.record_id or r.record_id not in seen]
             seen.update(r.record_id for r in fresh)
             records.extend(r for r in fresh if keep is None or keep(r))
             if count is not None and len(records) >= count:
                 return
-            if len(page) < page_size or not fresh or oldest is None or oldest == cursor:
+            if len(page) < page_size:
+                return
+            if local:
+                # The app's paging: the oldest start_time of the page, and a page that
+                # starts with the same row as the last one ends the day.
+                if page[0].record_id and page[0].record_id == first_id:
+                    return
+                first_id = page[0].record_id
+                times = [r.start_time for r in page if r.start_time]
+                if not times:
+                    return
+                time_cursor = history_cursor_time(min(times))
+                continue
+            if not fresh or oldest is None or oldest == cursor:
                 return
             cursor = oldest
         _LOGGER.warning(
@@ -2764,11 +2810,15 @@ class StationSession:
         timeout: float | None,
         *,
         resend: bool = False,
+        verb: int = DB_QUERY_HISTORY,
+        start_time: str = "0",
     ) -> tuple[list[HistoryRecord], int | None]:
         """One page of a day's history and the cursor for the next (its oldest ``record_id``).
 
-        ``resend``: after a timeout, ask the same page once more; a late reply to the
-        first query answers the second as well.
+        ``verb`` picks the query: ``DB_QUERY_HISTORY`` pages from ``start_id``,
+        ``DB_QUERY_LOCAL_EVENTS`` from ``start_time``. ``resend``: after a timeout, ask
+        the same page once more; a late reply to the first query answers the second as
+        well.
         """
         timeout = HISTORY_QUERY_TIMEOUT if timeout is None else timeout
         await self.async_connect()
@@ -2778,13 +2828,18 @@ class StationSession:
         def send() -> None:
             transaction = str(int(time.time() * 1000))
             sent.add(transaction)
-            payload = history_query_payload(
+            dates = (
                 day.strftime(HISTORY_DATE_FORMAT),
                 (day + timedelta(days=1)).strftime(HISTORY_DATE_FORMAT),
-                count=page_size,
-                start_id=start_id,
-                transaction=transaction,
             )
+            if verb == DB_QUERY_LOCAL_EVENTS:
+                payload = local_events_query_payload(
+                    *dates, count=page_size, start_time=start_time, transaction=transaction
+                )
+            else:
+                payload = history_query_payload(
+                    *dates, count=page_size, start_id=start_id, transaction=transaction
+                )
             self._send_secure(
                 device_msg(creds.account_id, CMD_DATABASE, payload, channel=STATION_CHANNEL)
             )
@@ -2792,7 +2847,7 @@ class StationSession:
         def match(inbound: Inbound) -> tuple[list[HistoryRecord], int | None] | None:
             if inbound.type != FrameType.DB_SYNC or (obj := inbound.json()) is None:
                 return None
-            if obj.get("cmd") != DB_QUERY_HISTORY:
+            if json_int(obj.get("cmd")) != verb:
                 return None
             echoed = obj.get("transaction")
             if echoed is not None and str(echoed) not in sent:

@@ -304,6 +304,11 @@ def _record_id(row: dict[str, Any]) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+def _cursor_time(row: dict[str, Any]) -> str:
+    """A row's ``start_time`` as the 10017 cursor renders it (separators stripped)."""
+    return str(row.get("start_time", "")).replace("-", "").replace(" ", "").replace(":", "")
+
+
 def _record_day(row: dict[str, Any]) -> str | None:
     """``YYYYMMDD`` of a date-prefixed ``record_id`` (``YYYYMMDD`` + a 5-digit counter)."""
     record_id = _record_id(row)
@@ -378,7 +383,7 @@ class FakeStation:
     """Other tables the station appends to every history page (AI crops, the person
     library), by ``table_name``."""
     history_queries: list[dict[str, Any]] = field(default_factory=list)
-    """The inner ``payload`` of every history (10011) query received."""
+    """The inner ``payload`` of every history (10011 or 10017) query received."""
     event_summaries: dict[str, dict[str, Any]] = field(default_factory=dict)
     """The event-count (10013) item ``payload`` by device serial, as the T8170 answers:
     ``{"event_count": 11, "crop_hb3_path": "…_snapshot.jpg", "crop_cloud_path": ""}``."""
@@ -1005,6 +1010,8 @@ class FakeStation:
             inner = obj.get("payload") or {}
             if inner.get("cmd") == 10011:
                 self._answer_history(inner)
+            elif inner.get("cmd") == 10017:
+                self._answer_local_events(inner)
             elif inner.get("cmd") == 10013:
                 self._answer_event_count(inner)
             else:
@@ -1049,6 +1056,37 @@ class FakeStation:
                 "data": [{"payload": rows_, "table_name": name} for name, rows_ in tables],
                 "start_id": ids[0] if ids else 0,
                 "end_id": ids[-1] if ids else 0,
+                "mIntRet": 0,
+                "msg": "SUCCESSFUL",
+                "table": "history_record_info",
+                "transaction": inner.get("transaction"),
+            },
+        )
+
+    def _answer_local_events(self, inner: dict[str, Any]) -> None:
+        """A history page under the app's verb for a station other than the HomeBase 3
+        family (10017), as declared from the app: rows of the ``start_date`` day,
+        newest first, at most ``count``, older than the ``start_time`` cursor
+        (``YYYYMMDDHHMMSS``) when it is not ``"0"``. Unobserved on hardware: the
+        reply is shaped like a 10011 page naming the verb."""
+        query = inner.get("payload") or {}
+        self.history_queries.append(dict(query))
+        day = str(query.get("start_date", ""))
+        cursor = str(query.get("start_time") or "0")
+        rows = sorted(
+            (row for row in self.rows if _record_day(row) in (None, day)),
+            key=lambda row: _record_id(row) or 0,
+            reverse=True,
+        )
+        if cursor != "0":
+            rows = [row for row in rows if _cursor_time(row) < cursor]
+        page = rows[: int(query.get("count") or 20)]
+        tables = [("history_record_info", page), *self.history_side_tables.items()]
+        self.send_json(
+            FrameType.DB_SYNC,
+            {
+                "cmd": 10017,
+                "data": [{"payload": rows_, "table_name": name} for name, rows_ in tables],
                 "mIntRet": 0,
                 "msg": "SUCCESSFUL",
                 "table": "history_record_info",

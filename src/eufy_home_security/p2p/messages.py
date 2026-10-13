@@ -55,6 +55,22 @@ DB_QUERY = 10000
 #: (:func:`history_query_payload`) it returns one page of ``count`` records of one
 #: day, newest first; ``start_id`` pages back from a ``record_id``.
 DB_QUERY_HISTORY = 10011
+#: The history-list verb the app uses for every station whose thing description does
+#: not name :data:`DB_QUERY_HISTORY` (a HomeBase 2, a standalone camera): with the
+#: app's field set (:func:`local_events_query_payload`) it returns one page of
+#: ``count`` records of one day, newest first; ``start_time`` pages back from the
+#: oldest row's start time **[declared: app]**.
+DB_QUERY_LOCAL_EVENTS = 10017
+HISTORY_VERB_BY_MODEL: Mapping[str, int] = {
+    "T8030": DB_QUERY_HISTORY,
+    "T8025": DB_QUERY_HISTORY,
+    "T8N00": DB_QUERY_HISTORY,
+    "T9000": DB_QUERY_HISTORY,
+}
+"""The history verb a station's thing description names (``query_event_list_cmd``),
+by serial prefix; every other model gets the app's default, :data:`DB_QUERY_LOCAL_EVENTS`
+**[declared: app]**. A HomeBase 3 the app recognises by serial gets
+:data:`DB_QUERY_HISTORY` either way."""
 #: The event-count verb: per device the number of events and the path of the newest
 #: event's still (``crop_hb3_path``). A standalone T8170 answers it and not 10011;
 #: its handler uses it for ``device_thumbnail_path`` and ``event_data_number``.
@@ -306,10 +322,60 @@ def history_query_payload(
     }
 
 
+def history_query_verb(serial: str) -> int:
+    """The history-list verb the app sends the station ``serial``
+    (:data:`HISTORY_VERB_BY_MODEL`)."""
+    return HISTORY_VERB_BY_MODEL.get(serial[:5], DB_QUERY_LOCAL_EVENTS)
+
+
+def local_events_query_payload(
+    start_date: str,
+    end_date: str,
+    *,
+    count: int = 20,
+    start_time: str = "0",
+    table: str = "history_record_info",
+    transaction: str,
+) -> dict[str, Any]:
+    """The inner CMD_DATABASE (1306) object for a history list, verb
+    ``DB_QUERY_LOCAL_EVENTS`` (10017), with the field set the eufy app sends for
+    a station other than the HomeBase 3 family: every filter at its "all" value and
+    no ``device_info`` (all devices at once). Dates are ``YYYYMMDD``; the app asks
+    for one day as ``start_date`` = that day, ``end_date`` = the next, ``count`` 20.
+    ``start_time`` ``"0"`` asks for the newest rows; a later page passes the previous
+    page's oldest ``start_time`` as :func:`history_cursor_time` renders it.
+    """
+    return {
+        "cmd": DB_QUERY_LOCAL_EVENTS,
+        "payload": {
+            "count": count,
+            "start_date": start_date,
+            "end_date": end_date,
+            "start_time": start_time,
+            "event_type": 0,
+            "ai_type": 0,
+            "storage_cloud": -1,
+            "trigger_type": 0,
+            "detection_type": 0,
+            "flag": 0,
+        },
+        "table": table,
+        "transaction": transaction,
+    }
+
+
+def history_cursor_time(start_time: str) -> str:
+    """A row's ``start_time`` (``YYYY-MM-DD HH:MM:SS``) as the ``start_time`` cursor of
+    the next :func:`local_events_query_payload` page: the app strips ``-``, space and
+    ``:`` (``YYYYMMDDHHMMSS``)."""
+    return start_time.replace("-", "").replace(" ", "").replace(":", "")
+
+
 def flatten_history_rows(
     obj: Mapping[str, Any], table: str = "history_record_info"
 ) -> list[dict[str, Any]]:
-    """The ``table`` rows from a ``DB_QUERY_HISTORY`` (10011) reply.
+    """The ``table`` rows from a ``DB_QUERY_HISTORY`` (10011) or
+    ``DB_QUERY_LOCAL_EVENTS`` (10017) reply.
 
     Unlike the flat person/face dumps, a history reply nests the records one level
     down: ``data`` is a list of per-table wrappers (``table_name`` + a ``payload``

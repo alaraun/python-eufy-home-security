@@ -71,7 +71,7 @@ from eufy_home_security.p2p.media import (
     VideoCodec,
     generate_media_rsa_key,
 )
-from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN
+from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN, history_cursor_time
 from eufy_home_security.p2p.session import (
     MEDIA_KEYFRAME_HOLD,
     PARAM_SETTLE,
@@ -1157,6 +1157,9 @@ async def test_list_history_parses_records(station: FakeStation) -> None:
     assert (rec.arm_mode, rec.msg_type, rec.user_name) == (63, 9, "someone")
 
 
+_HB2_SN = "T8010P2000000007"
+
+
 def _history_row(day: str, counter: int) -> dict[str, Any]:
     return {
         "record_id": int(day) * 100_000 + counter,
@@ -1200,6 +1203,53 @@ async def test_history_pages_every_day_of_the_window(station: FakeStation) -> No
     assert days[1][2] == history[29].record_id  # the next page starts at the last one seen
     assert ("20260915", "20260916", 0, 30) in days
     assert [r.record_id for r in capped] == [r["record_id"] for r in newest_first[:40]]
+
+
+async def test_a_station_outside_the_homebase_3_family_is_paged_by_start_time() -> None:
+    """A HomeBase 2 gets the app's 10017 query: the filters at their "all" values, no
+    ids, a page of 20, and the next page from the oldest start_time of the last;
+    ``before`` keeps the rows older than its record from the day's newest."""
+    station = FakeStation(serial=_HB2_SN)
+    await station.start()
+    yesterday = [_history_row("20260915", n) for n in range(22, 36)]  # hygiene: ok
+    today = [_history_row("20260916", n) for n in range(21, 71) if n % 7]  # gaps in ids
+    station.rows = [*yesterday, *today]  # hygiene: ok
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        history = await session.async_list_history("20260915", "20260916")
+        pages = len(station.history_queries)
+        older = await session.async_list_history("20260916", before=today[10]["record_id"])
+    finally:
+        await session.async_close()
+        station.stop()
+    newest_first = sorted(
+        [*yesterday, *today],  # hygiene: ok
+        key=lambda r: r["record_id"],
+        reverse=True,
+    )
+    assert [r.record_id for r in history] == [r["record_id"] for r in newest_first]
+    first = station.history_queries[0]
+    assert first == {
+        "count": 20,
+        "start_date": "20260916",
+        "end_date": "20260917",
+        "start_time": "0",
+        "event_type": 0,
+        "ai_type": 0,
+        "storage_cloud": -1,
+        "trigger_type": 0,
+        "detection_type": 0,
+        "flag": 0,
+    }
+    second = station.history_queries[1]
+    assert second["start_date"] == "20260916"
+    assert history[19].start_time is not None
+    assert second["start_time"] == history_cursor_time(history[19].start_time)
+    assert pages == 3 + 1  # 43 rows in 20, 20, 3; 14 rows in one page  # hygiene: ok
+    assert [r.record_id for r in older] == [r["record_id"] for r in today[9::-1]]
+    assert all(q["start_time"] == "0" for q in station.history_queries[pages : pages + 1])
 
 
 @pytest.mark.parametrize(

@@ -86,6 +86,40 @@ def test_history_query_payload_matches_the_app_field_set() -> None:
     assert (inner["count"], inner["start_id"], inner["end_id"], inner["need_ai"]) == (30, 0, 1, 1)
 
 
+def test_the_history_verb_follows_the_models_thing_description() -> None:
+    """The HomeBase 3 family declares 10011; every other station gets the app's
+    default 10017."""
+    assert messages.history_query_verb(SYNTHETIC.station_sn) == messages.DB_QUERY_HISTORY
+    for code in ("T8030", "T8025", "T8N00", "T9000"):
+        assert messages.history_query_verb(f"{code}P2000000001") == 10011
+    for code in ("T8010", "T8001", "T8170", "T8410", "T9999"):
+        assert messages.history_query_verb(f"{code}P2000000001") == 10017
+
+
+def test_local_events_query_payload_matches_the_app_field_set() -> None:
+    p = messages.local_events_query_payload("20260914", "20260915", transaction="t")
+    assert p["cmd"] == messages.DB_QUERY_LOCAL_EVENTS == 10017
+    assert p["table"] == "history_record_info"
+    assert p["transaction"] == "t"
+    assert p["payload"] == {
+        "count": 20,
+        "start_date": "20260914",
+        "end_date": "20260915",
+        "start_time": "0",
+        "event_type": 0,
+        "ai_type": 0,
+        "storage_cloud": -1,
+        "trigger_type": 0,
+        "detection_type": 0,
+        "flag": 0,
+    }
+    later = messages.local_events_query_payload(
+        "20260914", "20260915", count=5, start_time="20260914120000", transaction="u"
+    )
+    assert (later["payload"]["count"], later["payload"]["start_time"]) == (5, "20260914120000")
+    assert messages.history_cursor_time("2026-09-14 12:00:34") == "20260914120034"  # hygiene: ok
+
+
 def test_flatten_history_rows_unwraps_nested_payload_and_bare_rows() -> None:
     nested = {
         "cmd": 10011,

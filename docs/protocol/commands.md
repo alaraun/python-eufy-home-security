@@ -368,6 +368,21 @@ Names for every id: `src/eufy_home_security/devices/command_types.py`.
   come newest first; a page asked from `start_id` repeats that row first. A page
   shorter than `count` is the last. `record_id` is the day (`YYYYMMDD`) followed by a
   five-digit counter.
+- **History list for other stations (verb `10017`), as the app sends it
+  [declared: app]:** the app reads the station's thing-description property
+  `query_event_list_cmd` (10011 for the T8030, T8025, T8N00 and T9000; absent, so the
+  default 10017, for every other model: a HomeBase 2, a standalone camera) and sends
+  `{"table": "history_record_info", "cmd": 10017, "payload": {"count": 20, "start_date",
+  "end_date", "start_time": "0", "event_type": 0, "ai_type": 0, "storage_cloud": -1,
+  "trigger_type": 0, "detection_type": 0, "flag": 0}}`, no `device_info`. The next page
+  passes the previous page's oldest `start_time` as `start_time`, separators stripped
+  (`YYYYMMDDHHMMSS`); a page shorter than `count`, or one that starts with the row the
+  last one started with, is the last. The app's per-query timeout is the thing
+  property `device_query_event_timeout` (default 13 s), `device_query_event_retry_time`
+  (default 2) retries; result codes `-1008` (storage removed) and `-118` (no card) mean
+  "no database" and end the listing. The reply shape is not observed on hardware; the
+  library takes it like a 10011 page naming `cmd` 10017. `async_list_history` picks
+  the verb by the station's model (`history_query_verb`).
 - **One day per query.** Asked for day D to day D+1, the station returned only D's
   rows; asked for D+1 to D+2, or D+1 to D+1, D+1's. Whether it reads only
   `start_date`, or treats `end_date` as exclusive unless it equals `start_date`, is
