@@ -4,6 +4,15 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.13](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.12...v0.3.13) (2026-10-13)
+
+
+### Bug Fixes
+
+* a station the eufy app reaches only over WebRTC (HomeBase Professional S1, NVR) is skipped instead of rediscovered forever ([8b4e748](https://github.com/alaraun/python-eufy-home-security/commit/8b4e7488bd0bb43d1537f97c7a0bf4fa66c58121))
+* a storage medium is unhealthy only for the health codes the eufy app flags ([b7fcb05](https://github.com/alaraun/python-eufy-home-security/commit/b7fcb055e0e9e3c633b476f502f62c4ac499b30d))
+* each station gets the storage query the eufy app sends it; a HomeBase 2 reports its eMMC and disk ([b7fcb05](https://github.com/alaraun/python-eufy-home-security/commit/b7fcb055e0e9e3c633b476f502f62c4ac499b30d))
+
 ## [0.3.12](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.11...v0.3.12) (2026-10-12)
 
 
