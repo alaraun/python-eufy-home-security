@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.14](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.13...v0.3.14) (2026-10-13)
+
+
+### Bug Fixes
+
+* live view of a standalone camera whose frames name another channel plays instead of failing ([a456711](https://github.com/alaraun/python-eufy-home-security/commit/a456711d2ca051dd249a9a0295963c4ac8375e5c))
+
 ## [0.3.13](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.12...v0.3.13) (2026-10-13)
 
 
