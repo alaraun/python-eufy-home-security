@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 
 import pytest
@@ -364,3 +365,39 @@ async def _wrap(stream: FakeStream) -> FakeStream:
 
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize("where", ["writing", "waiting"])
+async def test_a_cancelled_viewer_closes_the_camera_stream(where: str) -> None:
+    """A viewer task cancelled mid-stream (a web server cancelling the request of a
+    client that went away) still stops the camera when it was the last subscriber,
+    whether it was cancelled in its own write or while waiting for the next chunk."""
+    streams: list[FakeStream] = []
+
+    async def open_stream() -> FakeStream:
+        streams.append(FakeStream(settled(4), hold=True))
+        return streams[-1]
+
+    broadcast = StreamBroadcast(open_stream, settle=0.0, name="test")
+    got_chunk = asyncio.Event()
+    stall = asyncio.Event()
+
+    async def viewer() -> None:
+        async with contextlib.aclosing(broadcast.subscribe()) as stream:
+            async for _chunk in stream:
+                got_chunk.set()
+                if where == "writing":
+                    await stall.wait()  # a write to a client that stopped reading
+
+    task = asyncio.create_task(viewer())
+    try:
+        await asyncio.wait_for(got_chunk.wait(), 3)
+        await asyncio.sleep(0.05)  # "waiting": the 4 frames are out, the queue is empty
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert streams[0].closed
+        assert not broadcast.running
+        assert broadcast.subscribers == 0
+    finally:
+        await broadcast.aclose()
