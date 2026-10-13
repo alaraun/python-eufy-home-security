@@ -83,6 +83,14 @@ The app's settings screens gate each on the device having no parent: the time se
 leads to the NAS settings (with a parent that cell shows the parent's name and opens
 nothing). A device paired to a station reports none of them.
 """
+BATTERY_PROPERTY: Final = "battery_value"
+"""The thing-description property of a model that runs on a battery.
+
+The eufy app shows a camera's battery and charging state only when its thing
+description has this property (and the product's feature flags allow it); a
+mains-powered camera or a wired doorbell, whose block reports a charging field too,
+gets a power-source icon instead. See :meth:`~..station.Station.has_battery`.
+"""
 _PRODUCT_CODE: Final = re.compile(r"[A-Za-z0-9]{1,32}")
 _SN_SLOTS: Final = frozenset({"$device_sn", "$station_sn"})
 _PARAM_SLOT: Final = re.compile(r"\$param:(\d+):(int|str)")

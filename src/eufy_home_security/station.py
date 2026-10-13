@@ -26,6 +26,7 @@ from .devices.capabilities import (
 from .devices.live_open import LiveOpen, has_live_open, library_live_open
 from .devices.live_open import app_version as live_open_app_version
 from .devices.model_settings import (
+    BATTERY_PROPERTY,
     PARENTLESS_ONLY,
     Setting,
     SettingKind,
@@ -194,6 +195,8 @@ PTZ_SETTLE_SECONDS: Final = 1.5
 0.7 s, ending about 1.0 s after the send. A step sent 1.0 s after the previous one moves
 a full step; one sent 0.5 s after it shortens the pair."""
 PTZ_BUSY_CODE: Final = 1
+# The kinds the eufy app's battery display rule covers (the camera card).
+_BATTERY_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
 """The receipt code a moving camera answers a preset command with (it is busy, not broken)."""
 PTZ_BUSY_ATTEMPTS: Final = 4
 """How often a preset command is re-sent while the camera answers :data:`PTZ_BUSY_CODE`."""
@@ -895,6 +898,27 @@ class Station:
         if serial != self.serial:
             self.sub_device(serial)
         return self._settings_of(serial)
+
+    def has_battery(self, device_sn: str | None = None) -> bool | None:
+        """Whether the camera or doorbell ``device_sn`` (the station itself for ``None``)
+        runs on a battery, as the eufy app decides whether to show one **[declared]**:
+        True when its settings list (:meth:`settings_for`) declares
+        :data:`~.devices.model_settings.BATTERY_PROPERTY`, False when the list is
+        known and declares none (a mains-powered camera, a wired doorbell), whose
+        block may still report ``battery`` and ``charging`` figures the app hides.
+
+        None when the model has no settings list, and for every other kind (a
+        sensor or keypad declares its battery differently; the app's rule is the
+        camera card's). Sync; raises ``UnsupportedError`` as :meth:`settings_for`.
+        """
+        serial = self.serial if device_sn in (None, self.serial) else device_sn
+        model = model_for_serial(serial)
+        if model is None or model.kind not in _BATTERY_KINDS:
+            return None
+        settings = self.settings_for(serial)
+        if not settings:
+            return None
+        return any(setting.key == BATTERY_PROPERTY for setting in settings)
 
     def _settings_of(self, serial: str) -> tuple[Setting, ...]:
         """:meth:`settings_for` of ``serial``, paired or not (a dump can name a device

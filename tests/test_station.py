@@ -1183,6 +1183,37 @@ def test_settings_for_lists_the_model_then_the_mode_tables() -> None:
     assert standalone.settings_for(_T8170_SN) == standalone.settings_for()
 
 
+def test_has_battery_follows_the_models_thing_description() -> None:
+    """A camera model declaring battery_value has a battery; a bundled mains model
+    (floodlight, wired doorbell) has none although its block may report charging;
+    a sensor, a station and a model without settings answer None."""
+    floodlight = CloudDevice(
+        device_sn="T8425P2000000005",
+        device_type=47,
+        name="Drive",
+        station_sn=SYNTHETIC.station_sn,
+        channel=2,
+    )
+    doorbell = dataclasses.replace(
+        floodlight, device_sn="T8200P2000000006", device_type=5, channel=4
+    )
+    sensor = dataclasses.replace(floodlight, device_sn=SENSOR_SN, device_type=10, channel=16)
+    unknown = dataclasses.replace(floodlight, device_sn="T9999P0000000002", channel=3)
+    hub = _hub_with(CAMERA, floodlight, doorbell, sensor, unknown)
+    assert hub.has_battery(SYNTHETIC.camera_sn) is True
+    assert hub.has_battery("T8425P2000000005") is False
+    assert hub.has_battery("T8200P2000000006") is False
+    assert hub.has_battery(SENSOR_SN) is None
+    assert hub.has_battery("T9999P0000000002") is None
+    assert hub.has_battery() is None
+    assert hub.has_battery(SYNTHETIC.station_sn) is None
+    with pytest.raises(UnsupportedError, match="not paired"):
+        hub.has_battery("T8160P2000099999")
+    standalone = _standalone_t8170()
+    assert standalone.has_battery() is True
+    assert standalone.has_battery(_T8170_SN) is True
+
+
 def test_settings_sort_by_group_page_order_key() -> None:
     def make(key: str, group: str | None, order: int | None, page: str | None = None) -> Setting:
         return Setting(

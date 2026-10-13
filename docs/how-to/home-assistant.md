@@ -926,7 +926,12 @@ A closed session (`async_close`) never reconnects on its own — build a new
     timestamp sensor, never for availability or "last seen". A quiet, healthy sensor
     keeps an old value, and so does a dead one.
   - **Charging and power manager** (cameras; each None when the block omits it, all
-    *declared* from the vendor handlers, values live-read only):
+    *declared* from the vendor handlers, values live-read only). Build these and the
+    battery sensor only where `station.has_battery(device_sn)` is not False: a
+    mains-powered camera or a wired doorbell reports a charging field too, and the eufy
+    app shows no battery for a model whose thing description lacks `battery_value`
+    (None for a model without a settings list, and for kinds other than camera and
+    doorbell):
     - `charging` / `solar_charging` (bool) from `power_source`, the raw param 2111
       code: 0/2 not charging, 1 USB, 3 AC, 4 built-in solar, 5 USB + built-in solar,
       6/8 external panel, 7/12 external + built-in, 20 a connected panel. A binary
