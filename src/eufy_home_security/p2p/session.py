@@ -894,7 +894,11 @@ class MediaStream:
         (:attr:`~.media.MediaRecordShape.outcome`)."""
         # Without a subheader the record's protection follows its keyframe flag.
         is_video = frame_type == FrameType.VIDEO_FRAME
-        if self.command == CMD_START_REALTIME_MEDIA and camera not in (None, self.channel):
+        if (
+            self.command == CMD_START_REALTIME_MEDIA
+            and self._session.tags_live_camera
+            and camera not in (None, self.channel)
+        ):
             self._other_camera_frame(camera, is_video)
             return "other_camera"
         self._last_rx = time.monotonic()
@@ -1393,6 +1397,14 @@ class StationSession:
         """Whether this station is a standalone device (its own station, like a SoloCam),
         by the app's rule: its serial names no station kind (:func:`~..devices.recipes.connect_type`)."""
         return connect_type(self.serial, self.serial) is ConnectType.SINGLE
+
+    @property
+    def tags_live_camera(self) -> bool:
+        """Whether this station's live frames name the streaming camera (subheader byte 2)
+        and a frame for another camera is dropped: a HomeBase (serial ``T80…``), as in the
+        eufy app's live decryptor. A standalone device's tag is not its channel (a T8442 and a
+        T8200 tag channel-0 video 1), and the app does not check it there."""
+        return "T80" in self.serial
 
     @property
     def homebase3(self) -> bool:

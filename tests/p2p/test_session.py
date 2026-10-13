@@ -2699,6 +2699,35 @@ async def test_live_stream_ignores_a_few_wrong_camera_frames(
         await session.async_close()
 
 
+async def test_a_standalone_device_streams_whatever_channel_its_frames_name(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A standalone camera tags its live video with a channel other than its own (1 for
+    channel 0): the app checks the tag only on a HomeBase, so the stream plays."""
+    start_media = FakeStation._start_media
+
+    def tagged_1(self: FakeStation, key_hex: str, *, live: bool, camera: int) -> None:
+        start_media(self, key_hex, live=live, camera=1)
+
+    monkeypatch.setattr(FakeStation, "_start_media", tagged_1)
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
+
+    station.serial = "T8442P2000054321"
+    station.static_key = static_key("T8442P2000054321", station.did)
+    session = StationSession(
+        "T8442P2000054321", provider, host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        assert not session.tags_live_camera
+        async with await session.async_open_live(0) as stream:
+            assert (await anext(stream)).is_keyframe
+            assert stream.other_camera_frames == 0
+    finally:
+        await session.async_close()
+
+
 async def test_recording_open_ignores_wrong_camera_frames(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:

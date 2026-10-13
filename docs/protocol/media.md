@@ -252,7 +252,10 @@ Sent as a GCM DeviceMsgBean on DRW channel 0, with the XZYH subheader
   channel in subheader byte 2, and the `0x0408` RSSI and 6246 viewer frames too. A live
   `MediaStream` drops frames tagged with another channel (`other_camera_frames`) and
   fails with `ProtocolError` when 25 of them arrive before a frame of its own camera.
-  So a consumer never receives another camera's view.
+  So a consumer never receives another camera's view. The eufy app checks the tag only
+  on a HomeBase (serial `T80…`) **[declared: app]**, and so does the library
+  (`StationSession.tags_live_camera`): a standalone device's tag is not its channel (a
+  T8442 and a T8200 tag the video of channel 0 with 1 **[reporter log]**).
 - `key` is the **public modulus of an RSA-1024 key pair the client mints for this
   stream** (exponent 65537 implied), or a P-256 public key (see
   [media key](#media-key-rsa-or-ecc-verified)). The station wraps the stream's AES key to it.
