@@ -69,6 +69,8 @@ _PTS_MODULUS = 1 << 33
 """A PES timestamp is 33 bits and wraps roughly every 26.5 hours."""
 
 WRAP_THRESHOLD = 90_000 * 10
+FIRST_DTS_LEAD = 6_000
+"""How far the first video frame's DTS precedes its PTS: one frame at 15 fps."""
 """A backwards step larger than this (10 s in 90 kHz ticks) is a clock wrap, not jitter.
 
 The camera's timestamps jitter by a millisecond or two, which is clamped. A wrap moves
@@ -105,9 +107,11 @@ class TSMuxer:
         "_audio_cc",
         "_codec",
         "_last_audio_pts",
+        "_last_dts",
         "_last_pts",
         "_pat_cc",
         "_pmt_cc",
+        "_previous_pts",
         "_video_cc",
     )
 
@@ -119,6 +123,8 @@ class TSMuxer:
         self._video_cc = 0
         self._audio_cc = 0
         self._last_pts: int | None = None
+        self._last_dts: int | None = None
+        self._previous_pts: int | None = None
         self._last_audio_pts: int | None = None
 
     @property
@@ -269,8 +275,25 @@ class TSMuxer:
         if audio:
             self._last_audio_pts = pts
         else:
+            self._previous_pts = self._last_pts
             self._last_pts = pts
         return pts
+
+    def next_dts(self, pts: int) -> int:
+        """The DTS of the video frame presented at ``pts`` (already clamped): the
+        previous frame's PTS, as a one-picture reorder delay has it, and
+        :data:`FIRST_DTS_LEAD` before the first frame's. Always below ``pts`` and never
+        behind the previous DTS; a clock wrap (a backwards step past
+        :data:`WRAP_THRESHOLD`) restarts it from ``pts``."""
+        previous = self._previous_pts
+        if previous is None or previous - pts >= WRAP_THRESHOLD:
+            dts = pts - FIRST_DTS_LEAD
+        else:
+            dts = min(previous, pts - 1)
+            if self._last_dts is not None:
+                dts = max(dts, self._last_dts)
+        self._last_dts = dts
+        return dts
 
     def _packetise(self, pes: bytes, pid: int, *, pcr: int | None, random_access: bool) -> bytes:
         """Split one PES packet into whole TS packets on ``pid``.
@@ -340,15 +363,24 @@ class TSMuxer:
 
         The first packet of a keyframe carries a PCR and the random-access indicator, so
         a decoder joining mid-stream can start there.
+
+        The PES carries PTS and a DTS one frame behind it (:meth:`next_dts`). The
+        camera's SPS declares a one-picture reorder delay although it sends no
+        B-frames; with PTS alone, or a DTS equal to the PTS, libavformat derives the
+        DTS from that delay itself and leaves the first frame's unset, and a consumer
+        that drops a packet without one (Home Assistant's stream worker) loses the
+        opening keyframe and plays the P-frames after it broken.
         """
         pts = self.next_pts(pts)
+        dts = self.next_dts(pts)
         aud = _AUD_HEVC if self._codec is VideoCodec.HEVC else _AUD_H264
         # PES packet length 0 means unbounded, which is legal (and usual) for video.
         pes = (
             bytes([0x00, 0x00, 0x01, _STREAM_ID_VIDEO])
             + b"\x00\x00"  # PES_packet_length: unbounded
-            + b"\x80\x80\x05"  # flags: PTS only, 5-byte header
-            + self._pts_field(0b0010, pts)
+            + b"\x80\xc0\x0a"  # flags: PTS and DTS, 10-byte header
+            + self._pts_field(0b0011, pts)
+            + self._pts_field(0b0001, dts)
             + aud
             + frame
         )

@@ -9,9 +9,11 @@ from hypothesis import strategies as st
 from eufy_home_security.p2p.media import VideoCodec, ms_to_pts
 from eufy_home_security.p2p.mpegts import (
     AUDIO_PID,
+    FIRST_DTS_LEAD,
     PMT_PID,
     TS_PACKET_LEN,
     VIDEO_PID,
+    WRAP_THRESHOLD,
     TSMuxer,
 )
 
@@ -85,21 +87,48 @@ def test_a_keyframe_carries_a_pcr_and_the_random_access_indicator() -> None:
         assert not pframe[5] & 0x10, "and carries no PCR"
 
 
-def test_pts_is_encoded_where_a_decoder_looks_for_it() -> None:
-    mux = TSMuxer()
-    pts = 1_234_567
-    payload = packets(mux.video(b"\x00" * 100, pts, keyframe=False))[0]
-    start = payload.index(b"\x00\x00\x01\xe0")
-    field = payload[start + 9 : start + 14]
-    decoded = (
+def _timestamp(field: bytes) -> int:
+    return (
         ((field[0] >> 1) & 0x07) << 30
         | field[1] << 22
         | ((field[2] >> 1) & 0x7F) << 15
         | field[3] << 7
         | ((field[4] >> 1) & 0x7F)
     )
-    assert decoded == pts
-    assert field[0] >> 4 == 0b0010, "PTS-only marker"
+
+
+def _video_timestamps(mux: TSMuxer, pts: int) -> tuple[int, int]:
+    payload = packets(mux.video(b"\x00" * 100, pts, keyframe=False))[0]
+    start = payload.index(b"\x00\x00\x01\xe0")
+    assert payload[start + 6 : start + 9] == b"\x80\xc0\x0a", "PTS+DTS flags, 10-byte header"
+    pts_field = payload[start + 9 : start + 14]
+    dts_field = payload[start + 14 : start + 19]
+    assert pts_field[0] >> 4 == 0b0011, "PTS marker of a PTS+DTS header"
+    assert dts_field[0] >> 4 == 0b0001, "DTS marker"
+    assert payload[start + 19 : start + 26] == b"\x00\x00\x00\x01\x46\x01\x50", "the AUD follows"
+    return _timestamp(pts_field), _timestamp(dts_field)
+
+
+def test_pts_and_dts_are_encoded_where_a_decoder_looks_for_them() -> None:
+    """A video PES carries PTS and a DTS one frame behind: the previous frame's PTS,
+    the first one a frame's lead before its own, so a demuxer that reads a reorder
+    delay from the SPS never has to guess (and never leaves the first frame without)."""
+    mux = TSMuxer()
+    assert _video_timestamps(mux, 1_234_567) == (1_234_567, 1_234_567 - FIRST_DTS_LEAD)
+    assert _video_timestamps(mux, 1_240_567) == (1_240_567, 1_234_567)
+    assert _video_timestamps(mux, 1_246_567) == (1_246_567, 1_240_567)
+
+
+def test_the_dts_stays_below_the_pts_and_never_steps_back() -> None:
+    """Pinned (repeated) PTS values keep DTS strictly below PTS and monotonic; a clock
+    wrap restarts both."""
+    mux = TSMuxer()
+    assert _video_timestamps(mux, 2_096_000) == (2_096_000, 2_090_000)
+    assert _video_timestamps(mux, 2_095_850) == (2_096_000, 2_095_999), "pinned PTS, DTS below"
+    assert _video_timestamps(mux, 2_096_000) == (2_096_000, 2_095_999), "DTS does not step back"
+    assert _video_timestamps(mux, 2_102_000) == (2_102_000, 2_096_000)
+    wrapped = 2_102_000 - WRAP_THRESHOLD - 1
+    assert _video_timestamps(mux, wrapped) == (wrapped, wrapped - FIRST_DTS_LEAD)
 
 
 def test_timestamps_are_clamped_monotonic() -> None:
@@ -125,15 +154,8 @@ def test_muxing_never_emits_a_backwards_timestamp() -> None:
     out = packets(mux.video(b"\x00" * 50, 95_850, keyframe=False))
     payload = out[0]
     start = payload.index(b"\x00\x00\x01\xe0")
-    field = payload[start + 9 : start + 14]
-    decoded = (
-        ((field[0] >> 1) & 0x07) << 30
-        | field[1] << 22
-        | ((field[2] >> 1) & 0x7F) << 15
-        | field[3] << 7
-        | ((field[4] >> 1) & 0x7F)
-    )
-    assert decoded == 96_000
+    assert _timestamp(payload[start + 9 : start + 14]) == 96_000
+    assert _timestamp(payload[start + 14 : start + 19]) == 95_999, "the DTS stays below"
 
 
 def test_an_access_unit_delimiter_precedes_the_frame() -> None:
