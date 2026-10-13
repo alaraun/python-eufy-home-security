@@ -2197,10 +2197,12 @@ async def async_get_config_entry_diagnostics(hass, entry):
 - A non-empty `unclassified_sections` in the summary means the library is newer than the
   integration; it lists names only and is safe to show.
 - Add `eufy.skipped_devices` (`SkippedDevice(device_sn_redacted, reason)`: `bad_serial`,
-  `bad_did`, `no_did`, `orphan`). A `bad_serial`, `bad_did` or `orphan` deserves a
-  non-fixable repair issue; `bad_did` is a station whose P2P id local P2P does not
-  accept (the eufy app does not connect to it either), and its paired devices are
-  listed as `orphan`;
+  `bad_did`, `webrtc_only`, `no_did`, `orphan`). A `bad_serial`, `bad_did`,
+  `webrtc_only` or `orphan` deserves a non-fixable repair issue; `bad_did` is a station
+  whose P2P id local P2P does not accept (the eufy app does not connect to it either),
+  and its paired devices are listed as `orphan`; `webrtc_only` is a station the eufy app
+  reaches only over its WebRTC path (the HomeBase Professional S1, T9000, and the NVR,
+  T8N00), which the library does not speak, and every device paired to it;
   `no_did` is a device the library does not serve (a robot vacuum on the same account).
 - Add per station `dataclasses.asdict(station.stats())` (`SessionStats`): it carries no
   identifiers and needs no redaction. For "live view shows no picture", look at

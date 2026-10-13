@@ -383,13 +383,16 @@ ORPHAN_SN = "T8161P1000000009"
 LONG_DID_STATION_SN = "T8030P3000000001"
 LONG_DID_CAMERA_SN = "T8113P3000000002"
 LONG_DID = "TESTPRA-000123456-ABCDE12345"  # 9 digits, 10-character suffix
+WEBRTC_STATION_SN = "T9000P4000000001"
+WEBRTC_CAMERA_SN = "T8160P4000000002"
 
 
 class BadSerialCloud(StubCloud):
     """The stub's devices plus every kind of device the grouping skips.
 
     A station with no serial, a camera with a bad serial,
-    a product with no P2P id, and a camera paired to a station not on the list.
+    a product with no P2P id, a camera paired to a station not on the list, and a
+    station the eufy app reaches only over WebRTC with its camera.
     """
 
     async def async_get_devices(
@@ -420,6 +423,16 @@ class BadSerialCloud(StubCloud):
                 station_sn=LONG_DID_STATION_SN,
                 channel=0,
             ),
+            CloudDevice(
+                device_sn=WEBRTC_STATION_SN, device_type=18, name="Pro", p2p_did=SYNTHETIC.did
+            ),
+            CloudDevice(
+                device_sn=WEBRTC_CAMERA_SN,
+                device_type=19,
+                name="Behind pro",
+                station_sn=WEBRTC_STATION_SN,
+                channel=0,
+            ),
         ]
 
 
@@ -448,19 +461,24 @@ async def test_discover_skips_and_lists_devices_it_cannot_build(
         ("empty", "bad_serial"),
         (redact_serial(ODD_CAMERA_SN), "bad_serial"),
         (redact_serial(LONG_DID_STATION_SN), "bad_did"),
+        (redact_serial(WEBRTC_STATION_SN), "webrtc_only"),
         (redact_serial(VACUUM_SN), "no_did"),
         (redact_serial(ORPHAN_SN), "orphan"),
         (redact_serial(LONG_DID_CAMERA_SN), "orphan"),
+        (redact_serial(WEBRTC_CAMERA_SN), "webrtc_only"),
     ]
     skipped = [r for r in caplog.records if "skipping device" in r.getMessage()]
     assert [r.levelname for r in skipped] == [
         "WARNING",
         "WARNING",
         "WARNING",
+        "WARNING",
         "INFO",
         "WARNING",
         "WARNING",
+        "INFO",
     ]
+    assert "only over WebRTC" in skipped[3].getMessage()
     assert "its P2P id is not one local P2P accepts" in skipped[2].getMessage()
     assert LONG_DID not in caplog.text
     assert "skipping device empty:" in skipped[0].getMessage()

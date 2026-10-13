@@ -34,6 +34,7 @@ from .devices.model_settings import (
     product_code_of,
     settings_of,
 )
+from .devices.recipes import WEBRTC_ONLY_STATIONS
 from .devices.td import parse_thing_description, td_version
 from .devices.types import connects_on_demand
 from .diagnostics import AccountReport, async_account_report
@@ -92,7 +93,7 @@ _LOGGER = logging.getLogger(__name__)
 _SKIP_THROTTLE = LogThrottle()  # one line per skipped device, not one per discovery
 
 type ModelState = Literal["bundled", "cloud-listed", "unknown"]
-type SkipReason = Literal["bad_serial", "bad_did", "no_did", "orphan"]
+type SkipReason = Literal["bad_serial", "bad_did", "webrtc_only", "no_did", "orphan"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +103,9 @@ class SkippedDevice:
     ``reason`` is ``"bad_serial"`` (its serial cannot name it in an id, see
     :func:`~.identity.is_device_serial`), ``"bad_did"`` (a station whose P2P id local P2P
     does not accept, see :meth:`~.p2p.did.Did.parse`; the eufy app's P2P stack refuses
-    it too), ``"no_did"`` (its own parent but
+    it too), ``"webrtc_only"`` (a station the eufy app reaches only over WebRTC, see
+    :data:`~.devices.recipes.WEBRTC_ONLY_STATIONS`, or a device paired to one),
+    ``"no_did"`` (its own parent but
     without a P2P id, so not a station: a non-security product, say) or ``"orphan"``
     (paired to a station that is not on the list, or was itself skipped).
     """
@@ -1319,9 +1322,11 @@ def _group(
     A device whose serial cannot name it in an id (see
     :func:`~.identity.is_device_serial`) or a station whose P2P id does not parse
     (:meth:`~.p2p.did.Did.parse`) is left out, with a warning: a consumer would
-    otherwise fail on it while setting up every other device. A station left out
-    takes its devices with it (they are orphans). A device that is its own parent but
-    has no P2P id is no station and is left out quietly.
+    otherwise fail on it while setting up every other device. A station the eufy app
+    reaches only over WebRTC is left out with a warning, and the devices paired to it
+    quietly, under the same reason. Any other station left out takes its devices with it
+    (they are orphans). A device that is its own parent but has no P2P id is no station
+    and is left out quietly.
     """
     skipped: list[SkippedDevice] = []
 
@@ -1330,12 +1335,20 @@ def _group(
         skipped.append(SkippedDevice(label, reason))
         if not _SKIP_THROTTLE.should_log((reason, device.device_sn)):
             return
-        level, why = {
-            "bad_serial": (logging.WARNING, "its serial is not letters and digits"),
-            "bad_did": (logging.WARNING, "its P2P id is not one local P2P accepts"),
-            "no_did": (logging.INFO, "not a station (no P2P id) and paired to none"),
-            "orphan": (logging.WARNING, "its station is not on the account's device list"),
-        }[reason]
+        if reason == "webrtc_only" and not device.is_station:
+            level, why = logging.INFO, "its station is reached only over the eufy app's WebRTC"
+        else:
+            level, why = {
+                "bad_serial": (logging.WARNING, "its serial is not letters and digits"),
+                "bad_did": (logging.WARNING, "its P2P id is not one local P2P accepts"),
+                "webrtc_only": (
+                    logging.WARNING,
+                    "the eufy app reaches this station only over WebRTC, which the library "
+                    "does not support",
+                ),
+                "no_did": (logging.INFO, "not a station (no P2P id) and paired to none"),
+                "orphan": (logging.WARNING, "its station is not on the account's device list"),
+            }[reason]
         _LOGGER.log(level, "skipping device %s: %s", label, why)
 
     usable = []
@@ -1344,6 +1357,8 @@ def _group(
             skip(device, "bad_serial")
         elif device.is_station and not _did_parses(device.p2p_did):
             skip(device, "bad_did")
+        elif device.is_station and device.device_sn[:5] in WEBRTC_ONLY_STATIONS:
+            skip(device, "webrtc_only")
         else:
             usable.append(device)
     stations = [d for d in usable if d.is_station]
@@ -1354,6 +1369,8 @@ def _group(
             continue
         if not device.station_sn or device.station_sn == device.device_sn:
             skip(device, "no_did")
+        elif device.station_sn[:5] in WEBRTC_ONLY_STATIONS:
+            skip(device, "webrtc_only")
         elif device.station_sn in serials:
             children.setdefault(device.station_sn, []).append(device)
         else:
