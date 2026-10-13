@@ -1150,7 +1150,13 @@ image.
 - **Offer what `station.image_sources(device_sn)` lists.** Behind a station it is all
   three; a standalone camera (T8170) lists no recordings, so it offers `THUMBNAIL`
   (its newest event still, through the event-count query) and `LIVE`, and
-  `TRIGGER_FRAME` raises `UnsupportedError` at once. Its stills come in the V1
+  `TRIGGER_FRAME` raises `UnsupportedError` at once. Its history listing is graded
+  per verb: 10011 measured unanswered on a standalone T8170 (verification log, *T8170
+  event history and stills*); the verb the app sends it and every station outside the
+  HomeBase 3 family, 10017 (`history_query_verb`), is declared from the app and not
+  observed on hardware. An unanswered 10017 query ends after one resend with
+  `DeviceTimeoutError`, a reply without rows ends the listing empty; `THUMBNAIL` stays
+  a standalone camera's only still until a log shows 10017 rows. Its stills come in the V1
   `eufysecurity` format, which the library decodes: the integration gets a JPEG.
 - **A standalone camera's detection** (cloud push only, no path or record):
   `async_event_image(event, THUMBNAIL)` wakes it, reads its newest still and returns it

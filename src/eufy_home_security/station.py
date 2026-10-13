@@ -195,13 +195,13 @@ PTZ_SETTLE_SECONDS: Final = 1.5
 0.7 s, ending about 1.0 s after the send. A step sent 1.0 s after the previous one moves
 a full step; one sent 0.5 s after it shortens the pair."""
 PTZ_BUSY_CODE: Final = 1
-# The kinds the eufy app's battery display rule covers (the camera card).
-_BATTERY_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
 """The receipt code a moving camera answers a preset command with (it is busy, not broken)."""
 PTZ_BUSY_ATTEMPTS: Final = 4
 """How often a preset command is re-sent while the camera answers :data:`PTZ_BUSY_CODE`."""
 PTZ_BUSY_DELAY: Final = 3.0
 """Wait between those attempts: a T8170 settles within a few seconds of a turn."""
+# The kinds the eufy app's battery display rule covers (the camera card).
+_BATTERY_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
 FRESH_KEYFRAME_WINDOW: Final = 0.5
 """After a live stream's first keyframe, wait this long for a second one and prefer it:
 a T8170 woken again may first replay its last keyframe of the previous stream (minutes
