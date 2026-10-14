@@ -2238,7 +2238,8 @@ async def async_get_config_entry_diagnostics(hass, entry):
   identifiers and needs no redaction. For "live view shows no picture", look at
   `media_video_codecs`, `media_codec_overrides`, `media_first_records`,
   `media_rejected_keyframe` and `media_failures_by_channel` (which camera channel's
-  opens failed, by error class)
+  opens failed, by error class); for "the picture freezes", at
+  `media_frames_skipped_for_keyframe` against `media_frames_dropped_for_reader`
   (see `docs/protocol/media.md`). For "events stopped", compare
   `seconds_since_last_event` with `seconds_since_last_probe` and look at
   `ecb_state_refused`, `dropped_undecodable` and `wrong_port_drops`; for a flapping

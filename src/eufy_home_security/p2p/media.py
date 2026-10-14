@@ -239,6 +239,14 @@ class MediaRecordShape:
     since_keyframe_ms: int | None = None
     """For a keyframe that did not decrypt to Annex-B: its header time minus the latest
     good keyframe's (0: a part of that same picture)."""
+    channel: int | None = None
+    """For a keyframe that did not decrypt to Annex-B: the stream's camera channel."""
+    gap_ms: int | None = None
+    """For a keyframe that did not decrypt to Annex-B: milliseconds since the stream's
+    previous video record arrived."""
+    previous_outcome: str | None = None
+    """For a keyframe that did not decrypt to Annex-B: :attr:`outcome` of the stream's
+    previous video record."""
 
 
 #: Bytes of a body a :class:`MediaRecordShape` shows: a 4-byte start code and a NAL header.

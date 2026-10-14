@@ -95,17 +95,19 @@ image = await station.async_preset_image(device_sn, preset=1)  # pan/tilt: turn,
   [keyframe decryption](#keyframe-decryption-verified)) is dropped the same way,
   logged at DEBUG; it is a WARNING only when no keyframe decodes by
   `first_frame_timeout`. A keyframe with the pinned wrapped key that still does not
-  decrypt to Annex-B is the rest of the keyframe before it when it follows that one
-  directly ([keyframes in parts](#keyframes-in-parts-app)); otherwise it is corrupt
-  and logged as a WARNING (`media_keyframes_rejected`, its shape with
-  `since_keyframe_ms` in `media_rejected_keyframe`).
+  decrypt to Annex-B is the rest of the keyframe before it when that one is still held
+  ([keyframes in parts](#keyframes-in-parts-app)); otherwise it is corrupt
+  and logged as a WARNING (`media_keyframes_rejected`; its shape in
+  `media_rejected_keyframe` with `since_keyframe_ms`, the stream's `channel`, `gap_ms`
+  since the previous video record and that record's `previous_outcome`).
 - Video and audio are delivered from the first keyframe on, video already
   decrypted: Annex-B in the camera's codec (HEVC or H.264, `MediaFrame.codec`, read
   from the keyframe's picture) that a decoder accepts as is. Audio is ADTS AAC.
 - A slow reader does not stall the session: past 250 buffered frames (video and
   audio together), new frames are dropped, video until the next keyframe, and
-  counted in `stream.dropped`. A keyframe that does not decode also drops video
-  until the next one.
+  counted in `stream.dropped` (`media_frames_dropped_for_reader`). A keyframe that
+  does not decode, or a frame with no NAL unit, skips video to the next keyframe,
+  counted in `stream.skipped` (`media_frames_skipped_for_keyframe`).
 - A recording ends on the station's **end-of-playback frame** (`0x0402` = 2, below):
   the frames already queued are delivered, then iteration stops. Only a recording
   that has delivered its first keyframe takes it, because the frame carries no stream
@@ -509,13 +511,18 @@ sends the held frame to the decoder. A camera can so send one keyframe in severa
 records, each with the keyframe flag, the same wrapped key and its own encrypted first
 128 bytes.
 
-The library does the same for keyframes: a keyframe-flagged record that follows a
-keyframe directly and does not decrypt to Annex-B is joined to it
-(`media_keyframe_continuations`, shape outcome `continuation`), and a keyframe is
-delivered when the next record arrives, or after `MEDIA_KEYFRAME_HOLD` (0.2 s) when none
-does. P-frames are not held. Expected on HomeBase 2 cameras, whose diagnostics show
-about half of the keyframe-flagged records without a start code under the keyframe's
-own wrapped key; not verified on hardware.
+The library does the same for keyframes: a keyframe is held until the next video
+record, and a keyframe-flagged record that does not decrypt to Annex-B while a keyframe
+is held is joined to it (`media_keyframe_continuations`, shape outcome `continuation`).
+As in the app, the hold has no time limit and only a video record ends it: audio that
+arrives meanwhile is queued behind the keyframe, records dropped before decoding (another
+camera's on a HomeBase, another stream's keyframe) leave it held, and a keyframe no video
+record follows is not delivered (the stream ends at its idle timeout). P-frames are not
+held; a P-frame without a start
+code, which the app would append to the frame before it, is counted in
+`media_pframes_without_start_code`. Expected on HomeBase 2 cameras, whose diagnostics
+show keyframe-flagged records without a start code under the keyframe's own wrapped key
+and with its stream time; not verified on hardware.
 
 ### Media key: RSA or ECC **[verified]**
 
@@ -590,7 +597,12 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
   `media_keyframes_rejected` with `media_rejected_keyframe`: a keyframe that did not
   decrypt to Annex-B, with `probe` naming the body layouts that do start with a start
   code (`raw@<n>`: clear from offset n; `ecb@<n>`: one 128-byte ECB run from n under
-  the stream key; the layout above is `ecb@129`). No key material is kept. An extra
+  the stream key; the layout above is `ecb@129`), the stream's `channel`, `gap_ms` and
+  `previous_outcome` of the video record before it. `media_frames_skipped_for_keyframe`
+  counts the video lost to such rejections (a picture that freezes), apart from
+  `media_frames_dropped_for_reader` (a slow consumer), and
+  `media_pframes_without_start_code` the P-frames the app would have joined to the frame
+  before them. No key material is kept. An extra
   live session's media counts into its station session's figures.
 
 ## Streaming quality **[verified]**

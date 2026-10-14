@@ -73,7 +73,6 @@ from eufy_home_security.p2p.media import (
 )
 from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN, history_cursor_time
 from eufy_home_security.p2p.session import (
-    MEDIA_KEYFRAME_HOLD,
     PARAM_SETTLE,
     CommandOutcome,
     CredentialProvider,
@@ -97,7 +96,9 @@ from eufy_home_security.testing.station import (
     MEDIA_WIDTH,
     SESSION_KEY,
     FakeStation,
+    audio_record,
     media_keyframe,
+    media_keyframe_parts,
     synthetic_hub_storage,
     v1_still,
     video_record,
@@ -2305,24 +2306,37 @@ async def test_a_corrupt_keyframe_with_the_pinned_key_still_warns(
         stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
     assert [(await anext(stream)).data for _ in range(2)] == [MEDIA_KEYFRAME, MEDIA_PFRAME]
     assert not stream._frames  # video waits for the next keyframe
+    assert (stream.dropped, stream.skipped) == (0, 1)
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings == ["undecodable media frame 0x0514: keyframe did not decrypt to Annex-B"]
     stats = session.stats()
+    assert (stats.media_frames_dropped_for_reader, stats.media_frames_skipped_for_keyframe) == (
+        0,
+        1,
+    )
+    assert stats.media_pframes_without_start_code == 1  # the fake's P-frame body
     assert [(s.outcome, s.variant, s.key_flag, s.codec) for s in stats.media_first_records] == [
         ("keyframe", "none", 1, "hevc"),
         ("frame", "none", 0, "hevc"),
         ("not_annex_b", "none", 1, "hevc"),
         ("waiting_keyframe", "none", 0, "hevc"),
     ]
-    assert stats.media_rejected_keyframe is not None
-    assert stats.media_rejected_keyframe.since_keyframe_ms == 960
+    rejected = stats.media_rejected_keyframe
+    assert rejected is not None
+    assert rejected.since_keyframe_ms == 960
     assert stats.media_first_records[0].head == MEDIA_KEYFRAME[:5].hex()
     assert stats.media_keyframes_rejected == 1
-    assert stats.media_rejected_keyframe == replace(
-        stats.media_first_records[2], since_keyframe_ms=960
+    assert rejected.gap_ms is not None
+    assert rejected.gap_ms >= 0
+    assert rejected == replace(
+        stats.media_first_records[2],
+        since_keyframe_ms=960,
+        channel=0,
+        gap_ms=rejected.gap_ms,
+        previous_outcome="frame",
     )
-    assert stats.media_rejected_keyframe.probe == "none"  # no layout yields a start code
-    assert stats.media_rejected_keyframe.record_len == len(corrupt) + 22
+    assert rejected.probe == "none"  # no layout yields a start code
+    assert rejected.record_len == len(corrupt) + 22
 
 
 async def test_a_keyframe_sent_in_parts_is_joined_into_one_picture(
@@ -2351,26 +2365,98 @@ async def test_a_keyframe_sent_in_parts_is_joined_into_one_picture(
     assert outcomes[outcomes.index("keyframe") + 1] == "continuation"
 
 
-async def test_a_held_keyframe_goes_out_when_nothing_follows(station: FakeStation) -> None:
-    """A keyframe with no record after it is delivered after the hold, not withheld."""
-    _, rsa_key = generate_media_rsa_key()
+async def test_a_keyframe_no_video_record_follows_is_not_delivered(
+    station: FakeStation,
+) -> None:
+    """The stream ends at its idle timeout without the held keyframe, as the app's
+    player shows a frame only once the next one starts; a keyframe's delivery so never
+    lags its arrival by more than one record."""
+    _, stream, rsa_key = _rsa_stream(station, idle_timeout=0.3)
     body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
-    session = make_session(station, Provider(station))
-    stream = MediaStream(
-        session,
-        command=1003,
-        channel=0,
-        decoder=MediaDecoder(rsa_key),
-        stop_body=lambda: (0, b""),
-        first_frame_timeout=5.0,
-        idle_timeout=5.0,
-    )
     stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
-    assert not stream._frames
-    started = time.monotonic()
+    stream._feed(FrameType.AUDIO_FRAME, audio_record(MEDIA_AUDIO))
+    with pytest.raises(StopAsyncIteration):
+        await anext(stream)
+
+
+def _keyframe_in_two_parts(rsa_key: Any) -> tuple[bytes, bytes]:
+    first, rest = media_keyframe_parts(rsa_key.public_key(), bytes(range(16)), 2)
+    return (
+        video_record(first, keyframe=True, timestamp_ms=1000),
+        video_record(rest, keyframe=True, timestamp_ms=1000),
+    )
+
+
+async def test_a_keyframe_part_after_a_pause_is_still_joined(station: FakeStation) -> None:
+    """The held keyframe waits for the next video record however long it takes, as the
+    app's player does: a late part is joined, not rejected."""
+    session, stream, rsa_key = _rsa_stream(station)
+    first, rest = _keyframe_in_two_parts(rsa_key)
+    stream._feed(FrameType.VIDEO_FRAME, first)
+    reading = asyncio.ensure_future(anext(stream))
+    await asyncio.sleep(0.3)
+    assert not reading.done()
+    stream._feed(FrameType.VIDEO_FRAME, rest)
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
+    frame = await reading
+    assert (frame.data, frame.is_keyframe) == (MEDIA_KEYFRAME, True)
+    assert (await anext(stream)).data == MEDIA_PFRAME
+    assert session.stats().media_keyframes_rejected == 0
+
+
+async def test_audio_between_keyframe_parts_goes_out_after_the_joined_keyframe(
+    station: FakeStation,
+) -> None:
+    session, stream, rsa_key = _rsa_stream(station)
+    first, rest = _keyframe_in_two_parts(rsa_key)
+    stream._feed(FrameType.VIDEO_FRAME, first)
+    stream._feed(FrameType.AUDIO_FRAME, audio_record(MEDIA_AUDIO, timestamp_ms=1000))
+    stream._feed(FrameType.VIDEO_FRAME, rest)
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
+    frames = [await anext(stream) for _ in range(3)]
+    assert [(f.kind, f.data if f.kind is MediaKind.VIDEO else b"") for f in frames] == [
+        (MediaKind.VIDEO, MEDIA_KEYFRAME),
+        (MediaKind.AUDIO, b""),
+        (MediaKind.VIDEO, MEDIA_PFRAME),
+    ]
+    assert session.stats().media_keyframes_rejected == 0
+
+
+async def test_another_cameras_record_between_keyframe_parts_does_not_split_them(
+    station: FakeStation,
+) -> None:
+    """On a HomeBase a record tagged for another camera is dropped before the join."""
+    session, stream, rsa_key = _rsa_stream(station)
+    assert session.tags_live_camera
+    first, rest = _keyframe_in_two_parts(rsa_key)
+    stream._feed(FrameType.VIDEO_FRAME, first, camera=0)
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False), camera=3)
+    stream._feed(FrameType.VIDEO_FRAME, rest, camera=0)
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False), camera=0)
     frame = await anext(stream)
     assert (frame.data, frame.is_keyframe) == (MEDIA_KEYFRAME, True)
-    assert MEDIA_KEYFRAME_HOLD * 0.8 <= time.monotonic() - started < 2.0
+    assert session.stats().media_keyframes_rejected == 0
+
+
+async def test_video_dropped_after_a_reader_overflow_counts_as_reader_lag(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The P-frames dropped until the next keyframe after an overflow are the reader's
+    lag (``dropped``), not frames skipped after one that did not decode."""
+    monkeypatch.setattr(session_module, "MEDIA_QUEUE_FRAMES", 2)
+    session, stream, rsa_key = _rsa_stream(station)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    for _ in range(2):  # the second overflows the queue
+        stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
+    assert [(await anext(stream)).is_keyframe for _ in range(2)] == [True, False]
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
+    stats = session.stats()
+    assert (stream.dropped, stream.skipped) == (2, 0)
+    assert (stats.media_frames_dropped_for_reader, stats.media_frames_skipped_for_keyframe) == (
+        2,
+        0,
+    )
 
 
 #: An H.264 keyframe (SPS, PPS, IDR) and P-frame, as a HomeBase 2 camera sends them.
@@ -2383,7 +2469,9 @@ H264_KEYFRAME = (
 H264_PFRAME = b"\x00\x00\x00\x01\x41\x9a" + bytes(range(1, 60))
 
 
-def _rsa_stream(station: FakeStation) -> tuple[StationSession, MediaStream, Any]:
+def _rsa_stream(
+    station: FakeStation, *, idle_timeout: float = 1.0
+) -> tuple[StationSession, MediaStream, Any]:
     _, rsa_key = generate_media_rsa_key()
     session = make_session(station, Provider(station))
     stream = MediaStream(
@@ -2393,7 +2481,7 @@ def _rsa_stream(station: FakeStation) -> tuple[StationSession, MediaStream, Any]
         decoder=MediaDecoder(rsa_key),
         stop_body=lambda: (0, b""),
         first_frame_timeout=1.0,
-        idle_timeout=1.0,
+        idle_timeout=idle_timeout,
     )
     return session, stream, rsa_key
 
@@ -2419,6 +2507,7 @@ async def test_a_keyframe_whose_picture_matches_its_header_keeps_the_header_code
     session, stream, rsa_key = _rsa_stream(station)
     body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
     stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
     assert (await anext(stream)).codec is VideoCodec.HEVC
     assert session.stats().media_codec_overrides == {}
 
