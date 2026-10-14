@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.16](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.15...v0.3.16) (2026-10-14)
+
+
+### Features
+
+* pan/tilt, presets and zoom for every model whose app handler declares them ([#84](https://github.com/alaraun/python-eufy-home-security/issues/84)) ([c0c0413](https://github.com/alaraun/python-eufy-home-security/commit/c0c041397f90b1752ebde8564b38d98c46b15953))
+
 ## [0.3.15](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.14...v0.3.15) (2026-10-13)
 
 
