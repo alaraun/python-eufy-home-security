@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.3.17](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.16...v0.3.17) (2026-10-14)
+
+
+### Bug Fixes
+
+* a keyframe sent in several records stays whole however its parts arrive ([134b57c](https://github.com/alaraun/python-eufy-home-security/commit/134b57c7e0168d5ee31ba713ee507478e54959d2))
+
 ## [0.3.16](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.15...v0.3.16) (2026-10-14)
 
 
