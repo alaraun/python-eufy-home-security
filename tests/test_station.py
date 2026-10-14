@@ -16,6 +16,7 @@ import pytest
 import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.station as station_mod
 from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.devices.capabilities import Capability
 from eufy_home_security.devices.live_open import LiveOpen, live_open
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
@@ -29,7 +30,6 @@ from eufy_home_security.devices.recipes import (
     ConnectType,
     PanTilt,
     PresetPosition,
-    handler_variant,
     pan_tilt,
     set_picture_zoom,
 )
@@ -2172,7 +2172,7 @@ async def test_pan_tilt_sends_direction(standalone_station: Station, fake: FakeS
 
     assert fake.pan_tilts == [PanTilt.LEFT, PanTilt.UP]
     body = next(b for b in fake.doorbell_payloads if b.get("commandType") == 6030)
-    step = pan_tilt(PanTilt.LEFT, zoom_ivalue=handler_variant("T8170").ptz_zoom_ivalue)
+    step = pan_tilt(PanTilt.LEFT)
     assert body["data"] == step.params
 
 
@@ -2183,7 +2183,7 @@ async def test_a_t8410_pan_tilt_applies_its_handler_variant(
 
     assert fake.pan_tilts == [PanTilt.RIGHT]
     body = next(b for b in fake.doorbell_payloads if b.get("commandType") == 6030)
-    step = pan_tilt(PanTilt.RIGHT, zoom_ivalue=handler_variant("T8410").ptz_zoom_ivalue)
+    step = pan_tilt(PanTilt.RIGHT, zoom_ivalue=False)
     assert body["data"] == step.params
 
 
@@ -2293,6 +2293,83 @@ async def test_a_t8410_refuses_every_slot_call_before_sending(
             await call
 
     assert fake.doorbell_payloads == []
+
+
+_FLOODLIGHT = CloudDevice(
+    device_sn="T8425P2000067890",
+    device_type=47,
+    name="Drive",
+    station_sn=SYNTHETIC.station_sn,
+    channel=2,
+)
+"""A pan/tilt floodlight camera paired to the HomeBase 3 (synthetic serial)."""
+
+
+@pytest.fixture
+async def floodlight_hub(fake: FakeStation) -> AsyncIterator[Station]:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    hub = Station(STATION, session, sub_devices=[CAMERA, _FLOODLIGHT])
+    yield hub
+    await hub.async_close()
+
+
+def test_ptz_support_follows_the_handlers_actions_behind_a_homebase_3() -> None:
+    hub = _hub_with(CAMERA, _FLOODLIGHT)
+    for capability in (Capability.PTZ_CONTROL, Capability.PTZ_PRESETS, Capability.PTZ_ZOOM):
+        evidence = hub.ptz_support(_FLOODLIGHT.device_sn, capability)
+        assert evidence.support is Support.DECLARED, capability
+        assert "T8425 handler's" in evidence.source
+        assert "under HB3" in evidence.source
+        assert hub.ptz_support(SYNTHETIC.camera_sn, capability).support is Support.UNKNOWN
+    with pytest.raises(ValueError, match="not a pan/tilt/zoom capability"):
+        hub.ptz_support(_FLOODLIGHT.device_sn, Capability.LIVE_STREAM)
+
+
+def test_ptz_support_is_unknown_where_the_app_takes_another_route() -> None:
+    """Behind a HomeBase 4 the handler routes every pan/tilt action over WebRTC."""
+    homebase4 = dataclasses.replace(STATION, device_sn="T8040P2000012345")
+    floodlight = dataclasses.replace(_FLOODLIGHT, station_sn=homebase4.device_sn)
+    hub = Station(homebase4, _hub_with().session, sub_devices=[floodlight])
+    evidence = hub.ptz_support(floodlight.device_sn, Capability.PTZ_CONTROL)
+    assert evidence.support is Support.UNKNOWN
+    assert "behind a HB4 station" in evidence.source
+
+
+async def test_a_floodlight_pans_and_reads_presets_in_its_handlers_plain_form(
+    floodlight_hub: Station, fake: FakeStation
+) -> None:
+    serial = _FLOODLIGHT.device_sn
+    await floodlight_hub.async_pan_tilt(serial, PanTilt.RIGHT, settle=0)
+    slots = await floodlight_hub.async_refresh_presets(serial)
+
+    assert fake.pan_tilts == [PanTilt.RIGHT]
+    assert slots == floodlight_hub.presets(serial)
+    steps = [b for b in fake.doorbell_payloads if b.get("commandType") == 6030]
+    assert steps == [{"commandType": 6030, "data": {"cmd_type": 1, "rotate_type": 2}}]
+    queries = [b for b in fake.doorbell_payloads if b.get("commandType") == 6034]
+    assert queries == [{"commandType": 6034}]
+
+
+async def test_a_slot_store_the_thing_description_lacks_is_refused_before_sending(
+    fake: FakeStation,
+) -> None:
+    """The T8173 declares delete and picture actions but no set_preset_positions."""
+    station = await _standalone(fake, "T8173P2000054321")
+    try:
+        for call in (
+            station.async_store_preset(station.serial, 1),
+            station.async_save_preset(station.serial),
+        ):
+            with pytest.raises(UnsupportedError, match="declares no set_preset_positions"):
+                await call
+        assert fake.doorbell_payloads == []
+    finally:
+        await station.async_close()
 
 
 async def _until(condition: Callable[[], bool], timeout: float = 2.0) -> None:

@@ -1652,10 +1652,25 @@ failing is never a reason to fail setup or to mark anything else unavailable.
 
 ### Pan/tilt presets
 
-A pan/tilt camera (the T8170 Battery SoloCam: profile capability `PTZ_PRESETS`) has
-preset slots, each a stored direction and zoom. The library reads them, turns the
-camera to one, and takes that view's live image, so the integration can offer one
-"capture" per preset without knowing any command.
+A pan/tilt camera has preset slots, each a stored direction and zoom. The library reads
+them, turns the camera to one, and takes that view's live image, so the integration can
+offer one "capture" per preset without knowing any command.
+
+#### Which cameras pan, tilt, zoom and keep presets
+
+Ask the station: `station.ptz_support(device_sn, capability)` for
+`Capability.PTZ_CONTROL` (one-step pan/tilt), `Capability.PTZ_PRESETS` (read the slots,
+turn to one) and `Capability.PTZ_ZOOM` (picture zoom) returns an `Evidence` like
+`live_support`: `VERIFIED` (proven on hardware: the T8170), `DECLARED` (the device's thing
+description in the eufy app declares the actions and the library sends each as the
+device's own handler does, under this station) or `UNKNOWN` (`source` says why: no such
+action, or a recipe or route the library does not implement). Create the controls for
+anything but `UNKNOWN`. The table behind it is generated from the app's handlers for
+every product (`scripts/gen_ptz.py`), so a new pan/tilt model needs a regeneration, not
+code. `profile_for_serial(...).support(...)` answers the same per model, `DECLARED` when
+the library sends the actions under *some* station; prefer `ptz_support`. Storing,
+deleting, picturing a slot or changing the default needs that action too: a model whose
+thing description lacks one raises `UnsupportedError` before anything is sent.
 
 | call | what | camera |
 |---|---|---|
@@ -1713,7 +1728,7 @@ preset", so the choice is also available to automations (`select.select_option`)
 
 | select | from the library |
 |---|---|
-| created when | `profile_for_serial(device_sn).support(Capability.PTZ_PRESETS) is not Support.UNKNOWN` |
+| created when | `station.ptz_support(device_sn, Capability.PTZ_PRESETS).support is not Support.UNKNOWN` |
 | `options` | the enabled slots of `station.presets(device_sn)`, as strings (`"0"`, `"2"`, …), or friendlier labels you map back to the index |
 | `current_option` | `station.default_preset(device_sn)`; `None` (unknown) when the slots were never read or no slot is the default |
 | `async_select_option` | `await station.async_set_default_preset(device_sn, int(option))` |

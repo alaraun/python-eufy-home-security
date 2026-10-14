@@ -101,6 +101,13 @@ LIVE_OPEN_PAYLOAD: Final[Mapping[str, Any]] = {
 }
 HOMEBASE2_LIVE_OPEN_PAYLOAD: Final[Mapping[str, Any]] = {**LIVE_OPEN_PAYLOAD, "ClientOS": "ANDROID"}
 """The app's live-open input for a camera behind a station: it adds the client OS."""
+HOMEBASE_T8425: Final[Mapping[str, Any]] = {
+    "device_sn": "T8425P2000067890",
+    "parent_sn": SYNTHETIC.station_sn,
+    "device_channel": 2,
+    "main_sw_version": "1.6.5.0",
+}
+"""A pan/tilt floodlight camera behind a HomeBase 3 (synthetic serial)."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -262,6 +269,36 @@ CASES: Final[tuple[Case, ...]] = (
         device=STANDALONE_T8410C,
         payload={"cmdType": 1, "rotateType": 2, "zoom": 1},
         builder="ptz_rotate",
+    ),
+    Case(
+        product_code="T8425",
+        identifier="ptz_action_control",
+        device=HOMEBASE_T8425,
+        payload={"cmdType": 1, "rotateType": 2, "zoom": 1},
+        builder="ptz_rotate",
+        note="The plain form: no `zoom`, no `ivalue`.",
+    ),
+    Case(
+        product_code="T8425",
+        identifier="query_preset_positions",
+        device=HOMEBASE_T8425,
+        payload=0,
+        builder="query_preset_positions",
+        note="The plain form: no `value`; the notify's sub-command named.",
+    ),
+    Case(
+        product_code="T8425",
+        identifier="set_ptz_cruise_preview",
+        device=HOMEBASE_T8425,
+        payload=1,
+        builder="goto_preset",
+    ),
+    Case(
+        product_code="T8425",
+        identifier="set_picture_zoom",
+        device=HOMEBASE_T8425,
+        payload={"dstZoom": 2.5, "orgZoom": 0},
+        builder="set_picture_zoom",
     ),
 )
 

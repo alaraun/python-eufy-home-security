@@ -65,6 +65,15 @@ uv run python scripts/gen_live_open.py           # rewrite the table
 uv run python scripts/gen_live_open.py --check   # compare, write nothing
 ```
 
+The pan/tilt/zoom table (`devices/_ptz_data.py`: per product whose thing description
+declares a pan/tilt, preset or zoom action, the library recipe form that reproduces the
+handler's, per connect type) is generated the same way:
+
+```
+uv run python scripts/gen_ptz.py                 # rewrite the table
+uv run python scripts/gen_ptz.py --check         # compare, write nothing
+```
+
 ## Check
 
 ```

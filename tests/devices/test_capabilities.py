@@ -6,10 +6,12 @@ from eufy_home_security.devices.capabilities import (
     FALLBACK_PROFILES,
     KIND_MARKERS,
     PROFILES,
+    PTZ_ACTIONS,
     Capability,
     kind_from_params,
     profile_for_serial,
 )
+from eufy_home_security.devices.ptz import PTZ_IDENTIFIERS
 from eufy_home_security.devices.support import Evidence, Support
 from eufy_home_security.devices.types import MODELS, DeviceKind
 
@@ -183,3 +185,43 @@ def test_live_video_is_declared_where_the_library_sends_the_handlers_open(
 
 def test_the_generic_profile_itself_claims_no_live_video() -> None:
     assert FALLBACK_PROFILES[DeviceKind.CAMERA].support(Capability.LIVE_STREAM) is Support.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    ("serial", "control", "presets", "zoom"),
+    [
+        # the handler declares and builds every action: all three, from the generic profile
+        ("T8425P2000067890", Support.DECLARED, Support.DECLARED, Support.DECLARED),
+        # no set_picture_zoom action in its thing description
+        ("T8426P2000067890", Support.DECLARED, Support.DECLARED, Support.UNKNOWN),
+        # its pan/tilt step is a 1350 recipe the library does not send
+        ("T8423P2000067890", Support.UNKNOWN, Support.DECLARED, Support.UNKNOWN),
+        # its profile's own grades stand
+        ("T8170P0000054321", Support.VERIFIED, Support.VERIFIED, Support.VERIFIED),
+        # no pan/tilt action at all
+        ("T8160P2000067890", Support.UNKNOWN, Support.UNKNOWN, Support.UNKNOWN),
+    ],
+)
+def test_pan_tilt_zoom_is_declared_where_the_library_sends_the_handlers_actions(
+    serial: str, control: Support, presets: Support, zoom: Support
+) -> None:
+    profile = profile_for_serial(serial)
+    assert profile is not None
+    assert profile.support(Capability.PTZ_CONTROL) is control
+    assert profile.support(Capability.PTZ_PRESETS) is presets
+    assert profile.support(Capability.PTZ_ZOOM) is zoom
+    if serial.startswith("T8425"):
+        evidence = profile.capabilities[Capability.PTZ_PRESETS]
+        assert "query_preset_positions and set_ptz_cruise_preview are" in evidence.source
+        assert "HB3" in evidence.source
+        assert "Station.ptz_support" in evidence.note
+    assert profile_for_serial(serial) is profile
+
+
+def test_ptz_actions_cover_the_three_capabilities() -> None:
+    assert set(PTZ_ACTIONS) == {
+        Capability.PTZ_CONTROL,
+        Capability.PTZ_PRESETS,
+        Capability.PTZ_ZOOM,
+    }
+    assert set().union(*PTZ_ACTIONS.values()) <= set(PTZ_IDENTIFIERS)

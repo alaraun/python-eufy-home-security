@@ -14,7 +14,6 @@ from eufy_home_security.devices.recipes import (
     connect_type,
     free_preset_slot,
     goto_preset,
-    handler_variant,
     parse_preset_positions,
     ptz_rotate,
     query_preset_positions,
@@ -168,9 +167,9 @@ def test_pan_tilt_directions_are_the_cameras() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    ("product_code", "zoom_ivalue"),
-    [("T8410", False), ("t8410", False), ("T8410C", True), ("T8170", True), (None, True)],
-)
-def test_handler_variant_per_product(product_code: str | None, zoom_ivalue: bool) -> None:
-    assert handler_variant(product_code).ptz_zoom_ivalue is zoom_ivalue
+def test_the_plain_preset_query_sends_no_data_and_names_its_notify() -> None:
+    plain = query_preset_positions(value=False)
+    assert plain.plaintext() == b'{"commandType":6034}'
+    assert plain.as_handler_dict()["notifySubCmd"] == 6034
+    assert plain.answer_cmd == query_preset_positions().answer_cmd == 6034
+    assert b'"data":{"value":0}' in query_preset_positions().plaintext()

@@ -13,9 +13,10 @@ from typing import Any
 
 import pytest
 
-from eufy_home_security.devices import live_open, recipes
+from eufy_home_security.devices import live_open, ptz, recipes
 from eufy_home_security.devices.model_settings import product_code_of
-from eufy_home_security.devices.recipes import ConnectType, HandlerVariant, Recipe
+from eufy_home_security.devices.ptz import PtzForm
+from eufy_home_security.devices.recipes import ConnectType, Recipe
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "thing_models"
 GOLDEN_FILES = sorted(FIXTURES.glob("*.json"))
@@ -23,7 +24,7 @@ GOLDEN_FILES = sorted(FIXTURES.glob("*.json"))
 type Case = dict[str, Any]
 
 
-def _open_live_stream(case: Case, variant: HandlerVariant) -> Recipe:
+def _open_live_stream(case: Case) -> Recipe:
     payload = case["payload"]
     if _connect_type(case) is not ConnectType.SINGLE:
         return recipes.open_live_stream_station(
@@ -45,27 +46,36 @@ def _open_live_stream(case: Case, variant: HandlerVariant) -> Recipe:
     )
 
 
-def _ptz_rotate(case: Case, variant: HandlerVariant) -> Recipe:
+def _ptz_form(case: Case) -> PtzForm | None:
+    """The form the generated table (:mod:`eufy_home_security.devices.ptz`) names for the
+    case's product, action and connect type."""
+    code = product_code_of(None, case["device"]["device_sn"])
+    return ptz.ptz_form(code, case["identifier"], _connect_type(case))
+
+
+def _ptz_rotate(case: Case) -> Recipe:
     payload = case["payload"]
     return recipes.ptz_rotate(
         cmd_type=payload["cmdType"],
         rotate_type=payload["rotateType"],
         zoom=payload["zoom"],
-        zoom_ivalue=variant.ptz_zoom_ivalue,
+        zoom_ivalue=_ptz_form(case) is PtzForm.STANDARD,
     )
 
 
-BUILDERS: dict[str, Callable[[Case, HandlerVariant], Recipe]] = {
+BUILDERS: dict[str, Callable[[Case], Recipe]] = {
     "open_live_stream": _open_live_stream,
-    "close_live_stream": lambda case, variant: recipes.close_live_stream(),
-    "query_preset_positions": lambda case, variant: recipes.query_preset_positions(),
-    "set_ptz_cruise_preview": lambda case, variant: recipes.goto_preset(case["payload"]),
-    "get_preset_position_pic": lambda case, variant: recipes.preset_picture(case["payload"]),
+    "close_live_stream": lambda case: recipes.close_live_stream(),
+    "query_preset_positions": lambda case: recipes.query_preset_positions(
+        value=_ptz_form(case) is PtzForm.STANDARD
+    ),
+    "set_ptz_cruise_preview": lambda case: recipes.goto_preset(case["payload"]),
+    "get_preset_position_pic": lambda case: recipes.preset_picture(case["payload"]),
     "ptz_action_control": _ptz_rotate,
-    "set_picture_zoom": lambda case, variant: recipes.set_picture_zoom(case["payload"]["dstZoom"]),
+    "set_picture_zoom": lambda case: recipes.set_picture_zoom(case["payload"]["dstZoom"]),
 }
-"""Each identifier the library implements, called with a golden case's input and the
-product's :func:`~eufy_home_security.devices.recipes.handler_variant`."""
+"""Each identifier the library implements, called with a golden case's input; a
+pan/tilt/zoom action in the form :mod:`eufy_home_security.devices.ptz` names for it."""
 
 
 def _connect_type(case: Case) -> ConnectType:
@@ -101,6 +111,7 @@ def test_the_golden_files_of_the_standalone_homebase3_and_homebase2_cameras_are_
         "T8170.json",
         "T8410.json",
         "T8410C.json",
+        "T8425.json",
     ]
 
 
@@ -112,8 +123,7 @@ def test_every_golden_identifier_is_mapped_to_a_builder() -> None:
 @pytest.mark.parametrize(("product_code", "case"), list(_builder_params()))
 def test_the_builder_reproduces_the_handlers_recipe(product_code: str, case: Case) -> None:
     expected = {k: v for k, v in case["p2p"].items() if k not in recipes.HANDLER_UNUSED_KEYS}
-    variant = recipes.handler_variant(product_code)
-    assert BUILDERS[case["identifier"]](case, variant).as_handler_dict() == expected
+    assert BUILDERS[case["identifier"]](case).as_handler_dict() == expected
 
 
 def test_the_handlers_homebase_live_open_is_the_1350_1003_frame_the_library_does_not_use() -> None:

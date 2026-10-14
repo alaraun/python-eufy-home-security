@@ -1,0 +1,94 @@
+{
+  "cases": [
+    {
+      "identifier": "ptz_action_control",
+      "payload": {
+        "cmdType": 1,
+        "rotateType": 2,
+        "zoom": 1
+      },
+      "device": {
+        "device_sn": "T8425P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 2,
+        "main_sw_version": "1.6.5.0"
+      },
+      "p2p": {
+        "cmd": 1700,
+        "subCmd": 6030,
+        "params": {
+          "cmd_type": 1,
+          "rotate_type": 2
+        }
+      }
+    },
+    {
+      "identifier": "query_preset_positions",
+      "payload": 0,
+      "device": {
+        "device_sn": "T8425P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 2,
+        "main_sw_version": "1.6.5.0"
+      },
+      "p2p": {
+        "cmd": 1700,
+        "subCmd": 6034,
+        "notifyCmd": 1351,
+        "notifySubCmd": 6034,
+        "resultFrom": 1,
+        "parsePayloadAction": "query_preset_positions_parse_payload",
+        "payloadFrom": "mapOf"
+      }
+    },
+    {
+      "identifier": "set_ptz_cruise_preview",
+      "payload": 1,
+      "device": {
+        "device_sn": "T8425P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 2,
+        "main_sw_version": "1.6.5.0"
+      },
+      "p2p": {
+        "cmd": 1700,
+        "subCmd": 6035,
+        "params": {
+          "value": 1
+        }
+      }
+    },
+    {
+      "identifier": "set_picture_zoom",
+      "payload": {
+        "dstZoom": 2.5,
+        "orgZoom": 0
+      },
+      "device": {
+        "device_sn": "T8425P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 2,
+        "main_sw_version": "1.6.5.0"
+      },
+      "p2p": {
+        "cmd": 1350,
+        "subCmd": 6203,
+        "params": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0,
+          "offset": false,
+          "orgZoom": 0,
+          "dstZoom": 2.5
+        }
+      }
+    }
+  ],
+  "handler": {
+    "large_version": 141,
+    "plugin_path_date": "2026/07/02",
+    "sha256": "72fb593a44197d2a231ca4cf4e0cc3ca8158ccb9c24b59a974a3030b988dc6c2"
+  },
+  "product_code": "T8425"
+}

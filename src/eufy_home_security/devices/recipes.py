@@ -226,35 +226,6 @@ LIVE_OPEN_TIMEOUT: Final = 15.0
 """The handler's timeout for a live open (15000 ms)."""
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class HandlerVariant:
-    """Where a product's handler departs from the T8170's recipes."""
-
-    ptz_zoom_ivalue: bool = True
-    """A pan/tilt step (1700/6030) carries ``zoom`` and ``ivalue`` -1."""
-
-
-DEFAULT_VARIANT: Final = HandlerVariant()
-"""The T8170 handler's recipes, the library's default for every other product."""
-
-HANDLER_VARIANTS: Final[Mapping[str, HandlerVariant]] = MappingProxyType(
-    {
-        "T8410": HandlerVariant(ptz_zoom_ivalue=False),
-    }
-)
-"""Per product code, the recipe variant its handler declares (declared from the
-T8410 handler's ``ptz_action_control``). Which live open a product's handler sends is
-generated data: :mod:`.live_open`."""
-
-
-def handler_variant(product_code: str | None) -> HandlerVariant:
-    """The recipe variant of ``product_code``; :data:`DEFAULT_VARIANT` when none is
-    recorded or the code is unknown."""
-    if product_code is None:
-        return DEFAULT_VARIANT
-    return HANDLER_VARIANTS.get(product_code.strip().upper(), DEFAULT_VARIANT)
-
-
 def open_live_stream_single(
     *,
     channel: int,
@@ -397,15 +368,22 @@ stores nothing, so a store is only real once the read-back shows the slot in use
 """
 
 
-def query_preset_positions() -> Recipe:
-    """Read the preset slots; answered by a 1351 notify carrying ``points``."""
+def query_preset_positions(*, value: bool = True) -> Recipe:
+    """Read the preset slots; answered by a 1351 notify carrying ``points``.
+
+    ``value`` sends ``{"value": 0}`` as the T8170 handler does; False sends no data and
+    names the notify's sub-command, as most other pan/tilt handlers do
+    (:attr:`~.ptz.PtzForm.PLAIN`).
+    """
+    sub_cmd = SubCommand.COMMAND_INDOOR_SPAN_CRUISE_QUERY
     return Recipe(
         identifier="query_preset_positions",
         cmd=RecipeCommand.DOORBELL_PAYLOAD,
-        sub_cmd=SubCommand.COMMAND_INDOOR_SPAN_CRUISE_QUERY,
+        sub_cmd=sub_cmd,
         notify_cmd=RecipeCommand.NOTIFY_PAYLOAD,
+        notify_sub_cmd=None if value else sub_cmd,
         result_from=ResultFrom.NOTIFY,
-        params=MappingProxyType({"value": 0}),
+        params=MappingProxyType({"value": 0}) if value else None,
     )
 
 
@@ -452,7 +430,7 @@ def ptz_rotate(
     *, cmd_type: int, rotate_type: int, zoom: float = 1.0, zoom_ivalue: bool = True
 ) -> Recipe:
     """Pan or tilt (``ptz_action_control``). ``zoom_ivalue`` False sends ``cmd_type``
-    and ``rotate_type`` only (:attr:`HandlerVariant.ptz_zoom_ivalue`)."""
+    and ``rotate_type`` only (:attr:`~.ptz.PtzForm.PLAIN`)."""
     params: dict[str, Any] = {"cmd_type": cmd_type, "rotate_type": rotate_type}
     if zoom_ivalue:
         params |= {"zoom": _js_number(zoom), "ivalue": -1}

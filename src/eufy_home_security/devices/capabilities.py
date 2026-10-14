@@ -27,6 +27,8 @@ from ..models import (
 )
 from ..p2p.params import GUARD_MODE_PARAM
 from .live_open import app_version, library_live_open
+from .ptz import app_version as ptz_app_version
+from .ptz import ptz_form
 from .recipes import PARENT_CONNECT_TYPES, ConnectType
 from .support import Evidence, Support
 from .types import MODELS, DeviceKind, model_for_serial, serial_product_code
@@ -478,16 +480,30 @@ def own_profile(serial: str) -> DeviceProfile | None:
 _LIVE_CAPABILITIES: Final = (Capability.LIVE_STREAM, Capability.LIVE_KEYFRAME)
 _CONNECT_TYPES: Final = (ConnectType.SINGLE, *dict.fromkeys(PARENT_CONNECT_TYPES.values()))
 
+PTZ_ACTIONS: Final[Mapping[Capability, tuple[str, ...]]] = MappingProxyType(
+    {
+        Capability.PTZ_CONTROL: ("ptz_action_control",),
+        Capability.PTZ_PRESETS: ("query_preset_positions", "set_ptz_cruise_preview"),
+        Capability.PTZ_ZOOM: ("set_picture_zoom",),
+    }
+)
+"""The thing-model actions each pan/tilt/zoom capability sends (:mod:`.ptz`). A slot
+store, delete, picture or default change needs its own action besides
+:attr:`Capability.PTZ_PRESETS`."""
 
-_LIVE_PROFILES: dict[tuple[int, str], DeviceProfile] = {}
+
+_GENERATED_PROFILES: dict[tuple[int, str], DeviceProfile] = {}
 
 
-def _with_live(profile: DeviceProfile, product_code: str) -> DeviceProfile:
-    """Memoised :func:`_build_with_live`, keyed by the (module-level, immortal) profile."""
+def _with_generated(profile: DeviceProfile, product_code: str) -> DeviceProfile:
+    """Memoised :func:`_build_with_ptz` of :func:`_build_with_live`, keyed by the
+    (module-level, immortal) profile."""
     key = (id(profile), product_code)
-    if key not in _LIVE_PROFILES:
-        _LIVE_PROFILES[key] = _build_with_live(profile, product_code)
-    return _LIVE_PROFILES[key]
+    if key not in _GENERATED_PROFILES:
+        _GENERATED_PROFILES[key] = _build_with_ptz(
+            _build_with_live(profile, product_code), product_code
+        )
+    return _GENERATED_PROFILES[key]
 
 
 def _build_with_live(profile: DeviceProfile, product_code: str) -> DeviceProfile:
@@ -514,6 +530,33 @@ def _build_with_live(profile: DeviceProfile, product_code: str) -> DeviceProfile
     return replace(profile, capabilities=MappingProxyType(capabilities))
 
 
+def _build_with_ptz(profile: DeviceProfile, product_code: str) -> DeviceProfile:
+    """``profile`` with each pan/tilt/zoom capability graded ``DECLARED`` where the
+    library sends every action of it (:data:`PTZ_ACTIONS`) as the product's handler does,
+    under one connect type (:mod:`.ptz`); an entry the profile grades itself (other than
+    ``UNKNOWN``) stands. ``profile`` itself when nothing changes."""
+    graded: dict[Capability, Evidence] = {}
+    for capability, actions in PTZ_ACTIONS.items():
+        if profile.support(capability) is not Support.UNKNOWN:
+            continue
+        where = [
+            ct.value
+            for ct in _CONNECT_TYPES
+            if all(ptz_form(product_code, action, ct) is not None for action in actions)
+        ]
+        if where:
+            graded[capability] = Evidence(
+                Support.DECLARED,
+                f"the {product_code} handler's {' and '.join(actions)} "
+                f"{'is' if len(actions) == 1 else 'are'} the library's recipe under "
+                f"{', '.join(where)} (eufy app {ptz_app_version()})",
+                "depends on the station: Station.ptz_support answers for one device and station",
+            )
+    if not graded:
+        return profile
+    return replace(profile, capabilities=MappingProxyType({**profile.capabilities, **graded}))
+
+
 def profile_for_serial(serial: str) -> DeviceProfile | None:
     """The profile for a serial's model.
 
@@ -523,11 +566,13 @@ def profile_for_serial(serial: str) -> DeviceProfile | None:
     (:attr:`Capability.LIVE_STREAM`, :attr:`Capability.LIVE_KEYFRAME`) the profile does not
     grade is ``DECLARED`` when the library sends the product handler's live open under
     some connect type; whether it does under one station is
-    :meth:`~..station.Station.live_support`.
+    :meth:`~..station.Station.live_support`. Pan/tilt, presets and zoom the profile does
+    not grade are ``DECLARED`` the same way from the handler's actions
+    (:data:`PTZ_ACTIONS`); under one station: :meth:`~..station.Station.ptz_support`.
     """
     profile = own_profile(serial)
     if profile is None:
         return None
     model = model_for_serial(serial)
     code = serial_product_code(serial) or (model.model if model is not None else None)
-    return profile if code is None else _with_live(profile, code)
+    return profile if code is None else _with_generated(profile, code)
