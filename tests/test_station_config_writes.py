@@ -483,3 +483,31 @@ async def test_cross_camera_unknown_support_and_stale_revision_send_nothing(
     with pytest.raises(UnsupportedError, match="cross_camera_groups is not supported"):
         await hub.async_set_cross_camera_groups([])
     assert tracking_writes(fake) == []
+
+
+# ── guard mode and bulk mode-table refusals ──────────────────────────────────
+
+
+async def test_a_custom_mode_the_known_list_lacks_is_not_set(
+    station: Station, fake: FakeStation
+) -> None:
+    await station.async_update()
+    with pytest.raises(UnsupportedError, match="has no Custom 2"):
+        await station.async_set_guard_mode("custom_2")
+    assert [c for c in fake.received if c["cmd"] == 1224] == []
+    assert await station.async_set_guard_mode("custom_1") is GuardMode.CUSTOM_1
+
+
+async def test_bulk_mode_table_writes_need_known_support(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unknown(self: Station, feature: StationFeature) -> Evidence:
+        return Evidence(Support.UNKNOWN, "not on record")
+
+    monkeypatch.setattr(Station, "config_support", unknown)
+    with pytest.raises(UnsupportedError, match="mode_tables is not supported"):
+        await station.async_set_mode_actions("away", {CAMERA.device_sn: {"record": True}})
+    with pytest.raises(UnsupportedError, match="mode_delays is not supported"):
+        await station.async_set_mode_delays("away", entry_s=30)
+    assert fake.param_queries == 0
+    assert fake.mode_tables_received == []

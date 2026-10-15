@@ -35,7 +35,12 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from ..exceptions import ProtocolError
-from ..models import PARAM_SUB_DEVICE_ASSOCIATION, PARAM_SUB_DEVICE_SERIALS, GuardMode
+from ..models import (
+    GUARD_MODE_LABELS,
+    PARAM_SUB_DEVICE_ASSOCIATION,
+    PARAM_SUB_DEVICE_SERIALS,
+    GuardMode,
+)
 from ._json import json_int, loads_json
 from .mode_actions import CountDown, ModeTable
 
@@ -70,7 +75,7 @@ CUSTOM_MODES: Final[tuple[GuardMode, ...]] = (
 """The modes a user can add, rename and delete, in the order an add fills them."""
 
 BUILT_IN_MODE_TITLES: Final[Mapping[GuardMode, str]] = MappingProxyType(
-    {GuardMode.HOME: "Home", GuardMode.AWAY: "Away", GuardMode.DISARMED: "Disarmed"}
+    {mode: GUARD_MODE_LABELS[mode] for mode in (GuardMode.HOME, GuardMode.AWAY, GuardMode.DISARMED)}
 )
 """The modes every station offers, with the titles the app shows whatever 1256 says."""
 

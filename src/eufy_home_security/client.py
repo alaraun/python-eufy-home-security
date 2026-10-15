@@ -1316,10 +1316,11 @@ class EufySecurity:
         or that another group of the house has, no member or a mode that cannot be a
         target (``ValueError``, both before any request); a member that is not a station
         or standalone device of the house, or a house already holding
-        :data:`~.cloud.arming.MAX_GROUPS_PER_HOUSE` groups (:class:`UnsupportedError`).
-        Every writable :class:`GuardMode` is accepted: the library does not read a
-        station's defined custom modes. :class:`ProtocolError` when the cloud accepts the
-        group but does not list it.
+        :data:`~.cloud.arming.MAX_GROUPS_PER_HOUSE` groups, or a custom mode a member's
+        station does not have while its mode list is known (:class:`UnsupportedError`;
+        :meth:`Station.target_mode_name`). A member's ``mode`` title is its station's
+        name for the mode (a custom mode's own title) where known.
+        :class:`ProtocolError` when the cloud accepts the group but does not list it.
         """
         trimmed = arming.check_group_name(name)
         targets = arming.target_modes(members)
@@ -1331,7 +1332,7 @@ class EufySecurity:
                 f"the house already has {len(listing.groups)} arming groups "
                 f"(at most {arming.MAX_GROUPS_PER_HOUSE})"
             )
-        chosen = arming.build_members(house, targets)
+        chosen = arming.build_members(house, targets, titles=self._member_titles(targets))
         await self.cloud.async_add_arming_group(
             house.house_id, trimmed, chosen, region=house.region
         )
@@ -1356,7 +1357,7 @@ class EufySecurity:
         The same refusals as :meth:`async_create_arming_group`, plus ``ValueError`` when
         neither ``name`` nor ``members`` is given and :class:`UnsupportedError` for a group
         the house does not have. A member keeping its mode keeps the mode name stored
-        with it.
+        with it unless its station names the mode.
         """
         if name is None and members is None:
             raise ValueError("pass a name or members to update an arming group")
@@ -1367,7 +1368,11 @@ class EufySecurity:
         group = arming.find_group(listing, group_id)
         if trimmed is not None:
             arming.check_unique_name(listing, trimmed, group_id=group_id)
-        chosen = None if targets is None else arming.build_members(house, targets, group)
+        chosen = (
+            None
+            if targets is None
+            else arming.build_members(house, targets, group, titles=self._member_titles(targets))
+        )
         await self.cloud.async_update_arming_group(
             house.house_id, group_id, region=house.region, name=trimmed, members=chosen
         )
@@ -1457,6 +1462,17 @@ class EufySecurity:
         except EufySecurityError as err:
             return result(arming.ArmingOutcome.FAILED, error=err)
         return result(arming.ArmingOutcome.CHANGED, applied=applied)
+
+    def _member_titles(self, targets: Mapping[str, GuardMode]) -> dict[str, str]:
+        """Each target's mode name on its local station where that station's modes are
+        known (:meth:`Station.target_mode_name`, which refuses a custom mode the station
+        does not have)."""
+        titles: dict[str, str] = {}
+        for serial, mode in targets.items():
+            station = self.stations.get(serial)
+            if station is not None and (name := station.target_mode_name(mode)) is not None:
+                titles[serial] = name
+        return titles
 
     async def _arming_groups_of(self, house: arming.ArmingHouse) -> arming.ArmingGroupList:
         return await self.cloud.async_list_arming_groups(house.house_id, region=house.region)

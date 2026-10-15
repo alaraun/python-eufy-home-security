@@ -3,6 +3,7 @@ EufyCloudApi's six calls on the security realm."""
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any
 
 import aiohttp
@@ -139,6 +140,8 @@ def test_logs_keep_the_clouds_order_and_need_a_group_and_a_time() -> None:
         ),
         ArmingGroupLog(group_id=GROUP, create_time=1_700_000_000),
     )
+    first = arming.parse_logs(raw, PATH)[0]
+    assert first.created_at == dt.datetime(2023, 11, 14, 22, 15, tzinfo=dt.UTC)  # seconds
     assert arming.parse_logs(None, PATH) == arming.parse_logs({"logs": None}, PATH) == ()
     bad_logs: list[object] = [
         {"logs": {}},
@@ -210,6 +213,15 @@ def test_members_must_be_stations_of_the_house_and_keep_a_stored_title() -> None
     )
     assert arming.build_members(house, {SYNTHETIC.station_sn: GuardMode.AWAY}, previous) == (
         ArmingGroupMember(device_sn=SYNTHETIC.station_sn, mode=GuardMode.AWAY, title="Away"),
+    )
+    # The station's own name for the mode wins over a stored title.
+    titles = {SYNTHETIC.station_sn: "Night watch"}
+    assert arming.build_members(
+        house, {SYNTHETIC.station_sn: GuardMode.CUSTOM_2}, previous, titles=titles
+    ) == (
+        ArmingGroupMember(
+            device_sn=SYNTHETIC.station_sn, mode=GuardMode.CUSTOM_2, title="Night watch"
+        ),
     )
     with pytest.raises(UnsupportedError, match="not a station"):
         arming.build_members(house, {SYNTHETIC.camera_sn: GuardMode.AWAY})
@@ -294,6 +306,28 @@ async def test_the_six_calls_send_the_apps_bodies_on_the_security_realm(
     assert listing.house_id == HOUSE
     assert [g.group_id for g in listing.groups] == [GROUP]
     assert logs == (ArmingGroupLog(group_id=GROUP, create_time=5),)
+
+
+async def test_an_activation_is_recorded_under_the_login_s_nickname(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """The app records an activation under the account's nickname; the login answer
+    carries it, and a later client on the cached session still has it."""
+    fake_mega.login_data["nick_name"] = "Kim R"
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            before = (api.nick_name, api.activation_user_name)
+            await api.async_login()
+            assert before == (None, SYNTHETIC.email.split("@")[0])
+            assert api.nick_name == "Kim R"
+            cached = _api(session, cache)  # no new login
+            await cached.async_activate_arming_group(HOUSE, GROUP, region="eu")
+    assert [e for e, _ in fake_mega.region_calls if e == "login"] == ["login"]
+    assert [body for name, body in fake_mega.calls if name == "setup_guard"] == [
+        {"house_id": HOUSE, "group_id": GROUP, "user_name": "Kim R", "enable": True}
+    ]
 
 
 async def test_a_refused_activation_raises_the_clouds_error(

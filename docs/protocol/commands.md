@@ -711,7 +711,7 @@ light and reports `0x04B1` = `[16, 0]` on channel 255 ([events.md](events.md#ala
 A station keeps its mode list, schedule, stored mode tables and cross-camera tracking
 choice as parameters whose value is the base64 of a compact JSON document. On a
 HomeBase 3 the cloud device list carries 1254, 1256 and 1157–1159, and the parameter
-dump carries 1072, 1073 and 1257 (shapes seen on hardware; no library write).
+dump carries 1072, 1073 and 1257 (shapes seen on hardware).
 Codec: `p2p/station_config_codecs.py` (pure); absent or blank means "not set".
 
 | param | holds | JSON |
@@ -744,6 +744,19 @@ and a slot mode (and the 1257 default) among Away, Home, Custom 1–3 and Disarm
 a count-down as the app does (each listed device of the table at `delay_time`, the
 others at 0) and turns a table into the `mode_actions.ModeTable` a 1255 write
 starts from; Disarmed has no 1255 table.
+
+**Cross-camera tracking (1072, 1073).** A write is a 1350 `DeviceMsgBean` on channel
+255 whose `cmd` is the param and whose `payload` is the whole list (the serials, or the
+`{"value": [...]}` groups); the station stores its base64.
+
+**Library writes [app].** `Station.async_create_custom_mode` / `async_rename_custom_mode` /
+`async_delete_custom_mode` send 1256 and `async_set_schedule` 1254 as frames of their own
+type with the document as the body, each answered by a receipt; the 1257 default goes as
+an ECB scalar (`u32le mode ‖ char[128] owner account id`). The cross-camera calls send
+the 1350 lists above. A write is confirmed by a fresh parameter dump where it carries the
+param; on a HomeBase 3 the dump lacks 1256 and 1254, so a zero receipt confirms them and
+the library files the written value as its own until the cloud's copy changes. Not
+written on hardware yet.
 
 **JSON style.** The codec writes compact JSON (`,` and `:` without spaces), non-ASCII
 as UTF-8, `<` `>` `&` `=` `'` U+2028 U+2029 as `\uXXXX`, keys sorted in 1256 and 1254,

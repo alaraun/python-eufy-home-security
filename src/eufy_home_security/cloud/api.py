@@ -215,6 +215,8 @@ _AB_WANTED_KEY: Final = "ab_wanted"
 """A cached session's settled ``ab``: what was asked for (differs after a refused country login)."""
 _ENDED_KEY: Final = "ended"
 """A cached session section's record of why its session was dropped (a :class:`SessionState`)."""
+_NICK_NAME_KEY: Final = "nick_name"
+"""The login answer's account nickname, kept in the session section it came with."""
 _EXTRA_HOMES_KEY: Final = "extra_countries"
 """``cloud.extra_countries``: each looked-up extra country's home region."""
 
@@ -377,6 +379,22 @@ class EufyCloudApi:
     def user_name(self) -> str:
         """What the app sends as ``user_name``: the e-mail's local part."""
         return self._email.split("@", 1)[0] if "@" in self._email else self._email
+
+    @property
+    def nick_name(self) -> str | None:
+        """The account's nickname (the login answer's ``nick_name``, kept with the cached
+        session); None until a login gave one."""
+        for cloud in self._cache.cloud_sessions().values():
+            nick = cloud.get(_NICK_NAME_KEY)
+            if isinstance(nick, str) and nick.strip():
+                return nick
+        return None
+
+    @property
+    def activation_user_name(self) -> str:
+        """The name an arming-group activation is recorded under: :attr:`nick_name`, as
+        the app sends it, else :attr:`user_name`."""
+        return self.nick_name or self.user_name
 
     def _http(self) -> aiohttp.ClientSession:
         """The aiohttp session, resolving and memoising a factory on first use."""
@@ -1457,6 +1475,9 @@ class EufyCloudApi:
             cloud["mega_domain"] = mega_domain
         if isinstance(country_code, str) and country_code:
             cloud["country_code"] = country_code
+        nick_name = data.get(_NICK_NAME_KEY)
+        if isinstance(nick_name, str) and nick_name.strip():
+            cloud[_NICK_NAME_KEY] = nick_name
         _LOGGER.info(
             "%s cloud login ok (user %s, token expires %s, ab %s, mega_domain %r, country_code %r)",
             region,
@@ -2988,11 +3009,11 @@ class EufyCloudApi:
     async def async_activate_arming_group(
         self, house_id: str, group_id: str, *, region: str, user_name: str | None = None
     ) -> None:
-        """Record an activation of a group by ``user_name`` (default :attr:`user_name`)
-        (``setup_guard``). The cloud changes no station's mode: the members' guard-mode
+        """Record an activation of a group by ``user_name`` (default
+        :attr:`activation_user_name`) (``setup_guard``). The cloud changes no station's mode: the members' guard-mode
         writes are the caller's (see
         :meth:`~..client.EufySecurity.async_activate_arming_group`)."""
-        body = arming.activate_body(house_id, group_id, user_name or self.user_name)
+        body = arming.activate_body(house_id, group_id, user_name or self.activation_user_name)
         await self._security_call(const.ARMING_GROUP_ACTIVATE_PATH, body, region=region)
 
     async def async_arming_group_logs(

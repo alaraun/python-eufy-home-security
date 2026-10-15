@@ -389,3 +389,39 @@ async def test_activation_arms_a_real_station_session() -> None:
     assert [r.outcome for r in again.results] == [ArmingOutcome.ALREADY]
     assert cloud.arming_groups[HOUSE][0]["status"] == "1"
     assert [log["user_name"] for log in cloud.arming_logs[GROUP]] == ["user", "user"]
+
+
+@dataclass
+class ModesStation:
+    """A local station whose mode list is known: Custom 1 is "Night watch"."""
+
+    serial: str
+
+    def target_mode_name(self, mode: GuardMode) -> str | None:
+        if mode is GuardMode.CUSTOM_2:
+            raise UnsupportedError("no Custom 2")
+        return "Night watch" if mode is GuardMode.CUSTOM_1 else mode.label
+
+
+async def test_member_modes_are_checked_and_named_by_their_station() -> None:
+    cloud = _cloud()
+    eufy = _client(cloud)
+    eufy.stations[SYNTHETIC.station_sn] = cast("Station", ModesStation(SYNTHETIC.station_sn))
+    with pytest.raises(UnsupportedError, match="no Custom 2"):
+        await eufy.async_create_arming_group("Porch", {SYNTHETIC.station_sn: "custom_2"})
+    with pytest.raises(UnsupportedError, match="no Custom 2"):
+        await eufy.async_update_arming_group(GROUP, members={SYNTHETIC.station_sn: "custom_2"})
+    await eufy.async_update_arming_group(
+        GROUP, members={SYNTHETIC.station_sn: "custom_1", OTHER_STATION_SN: "custom_1"}
+    )
+    assert _arming_bodies(cloud, const.ARMING_GROUP_ADD_PATH) == []
+    assert _arming_bodies(cloud, const.ARMING_GROUP_UPDATE_PATH) == [
+        {
+            "house_id": HOUSE,
+            "group_id": GROUP,
+            "devices": [
+                {"device_sn": SYNTHETIC.station_sn, "mode": "Night watch", "mode_id": 3},
+                {"device_sn": OTHER_STATION_SN, "mode": "Custom 1", "mode_id": 3},
+            ],
+        }
+    ]

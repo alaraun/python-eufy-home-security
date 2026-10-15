@@ -12,6 +12,7 @@ from __future__ import annotations
 import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import IntEnum, StrEnum
 from types import MappingProxyType
 from typing import Any, Final
@@ -19,7 +20,7 @@ from typing import Any, Final
 from .._logging import redact, redact_serial
 from ..devices.types import serial_prefix
 from ..exceptions import EufySecurityError, ProtocolError, UnsupportedError
-from ..models import GuardMode
+from ..models import GUARD_MODE_LABELS, GuardMode
 
 MAX_NAME_LENGTH: Final = 31
 """The longest group name the app accepts, counted as the app counts: a character above
@@ -39,20 +40,12 @@ NAME_FORBIDDEN_CHARACTERS: Final = frozenset(
 _EMOJI_JOINERS: Final = frozenset("\u200d\ufe0f\u20e3")
 
 MODE_TITLES: Final[Mapping[GuardMode, str]] = MappingProxyType(
-    {
-        GuardMode.AWAY: "Away",
-        GuardMode.HOME: "Home",
-        GuardMode.SCHEDULE: "Schedule",
-        GuardMode.CUSTOM_1: "Custom 1",
-        GuardMode.CUSTOM_2: "Custom 2",
-        GuardMode.CUSTOM_3: "Custom 3",
-        GuardMode.GEOFENCE: "Geofencing",
-        GuardMode.DISARMED: "Disarmed",
-    }
+    {mode: label for mode, label in GUARD_MODE_LABELS.items() if mode is not GuardMode.OFF}
 )
-"""The ``mode`` title sent with each member: the app's English mode names. For a custom
-mode the app sends the mode's own name; ``Custom N`` stands in when it is not known.
-Every writable guard mode is a key (:attr:`GuardMode.OFF` is report-only)."""
+"""The ``mode`` title sent with each member: the app's English mode names, which are
+the display labels (:data:`~..models.GUARD_MODE_LABELS`). For a custom mode the app
+sends the mode's own name; ``Custom N`` stands in when it is not known. Every writable
+guard mode is a key (:attr:`GuardMode.OFF` is report-only)."""
 
 
 class ArmingGroupPreset(IntEnum):
@@ -130,8 +123,12 @@ class ArmingGroupLog:
     user_id: str = ""
     user_name: str = ""
     create_time: int
-    """The activation time as the cloud sends it (epoch; whether seconds or milliseconds
-    is not established)."""
+    """The activation time as the cloud sends it: epoch seconds (:attr:`created_at`)."""
+
+    @property
+    def created_at(self) -> datetime:
+        """:attr:`create_time` as an aware UTC datetime."""
+        return datetime.fromtimestamp(self.create_time, UTC)
 
     def __repr__(self) -> str:
         return (
@@ -234,14 +231,18 @@ def build_members(
     house: ArmingHouse,
     targets: Mapping[str, GuardMode],
     previous: ArmingGroup | None = None,
+    *,
+    titles: Mapping[str, str] | None = None,
 ) -> tuple[ArmingGroupMember, ...]:
     """The members to send for ``targets`` (serial → mode), in their order.
 
     :class:`UnsupportedError` for a serial that is not a station or standalone device of
-    ``house``. A member of ``previous`` keeping its mode keeps its stored title (a custom
-    mode's name); any other gets :func:`mode_title`.
+    ``house``. A member's title is its station's name for the mode where ``titles``
+    (serial → name) gives one, else, for a member of ``previous`` keeping its mode, its
+    stored title (a custom mode's name), else :func:`mode_title`.
     """
     stored = {} if previous is None else {m.device_sn: m for m in previous.members}
+    named = titles or {}
     members = []
     for serial, mode in targets.items():
         if serial not in house.stations:
@@ -249,7 +250,9 @@ def build_members(
                 f"{redact_serial(serial)} is not a station or standalone device of the house"
             )
         old = stored.get(serial)
-        title = old.title if old is not None and old.mode == mode and old.title else ""
+        title = named.get(serial, "")
+        if not title and old is not None and old.mode == mode:
+            title = old.title
         members.append(
             ArmingGroupMember(device_sn=serial, mode=mode, title=title or mode_title(mode))
         )

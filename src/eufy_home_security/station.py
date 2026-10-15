@@ -182,6 +182,7 @@ from .p2p.station_config_codecs import (
     CMD_CUSTOM_MODES,
     CMD_SCHEDULE,
     CMD_SCHEDULE_DEFAULT,
+    CUSTOM_MODES,
     DEFAULT_MODE_ICON,
     PARAM_TRACKING_CAMERAS,
     PARAM_TRACKING_GROUPS,
@@ -1557,8 +1558,14 @@ class Station:
     # ── writes ───────────────────────────────────────────────────────────────
 
     async def async_set_guard_mode(self, mode: GuardMode | str | int) -> GuardMode | int:
-        """Arm/disarm; returns the mode the station reports it applied."""
-        return await self.session.async_set_guard_mode(GuardMode.parse(mode))
+        """Arm/disarm; returns the mode the station reports it applied.
+
+        Raises ``UnsupportedError`` before anything is sent for a custom mode the
+        station does not have while its mode list is known (:meth:`target_mode_name`).
+        """
+        guard = GuardMode.parse(mode)
+        self.target_mode_name(guard)
+        return await self.session.async_set_guard_mode(guard)
 
     async def async_set_setting(
         self,
@@ -1712,9 +1719,10 @@ class Station:
         ``expect_revision`` is checked against the configuration of the fresh read
         (:class:`~.exceptions.ConfigChangedError`, nothing sent, when it differs).
 
-        Raises, before anything is sent: ``UnsupportedError`` for a mode without
-        per-device actions (Schedule, Off, Disarmed, Geofence) or for which the station
-        stores no table, a serial not paired to this station, a device of no
+        Raises, before anything is sent: ``UnsupportedError`` when the station's mode
+        tables (for ``changes``) or delays are *unknown* (:meth:`config_support`), for a
+        mode without per-device actions (Schedule, Off, Disarmed, Geofence) or for which
+        the station stores no table, a serial not paired to this station, a device of no
         catalogued kind, a flag its kind does not have, a station with a device of no
         known kind in the table (it may be a siren accessory, whose triggers a library
         table clears) or delays the table cannot carry unchanged; ``ValueError`` for a
@@ -1724,6 +1732,10 @@ class Station:
         the device and flag (or delay) the read-back does not show, and the session's
         typed errors.
         """
+        if changes:
+            self._require_feature(StationFeature.MODE_TABLES)
+        if any(v is not None for v in (entry_s, exit_s)) or entry_devices or exit_devices:
+            self._require_feature(StationFeature.MODE_DELAYS)
         guard = GuardMode.parse(mode)
         if guard not in MODE_TABLE_MODES:
             raise UnsupportedError(f"guard mode {guard!r} has no per-device actions")
@@ -2059,6 +2071,23 @@ class Station:
         await self._async_confirm_param(
             param, stored, holds, answered=outcome is CommandOutcome.APPLIED
         )
+
+    def target_mode_name(self, mode: GuardMode) -> str | None:
+        """The name this station gives ``mode``, for a write that targets it (the guard
+        mode, an arming-group member); None while its mode list is not known (no
+        state yet, or no source carries the list).
+
+        Raises ``UnsupportedError`` for a custom mode the known list does not define.
+        """
+        config = self.config
+        if config is None or config.sources.get("modes") in (None, ValueSource.APP_DEFAULT):
+            return None
+        if mode in CUSTOM_MODES and not config.is_defined(mode):
+            have = ", ".join(m.name for m in config.modes if m.custom) or "none"
+            raise UnsupportedError(
+                f"{self._log_name} has no {mode.label} (its custom modes: {have})"
+            )
+        return config.mode_name(mode)
 
     def _require_feature(self, feature: StationFeature) -> None:
         """``UnsupportedError`` when ``feature`` is *unknown* on this station."""
