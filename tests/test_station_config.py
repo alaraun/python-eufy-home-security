@@ -284,7 +284,7 @@ def stored_table(mode: int, actions: dict[int, int], *, alarm: tuple[list[int], 
 CUSTOM_1_LISTED = mode_list((1, "Home", 1), (0, "Away", 0), (3, "Night watch", 6))
 
 
-def test_mode_tables_come_from_the_stored_table_else_the_dump() -> None:
+def test_mode_tables_come_from_the_dump_else_the_stored_table() -> None:
     config = config_of(
         {1224: "0"},
         cloud={1256: CUSTOM_1_LISTED, 1157: stored_table(1, {0: 9}, alarm=([0], 30))},
@@ -325,13 +325,24 @@ def test_the_disarmed_table_comes_from_its_stored_param_only() -> None:
     assert [d.action for d in disarmed.devices] == [0]
 
 
-def test_an_undecodable_stored_table_falls_back_to_the_dump_and_says_why() -> None:
-    config = config_of({1224: "0", 1157: b64({"mode_id": 0})}, blocks={0: {1225: "1"}})
+def test_the_dump_table_wins_over_a_stale_stored_copy() -> None:
+    """After a write the devices' parameters already hold the new mask; the stored copy
+    in the cloud list still holds the old one."""
+    config = config_of(
+        {1224: "0"},
+        cloud={1157: stored_table(1, {0: 9}, alarm=([0], 30))},
+        blocks={0: {1225: "1"}},
+    )
     home = config.mode_tables[GuardMode.HOME]
     assert home is not None
     assert [d.action for d in home.devices] == [1]
-    assert "mode_tables.home" in config.unreadable
     assert config.sources["mode_tables.home"] is ValueSource.P2P
+
+
+def test_an_undecodable_stored_table_without_a_dump_table_is_none_and_says_why() -> None:
+    config = config_of({1224: "0", 1157: b64({"mode_id": 0})})
+    assert config.mode_tables[GuardMode.HOME] is None
+    assert "mode_tables.home" in config.unreadable
 
 
 @pytest.mark.parametrize(

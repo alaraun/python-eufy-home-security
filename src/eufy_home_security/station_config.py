@@ -237,8 +237,8 @@ def build_station_config(state: StationState) -> StationConfig:
 
     Station values come from :attr:`~.station.StationState.setting_params` (the P2P
     dump, then the cloud's copy) with their :attr:`~.station.StationState.param_sources`;
-    a mode table from its stored parameter (1157-1161, 1177) where a source carries it,
-    else from the paired devices' per-mode parameters in the dump.
+    a mode table from the paired devices' per-mode parameters in the dump, else from its
+    stored parameter (1157-1161, 1177) where a source carries it.
     """
     sources: dict[str, ValueSource] = {}
     unreadable: dict[str, str] = {}
@@ -376,31 +376,31 @@ def _mode_table(
 ) -> ModeTableView | None:
     name = f"mode_tables.{mode.name.lower()}"
     serials = {ch: d.serial for ch, d in state.devices.items()}
-    pid = STORED_MODE_TABLE_PARAMS.get(mode)
-    raw, source = _param(state, pid) if pid is not None else (None, None)
-    if raw is not None:
+    # The devices' own per-mode parameters first: a write's read-back updates them at
+    # once, while the stored copy in the cloud list lags until the next list fetch.
+    if mode in MODE_TABLE_MODES:
+        blocks = {ch: d.params for ch, d in state.devices.items()}
         try:
-            stored = decode_stored_mode_table(raw, mode)
-        except ProtocolError as err:
+            table = mode_table_from_params(blocks, mode)
+        except (UnsupportedError, ValueError) as err:
             unreadable[name] = str(err)
         else:
-            if stored is not None and source is not None:
-                sources[name] = source
-                return _view(
-                    mode, stored.actions, stored.alarm_delays(), stored.leaving_delays(), serials
-                )
-    if mode not in MODE_TABLE_MODES:
+            if table.actions:
+                sources[name] = ValueSource.P2P
+                return _view(mode, table.actions, table.alarm_delays, table.leaving_delays, serials)
+    pid = STORED_MODE_TABLE_PARAMS.get(mode)
+    raw, source = _param(state, pid) if pid is not None else (None, None)
+    if raw is None:
         return None
-    blocks = {ch: d.params for ch, d in state.devices.items()}
     try:
-        table = mode_table_from_params(blocks, mode)
-    except (UnsupportedError, ValueError) as err:
+        stored = decode_stored_mode_table(raw, mode)
+    except ProtocolError as err:
         unreadable[name] = str(err)
         return None
-    if not table.actions:
+    if stored is None or source is None:
         return None
-    sources[name] = ValueSource.P2P
-    return _view(mode, table.actions, table.alarm_delays, table.leaving_delays, serials)
+    sources[name] = source
+    return _view(mode, stored.actions, stored.alarm_delays(), stored.leaving_delays(), serials)
 
 
 def _view(

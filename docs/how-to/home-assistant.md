@@ -2110,15 +2110,15 @@ table of its own.
 
 ```python
 config = await station.async_get_config()  # refresh=True: fresh P2P read + cloud list once
-for mode in config.modes:                  # ModeInfo(code, name, icon, custom), app order
+for mode in config.modes:  # ModeInfo(code, name, icon, custom), app order
     ...
-config.settable_modes                      # what async_set_guard_mode writes on this station
-config.mode_tables[GuardMode.AWAY]         # ModeTableView | None, per device: action, delays
-config.schedule, config.schedule_default   # weekly slots (1254) and the mode outside them
-config.cross_camera                        # switches, chosen cameras, tracking groups
-config.alarm_volume, config.time_zone      # with config.setting_keys naming the setting
-config.sources["schedule"]                 # ValueSource.P2P / CLOUD / APP_DEFAULT
-station.config                             # the same, built from the current state, no I/O
+config.settable_modes  # what async_set_guard_mode writes on this station
+config.mode_tables[GuardMode.AWAY]  # ModeTableView | None, per device: action, delays
+config.schedule, config.schedule_default  # weekly slots (1254) and the mode outside them
+config.cross_camera  # switches, chosen cameras, tracking groups
+config.alarm_volume, config.time_zone  # with config.setting_keys naming the setting
+config.sources["schedule"]  # ValueSource.P2P / CLOUD / APP_DEFAULT
+station.config  # the same, built from the current state, no I/O
 ```
 
 - **Defined modes.** `config.modes` lists the modes the station has, in the app's order
@@ -2143,8 +2143,11 @@ station.config                             # the same, built from the current st
   label: Away, Home, Schedule, Custom 1-3, Off, Geofencing, Disarmed.
 - **Mode tables.** One entry per defined mode that has a table (Home, Away, Custom 1-3,
   Disarmed): each device's action mask (`ModeDeviceAction.flags` names its bits) and its
-  entry (`alarm_delay`) and exit (`leaving_delay`) delays. None when no source carries the
-  table (a mode never configured); a table is never invented.
+  entry (`alarm_delay`) and exit (`leaving_delay`) delays, read from the devices' own
+  per-mode parameters in the dump (a write's read-back updates them at once), else from
+  the copy the station stores per mode (on a HomeBase 3, 1157-1161 and 1177, usually from
+  the cloud list, which lags a write until the next list fetch). None when no source
+  carries the table (a mode never configured); a table is never invented.
 - **Missing and unreadable values.** A value no source carries is None and has no
   `sources` entry. A value a source carries but that does not decode is named in
   `config.unreadable` with the reason; the field falls back to the next source, else None.
