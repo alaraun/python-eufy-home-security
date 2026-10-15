@@ -106,7 +106,9 @@ from .exceptions import (
     DeviceBusyError,
     DeviceTimeoutError,
     EufySecurityError,
+    ModeInUseError,
     PresetSlotsFullError,
+    ProtocolError,
     RecordNotFoundError,
     StillNotWrittenError,
     UnsupportedError,
@@ -176,8 +178,24 @@ from .p2p.session import (
     SessionStats,
     StationSession,
 )
+from .p2p.station_config_codecs import (
+    CMD_CUSTOM_MODES,
+    DEFAULT_MODE_ICON,
+    CustomModes,
+    add_custom_mode,
+    decode_custom_modes,
+    delete_custom_mode,
+    modify_custom_mode,
+    require_custom_mode,
+)
 from .p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
-from .station_config import StationConfig, build_station_config, changed_fields, check_revision
+from .station_config import (
+    ModeInfo,
+    StationConfig,
+    build_station_config,
+    changed_fields,
+    check_revision,
+)
 
 if TYPE_CHECKING:
     from .storage import SessionCache
@@ -189,6 +207,9 @@ READBACK_DELAY = 0.8
 
 MODE_TABLES_LOCK: Final = "mode_tables"
 """The shared parameter group of the per-mode action tables (:meth:`Station._shared_lock`)."""
+MODE_LIST_LOCK: Final = "mode_list"
+"""The shared parameter group of the mode list (1256) and the schedule (1254, 1257), which
+names its modes."""
 
 CAMERA_IMAGE_DAYS = 7
 """Days of history :meth:`Station.async_camera_image` searches for a camera's newest event."""
@@ -1743,6 +1764,205 @@ class Station:
             exit_devices=exit_devices,
             expect_revision=expect_revision,
         )
+
+    # ── station configuration writes ─────────────────────────────────────────
+
+    async def async_create_custom_mode(
+        self,
+        name: str,
+        *,
+        icon: int | None = None,
+        detail: str | None = None,
+        expect_revision: int | None = None,
+    ) -> ModeInfo:
+        """Add a custom mode named ``name`` in the first free of Custom 1-3; returns it.
+
+        ``icon`` is the app's ``iconType`` (0-7, default :data:`DEFAULT_MODE_ICON`),
+        ``detail`` the mode's description. The mode list (1256) is read fresh, the new
+        entry added and the whole list written (``operate_type`` 100); see
+        :meth:`_async_write_mode_list` for how it is confirmed. The new mode gets the
+        app's actions for an added mode (record and notification) and no device table.
+
+        Raises, before anything is sent: ``UnsupportedError`` when the station's custom
+        modes are *unknown* (:meth:`config_support`) or its mode list cannot be known;
+        ``ValueError`` (a message a UI can show) when all three custom modes exist, the
+        name is empty, longer than 30 characters or already used, or the icon or detail
+        is out of range; :class:`~.exceptions.ConfigChangedError` when ``expect_revision``
+        differs from the fresh read's.
+        """
+        self._require_feature(StationFeature.CUSTOM_MODES)
+        icon_type = DEFAULT_MODE_ICON if icon is None else icon
+        text = "" if detail is None else detail
+        add_custom_mode(None, account_id="", title=name, icon_type=icon_type, detail=text)
+        async with self._shared_lock(MODE_LIST_LOCK):
+            state, config = await self._config_for_write(expect_revision)
+            current = self._custom_modes(state, config)
+            doc = add_custom_mode(
+                current, account_id="", title=name, icon_type=icon_type, detail=text
+            )
+            await self._async_write_mode_list(doc)
+        return self._defined_mode(cast(GuardMode, doc.mode_id))
+
+    async def async_rename_custom_mode(
+        self,
+        mode: GuardMode | str | int,
+        name: str,
+        *,
+        icon: int | None = None,
+        expect_revision: int | None = None,
+    ) -> ModeInfo:
+        """Rename custom mode ``mode`` (and change its icon when ``icon`` is given);
+        returns it. One 1256 write (``operate_type`` 102) of the whole list, read fresh.
+
+        Raises before anything is sent: ``UnsupportedError`` as
+        :meth:`async_create_custom_mode`; ``ValueError`` for a built-in mode, a custom
+        mode the station does not have, or a name or icon the app refuses;
+        :class:`~.exceptions.ConfigChangedError` for a stale ``expect_revision``.
+        """
+        self._require_feature(StationFeature.CUSTOM_MODES)
+        target = require_custom_mode(GuardMode.parse(mode), "rename")
+        add_custom_mode(
+            None, account_id="", title=name, icon_type=icon or 0, mode=target
+        )  # refuses a name or icon before any traffic
+        async with self._shared_lock(MODE_LIST_LOCK):
+            state, config = await self._config_for_write(expect_revision)
+            current = self._custom_modes(state, config)
+            if current is None:
+                raise ValueError(f"{target.label} does not exist")
+            doc = modify_custom_mode(current, target, account_id="", title=name, icon_type=icon)
+            await self._async_write_mode_list(doc)
+        return self._defined_mode(target)
+
+    async def async_delete_custom_mode(
+        self, mode: GuardMode | str | int, *, expect_revision: int | None = None
+    ) -> None:
+        """Delete custom mode ``mode``: one 1256 write (``operate_type`` 101) of the
+        whole list without it, read fresh.
+
+        Raises before anything is sent: ``UnsupportedError`` as
+        :meth:`async_create_custom_mode`; ``ValueError`` for a built-in mode or one the
+        station does not have; :class:`~.exceptions.ModeInUseError` (its ``reason`` a
+        sentence a UI can show) when the mode is the station's current mode or the one
+        in force, a schedule slot uses it or it is the schedule's mode outside every
+        slot; :class:`~.exceptions.ConfigChangedError` for a stale ``expect_revision``.
+        """
+        self._require_feature(StationFeature.CUSTOM_MODES)
+        target = require_custom_mode(GuardMode.parse(mode), "delete")
+        async with self._shared_lock(MODE_LIST_LOCK):
+            state, config = await self._config_for_write(expect_revision)
+            current = self._custom_modes(state, config)
+            if current is None:
+                raise ValueError(f"{target.label} does not exist")
+            doc = delete_custom_mode(current, target, account_id="")
+            self._check_mode_unused(config, target)
+            await self._async_write_mode_list(doc)
+
+    @staticmethod
+    def _check_mode_unused(config: StationConfig, mode: GuardMode) -> None:
+        """:class:`~.exceptions.ModeInUseError` when ``config`` is in ``mode`` or its
+        schedule uses it."""
+        name = config.mode_name(mode)
+        if mode in (config.guard_mode, config.effective_mode):
+            raise ModeInUseError(
+                f"{name} is the station's current mode; switch to another mode before deleting it"
+            )
+        if config.schedule is not None and mode in config.schedule.modes():
+            raise ModeInUseError(
+                f"{name} is used by the schedule; remove it from the schedule first"
+            )
+        if config.schedule_default == mode:
+            raise ModeInUseError(
+                f"{name} is the schedule's mode outside its time slots; choose another one first"
+            )
+
+    def _require_feature(self, feature: StationFeature) -> None:
+        """``UnsupportedError`` when ``feature`` is *unknown* on this station."""
+        evidence = self.config_support(feature)
+        if evidence.support is Support.UNKNOWN:
+            raise UnsupportedError(f"{feature.value} is not supported here: {evidence.source}")
+
+    async def _config_for_write(
+        self, expect_revision: int | None
+    ) -> tuple[StationState, StationConfig]:
+        """A fresh read and its configuration, checked against ``expect_revision``
+        (:class:`~.exceptions.ConfigChangedError`, nothing sent, when it differs)."""
+        state = await self.async_update(wake=True)
+        config = build_station_config(state)
+        check_revision(config, expect_revision)
+        return state, config
+
+    def _custom_modes(self, state: StationState, config: StationConfig) -> CustomModes | None:
+        """The mode list (1256) a write starts from; None when the station has none.
+
+        ``UnsupportedError`` when the list does not decode, or when no source carries
+        it and the station has no cloud copy: the list may exist where the library cannot
+        see it, and a write would replace it.
+        """
+        if (problem := config.unreadable.get("modes")) is not None:
+            raise UnsupportedError(f"the station's mode list cannot be read: {problem}")
+        raw = state.setting_params.get(CMD_CUSTOM_MODES)
+        if raw is None and not self.has_cloud_copy:
+            raise UnsupportedError(
+                "the station's mode list is not known yet (its parameter dump does not "
+                "carry it); read the configuration with refresh first"
+            )
+        return decode_custom_modes(raw)
+
+    async def _async_write_mode_list(self, doc: CustomModes) -> None:
+        """Send mode list ``doc`` (frame 1256) and confirm it (:meth:`_async_confirm_param`)."""
+        receipted = await self.session.async_send_json_frame(
+            CMD_CUSTOM_MODES, lambda account: replace(doc, account_id=account).body()
+        )
+
+        def holds(raw: str) -> bool:
+            stored = decode_custom_modes(raw)
+            return stored is not None and stored.modes == doc.modes
+
+        await self._async_confirm_param(CMD_CUSTOM_MODES, doc.param_value(), holds, receipted)
+
+    async def _async_confirm_param(
+        self, param: int, stored: str, holds: Callable[[str], bool], answered: bool
+    ) -> None:
+        """Confirm a write of the station's own ``param`` and show it in :attr:`state`.
+
+        Where a fresh parameter dump carries ``param``, it must hold the write
+        (``holds``) within :data:`READBACK_ATTEMPTS` reads. Where the dump does not carry
+        it (a HomeBase 3's mode list and schedule live in the cloud's copy), the station's
+        own answer to the write (``answered``: a zero receipt or result) is all that
+        confirms it, and ``stored`` is filed as this library's own write, which
+        :attr:`state` shows until the cloud copy changes after it. Raises
+        :class:`CommandNotAppliedError` when neither confirms the write.
+        """
+        for attempt in range(READBACK_ATTEMPTS):
+            raw = (await self.session.async_get_params()).station.get(param)
+            if raw is None:
+                break
+            with contextlib.suppress(ProtocolError):
+                if holds(raw):
+                    return
+            if attempt + 1 < READBACK_ATTEMPTS:
+                await asyncio.sleep(READBACK_DELAY)
+        else:
+            raise CommandNotAppliedError(
+                param, f"param {param} not confirmed: the station reports another value"
+            )
+        if not answered:
+            raise CommandNotAppliedError(
+                param,
+                f"the station acknowledged command {param} without answering it, and its "
+                "parameter dump does not carry it: nothing confirms the write",
+            )
+        self.session.apply_local_params(STATION_CHANNEL, {param: stored})
+
+    def _defined_mode(self, mode: GuardMode) -> ModeInfo:
+        """``mode`` as :attr:`config` lists it after a write."""
+        config = self.config
+        info = config.mode(mode) if config is not None else None
+        if info is None:
+            raise CommandNotAppliedError(
+                CMD_CUSTOM_MODES, f"{mode.label} is not listed after the write"
+            )
+        return info
 
     @staticmethod
     def _with_flags(

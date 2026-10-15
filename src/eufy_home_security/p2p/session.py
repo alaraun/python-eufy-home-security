@@ -2239,46 +2239,62 @@ class StationSession:
         ``UnsupportedError`` for a table whose delays cannot be expressed (before
         anything is sent). ``verify=False`` skips the read-back.
         """
+        _LOGGER.info(
+            "%s: writing the %s mode table (%d devices)",
+            self._log_name,
+            table.mode.name,
+            len(table.actions),
+        )
+        # Acknowledged without a receipt: the read-back decides.
+        await self.async_send_json_frame(CMD_SET_ALL_ACTION, table.encode, timeout=timeout)
+        if verify:
+            await self._confirm_params(CMD_SET_ALL_ACTION, table.params())
+
+    async def async_send_json_frame(
+        self, command: int, body: Callable[[str], bytes], *, timeout: float | None = None
+    ) -> bool:
+        """Send ``body(owner account id)`` (a JSON document) as a frame whose type is
+        ``command``, the way the app sends a mode table (1255), the mode list (1256) and
+        the schedule (1254), and wait for the station's receipt of that type on channel 0.
+
+        Returns True for receipt code 0 and False when the station acknowledged the
+        datagram but sent no receipt within ``timeout``. Neither is a read-back: the
+        caller confirms the write. A non-zero receipt raises
+        :class:`CommandRejectedError`; no acknowledgement :class:`DeviceTimeoutError`.
+        No resend: the station queues channel-0 frames, so a resend would queue a
+        second copy.
+        """
         timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
-        creds = self._require_creds()
-        body = table.encode(creds.account_id)
+        plaintext = body(self._require_creds().account_id)
 
         def match(inbound: Inbound) -> int | None:
-            if inbound.type != CMD_SET_ALL_ACTION or inbound.channel != 0:
+            if inbound.type != command or inbound.channel != 0:
                 return None
             return decode_command_receipt(inbound.frame)
 
-        async with self._op("mode table write"):
-            _LOGGER.info(
-                "%s: writing the %s mode table (%d devices)",
-                self._log_name,
-                table.mode.name,
-                len(table.actions),
+        async with self._op(f"cmd {command} write"):
+            _LOGGER.debug(
+                "%s: tx JSON frame %d (%d bytes)", self._log_name, command, len(plaintext)
             )
             indices: list[int] = []
-            code: int | None
             try:
                 code = cast(
                     int,
                     await self._request(
-                        lambda: indices.append(
-                            self._send_secure(body, frame_type=CMD_SET_ALL_ACTION)
-                        ),
+                        lambda: indices.append(self._send_secure(plaintext, frame_type=command)),
                         match,
                         timeout=timeout,
-                        label=f"cmd {CMD_SET_ALL_ACTION}",
+                        label=f"cmd {command}",
                     ),
                 )
             except DeviceTimeoutError:
-                error = self._unanswered_error(CMD_SET_ALL_ACTION, 0, indices)
+                error = self._unanswered_error(command, 0, indices)
                 if isinstance(error, DeviceTimeoutError):
                     raise error from None
-                code = None  # acknowledged without a receipt: the read-back decides
-        if code:
-            _raise_for_code(CMD_SET_ALL_ACTION, code)
-        if verify:
-            await self._confirm_params(CMD_SET_ALL_ACTION, table.params())
+                return False
+        _raise_for_code(command, code)
+        return True
 
     async def _confirm_params(
         self, command: int, expected: Mapping[int, Mapping[int, int]]

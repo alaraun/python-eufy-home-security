@@ -7,7 +7,7 @@ the ECIES CONN_INIT handshake (or the RSA one, :attr:`FakeStation.conn_init_vers
 parameter dumps, arming, legacy ECB scalars, image
 and database requests, the storage record (asked for or pushed with
 :meth:`FakeStation.send_storage`), mode-table writes (``SET_ALL_ACTION``, 1255),
-unsolicited camera pushes, and media streams (live and recordings) with the
+mode-list and schedule writes (1256, 1254), unsolicited camera pushes, and media streams (live and recordings) with the
 RSA-wrapped keyframe cipher.
 
 Where the real station is awkward, the fake is too: a guard-mode report is GCM (a
@@ -83,6 +83,12 @@ from ..p2p.pppp import (
     encode_drw_ack,
     encode_packet,
 )
+from ..p2p.station_config_codecs import (
+    CMD_CUSTOM_MODES,
+    CMD_SCHEDULE,
+    PARAM_TRACKING_CAMERAS,
+    PARAM_TRACKING_GROUPS,
+)
 from ..p2p.storage_info import CMD_SD_INFO
 from ..p2p.xzyh import FrameCipher, FrameType, StreamDecoder, encode_frame
 from .synthetic import SYNTHETIC
@@ -90,10 +96,13 @@ from .synthetic import SYNTHETIC
 SESSION_KEY = SYNTHETIC.session_key
 RSA_SESSION_KEY = SYNTHETIC.session_key[:16]
 """The 16-character AES-128 key an RSA CONN_INIT carries."""
+_CONFIG_FRAMES = (CMD_CUSTOM_MODES, CMD_SCHEDULE)
+"""JSON documents written as a frame of their own type (the mode list, the schedule)."""
 _SESSION_FRAME_TYPES = frozenset(
     {
         FrameType.PARAM_NOTIFY,
         CMD_SET_ALL_ACTION,
+        *_CONFIG_FRAMES,
         *STRING_CMDS,
         FrameType.DOORBELL_PAYLOAD,
         FrameType.STOP_REALTIME_MEDIA,
@@ -419,6 +428,16 @@ class FakeStation:
     value)``, in arrival order; the value is stored as the param of that channel."""
     mode_table_receipt_code: int = 0
     """The code a 1255 receipt carries; non-zero leaves the parameters untouched."""
+    config_frames_received: list[tuple[int, bytes]] = field(default_factory=list)
+    """Every mode-list (1256) and schedule (1254) body as ``(frame type, body bytes)``,
+    in arrival order (whatever its account id)."""
+    stored_config: dict[int, str] = field(default_factory=dict)
+    """What the station holds for 1256 and 1254 after a write: the base64 of the body. A
+    HomeBase 3's dump does not carry them, so the dump shows a write only where
+    :attr:`params` already carries the param."""
+    config_receipt_code: int | None = 0
+    """The code a 1256 / 1254 receipt carries (non-zero applies nothing); None sends no
+    receipt, applying the write."""
     drop_first_drw: bool = False
     apply_settings: bool = True
     ecb_apply_late: bool = False
@@ -792,6 +811,12 @@ class FakeStation:
                 return
             self.mode_tables_received.append(obj)
             self._on_mode_table(obj)
+        elif ftype in _CONFIG_FRAMES:
+            obj = decode_json_payload(plain)
+            if obj is None:
+                return
+            self.config_frames_received.append((ftype, plain))
+            self._on_config_frame(ftype, obj, plain)
         elif ftype in STRING_CMDS:
             self._on_string_command(ftype, plain)
         elif ftype == FrameType.DOORBELL_PAYLOAD:
@@ -1016,6 +1041,15 @@ class FakeStation:
                 self._answer_event_count(inner)
             else:
                 self.send_json(FrameType.DB_SYNC, {"cmd": 1306, "data": json.dumps(self.rows)})
+        elif cmd in (PARAM_TRACKING_CAMERAS, PARAM_TRACKING_GROUPS):
+            # A list write (``param_list``): stored as the base64 of its compact JSON.
+            payload = obj.get("payload")
+            if self.apply_settings and isinstance(payload, list):
+                text = json.dumps(payload, separators=(",", ":"))
+                own = self.params.setdefault(STATION_CHANNEL, {})
+                own[cmd] = base64.b64encode(text.encode()).decode("ascii")
+            if self.reply_to_settings:
+                self.send_json(FrameType.NOTIFY_PAYLOAD, {"cmd": cmd, "code": 0})
         else:
             payload = obj.get("payload")
             if self.apply_settings and isinstance(payload, dict) and "channel" in payload:
@@ -1142,6 +1176,26 @@ class FakeStation:
             cipher=FrameCipher.GCM,
             subheader=bytes([FrameCipher.GCM, 0, 0, 0, 1, 0]),
         )
+
+    def _on_config_frame(self, ftype: int, obj: dict[str, Any], plain: bytes) -> None:
+        """As the app's mode-list and schedule writes are answered: a receipt of the
+        request's type on channel 0 and the body stored as sent, base64."""
+        if obj.get("account_id") != self.account_id:
+            return  # dropped without a word, as a foreign 1255
+        code = self.config_receipt_code
+        if code in (0, None) and self.apply_settings:
+            stored = base64.b64encode(plain).decode("ascii")
+            self.stored_config[ftype] = stored
+            own = self.params.setdefault(STATION_CHANNEL, {})
+            if ftype in own:
+                own[ftype] = stored
+        if code is not None:
+            self.send_frame(
+                ftype,
+                struct.pack("<i", code) + bytes(self.receipt_len - 4),
+                cipher=FrameCipher.GCM,
+                subheader=bytes([FrameCipher.GCM, 0, 0, 0, 1, 0]),
+            )
 
     def _on_string_command(self, ftype: int, plain: bytes) -> None:
         """As a T8170: a string command (1215) of the owner is stored verbatim on the

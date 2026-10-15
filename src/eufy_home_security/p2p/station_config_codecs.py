@@ -86,6 +86,10 @@ MAX_TITLE_LENGTH: Final = 30
 """Longest mode title the app accepts (after trimming)."""
 MAX_DETAIL_LENGTH: Final = 60
 """Longest mode description the app accepts."""
+MODE_ICONS: Final = 8
+"""The icons the app offers for a mode: ``iconType`` 0 to 7."""
+DEFAULT_MODE_ICON: Final = 7
+"""The app's generic custom-mode icon (its last one)."""
 
 _ADDED_MODE_ACTION_FLAGS: Final = 1 | 8  # record | notification
 _GSON_ESCAPES: Final = str.maketrans(
@@ -196,9 +200,9 @@ def _to_mode(value: GuardMode | int, what: str) -> GuardMode:
         raise ValueError(f"{what}: unknown guard mode {value}") from None
 
 
-def _non_negative(what: str, value: object) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(f"{what} must be a non-negative integer, got {value!r}")
+def _icon(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value < MODE_ICONS:
+        raise ValueError(f"a mode icon is 0 to {MODE_ICONS - 1}, got {value!r}")
     return value
 
 
@@ -329,7 +333,9 @@ def decode_custom_modes(raw: str | None) -> CustomModes | None:
     )
 
 
-def _require_custom(mode: GuardMode | int, action: str) -> GuardMode:
+def require_custom_mode(mode: GuardMode | int, action: str) -> GuardMode:
+    """``mode`` as one of :data:`CUSTOM_MODES`; ``ValueError`` naming ``action`` (``"delete"``)
+    for any other mode."""
     guard_mode = _to_mode(mode, f"the mode to {action}")
     if guard_mode not in CUSTOM_MODES:
         raise ValueError(
@@ -380,9 +386,9 @@ def add_custom_mode(
     ``current`` ``None`` is an empty list. ``mode`` defaults to the first free of
     Custom 1-3. The new entry's ``mode_action`` is ``mode << 24 | 9`` (record and
     notification), as the app sets it. Raises ``ValueError`` when no custom slot is
-    free, ``mode`` is not a free custom mode, or the title is empty, longer than
-    :data:`MAX_TITLE_LENGTH` after trimming or already used, or ``detail`` is longer
-    than :data:`MAX_DETAIL_LENGTH`.
+    free, ``mode`` is not a free custom mode, the title is empty, longer than
+    :data:`MAX_TITLE_LENGTH` after trimming or already used, ``icon_type`` is not one
+    of the :data:`MODE_ICONS`, or ``detail`` is longer than :data:`MAX_DETAIL_LENGTH`.
     """
     existing = current.custom_modes() if current is not None else ()
     if mode is None:
@@ -391,13 +397,13 @@ def add_custom_mode(
             raise ValueError("all three custom modes exist; delete one first")
         new_mode = free[0]
     else:
-        new_mode = _require_custom(mode, "add")
+        new_mode = require_custom_mode(mode, "add")
         if new_mode in existing:
             raise ValueError(f"{new_mode.name.lower()} already exists")
     entry = ModeDefinition(
         mode=new_mode,
         title=_clean_title(current, title, new_mode),
-        icon_type=_non_negative("icon_type", icon_type),
+        icon_type=_icon(icon_type),
         detail=_clean_detail(detail),
         mode_action=int(new_mode) << 24 | _ADDED_MODE_ACTION_FLAGS,
     )
@@ -421,16 +427,16 @@ def modify_custom_mode(
     """The 1256 modify body (102): ``mode``'s entry with the given fields replaced.
 
     Raises ``ValueError`` when ``mode`` is not an existing custom mode, or for a
-    title or detail :func:`add_custom_mode` would refuse.
+    title, icon or detail :func:`add_custom_mode` would refuse.
     """
-    target = _require_custom(mode, "modify")
+    target = require_custom_mode(mode, "modify")
     entry = current.get(target)
     if entry is None:
         raise ValueError(f"{target.name.lower()} does not exist")
     changed = replace(
         entry,
         title=entry.title if title is None else _clean_title(current, title, target),
-        icon_type=entry.icon_type if icon_type is None else _non_negative("icon_type", icon_type),
+        icon_type=entry.icon_type if icon_type is None else _icon(icon_type),
         detail=entry.detail if detail is None else _clean_detail(detail),
     )
     return CustomModes(
@@ -453,7 +459,7 @@ def delete_custom_mode(
     Raises ``ValueError`` when ``mode`` is a built-in mode or not listed, or when
     ``schedule`` has a slot in it (the app asks to change the schedule first).
     """
-    target = _require_custom(mode, "delete")
+    target = require_custom_mode(mode, "delete")
     if current.get(target) is None:
         raise ValueError(f"{target.name.lower()} does not exist")
     if schedule is not None and target in schedule.modes():
