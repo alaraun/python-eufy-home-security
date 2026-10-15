@@ -873,7 +873,12 @@ A closed session (`async_close`) never reconnects on its own — build a new
   `light_alarm`, `report_monitor_center`; sensor: `notification`, `station_alarm`,
   `report_monitor_center`, and `motion_sensor_respond` on a motion sensor only, cloud
   `device_type` 10 or 127; `async_set_mode_action` refuses a flag the device does not
-  have). A siren accessory is of kind `other`, not `sensor`. One switch per (mode, flag), for
+  have). A flag is on as the app's checkbox is ticked: `motion_sensor_respond` is the
+  app's "React to motion", on while its bit (32) is **clear** (`MODE_ACTION_INVERTED`);
+  read a switch with `mode_action_on(flag, mask)`, never `mask & bit`. Turning it off
+  sets the bit and, as the app does, also turns that sensor's `notification` and
+  `station_alarm` off in the same write (`MODE_ACTION_CLEARS`); turning it on again
+  restores neither, so refresh those switches after a write. A siren accessory is of kind `other`, not `sensor`. One switch per (mode, flag), for
   example "Front · Away · camera siren", written with
   `station.async_set_mode_action("away", "camera_siren", on, device_sn=…)`: it reads the
   current mask fresh, changes that one bit, writes and confirms by read-back. **Never
@@ -928,7 +933,9 @@ A closed session (`async_close`) never reconnects on its own — build a new
   the unknown-kind and delay cases above, a flag value that is not a bool and a device
   turned on with no delay value to take (`ValueError`). A read-back that does not show
   the table raises `CommandNotAppliedError` naming the device and flag (`… camera_siren:
-  wrote on, station reports off`). `expect_revision` is checked against the revision of
+  wrote on, station reports off`). Turning `motion_sensor_respond` off clears the
+  sensor's `notification` and `station_alarm` too, and asking for either on in the same
+  edit is a `ValueError`. `expect_revision` is checked against the revision of
   the configuration the fresh read gives (`ConfigChangedError`, nothing sent, when it
   differs; see [Station configuration](#station-configuration)).
 
@@ -943,7 +950,7 @@ A closed session (`async_close`) never reconnects on its own — build a new
   | `station_alarm` | HomeBase alarm |
   | `notification` | Notification |
   | `privacy` | Privacy mode |
-  | `motion_sensor_respond` | Motion sensor response |
+  | `motion_sensor_respond` | React to motion |
   | `report_monitor_center` | Monitoring center |
   | `light_alarm` | Light alarm |
   | `privacy_new` | Switch to privacy mode |
@@ -1065,8 +1072,9 @@ For the integration this means:
   show each value by its label; do not ship translations of vendor keys.
 - **Import the types from the package root:** `Setting`, `SettingKind`, `SettingControl`,
   `SettingUnit`, `CommandOutcome` and `SettingsCoverage` are exported there; capability grades
-  (`Capability`, `Support`, `profile_for_serial`), `MODE_ACTION_FLAGS` and
-  `MODE_ACTION_LABELS` from `eufy_home_security.devices`.
+  (`Capability`, `Support`, `profile_for_serial`), `MODE_ACTION_FLAGS`,
+  `MODE_ACTION_LABELS`, `MODE_ACTION_INVERTED`, `MODE_ACTION_CLEARS` and `mode_action_on`
+  from `eufy_home_security.devices`.
 
 `setting.name` is the eufy app's own title where the app has one (`Clip length`,
 `Intervals between triggers`, `Working mode` on a T8160), else a title made from the key;

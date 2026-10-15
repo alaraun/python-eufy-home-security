@@ -19,10 +19,18 @@ from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final
 
+from .devices.settings import MOTION_SENSOR_DEVICE_TYPES
 from .devices.timezones import TIMEZONE_DOMAIN
+from .devices.types import model_for_serial
 from .exceptions import ConfigChangedError, ProtocolError, UnsupportedError
 from .models import GuardMode, ValueSource
-from .p2p.mode_actions import ACTION_FLAGS, MODE_TABLE_MODES, mode_table_from_params
+from .p2p.mode_actions import (
+    ACTION_FLAGS,
+    MODE_ACTION_INVERTED,
+    MODE_TABLE_MODES,
+    mode_action_on,
+    mode_table_from_params,
+)
 from .p2p.params import ACTIVE_MODE_PARAM, GUARD_MODE_PARAM
 from .p2p.station_config_codecs import (
     CMD_CUSTOM_MODES,
@@ -129,8 +137,16 @@ class ModeDeviceAction:
 
     @property
     def flags(self) -> frozenset[str]:
-        """The names of the action bits set in :attr:`action`."""
-        return frozenset(name for name, bit in ACTION_FLAGS.items() if self.action & bit)
+        """The names of the actions on in :attr:`action` (:func:`~.p2p.mode_actions.mode_action_on`):
+        a bit set, or, for a catalogued motion sensor only, ``motion_sensor_respond``
+        while its bit is clear (:data:`~.p2p.mode_actions.MODE_ACTION_INVERTED`)."""
+        model = model_for_serial(self.device_sn) if self.device_sn else None
+        motion = model is not None and model.cloud_device_type in MOTION_SENSOR_DEVICE_TYPES
+        return frozenset(
+            name
+            for name in ACTION_FLAGS
+            if (motion or name not in MODE_ACTION_INVERTED) and mode_action_on(name, self.action)
+        )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

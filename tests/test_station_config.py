@@ -20,6 +20,7 @@ from eufy_home_security.p2p.session import P2PCredentials, StationSession
 from eufy_home_security.station import Station, StationState
 from eufy_home_security.station_config import (
     MODE_ORDER,
+    ModeDeviceAction,
     StationConfig,
     build_station_config,
     changed_fields,
@@ -282,6 +283,25 @@ def stored_table(mode: int, actions: dict[int, int], *, alarm: tuple[list[int], 
 
 
 CUSTOM_1_LISTED = mode_list((1, "Home", 1), (0, "Away", 0), (3, "Night watch", 6))
+
+
+@pytest.mark.parametrize(
+    ("serial", "action", "flags"),
+    [
+        ("T8910P0000000001", 8, {"notification", "motion_sensor_respond"}),
+        ("T8910P0000000001", 32, set()),
+        (SYNTHETIC.camera_sn, 33, {"record"}),
+        (None, 40, {"notification"}),
+    ],
+)
+def test_a_mode_entry_lists_react_to_motion_while_bit_32_is_clear(
+    serial: str | None, action: int, flags: set[str]
+) -> None:
+    """Only a catalogued motion sensor reacts to motion; bit 32 set means it ignores it."""
+    entry = ModeDeviceAction(
+        channel=16, device_sn=serial, action=action, alarm_delay=0, leaving_delay=0
+    )
+    assert entry.flags == flags
 
 
 def test_mode_tables_come_from_the_dump_else_the_stored_table() -> None:

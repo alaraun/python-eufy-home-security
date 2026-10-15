@@ -1464,7 +1464,7 @@ async def test_a_matrix_edit_is_one_table_write(station: Station, fake: FakeStat
             "account_id": SYNTHETIC.account_id,
             "mode_id": 0,
             "devices": [
-                {"device_channel": 16, "action": 44},
+                {"device_channel": 16, "action": 12},
                 {"device_channel": 0, "action": 10},
             ],
             "count_down_alarm": {"channel_list": [0], "delay_time": 30},
@@ -1475,15 +1475,45 @@ async def test_a_matrix_edit_is_one_table_write(station: Station, fake: FakeStat
             ],
         }
     ]
-    assert table.actions == {0: 10, 16: 44}
-    assert (fake.params[0][1239], fake.params[16][1239], fake.params[0][1167]) == ("10", "44", "30")
+    assert table.actions == {0: 10, 16: 12}
+    assert (fake.params[0][1239], fake.params[16][1239], fake.params[0][1167]) == ("10", "12", "30")
     # The same edit again, and an empty one: read, nothing written.
     again = await hub.async_set_mode_actions(
         "away", {SYNTHETIC.camera_sn: {"camera_siren": True}}, entry_s=30
     )
-    assert again.actions == {0: 10, 16: 44}
-    assert (await hub.async_set_mode_actions(GuardMode.AWAY, {})).actions == {0: 10, 16: 44}
+    assert again.actions == {0: 10, 16: 12}
+    assert (await hub.async_set_mode_actions(GuardMode.AWAY, {})).actions == {0: 10, 16: 12}
     assert len(fake.mode_tables_received) == 1
+
+
+async def test_ignoring_motion_clears_the_sensor_s_notification_and_alarm(
+    station: Station, fake: FakeStation
+) -> None:
+    """Unticking "React to motion" sets bit 32 and, as the app does, clears notification
+    and HomeBase alarm in the same table write; ticking it again restores nothing."""
+    _mode_table_blocks(fake)
+    fake.params[16][1239] = "76"  # notification, HomeBase alarm, monitoring center
+    hub = _matrix_hub(station)
+    table = await hub.async_set_mode_actions("away", {SENSOR_SN: {"motion_sensor_respond": False}})
+    assert table.actions[16] == 96
+    assert fake.mode_tables_received[-1]["devices"][0] == {"device_channel": 16, "action": 96}
+    assert fake.params[16][1239] == "96"
+    mask = await hub.async_set_mode_action(
+        "away", "motion_sensor_respond", True, device_sn=SENSOR_SN
+    )
+    assert mask == 64
+    assert len(fake.mode_tables_received) == 2
+
+
+async def test_a_flag_the_ignore_bit_clears_cannot_be_turned_on_with_it(
+    station: Station, fake: FakeStation
+) -> None:
+    _mode_table_blocks(fake)
+    hub = _matrix_hub(station)
+    edit = {SENSOR_SN: {"motion_sensor_respond": False, "notification": True}}
+    with pytest.raises(ValueError, match="also turns notification off"):
+        await hub.async_set_mode_actions("away", edit)
+    assert fake.mode_tables_received == []
 
 
 async def test_mode_delays_alone_are_one_table_write(station: Station, fake: FakeStation) -> None:

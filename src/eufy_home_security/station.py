@@ -162,6 +162,7 @@ from .p2p.mode_actions import (
     MODE_TABLE_PARAMS,
     ModeTable,
     ModeTableField,
+    mode_action_on,
     mode_table_from_params,
 )
 from .p2p.params import (
@@ -1704,7 +1705,11 @@ class Station:
         ``changes`` maps a paired device's serial to ``{flag: on}`` for the flags of
         its kind (:func:`~.devices.settings.mode_action_flags`), for example
         ``{cam_sn: {"record": True, "camera_siren": False}, sensor_sn: {"notification":
-        True}}``. The delays follow the app's delay screen (one value per mode):
+        True}}``. A flag is on as the app's checkbox is ticked: ``motion_sensor_respond``
+        True clears its bit (:data:`~.p2p.mode_actions.MODE_ACTION_INVERTED`), and
+        turning it off also turns the sensor's ``notification`` and ``station_alarm`` off
+        in the same write, as the app does (:data:`~.p2p.mode_actions.MODE_ACTION_CLEARS`).
+        The delays follow the app's delay screen (one value per mode):
         ``entry_s`` / ``exit_s`` set the alarm (entry) / leaving (exit) delay of every
         device that has it on afterwards (0 turns it off on all), and ``entry_devices``
         / ``exit_devices`` turn it on or off per serial; see
@@ -1726,7 +1731,8 @@ class Station:
         catalogued kind, a flag its kind does not have, a station with a device of no
         known kind in the table (it may be a siren accessory, whose triggers a library
         table clears) or delays the table cannot carry unchanged; ``ValueError`` for a
-        flag value that is not a bool or a delay change :meth:`with_count_down` refuses;
+        flag value that is not a bool, a flag turned on that a flag turned off in the
+        same edit clears, or a delay change :meth:`with_count_down` refuses;
         :class:`CommandNotAppliedError` when a device is missing from the fresh read or
         does not report its mask. After sending: :class:`CommandNotAppliedError` naming
         the device and flag (or delay) the read-back does not show, and the session's
@@ -1746,7 +1752,7 @@ class Station:
             for flag, on in flags.items():
                 if not isinstance(on, bool):
                     raise ValueError(f"{flag}: on must be a bool, got {on!r}")
-                spec.with_flag(0, flag, on)  # refuses an unknown flag before any traffic
+            spec.with_flags(0, flags)  # refuses an unknown or clashing flag before any traffic
             edits.setdefault(channel, (spec, {}))[1].update(flags)
         count_downs = {
             ModeTableField.ALARM_DELAY: (entry_s, self._delay_channels(entry_devices)),
@@ -2193,7 +2199,8 @@ class Station:
     def _with_flags(
         table: ModeTable, edits: Mapping[int, tuple[SettingDef, Mapping[str, bool]]]
     ) -> ModeTable:
-        """``table`` with each channel's flags set or cleared, every other bit kept;
+        """``table`` with each channel's flags turned on or off (:meth:`SettingDef.with_flags`:
+        with the flags a flag turned off clears), every other bit kept;
         :class:`CommandNotAppliedError` when a channel's current mask is not in it."""
         for channel, (spec, flags) in sorted(edits.items()):
             mask = table.actions.get(channel)
@@ -2203,9 +2210,7 @@ class Station:
                     f"{spec.key}: the station does not report the current mask on channel "
                     f"{channel}; refusing to write a whole mask blind",
                 )
-            for flag, on in flags.items():
-                mask = spec.with_flag(mask, flag, on)
-            table = table.with_action(channel, mask)
+            table = table.with_action(channel, spec.with_flags(mask, flags))
         return table
 
     def _delay_channels(self, devices: Mapping[str, bool] | None) -> dict[int, bool]:
@@ -2321,7 +2326,9 @@ class Station:
                 )
                 for flag, bit in flags.items():
                     if (want ^ got) & bit:
-                        wrote, reads = ("on", "off") if want & bit else ("off", "on")
+                        wrote, reads = (
+                            ("on", "off") if mode_action_on(flag, want) else ("off", "on")
+                        )
                         problems.append(f"{name} {flag}: wrote {wrote}, station reports {reads}")
                 named = 0
                 for bit in flags.values():
@@ -2347,8 +2354,11 @@ class Station:
         The setting is the device kind's ``<kind>_action_<mode>`` (``camera_action_away``),
         whose ``flags`` name the actions. The current mask is read fresh, one bit is
         changed with every other bit kept, and the mode table is written and confirmed by
-        read-back; nothing is written when the flag is already as asked. A library write
-        of the mask is proven on hardware; the flag names come from the app and are not.
+        read-back; nothing is written when the flag is already as asked. Turning
+        ``motion_sensor_respond`` off also turns ``notification`` and ``station_alarm``
+        off (see :meth:`async_set_mode_actions`). A library write of the mask is proven
+        on hardware; of the flag names, ``record``, ``notification`` and
+        ``motion_sensor_respond`` are checked against the app display.
 
         Raises ``UnsupportedError`` for a mode without per-device actions (Schedule,
         Off, Disarmed, Geofence), a device whose kind is unknown or has no catalogued

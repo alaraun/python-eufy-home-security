@@ -28,9 +28,12 @@ from eufy_home_security.models import GuardMode
 from eufy_home_security.p2p.mode_actions import (
     ACTION_FLAGS,
     FIELD_PARAMS,
+    MODE_ACTION_CLEARS,
+    MODE_ACTION_INVERTED,
     MODE_TABLE_MODES,
     MODE_TABLE_PARAMS,
     ModeTableField,
+    mode_action_on,
 )
 
 MODES = ("home", "away", "custom_1", "custom_2", "custom_3")
@@ -90,7 +93,7 @@ def test_action_flags_per_kind_are_the_apk_bits() -> None:
         0,
     )
     assert away.with_flag(143, "camera_siren", False) == 141
-    assert mode_table_setting("sensor_action_away").decode_flags(8) == (
+    assert mode_table_setting("sensor_action_away").decode_flags(40) == (
         frozenset({"notification"}),
         0,
     )
@@ -168,6 +171,32 @@ def test_with_flag_keeps_every_other_bit() -> None:
     assert action.with_flag(0x30F, "record", False) == 0x30E
     assert action.with_flag(0x301, "record", True) == 0x301
     assert action.decode_flags(0x309) == (frozenset({"record", "notification"}), 0x300)
+
+
+def test_motion_sensor_respond_is_on_while_its_bit_is_clear() -> None:
+    """The app's "React to motion" is ticked while bit 32 is clear."""
+    assert {"motion_sensor_respond"} == MODE_ACTION_INVERTED
+    assert mode_action_on("motion_sensor_respond", 8)
+    assert not mode_action_on("motion_sensor_respond", 40)
+    assert mode_action_on("notification", 40)
+    sensor = mode_table_setting("sensor_action_away").for_device_type(10)
+    assert sensor.decode_flags(0) == (frozenset({"motion_sensor_respond"}), 0)
+    assert sensor.decode_flags(32) == (frozenset(), 0)
+    assert sensor.with_flag(8, "motion_sensor_respond", False) == 40
+    assert sensor.with_flag(40, "motion_sensor_respond", True) == 8
+    assert mode_action_label("motion_sensor_respond") == "React to motion"
+
+
+def test_ignoring_motion_also_clears_notification_and_homebase_alarm() -> None:
+    assert {"motion_sensor_respond": {"notification", "station_alarm"}} == MODE_ACTION_CLEARS
+    sensor = mode_table_setting("sensor_action_away").for_device_type(10)
+    assert sensor.with_flags(76, {"motion_sensor_respond": False}) == 96
+    assert sensor.with_flags(96, {"motion_sensor_respond": True}) == 64  # restores nothing
+    assert sensor.with_flags(12, {"notification": False}) == 4  # only the coupled flag clears
+    with pytest.raises(ValueError, match="station_alarm cannot be turned on"):
+        sensor.with_flags(0, {"motion_sensor_respond": False, "station_alarm": True})
+    door = mode_table_setting("sensor_action_away").for_device_type(2)
+    assert door.with_flags(12, {"station_alarm": False}) == 8
 
 
 def test_flags_refuse_unknown_names_other_kinds_and_negatives() -> None:
