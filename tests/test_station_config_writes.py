@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -25,7 +26,7 @@ from eufy_home_security.station import Station
 from eufy_home_security.station_config import ModeInfo
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import FakeStation
-from tests.test_station_config import CAMERA, STATION, _cloud_entry, mode_list, schedule
+from tests.test_station_config import CAMERA, STATION, _cloud_entry, b64, mode_list, schedule
 
 ACCOUNT = SYNTHETIC.account_id
 LISTED = mode_list((1, "Home", 1), (0, "Away", 0), (3, "Night watch", 6))
@@ -349,3 +350,136 @@ async def test_schedule_unknown_support_and_stale_revision_send_nothing(
     with pytest.raises(UnsupportedError, match="schedule is not supported"):
         await station.async_set_schedule(week())
     assert fake.config_frames_received == []
+
+
+# ── cross-camera tracking ────────────────────────────────────────────────────
+
+CAMERA_2 = dataclasses.replace(CAMERA, device_sn="T8160P2000067891", name="Back", channel=1)
+SENSOR = dataclasses.replace(
+    CAMERA, device_sn="T8910P0000000001", device_type=10, name="Path", channel=16
+)
+FOREIGN_CAMERA = "T8160P2000067892"
+
+
+@pytest.fixture
+async def hub(fake: FakeStation) -> AsyncIterator[Station]:
+    """The synthetic HomeBase 3 with two cameras and a motion sensor."""
+    fake.reply_to_settings = True  # a 1350 setting answered with code 0
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(ACCOUNT, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    st = Station(STATION, session, sub_devices=[CAMERA, CAMERA_2, SENSOR])
+    yield st
+    await st.async_close()
+
+
+def tracking_writes(fake: FakeStation) -> list[tuple[int, object]]:
+    return [(c["cmd"], c["payload"]) for c in fake.received if c["cmd"] in (1072, 1073)]
+
+
+async def test_choose_tracking_cameras_writes_the_list_and_reads_it_back(
+    hub: Station, fake: FakeStation
+) -> None:
+    assert await hub.async_set_cross_camera_cameras([CAMERA_2.device_sn]) == (CAMERA_2.device_sn,)
+    assert await hub.async_set_cross_camera_cameras(None) == (
+        CAMERA.device_sn,
+        CAMERA_2.device_sn,
+    )
+    await hub.async_set_cross_camera_cameras(None)  # already held: nothing sent
+    assert tracking_writes(fake) == [
+        (1072, [CAMERA_2.device_sn]),
+        (1072, [CAMERA.device_sn, CAMERA_2.device_sn]),
+    ]
+    assert fake.params[255][1072] == b64([CAMERA.device_sn, CAMERA_2.device_sn])
+    assert fake.received[-1]["mChannel"] == 255  # the station itself
+
+
+async def test_tracking_groups_write_the_whole_list(hub: Station, fake: FakeStation) -> None:
+    groups = await hub.async_set_cross_camera_groups([[CAMERA.device_sn, CAMERA_2.device_sn]])
+    assert groups == ((CAMERA.device_sn, CAMERA_2.device_sn),)
+    assert await hub.async_set_cross_camera_groups([]) == ()
+    assert tracking_writes(fake) == [
+        (1073, [{"value": [CAMERA.device_sn, CAMERA_2.device_sn]}]),
+        (1073, []),
+    ]
+    config = hub.config
+    assert config is not None
+    assert config.cross_camera is not None
+    assert config.cross_camera.groups == ()
+
+
+async def test_a_tracking_write_the_dump_does_not_show_is_not_applied(
+    hub: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(station_module, "READBACK_DELAY", 0)
+    fake.params[255][1072] = b64([CAMERA.device_sn])
+    fake.apply_settings = False
+    with pytest.raises(CommandNotAppliedError, match="1072 not confirmed"):
+        await hub.async_set_cross_camera_cameras([CAMERA_2.device_sn])
+
+
+CrossWrite = Callable[[Station], Awaitable[object]]
+
+
+@pytest.mark.parametrize(
+    ("write", "error", "match"),
+    [
+        (
+            lambda s: s.async_set_cross_camera_cameras([FOREIGN_CAMERA]),
+            UnsupportedError,
+            "is not a camera paired",
+        ),
+        (
+            lambda s: s.async_set_cross_camera_cameras([SENSOR.device_sn]),
+            UnsupportedError,
+            "is not a camera paired",
+        ),
+        (lambda s: s.async_set_cross_camera_cameras([]), ValueError, "at least one camera"),
+        (
+            lambda s: s.async_set_cross_camera_cameras([CAMERA.device_sn] * 2),
+            ValueError,
+            "listed twice",
+        ),
+        (lambda s: s.async_set_cross_camera_cameras(CAMERA.device_sn), ValueError, "not one"),
+        (
+            lambda s: s.async_set_cross_camera_groups([[CAMERA.device_sn], [CAMERA.device_sn]]),
+            ValueError,
+            "one tracking group only",
+        ),
+        (
+            lambda s: s.async_set_cross_camera_groups([[CAMERA.device_sn, FOREIGN_CAMERA]]),
+            UnsupportedError,
+            "is not a camera paired",
+        ),
+        (lambda s: s.async_set_cross_camera_groups([[]]), ValueError, "at least one camera"),
+    ],
+)
+async def test_cross_camera_refusals_send_nothing(
+    hub: Station, fake: FakeStation, write: CrossWrite, error: type[Exception], match: str
+) -> None:
+    with pytest.raises(error, match=match):
+        await write(hub)
+    assert fake.received == []
+    assert fake.param_queries == 0
+
+
+async def test_cross_camera_unknown_support_and_stale_revision_send_nothing(
+    hub: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = await hub.async_get_config()
+    fake.params[255][1224] = "0"
+    with pytest.raises(ConfigChangedError):
+        await hub.async_set_cross_camera_groups([], expect_revision=config.revision)
+
+    def groups_unknown(self: Station, feature: StationFeature) -> Evidence:
+        known = feature is not StationFeature.CROSS_CAMERA_GROUPS
+        return Evidence(Support.DECLARED if known else Support.UNKNOWN, "test")
+
+    monkeypatch.setattr(Station, "config_support", groups_unknown)
+    with pytest.raises(UnsupportedError, match="cross_camera_groups is not supported"):
+        await hub.async_set_cross_camera_groups([])
+    assert tracking_writes(fake) == []

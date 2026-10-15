@@ -8,7 +8,7 @@ import contextlib
 import ipaddress
 import logging
 import time
-from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
@@ -183,14 +183,20 @@ from .p2p.station_config_codecs import (
     CMD_SCHEDULE,
     CMD_SCHEDULE_DEFAULT,
     DEFAULT_MODE_ICON,
+    PARAM_TRACKING_CAMERAS,
+    PARAM_TRACKING_GROUPS,
     CustomModes,
     Schedule,
     add_custom_mode,
     decode_custom_modes,
     decode_schedule,
     decode_schedule_default,
+    decode_tracking_cameras,
+    decode_tracking_groups,
     delete_custom_mode,
     encode_schedule_default,
+    encode_tracking_cameras,
+    encode_tracking_groups,
     modify_custom_mode,
     require_custom_mode,
 )
@@ -213,6 +219,8 @@ READBACK_DELAY = 0.8
 
 MODE_TABLES_LOCK: Final = "mode_tables"
 """The shared parameter group of the per-mode action tables (:meth:`Station._shared_lock`)."""
+CROSS_CAMERA_LOCK: Final = "cross_camera"
+"""The shared parameter group of the cross-camera tracking cameras (1072) and groups (1073)."""
 MODE_LIST_LOCK: Final = "mode_list"
 """The shared parameter group of the mode list (1256) and the schedule (1254, 1257), which
 names its modes."""
@@ -1942,6 +1950,115 @@ class Station:
         if after is None:  # pragma: no cover - a write leaves a state
             return schedule, default
         return after.schedule, after.schedule_default
+
+    async def async_set_cross_camera_cameras(
+        self, serials: Iterable[str] | None, *, expect_revision: int | None = None
+    ) -> tuple[str, ...]:
+        """Choose the cameras cross-camera tracking follows (1072); ``None`` chooses every
+        camera of the station. Returns the choice :attr:`config` shows after the write.
+
+        One write of the whole list (a 1350 sub-command whose payload is the list, as
+        the app's handler sends it), read fresh under the station's cross-camera lock
+        and confirmed by the parameter dump; nothing is sent when the station already
+        holds the choice. The tracking switches (1065, 1069, 1070) are settings
+        (:attr:`~.station_config.StationConfig.setting_keys`).
+
+        Raises before anything is sent: ``UnsupportedError`` when cross-camera tracking
+        is *unknown* on the station or a serial is not a camera paired to it (a sensor,
+        another station's camera); ``ValueError`` for an empty choice or a serial listed
+        twice; :class:`~.exceptions.ConfigChangedError` for a stale ``expect_revision``.
+        """
+        self._require_feature(StationFeature.CROSS_CAMERA)
+        if serials is None:
+            chosen = tuple(
+                d.device_sn for d in self.sub_devices if self._is_own_camera(d.device_sn)
+            )
+            if not chosen:
+                raise UnsupportedError(f"{self._log_name} has no paired camera")
+        else:
+            chosen = self._own_cameras(serials, "tracking cameras")
+            if not chosen:
+                raise ValueError("choose at least one camera; None chooses every camera")
+        value = encode_tracking_cameras(chosen)
+        async with self._shared_lock(CROSS_CAMERA_LOCK):
+            _, config = await self._config_for_write(expect_revision)
+            if config.cross_camera is None or config.cross_camera.cameras != chosen:
+                await self._async_write_list(
+                    PARAM_TRACKING_CAMERAS,
+                    list(chosen),
+                    value,
+                    lambda raw: decode_tracking_cameras(raw) == chosen,
+                )
+        after = self.config
+        cross = after.cross_camera if after is not None else None
+        return cross.cameras if cross is not None and cross.cameras is not None else chosen
+
+    async def async_set_cross_camera_groups(
+        self, groups: Iterable[Iterable[str]], *, expect_revision: int | None = None
+    ) -> tuple[tuple[str, ...], ...]:
+        """Replace the cross-camera tracking groups (1073), each a list of camera
+        serials; returns the groups :attr:`config` shows after the write. Written and
+        confirmed as :meth:`async_set_cross_camera_cameras` (``[{"value": [serial,
+        ...]}, ...]``); ``[]`` removes every group.
+
+        Raises before anything is sent: ``UnsupportedError`` when tracking groups are
+        *unknown* on the station or a serial is not a camera paired to it;
+        ``ValueError`` for an empty group or a camera listed twice (in one group or in
+        two); :class:`~.exceptions.ConfigChangedError` for a stale ``expect_revision``.
+        """
+        self._require_feature(StationFeature.CROSS_CAMERA_GROUPS)
+        if isinstance(groups, str):
+            raise ValueError("tracking groups must be a list of serial lists")
+        chosen = tuple(self._own_cameras(group, "a tracking group") for group in groups)
+        members = [serial for group in chosen for serial in group]
+        if any(not group for group in chosen):
+            raise ValueError("a tracking group needs at least one camera")
+        if len(set(members)) != len(members):
+            raise ValueError("a camera can be in one tracking group only")
+        value = encode_tracking_groups(chosen)
+        async with self._shared_lock(CROSS_CAMERA_LOCK):
+            _, config = await self._config_for_write(expect_revision)
+            if config.cross_camera is None or config.cross_camera.groups != chosen:
+                await self._async_write_list(
+                    PARAM_TRACKING_GROUPS,
+                    [{"value": list(group)} for group in chosen],
+                    value,
+                    lambda raw: decode_tracking_groups(raw) == chosen,
+                )
+        after = self.config
+        cross = after.cross_camera if after is not None else None
+        return cross.groups if cross is not None else chosen
+
+    def _own_cameras(self, serials: Iterable[str], what: str) -> tuple[str, ...]:
+        """``serials`` checked as distinct cameras paired to this station."""
+        if isinstance(serials, str):
+            raise ValueError(f"{what} must be a list of serials, not one string")
+        out = tuple(serials)
+        encode_tracking_cameras(out)  # refuses an empty or repeated serial
+        for serial in out:
+            if not self._is_own_camera(serial):
+                raise UnsupportedError(
+                    f"{redact_serial(serial)} is not a camera paired to {self._log_name}"
+                )
+        return out
+
+    def _is_own_camera(self, serial: str) -> bool:
+        model = model_for_serial(serial)
+        return (
+            any(d.device_sn == serial for d in self.sub_devices)
+            and model is not None
+            and model.kind is DeviceKind.CAMERA
+        )
+
+    async def _async_write_list(
+        self, param: int, payload: list[Any], stored: str, holds: Callable[[str], bool]
+    ) -> None:
+        """Send ``payload`` as the 1350 sub-command ``param`` (the handler's ``param_list``)
+        and confirm it (:meth:`_async_confirm_param`; ``stored`` is its param value)."""
+        outcome = await self.session.async_send_command(param, payload=payload)
+        await self._async_confirm_param(
+            param, stored, holds, answered=outcome is CommandOutcome.APPLIED
+        )
 
     def _require_feature(self, feature: StationFeature) -> None:
         """``UnsupportedError`` when ``feature`` is *unknown* on this station."""
