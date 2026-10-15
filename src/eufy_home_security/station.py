@@ -241,6 +241,8 @@ READBACK_DELAY = 0.8
 MODE_TABLES_LOCK: Final = "mode_tables"
 """The shared parameter group of the per-mode action tables (:meth:`Station._shared_lock`)."""
 CROSS_CAMERA_LOCK: Final = "cross_camera"
+MIN_TRACKING_CAMERAS: Final = 2
+"""The fewest cameras the eufy app saves as the cross-camera tracking choice."""
 """The shared parameter group of the cross-camera tracking cameras (1072) and groups (1073)."""
 MODE_LIST_LOCK: Final = "mode_list"
 """The shared parameter group of the mode list (1256) and the schedule (1254, 1257), which
@@ -2119,21 +2121,28 @@ class Station:
 
         Raises before anything is sent: ``UnsupportedError`` when cross-camera tracking
         is *unknown* on the station or a serial is not in :meth:`cross_camera_eligible`
-        (a sensor, a keypad, another station's camera); ``ValueError`` for an empty choice
-        or a serial listed twice; :class:`~.exceptions.ConfigChangedError` for a stale
+        (a sensor, a keypad, another station's camera) or, for ``None``, when fewer than
+        :data:`MIN_TRACKING_CAMERAS` are eligible; ``ValueError`` for a choice of fewer than
+        :data:`MIN_TRACKING_CAMERAS` (the eufy app saves no smaller one) or a serial listed
+        twice; :class:`~.exceptions.ConfigChangedError` for a stale
         ``expect_revision``.
         """
         self._require_feature(StationFeature.CROSS_CAMERA)
         if serials is None:
             chosen = self.cross_camera_eligible()
-            if not chosen:
+            if len(chosen) < MIN_TRACKING_CAMERAS:
                 raise UnsupportedError(
-                    f"{self._log_name} has no paired camera", device_sn=self.serial
+                    f"{self._log_name} has fewer than {MIN_TRACKING_CAMERAS} cameras "
+                    "cross-camera tracking can follow",
+                    device_sn=self.serial,
                 )
         else:
             chosen = self._own_cameras(serials, "tracking cameras")
-            if not chosen:
-                raise ValueError("choose at least one camera; None chooses every camera")
+            if len(chosen) < MIN_TRACKING_CAMERAS:
+                raise ValueError(
+                    f"choose at least {MIN_TRACKING_CAMERAS} cameras, as the eufy app requires; "
+                    "None chooses every camera"
+                )
         value = encode_tracking_cameras(chosen)
         async with self._shared_lock(CROSS_CAMERA_LOCK):
             _, config = await self._config_for_write(expect_revision)

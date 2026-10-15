@@ -2364,7 +2364,7 @@ schedule = Schedule(
     slots=(ScheduleSlot(Weekday.MONDAY, time(8), time(17), GuardMode.AWAY),),
 )
 slots, default = await station.async_set_schedule(schedule, default_mode=GuardMode.DISARMED)
-await station.async_set_cross_camera_cameras([cam_sn, other_sn])  # None: every camera
+await station.async_set_cross_camera_cameras([cam_sn, other_sn])  # 2 or more; None: all
 await station.async_set_cross_camera_groups([[cam_sn, other_sn]])  # []: no group
 await station.async_set_mode_actions("away", {cam_sn: {"camera_siren": True}})
 ```
