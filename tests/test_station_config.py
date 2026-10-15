@@ -410,6 +410,28 @@ def test_cross_camera_reads_the_settings_and_the_lists() -> None:
     assert config.setting_keys["cross_camera.enabled"] == "device_cross_cam_tracking_swtich"
 
 
+@pytest.mark.parametrize(
+    ("cloud", "option", "seconds"),
+    [
+        ({1070: "180"}, 1, 180),  # a HomeBase 3's cloud copy: option 1, the app's "3 min"
+        ({1070: "1800"}, 6, 1800),
+        ({}, 0, 120),  # unreported: the app's default, 2 min
+        ({1070: "7"}, None, None),  # not an interval the model offers
+    ],
+)
+def test_the_continuous_tracking_time_reads_as_its_option_and_in_seconds(
+    cloud: dict[int, str], option: int | None, seconds: int | None
+) -> None:
+    state = state_of({1224: "0"}, cloud=cloud)
+    config = build_station_config(state)
+    cross = config.cross_camera
+    assert cross is not None
+    assert (cross.continuous_time, cross.continuous_time_s) == (option, seconds)
+    setting = state.settings[config.setting_keys["cross_camera.continuous_time"]]
+    if option is not None and seconds is not None:
+        assert setting.label(option) == f"{seconds // 60} min"
+
+
 def test_alarm_and_time_values_reuse_the_station_settings() -> None:
     config = config_of({1224: "0", 1235: "20", 1281: "2"})
     assert (config.alarm_volume, config.alarm_tone) == (20, 2)

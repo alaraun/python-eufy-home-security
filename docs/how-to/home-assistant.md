@@ -2264,6 +2264,11 @@ station.config  # the same, built from the current state, no I/O
   `UNKNOWN` (the app offers no delays there, or the library cannot send them) gets no
   delay control at all. The per-mode delay settings carry the same list as
   `setting.values`.
+- **Cross-camera tracking time.** `config.cross_camera.continuous_time_s` is the
+  continuous tracking time in seconds (120-1800); `continuous_time` is the same choice
+  as the setting's value (`setting_keys["cross_camera.continuous_time"]` names the
+  setting): an option index on a HomeBase 3 (1 = "3 min" = 180 s), titled by the
+  setting's `labels` and written with `async_set_setting`.
 - **Missing and unreadable values.** A value no source carries is None and has no
   `sources` entry. A value a source carries but that does not decode is named in
   `config.unreadable` with the reason; the field falls back to the next source, else None.

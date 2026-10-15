@@ -20,6 +20,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final
 
 from .devices.settings import MOTION_SENSOR_DEVICE_TYPES
+from .devices.station_config_support import cross_camera_intervals
 from .devices.timezones import TIMEZONE_DOMAIN
 from .devices.types import model_for_serial
 from .exceptions import ConfigChangedError, ProtocolError, UnsupportedError
@@ -51,7 +52,7 @@ from .p2p.station_config_codecs import (
 )
 
 if TYPE_CHECKING:
-    from .devices.model_settings import Value
+    from .devices.model_settings import Setting, Value
     from .station import StationState
 
 __all__ = [
@@ -169,8 +170,13 @@ class CrossCameraConfig:
     enabled: bool | None
     assistance: bool | None
     continuous_time: Value | None
-    """The setting's public value; :attr:`StationConfig.setting_keys` names the setting
-    whose ``labels`` show it."""
+    """The continuous tracking time as the setting's public value (an option index on a
+    HomeBase 3: 1 is "3 min"); :attr:`StationConfig.setting_keys` names the setting,
+    whose ``labels`` title it and whose write takes it."""
+    continuous_time_s: int | None
+    """The same time in seconds (180 for "3 min"): the model's interval
+    (:func:`~.devices.station_config_support.cross_camera_intervals`) at the option's
+    position; None when :attr:`continuous_time` is None or the model lists no intervals."""
     cameras: tuple[str, ...] | None
     """The serials chosen for tracking (param 1072); None means every camera."""
     groups: tuple[tuple[str, ...], ...]
@@ -318,6 +324,10 @@ def build_station_config(state: StationState) -> StationConfig:
             enabled=enabled if isinstance(enabled, bool) else None,
             assistance=assistance if isinstance(assistance, bool) else None,
             continuous_time=values.get("cross_camera.continuous_time"),
+            continuous_time_s=_tracking_seconds(
+                state.settings.get(setting_keys.get("cross_camera.continuous_time", "")),
+                values.get("cross_camera.continuous_time"),
+            ),
             cameras=cameras,
             groups=groups or (),
         )
@@ -442,6 +452,17 @@ def _view(
             for channel in sorted(actions)
         ),
     )
+
+
+def _tracking_seconds(setting: Setting | None, value: Value | None) -> int | None:
+    """Seconds of tracking-time option ``value``: the model's interval at the option's
+    position, both lists in the thing description's order."""
+    if setting is None or value is None or isinstance(value, bool):
+        return None
+    intervals = cross_camera_intervals(setting.product_code)
+    if len(intervals) != len(setting.values):
+        return None
+    return next((s for v, s in zip(setting.values, intervals, strict=True) if v == value), None)
 
 
 def _setting_keys(state: StationState) -> dict[str, str]:
