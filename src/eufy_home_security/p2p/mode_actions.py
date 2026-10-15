@@ -241,7 +241,7 @@ class ModeTable:
         current = self._delays(table_field)
         cleared = self.cleared - {(table_field, channel)}
         if seconds:
-            delays = {ch: seconds for ch, value in current.items() if value}
+            delays = {ch: seconds if value else 0 for ch, value in current.items()}
             delays[channel] = seconds
         else:
             delays = {**current, channel: 0}
@@ -249,6 +249,52 @@ class ModeTable:
         if table_field is ModeTableField.ALARM_DELAY:
             return replace(self, alarm_delays=delays, cleared=cleared)
         return replace(self, leaving_delays=delays, cleared=cleared)
+
+    def with_count_down(
+        self,
+        table_field: ModeTableField,
+        *,
+        seconds: int | None = None,
+        channels: Mapping[int, bool] | None = None,
+    ) -> ModeTable:
+        """This table with one count-down changed as a whole, by :meth:`with_delay`'s rule.
+
+        ``channels`` turns the delay on (True) or off (False) per channel; ``seconds``
+        is the mode's one value for every channel that has it on afterwards, and 0
+        turns it off on all of them. A channel turned on without ``seconds`` takes the
+        value the channels already on share. ``seconds`` with no channel on changes
+        nothing. Raises ``ValueError`` for a negative delay, 0 s with a channel turned
+        on, or a channel turned on when no channel has a value to take.
+        """
+        changes = dict(channels or {})
+        if seconds is not None:
+            _non_negative("a delay", seconds)
+        turned_on = sorted(ch for ch, on in changes.items() if on)
+        if seconds == 0 and turned_on:
+            raise ValueError(
+                f"a {table_field} of 0 s is off; it cannot turn on channels {turned_on}"
+            )
+        table = self
+        for channel in sorted(ch for ch, on in changes.items() if not on):
+            table = table.with_delay(table_field, channel, 0)
+        on_now = sorted(ch for ch, value in table._delays(table_field).items() if value)
+        if seconds == 0:
+            for channel in on_now:
+                table = table.with_delay(table_field, channel, 0)
+            return table
+        value = seconds
+        if value is None and turned_on:
+            if not on_now:
+                raise ValueError(
+                    f"no device has the {self.mode.name.lower()} {table_field} on; "
+                    "give the delay in seconds"
+                )
+            value = table.count_down(table_field).delay
+        if value is None:
+            return table
+        for channel in turned_on or on_now:
+            table = table.with_delay(table_field, channel, value)
+        return table
 
     def count_down(self, table_field: ModeTableField) -> CountDown:
         """The count-down that carries this table's delays for ``table_field``.

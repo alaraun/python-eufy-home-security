@@ -70,6 +70,7 @@ from .devices.settings import (
     VIEW_MODE_PARAM,
     Scope,
     SettingDef,
+    mode_action_flags,
     mode_action_key,
     mode_table_setting,
     report_value,
@@ -151,7 +152,14 @@ from .p2p.clip import ClipWriter, MediaClip
 from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
 from .p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
 from .p2p.messages import RECEIPT_NOT_HANDLED, decode_preset_picture, record_id_day
-from .p2p.mode_actions import MODE_TABLE_PARAMS, ModeTableField, mode_table_from_params
+from .p2p.mode_actions import (
+    FIELD_PARAMS,
+    MODE_TABLE_MODES,
+    MODE_TABLE_PARAMS,
+    ModeTable,
+    ModeTableField,
+    mode_table_from_params,
+)
 from .p2p.params import (
     ACTIVE_MODE_PARAM,
     GUARD_MODE_PARAM,
@@ -176,6 +184,9 @@ _LOGGER = logging.getLogger(__name__)
 
 READBACK_ATTEMPTS = 3
 READBACK_DELAY = 0.8
+
+MODE_TABLES_LOCK: Final = "mode_tables"
+"""The shared parameter group of the per-mode action tables (:meth:`Station._shared_lock`)."""
 
 CAMERA_IMAGE_DAYS = 7
 """Days of history :meth:`Station.async_camera_image` searches for a camera's newest event."""
@@ -881,6 +892,8 @@ class Station:
         demand files them in its session instead)."""
         self._cloud_time_zone: _CloudValue | None = None
         """The station entry's ``time_zone``."""
+        self._shared_locks: dict[str, asyncio.Lock] = {}
+        """:meth:`_shared_lock` per shared parameter group."""
         session.add_dump_listener(self._on_dump_complete)
         session.add_notify_listener(self._on_notify)
         session.subscribe(self._on_session_event)
@@ -1622,6 +1635,261 @@ class Station:
             )
         return current
 
+    # ── mode tables: bulk edits ──────────────────────────────────────────────
+
+    def _shared_lock(self, group: str) -> asyncio.Lock:
+        """The lock that serialises read-modify-writes of the shared parameter ``group``
+        on this station (:data:`MODE_TABLES_LOCK`), so concurrent writes keep each
+        other's changes."""
+        return self._shared_locks.setdefault(group, asyncio.Lock())
+
+    def _check_config_revision(self, expect_revision: int | None) -> None:
+        """Refuse a write made against an older station configuration.
+
+        Called under the write's lock after the fresh read and before anything is sent.
+        The revision check is applied when the read model provides one; until then
+        every ``expect_revision`` passes.
+        """
+
+    async def async_set_mode_actions(
+        self,
+        mode: GuardMode | str | int,
+        changes: Mapping[str, Mapping[str, bool]],
+        *,
+        entry_s: int | None = None,
+        exit_s: int | None = None,
+        entry_devices: Mapping[str, bool] | None = None,
+        exit_devices: Mapping[str, bool] | None = None,
+        expect_revision: int | None = None,
+    ) -> ModeTable:
+        """Change several devices' actions (and the delays) of one guard mode with one
+        mode-table write; returns the table now in effect.
+
+        ``changes`` maps a paired device's serial to ``{flag: on}`` for the flags of
+        its kind (:func:`~.devices.settings.mode_action_flags`), for example
+        ``{cam_sn: {"record": True, "camera_siren": False}, sensor_sn: {"notification":
+        True}}``. The delays follow the app's delay screen (one value per mode):
+        ``entry_s`` / ``exit_s`` set the alarm (entry) / leaving (exit) delay of every
+        device that has it on afterwards (0 turns it off on all), and ``entry_devices``
+        / ``exit_devices`` turn it on or off per serial; see
+        :meth:`~.p2p.mode_actions.ModeTable.with_count_down`.
+
+        The whole mode is read fresh once, every change is applied to it with every
+        other bit and value kept, the table is sent once (``SET_ALL_ACTION``) and
+        every value confirmed by read-back. Nothing is sent when the table already
+        holds the result, nor for an empty edit (which returns the current table).
+        Single-flag writes (:meth:`async_set_mode_action`, :meth:`async_set_setting`)
+        share the station's mode-table lock, so concurrent writes keep each other's bits.
+        ``expect_revision`` is checked after the fresh read (:meth:`_check_config_revision`).
+
+        Raises, before anything is sent: ``UnsupportedError`` for a mode without
+        per-device actions (Schedule, Off, Disarmed, Geofence) or for which the station
+        stores no table, a serial not paired to this station, a device of no
+        catalogued kind, a flag its kind does not have, a station with a device of no
+        known kind in the table (it may be a siren accessory, whose triggers a library
+        table clears) or delays the table cannot carry unchanged; ``ValueError`` for a
+        flag value that is not a bool or a delay change :meth:`with_count_down` refuses;
+        :class:`CommandNotAppliedError` when a device is missing from the fresh read or
+        does not report its mask. After sending: :class:`CommandNotAppliedError` naming
+        the device and flag (or delay) the read-back does not show, and the session's
+        typed errors.
+        """
+        guard = GuardMode.parse(mode)
+        if guard not in MODE_TABLE_MODES:
+            raise UnsupportedError(f"guard mode {guard!r} has no per-device actions")
+        edits: dict[int, tuple[SettingDef, dict[str, bool]]] = {}
+        for device_sn, flags in changes.items():
+            channel = self.channel_for(device_sn)
+            spec = self._mode_action_spec(guard, channel)
+            for flag, on in flags.items():
+                if not isinstance(on, bool):
+                    raise ValueError(f"{flag}: on must be a bool, got {on!r}")
+                spec.with_flag(0, flag, on)  # refuses an unknown flag before any traffic
+            edits.setdefault(channel, (spec, {}))[1].update(flags)
+        count_downs = {
+            ModeTableField.ALARM_DELAY: (entry_s, self._delay_channels(entry_devices)),
+            ModeTableField.LEAVING_DELAY: (exit_s, self._delay_channels(exit_devices)),
+        }
+        targets = set(edits).union(*(chs for _, chs in count_downs.values()))
+
+        def edit(table: ModeTable) -> ModeTable:
+            table = self._with_flags(table, edits)
+            for table_field, (seconds, channels) in count_downs.items():
+                if seconds is not None or channels:
+                    table = table.with_count_down(table_field, seconds=seconds, channels=channels)
+            return table
+
+        _, new = await self._async_edit_mode_table(
+            guard,
+            edit,
+            targets={ch: edits[ch][0] if ch in edits else None for ch in targets},
+            command=FIELD_PARAMS[ModeTableField.ACTION][guard],
+            expect_revision=expect_revision,
+        )
+        return new
+
+    async def async_set_mode_delays(
+        self,
+        mode: GuardMode | str | int,
+        *,
+        entry_s: int | None = None,
+        exit_s: int | None = None,
+        entry_devices: Mapping[str, bool] | None = None,
+        exit_devices: Mapping[str, bool] | None = None,
+        expect_revision: int | None = None,
+    ) -> ModeTable:
+        """:meth:`async_set_mode_actions` with delay changes only (one table write)."""
+        return await self.async_set_mode_actions(
+            mode,
+            {},
+            entry_s=entry_s,
+            exit_s=exit_s,
+            entry_devices=entry_devices,
+            exit_devices=exit_devices,
+            expect_revision=expect_revision,
+        )
+
+    @staticmethod
+    def _with_flags(
+        table: ModeTable, edits: Mapping[int, tuple[SettingDef, Mapping[str, bool]]]
+    ) -> ModeTable:
+        """``table`` with each channel's flags set or cleared, every other bit kept;
+        :class:`CommandNotAppliedError` when a channel's current mask is not in it."""
+        for channel, (spec, flags) in sorted(edits.items()):
+            mask = table.actions.get(channel)
+            if mask is None:
+                raise CommandNotAppliedError(
+                    spec.command_id,
+                    f"{spec.key}: the station does not report the current mask on channel "
+                    f"{channel}; refusing to write a whole mask blind",
+                )
+            for flag, on in flags.items():
+                mask = spec.with_flag(mask, flag, on)
+            table = table.with_action(channel, mask)
+        return table
+
+    def _delay_channels(self, devices: Mapping[str, bool] | None) -> dict[int, bool]:
+        """``{serial: on}`` as ``{channel: on}``; refuses an unpaired serial or a non-bool."""
+        out: dict[int, bool] = {}
+        for device_sn, on in (devices or {}).items():
+            if not isinstance(on, bool):
+                raise ValueError(f"a delay's on must be a bool, got {on!r}")
+            out[self.channel_for(device_sn)] = on
+        return out
+
+    def _mode_action_spec(self, mode: GuardMode, channel: int) -> SettingDef:
+        """The action-mask setting of the device on ``channel`` for ``mode``, with the
+        flags of its kind and cloud type; ``UnsupportedError`` for a mode without
+        actions or a device of no catalogued kind."""
+        key = mode_action_key(mode, scope_for_kind(self._kind_on(channel)))
+        cloud = self._cloud_by_channel().get(channel)
+        return mode_table_setting(key).for_device_type(cloud.device_type if cloud else None)
+
+    async def _async_edit_mode_table(
+        self,
+        mode: GuardMode,
+        edit: Callable[[ModeTable], ModeTable],
+        *,
+        targets: Mapping[int, SettingDef | None],
+        command: int,
+        expect_revision: int | None = None,
+    ) -> tuple[ModeTable, ModeTable]:
+        """Read ``mode``'s whole table fresh, ``edit`` it, send it once and confirm it by
+        read-back, all under the mode-table lock; returns (table read, table in effect).
+
+        ``targets`` are the channels the edit changes, each with the setting it changes
+        (checked against the device's kind) or None. Refuses (nothing sent) as
+        :meth:`async_set_mode_actions` lists; ``command`` is the id its errors carry.
+        """
+        async with self._shared_lock(MODE_TABLES_LOCK):
+            wanted = self.channels | targets.keys()
+            dump = await self.session.async_get_params(expect_channels=wanted)
+            missing = sorted(wanted - dump.devices.keys())
+            if missing:
+                raise CommandNotAppliedError(
+                    command,
+                    f"{mode.name.lower()} mode table: channels {missing} are missing from the "
+                    "parameter dump; refusing to write a mode table without them",
+                )
+            state = self._state(dump)
+            for target, spec in sorted(targets.items()):
+                device = state.devices.get(target)
+                if device is None:
+                    # `state.devices` holds sub-devices only, so a station channel (or one
+                    # that went away since the dump) lands here.
+                    raise UnsupportedError(f"channel {target} is no paired device")
+                if spec is not None and not spec.applies_to(scope_for_kind(device.kind)):
+                    raise UnsupportedError(
+                        f"setting {spec.key!r} is a {spec.scope} setting, not one of "
+                        f"channel {target}"
+                    )
+            self._check_config_revision(expect_revision)
+            table = mode_table_from_params(dump.devices, mode)
+            if not table.actions:
+                raise UnsupportedError(
+                    f"the station stores no {mode.name.lower()} mode table (no device reports "
+                    f"param {FIELD_PARAMS[ModeTableField.ACTION][mode]})"
+                )
+            new = edit(table)
+            if new.same_values(table):
+                return table, table
+            # A channel with no known device (the station's own block can carry a
+            # per-mode action) is refused like one of an unknown kind.
+            unknown = sorted(
+                ch
+                for ch in new.actions
+                if ch not in state.devices
+                or state.devices[ch].kind not in (DeviceKind.CAMERA, DeviceKind.SENSOR)
+            )
+            if unknown:
+                raise UnsupportedError(
+                    f"{mode.name.lower()} mode table: channels {unknown} are of no known "
+                    "device kind; a mode table always clears siren-accessory triggers, so it "
+                    "is not written"
+                )
+            new.request("")  # refuses a delay the table cannot carry, before any traffic
+            try:
+                await self.session.async_set_mode_table(new)
+            except CommandNotAppliedError as err:
+                raise CommandNotAppliedError(
+                    err.command, f"{self._mode_table_mismatch(new)}: {err}"
+                ) from err
+            return table, new
+
+    def _mode_table_mismatch(self, table: ModeTable) -> str:
+        """Which device's flag or delay the last read does not show as ``table`` set it."""
+        reported = self.session.merged_params().devices
+        cloud = self._cloud_by_channel()
+        action_param = FIELD_PARAMS[ModeTableField.ACTION][table.mode]
+        problems: list[str] = []
+        for channel, values in sorted(table.params().items()):
+            entry = cloud.get(channel)
+            name = redact_serial(entry.device_sn) if entry else f"channel {channel}"
+            block = reported.get(channel, {})
+            for param, want in sorted(values.items()):
+                raw = block.get(param)
+                got = json_int(raw) if raw is not None else None
+                if got == want:
+                    continue
+                if param != action_param or got is None:
+                    what = "action" if param == action_param else MODE_TABLE_PARAMS[param][1]
+                    problems.append(f"{name} {what}: wrote {want}, station reports {got}")
+                    continue
+                flags = mode_action_flags(
+                    scope_for_kind(self._kind_on(channel)), entry.device_type if entry else None
+                )
+                for flag, bit in flags.items():
+                    if (want ^ got) & bit:
+                        wrote, reads = ("on", "off") if want & bit else ("off", "on")
+                        problems.append(f"{name} {flag}: wrote {wrote}, station reports {reads}")
+                named = 0
+                for bit in flags.values():
+                    named |= bit
+                if (want ^ got) & ~named:
+                    problems.append(f"{name} action: wrote {want}, station reports {got}")
+        detail = "; ".join(problems) or "the read-back differs"
+        return f"{table.mode.name.lower()} mode table not confirmed ({detail})"
+
     async def async_set_mode_action(
         self,
         mode: GuardMode | str | int,
@@ -1650,21 +1918,16 @@ class Station:
         if (device_sn is None) == (channel is None):
             raise ValueError("pass exactly one of device_sn or channel")
         target = self.channel_for(device_sn) if device_sn is not None else cast(int, channel)
-        key = mode_action_key(GuardMode.parse(mode), scope_for_kind(self._kind_on(target)))
-        cloud = self._cloud_by_channel().get(target)
-        spec = mode_table_setting(key).for_device_type(cloud.device_type if cloud else None)
+        guard = GuardMode.parse(mode)
+        spec = self._mode_action_spec(guard, target)
         spec.with_flag(0, flag, on)  # refuses an unknown flag before any traffic
-        current = await self._read_back(spec.read_param, target)
-        if current is None:
-            raise CommandNotAppliedError(
-                spec.command_id,
-                f"{key}: the station does not report the current mask on channel {target}; "
-                "refusing to write a whole mask blind",
-            )
-        wanted = spec.with_flag(current, flag, on)
-        if wanted == current:
-            return current
-        return await self._async_set_mode_table_value(spec, wanted, target)
+        _, new = await self._async_edit_mode_table(
+            guard,
+            lambda table: self._with_flags(table, {target: (spec, {flag: on})}),
+            targets={target: spec},
+            command=spec.command_id,
+        )
+        return new.actions[target]
 
     # ── station configuration ────────────────────────────────────────────────
 
@@ -1743,51 +2006,15 @@ class Station:
         ``value`` without writing when the table already holds it.
         """
         mode, table_field = MODE_TABLE_PARAMS[spec.command_id]
-        wanted = self.channels | {target}
-        dump = await self.session.async_get_params(expect_channels=wanted)
-        missing = sorted(wanted - dump.devices.keys())
-        if missing:
-            raise CommandNotAppliedError(
-                spec.command_id,
-                f"{spec.key}: channels {missing} are missing from the parameter dump; "
-                "refusing to write a mode table without them",
-            )
-        state = self._state(dump)
-        device = state.devices.get(target)
-        if device is None:
-            # `state.devices` holds sub-devices only, so a station channel (or one that
-            # went away between the dump and here) lands here. A public write must
-            # raise a typed error, not a KeyError.
-            raise UnsupportedError(
-                f"setting {spec.key!r} names channel {target}, which is no paired device"
-            )
-        if not spec.applies_to(scope_for_kind(device.kind)):
-            raise UnsupportedError(
-                f"setting {spec.key!r} is a {spec.scope} setting, not one of channel {target}"
-            )
-        table = mode_table_from_params(dump.devices, mode)
-        # A station's own block can carry a per-mode action parameter, and it is not in
-        # `state.devices` (which holds sub-devices only). Treat a channel with no known
-        # device the same as one of an unknown kind: a typed refusal, not a KeyError.
-        unknown = sorted(
-            ch
-            for ch in table.actions
-            if ch not in state.devices
-            or state.devices[ch].kind not in (DeviceKind.CAMERA, DeviceKind.SENSOR)
+
+        def edit(table: ModeTable) -> ModeTable:
+            if table_field is ModeTableField.ACTION:
+                return table.with_action(target, value)
+            return table.with_delay(table_field, target, value)
+
+        await self._async_edit_mode_table(
+            mode, edit, targets={target: spec}, command=spec.command_id
         )
-        if unknown:
-            raise UnsupportedError(
-                f"{spec.key}: channels {unknown} are of no known device kind; a mode table "
-                "always clears siren-accessory triggers, so it is not written"
-            )
-        if table_field is ModeTableField.ACTION:
-            new = table.with_action(target, value)
-        else:
-            new = table.with_delay(table_field, target, value)
-        if new.same_values(table):
-            return value
-        new.request("")  # refuses a delay the table cannot carry, before any traffic
-        await self.session.async_set_mode_table(new)
         return value
 
     async def _read_back(self, param_id: int, channel: int) -> int | None:

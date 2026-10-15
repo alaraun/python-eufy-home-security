@@ -135,6 +135,37 @@ def test_a_delay_that_differs_between_devices_is_refused() -> None:
     assert table.with_delay(LEAVING, 0, 20).count_down(LEAVING) == CountDown((1, 0), 20)
 
 
+def test_with_count_down_changes_a_delay_as_the_delay_screen_does() -> None:
+    table = mode_table_from_params(
+        {0: {1225: "1", 1166: "30"}, 1: {1225: "1", 1166: "0"}, 16: {1225: "0", 1166: "30"}},
+        GuardMode.HOME,
+    )
+    # Turned on without seconds: takes the value the others share.
+    assert table.with_count_down(ALARM, channels={1: True}).count_down(ALARM) == CountDown(
+        (16, 1, 0), 30
+    )
+    # Seconds alone move every device that has it on; one off, the others moved.
+    moved = table.with_count_down(ALARM, seconds=45, channels={16: False})
+    assert moved.count_down(ALARM) == CountDown((0,), 45)
+    assert moved.params()[16][1166] == 0
+    # 0 s turns it off everywhere; the last ones off are listed with 0.
+    assert table.with_count_down(ALARM, seconds=0).count_down(ALARM) == CountDown((16, 0), 0)
+    # Seconds with nobody on changes nothing.
+    assert table.with_count_down(LEAVING, seconds=20).same_values(table)
+
+
+def test_with_count_down_refusals() -> None:
+    table = _home()  # every delay off
+    with pytest.raises(ValueError, match="give the delay in seconds"):
+        table.with_count_down(ALARM, channels={0: True})
+    with pytest.raises(ValueError, match="cannot turn on channels"):
+        table.with_count_down(ALARM, seconds=0, channels={0: True})
+    with pytest.raises(ValueError, match="non-negative"):
+        table.with_count_down(ALARM, seconds=-1)
+    with pytest.raises(UnsupportedError, match="channel 7"):
+        table.with_count_down(ALARM, seconds=30, channels={7: True})
+
+
 @pytest.mark.parametrize(
     ("dump", "mode", "match"),
     [
