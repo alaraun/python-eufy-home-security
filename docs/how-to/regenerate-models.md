@@ -74,6 +74,24 @@ uv run python scripts/gen_ptz.py                 # rewrite the table
 uv run python scripts/gen_ptz.py --check         # compare, write nothing
 ```
 
+The station configuration table (`devices/_station_config_data.py`: per station model,
+which configuration features the app offers and the library sends as its handler does,
+where the model keeps its per-mode tables, the cross-camera tracking times, firmware
+gates and the restart request) comes from the same cache plus two app inputs: the
+app's HomeBase capability table (`hb_capability_config.json`, in the directory
+`--data` names) and a Remote Config fetch (`--remote-config`). The defaults point
+into `.work/`, since the inputs are private:
+
+```
+uv run python scripts/gen_station_config.py      # rewrite the table
+uv run python scripts/gen_station_config.py --check
+uv run python scripts/gen_station_config.py --data DIR --cache DIR --remote-config FILE
+```
+
+Hardware grades (*verified*) are not generated: they live in
+`devices/station_config_support.py`, each traced to a row of
+[hardware-verification.md](../reference/hardware-verification.md).
+
 ## Check
 
 ```

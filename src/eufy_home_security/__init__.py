@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         setting_section,
     )
     from .devices.settings import SettingUnit
+    from .devices.station_config_support import ModeTableStorage, StationFeature
     from .diagnostics import AccountReport
     from .events import (
         AccountMismatch,
@@ -178,6 +179,7 @@ _EXPORTS: dict[str, str] = {
         "devices.sections",
     ),
     "SettingUnit": "devices.settings",
+    **dict.fromkeys(("ModeTableStorage", "StationFeature"), "devices.station_config_support"),
     **dict.fromkeys(
         ("MAX_PRESET_SLOTS", "MAX_ZOOM", "MIN_ZOOM", "PanTilt", "PresetPosition"), "devices.recipes"
     ),
@@ -412,6 +414,7 @@ __all__ = [
     "ModeDeviceAction",
     "ModeInUseError",
     "ModeInfo",
+    "ModeTableStorage",
     "ModeTableView",
     "ModelDataError",
     "ModelStatus",
@@ -451,6 +454,7 @@ __all__ = [
     "StationClaims",
     "StationConfig",
     "StationConfigChanged",
+    "StationFeature",
     "StationRefreshStatus",
     "StationState",
     "StationStateChanged",
