@@ -76,7 +76,7 @@ from .devices.settings import (
     report_value,
     scope_for_kind,
 )
-from .devices.station_config_support import StationFeature
+from .devices.station_config_support import StationFeature, restart_command
 from .devices.station_config_support import config_support as station_config_support
 from .devices.support import Evidence, Support
 from .devices.timezones import TIMEZONE_DOMAIN
@@ -3678,6 +3678,32 @@ class Station:
                 CMD_STORAGE, RECEIPT_NOT_HANDLED, "the eufy app asks this station no storage query"
             )
         return await self.session.async_get_storage(timeout=timeout)
+
+    # ── station actions: restart, sound and stop the alarm ───────────────────
+
+    async def async_restart(self, *, timeout: float | None = None) -> CommandOutcome:
+        """Restart the station (the eufy app's Restart; declared, not checked on hardware).
+
+        Sends the model's restart request
+        (:func:`~.devices.station_config_support.restart_command`, an ECB station scalar
+        with value 0) and returns ``APPLIED`` once the station answered it. The station
+        then drops the session while it boots: :attr:`state` and every call fail with the
+        session's typed errors until the session reconnects on its normal path (the
+        supervisor of :meth:`async_start`, or the next call's connect), and a
+        :class:`~.events.ConnectionChanged` reports both edges. Raises ``UnsupportedError``
+        before sending where :meth:`config_support` grades
+        :attr:`~.devices.station_config_support.StationFeature.RESTART` ``UNKNOWN``,
+        :class:`CommandRejectedError` for a non-zero result, :class:`CommandNotAppliedError`
+        when the station acknowledged it but never answered, and
+        :class:`DeviceTimeoutError` without even an ACK.
+        """
+        evidence = self.config_support(StationFeature.RESTART)
+        command = restart_command(self._product_code(self.serial))
+        if evidence.support is Support.UNKNOWN or command is None:
+            raise UnsupportedError(f"no restart: {evidence.source}")
+        # Every model's request is an ECB station scalar without a sub-command.
+        await self.session.async_send_ecb_scalar(command[0], 0, timeout=timeout)
+        return CommandOutcome.APPLIED
 
     @property
     def storage(self) -> StorageInfo | None:

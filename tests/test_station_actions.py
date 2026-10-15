@@ -1,0 +1,137 @@
+"""Station actions against the fake station: restart, sound and stop the alarm."""
+
+from __future__ import annotations
+
+import dataclasses
+from collections.abc import AsyncIterator
+
+import pytest
+
+from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.devices import station_config_support as scs
+from eufy_home_security.devices._station_config_data import RESTART_COMMAND
+from eufy_home_security.devices.station_config_support import (
+    StationFeature,
+    config_support,
+    restart_command,
+    station_config_models,
+)
+from eufy_home_security.devices.support import Support
+from eufy_home_security.exceptions import (
+    CommandNotAppliedError,
+    CommandRejectedError,
+    UnsupportedError,
+)
+from eufy_home_security.p2p.messages import ECB_STATION_CMDS
+from eufy_home_security.p2p.session import CommandOutcome, P2PCredentials, StationSession
+from eufy_home_security.station import Station
+from eufy_home_security.testing import SYNTHETIC
+from eufy_home_security.testing.station import FakeStation
+
+HB3 = CloudDevice(
+    device_sn=SYNTHETIC.station_sn,
+    device_type=18,
+    name="Home Base",
+    p2p_did=SYNTHETIC.did,
+    main_sw_version="3.8.7.4",
+)
+
+#: Models whose restart the library sends.
+RESTART_MODELS = tuple(sorted(RESTART_COMMAND))
+
+
+def _as(pn: str) -> CloudDevice:
+    """The fake's station listed under product code ``pn``."""
+    return dataclasses.replace(HB3, raw={"device_new_pn": pn})
+
+
+@pytest.fixture
+async def fake() -> AsyncIterator[FakeStation]:
+    station = FakeStation()
+    station.params[255][1224] = "63"
+    station.reply_to_settings = True
+    await station.start()
+    yield station
+    station.stop()
+
+
+def _station(fake: FakeStation, device: CloudDevice = HB3) -> Station:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    return Station(device, session)
+
+
+@pytest.fixture
+async def station(fake: FakeStation) -> AsyncIterator[Station]:
+    st = _station(fake)
+    yield st
+    await st.async_close()
+
+
+def test_every_restart_request_is_an_ecb_station_scalar() -> None:
+    assert RESTART_MODELS == ("T8001", "T8002", "T8010", "T8020", "T8025", "T8026", "T8030")
+    for pn in station_config_models():
+        command = restart_command(pn)
+        declared = config_support(pn, StationFeature.RESTART).support is not Support.UNKNOWN
+        assert declared is (command is not None), pn
+        if command is not None:
+            assert command == (1034, None)
+            assert command[0] in ECB_STATION_CMDS
+
+
+@pytest.mark.parametrize("pn", RESTART_MODELS)
+async def test_restart_sends_the_models_restart_request(fake: FakeStation, pn: str) -> None:
+    station = _station(fake, _as(pn))
+    try:
+        assert await station.async_restart() is CommandOutcome.APPLIED
+    finally:
+        await station.async_close()
+    assert fake.ecb_received == [(1034, 255, 0)]
+    assert fake.received == []
+
+
+async def test_a_rejected_restart_raises(station: Station, fake: FakeStation) -> None:
+    fake.account_id = "another-account"  # the ECB result code is then -104
+    with pytest.raises(CommandRejectedError) as err:
+        await station.async_restart()
+    assert (err.value.command, err.value.code) == (1034, -104)
+
+
+async def test_an_unanswered_restart_is_not_success(station: Station, fake: FakeStation) -> None:
+    fake.ecb_apply_late = True  # taken, never answered
+    with pytest.raises(CommandNotAppliedError):
+        await station.async_restart(timeout=0.5)
+
+
+@pytest.mark.parametrize(
+    ("pn", "reason"),
+    [
+        ("T8023", "declares no restart_device"),
+        ("T8024", "declares no restart_device"),
+        ("T8N00", "WebRTC"),
+        ("T9000", "WebRTC"),
+        ("T8040", "no thing description"),
+    ],
+)
+async def test_restart_is_refused_without_sending_on_a_model_without_it(
+    fake: FakeStation, pn: str, reason: str
+) -> None:
+    station = _station(fake, _as(pn))
+    assert station.config_support(StationFeature.RESTART).support is Support.UNKNOWN
+    with pytest.raises(UnsupportedError, match=reason):
+        await station.async_restart()
+    assert fake.ecb_received == []
+    assert fake.received == []
+
+
+async def test_restart_is_refused_below_a_firmware_gate(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(scs, "MIN_FIRMWARE", {"T8030": {"restart": "9.0"}})
+    with pytest.raises(UnsupportedError, match=r"from firmware 9\.0"):
+        await station.async_restart()
+    assert fake.ecb_received == []
