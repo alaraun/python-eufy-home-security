@@ -19,7 +19,11 @@ from types import MappingProxyType
 from typing import Final
 
 from ..models import GuardMode
-from ..p2p.station_config_codecs import CUSTOM_MODES
+from ..p2p.station_config_codecs import (
+    CUSTOM_MODES,
+    PRO_ALARM_MODE_TABLE_PARAMS,
+    STORED_MODE_TABLE_PARAMS,
+)
 from ._station_config_data import (
     APP_VERSION,
     CROSS_CAMERA_INTERVALS,
@@ -96,7 +100,9 @@ class ModeTableStorage(StrEnum):
     1-3, 1177 Disarmed (see :data:`~..p2p.station_config_codecs.STORED_MODE_TABLE_PARAMS`)."""
     PRO_ALARM = "pro_alarm"
     """The professional-alarm params: 61301 Away, 61300 Home, 61307-61309 Custom 1-3,
-    61306 Disarmed."""
+    61306 Disarmed (see :data:`~..p2p.station_config_codecs.PRO_ALARM_MODE_TABLE_PARAMS`).
+    The eufy app reads these models' tables from the devices' own per-mode params, as
+    with :attr:`ACTION_PARAMS`; the library falls back to the stored copy."""
 
 
 #: Hardware facts: (model, feature) -> evidence, each traced in the verification log.
@@ -253,6 +259,15 @@ def mode_table_params(product_code: str | None) -> Mapping[GuardMode, int]:
     model, as its handler updates it after a 1255 write; empty when not on record."""
     code = _key(product_code)
     return MappingProxyType({}) if code is None else _MODE_PARAMS.get(code, MappingProxyType({}))
+
+
+def stored_mode_table_params(product_code: str | None) -> Mapping[GuardMode, int]:
+    """The station params the library reads a stored copy of each mode's whole table
+    from: 61300-61309 on a :attr:`ModeTableStorage.PRO_ALARM` model, else the HomeBase 3
+    layout 1157-1161 / 1177 (every other model, and a model not on record)."""
+    if mode_table_storage(product_code) is ModeTableStorage.PRO_ALARM:
+        return PRO_ALARM_MODE_TABLE_PARAMS
+    return STORED_MODE_TABLE_PARAMS
 
 
 def max_custom_modes(product_code: str | None) -> int:

@@ -24,10 +24,14 @@ from eufy_home_security.devices.station_config_support import (
     mode_table_storage,
     restart_command,
     station_config_models,
+    stored_mode_table_params,
 )
 from eufy_home_security.devices.support import Support
 from eufy_home_security.models import GuardMode
-from eufy_home_security.p2p.station_config_codecs import STORED_MODE_TABLE_PARAMS
+from eufy_home_security.p2p.station_config_codecs import (
+    PRO_ALARM_MODE_TABLE_PARAMS,
+    STORED_MODE_TABLE_PARAMS,
+)
 
 from .verification_log import VERIFIED_MARK, log_rows
 
@@ -154,8 +158,10 @@ def test_mode_table_storage(code: str, storage: ModeTableStorage) -> None:
     if storage is ModeTableStorage.HB3_TABLES:
         assert params == STORED_MODE_TABLE_PARAMS
     if storage is ModeTableStorage.PRO_ALARM:
-        assert params[GuardMode.HOME] == 61300
-        assert params[GuardMode.DISARMED] == 61306
+        assert params == PRO_ALARM_MODE_TABLE_PARAMS
+        assert stored_mode_table_params(code) == PRO_ALARM_MODE_TABLE_PARAMS
+    else:
+        assert stored_mode_table_params(code) == STORED_MODE_TABLE_PARAMS
     if storage is ModeTableStorage.ACTION_PARAMS:
         assert params[GuardMode.AWAY] == 1239
         assert params[GuardMode.HOME] == 1225
@@ -217,6 +223,7 @@ def test_lookups_for_a_model_not_on_record() -> None:
         assert config_support(code, StationFeature.SCHEDULE).support is Support.UNKNOWN
         assert mode_table_storage(code) is None
         assert mode_table_params(code) == {}
+        assert stored_mode_table_params(code) == STORED_MODE_TABLE_PARAMS
         assert cross_camera_intervals(code) == ()
         assert restart_command(code) is None
         assert max_custom_modes(code) == 0

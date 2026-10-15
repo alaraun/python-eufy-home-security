@@ -217,6 +217,7 @@ from .station_config import (
     build_station_config,
     changed_fields,
     check_revision,
+    stored_device_params,
 )
 
 if TYPE_CHECKING:
@@ -319,11 +320,15 @@ def _ip_or_none(value: str | None) -> str | None:
 
 
 def _read(
-    settings: Mapping[str, Setting], key: str, params: Mapping[int, str | None]
+    settings: Mapping[str, Setting],
+    key: str,
+    params: Mapping[int, str | None],
+    stored: Mapping[int, str] | None = None,
 ) -> Value | None:
     """The public value of setting ``key`` in one block's ``params``: None when the
     block does not report it or the setting is not readable; ``UnsupportedError`` for a
-    key the device does not have."""
+    key the device does not have. A per-mode setting the block lacks reads ``stored``
+    (:attr:`SubDeviceState.stored_mode_params`)."""
     setting = settings.get(key)
     if setting is None:
         raise UnsupportedError(f"unknown setting {key!r} for this device")
@@ -331,6 +336,8 @@ def _read(
         return None
     raw = params.get(setting.read_param)
     if setting._mode_table is not None:
+        if raw is None and stored is not None:
+            raw = stored.get(setting.read_param)
         return report_value(raw)
     value = setting.decode(raw, params)
     if value is None and raw is not None and not raw.lstrip("-").isdigit():
@@ -419,6 +426,11 @@ class SubDeviceState:
     """A motion sensor's raw PIR sensitivity (param 1609). The handler maps only 0-2
     to a level; other values (a T8910 reported 8) have no vendor meaning."""
     params: Mapping[int, str | None] = field(repr=False)
+    stored_mode_params: Mapping[int, str] = field(default_factory=dict, repr=False)
+    """The per-mode action and delay values a pro-alarm station's stored mode tables
+    (61300-61309) give this device, by param id, for the modes no block of the dump
+    reports (:func:`~.station_config.stored_device_params`); the per-mode settings read
+    them where :attr:`params` lacks the param."""
     settings: Mapping[str, Setting] = field(default_factory=dict, repr=False, compare=False)
     """This device's settings by key (:meth:`Station.settings_for`), resolved when the
     state is built."""
@@ -463,7 +475,7 @@ class SubDeviceState:
         readable, never a default. Raises ``UnsupportedError`` for a key this device
         does not have (:attr:`settings`).
         """
-        return _read(self.settings, key, self.params)
+        return _read(self.settings, key, self.params, self.stored_mode_params)
 
 
 #: Parameters the library reads into :class:`StationState` itself rather than through
@@ -560,6 +572,9 @@ class StationState:
     """One consistent snapshot of a station, taken from a single parameter dump."""
 
     serial: str
+    product_code: str | None = None
+    """The station's product code (``T8030``); None when neither the cloud nor the serial
+    names it."""
     guard_mode: GuardMode | int | None
     """The selected guard mode (param 1224): :attr:`GuardMode.SCHEDULE` while a schedule
     runs."""
@@ -1504,6 +1519,11 @@ class Station:
     def _state(self, dump: ParamDump) -> StationState:
         cloud_by_channel = self._cloud_by_channel()
         blocks = {ch: params for ch, params in dump.devices.items() if ch != STATION_CHANNEL}
+        station = dump.station
+        own_settings = self._settings_by_key(self.serial)
+        setting_params, param_sources = self._setting_params(station, own_settings)
+        product_code = self._product_code(self.serial)
+        stored = stored_device_params(setting_params, product_code, blocks)
         devices = {}
         for channel, params in blocks.items():
             cloud = cloud_by_channel.get(channel)
@@ -1544,17 +1564,16 @@ class Station:
                 low_battery=_flag_or_none(params.get(PARAM_SENSOR_LOW_BATTERY)),
                 pir_sensitivity_raw=_count_or_none(params.get(PARAM_SENSOR_PIR_SENSITIVITY)),
                 params=dict(params),
+                stored_mode_params=stored.get(channel, {}),
                 settings=self._settings_by_key(serial) if serial else {},
             )
         # Log lines on the session name a parameter by the device kind on its channel.
         self.session.channel_scopes.update(
             {ch: scope_for_kind(d.kind) for ch, d in devices.items() if d.kind is not None}
         )
-        station = dump.station
-        own_settings = self._settings_by_key(self.serial)
-        setting_params, param_sources = self._setting_params(station, own_settings)
         return StationState(
             serial=self.serial,
+            product_code=product_code,
             guard_mode=dump.guard_mode,
             active_mode=dump.guard_mode if dump.active_mode is None else dump.active_mode,
             firmware=_text_or_none(dump.meta.get("main_sw_version")) or self.device.main_sw_version,

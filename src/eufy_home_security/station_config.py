@@ -20,15 +20,22 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final
 
 from .devices.settings import MOTION_SENSOR_DEVICE_TYPES
-from .devices.station_config_support import cross_camera_intervals
+from .devices.station_config_support import (
+    ModeTableStorage,
+    cross_camera_intervals,
+    mode_table_storage,
+    stored_mode_table_params,
+)
 from .devices.timezones import TIMEZONE_DOMAIN
 from .devices.types import model_for_serial
 from .exceptions import ConfigChangedError, ProtocolError, UnsupportedError
-from .models import GuardMode, ValueSource
+from .models import STATION_CHANNEL, GuardMode, ValueSource
 from .p2p.mode_actions import (
     ACTION_FLAGS,
+    FIELD_PARAMS,
     MODE_ACTION_INVERTED,
     MODE_TABLE_MODES,
+    ModeTableField,
     mode_action_on,
     mode_table_from_params,
 )
@@ -43,6 +50,7 @@ from .p2p.station_config_codecs import (
     STORED_MODE_TABLE_PARAMS,
     CustomModes,
     Schedule,
+    StoredModeTable,
     decode_custom_modes,
     decode_schedule,
     decode_schedule_default,
@@ -66,6 +74,8 @@ __all__ = [
     "changed_fields",
     "check_revision",
     "guard_mode_label",
+    "stored_device_params",
+    "stored_mode_table",
 ]
 
 MODE_ORDER: Final[tuple[GuardMode, ...]] = (
@@ -260,7 +270,8 @@ def build_station_config(state: StationState) -> StationConfig:
     Station values come from :attr:`~.station.StationState.setting_params` (the P2P
     dump, then the cloud's copy) with their :attr:`~.station.StationState.param_sources`;
     a mode table from the paired devices' per-mode parameters in the dump, else from its
-    stored parameter (1157-1161, 1177) where a source carries it.
+    stored parameter where a source carries it (1157-1161 and 1177; 61300-61309 on a
+    pro-alarm model, :func:`stored_mode_table`).
     """
     sources: dict[str, ValueSource] = {}
     unreadable: dict[str, str] = {}
@@ -417,12 +428,12 @@ def _mode_table(
             if table.actions:
                 sources[name] = ValueSource.P2P
                 return _view(mode, table.actions, table.alarm_delays, table.leaving_delays, serials)
-    pid = STORED_MODE_TABLE_PARAMS.get(mode)
+    pid = stored_mode_table_params(state.product_code).get(mode)
     raw, source = _param(state, pid) if pid is not None else (None, None)
     if raw is None:
         return None
     try:
-        stored = decode_stored_mode_table(raw, mode)
+        stored = stored_mode_table(state.setting_params, state.product_code, mode)
     except ProtocolError as err:
         unreadable[name] = str(err)
         return None
@@ -430,6 +441,52 @@ def _mode_table(
         return None
     sources[name] = source
     return _view(mode, stored.actions, stored.alarm_delays(), stored.leaving_delays(), serials)
+
+
+def stored_mode_table(
+    params: Mapping[int, str | None], product_code: str | None, mode: GuardMode
+) -> StoredModeTable | None:
+    """``mode``'s table as the station stores it in its own ``params``, in the model's
+    layout (:func:`~.devices.station_config_support.stored_mode_table_params`); None when
+    absent. Raises ``ProtocolError`` for a value that is not that mode's table."""
+    layout = stored_mode_table_params(product_code)
+    pid = layout.get(mode)
+    return None if pid is None else decode_stored_mode_table(params.get(pid), mode, params=layout)
+
+
+def stored_device_params(
+    params: Mapping[int, str | None],
+    product_code: str | None,
+    blocks: Mapping[int, Mapping[int, str | None]],
+) -> dict[int, dict[int, str]]:
+    """channel → {per-mode param: value} a pro-alarm station's stored tables give its
+    devices: for each mode no device block in ``blocks`` reports (its action param), the
+    action and both delays of every device of the stored table (station ``params``). Empty
+    on any other model; a stored table that does not decode gives nothing."""
+    if mode_table_storage(product_code) is not ModeTableStorage.PRO_ALARM:
+        return {}
+    out: dict[int, dict[int, str]] = {}
+    for mode in MODE_TABLE_MODES:
+        action_param = FIELD_PARAMS[ModeTableField.ACTION][mode]
+        if any(
+            block.get(action_param) is not None
+            for channel, block in blocks.items()
+            if channel != STATION_CHANNEL
+        ):
+            continue
+        try:
+            stored = stored_mode_table(params, product_code, mode)
+        except ProtocolError:
+            continue
+        if stored is None:
+            continue
+        alarm, leaving = stored.alarm_delays(), stored.leaving_delays()
+        for channel, action in stored.actions.items():
+            values = out.setdefault(channel, {})
+            values[action_param] = str(action)
+            values[FIELD_PARAMS[ModeTableField.ALARM_DELAY][mode]] = str(alarm[channel])
+            values[FIELD_PARAMS[ModeTableField.LEAVING_DELAY][mode]] = str(leaving[channel])
+    return out
 
 
 def _view(

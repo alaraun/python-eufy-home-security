@@ -69,21 +69,27 @@ def schedule(*slots: tuple[int, int, int, int]) -> str:
     )
 
 
-def _offline_station(sub_devices: tuple[CloudDevice, ...] = (CAMERA,)) -> Station:
+def _offline_station(
+    sub_devices: tuple[CloudDevice, ...] = (CAMERA,), *, pn: str | None = None
+) -> Station:
     async def no_credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         raise AssertionError("not connecting")
 
     session = StationSession(SYNTHETIC.station_sn, no_credentials, host=None)
-    return Station(STATION, session, sub_devices=sub_devices)
+    hub = STATION if pn is None else dataclasses.replace(STATION, raw={"device_new_pn": pn})
+    return Station(hub, session, sub_devices=sub_devices)
 
 
-def _cloud_entry(params: dict[int, str]) -> CloudDevice:
+def _cloud_entry(params: dict[int, str], *, pn: str | None = None) -> CloudDevice:
+    """The hub's cloud device with ``params``; ``pn`` sets its product code."""
     raw: dict[str, Any] = {
         "params": [
             {"param_type": pid, "param_value": value, "update_time": 1.7e9}
             for pid, value in params.items()
         ]
     }
+    if pn is not None:
+        raw["device_new_pn"] = pn
     return dataclasses.replace(STATION, raw=raw)
 
 
@@ -92,11 +98,13 @@ def state_of(
     *,
     cloud: dict[int, str] | None = None,
     blocks: dict[int, dict[int, str]] | None = None,
+    pn: str | None = None,
 ) -> StationState:
-    """The state of the synthetic hub from its own block, a cloud copy and device blocks."""
-    st = _offline_station()
+    """The state of the synthetic hub from its own block, a cloud copy and device blocks;
+    ``pn`` makes it a station of that product code."""
+    st = _offline_station(pn=pn)
     if cloud is not None:
-        st.apply_cloud_device(_cloud_entry(cloud))
+        st.apply_cloud_device(_cloud_entry(cloud, pn=pn))
     dump = ParamDump()
     dump.ingest(
         {
@@ -378,6 +386,75 @@ def test_a_dump_table_that_cannot_be_built_is_none_and_says_why(
     config = config_of({1224: "0"}, blocks=blocks)
     assert config.mode_tables[GuardMode.HOME] is None
     assert "mode_tables.home" in config.unreadable
+
+
+def pro_alarm_table(mode: int, actions: dict[int, int], *, alarm: tuple[list[int], int]) -> str:
+    """A pro-alarm station's stored table (61300-61309): the same document as
+    :func:`stored_table`."""
+    return stored_table(mode, actions, alarm=alarm)
+
+
+def test_a_pro_alarm_station_reads_its_stored_tables_dump_first() -> None:
+    """A T8024 whose devices report no per-mode params: Away from the dump's 61301, Home
+    from the cloud's 61300; a HomeBase 3 copy (1157) is not its layout."""
+    state = state_of(
+        {1224: "0", 61301: pro_alarm_table(0, {0: 9}, alarm=([0], 30))},
+        cloud={
+            61301: pro_alarm_table(0, {0: 1}, alarm=([], 0)),
+            61300: pro_alarm_table(1, {0: 143}, alarm=([], 0)),
+            1157: stored_table(1, {0: 8}, alarm=([], 0)),
+        },
+        blocks={0: {1101: "87"}},
+        pn="T8024",
+    )
+    config = build_station_config(state)
+    away, home = config.mode_tables[GuardMode.AWAY], config.mode_tables[GuardMode.HOME]
+    assert away is not None
+    assert home is not None
+    assert [(d.device_sn, d.action, d.alarm_delay) for d in away.devices] == [
+        (SYNTHETIC.camera_sn, 9, 30)
+    ]
+    assert [d.action for d in home.devices] == [143]
+    assert config.sources["mode_tables.away"] is ValueSource.P2P
+    assert config.sources["mode_tables.home"] is ValueSource.CLOUD
+    camera = SYNTHETIC.camera_sn
+    assert state.setting("camera_action_away", device_sn=camera) == 9
+    assert state.setting("alarm_delay_away", device_sn=camera) == 30
+    assert state.setting("leaving_delay_away", device_sn=camera) == 0
+    assert state.setting("camera_action_home", device_sn=camera) == 143
+    assert state.setting("camera_action_custom_1", device_sn=camera) is None
+    assert state.devices[0].params == {1101: "87"}  # the block itself is as reported
+
+
+def test_a_pro_alarm_station_whose_devices_report_their_params_reads_those() -> None:
+    """The layout the eufy app reads these models from: the devices' own params win."""
+    state = state_of(
+        {1224: "0", 61301: pro_alarm_table(0, {0: 9}, alarm=([0], 30))},
+        blocks={0: {1239: "5", 1167: "10"}},
+        pn="T8024",
+    )
+    away = build_station_config(state).mode_tables[GuardMode.AWAY]
+    assert away is not None
+    assert [(d.action, d.alarm_delay) for d in away.devices] == [(5, 10)]
+    assert state.devices[0].stored_mode_params == {}
+    assert state.setting("camera_action_away", device_sn=SYNTHETIC.camera_sn) == 5
+
+
+def test_a_homebase_3_does_not_read_the_pro_alarm_params() -> None:
+    state = state_of(
+        {1224: "0", 61301: pro_alarm_table(0, {0: 9}, alarm=([0], 30))},
+        blocks={0: {1101: "87"}},
+    )
+    assert build_station_config(state).mode_tables[GuardMode.AWAY] is None
+    assert state.devices[0].stored_mode_params == {}
+
+
+def test_an_undecodable_pro_alarm_table_is_none_and_says_why() -> None:
+    state = state_of({1224: "0", 61301: b64({"mode_id": 0})}, blocks={0: {1101: "87"}}, pn="T8020")
+    config = build_station_config(state)
+    assert config.mode_tables[GuardMode.AWAY] is None
+    assert "mode_tables.away" in config.unreadable
+    assert state.setting("camera_action_away", device_sn=SYNTHETIC.camera_sn) is None
 
 
 # ── schedule, cross-camera, settings ─────────────────────────────────────────
