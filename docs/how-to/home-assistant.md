@@ -2199,7 +2199,10 @@ station.config  # the same, built from the current state, no I/O
     station reports one as its mode;
   - Schedule when the schedule has a slot or Schedule is selected;
   - Geofencing while it is selected and Off while the station reports it: the library
-    cannot tell whether a station offers either otherwise.
+    cannot tell whether a station offers either otherwise. The eufy app shows a
+    Geofencing tile among its modes all the time, but geofencing follows the phones
+    running the app, which Home Assistant cannot do: do not offer it as a choice (it is
+    in `settable_modes` only while the station is already in it).
 
   A mode outside `modes` does not exist on the station: mark its per-mode entities
   unavailable (or do not create them) instead of showing `unknown`. Without a mode list
@@ -2260,6 +2263,10 @@ await station.async_set_mode_actions("away", {cam_sn: {"camera_siren": True}})
   other's changes. On a HomeBase 3 (T8030) each is verified: written, confirmed, checked
   in the eufy app and restored (the 1257 default and the tracking switches aside); on
   other models they are declared from the eufy app (`config_support` grades them).
+- **A new custom mode.** The station seeds its device table: every camera records and
+  notifies, every sensor notifies (a motion sensor also reacts to motion), no delays;
+  change them with `async_set_mode_actions`. `icon` is the app's `iconType` 0-7; the
+  default 7 (`DEFAULT_MODE_ICON`) shows as the app's sliders ("customize") icon.
 - **Refused before sending.** `UnsupportedError` when `config_support` of the call's
   feature is `UNKNOWN`, for a serial that is not a camera paired to the station (a
   sensor, another station's camera), for a mode list that cannot be read or that no

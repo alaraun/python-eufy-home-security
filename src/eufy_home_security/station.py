@@ -1819,7 +1819,8 @@ class Station:
         ``detail`` the mode's description. The mode list (1256) is read fresh, the new
         entry added and the whole list written (``operate_type`` 100); see
         :meth:`_async_write_mode_list` for how it is confirmed. The new mode gets the
-        app's actions for an added mode (record and notification) and no device table.
+        app's actions for an added mode (record and notification), and the station seeds
+        its device table: cameras record and notify, sensors notify, no delays.
 
         Raises, before anything is sent: ``UnsupportedError`` when the station's custom
         modes are *unknown* (:meth:`config_support`) or its mode list cannot be known;

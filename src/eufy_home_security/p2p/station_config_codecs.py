@@ -94,7 +94,7 @@ MAX_DETAIL_LENGTH: Final = 60
 MODE_ICONS: Final = 8
 """The icons the app offers for a mode: ``iconType`` 0 to 7."""
 DEFAULT_MODE_ICON: Final = 7
-"""The app's generic custom-mode icon (its last one)."""
+"""The app's last mode icon, shown as sliders ("customize"); verified on a HomeBase 3."""
 
 _ADDED_MODE_ACTION_FLAGS: Final = 1 | 8  # record | notification
 _GSON_ESCAPES: Final = str.maketrans(
