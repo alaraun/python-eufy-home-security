@@ -84,6 +84,7 @@ from .devices.types import DeviceKind, DeviceModel, model_for_serial
 from .events import (
     RECORDING_SUFFIX,
     STILL_SUFFIX,
+    AlarmChanged,
     CameraBusyChanged,
     ConnectionChanged,
     DevicesChanged,
@@ -940,6 +941,8 @@ class Station:
         """The station entry's ``time_zone``."""
         self._shared_locks: dict[str, asyncio.Lock] = {}
         """:meth:`_shared_lock` per shared parameter group."""
+        self._alarm: AlarmChanged | None = None
+        """The last alarm transition (:attr:`last_alarm`)."""
         session.add_dump_listener(self._on_dump_complete)
         session.add_notify_listener(self._on_notify)
         session.subscribe(self._on_session_event)
@@ -1281,6 +1284,8 @@ class Station:
         self._bus.emit(ZoomChanged(station_sn=self.serial, device_sn=device_sn, zoom=zoom))
 
     def _on_session_event(self, event: Event) -> None:
+        if isinstance(event, AlarmChanged):
+            self.note_alarm(event)
         # A camera that loses its link has gone idle, and an idle camera returns to 1x.
         if isinstance(event, ConnectionChanged) and not event.connected:
             for device_sn in list(self._zooms):
@@ -1307,6 +1312,32 @@ class Station:
     def connected(self) -> bool:
         """Whether the last :class:`~.events.ConnectionChanged` said connected and still holds."""
         return self.session.announced
+
+    @property
+    def alarming(self) -> bool:
+        """Whether the station's alarm is sounding, as the last
+        :class:`~.events.AlarmChanged` for it said; False before any. Under
+        :class:`~.client.EufySecurity` it follows the account's alarm tracker (the
+        station's alarm-tone frames, the cloud's alarm pushes, a disarm) and is already
+        set when a subscriber receives the event. It is not re-read on reconnect: an
+        alarm that ends while the session is down stays on until the next transition."""
+        return self._alarm is not None and self._alarm.alarming
+
+    @property
+    def last_alarm(self) -> AlarmChanged | None:
+        """The last :class:`~.events.AlarmChanged` for this station (its channel, event
+        type, duration or stop source); None before any."""
+        return self._alarm
+
+    def note_alarm(self, change: AlarmChanged) -> None:
+        """Record an alarm transition for this station (:attr:`alarming`).
+
+        The station records its own session's at once; :class:`~.client.EufySecurity`
+        records the ones its tracker makes from a push or a disarm before emitting
+        them. A change for another station is ignored.
+        """
+        if change.station_sn == self.serial:
+            self._alarm = change
 
     @property
     def last_error(self) -> EufySecurityError | None:

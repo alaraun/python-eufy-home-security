@@ -779,7 +779,11 @@ A closed session (`async_close`) never reconnects on its own — build a new
   alarm pushes), transitions only, and a disarm ends it; `stop_source` says `APP`
   (verified), `KEYPAD` or `HOMEBASE` when a stop named one, `duration_s` the tone's
   length over P2P. A cloud-only station gets no end when the alarm times out: expect it
-  to stay triggered until a stop or disarm, or end it on a timer of your own. `DELAY`
+  to stay triggered until a stop or disarm, or end it on a timer of your own. The same
+  state is on the station: `station.alarming` (bool) and `station.last_alarm` (the last
+  `AlarmChanged`, None before any), already set when a subscriber receives the event, so
+  a panel or card reads it at setup and on any later refresh instead of keeping a copy.
+  `DELAY`
   (pending) is only on the push: `SecurityEvent.alarm_phase is AlarmPhase.DELAY` for
   `alarm_delay` seconds (msg_type 16, unverified). For `changed_by`, use
   `arming_source` (keypad, key fob, app; `None` when not authenticated) and `user_name`

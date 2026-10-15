@@ -219,7 +219,9 @@ and `[16, 0]` ends it with `stop_source` `APP`.
 
 `AlarmChanged(station_sn, alarming, channel, event_type, duration_s, stop_source,
 source)` is the alarm's state, from both channels. `EufySecurity` passes both through
-one account-wide `AlarmTracker` (`events.py`), so each alarm is one start and one end:
+one account-wide `AlarmTracker` (`events.py`), so each alarm is one start and one end.
+`Station.alarming` and `Station.last_alarm` hold the station's current state, set before
+the event is emitted:
 
 | input | effect |
 |---|---|

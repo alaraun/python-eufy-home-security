@@ -19,6 +19,7 @@ from eufy_home_security.devices.station_config_support import (
     station_config_models,
 )
 from eufy_home_security.devices.support import Support
+from eufy_home_security.events import AlarmChanged, AlarmStopSource, Event
 from eufy_home_security.exceptions import (
     CommandNotAppliedError,
     CommandRejectedError,
@@ -236,6 +237,31 @@ async def test_the_alarm_tone_frame_confirms_an_unanswered_alarm(
         assert not session._tone_waiters
         assert not session._op_lock.locked()
     assert _sent(fake, 1201) == [_tone_file(30), _tone_file(0)]
+
+
+async def test_the_station_says_whether_its_alarm_sounds(
+    station: Station, fake: FakeStation
+) -> None:
+    """``alarming`` follows the alarm-tone frames and is already set when a subscriber
+    receives the AlarmChanged; ``last_alarm`` is that event."""
+    fake.tone_frames = True
+    seen: list[tuple[bool, bool]] = []
+
+    def on_event(event: Event) -> None:
+        if isinstance(event, AlarmChanged):
+            seen.append((event.alarming, station.alarming))
+
+    station.subscribe(on_event)
+    assert (station.alarming, station.last_alarm) == (False, None)
+    await station.async_trigger_alarm(30)
+    started = station.last_alarm
+    assert started is not None
+    assert (station.alarming, started.event_type, started.duration_s) == (True, 3, 30)
+    await station.async_stop_alarm()
+    stopped = station.last_alarm
+    assert stopped is not None
+    assert (station.alarming, stopped.stop_source) == (False, AlarmStopSource.APP)
+    assert seen == [(True, True), (False, False)]
 
 
 @pytest.mark.parametrize(

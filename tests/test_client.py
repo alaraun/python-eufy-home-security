@@ -689,13 +689,19 @@ async def test_an_alarm_is_one_start_and_one_end_across_channels() -> None:
             event_time_ms=at_ms,
         )
 
+    states: list[bool] = []  # the station's alarming at each AlarmChanged
+
     async with aiohttp.ClientSession() as http:
         eufy = account(http)
         eufy.subscribe(events.append)
         await eufy.async_login()
         await eufy.async_discover()
         await eufy.async_start(p2p=False)
-        bus = eufy.stations[station_sn].session._bus
+        station = eufy.stations[station_sn]
+        eufy.subscribe(
+            lambda e: states.append(station.alarming) if isinstance(e, AlarmChanged) else None
+        )
+        bus = station.session._bus
         push = StubPush.instances[0]
         bus.emit(alarm(True))  # the tone frame
         push.callback(alarm_push(3, now_ms - 50))  # the cloud's copies
@@ -712,6 +718,8 @@ async def test_an_alarm_is_one_start_and_one_end_across_channels() -> None:
         (True, EventSource.CLOUD),
         (False, EventSource.CLOUD),
     ]
+    assert states == [alarming for alarming, _ in lifecycle]
+    assert not station.alarming
     assert sum(isinstance(e, SecurityEvent) and e.msg_type == 10 for e in events) == 4
 
 

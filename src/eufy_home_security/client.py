@@ -1262,7 +1262,7 @@ class EufySecurity:
             return
         self._bus.emit(admitted)
         if (alarm := self._alarms.push(admitted)) is not None:
-            self._bus.emit(alarm)
+            self._emit_alarm(alarm)
         if admitted.guard_mode is None or not admitted.station_sn:
             return
         mode = as_guard_mode(admitted.guard_mode)
@@ -1287,7 +1287,13 @@ class EufySecurity:
         if isinstance(in_force, GuardMode) and in_force.is_disarmed:
             alarm = self._alarms.disarmed(event.station_sn, event.source)
             if alarm is not None:
-                self._bus.emit(alarm)
+                self._emit_alarm(alarm)
+
+    def _emit_alarm(self, alarm: AlarmChanged) -> None:
+        """Emit an alarm transition of the tracker, its station's state set first."""
+        if (station := self.stations.get(alarm.station_sn)) is not None:
+            station.note_alarm(alarm)
+        self._bus.emit(alarm)
 
     # ── arming groups ────────────────────────────────────────────────────────
 
