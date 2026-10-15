@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Final
 from .devices.settings import MOTION_SENSOR_DEVICE_TYPES
 from .devices.station_config_support import (
     ModeTableStorage,
+    cross_camera_eligible,
     cross_camera_intervals,
     mode_table_storage,
     stored_mode_table_params,
@@ -191,6 +192,11 @@ class CrossCameraConfig:
     """The serials chosen for tracking (param 1072); None means every camera."""
     groups: tuple[tuple[str, ...], ...]
     """The tracking groups (param 1073), each a tuple of serials."""
+    eligible: tuple[str, ...] = ()
+    """The paired devices tracking can follow, by channel: the cameras and doorbells the
+    eufy app offers in its camera list
+    (:func:`~.devices.station_config_support.cross_camera_candidate`). The choice and the
+    groups take these serials only."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -341,6 +347,7 @@ def build_station_config(state: StationState) -> StationConfig:
             ),
             cameras=cameras,
             groups=groups or (),
+            eligible=cross_camera_eligible(d.serial for _, d in sorted(state.devices.items())),
         )
 
     content: dict[str, Any] = {

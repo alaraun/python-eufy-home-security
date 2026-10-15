@@ -493,6 +493,29 @@ def test_cross_camera_reads_the_settings_and_the_lists() -> None:
     assert config.setting_keys["cross_camera.enabled"] == "device_cross_cam_tracking_swtich"
 
 
+def test_cross_camera_lists_the_cameras_and_doorbells_tracking_can_follow() -> None:
+    """By channel; a sensor, a keypad and a device of no catalogued model are left out."""
+    doorbell = dataclasses.replace(CAMERA, device_sn="T8210P0000000001", device_type=7, channel=1)
+    keypad = dataclasses.replace(CAMERA, device_sn="T8960P0000000001", device_type=4, channel=2)
+    unknown = dataclasses.replace(CAMERA, device_sn="T0000P0000000001", device_type=0, channel=3)
+    sensor = dataclasses.replace(CAMERA, device_sn="T8910P0000000001", device_type=10, channel=16)
+    st = _offline_station((sensor, doorbell, unknown, CAMERA, keypad))
+    dump = ParamDump()
+    dump.ingest(
+        {
+            "params": [
+                {"dev_type": dev, "param_type": 1101, "param_value": "90"}
+                for dev in (0, 1, 2, 3, 16)
+            ]
+            + [{"dev_type": 255, "param_type": 1224, "param_value": "0"}]
+        }
+    )
+    cross = build_station_config(st._state(dump)).cross_camera
+    assert cross is not None
+    assert cross.eligible == (SYNTHETIC.camera_sn, doorbell.device_sn)
+    assert st.cross_camera_eligible() == cross.eligible
+
+
 @pytest.mark.parametrize(
     ("cloud", "option", "seconds"),
     [

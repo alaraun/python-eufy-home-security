@@ -430,6 +430,23 @@ async def test_choose_tracking_cameras_writes_the_list_and_reads_it_back(
     assert fake.received[-1]["mChannel"] == 255  # the station itself
 
 
+async def test_a_paired_doorbell_can_be_tracked_and_a_sensor_cannot(
+    hub: Station, fake: FakeStation
+) -> None:
+    doorbell = dataclasses.replace(CAMERA, device_sn="T8210P0000000001", device_type=7, channel=2)
+    st = Station(STATION, hub.session, sub_devices=[SENSOR, doorbell, CAMERA])
+    assert st.cross_camera_eligible() == (CAMERA.device_sn, doorbell.device_sn)
+    assert await st.async_set_cross_camera_cameras([doorbell.device_sn]) == (doorbell.device_sn,)
+    assert await st.async_set_cross_camera_cameras(None) == st.cross_camera_eligible()
+    with pytest.raises(UnsupportedError, match="that cross-camera tracking can follow") as err:
+        await st.async_set_cross_camera_groups([[CAMERA.device_sn, SENSOR.device_sn]])
+    assert err.value.device_sn == SENSOR.device_sn
+    assert tracking_writes(fake) == [
+        (1072, [doorbell.device_sn]),
+        (1072, [CAMERA.device_sn, doorbell.device_sn]),
+    ]
+
+
 async def test_tracking_groups_write_the_whole_list(hub: Station, fake: FakeStation) -> None:
     groups = await hub.async_set_cross_camera_groups([[CAMERA.device_sn, CAMERA_2.device_sn]])
     assert groups == ((CAMERA.device_sn, CAMERA_2.device_sn),)
@@ -463,12 +480,12 @@ CrossWrite = Callable[[Station], Awaitable[object]]
         (
             lambda s: s.async_set_cross_camera_cameras([FOREIGN_CAMERA]),
             UnsupportedError,
-            "is not a camera paired",
+            "is not a camera or doorbell paired",
         ),
         (
             lambda s: s.async_set_cross_camera_cameras([SENSOR.device_sn]),
             UnsupportedError,
-            "is not a camera paired",
+            "is not a camera or doorbell paired",
         ),
         (lambda s: s.async_set_cross_camera_cameras([]), ValueError, "at least one camera"),
         (
@@ -485,7 +502,7 @@ CrossWrite = Callable[[Station], Awaitable[object]]
         (
             lambda s: s.async_set_cross_camera_groups([[CAMERA.device_sn, FOREIGN_CAMERA]]),
             UnsupportedError,
-            "is not a camera paired",
+            "is not a camera or doorbell paired",
         ),
         (lambda s: s.async_set_cross_camera_groups([[]]), ValueError, "at least one camera"),
     ],

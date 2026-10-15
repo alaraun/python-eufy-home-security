@@ -2325,6 +2325,15 @@ station.config  # the same, built from the current state, no I/O
   as the setting's value (`setting_keys["cross_camera.continuous_time"]` names the
   setting): an option index on a HomeBase 3 (1 = "3 min" = 180 s), titled by the
   setting's `labels` and written with `async_set_setting`.
+- **Cross-camera cameras.** `config.cross_camera.eligible` lists the serials tracking can
+  follow, by channel: the paired cameras and doorbells, as the eufy app's camera list
+  offers them (it leaves out sensors, keypads and sirens; the library also leaves out a
+  device whose model is not a known camera or doorbell, such as a lock).
+  `station.cross_camera_eligible()` gives the same from the cloud's device list, without
+  a state. Offer these in the card's camera picker and group editor instead of picking
+  by device kind: `async_set_cross_camera_cameras` and `async_set_cross_camera_groups`
+  refuse any other serial with the same rule, and `None` chooses all of them.
+  `cameras` None means every one of them is chosen. Declared from the app.
 - **Missing and unreadable values.** A value no source carries is None and has no
   `sources` entry. A value a source carries but that does not decode is named in
   `config.unreadable` with the reason; the field falls back to the next source, else None.
@@ -2380,8 +2389,8 @@ await station.async_set_mode_actions("away", {cam_sn: {"camera_siren": True}})
   change them with `async_set_mode_actions`. `icon` is the app's `iconType` 0-7; the
   default 7 (`DEFAULT_MODE_ICON`) shows as the app's sliders ("customize") icon.
 - **Refused before sending.** `UnsupportedError` when `config_support` of the call's
-  feature is `UNKNOWN`, for a serial that is not a camera paired to the station (a
-  sensor, another station's camera), for a mode list that cannot be read or that no
+  feature is `UNKNOWN`, for a tracking serial not in `cross_camera.eligible` (a sensor,
+  a keypad, another station's camera), for a mode list that cannot be read or that no
   source carries yet (a station without a cloud copy: refresh first). `ValueError`, with
   a message a card can show: a mode name that is empty, over 30 characters or already
   used, an icon outside 0-7, a fourth custom mode, a built-in or missing mode to rename

@@ -13,7 +13,7 @@ cross-camera tracking times, the app's firmware gates and the restart command.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
@@ -36,6 +36,7 @@ from ._station_config_data import (
 )
 from .capabilities import PROFILES, Capability
 from .support import Evidence, Support
+from .types import DeviceKind, model_for_serial, serial_prefix
 
 
 class StationFeature(StrEnum):
@@ -282,6 +283,43 @@ def cross_camera_intervals(product_code: str | None) -> tuple[int, ...]:
     1070, in the app's order; empty without cross-camera tracking."""
     code = _key(product_code)
     return () if code is None else CROSS_CAMERA_INTERVALS.get(code, ())
+
+
+#: Serial prefixes the eufy app leaves out of a station's cross-camera camera list: its
+#: sensors, keypads and sirens. The product handlers' filter, plus T870G, which the app's
+#: own list also leaves out.
+CROSS_CAMERA_EXCLUDED_PREFIXES: Final = frozenset(
+    {
+        "T8900", "T8910", "T8920", "T8931", "T8960", "T8970", "T870G", "T90C0", "T90E0",
+        "T90F0", "T90G0", "T90K0", "T90M0", "T90P0", "T90R0", "T90R1", "T90S0",
+    }
+)  # fmt: skip
+CROSS_CAMERA_DEVICE_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
+"""The device kinds cross-camera tracking can follow."""
+CROSS_CAMERA_ELIGIBLE_EVIDENCE: Final = Evidence(
+    Support.DECLARED,
+    f"eufy app {APP_VERSION}: the cross-camera camera list and the product handlers' "
+    "device filter for 1072",
+    "the app lists every device paired to the station except the excluded prefixes; the "
+    "library also requires a camera or doorbell model",
+)
+
+
+def cross_camera_candidate(serial: str | None) -> bool:
+    """Whether a device paired to a station can be chosen for cross-camera tracking
+    (1072, 1073): a catalogued camera or doorbell (:data:`CROSS_CAMERA_DEVICE_KINDS`)
+    whose serial prefix the app does not leave out
+    (:data:`CROSS_CAMERA_EXCLUDED_PREFIXES`). False for an uncatalogued model."""
+    if not serial or serial_prefix(serial) in CROSS_CAMERA_EXCLUDED_PREFIXES:
+        return False
+    model = model_for_serial(serial)
+    return model is not None and model.kind in CROSS_CAMERA_DEVICE_KINDS
+
+
+def cross_camera_eligible(serials: Iterable[str | None]) -> tuple[str, ...]:
+    """The serials of ``serials`` (the devices paired to one station) that cross-camera
+    tracking can follow (:func:`cross_camera_candidate`), in their order."""
+    return tuple(s for s in serials if s is not None and cross_camera_candidate(s))
 
 
 def restart_command(product_code: str | None) -> tuple[int, int | None] | None:

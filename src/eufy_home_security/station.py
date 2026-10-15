@@ -79,6 +79,7 @@ from .devices.settings import (
 from .devices.station_config_support import (
     ModeTableStorage,
     StationFeature,
+    cross_camera_eligible,
     mode_table_storage,
     restart_command,
     station_config_models,
@@ -2117,15 +2118,14 @@ class Station:
         (:attr:`~.station_config.StationConfig.setting_keys`).
 
         Raises before anything is sent: ``UnsupportedError`` when cross-camera tracking
-        is *unknown* on the station or a serial is not a camera paired to it (a sensor,
-        another station's camera); ``ValueError`` for an empty choice or a serial listed
-        twice; :class:`~.exceptions.ConfigChangedError` for a stale ``expect_revision``.
+        is *unknown* on the station or a serial is not in :meth:`cross_camera_eligible`
+        (a sensor, a keypad, another station's camera); ``ValueError`` for an empty choice
+        or a serial listed twice; :class:`~.exceptions.ConfigChangedError` for a stale
+        ``expect_revision``.
         """
         self._require_feature(StationFeature.CROSS_CAMERA)
         if serials is None:
-            chosen = tuple(
-                d.device_sn for d in self.sub_devices if self._is_own_camera(d.device_sn)
-            )
+            chosen = self.cross_camera_eligible()
             if not chosen:
                 raise UnsupportedError(
                     f"{self._log_name} has no paired camera", device_sn=self.serial
@@ -2157,7 +2157,7 @@ class Station:
         ...]}, ...]``); ``[]`` removes every group.
 
         Raises before anything is sent: ``UnsupportedError`` when tracking groups are
-        *unknown* on the station or a serial is not a camera paired to it;
+        *unknown* on the station or a serial is not in :meth:`cross_camera_eligible`;
         ``ValueError`` for an empty group or a camera listed twice (in one group or in
         two); :class:`~.exceptions.ConfigChangedError` for a stale ``expect_revision``.
         """
@@ -2190,21 +2190,24 @@ class Station:
             raise ValueError(f"{what} must be a list of serials, not one string")
         out = tuple(serials)
         encode_tracking_cameras(out)  # refuses an empty or repeated serial
+        eligible = self.cross_camera_eligible()
         for serial in out:
-            if not self._is_own_camera(serial):
+            if serial not in eligible:
                 raise UnsupportedError(
-                    f"{redact_serial(serial)} is not a camera paired to {self._log_name}",
+                    f"{redact_serial(serial)} is not a camera or doorbell paired to "
+                    f"{self._log_name} that cross-camera tracking can follow",
                     device_sn=serial,
                 )
         return out
 
-    def _is_own_camera(self, serial: str) -> bool:
-        model = model_for_serial(serial)
-        return (
-            any(d.device_sn == serial for d in self.sub_devices)
-            and model is not None
-            and model.kind is DeviceKind.CAMERA
-        )
+    def cross_camera_eligible(self) -> tuple[str, ...]:
+        """The serials of the paired devices cross-camera tracking can follow, by channel:
+        the cameras and doorbells the eufy app offers in its camera list
+        (:func:`~.devices.station_config_support.cross_camera_candidate`). The rule
+        :meth:`async_set_cross_camera_cameras` and :meth:`async_set_cross_camera_groups`
+        check a serial against, and what ``None`` chooses. No I/O."""
+        paired = sorted(self.sub_devices, key=lambda d: (d.channel is None, d.channel or 0))
+        return cross_camera_eligible(d.device_sn for d in paired)
 
     async def _async_write_list(
         self, param: int, payload: list[Any], stored: str, holds: Callable[[str], bool]

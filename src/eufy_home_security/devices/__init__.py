@@ -45,9 +45,13 @@ from .settings import (
 )
 from .station_config_support import (
     ALARM_AFFECTING,
+    CROSS_CAMERA_ELIGIBLE_EVIDENCE,
+    CROSS_CAMERA_EXCLUDED_PREFIXES,
     ModeTableStorage,
     StationFeature,
     config_support,
+    cross_camera_candidate,
+    cross_camera_eligible,
     cross_camera_intervals,
     max_custom_modes,
     mode_table_params,
@@ -73,6 +77,8 @@ from .types import (
 __all__ = [
     "ALARM_AFFECTING",
     "COMMAND_NAMES",
+    "CROSS_CAMERA_ELIGIBLE_EVIDENCE",
+    "CROSS_CAMERA_EXCLUDED_PREFIXES",
     "FALLBACK_PROFILES",
     "MODELS",
     "MODES_SECTION",
@@ -110,6 +116,8 @@ __all__ = [
     "command_name",
     "config_support",
     "connects_on_demand",
+    "cross_camera_candidate",
+    "cross_camera_eligible",
     "cross_camera_intervals",
     "max_custom_modes",
     "mode_action_flags",

@@ -14,9 +14,13 @@ from eufy_home_security.devices._station_config_data import FEATURES
 from eufy_home_security.devices.model_settings import settings_of
 from eufy_home_security.devices.station_config_support import (
     ALARM_AFFECTING,
+    CROSS_CAMERA_DEVICE_KINDS,
+    CROSS_CAMERA_EXCLUDED_PREFIXES,
     ModeTableStorage,
     StationFeature,
     config_support,
+    cross_camera_candidate,
+    cross_camera_eligible,
     cross_camera_intervals,
     max_custom_modes,
     min_firmware,
@@ -27,6 +31,7 @@ from eufy_home_security.devices.station_config_support import (
     stored_mode_table_params,
 )
 from eufy_home_security.devices.support import Support
+from eufy_home_security.devices.types import MODELS
 from eufy_home_security.models import GuardMode
 from eufy_home_security.p2p.station_config_codecs import (
     PRO_ALARM_MODE_TABLE_PARAMS,
@@ -170,6 +175,47 @@ def test_mode_table_storage(code: str, storage: ModeTableStorage) -> None:
 def test_every_model_on_record_names_its_mode_table_storage() -> None:
     for code in ON_RECORD:
         assert mode_table_storage(code) is not None, code
+
+
+@pytest.mark.parametrize(
+    ("serial", "eligible"),
+    [
+        ("T8160P0000000001", True),  # a camera
+        ("T8210P0000000001", True),  # a doorbell
+        ("T8910P0000000001", False),  # a motion sensor
+        ("T8960P0000000001", False),  # a keypad
+        ("T8970P0000000001", False),  # a siren
+        ("T870GP0000000001", False),  # left out by the app's own list
+        ("T8520P0000000001", False),  # a lock: no video to follow
+        ("T0000P0000000001", False),  # no catalogued model
+        ("", False),
+        (None, False),
+    ],
+)
+def test_cross_camera_follows_cameras_and_doorbells_the_app_lists(
+    serial: str | None, eligible: bool
+) -> None:
+    assert cross_camera_candidate(serial) is eligible
+
+
+def test_an_excluded_prefix_stays_out_whatever_its_catalogued_kind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera = MODELS["T8160"]
+    monkeypatch.setattr(scs, "model_for_serial", lambda serial: camera)
+    assert not cross_camera_candidate("T8910P0000000001")
+    assert cross_camera_candidate("T8160P0000000001")
+
+
+def test_cross_camera_eligible_keeps_the_order_given() -> None:
+    serials = ["T8210P0000000001", None, "T8910P0000000001", "T8160P0000000001"]
+    assert cross_camera_eligible(serials) == ("T8210P0000000001", "T8160P0000000001")
+
+
+def test_no_excluded_prefix_is_a_camera_or_doorbell_model() -> None:
+    for prefix in CROSS_CAMERA_EXCLUDED_PREFIXES:
+        model = MODELS.get(prefix)
+        assert model is None or model.kind not in CROSS_CAMERA_DEVICE_KINDS, prefix
 
 
 def test_cross_camera_intervals_match_the_settings_file() -> None:
