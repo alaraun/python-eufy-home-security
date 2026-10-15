@@ -64,6 +64,8 @@ LOG_AREA: dict[tuple[str, StationFeature], str] = {
     ): "Cross-camera tracking groups (1073) library write",
     ("T8030", StationFeature.MODE_TABLES): "Settings, mode table (1255) library write",
     ("T8030", StationFeature.MODE_DELAYS): "Settings, mode table (1255) library write",
+    ("T8030", StationFeature.RESTART): "Station restart (1034) library call",
+    ("T8030", StationFeature.SOUND_ALARM): "Station siren sound and stop (1201) library call",
 }
 
 
@@ -87,8 +89,12 @@ def test_a_model_without_a_thing_description_is_unknown_throughout() -> None:
 
 
 def test_homebase_3_grades_follow_the_hardware_checks() -> None:
-    verified = {StationFeature.GUARD_MODE, StationFeature.MODE_TABLES, StationFeature.MODE_DELAYS}
-    verified |= {
+    verified = {
+        StationFeature.GUARD_MODE,
+        StationFeature.MODE_TABLES,
+        StationFeature.MODE_DELAYS,
+        StationFeature.RESTART,
+        StationFeature.SOUND_ALARM,
         StationFeature.CUSTOM_MODES,
         StationFeature.SCHEDULE,
         StationFeature.CROSS_CAMERA,

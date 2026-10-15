@@ -141,6 +141,17 @@ _VERIFIED: Final[Mapping[tuple[str, StationFeature], Evidence]] = MappingProxyTy
             "delays, T8030 HomeBase 3 fw 3.8.7.4",
             "Custom 2 and 3 declared",
         ),
+        ("T8030", StationFeature.RESTART): Evidence(
+            Support.VERIFIED,
+            "live library restart (1034): the station answered, rebooted and its session "
+            "came back, T8030 HomeBase 3 fw 3.8.7.4",
+        ),
+        ("T8030", StationFeature.SOUND_ALARM): Evidence(
+            Support.VERIFIED,
+            "live library 1201 sound (30 s) and stop, each confirmed by the station's "
+            "alarm-tone frame, the siren heard and then silent, T8030 HomeBase 3 fw 3.8.7.4",
+            "the station acknowledges 1201 without a result",
+        ),
     }
 )
 

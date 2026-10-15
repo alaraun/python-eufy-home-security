@@ -140,11 +140,16 @@ async def test_restart_is_refused_without_sending_on_a_model_without_it(
 
 
 async def test_restart_is_refused_below_a_firmware_gate(
-    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(scs, "MIN_FIRMWARE", {"T8030": {"restart": "9.0"}})
-    with pytest.raises(UnsupportedError, match=r"from firmware 9\.0"):
-        await station.async_restart()
+    """A *declared* model below the app's gate is refused (a *verified* one is not gated)."""
+    monkeypatch.setattr(scs, "MIN_FIRMWARE", {"T8010": {"restart": "9.0"}})
+    station = _station(fake, _as("T8010"))
+    try:
+        with pytest.raises(UnsupportedError, match=r"from firmware 9\.0"):
+            await station.async_restart()
+    finally:
+        await station.async_close()
     assert fake.ecb_received == []
 
 

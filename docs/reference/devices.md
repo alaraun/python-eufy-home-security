@@ -323,8 +323,8 @@ Which station configuration features each station model offers (`Station.config_
 | cross_camera | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | cross_camera_groups | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | arming_groups | yes | unknown | declared | declared | declared | declared | unknown | unknown | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
-| restart | yes | unknown | declared | declared | declared | declared | unknown | unknown | unknown | declared | declared | unknown | declared | unknown | unknown | unknown |
-| sound_alarm | yes | unknown | declared | declared | declared | declared | unknown | declared | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
+| restart | yes | unknown | declared | declared | declared | declared | unknown | unknown | unknown | declared | declared | unknown | verified | unknown | unknown | unknown |
+| sound_alarm | yes | unknown | declared | declared | declared | declared | unknown | declared | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | working_mode | no | unknown | declared | declared | declared | unknown | unknown | unknown | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
 
 ### Station configuration of T7000 Station T7000
@@ -551,8 +551,8 @@ Restart: 1034
 | cross_camera | verified | 3.3.6.2 | live 1072 write of the chosen cameras + read-back, checked in the eufy app and restored, T8030 HomeBase 3 fw 3.8.7.4 (the tracking switches (1065, 1069, 1070) are settings, not written here; the eufy app offers it from firmware 3.3.6.2) |
 | cross_camera_groups | verified | 3.3.6.2 | live 1073 write of the groups + read-back, checked in the eufy app and restored, T8030 HomeBase 3 fw 3.8.7.4 (the eufy app offers it from firmware 3.3.6.2) |
 | arming_groups | declared | - | the T8030 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode (the group list read for a house with a T8030; not written or activated) |
-| restart | declared | - | the T8030 handler builds restart_device as 1034 (eufy app 6.1.10) |
-| sound_alarm | declared | - | the T8030 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
+| restart | verified | - | live library restart (1034): the station answered, rebooted and its session came back, T8030 HomeBase 3 fw 3.8.7.4 |
+| sound_alarm | verified | - | live library 1201 sound (30 s) and stop, each confirmed by the station's alarm-tone frame, the siren heard and then silent, T8030 HomeBase 3 fw 3.8.7.4 (the station acknowledges 1201 without a result) |
 | working_mode | declared | - | the T8030 handler builds working_mode_value as 1296 (eufy app 6.1.10) |
 
 ### Station configuration of T8040 Station 4

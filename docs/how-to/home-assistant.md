@@ -1241,7 +1241,7 @@ only where `station.config_support(StationFeature.RESTART)` (or `SOUND_ALARM`) i
 show the grade. After a restart the station's state is unavailable until the session
 reconnects on its own (a `ConnectionChanged` reports the drop and the return); do not
 retry the restart meanwhile. Wire formats:
-[commands.md](../protocol/commands.md#station-actions-declared-app).
+[commands.md](../protocol/commands.md#station-actions-verified-t8030-declared-app).
 
 ### Camera images
 

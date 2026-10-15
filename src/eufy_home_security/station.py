@@ -3688,7 +3688,8 @@ class Station:
     # ── station actions: restart, sound and stop the alarm ───────────────────
 
     async def async_restart(self, *, timeout: float | None = None) -> CommandOutcome:
-        """Restart the station (the eufy app's Restart; declared, not checked on hardware).
+        """Restart the station (the eufy app's Restart; verified on a T8030, declared on
+        the other models).
 
         Sends the model's restart request
         (:func:`~.devices.station_config_support.restart_command`, an ECB station scalar
@@ -3729,7 +3730,7 @@ class Station:
         self, seconds: int = 30, *, timeout: float | None = None
     ) -> CommandOutcome:
         """Sound the station's own siren for ``seconds`` (the eufy app's alarm action;
-        declared, not checked on hardware). **Alarm-affecting.**
+        verified on a T8030, declared on the other models). **Alarm-affecting.**
 
         ``seconds`` is one of :data:`~.p2p.messages.SOUND_ALARM_SECONDS` (``ValueError``
         otherwise). Returns ``APPLIED`` once the station answered SET_TONE_FILE (1201)
@@ -3749,7 +3750,8 @@ class Station:
 
     async def async_stop_alarm(self, *, timeout: float | None = None) -> CommandOutcome:
         """Stop the station's siren, whether sounded by :meth:`async_trigger_alarm` or by
-        an alarm (SET_TONE_FILE with 0 seconds; declared, not checked on hardware).
+        an alarm (SET_TONE_FILE with 0 seconds; verified on a T8030, declared on the
+        other models).
         **Alarm-affecting.** Refuses, returns and raises as :meth:`async_trigger_alarm`."""
         self._require_action(StationFeature.SOUND_ALARM)
         outcome = await self.session.async_set_tone_file(0, timeout=timeout)
