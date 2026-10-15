@@ -14,7 +14,6 @@ from eufy_home_security.devices._station_config_data import FEATURES
 from eufy_home_security.devices.model_settings import settings_of
 from eufy_home_security.devices.station_config_support import (
     ALARM_AFFECTING,
-    CROSS_CAMERA_DEVICE_KINDS,
     CROSS_CAMERA_EXCLUDED_PREFIXES,
     ModeTableStorage,
     StationFeature,
@@ -31,7 +30,7 @@ from eufy_home_security.devices.station_config_support import (
     stored_mode_table_params,
 )
 from eufy_home_security.devices.support import Support
-from eufy_home_security.devices.types import MODELS
+from eufy_home_security.devices.types import MODELS, DeviceKind
 from eufy_home_security.models import GuardMode
 from eufy_home_security.p2p.station_config_codecs import (
     PRO_ALARM_MODE_TABLE_PARAMS,
@@ -75,6 +74,7 @@ LOG_AREA: dict[tuple[str, StationFeature], str] = {
     ("T8030", StationFeature.MODE_DELAYS): "Settings, mode table (1255) library write",
     ("T8030", StationFeature.RESTART): "Station restart (1034) library call",
     ("T8030", StationFeature.SOUND_ALARM): "Station siren sound and stop (1201) library call",
+    ("T8030", StationFeature.ARMING_GROUPS): "Arming groups (cloud)",
 }
 
 
@@ -108,11 +108,13 @@ def test_homebase_3_grades_follow_the_hardware_checks() -> None:
         StationFeature.SCHEDULE,
         StationFeature.CROSS_CAMERA,
         StationFeature.CROSS_CAMERA_GROUPS,
+        StationFeature.ARMING_GROUPS,
     }
     for feature in StationFeature:
         expected = Support.VERIFIED if feature in verified else Support.DECLARED
         assert config_support("T8030", feature).support is expected, feature
-    assert "not written" in config_support("T8030", StationFeature.ARMING_GROUPS).note
+    note = config_support("T8030", StationFeature.ARMING_GROUPS).note
+    assert note == "an activation that changes the guard mode is declared"
 
 
 def test_every_verified_entry_is_in_the_verification_log() -> None:
@@ -186,25 +188,16 @@ def test_every_model_on_record_names_its_mode_table_storage() -> None:
         ("T8960P0000000001", False),  # a keypad
         ("T8970P0000000001", False),  # a siren
         ("T870GP0000000001", False),  # left out by the app's own list
-        ("T8520P0000000001", False),  # a lock: no video to follow
-        ("T0000P0000000001", False),  # no catalogued model
+        ("T8520P0000000001", True),  # a lock: the app lists it
+        ("T0000P0000000001", True),  # no catalogued model: the app lists it
         ("", False),
         (None, False),
     ],
 )
-def test_cross_camera_follows_cameras_and_doorbells_the_app_lists(
+def test_cross_camera_offers_every_paired_device_the_app_lists(
     serial: str | None, eligible: bool
 ) -> None:
     assert cross_camera_candidate(serial) is eligible
-
-
-def test_an_excluded_prefix_stays_out_whatever_its_catalogued_kind(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    camera = MODELS["T8160"]
-    monkeypatch.setattr(scs, "model_for_serial", lambda serial: camera)
-    assert not cross_camera_candidate("T8910P0000000001")
-    assert cross_camera_candidate("T8160P0000000001")
 
 
 def test_cross_camera_eligible_keeps_the_order_given() -> None:
@@ -215,7 +208,7 @@ def test_cross_camera_eligible_keeps_the_order_given() -> None:
 def test_no_excluded_prefix_is_a_camera_or_doorbell_model() -> None:
     for prefix in CROSS_CAMERA_EXCLUDED_PREFIXES:
         model = MODELS.get(prefix)
-        assert model is None or model.kind not in CROSS_CAMERA_DEVICE_KINDS, prefix
+        assert model is None or model.kind not in {DeviceKind.CAMERA, DeviceKind.DOORBELL}, prefix
 
 
 def test_cross_camera_intervals_match_the_settings_file() -> None:

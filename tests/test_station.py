@@ -2714,7 +2714,7 @@ def test_config_support_grades_the_station_model_at_its_firmware() -> None:
     hub = _hub_with(CAMERA)
     assert hub.config_support(StationFeature.MODE_TABLES).support is Support.VERIFIED
     assert hub.config_support(StationFeature.CROSS_CAMERA).support is Support.VERIFIED
-    assert hub.config_support(StationFeature.ARMING_GROUPS).support is Support.DECLARED
+    assert hub.config_support(StationFeature.WORKING_MODE).support is Support.DECLARED
     old = Station(
         dataclasses.replace(STATION, main_sw_version="3.2.0.0"), hub.session, sub_devices=[CAMERA]
     )

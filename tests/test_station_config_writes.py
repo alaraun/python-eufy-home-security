@@ -480,12 +480,12 @@ CrossWrite = Callable[[Station], Awaitable[object]]
         (
             lambda s: s.async_set_cross_camera_cameras([FOREIGN_CAMERA]),
             UnsupportedError,
-            "is not a camera or doorbell paired",
+            "is not a device paired",
         ),
         (
             lambda s: s.async_set_cross_camera_cameras([SENSOR.device_sn]),
             UnsupportedError,
-            "is not a camera or doorbell paired",
+            "is not a device paired",
         ),
         (lambda s: s.async_set_cross_camera_cameras([]), ValueError, "at least 2 cameras"),
         (
@@ -502,7 +502,7 @@ CrossWrite = Callable[[Station], Awaitable[object]]
         (
             lambda s: s.async_set_cross_camera_groups([[CAMERA.device_sn, FOREIGN_CAMERA]]),
             UnsupportedError,
-            "is not a camera or doorbell paired",
+            "is not a device paired",
         ),
         (lambda s: s.async_set_cross_camera_groups([[]]), ValueError, "at least one camera"),
     ],

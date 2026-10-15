@@ -36,7 +36,7 @@ from ._station_config_data import (
 )
 from .capabilities import PROFILES, Capability
 from .support import Evidence, Support
-from .types import DeviceKind, model_for_serial, serial_prefix
+from .types import serial_prefix
 
 
 class StationFeature(StrEnum):
@@ -147,6 +147,13 @@ _VERIFIED: Final[Mapping[tuple[str, StationFeature], Evidence]] = MappingProxyTy
             "live 1255 write + read-back of the Home, Away and Custom 1 entry and exit "
             "delays, T8030 HomeBase 3 fw 3.8.7.4",
             "Custom 2 and 3 declared",
+        ),
+        ("T8030", StationFeature.ARMING_GROUPS): Evidence(
+            Support.VERIFIED,
+            "live library create, rename, member change and delete of a group, each checked "
+            "in the eufy app, and an activation with the HomeBase already in the group's "
+            "mode, in a house with a T8030 HomeBase 3 fw 3.8.7.4",
+            "an activation that changes the guard mode is declared",
         ),
         ("T8030", StationFeature.RESTART): Evidence(
             Support.VERIFIED,
@@ -294,26 +301,21 @@ CROSS_CAMERA_EXCLUDED_PREFIXES: Final = frozenset(
         "T90F0", "T90G0", "T90K0", "T90M0", "T90P0", "T90R0", "T90R1", "T90S0",
     }
 )  # fmt: skip
-CROSS_CAMERA_DEVICE_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
-"""The device kinds cross-camera tracking can follow."""
 CROSS_CAMERA_ELIGIBLE_EVIDENCE: Final = Evidence(
     Support.DECLARED,
     f"eufy app {APP_VERSION}: the cross-camera camera list and the product handlers' "
     "device filter for 1072",
-    "the app lists every device paired to the station except the excluded prefixes; the "
-    "library also requires a camera or doorbell model",
+    "the app lists every device paired to the station except the excluded prefixes",
 )
 
 
 def cross_camera_candidate(serial: str | None) -> bool:
     """Whether a device paired to a station can be chosen for cross-camera tracking
-    (1072, 1073): a catalogued camera or doorbell (:data:`CROSS_CAMERA_DEVICE_KINDS`)
-    whose serial prefix the app does not leave out
-    (:data:`CROSS_CAMERA_EXCLUDED_PREFIXES`). False for an uncatalogued model."""
-    if not serial or serial_prefix(serial) in CROSS_CAMERA_EXCLUDED_PREFIXES:
+    (1072, 1073): every device whose serial prefix the eufy app does not leave out
+    (:data:`CROSS_CAMERA_EXCLUDED_PREFIXES`), as the app's list offers it."""
+    if not serial:
         return False
-    model = model_for_serial(serial)
-    return model is not None and model.kind in CROSS_CAMERA_DEVICE_KINDS
+    return serial_prefix(serial) not in CROSS_CAMERA_EXCLUDED_PREFIXES
 
 
 def cross_camera_eligible(serials: Iterable[str | None]) -> tuple[str, ...]:

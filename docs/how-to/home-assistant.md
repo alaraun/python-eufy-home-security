@@ -2326,9 +2326,8 @@ station.config  # the same, built from the current state, no I/O
   setting): an option index on a HomeBase 3 (1 = "3 min" = 180 s), titled by the
   setting's `labels` and written with `async_set_setting`.
 - **Cross-camera cameras.** `config.cross_camera.eligible` lists the serials tracking can
-  follow, by channel: the paired cameras and doorbells, as the eufy app's camera list
-  offers them (it leaves out sensors, keypads and sirens; the library also leaves out a
-  device whose model is not a known camera or doorbell, such as a lock).
+  follow, by channel: every paired device the eufy app's list offers (it leaves out
+  sensors, keypads and sirens; a paired lock is listed, as in the app).
   `station.cross_camera_eligible()` gives the same from the cloud's device list, without
   a state. Offer these in the card's camera picker and group editor instead of picking
   by device kind: `async_set_cross_camera_cameras` and `async_set_cross_camera_groups`

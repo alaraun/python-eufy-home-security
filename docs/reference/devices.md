@@ -322,7 +322,7 @@ Which station configuration features each station model offers (`Station.config_
 | mode_delays | yes | unknown | declared | declared | declared | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | cross_camera | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | cross_camera_groups | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
-| arming_groups | yes | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | declared | unknown | declared | unknown |
+| arming_groups | yes | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | verified | unknown | declared | unknown |
 | restart | yes | unknown | declared | declared | declared | declared | unknown | unknown | unknown | declared | declared | unknown | verified | unknown | unknown | unknown |
 | sound_alarm | yes | unknown | declared | declared | declared | declared | unknown | declared | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | working_mode | no | unknown | declared | declared | declared | unknown | unknown | unknown | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
@@ -550,7 +550,7 @@ Restart: 1034
 | mode_delays | verified | - | live 1255 write + read-back of the Home, Away and Custom 1 entry and exit delays, T8030 HomeBase 3 fw 3.8.7.4 (Custom 2 and 3 declared) |
 | cross_camera | verified | 3.3.6.2 | live 1072 write of the chosen cameras + read-back, checked in the eufy app and restored, T8030 HomeBase 3 fw 3.8.7.4 (the tracking switches (1065, 1069, 1070) are settings, not written here; the eufy app offers it from firmware 3.3.6.2) |
 | cross_camera_groups | verified | 3.3.6.2 | live 1073 write of the groups + read-back, checked in the eufy app and restored, T8030 HomeBase 3 fw 3.8.7.4 (the eufy app offers it from firmware 3.3.6.2) |
-| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8030 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode (the group list read for a house with a T8030; not written or activated) |
+| arming_groups | verified | - | live library create, rename, member change and delete of a group, each checked in the eufy app, and an activation with the HomeBase already in the group's mode, in a house with a T8030 HomeBase 3 fw 3.8.7.4 (an activation that changes the guard mode is declared) |
 | restart | verified | - | live library restart (1034): the station answered, rebooted and its session came back, T8030 HomeBase 3 fw 3.8.7.4 |
 | sound_alarm | verified | - | live library 1201 sound (30 s) and stop, each confirmed by the station's alarm-tone frame, the siren heard and then silent, T8030 HomeBase 3 fw 3.8.7.4 (the station acknowledges 1201 without a result) |
 | working_mode | declared | - | the T8030 handler builds working_mode_value as 1296 (eufy app 6.1.10) |

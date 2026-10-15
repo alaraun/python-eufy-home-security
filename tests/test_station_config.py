@@ -493,8 +493,8 @@ def test_cross_camera_reads_the_settings_and_the_lists() -> None:
     assert config.setting_keys["cross_camera.enabled"] == "device_cross_cam_tracking_swtich"
 
 
-def test_cross_camera_lists_the_cameras_and_doorbells_tracking_can_follow() -> None:
-    """By channel; a sensor, a keypad and a device of no catalogued model are left out."""
+def test_cross_camera_lists_the_devices_tracking_can_follow() -> None:
+    """By channel, as the eufy app lists them; a sensor and a keypad are left out."""
     doorbell = dataclasses.replace(CAMERA, device_sn="T8210P0000000001", device_type=7, channel=1)
     keypad = dataclasses.replace(CAMERA, device_sn="T8960P0000000001", device_type=4, channel=2)
     unknown = dataclasses.replace(CAMERA, device_sn="T0000P0000000001", device_type=0, channel=3)
@@ -512,7 +512,7 @@ def test_cross_camera_lists_the_cameras_and_doorbells_tracking_can_follow() -> N
     )
     cross = build_station_config(st._state(dump)).cross_camera
     assert cross is not None
-    assert cross.eligible == (SYNTHETIC.camera_sn, doorbell.device_sn)
+    assert cross.eligible == (SYNTHETIC.camera_sn, doorbell.device_sn, unknown.device_sn)
     assert st.cross_camera_eligible() == cross.eligible
 
 

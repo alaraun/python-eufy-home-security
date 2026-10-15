@@ -2203,7 +2203,7 @@ class Station:
         for serial in out:
             if serial not in eligible:
                 raise UnsupportedError(
-                    f"{redact_serial(serial)} is not a camera or doorbell paired to "
+                    f"{redact_serial(serial)} is not a device paired to "
                     f"{self._log_name} that cross-camera tracking can follow",
                     device_sn=serial,
                 )
