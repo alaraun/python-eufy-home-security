@@ -285,8 +285,10 @@ The eufy app's Group Control: house-level groups of (station or standalone devic
 guard mode). Read and written by `EufyCloudApi.async_list_arming_groups`,
 `async_add_arming_group`, `async_update_arming_group`, `async_delete_arming_group`,
 `async_activate_arming_group` and `async_arming_group_logs` (models and bodies in
-`cloud/arming.py`). Paths and bodies are the app's **[declared: app]**; none has been
-sent to the live cloud **[open]**.
+`cloud/arming.py`). Paths and bodies are the app's **[declared: app]**. On a HomeBase 3
+account `guard_list`, `add_guard`, `update_guard` (with both keys, below), `delete_guard`,
+`setup_guard` and `get_guard_logs` were each answered `code 0`, each write showing in the
+next `guard_list`, and a renamed group in the eufy app **[verified]**.
 
 All six are `POST <security host>/v3/house/<op>` on the security realm, with the same
 identity as `get_ciphers` (the eufy_security key exchange on the logged-in session, then
@@ -296,10 +298,17 @@ identity as `get_ciphers` (the eufy_security key exchange on the logged-in sessi
 |---|---|---|
 | `guard_list` | `{"house_id"}` | `data.guided` (int), `data.groups[]` |
 | `add_guard` | `{"house_id", "group_name", "devices": [member…], "default": 0}` | none: the new `group_id` only appears in the list |
-| `update_guard` | `{"house_id", "group_id", ["group_name"], ["devices": [member…]]}`: a key only for what changes; `devices` is the whole list, never a delta | none |
+| `update_guard` | `{"house_id", "group_id", "group_name", "devices": [member…]}`: always both the name and the whole member list (never a delta), whatever changes | none |
 | `delete_guard` | `{"house_id", "group_id"}` | none |
 | `setup_guard` | `{"house_id", "group_id", "user_name", "enable": true}` | none |
 | `get_guard_logs` | `{"house_id", "group_id"}` | `data.logs[]` |
+
+`update_guard` is refused with code 10000 (`INPUT_PARAM_INVALID`, "Failed to request")
+unless the body carries both `group_name` and `devices`: a name alone and a member list
+alone are both refused **[verified]**. So a rename sends the group's current members and
+a member change its current name, both as `guard_list` reads them;
+`EufySecurity.async_update_arming_group` does that, and `EufyCloudApi.async_update_arming_group`
+takes both.
 
 A member is `{"device_sn", "mode", "mode_id"}`: the station's (or standalone device's)
 serial, never a paired device's; `mode_id` the guard mode it takes (command 1224's codes:
@@ -315,8 +324,8 @@ the app shows highlighted, `"0"` otherwise; read as the last activated group, in
 `default` (0 a user group, 1 the app's "I'm Leaving" preset, 2 "I'm Staying"; an icon
 only) and `devices[]` (members, each with `isBypass`, which the app only dims). `guided`
 2 means the app's introduction was completed. A log (`data.logs[]`): `group_id`,
-`group_name`, `user_id`, `user_name`, `create_time` (epoch; seconds or milliseconds is
-**[open]**), the first entry taken as the latest. The parser ignores unknown keys and
+`group_name`, `user_id`, `user_name`, `create_time` (epoch seconds **[verified]**), the
+first entry taken as the latest. `group_id` is a 32-digit hex string on the account seen. The parser ignores unknown keys and
 raises `ProtocolError` for a missing `groups`, `group_id`, `group_name`, member
 `device_sn` or `mode_id`, or log `group_id` or `create_time`.
 
@@ -331,8 +340,8 @@ professional-arming flow.
 changes no station, since the app sends the guard-mode writes itself), and only after it succeeds the client sends the guard-mode
 command (1224, [commands.md](commands.md)) to each member that is online and not already
 in its mode, in parallel; offline or failing members are skipped, without retry, and the
-group's status is the comparison of each member's mode with its target. A server-side
-rejection code for these paths is **[open]**.
+group's status is the comparison of each member's mode with its target. Rejection codes
+other than `update_guard`'s 10000 are **[open]**.
 
 ## Owner account_id
 

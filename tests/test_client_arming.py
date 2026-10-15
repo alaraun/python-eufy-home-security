@@ -198,22 +198,35 @@ async def test_house_rules_are_checked_before_the_write() -> None:
     assert _arming_bodies(cloud, const.ARMING_GROUP_ADD_PATH) == []
 
 
-async def test_update_sends_only_what_changes_and_keeps_a_stored_mode_name() -> None:
+async def test_update_sends_the_name_and_all_members_and_keeps_a_stored_mode_name() -> None:
+    """The cloud refuses an update without both keys: a rename carries the listed
+    members as stored, a member change the listed name."""
     cloud = _cloud()
     cloud.arming_groups[HOUSE] = [
-        _group(GROUP, "Night", _member(SYNTHETIC.station_sn, 4, "Porch")),
+        _group(
+            GROUP, "Night", _member(SYNTHETIC.station_sn, 4, "Porch"), _member(OTHER_STATION_SN, 99)
+        ),
         _group("group-2", "Day"),
     ]
     eufy = _client(cloud)
-    renamed = await eufy.async_update_arming_group(GROUP, name="Late")
+    renamed = await eufy.async_update_arming_group(GROUP, name=" Late ")
     moved = await eufy.async_update_arming_group(
         GROUP, members={SYNTHETIC.station_sn: GuardMode.CUSTOM_2, OTHER_STATION_SN: "home"}
     )
     assert _arming_bodies(cloud, const.ARMING_GROUP_UPDATE_PATH) == [
-        {"house_id": HOUSE, "group_id": GROUP, "group_name": "Late"},
         {
             "house_id": HOUSE,
             "group_id": GROUP,
+            "group_name": "Late",
+            "devices": [
+                {"device_sn": SYNTHETIC.station_sn, "mode": "Porch", "mode_id": 4},
+                {"device_sn": OTHER_STATION_SN, "mode": "99", "mode_id": 99},
+            ],
+        },
+        {
+            "house_id": HOUSE,
+            "group_id": GROUP,
+            "group_name": "Late",
             "devices": [
                 {"device_sn": SYNTHETIC.station_sn, "mode": "Porch", "mode_id": 4},
                 {"device_sn": OTHER_STATION_SN, "mode": "Home", "mode_id": 1},
@@ -419,6 +432,7 @@ async def test_member_modes_are_checked_and_named_by_their_station() -> None:
         {
             "house_id": HOUSE,
             "group_id": GROUP,
+            "group_name": "Night",
             "devices": [
                 {"device_sn": SYNTHETIC.station_sn, "mode": "Night watch", "mode_id": 3},
                 {"device_sn": OTHER_STATION_SN, "mode": "Custom 1", "mode_id": 3},

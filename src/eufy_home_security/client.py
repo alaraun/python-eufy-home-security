@@ -1354,10 +1354,13 @@ class EufySecurity:
         """Rename group ``group_id`` and/or replace its whole member list; returns the
         group as listed afterwards.
 
-        The same refusals as :meth:`async_create_arming_group`, plus ``ValueError`` when
-        neither ``name`` nor ``members`` is given and :class:`UnsupportedError` for a group
-        the house does not have. A member keeping its mode keeps the mode name stored
-        with it unless its station names the mode.
+        The cloud refuses an update without both the name and the members, so the one
+        not given is sent as the group list reads it (a rename carries the current
+        members with their stored mode names). The same refusals as
+        :meth:`async_create_arming_group`, plus ``ValueError`` when neither ``name`` nor
+        ``members`` is given and :class:`UnsupportedError` for a group the house does
+        not have. A member keeping its mode keeps the mode name stored with it unless
+        its station names the mode.
         """
         if name is None and members is None:
             raise ValueError("pass a name or members to update an arming group")
@@ -1369,12 +1372,16 @@ class EufySecurity:
         if trimmed is not None:
             arming.check_unique_name(listing, trimmed, group_id=group_id)
         chosen = (
-            None
+            group.members
             if targets is None
             else arming.build_members(house, targets, group, titles=self._member_titles(targets))
         )
         await self.cloud.async_update_arming_group(
-            house.house_id, group_id, region=house.region, name=trimmed, members=chosen
+            house.house_id,
+            group_id,
+            region=house.region,
+            name=group.name if trimmed is None else trimmed,
+            members=chosen,
         )
         return arming.find_group(await self._arming_groups_of(house), group_id)
 

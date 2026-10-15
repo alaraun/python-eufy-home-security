@@ -344,20 +344,17 @@ def add_body(house_id: str, name: str, members: Sequence[ArmingGroupMember]) -> 
 
 
 def update_body(
-    house_id: str,
-    group_id: str,
-    *,
-    name: str | None = None,
-    members: Sequence[ArmingGroupMember] | None = None,
+    house_id: str, group_id: str, *, name: str, members: Sequence[ArmingGroupMember]
 ) -> dict[str, Any]:
-    """``update_guard``: the name and/or the whole member list (never a delta); a key
-    is sent only for what changes."""
-    body: dict[str, Any] = {"house_id": house_id, "group_id": group_id}
-    if name is not None:
-        body["group_name"] = name
-    if members is not None:
-        body["devices"] = [member_body(m) for m in members]
-    return body
+    """``update_guard``: the group's name and its whole member list (never a delta).
+    Both are always sent: the cloud refuses an update that lacks either, so a rename
+    carries the current members and a member change the current name."""
+    return {
+        "house_id": house_id,
+        "group_id": group_id,
+        "group_name": name,
+        "devices": [member_body(m) for m in members],
+    }
 
 
 def delete_body(house_id: str, group_id: str) -> dict[str, Any]:

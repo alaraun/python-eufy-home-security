@@ -263,6 +263,17 @@ _SENT_MEMBERS = [
 ]
 
 
+def test_an_update_body_always_carries_the_name_and_every_member() -> None:
+    """The cloud refuses ``update_guard`` unless it names the group and lists all its
+    members, so the body has both keys whatever changes."""
+    assert arming.update_body(HOUSE, GROUP, name="Late", members=_MEMBERS) == {
+        "house_id": HOUSE,
+        "group_id": GROUP,
+        "group_name": "Late",
+        "devices": _SENT_MEMBERS,
+    }
+
+
 async def test_the_six_calls_send_the_apps_bodies_on_the_security_realm(
     fake_mega: FakeMega, cache: SessionCache
 ) -> None:
@@ -277,21 +288,20 @@ async def test_the_six_calls_send_the_apps_bodies_on_the_security_realm(
             await api.async_login()
             listing = await api.async_list_arming_groups(HOUSE, region="eu")
             await api.async_add_arming_group(HOUSE, "Night", _MEMBERS, region="eu")
-            await api.async_update_arming_group(HOUSE, GROUP, region="eu", name="Late")
-            await api.async_update_arming_group(HOUSE, GROUP, region="eu", members=_MEMBERS)
+            await api.async_update_arming_group(
+                HOUSE, GROUP, region="eu", name="Late", members=_MEMBERS
+            )
             await api.async_delete_arming_group(HOUSE, GROUP, region="eu")
             await api.async_activate_arming_group(HOUSE, GROUP, region="eu")
             logs = await api.async_arming_group_logs(HOUSE, GROUP, region="eu")
-            with pytest.raises(ValueError, match="name or members"):
-                await api.async_update_arming_group(HOUSE, GROUP, region="eu")
     endpoints = set(ARMING_ENDPOINTS.values())
     sent = [(name, body) for name, body in fake_mega.calls if name in endpoints]
     assert sent == [
         ("guard_list", {"house_id": HOUSE}),
         ("add_guard", {"house_id": HOUSE, "group_name": "Night", "devices": _SENT_MEMBERS,
                        "default": 0}),
-        ("update_guard", {"house_id": HOUSE, "group_id": GROUP, "group_name": "Late"}),
-        ("update_guard", {"house_id": HOUSE, "group_id": GROUP, "devices": _SENT_MEMBERS}),
+        ("update_guard", {"house_id": HOUSE, "group_id": GROUP, "group_name": "Late",
+                          "devices": _SENT_MEMBERS}),
         ("delete_guard", {"house_id": HOUSE, "group_id": GROUP}),
         ("setup_guard", {"house_id": HOUSE, "group_id": GROUP,
                          "user_name": SYNTHETIC.email.split("@")[0], "enable": True}),

@@ -2988,15 +2988,16 @@ class EufyCloudApi:
         group_id: str,
         *,
         region: str,
-        name: str | None = None,
-        members: Sequence[ArmingGroupMember] | None = None,
+        name: str,
+        members: Sequence[ArmingGroupMember],
     ) -> None:
-        """Rename a group and/or replace its whole member list (``update_guard``).
+        """Set a group's name and its whole member list (``update_guard``), as given.
 
-        ``ValueError`` when neither is given, before anything is sent.
+        Both are required: the cloud refuses an update that lacks either, so pass the
+        current value of the one that does not change
+        (:meth:`~..client.EufySecurity.async_update_arming_group` takes it from the
+        group list). Nothing is validated here.
         """
-        if name is None and members is None:
-            raise ValueError("pass a name or members to update an arming group")
         body = arming.update_body(house_id, group_id, name=name, members=members)
         await self._security_call(const.ARMING_GROUP_UPDATE_PATH, body, region=region)
 
