@@ -244,7 +244,8 @@ DISCOVERY_RETRY_DELAY = 0.5
 HANDSHAKE_TIMEOUT = 6.0
 COMMAND_TIMEOUT = 6.0
 TONE_CONFIRM_TIMEOUT = 10.0
-"""How long a SET_TONE_FILE write waits, after its command, for the alarm-tone frame."""
+"""How long (seconds from the call) a SET_TONE_FILE write left without a result waits
+for the alarm-tone frame."""
 LOOP_STALL_STEP = 0.25
 """A reply wait checks this often (seconds) whether the event loop was held."""
 LOOP_STALL_LATENESS = 0.1
@@ -2115,6 +2116,7 @@ class StationSession:
         value3: int = 0,
         payload: Mapping[str, Any] | Sequence[Any] | None = None,
         timeout: float | None = None,
+        confirm: Callable[[], asyncio.Future[Any]] | None = None,
     ) -> CommandOutcome:
         """Send a GCM ``DeviceMsgBean`` command and report how far it got.
 
@@ -2141,6 +2143,10 @@ class StationSession:
         history query or live-stream stop sent just before (none of them holds the lock
         until its receipt) can still have its receipt arrive now. Those are taken
         (code 0), so the effect is at most a skipped resend.
+
+        ``confirm``, for a command whose effect the station reports in another frame, is
+        called under the command lock just before the send; the future it returns counts
+        as the result once done (``APPLIED``), ending the wait like a 0x0547 reply.
         """
         timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
@@ -2178,7 +2184,16 @@ class StationSession:
                 self._param(command, channel).describe(),
             )
             waiter = self._add_waiter(match)
+
+            def settle(_: asyncio.Future[Any]) -> None:
+                if not waiter.future.done():
+                    waiter.future.set_result(True)
+
+            confirmed: asyncio.Future[Any] | None = None
             try:
+                if confirm is not None:
+                    confirmed = confirm()
+                    confirmed.add_done_callback(settle)
                 indices = [self._send_secure(body, dev_type=header)]
                 started = time.monotonic()
                 clock, label = _StallClock(), f"cmd {command}"
@@ -2214,6 +2229,8 @@ class StationSession:
                         event=receipt,
                     )
             finally:
+                if confirmed is not None:
+                    confirmed.remove_done_callback(settle)
                 self._remove_waiter(waiter)
         _raise_waiter_error(waiter)  # the session was lost, or the station rejected it
         if waiter.future.done() and not waiter.future.cancelled():
@@ -2338,33 +2355,42 @@ class StationSession:
         :func:`~.messages.tone_file_payload` with the session's user name, ``mChannel`` 0.
 
         Alarm-affecting. A HomeBase 3 acknowledges the command without a result and
-        reports the siren in its alarm-tone frame (:mod:`.alarm`): ``APPLIED`` when a
-        result or, within ``timeout`` (:data:`TONE_CONFIRM_TIMEOUT`) of sending, an
-        alarm-tone frame shows the siren on (``seconds`` > 0) or ended (0); else as
-        :meth:`async_send_command` returns and raises.
+        reports the siren in its alarm-tone frame (:mod:`.alarm`). Returns ``APPLIED`` as
+        soon as a result arrives or an alarm-tone frame received after the send shows the
+        siren on (``seconds`` > 0) or ended (0); a frame arriving after the command's own
+        wait still counts within ``timeout`` (:data:`TONE_CONFIRM_TIMEOUT`) of the call.
+        Otherwise returns and raises as :meth:`async_send_command`.
         """
         await self.async_connect()
         creds = self._require_creds()
-        loop = asyncio.get_running_loop()
-        future: asyncio.Future[AlarmChanged] = loop.create_future()
+        started = time.monotonic()
+        future: asyncio.Future[AlarmChanged] = asyncio.get_running_loop().create_future()
         entry = (seconds > 0, future)
-        self._tone_waiters.append(entry)
+
+        def watch() -> asyncio.Future[AlarmChanged]:
+            self._tone_waiters.append(entry)  # under the lock: only frames after the send
+            return future
+
         try:
             outcome = await self.async_send_command(
                 CMD_SET_TONE_FILE,
                 channel=0,
                 payload=tone_file_payload(seconds, creds.user_name),
                 timeout=timeout,
+                confirm=watch,
             )
             if outcome is CommandOutcome.APPLIED:
                 return outcome
+            left = started + _or(timeout, TONE_CONFIRM_TIMEOUT) - time.monotonic()
             try:
-                await asyncio.wait_for(asyncio.shield(future), _or(timeout, TONE_CONFIRM_TIMEOUT))
+                await asyncio.wait_for(future, max(left, 0.0))
             except TimeoutError:
                 return outcome
             return CommandOutcome.APPLIED
         finally:
-            self._tone_waiters.remove(entry)
+            if entry in self._tone_waiters:
+                self._tone_waiters.remove(entry)
+            future.cancel()
 
     async def async_run_recipe(
         self,

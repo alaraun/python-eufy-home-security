@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import AsyncIterator
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import pytest
@@ -213,11 +214,22 @@ async def test_the_alarm_tone_frame_confirms_an_unanswered_alarm(
     station: Station, fake: FakeStation
 ) -> None:
     """A HomeBase 3 acknowledges 1201 without a result and reports the siren in its
-    alarm-tone frame: on for a trigger, stopped from the app for a stop."""
+    alarm-tone frame: on for a trigger, stopped from the app for a stop. Each call returns
+    on the frame, well inside the default command timeout, and leaves no waiter or lock."""
     fake.reply_to_settings = False
     fake.tone_frames = True
-    assert await station.async_trigger_alarm(30, timeout=0.5) is CommandOutcome.APPLIED
-    assert await station.async_stop_alarm(timeout=0.5) is CommandOutcome.APPLIED
+    session = station.session
+    calls: tuple[Callable[[], Awaitable[CommandOutcome]], ...] = (
+        lambda: station.async_trigger_alarm(30),
+        station.async_stop_alarm,
+    )
+    for call in calls:
+        started = time.monotonic()
+        assert await call() is CommandOutcome.APPLIED
+        assert time.monotonic() - started < 2.0
+        assert not session._waiters
+        assert not session._tone_waiters
+        assert not session._op_lock.locked()
     assert _sent(fake, 1201) == [_tone_file(30), _tone_file(0)]
 
 
