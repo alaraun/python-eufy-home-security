@@ -315,6 +315,22 @@ def _defaults(
         _count(counts, "default:app")
 
 
+def _read_empty(
+    pn: str, settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]
+) -> None:
+    """Map an empty read to the value the app shows for it (the handler's decode differs)."""
+    for ident, rule in (titles.get("read_empty") or {}).items():
+        entry = settings.get(ident)
+        read = None if entry is None else entry.get("read")
+        if not isinstance(read, dict) or not isinstance(read.get("map"), dict):
+            continue
+        value = rule["value"]
+        if not _in_domain(entry, value):
+            raise GeneratorError(f"{pn}: {ident} empty read {value!r} is outside its domain")
+        read["map"][""] = value
+        _count(counts, "read:empty as the app")
+
+
 def _in_domain(entry: Mapping[str, Any], value: Any) -> bool:
     kind = entry["kind"]
     if kind == "bool":
@@ -408,6 +424,7 @@ def join(
     (``models``, ``titles``, ``units``); a model on the native screens only its own native
     titles (``native_models``). The hand-read facts apply to every model: ``excluded``
     identifiers are dropped, ``defaults`` set ``default`` on their listed models,
+    ``read_empty`` maps an empty read to the value the app shows,
     ``read_only`` ones become ``ro`` with their read kept, ``labels`` replace option
     titles and ``advanced`` ones are marked with the app's warning as ``note``
     (``held_members`` apply after shaping: :func:`hold_members`). Raises GeneratorError on
@@ -423,6 +440,7 @@ def join(
     if titles is not None:
         _excluded(product_code, settings, titles, counts)
         _defaults(product_code, settings, titles, counts)
+        _read_empty(product_code, settings, titles, counts)
         _read_only(settings, titles, counts)
         _hand_labels(product_code, settings, titles, counts)
         _advanced(settings, titles, counts)

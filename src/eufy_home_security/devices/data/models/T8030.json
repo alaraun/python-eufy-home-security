@@ -748,7 +748,7 @@
    "note": "switching to Standard reduces the HomeBase's Wi-Fi range",
    "read": {
     "map": {
-     "": 1,
+     "": 0,
      "EU": 0,
      "US": 1
     },

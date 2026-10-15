@@ -353,6 +353,7 @@ def _station() -> dict[str, Any]:
             "access": "rw",
             "values": [0, 1],
             "labels": {"0": "EU", "1": "US"},
+            "read": {"param": 1296, "map": {"": 1, "EU": 0, "US": 1}},
             "note": "round trip does not return the written value",
         },
         "radio_text": {"kind": "string", "access": "ro"},
@@ -365,6 +366,7 @@ def _station() -> dict[str, Any]:
 HAND = {
     "defaults": {"assist": {"value": True, "models": [PN]}},
     "read_only": {"pin_set": {}},
+    "read_empty": {"radio": {"value": 0}},
     "labels": {"radio": {"labels": {"0": "Standard", "1": "Performance (beta)"}}},
     "advanced": {"radio": {"note": "Standard reduces the range", "kind": "enum"}},
     "excluded": {"siren": {}},
@@ -387,6 +389,16 @@ def test_hand_default_outside_the_domain_raises(value: object) -> None:
     titles = _titles(defaults={"assist": {"value": value, "models": [PN]}})
     with pytest.raises(join.GeneratorError, match=f"{PN}: assist default"):
         join.join(PN, _station(), _td(), None, None, titles=titles)
+
+
+def test_read_empty_maps_an_empty_read_to_the_apps_value() -> None:
+    settings = _station()
+    counts = join.join(PN, settings, _td(), None, None, titles=_titles(**HAND))
+    assert settings["radio"]["read"]["map"] == {"": 0, "EU": 0, "US": 1}
+    assert counts["read:empty as the app"] == 1
+    bad = _titles(read_empty={"radio": {"value": 7}})
+    with pytest.raises(join.GeneratorError, match=f"{PN}: radio empty read"):
+        join.join(PN, _station(), _td(), None, None, titles=bad)
 
 
 def test_read_only_setting_keeps_its_read_and_drops_its_write() -> None:
