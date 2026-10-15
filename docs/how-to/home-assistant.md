@@ -587,7 +587,9 @@ A `DataUpdateCoordinator[StationState]` per station:
     station confirmed until a newer cloud snapshot or push reports another one.
     `await eufy.async_refresh_cloud_state()` fetches on request (a "refresh" button);
     it also refreshes every other station's cloud copy of its settings (see **State**
-    below).
+    below). The same interval keeps that copy fresh for every station, battery or not,
+    and a station without a copy yet (a list cached by an older version) is fetched once
+    at start.
   - Every command (arm, a setting, a snapshot) **wakes the camera first**: the library
     fetches its device session key (DSK, cached ~1 h) and pokes its rendezvous servers
     so it punches back over the LAN, then connects — the same path the eufy app uses. A

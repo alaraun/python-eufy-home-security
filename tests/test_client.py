@@ -1809,6 +1809,36 @@ async def test_on_demand_station_discover_and_start() -> None:
             fake.stop()
 
 
+async def test_a_hub_gets_the_cloud_refresh_loop_and_a_missing_copy_is_fetched_at_start() -> None:
+    """A hub's cloud copy (its settings the dump lacks) is refreshed on the interval;
+    a list cached without station parameters is fetched once when the stations start."""
+    fake = FakeStation()
+    await fake.start()
+    cloud = FakeCloud.for_stations(fake)
+    cloud.devices[0].pop("params")  # as a list cached before station entries kept them
+    try:
+        eufy = build_eufy_security(
+            email=SYNTHETIC.email,
+            store=MemoryStore(),
+            cloud=cloud,
+            stations={fake.serial: fake},
+            cloud_state_refresh=0.2,
+        )
+        await eufy.async_discover()
+        station = eufy.stations[fake.serial]
+        before = station.has_cloud_copy
+        cloud.devices[0]["params"] = [{"param_type": 1235, "param_value": "26"}]
+        cloud.calls.clear()
+        await eufy.async_start(push=False)
+        assert cloud.calls.count("devices") == 1  # at start, not after the interval
+        assert (before, station.has_cloud_copy) == (False, True)
+        await asyncio.sleep(0.5)
+        assert cloud.calls.count("devices") >= 2  # the loop runs without an on-demand station
+        await eufy.async_close()
+    finally:
+        fake.stop()
+
+
 async def test_async_refresh_cloud_state() -> None:
     async with aiohttp.ClientSession() as http:
         # no on-demand

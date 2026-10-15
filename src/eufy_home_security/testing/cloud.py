@@ -157,6 +157,8 @@ def station_device(
         "p2p_did": did,
         "local_ip": SYNTHETIC.station_ip,
         "main_sw_version": "3.8.7.4",
+        # A station's entry always carries a parameter snapshot; 1140 no setting reads.
+        "params": [{"param_type": 1140, "param_value": "0"}],
     }
 
 

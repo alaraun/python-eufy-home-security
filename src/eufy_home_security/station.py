@@ -1314,6 +1314,15 @@ class Station:
         after :data:`~.p2p.session.ON_DEMAND_IDLE_CLOSE` seconds idle."""
         return self.session.on_demand
 
+    @property
+    def has_cloud_copy(self) -> bool:
+        """Whether a device-list entry gave this station any cloud values yet.
+
+        Always True for a station reached on demand, whose cloud snapshot lives in
+        its session (see :meth:`apply_cloud_device`).
+        """
+        return self.connects_on_demand or bool(self._cloud) or self._cloud_time_zone is not None
+
     def apply_cloud_device(self, device: CloudDevice) -> int:
         """Take a device-list entry's parameter snapshot and ``time_zone`` as this
         station's cloud copy; returns how many values were news.

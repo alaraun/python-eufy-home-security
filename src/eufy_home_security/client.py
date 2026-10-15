@@ -1132,8 +1132,8 @@ class EufySecurity:
         station's cloud copy of its settings. Returns how many values were news; wakes no
         station and fetches nothing without a station.
 
-        :meth:`async_start` runs it every ``cloud_state_refresh`` seconds while any
-        station is reached on demand. A cloud failure is raised here, and in that loop
+        :meth:`async_start` runs it every ``cloud_state_refresh`` seconds while there is a
+        station, and once at start when a station has no cloud copy yet. A cloud failure is raised here, and in that loop
         reported as a :class:`~.events.CloudProblem` and retried at the next interval.
         """
         stations = dict(self.stations)
@@ -1153,18 +1153,23 @@ class EufySecurity:
         return news
 
     async def _start_cloud_state(self) -> None:
-        """Start the cloud-state loop once, when a station is reached on demand.
+        """Start the cloud-state loop once, when there is a station.
 
-        A station without any state yet (a cold cache) is fetched before this returns,
-        so a first ``async_update()`` finds state instead of waking the device; otherwise
-        the cached snapshot serves until the first interval ends.
+        Every station takes the settings its dump lacks from the device list, and a
+        station reached on demand its whole state; the loop refreshes that copy every
+        ``cloud_state_refresh`` seconds. An on-demand station without any state yet (a
+        cold cache), or a station without a cloud copy (a list cached without station
+        parameters), is fetched before this returns, so a first ``async_update()`` finds
+        state instead of waking the device; otherwise the cached snapshot serves until
+        the first interval ends.
         """
         if self._cloud_state_task is not None and not self._cloud_state_task.done():
             return
-        on_demand = [s for s in self.stations.values() if s.connects_on_demand]
-        if not on_demand:
+        if not self.stations:
             return
-        if any(s.state is None for s in on_demand):
+        on_demand = [s for s in self.stations.values() if s.connects_on_demand]
+        no_copy = [s for s in self.stations.values() if not s.has_cloud_copy]
+        if no_copy or any(s.state is None for s in on_demand):
             await self._refresh_cloud_state_logged()
         self._cloud_state_task = asyncio.get_running_loop().create_task(
             self._refresh_cloud_state_every(), name="eufy-cloud-state"
