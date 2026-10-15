@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 
@@ -19,6 +20,7 @@ from eufy_home_security.exceptions import (
 from eufy_home_security.models import GuardMode
 from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
+from eufy_home_security.p2p.station_config_codecs import Schedule, ScheduleSlot, Weekday
 from eufy_home_security.station import Station
 from eufy_home_security.station_config import ModeInfo
 from eufy_home_security.testing import SYNTHETIC
@@ -256,3 +258,94 @@ async def test_an_unanswered_write_the_dump_cannot_confirm_is_not_applied(
     config = station.config
     assert config is not None
     assert not config.is_defined(GuardMode.CUSTOM_2)  # not shown as written
+
+
+# ── schedule ─────────────────────────────────────────────────────────────────
+
+
+def week(*slots: tuple[int, int, int, GuardMode]) -> Schedule:
+    """A schedule of ``(weekday, start hour, end hour, mode)`` slots."""
+    return Schedule(
+        account_id=None,
+        slots=tuple(ScheduleSlot(Weekday(w), dt.time(s), dt.time(e), m) for w, s, e, m in slots),
+    )
+
+
+async def test_set_schedule_writes_the_whole_table_and_shows_it_at_once(
+    station: Station, fake: FakeStation
+) -> None:
+    station.apply_cloud_device(_cloud_entry({1256: LISTED, 1254: schedule((1, 8, 17, 0))}))
+    new = week((1, 8, 17, GuardMode.AWAY), (2, 22, 23, GuardMode.CUSTOM_1))
+
+    written, default = await station.async_set_schedule(new)
+
+    assert sent(fake, 1254) == [
+        (
+            '{"account_id":"' + ACCOUNT + '","schedules":['
+            '{"end_h":17,"end_m":0,"mode_id":0,"start_h":8,"start_m":0,"week":1},'
+            '{"end_h":23,"end_m":0,"mode_id":3,"start_h":22,"start_m":0,"week":2}]}'
+        ).encode()
+    ]
+    assert written is not None
+    assert written.slots == new.slots
+    assert default is None  # the fake's dump carries no 1257
+    assert fake.ecb_received == []
+    config = station.config
+    assert config is not None
+    assert config.schedule == written
+
+
+async def test_a_changed_default_is_the_scalar_1257_write_read_back(
+    station: Station, fake: FakeStation
+) -> None:
+    fake.params[255][1257] = "63"
+    _, default = await station.async_set_schedule(week(), default_mode="home")
+    assert default is GuardMode.HOME
+    assert fake.ecb_received == [(1257, 255, 1)]
+    assert fake.params[255][1257] == "1"
+    assert sent(fake, 1254) == [('{"account_id":"' + ACCOUNT + '","schedules":[]}').encode()]
+
+
+async def test_an_unchanged_schedule_and_default_send_nothing(
+    station: Station, fake: FakeStation
+) -> None:
+    fake.params[255][1257] = "63"
+    station.apply_cloud_device(_cloud_entry({1256: LISTED, 1254: schedule((1, 8, 17, 0))}))
+    await station.async_set_schedule(week((1, 8, 17, GuardMode.AWAY)), default_mode="disarmed")
+    assert fake.config_frames_received == []
+    assert fake.ecb_received == []
+
+
+@pytest.mark.parametrize(
+    ("schedule_", "default", "match"),
+    [
+        (week((1, 8, 9, GuardMode.CUSTOM_2)), None, "do not exist: custom_2"),
+        (week(), GuardMode.CUSTOM_3, "Custom 3 is a mode the station does not have"),
+        (week(), GuardMode.SCHEDULE, "cannot be schedule"),
+        ([], None, "must be a Schedule"),
+    ],
+)
+async def test_schedule_refusals_send_nothing(
+    station: Station, fake: FakeStation, schedule_: Schedule, default: GuardMode | None, match: str
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        await station.async_set_schedule(schedule_, default_mode=default)
+    assert fake.config_frames_received == []
+    assert fake.ecb_received == []
+
+
+async def test_schedule_unknown_support_and_stale_revision_send_nothing(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = await station.async_get_config()
+    fake.params[255][1224] = "0"
+    with pytest.raises(ConfigChangedError):
+        await station.async_set_schedule(week(), expect_revision=config.revision)
+
+    def unknown(self: Station, feature: StationFeature) -> Evidence:
+        return Evidence(Support.UNKNOWN, "not on record")
+
+    monkeypatch.setattr(Station, "config_support", unknown)
+    with pytest.raises(UnsupportedError, match="schedule is not supported"):
+        await station.async_set_schedule(week())
+    assert fake.config_frames_received == []

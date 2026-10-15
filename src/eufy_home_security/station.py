@@ -180,11 +180,17 @@ from .p2p.session import (
 )
 from .p2p.station_config_codecs import (
     CMD_CUSTOM_MODES,
+    CMD_SCHEDULE,
+    CMD_SCHEDULE_DEFAULT,
     DEFAULT_MODE_ICON,
     CustomModes,
+    Schedule,
     add_custom_mode,
     decode_custom_modes,
+    decode_schedule,
+    decode_schedule_default,
     delete_custom_mode,
+    encode_schedule_default,
     modify_custom_mode,
     require_custom_mode,
 )
@@ -1875,6 +1881,68 @@ class Station:
                 f"{name} is the schedule's mode outside its time slots; choose another one first"
             )
 
+    async def async_set_schedule(
+        self,
+        schedule: Schedule,
+        *,
+        default_mode: GuardMode | str | int | None = None,
+        expect_revision: int | None = None,
+    ) -> tuple[Schedule | None, GuardMode | None]:
+        """Replace the weekly schedule (1254, whole) and, when ``default_mode`` is given
+        and differs, the mode outside every slot (1257); returns both as
+        :attr:`config` shows them after the write.
+
+        Build ``schedule`` from :class:`~.p2p.station_config_codecs.ScheduleSlot`
+        entries: their ``ValueError`` (an end before the start, overlapping slots, a mode
+        no slot can use) is the message a UI shows. The configuration is read fresh under the
+        station's mode-list lock; nothing is sent for a part that already holds the
+        value. The schedule goes as a JSON frame of type 1254, as the app sends it,
+        confirmed as :meth:`_async_confirm_param` says (a HomeBase 3's dump does not
+        carry it); the default as the app's scalar 1257 write, confirmed by the dump.
+        A schedule change is alarm-affecting while Schedule is the selected mode.
+
+        Raises before anything is sent: ``UnsupportedError`` when the schedule is
+        *unknown* on the station (:meth:`config_support`); ``ValueError`` for a
+        ``schedule`` that is not a :class:`Schedule`, a default no schedule can name, or
+        a slot or default whose mode the station does not have (a custom mode it does
+        not list); :class:`~.exceptions.ConfigChangedError` for a stale
+        ``expect_revision``.
+        """
+        self._require_feature(StationFeature.SCHEDULE)
+        if not isinstance(schedule, Schedule):
+            raise ValueError(f"a schedule must be a Schedule, got {schedule!r}")
+        default = None if default_mode is None else GuardMode.parse(default_mode)
+        if default is not None:
+            encode_schedule_default(default)
+        async with self._shared_lock(MODE_LIST_LOCK):
+            _, config = await self._config_for_write(expect_revision)
+            defined = [m.code for m in config.modes if isinstance(m.code, GuardMode)]
+            schedule.require_defined(defined)
+            if default is not None and default not in defined:
+                raise ValueError(
+                    f"the schedule default {default.label} is a mode the station does not have"
+                )
+            current = config.schedule
+            if current is None or current.slots != schedule.slots:
+
+                def holds(raw: str) -> bool:
+                    stored = decode_schedule(raw)
+                    return stored is not None and stored.slots == schedule.slots
+
+                await self._async_write_document(CMD_SCHEDULE, schedule, holds)
+            if default is not None and default != config.schedule_default:
+                await self.session.async_send_ecb_scalar(CMD_SCHEDULE_DEFAULT, int(default))
+                await self._async_confirm_param(
+                    CMD_SCHEDULE_DEFAULT,
+                    str(int(default)),
+                    lambda raw: decode_schedule_default(raw) == default,
+                    answered=True,
+                )
+        after = self.config
+        if after is None:  # pragma: no cover - a write leaves a state
+            return schedule, default
+        return after.schedule, after.schedule_default
+
     def _require_feature(self, feature: StationFeature) -> None:
         """``UnsupportedError`` when ``feature`` is *unknown* on this station."""
         evidence = self.config_support(feature)
@@ -1910,15 +1978,26 @@ class Station:
 
     async def _async_write_mode_list(self, doc: CustomModes) -> None:
         """Send mode list ``doc`` (frame 1256) and confirm it (:meth:`_async_confirm_param`)."""
-        receipted = await self.session.async_send_json_frame(
-            CMD_CUSTOM_MODES, lambda account: replace(doc, account_id=account).body()
-        )
 
         def holds(raw: str) -> bool:
             stored = decode_custom_modes(raw)
             return stored is not None and stored.modes == doc.modes
 
-        await self._async_confirm_param(CMD_CUSTOM_MODES, doc.param_value(), holds, receipted)
+        await self._async_write_document(CMD_CUSTOM_MODES, doc, holds)
+
+    async def _async_write_document(
+        self, command: int, doc: CustomModes | Schedule, holds: Callable[[str], bool]
+    ) -> None:
+        """Send ``doc`` with the owner's account id as a JSON frame of type ``command``
+        (the param it sets) and confirm it (:meth:`_async_confirm_param`)."""
+        sent: list[CustomModes | Schedule] = []
+
+        def body(account: str) -> bytes:
+            sent.append(replace(doc, account_id=account))
+            return sent[-1].body()
+
+        receipted = await self.session.async_send_json_frame(command, body)
+        await self._async_confirm_param(command, sent[-1].param_value(), holds, receipted)
 
     async def _async_confirm_param(
         self, param: int, stored: str, holds: Callable[[str], bool], answered: bool
