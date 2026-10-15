@@ -65,9 +65,12 @@ def test_redaction_helpers_are_exported() -> None:
 
 
 def test_the_card_constants_are_exported_from_the_root() -> None:
+    from eufy_home_security.devices import settings  # noqa: PLC0415
     from eufy_home_security.p2p import mode_actions  # noqa: PLC0415
 
     assert eufy_home_security.MODE_DELAY_CHOICES is mode_actions.MODE_DELAY_CHOICES
+    assert eufy_home_security.MODE_ACTION_ALARM_AFFECTING is settings.MODE_ACTION_ALARM_AFFECTING
+    assert eufy_home_security.MODE_ACTION_LABELS is settings.MODE_ACTION_LABELS
 
 
 def test_every_cloud_public_name_resolves() -> None:

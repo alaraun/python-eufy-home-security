@@ -314,6 +314,22 @@ checkbox is ticked (``motion_sensor_respond``: ticked while its bit is clear, se
 :data:`~..p2p.mode_actions.MODE_ACTION_INVERTED`)."""
 
 
+_SOUNDING_FLAGS: Final = frozenset({"camera_siren", "station_alarm", "light_alarm"})
+
+MODE_ACTION_ALARM_AFFECTING: Final[frozenset[str]] = frozenset(
+    {
+        *_SOUNDING_FLAGS,
+        *(f for f, cleared in MODE_ACTION_CLEARS.items() if cleared & _SOUNDING_FLAGS),
+    }
+)
+"""The action flags whose change changes what sounds or flashes when the device
+triggers: its own siren (``camera_siren``), the HomeBase alarm (``station_alarm``), the
+light alarm (``light_alarm``), and ``motion_sensor_respond``, whose off also turns
+``station_alarm`` off (:data:`~..p2p.mode_actions.MODE_ACTION_CLEARS`). Confirm a change
+of one with the user first. The other flags (record, notification, privacy, the
+monitoring-centre report) sound nothing."""
+
+
 def mode_action_label(flag: str) -> str:
     """The display title of action ``flag``; ``UnsupportedError`` for an unknown flag."""
     try:

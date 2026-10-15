@@ -123,6 +123,29 @@ def test_per_mode_delays_and_actions_are_in_modes(scope: Scope) -> None:
     assert {s.section for s in mode_table_settings(scope)} == {MODES_SECTION}
 
 
+def test_the_alarm_and_modes_sections_are_alarm_affecting() -> None:
+    assert {s.id for s in SETTING_SECTIONS if s.alarm_affecting} == {"alarm", MODES_SECTION}
+
+
+@pytest.mark.parametrize(
+    ("key", "affecting"),
+    [
+        ("alarm_volume_value", True),  # a change sounds the HomeBase
+        ("alarm_tones_mode", True),
+        ("arming_selected_mode", True),
+        ("device_cross_cam_interval", False),
+        ("working_mode_value", False),
+    ],
+)
+def test_a_setting_is_alarm_affecting_by_its_section(key: str, affecting: bool) -> None:
+    assert settings_of("T8030", standalone=True)[key].alarm_affecting is affecting
+
+
+def test_every_per_mode_setting_is_alarm_affecting() -> None:
+    settings = (*mode_table_settings(Scope.CAMERA), *mode_table_settings(Scope.SENSOR))
+    assert all(s.alarm_affecting for s in settings)
+
+
 def _make(key: str, section: str = "picture", **fields: object) -> Setting:
     return Setting(
         key=key,

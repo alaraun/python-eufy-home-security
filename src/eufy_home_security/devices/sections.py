@@ -27,11 +27,16 @@ __all__ = [
 @dataclass(frozen=True, slots=True)
 class SettingSection:
     """One UI section: a stable lower-case ``id``, an English ``heading`` in sentence
-    case and the display ``order`` (ascending; gaps leave room for new sections)."""
+    case and the display ``order`` (ascending; gaps leave room for new sections).
+
+    ``alarm_affecting`` marks a section whose settings change how or whether the
+    alarm sounds (:attr:`.model_settings.Setting.alarm_affecting`).
+    """
 
     id: str
     heading: str
     order: int
+    alarm_affecting: bool = False
 
 
 SETTING_SECTIONS: Final[tuple[SettingSection, ...]] = (
@@ -52,9 +57,9 @@ SETTING_SECTIONS: Final[tuple[SettingSection, ...]] = (
     # Chimes, ringtones, quick and automatic responses.
     SettingSection("doorbell", "Doorbell & chime", 80),
     # Siren, alarm tone and volume, prompts, anti-theft, SOS and panic.
-    SettingSection("alarm", "Alarm", 90),
+    SettingSection("alarm", "Alarm", 90, alarm_affecting=True),
     # Guard modes, schedule, keypad, and the per-mode delays and device actions.
-    SettingSection("modes", "Modes", 100),
+    SettingSection("modes", "Modes", 100, alarm_affecting=True),
     # Local, HomeBase, NAS, SD-card and cloud storage.
     SettingSection("storage", "Storage", 110),
     # Wi-Fi, bridges, the HomeBase link, addresses, HomeKit and streaming protocols.

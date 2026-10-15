@@ -7,6 +7,7 @@ import pytest
 
 from eufy_home_security.devices.settings import (
     DUAL_VIEW,
+    MODE_ACTION_ALARM_AFFECTING,
     MODE_ACTION_FLAGS,
     MODE_ACTION_LABELS,
     MODE_TABLE_SETTINGS,
@@ -227,6 +228,12 @@ def test_every_action_flag_has_a_sentence_case_label() -> None:
     assert mode_action_label("station_alarm") == "HomeBase alarm"
     with pytest.raises(UnsupportedError, match="unknown action flag 'siren'; known: record"):
         mode_action_label("siren")
+
+
+def test_the_sounding_flags_and_their_clearer_are_alarm_affecting() -> None:
+    assert {"camera_siren", "station_alarm", "light_alarm", "motion_sensor_respond"} == (
+        MODE_ACTION_ALARM_AFFECTING
+    )
 
 
 def test_scope_for_kind() -> None:

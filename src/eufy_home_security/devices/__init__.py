@@ -30,6 +30,7 @@ from .sections import (
     setting_section,
 )
 from .settings import (
+    MODE_ACTION_ALARM_AFFECTING,
     MODE_ACTION_FLAGS,
     MODE_ACTION_LABELS,
     MOTION_SENSOR_DEVICE_TYPES,
@@ -74,6 +75,7 @@ __all__ = [
     "FALLBACK_PROFILES",
     "MODELS",
     "MODES_SECTION",
+    "MODE_ACTION_ALARM_AFFECTING",
     "MODE_ACTION_CLEARS",
     "MODE_ACTION_FLAGS",
     "MODE_ACTION_INVERTED",

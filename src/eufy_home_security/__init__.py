@@ -28,7 +28,7 @@ if TYPE_CHECKING:
         SettingSection,
         setting_section,
     )
-    from .devices.settings import SettingUnit
+    from .devices.settings import MODE_ACTION_ALARM_AFFECTING, MODE_ACTION_LABELS, SettingUnit
     from .devices.station_config_support import ModeTableStorage, StationFeature
     from .diagnostics import AccountReport
     from .events import (
@@ -180,7 +180,9 @@ _EXPORTS: dict[str, str] = {
         ),
         "devices.sections",
     ),
-    "SettingUnit": "devices.settings",
+    **dict.fromkeys(
+        ("MODE_ACTION_ALARM_AFFECTING", "MODE_ACTION_LABELS", "SettingUnit"), "devices.settings"
+    ),
     **dict.fromkeys(("ModeTableStorage", "StationFeature"), "devices.station_config_support"),
     **dict.fromkeys(
         ("MAX_PRESET_SLOTS", "MAX_ZOOM", "MIN_ZOOM", "PanTilt", "PresetPosition"), "devices.recipes"
@@ -343,6 +345,8 @@ __all__ = [
     "MIN_STATION_SESSIONS",
     "MIN_ZOOM",
     "MODES_SECTION",
+    "MODE_ACTION_ALARM_AFFECTING",
+    "MODE_ACTION_LABELS",
     "MODE_DELAY_CHOICES",
     "OTHER_SECTION",
     "SETTING_SECTIONS",

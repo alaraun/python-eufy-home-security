@@ -270,6 +270,15 @@ class Setting:
         return setting_section(self.section)
 
     @property
+    def alarm_affecting(self) -> bool:
+        """Whether a write changes how or whether the alarm sounds: a setting of an
+        alarm-affecting section (:attr:`.sections.SettingSection.alarm_affecting`: the
+        siren, alarm tone and volume, prompts, anti-theft, SOS and panic, the guard
+        mode, schedule, keypad, and the per-mode delays and actions). Confirm such a
+        write with the user first."""
+        return self.section_info.alarm_affecting
+
+    @property
     def read_param(self) -> int | None:
         """The parameter id that reports this setting's value; None when not readable."""
         return self._read_param

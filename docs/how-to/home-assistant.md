@@ -878,7 +878,12 @@ A closed session (`async_close`) never reconnects on its own — build a new
   read a switch with `mode_action_on(flag, mask)`, never `mask & bit`. Turning it off
   sets the bit and, as the app does, also turns that sensor's `notification` and
   `station_alarm` off in the same write (`MODE_ACTION_CLEARS`); turning it on again
-  restores neither, so refresh those switches after a write. A siren accessory is of kind `other`, not `sensor`. One switch per (mode, flag), for
+  restores neither, so refresh those switches after a write. `MODE_ACTION_ALARM_AFFECTING`
+  names the flags whose change changes what sounds or flashes on a trigger
+  (`camera_siren`, `station_alarm`, `light_alarm`, and `motion_sensor_respond` for the
+  HomeBase alarm it clears): confirm those switches with the user; `record`,
+  `notification`, `privacy` and `report_monitor_center` sound nothing.
+  `MODE_ACTION_LABELS` titles every flag. A siren accessory is of kind `other`, not `sensor`. One switch per (mode, flag), for
   example "Front · Away · camera siren", written with
   `station.async_set_mode_action("away", "camera_siren", on, device_sn=…)`: it reads the
   current mask fresh, changes that one bit, writes and confirms by read-back. **Never
@@ -1148,26 +1153,26 @@ description. It never blocks a read or a write.
 ### Grouping settings in a UI
 
 Every setting belongs to exactly one section: `setting.section` is its id (never None),
-`setting.section_info` its `SettingSection(id, heading, order)`. `SETTING_SECTIONS` lists
+`setting.section_info` its `SettingSection(id, heading, order, alarm_affecting)`. `SETTING_SECTIONS` lists
 every section in display order; `setting_section(id)` looks one up (`UnsupportedError`
 for an unknown id). All are exported from the package root.
 
-| id | heading | order | holds |
-|---|---|---|---|
-| `picture` | Picture | 10 | night vision, image, lights and indicator LEDs, watermark, orientation |
-| `detection` | Detection | 20 | motion, sound, radar and AI detection, zones, package guard, cross-camera tracking |
-| `recording` | Recording | 30 | recording and streaming quality, clip length, continuous recording, audio recording |
-| `audio` | Audio | 40 | microphone, speaker, two-way talk |
-| `power` | Power | 50 | power mode, power source, battery and solar |
-| `ptz` | Pan & tilt | 60 | pan/tilt speed, tracking, cruise, presets, gestures |
-| `notifications` | Notifications | 70 | push notifications, their types, intervals and snooze |
-| `doorbell` | Doorbell & chime | 80 | chimes, ringtones, quick and automatic responses |
-| `alarm` | Alarm | 90 | siren, alarm tone and volume, prompts, anti-theft, SOS |
-| `modes` | Modes | 100 | guard modes, keypad, and the per-mode delays and device actions |
-| `storage` | Storage | 110 | HomeBase, NAS, SD-card and cloud storage |
-| `network` | Network | 120 | Wi-Fi, bridges, the HomeBase link, HomeKit and streaming protocols |
-| `system` | System | 130 | name, time zone and format, working mode, firmware, device information |
-| `other` | Other | 140 | a setting no other section fits |
+| id | heading | order | alarm-affecting | holds |
+|---|---|---|---|---|
+| `picture` | Picture | 10 | | night vision, image, lights and indicator LEDs, watermark, orientation |
+| `detection` | Detection | 20 | | motion, sound, radar and AI detection, zones, package guard, cross-camera tracking |
+| `recording` | Recording | 30 | | recording and streaming quality, clip length, continuous recording, audio recording |
+| `audio` | Audio | 40 | | microphone, speaker, two-way talk |
+| `power` | Power | 50 | | power mode, power source, battery and solar |
+| `ptz` | Pan & tilt | 60 | | pan/tilt speed, tracking, cruise, presets, gestures |
+| `notifications` | Notifications | 70 | | push notifications, their types, intervals and snooze |
+| `doorbell` | Doorbell & chime | 80 | | chimes, ringtones, quick and automatic responses |
+| `alarm` | Alarm | 90 | yes | siren, alarm tone and volume, prompts, anti-theft, SOS |
+| `modes` | Modes | 100 | yes | guard modes, keypad, and the per-mode delays and device actions |
+| `storage` | Storage | 110 | | HomeBase, NAS, SD-card and cloud storage |
+| `network` | Network | 120 | | Wi-Fi, bridges, the HomeBase link, HomeKit and streaming protocols |
+| `system` | System | 130 | | name, time zone and format, working mode, firmware, device information |
+| `other` | Other | 140 | | a setting no other section fits |
 
 - **Build tabs or headings from `setting.section`, never from lists of keys.** A new model
   or a new setting arrives in its section with a library release.
@@ -1181,6 +1186,13 @@ for an unknown id). All are exported from the package root.
 - **Per-mode delays and actions** (`camera_action_*`, `sensor_action_*`, `alarm_delay_*`,
   `leaving_delay_*`) are in `modes` (`MODES_SECTION`): a camera view skips that section
   rather than matching key patterns.
+- **Confirm alarm-affecting settings.** `setting.alarm_affecting` is true for every
+  setting of an alarm-affecting section (`alarm`, `modes`): a write sounds the HomeBase
+  or camera (the alarm volume and tone play at once) or changes when and how the alarm
+  sounds (siren, anti-theft, SOS, guard mode, keypad, per-mode delays and actions). Ask
+  the user before sending one; the library does not prompt. The rule follows the
+  section the settings-file generator gives each setting from the eufy app's page, so
+  a new alarm setting is covered with the release that brings it.
 - The same setting key can sit in different sections on different device kinds
   (`led_on_off`: `picture` on a camera, `system` on a HomeBase).
 - A setting from a model without a settings file (see below) is in `other`.
@@ -2319,7 +2331,11 @@ await station.async_set_mode_actions("away", {cam_sn: {"camera_siren": True}})
   changes after the write; the next cloud refresh then carries it.
 - **Ask first.** `StationFeature.alarm_affecting` names the writes that change how the
   station alarms (schedule, mode tables and delays, guard mode): confirm those with the
-  user. The bulk mode-table write is refused when `MODE_TABLES` (or, for delays,
+  user. Within a mode table, `MODE_ACTION_ALARM_AFFECTING` names the flags that make a
+  device or the HomeBase sound or flash on a trigger, so a card can confirm a siren
+  toggle and pass a record or notification toggle straight through; a delay is always
+  alarm-affecting. Per setting, `setting.alarm_affecting` says the same (the alarm
+  volume and tone sound the HomeBase when written). The bulk mode-table write is refused when `MODE_TABLES` (or, for delays,
   `MODE_DELAYS`) is `UNKNOWN`.
 
 ### Station configuration support
