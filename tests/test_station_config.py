@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.events import Event, StationConfigChanged, StationStateChanged
 from eufy_home_security.exceptions import ConfigChangedError
 from eufy_home_security.models import GUARD_MODE_LABELS, GuardMode, ValueSource
 from eufy_home_security.p2p.params import ParamDump
@@ -486,3 +487,47 @@ async def test_a_write_s_revision_check_reads_fresh(station: Station, fake: Fake
     with pytest.raises(ConfigChangedError) as caught:
         await station._check_revision(config.revision)
     assert caught.value.config.is_defined(GuardMode.SCHEDULE)
+
+
+# ── StationConfigChanged ─────────────────────────────────────────────────────
+
+
+def _config_events(events: list[Event]) -> list[StationConfigChanged]:
+    return [e for e in events if isinstance(e, StationConfigChanged)]
+
+
+async def test_a_dump_that_changes_the_config_emits_once(
+    station: Station, fake: FakeStation
+) -> None:
+    events: list[Event] = []
+    station.subscribe(events.append)
+    first = await station.async_get_config()
+    [initial] = _config_events(events)
+    assert initial.revision == first.revision
+    assert {"modes", "guard_mode"} <= initial.fields
+
+    await station.async_update()  # nothing changed
+    fake.params[0][1101] = "12"  # a battery level: state, not configuration
+    await station.async_update()
+    assert len(_config_events(events)) == 1
+    assert len([e for e in events if isinstance(e, StationStateChanged)]) == 2
+
+    fake.params[255][1256] = CUSTOM_1_LISTED
+    await station.async_update()
+    changed = _config_events(events)[-1]
+    assert changed.fields == {"modes", "settable_modes", "mode_tables", "sources"}
+    config = station.config
+    assert config is not None
+    assert changed.revision == config.revision != first.revision
+
+
+async def test_a_cloud_refresh_that_changes_the_config_emits(station: Station) -> None:
+    await station.async_update()
+    events: list[Event] = []
+    station.subscribe(events.append)
+
+    station.apply_cloud_device(_cloud_entry({1254: schedule((0, 1, 2, 0))}))
+    station.apply_cloud_device(_cloud_entry({1254: schedule((0, 1, 2, 0))}))  # no news
+    assert [e.fields for e in _config_events(events)] == [
+        {"modes", "settable_modes", "schedule", "sources"}
+    ]

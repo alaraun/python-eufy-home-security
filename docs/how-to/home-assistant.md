@@ -2101,6 +2101,67 @@ await eufy.async_delete_arming_group(group.group_id)
 - **Status.** `ArmingGroup.active` is the cloud's flag for the last activated group; whether
   a group is in effect is better read from the members' own guard modes.
 
+### Station configuration
+
+`Station.async_get_config()` returns a `StationConfig`: one read model of what the eufy
+app shows on a HomeBase's Security and settings pages. Build a configuration card, a
+"Security mode" select and the per-mode entities from it; the integration needs no mode
+table of its own.
+
+```python
+config = await station.async_get_config()  # refresh=True: fresh P2P read + cloud list once
+for mode in config.modes:                  # ModeInfo(code, name, icon, custom), app order
+    ...
+config.settable_modes                      # what async_set_guard_mode writes on this station
+config.mode_tables[GuardMode.AWAY]         # ModeTableView | None, per device: action, delays
+config.schedule, config.schedule_default   # weekly slots (1254) and the mode outside them
+config.cross_camera                        # switches, chosen cameras, tracking groups
+config.alarm_volume, config.time_zone      # with config.setting_keys naming the setting
+config.sources["schedule"]                 # ValueSource.P2P / CLOUD / APP_DEFAULT
+station.config                             # the same, built from the current state, no I/O
+```
+
+- **Defined modes.** `config.modes` lists the modes the station has, in the app's order
+  (`MODE_ORDER`: Home, Away, Off, Custom 1-3, Disarmed, Schedule, Geofencing):
+  - Home, Away and Disarmed always, with their fixed names;
+  - Custom 1-3 only when the station's mode list (param 1256, usually the cloud's copy)
+    names them, with the user's title (`Custom N` when the title is blank), and while the
+    station reports one as its mode;
+  - Schedule when the schedule has a slot or Schedule is selected;
+  - Geofencing while it is selected and Off while the station reports it: the library
+    cannot tell whether a station offers either otherwise.
+
+  A mode outside `modes` does not exist on the station: mark its per-mode entities
+  unavailable (or do not create them) instead of showing `unknown`. Without a mode list
+  from either source (`config.sources["modes"]` is `APP_DEFAULT`) only the built-in modes
+  are listed; the client's cloud refresh fills it in.
+- **Setting a mode.** `async_set_guard_mode` writes every mode in `settable_modes`: the
+  defined modes except Off, which is report-only. A custom mode is written through 1224
+  like a built-in one.
+- **Names.** `ModeInfo.name` is the display name. For a code alone, `GuardMode.label` (or
+  `guard_mode_label(code)`, which also names an unknown code) gives the sentence-case
+  label: Away, Home, Schedule, Custom 1-3, Off, Geofencing, Disarmed.
+- **Mode tables.** One entry per defined mode that has a table (Home, Away, Custom 1-3,
+  Disarmed): each device's action mask (`ModeDeviceAction.flags` names its bits) and its
+  entry (`alarm_delay`) and exit (`leaving_delay`) delays. None when no source carries the
+  table (a mode never configured); a table is never invented.
+- **Missing and unreadable values.** A value no source carries is None and has no
+  `sources` entry. A value a source carries but that does not decode is named in
+  `config.unreadable` with the reason; the field falls back to the next source, else None.
+- **Changes.** `StationConfigChanged(station_sn, revision, fields)` is emitted (through
+  `Station.subscribe`) after any state update that changes the configuration: a parameter
+  dump, a cloud refresh, a write's read-back; the first configuration is emitted too, with
+  every field. Nothing is emitted when no field changed. Re-read `station.config` and
+  refresh what `fields` names. A guard-mode change arrives at once as `GuardModeChanged`;
+  the configuration follows with the next dump.
+- **Revision.** `config.revision` changes whenever any field changes and is the same for
+  the same content in every process (it fits a JSON number exactly). A write call that
+  takes `expect_revision` reads the station fresh first and raises `ConfigChangedError`
+  without sending anything when the revision differs; `err.config` is the fresh
+  configuration, so a card shows it and asks the user to redo the edit. `ModeInUseError`
+  (an `UnsupportedError`) refuses a change to a mode that is in use; its `reason` is a
+  sentence a UI can show.
+
 ## Errors map to HA control flow
 
 The library raises typed errors; translate them at the coordinator / setup boundary:
@@ -2121,6 +2182,8 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `CipherUnavailableError` (an `EmptyResponseError`; `cipher_id`, `owner_source`, `retry_after`) | the cloud has no key for the cipher the station named in its handshake, under the owner id asked (`owner_source`: `"member.admin_user_id"` or `"own user id"`). Not a reauth and not an outage of the station: the share or the station's binding needs the owner. Raise one non-fixable repair issue naming the station and `cipher_id`; clear it on `ConnectionChanged(connected=True)`. The library asks the same station and cipher again only after `retry_after` (an hour) or once a refreshed device list names another owner id; until then every attempt raises this without a request. A reload of the entry asks once more |
 | `StillNotWrittenError` (a `RecordNotFoundError`; `offset`) | the device has not written the event's row or still yet: keep what is shown and ask once more later (about 20 s). A plain `RecordNotFoundError` is final for that event: no retry |
 | `CaptureStoppedError` | a live capture's `stop` was set before its first keyframe: nothing was recorded, nothing to store. Not an error for the user who pressed stop |
+| `ConfigChangedError` (`config`, `expected`) | a write's `expect_revision` is stale: the station's configuration changed elsewhere and nothing was sent. Show `err.config` and let the user redo the edit; not an outage |
+| `ModeInUseError` (an `UnsupportedError`; `reason`) | the mode is in use (current, or named by the schedule); nothing was sent. `raise HomeAssistantError` with `reason` |
 | `KeyExchangeRefusedError` (a `CloudApiError`; `code` 4404 or 463, `status` 463) | the cloud gateway refused the client's key identity and a new key exchange did not restore it. Not a reauth and not a kick-out: no login was attempted and none helps by itself. Carry on from the cache and retry on the next interval; the library re-keys at each attempt. Raise a repair issue only if it persists (hours) |
 
 Errors that happen in the background (a key or owner-id refresh inside a running session,

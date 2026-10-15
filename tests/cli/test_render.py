@@ -24,6 +24,7 @@ from eufy_home_security.events import (
     PresetsChanged,
     PushChanged,
     SecurityEvent,
+    StationConfigChanged,
     StationStateChanged,
     StorageChanged,
     ZoomChanged,
@@ -75,6 +76,17 @@ def test_device_list_and_state_events_render_and_serialise() -> None:
     data = json.loads(json.dumps(render.event_json(snapshot)))
     assert data["type"] == "StationStateChanged"
     assert data["state"]["devices"]["0"]["battery"] == 87
+
+
+def test_config_events_render_and_serialise() -> None:
+    event = StationConfigChanged(
+        station_sn=SYNTHETIC.station_sn, revision=7, fields=frozenset({"schedule", "modes"})
+    )
+    assert render.render_event(event, now=NOW, show_serials=False) == (
+        "[03:04:05] T8030***2345 configuration revision 7: modes, schedule"
+    )
+    data = json.loads(json.dumps(render.event_json(event)))
+    assert (data["type"], data["fields"]) == ("StationConfigChanged", ["modes", "schedule"])
 
 
 def test_storage_events_render_and_serialise() -> None:

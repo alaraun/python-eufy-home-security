@@ -31,6 +31,7 @@ from ..events import (
     PushChanged,
     PushMessageType,
     SecurityEvent,
+    StationConfigChanged,
     StationsChanged,
     StationStateChanged,
     StorageChanged,
@@ -914,6 +915,11 @@ def render_event(event: Event, *, now: datetime, show_serials: bool) -> str:
                 f"[{stamp}] {fmt_serial(event.station_sn, show_serials)} state: guard mode "
                 f"{guard_mode_label(event.state.guard_mode)}, "
                 f"{len(event.state.devices)} device(s)"
+            )
+        case StationConfigChanged():
+            return (
+                f"[{stamp}] {fmt_serial(event.station_sn, show_serials)} configuration "
+                f"revision {event.revision}: {', '.join(sorted(event.fields))}"
             )
         case StorageChanged():
             disk = event.storage.disk

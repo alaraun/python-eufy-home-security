@@ -1026,6 +1026,22 @@ class StationStateChanged:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class StationConfigChanged:
+    """A station's configuration (:class:`~.station_config.StationConfig`) changed.
+
+    Emitted by :class:`~.station.Station` after a state update (a parameter dump, read
+    or pushed, a cloud refresh, a write's read-back) whose configuration has another
+    revision than the last one emitted, the first included; nothing when no field
+    changed. ``fields`` names the changed fields (every field the first time); read the
+    new configuration with :attr:`~.station.Station.config`.
+    """
+
+    station_sn: str
+    revision: int
+    fields: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class StorageChanged:
     """A station's storage record (disk and eMMC figures) changed.
 
@@ -1404,6 +1420,7 @@ type Event = (
     | DevicesChanged
     | StationsChanged
     | StationStateChanged
+    | StationConfigChanged
     | StorageChanged
     | CameraBusyChanged
     | PresetsChanged
