@@ -20,10 +20,9 @@ from eufy_home_security.devices.capabilities import Capability
 from eufy_home_security.devices.live_open import LiveOpen, live_open
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
-    Setting,
-    SettingKind,
     mode_table_settings,
     settings_of,
+    sort_settings,
 )
 from eufy_home_security.devices.recipes import (
     MAX_PRESET_SLOTS,
@@ -33,6 +32,7 @@ from eufy_home_security.devices.recipes import (
     pan_tilt,
     set_picture_zoom,
 )
+from eufy_home_security.devices.sections import MODES_SECTION
 from eufy_home_security.devices.settings import Scope
 from eufy_home_security.devices.support import Support
 from eufy_home_security.devices.timezones import encode_zone, zone_ids
@@ -1150,15 +1150,14 @@ def test_settings_for_lists_the_model_then_the_mode_tables() -> None:
     camera = hub.settings_for(SYNTHETIC.camera_sn)
     own = {k: v for k, v in settings_of("T8160").items() if k not in PARENTLESS_ONLY}
     modes = mode_table_settings(Scope.CAMERA)
-    assert camera[len(own) :] == modes
-    assert {s.key for s in camera[: len(own)]} == set(own)
-    # no T8160 setting has a group: (page, order, key) decides
-    orders = [(s.page is None, s.page or "", s.order is None, s.order or 0, s.key) for s in camera]
-    assert orders[: len(own)] == sorted(orders[: len(own)])
-    assert camera[0].page == "AboutDevice"
+    assert camera == sort_settings((*own.values(), *modes))
+    assert {s.key for s in camera} == set(own) | {s.key for s in modes}
+    assert {s.section for s in modes} == {MODES_SECTION}
+    assert camera[0].section == "picture"
     assert {s.key for s in hub.settings_for()} == set(settings_of("T8030"))  # no mode tables
     assert hub.settings_for(SYNTHETIC.station_sn) == hub.settings_for()
-    assert hub.settings_for(SENSOR_SN)[-len(modes) :] == mode_table_settings(Scope.SENSOR)
+    sensor_list = hub.settings_for(SENSOR_SN)
+    assert {s.key for s in mode_table_settings(Scope.SENSOR)} <= {s.key for s in sensor_list}
     assert hub.settings_for("T9999P0000000002") == ()  # no settings file
     with pytest.raises(UnsupportedError, match="not paired"):
         hub.settings_for("T8160P2000099999")
@@ -1196,35 +1195,6 @@ def test_has_battery_follows_the_models_thing_description() -> None:
     standalone = _standalone_t8170()
     assert standalone.has_battery() is True
     assert standalone.has_battery(_T8170_SN) is True
-
-
-def test_settings_sort_by_group_page_order_key() -> None:
-    def make(key: str, group: str | None, order: int | None, page: str | None = None) -> Setting:
-        return Setting(
-            key=key,
-            product_code="",
-            name=key,
-            kind=SettingKind.BOOL,
-            group=group,
-            order=order,
-            page=page,
-        )
-
-    settings = [
-        make("z", None, None),
-        make("b", "second", 1),
-        make("a", "first", 2),
-        make("c", "first", 0),
-        make("d", None, 0),
-        make("y", None, None, "Video"),
-        make("x", None, None, "Audio"),
-        make("w", None, 5, "Audio"),
-        make("e", "first", 1, "Audio"),
-    ]
-    ordered = station_mod._sorted_settings({s.key: s for s in settings})
-    # "first" ranks first because its lowest order (c, 0) comes before "second"'s (b, 1);
-    # inside a group a page sorts before no page, pages by name, then order and key.
-    assert [s.key for s in ordered] == ["e", "c", "a", "b", "w", "x", "y", "d", "z"]
 
 
 def test_setting_returns_the_listed_object_per_target() -> None:

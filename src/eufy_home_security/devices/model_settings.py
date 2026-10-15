@@ -20,7 +20,7 @@ import json
 import math
 import operator
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from importlib.resources.abc import Traversable
@@ -31,6 +31,13 @@ from ..exceptions import ModelDataError, UnsupportedError
 from ..p2p.mode_actions import ACTION_FLAGS
 from .labels import setting_name
 from .recipes import ConnectType
+from .sections import (
+    MODES_SECTION,
+    OTHER_SECTION,
+    SETTING_SECTIONS,
+    SettingSection,
+    setting_section,
+)
 from .settings import (
     DUAL_VIEW,
     MODE_TABLE_SETTINGS,
@@ -57,6 +64,7 @@ __all__ = [
     "mode_table_settings",
     "product_code_of",
     "settings_of",
+    "sort_settings",
 ]
 
 type Value = bool | int | float | str
@@ -95,6 +103,7 @@ _PRODUCT_CODE: Final = re.compile(r"[A-Za-z0-9]{1,32}")
 _SN_SLOTS: Final = frozenset({"$device_sn", "$station_sn"})
 _PARAM_SLOT: Final = re.compile(r"\$param:(\d+):(int|str)")
 _CUR_MODE: Final = "cur_mode"
+_SECTION_ORDER: Final = MappingProxyType({s.id: s.order for s in SETTING_SECTIONS})
 _SUB_1350: Final = 1350
 _RECIPE_1700: Final = 1700
 
@@ -205,6 +214,11 @@ class Setting:
     ``advanced`` marks a setting the eufy app puts behind a warning (``note`` gives it):
     offer it hidden by default.
 
+    ``section`` is the id of the UI section the setting belongs to (an entry of
+    :data:`~.sections.SETTING_SECTIONS`, :attr:`section_info`); a variant has its
+    primary's. ``page`` is the eufy app screen the setting is on, ``group`` and ``order``
+    its block and position there, where the app's layout names them.
+
     ``domain`` names a library table a ``STRING`` setting's values come from
     (:data:`~.timezones.TIMEZONE_DOMAIN`: the app's device time zones). Such a setting is
     a ``SELECT``: ``values`` are the table's ids, a write takes an id and sends the
@@ -228,6 +242,7 @@ class Setting:
     group: str | None = None
     order: int | None = None
     page: str | None = None
+    section: str = OTHER_SECTION
     applies_when: tuple[str, Value] | None = None
     note: str | None = None
     variant_of: str | None = None
@@ -247,6 +262,11 @@ class Setting:
     _write_params: frozenset[int] = field(default=frozenset(), repr=False)
     _mode_table: SettingDef | None = field(default=None, repr=False)
     """The hand-written mode-table entry a mode-table setting is written through."""
+
+    @property
+    def section_info(self) -> SettingSection:
+        """The catalogue entry of :attr:`section`: its heading and display order."""
+        return setting_section(self.section)
 
     @property
     def read_param(self) -> int | None:
@@ -807,6 +827,41 @@ def _is_ecb_scalar(cmd: int) -> bool:
     return is_ecb_scalar(cmd)
 
 
+# ── order ───────────────────────────────────────────────────────────────────
+
+
+def _placement_key(s: Setting) -> tuple[Any, ...]:
+    """Within a section: the app's placement (page, group, order) first, then the name."""
+    return (
+        _SECTION_ORDER[s.section],
+        s.page is None,
+        s.page or "",
+        s.group is None,
+        s.group or "",
+        s.order is None,
+        s.order or 0,
+        s.name.casefold(),
+        s.key,
+    )
+
+
+def sort_settings(settings: Iterable[Setting]) -> tuple[Setting, ...]:
+    """``settings`` in display order: by section (:attr:`SettingSection.order`), then the
+    eufy app's placement where it gives one (page name, group, order; placed settings
+    first), then the name (case-folded) and key. A variant follows its primary.
+    """
+    items = tuple(settings)
+    by_key = {s.key: s for s in items}
+
+    def key(s: Setting) -> tuple[Any, ...]:
+        primary = by_key.get(s.variant_of) if s.variant_of is not None else None
+        if primary is None:
+            return (*_placement_key(s), 0)
+        return (*_placement_key(primary), 1, s.name.casefold(), s.key)
+
+    return tuple(sorted(items, key=key))
+
+
 # ── mode tables ─────────────────────────────────────────────────────────────
 
 # An action mask holds the app's action bits (p2p.mode_actions.ACTION_FLAGS).
@@ -826,6 +881,7 @@ def _mode_table_setting(spec: SettingDef) -> Setting:
         unit=SettingUnit.SECONDS if delay else None,
         writable=True,
         readable=True,
+        section=MODES_SECTION,
         _read_param=spec.read_param,
         _mode_table=spec,
     )
@@ -1026,8 +1082,13 @@ def _parse(
 ) -> dict[str, Setting]:
     settings = {key: _setting(code, key, _in_context(e, context)) for key, e in entries.items()}
     for key, setting in settings.items():
-        if setting.variant_of is not None and setting.variant_of not in settings:
+        if setting.variant_of is None:
+            continue
+        primary = settings.get(setting.variant_of)
+        if primary is None:
             raise ValueError(f"{key}: variant_of {setting.variant_of!r} is not a setting")
+        if primary.section != setting.section:
+            raise ValueError(f"{key}: section {setting.section!r} is not its primary's")
     return settings
 
 
@@ -1177,6 +1238,9 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     order = entry.get("order")
     if order is not None and (isinstance(order, bool) or not isinstance(order, int)):
         raise TypeError("order is not an int")
+    section = entry["section"]
+    if section not in _SECTION_ORDER:
+        raise ValueError(f"section {section!r} is not in the catalogue")
     default = entry.get("default")
     name = _optional_str(entry, "name")
     variant_of = _optional_str(entry, "variant_of")
@@ -1224,6 +1288,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         group=_optional_str(entry, "group"),
         order=order,
         page=_optional_str(entry, "page"),
+        section=section,
         applies_when=applies_when,
         note=note,
         variant_of=variant_of,

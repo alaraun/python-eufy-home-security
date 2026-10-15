@@ -6,37 +6,43 @@
    "access": "ro",
    "default": "{\"trigger\":[],\"action\":[]}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "automation_detect_motion_trigger": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "battery_value": {
    "access": "ro",
    "default": "100",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "power"
   },
   "device_ability_data": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_is_online": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_model": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_name": {
    "access": "rw",
@@ -44,6 +50,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "section": "system",
    "write": {
     "cmd": 1217,
     "params": {
@@ -62,61 +69,71 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_to_hb_connect_type": {
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "firmware_main_version": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "firmware_main_version_time": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "page": "AboutDevice",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "is_device_upgrade": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "notification_jump_to_mode_page": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "notifications"
   },
   "sensor_alarm_timeout": {
    "access": "ro",
    "kind": "other",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "section": "alarm"
   },
   "sensor_disassemble_status": {
    "access": "ro",
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "sensor_is_low_power": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "power"
   },
   "sensor_motion_detection_sensitivity_level": {
    "access": "rw",
@@ -138,6 +155,7 @@
     },
     "param": 1609
    },
+   "section": "detection",
    "values": [
     0,
     1,
@@ -168,6 +186,7 @@
     },
     "param": 61010
    },
+   "section": "detection",
    "write": {
     "cmd": 1350,
     "subCmd": 61010,
@@ -184,7 +203,8 @@
   "sensor_motion_trigger_time": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "detection"
   }
  },
  "source": {

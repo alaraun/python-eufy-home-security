@@ -16,6 +16,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "section": "detection",
    "values": [
     "sideNum",
     "normalized",
@@ -31,7 +32,8 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "ai_tracking_status": {
    "access": "rw",
@@ -43,6 +45,7 @@
     "map": null,
     "param": 6016
    },
+   "section": "ptz",
    "write": {
     "cmd": 1700,
     "subCmd": 6016,
@@ -60,23 +63,27 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_modedetail_devices_rules": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_schedule_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -86,6 +93,7 @@
    "max": 10,
    "min": 0,
    "read": null,
+   "section": "modes",
    "step": 1,
    "write": {
     "cmd": 1224,
@@ -101,54 +109,63 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_arming": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_custom_mode": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_geofence": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_off_mode": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_privacy": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_query_working_mode": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_show_user_name": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_working_mode": {
    "access": "ro",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "audio_recording_on_off": {
    "access": "rw",
@@ -216,6 +233,7 @@
     },
     "param": 6012
    },
+   "section": "recording",
    "write": {
     "cmd": 1700,
     "subCmd": 6012,
@@ -242,6 +260,7 @@
     },
     "param": 6099
    },
+   "section": "ptz",
    "write": {
     "cmd": 1700,
     "subCmd": 6099,
@@ -259,13 +278,15 @@
    "access": "ro",
    "kind": "string",
    "note": "handler rejects the probed values",
-   "read": null
+   "read": null,
+   "section": "ptz"
   },
   "automation_config": {
    "access": "ro",
    "default": "{\"trigger\":[12,13],\"action\":[1,4,5]}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "automation_detect_trigger_type": {
    "access": "ro",
@@ -276,6 +297,7 @@
     "4": "Detected motion"
    },
    "read": null,
+   "section": "modes",
    "values": [
     0,
     1,
@@ -292,6 +314,7 @@
     "4": "Detected motion"
    },
    "read": null,
+   "section": "modes",
    "values": [
     0,
     1,
@@ -308,6 +331,7 @@
     "1": "Other"
    },
    "read": null,
+   "section": "modes",
    "values": [
     0,
     1
@@ -318,43 +342,50 @@
    "default": "1",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "camera_on_off_privacy_mode": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "change_wifi_is_check_same_lan": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "change_wifi_is_press_sync": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "change_wifi_is_support": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "cloud_storage_support_show_device": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "cloud_storage_support_trail": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "detection_sensitivity": {
    "access": "rw",
@@ -405,6 +436,7 @@
     "map": null,
     "param": 6041
    },
+   "section": "detection",
    "step": 1,
    "write": {
     "cmd": 1700,
@@ -445,6 +477,7 @@
     "map": null,
     "param": 1298
    },
+   "section": "detection",
    "write": {
     "cmd": 1350,
     "subCmd": 1298,
@@ -482,6 +515,7 @@
     "map": null,
     "param": 1298
    },
+   "section": "detection",
    "variant_of": "detection_type_set",
    "write": {
     "cmd": 1350,
@@ -502,7 +536,8 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_continuous_recording_switch": {
    "access": "rw",
@@ -517,6 +552,7 @@
     },
     "param": 6010
    },
+   "section": "recording",
    "write": {
     "cmd": 1700,
     "subCmd": 6010,
@@ -543,6 +579,7 @@
     "map": null,
     "param": 6011
    },
+   "section": "recording",
    "values": [
     0,
     1
@@ -564,31 +601,36 @@
    "access": "ro",
    "kind": "string",
    "note": "handler rejects the probed values",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "device_is_battery_device": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "power"
   },
   "device_is_online": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_model": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_multiple_bridge_style": {
    "access": "ro",
    "default": "v1",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "device_multiple_bridge_switch": {
    "access": "rw",
@@ -603,6 +645,7 @@
     },
     "param": 60011
    },
+   "section": "network",
    "write": {
     "cmd": 1350,
     "subCmd": 60011,
@@ -632,6 +675,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "section": "system",
    "write": {
     "cmd": 1217,
     "params": {
@@ -649,7 +693,8 @@
   "device_serial_number": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_silent_ota_switch": {
    "access": "rw",
@@ -664,6 +709,7 @@
     },
     "param": 6287
    },
+   "section": "system",
    "write": {
     "cmd": 1350,
     "subCmd": 6287,
@@ -704,6 +750,7 @@
     },
     "param": 1271
    },
+   "section": "notifications",
    "values": [
     5,
     0,
@@ -749,7 +796,8 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_storage_type": {
    "access": "ro",
@@ -760,6 +808,7 @@
     "2": "NAS"
    },
    "read": null,
+   "section": "storage",
    "values": [
     0,
     1,
@@ -774,6 +823,7 @@
     "1": "Cloud"
    },
    "read": null,
+   "section": "storage",
    "values": [
     0,
     1
@@ -784,19 +834,22 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "disable_ptz_turn_switch": {
    "access": "rw",
@@ -811,6 +864,7 @@
     },
     "param": 6248
    },
+   "section": "detection",
    "write": {
     "cmd": 1350,
     "subCmd": 6248,
@@ -828,20 +882,23 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "firmware_main_version": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "firmware_main_version_time": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "page": "AboutDevice",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "gesture_control_quick_focus_tap_switch": {
    "access": "rw",
@@ -849,6 +906,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "section": "ptz",
    "write": {
     "storeToLocal": true,
     "localParams": {
@@ -862,6 +920,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "section": "ptz",
    "write": {
     "storeToLocal": true,
     "localParams": {
@@ -874,17 +933,20 @@
    "default": false,
    "kind": "bool",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "hb_connect_is_connected": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "hb_connect_nas_storage_type": {
    "access": "rw",
@@ -897,6 +959,7 @@
     "map": null,
     "param": 40004
    },
+   "section": "storage",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -921,6 +984,7 @@
     "map": null,
     "param": 40003
    },
+   "section": "storage",
    "write": {
     "cmd": 1350,
     "subCmd": 1310,
@@ -946,6 +1010,7 @@
     "map": null,
     "param": 3103
    },
+   "section": "storage",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -963,49 +1028,57 @@
   "hb_connect_support_hb_nas": {
    "access": "ro",
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "hb_connect_support_version": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "home_card_show_video_playback": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "homebase_connect_support": {
    "access": "ro",
    "default": false,
    "kind": "bool",
    "page": "WiFiConnection",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "ip_address": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "is_device_upgrade": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "is_support_multiple_bridge": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "is_support_multiple_bridge__v1": {
    "access": "ro",
    "default": true,
    "kind": "bool",
    "read": null,
+   "section": "network",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v2": {
@@ -1013,6 +1086,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "section": "network",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v3": {
@@ -1020,6 +1094,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "section": "network",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v4": {
@@ -1027,6 +1102,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "section": "network",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v5": {
@@ -1034,13 +1110,15 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "section": "network",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_silent_ota_switch": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "led_on_off": {
    "access": "rw",
@@ -1084,6 +1162,7 @@
     },
     "param": 1045
    },
+   "section": "picture",
    "write": {
     "cmd": 1045,
     "params": {
@@ -1114,6 +1193,7 @@
     "4": "Sound"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     4,
@@ -1140,6 +1220,7 @@
     "9": "Playback"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     4,
@@ -1164,6 +1245,7 @@
     "2": "Panorama"
    },
    "read": null,
+   "section": "ptz",
    "values": [
     0,
     1,
@@ -1198,6 +1280,7 @@
      }
     }
    },
+   "section": "recording",
    "values": [
     0,
     4,
@@ -1250,6 +1333,7 @@
    },
    "note": "no handler write path",
    "read": null,
+   "section": "recording",
    "values": [
     0,
     4,
@@ -1267,6 +1351,7 @@
     "1": "Setting"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     1
@@ -1280,6 +1365,7 @@
     "1": "Setting"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     1
@@ -1290,13 +1376,15 @@
    "default": false,
    "kind": "bool",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "section": "ptz"
   },
   "mac_address": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "microphone_on_off": {
    "access": "rw",
@@ -1311,6 +1399,7 @@
     },
     "param": 1240
    },
+   "section": "audio",
    "write": {
     "cmd": 1240,
     "params": {
@@ -1327,13 +1416,15 @@
    "access": "ro",
    "default": "{\"HB3+AI\": 1,\"HB3\": 1,\"SINGLE\": 1}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "motion_activated_light_setting": {
    "access": "ro",
    "kind": "string",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "section": "picture"
   },
   "motion_detection_status": {
    "access": "rw",
@@ -1388,6 +1479,7 @@
     },
     "param": 6040
    },
+   "section": "detection",
    "write": {
     "cmd": 1700,
     "subCmd": 6040,
@@ -1414,6 +1506,7 @@
     "map": null,
     "param": 6050
    },
+   "section": "storage",
    "values": [
     0,
     1
@@ -1459,6 +1552,7 @@
     },
     "param": 1145
    },
+   "section": "storage",
    "write": {
     "cmd": 1145,
     "params": {
@@ -1490,6 +1584,7 @@
     },
     "param": 1277
    },
+   "section": "picture",
    "values": [
     1,
     2,
@@ -1529,6 +1624,7 @@
     },
     "param": 1277
    },
+   "section": "picture",
    "values": [
     103,
     102,
@@ -1570,6 +1666,7 @@
     "map": null,
     "param": 6027
    },
+   "section": "notifications",
    "write": {
     "cmd": 1350,
     "subCmd": 6027,
@@ -1596,6 +1693,7 @@
     },
     "param": 6027
    },
+   "section": "notifications",
    "write": {
     "cmd": 1350,
     "subCmd": 6027,
@@ -1619,6 +1717,7 @@
     "map": null,
     "param": 6027
    },
+   "section": "notifications",
    "write": {
     "cmd": 1350,
     "subCmd": 6027,
@@ -1642,6 +1741,7 @@
     "map": null,
     "param": 6027
    },
+   "section": "notifications",
    "write": {
     "cmd": 1350,
     "subCmd": 6027,
@@ -1665,6 +1765,7 @@
     "map": null,
     "param": 6027
    },
+   "section": "notifications",
    "write": {
     "cmd": 1350,
     "subCmd": 6027,
@@ -1688,6 +1789,7 @@
     "map": null,
     "param": 6027
    },
+   "section": "notifications",
    "write": {
     "cmd": 1350,
     "subCmd": 6027,
@@ -1726,6 +1828,7 @@
     },
     "param": 1250
    },
+   "section": "notifications",
    "values": [
     0,
     1,
@@ -1848,6 +1951,7 @@
    },
    "note": "round trip does not return the written value",
    "read": null,
+   "section": "notifications",
    "values": [
     0,
     1,
@@ -1888,6 +1992,7 @@
     "3": "Light alarm"
    },
    "read": null,
+   "section": "modes",
    "values": [
     0,
     1,
@@ -1906,6 +2011,7 @@
    },
    "note": "handler ignores the value",
    "read": null,
+   "section": "recording",
    "values": [
     0,
     1,
@@ -1917,14 +2023,16 @@
    "access": "ro",
    "default": "{\"config\":{\"SwipePanTilt\":1,\"GoAnywhere\":1,\"speedModel\":false},\"style\":{\"spotlight_switch\":\"v1\",\"nightvision_type\":\"v3\"},\"position\":{\"Live\":[\"set_alarm_type#C#2\",\"event_device_setting#C#1\",\"live_stream_mute#E#1\",\"media_record#F#1\",\"event_device_intercom#F#2\",\"ptz_action_control#F#3\",\"video_playback#F#4\",\"spotlight_switch#G#1\",\"media_screenshot#G#2\",\"nightvision_type#G#3\",\"ai_tracking_status#G#4\",\"set_preset_positions#G#5\",\"set_round_look_360#G#6\",\"ptz_calibrate#G#7\",\"live_streaming_resolution#G#8\",\"Panorama#G#9\"]}}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "preset_positions_calibrate_time": {
    "access": "ro",
    "default": "10",
    "kind": "other",
    "page": "PanTiltSpeed",
-   "read": null
+   "read": null,
+   "section": "ptz"
   },
   "ptz_turn_speed": {
    "access": "rw",
@@ -1937,6 +2045,7 @@
     "map": null,
     "param": 6015
    },
+   "section": "ptz",
    "step": 1,
    "write": {
     "cmd": 1700,
@@ -1988,6 +2097,7 @@
      }
     }
    },
+   "section": "recording",
    "values": [
     4,
     5,
@@ -2035,6 +2145,7 @@
    },
    "note": "no handler write path",
    "read": null,
+   "section": "recording",
    "values": [
     4,
     5,
@@ -2046,7 +2157,8 @@
   "reset_device_mode": {
    "access": "ro",
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "rotate_image_180_on_off": {
    "access": "rw",
@@ -2061,6 +2173,7 @@
     },
     "param": 1207
    },
+   "section": "picture",
    "write": {
     "cmd": 1207,
     "params": {
@@ -2087,6 +2200,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "section": "detection",
    "values": [
     "sideNum",
     "normalized",
@@ -2111,6 +2225,7 @@
     },
     "param": 6208
    },
+   "section": "detection",
    "write": {
     "cmd": 1350,
     "subCmd": 6208,
@@ -2136,6 +2251,7 @@
     "map": null,
     "param": 6044
    },
+   "section": "detection",
    "step": 1,
    "write": {
     "cmd": 1700,
@@ -2164,6 +2280,7 @@
     },
     "param": 6043
    },
+   "section": "detection",
    "write": {
     "cmd": 1700,
     "subCmd": 6043,
@@ -2195,6 +2312,7 @@
     },
     "param": 6046
    },
+   "section": "detection",
    "values": [
     0,
     1
@@ -2235,6 +2353,7 @@
     },
     "param": 1241
    },
+   "section": "audio",
    "write": {
     "cmd": 1241,
     "params": {
@@ -2258,6 +2377,7 @@
     "map": null,
     "param": 2003
    },
+   "section": "audio",
    "step": 1,
    "unit": "%",
    "write": {
@@ -2294,6 +2414,7 @@
     "map": null,
     "param": 1401
    },
+   "section": "picture",
    "step": 1,
    "write": {
     "cmd": 1401,
@@ -2321,6 +2442,7 @@
     },
     "param": 1403
    },
+   "section": "picture",
    "write": {
     "cmd": 1403,
     "params": {
@@ -2348,6 +2470,7 @@
     },
     "param": 1400
    },
+   "section": "picture",
    "write": {
     "cmd": 1700,
     "subCmd": 1400,
@@ -2367,7 +2490,8 @@
   "support_platform_v2": {
    "access": "ro",
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "support_video_codec": {
    "access": "ro",
@@ -2378,6 +2502,7 @@
     "1": "H265"
    },
    "read": null,
+   "section": "recording",
    "values": [
     0,
     1
@@ -2394,6 +2519,7 @@
    },
    "note": "round trip does not return the written value",
    "read": null,
+   "section": "notifications",
    "values": [
     0,
     1,
@@ -2437,6 +2563,7 @@
     "map": null,
     "param": 1253
    },
+   "section": "system",
    "values": [
     0,
     1
@@ -2463,6 +2590,7 @@
     "map": null,
     "param": 1215
    },
+   "section": "system",
    "write": {
     "cmd": 1215,
     "params": {
@@ -2488,6 +2616,7 @@
     },
     "param": 6031
    },
+   "section": "ptz",
    "write": {
     "cmd": 1700,
     "subCmd": 6031,
@@ -2508,6 +2637,7 @@
    "max": 2,
    "min": 1,
    "read": null,
+   "section": "system",
    "step": 1
   },
   "video_intercom_audio_type": {
@@ -2517,6 +2647,7 @@
    "max": 100,
    "min": 0,
    "read": null,
+   "section": "audio",
    "step": 1
   },
   "video_intercom_duplex": {
@@ -2526,6 +2657,7 @@
    "max": 2,
    "min": 0,
    "read": null,
+   "section": "audio",
    "step": 1
   },
   "watermark_set": {
@@ -2542,6 +2674,7 @@
     "map": null,
     "param": 1214
    },
+   "section": "picture",
    "values": [
     0,
     1,

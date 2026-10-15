@@ -6,70 +6,80 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "device_cleaning_switch": {
    "access": "ro",
    "default": false,
    "kind": "bool",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_custody_time": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_disinfection_switch": {
    "access": "ro",
    "default": false,
    "kind": "bool",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_disinfection_time": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_dry_switch": {
    "access": "ro",
    "default": false,
    "kind": "bool",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_dry_time": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_existing_filter_screen": {
    "access": "ro",
    "default": false,
    "kind": "bool",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_fault_status": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_filter_detection_status": {
    "access": "ro",
    "default": "1",
    "kind": "other",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "device_filter_element_status": {
    "access": "ro",
@@ -81,6 +91,7 @@
     "2": "Illegal"
    },
    "read": null,
+   "section": "other",
    "values": [
     0,
     1,
@@ -92,30 +103,35 @@
    "default": "0",
    "kind": "other",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_filter_element_used_count": {
    "access": "ro",
    "default": "0",
    "kind": "other",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_filter_last_time": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_is_online": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_model": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_mute_switch": {
    "access": "ro",
@@ -123,39 +139,45 @@
    "kind": "bool",
    "note": "no handler write path",
    "page": "BottleWasherSettingScreen",
-   "read": null
+   "read": null,
+   "section": "audio"
   },
   "device_name": {
    "access": "ro",
    "kind": "string",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_notification_switch": {
    "access": "ro",
    "default": false,
    "kind": "bool",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "section": "notifications"
   },
   "device_running_status": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_silent_ota_switch": {
    "access": "ro",
    "default": true,
    "kind": "bool",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_status": {
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_storage_switch": {
    "access": "ro",
@@ -163,7 +185,8 @@
    "kind": "bool",
    "note": "no handler write path",
    "page": "BottleWasherSettingScreen",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "device_temperature_format_set": {
    "access": "ro",
@@ -174,6 +197,7 @@
    },
    "note": "no handler write path",
    "read": null,
+   "section": "system",
    "values": [
     0,
     1
@@ -184,130 +208,151 @@
    "default": " 0",
    "kind": "other",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_wash_temperature": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_wash_total_time": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_wifi_name": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
    "default": "-55",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "device_work_mode": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "device_work_status": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
    "page": "BottleWasherHomeScreen",
-   "read": null
+   "read": null,
+   "section": "other"
   },
   "firmware_main_version": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "firmware_main_version_time": {
    "access": "ro",
    "kind": "string",
    "page": "AboutDevice",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "firmware_sub_version": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "page": "AboutDevice",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "firmware_sub_version_time": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "page": "AboutDevice",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "hide_share_device_feature": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "hide_share_your_thoughts": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "ip_address": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "is_device_upgrade": {
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "is_support_ble": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "is_support_mqtt": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "is_support_silent_ota_switch": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "mac_address": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "sdk_model_config": {
    "access": "ro",
    "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"bleOnline\":true,\"syncHeartBeat\":true}}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   }
  },
  "source": {

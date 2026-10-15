@@ -43,6 +43,7 @@ from types import ModuleType
 from typing import Any
 
 from eufy_home_security.devices.settings import DUAL_VIEW, VIEW_MODE_PARAM
+from eufy_home_security.devices.types import DeviceKind, model_for_serial
 
 ROOT = Path(__file__).resolve().parent.parent
 DRIVER = ROOT / "scripts" / "gen_models_driver.js"
@@ -75,6 +76,7 @@ def _load(name: str) -> ModuleType:
 codec = _load("gen_models_codec")
 joiner = _load("gen_models_join")
 controls = _load("gen_models_controls")
+sections = _load("gen_models_sections")
 GeneratorError = codec.GeneratorError
 RECIPE_FIELDS = ("cmd", "subCmd", "params")
 type LeafPath = tuple[str | int, ...]
@@ -906,6 +908,10 @@ def generate(
     if skipped:
         counts["skipped"] = skipped
     merged = merge_contexts(per_context)
+    model = model_for_serial(product_code)
+    station = model is not None and model.kind is DeviceKind.STATION
+    for key, n in sections.assign(merged, station=station).items():
+        _count(counts, key, n)
     for entry in merged.values():
         for item in entry.get("contexts", ()):
             for name in item["names"]:

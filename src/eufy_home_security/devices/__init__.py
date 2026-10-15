@@ -8,7 +8,21 @@ from .capabilities import (
     profile_for_serial,
 )
 from .command_types import COMMAND_NAMES, command_name
-from .model_settings import Setting, SettingControl, SettingKind, WireCommand, WritePath
+from .model_settings import (
+    Setting,
+    SettingControl,
+    SettingKind,
+    WireCommand,
+    WritePath,
+    sort_settings,
+)
+from .sections import (
+    MODES_SECTION,
+    OTHER_SECTION,
+    SETTING_SECTIONS,
+    SettingSection,
+    setting_section,
+)
 from .settings import (
     MODE_ACTION_FLAGS,
     MOTION_SENSOR_DEVICE_TYPES,
@@ -39,14 +53,17 @@ __all__ = [
     "COMMAND_NAMES",
     "FALLBACK_PROFILES",
     "MODELS",
+    "MODES_SECTION",
     "MODE_ACTION_FLAGS",
     "MOTION_SENSOR_DEVICE_TYPES",
     "ON_DEMAND_EVIDENCE",
     "ON_DEMAND_PREFIXES",
+    "OTHER_SECTION",
     "PROFILES",
     "SCOPE_DEFAULT_CHANNEL",
     "SERIAL_PRODUCT_CODES",
     "SERIAL_PRODUCT_CODES_EVIDENCE",
+    "SETTING_SECTIONS",
     "Capability",
     "DeviceKind",
     "DeviceModel",
@@ -56,6 +73,7 @@ __all__ = [
     "Setting",
     "SettingControl",
     "SettingKind",
+    "SettingSection",
     "SettingUnit",
     "Support",
     "WireCommand",
@@ -70,4 +88,6 @@ __all__ = [
     "scope_for_kind",
     "serial_prefix",
     "serial_product_code",
+    "setting_section",
+    "sort_settings",
 ]

@@ -790,9 +790,10 @@ A closed session (`async_close`) never reconnects on its own — build a new
   never from param ids. `station.settings_for(device_sn)` (`settings_for()` for the
   station itself) lists them: the settings of the device's model, read from the bundled
   per-model file and keyed by the vendor identifier (`power_manager_mode`,
-  `watermark_set`), sorted as the app lays them out (group, page, order, key); for a
-  paired camera or sensor the per-mode delays and actions follow (see **Per-mode
-  actions** below). `station.setting(key, device_sn=…)` (or `channel=…`) returns one
+  `watermark_set`), in display order: by section, then as the app lays them out (see
+  [Grouping settings in a UI](#grouping-settings-in-a-ui)); for a paired camera or
+  sensor the list includes the per-mode delays and actions (see **Per-mode actions**
+  below). `station.setting(key, device_sn=…)` (or `channel=…`) returns one
   `Setting`. A model the library has no settings file for gets its settings read-only
   from the cloud, or `()` (see [Models without a settings file](#models-without-a-settings-file)).
   Each `Setting` says what entity it is:
@@ -1081,6 +1082,49 @@ key and its public value. On a T8160, `video_clip_length`, `trigger_interval_tim
 `motion_stop_end_early` apply only while `power_manager_mode` is `3` (custom recording).
 It is a hint for display: show or enable the entity only in that state, or say so in its
 description. It never blocks a read or a write.
+
+### Grouping settings in a UI
+
+Every setting belongs to exactly one section: `setting.section` is its id (never None),
+`setting.section_info` its `SettingSection(id, heading, order)`. `SETTING_SECTIONS` lists
+every section in display order; `setting_section(id)` looks one up (`UnsupportedError`
+for an unknown id). All are exported from the package root.
+
+| id | heading | order | holds |
+|---|---|---|---|
+| `picture` | Picture | 10 | night vision, image, lights and indicator LEDs, watermark, orientation |
+| `detection` | Detection | 20 | motion, sound, radar and AI detection, zones, package guard, cross-camera tracking |
+| `recording` | Recording | 30 | recording and streaming quality, clip length, continuous recording, audio recording |
+| `audio` | Audio | 40 | microphone, speaker, two-way talk |
+| `power` | Power | 50 | power mode, power source, battery and solar |
+| `ptz` | Pan & tilt | 60 | pan/tilt speed, tracking, cruise, presets, gestures |
+| `notifications` | Notifications | 70 | push notifications, their types, intervals and snooze |
+| `doorbell` | Doorbell & chime | 80 | chimes, ringtones, quick and automatic responses |
+| `alarm` | Alarm | 90 | siren, alarm tone and volume, prompts, anti-theft, SOS |
+| `modes` | Modes | 100 | guard modes, keypad, and the per-mode delays and device actions |
+| `storage` | Storage | 110 | HomeBase, NAS, SD-card and cloud storage |
+| `network` | Network | 120 | Wi-Fi, bridges, the HomeBase link, HomeKit and streaming protocols |
+| `system` | System | 130 | name, time zone and format, working mode, firmware, device information |
+| `other` | Other | 140 | a setting no other section fits |
+
+- **Build tabs or headings from `setting.section`, never from lists of keys.** A new model
+  or a new setting arrives in its section with a library release.
+- **Ids are stable across releases;** a later release may add a section at any `order`.
+  Place sections by `order`, and treat an id the UI does not know like any other (its
+  `heading` from `section_info`), so a newer library never hides settings.
+- **Within a section** `settings_for()` already gives the display order: the eufy app's
+  placement where it has one (`page`, `group`, `order`), then the name. A variant
+  (`variant_of`) shares its primary's section and follows it; an `advanced` setting stays
+  in its section, hidden by default.
+- **Per-mode delays and actions** (`camera_action_*`, `sensor_action_*`, `alarm_delay_*`,
+  `leaving_delay_*`) are in `modes` (`MODES_SECTION`): a camera view skips that section
+  rather than matching key patterns.
+- The same setting key can sit in different sections on different device kinds
+  (`led_on_off`: `picture` on a camera, `system` on a HomeBase).
+- A setting from a model without a settings file (see below) is in `other`.
+- **What a frontend needs:** the section id per entity (an entity attribute, or the
+  integration's own data path to its card); headings and order come from
+  `SETTING_SECTIONS`, so pass that table once rather than per entity.
 
 ### Models without a settings file
 

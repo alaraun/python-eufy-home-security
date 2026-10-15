@@ -16,6 +16,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "section": "detection",
    "values": [
     "sideNum",
     "normalized",
@@ -31,7 +32,8 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "alerts_detection_type": {
    "access": "rw",
@@ -52,6 +54,7 @@
     },
     "param": 1252
    },
+   "section": "detection",
    "values": [
     0,
     1,
@@ -94,6 +97,7 @@
     },
     "param": 1015
    },
+   "section": "alarm",
    "write": {
     "cmd": 1015,
     "params": {
@@ -110,23 +114,27 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_modedetail_devices_rules": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_schedule_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -136,6 +144,7 @@
    "max": 10,
    "min": -1,
    "read": null,
+   "section": "modes",
    "step": 1,
    "write": {
     "cmd": 1224,
@@ -151,54 +160,63 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_arming": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_custom_mode": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_geofence": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_off_mode": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_privacy": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_query_working_mode": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_support_show_user_name": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "arming_working_mode": {
    "access": "ro",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "audio_recording_on_off": {
    "access": "rw",
@@ -215,6 +233,7 @@
     },
     "param": 1288
    },
+   "section": "recording",
    "write": {
     "cmd": 1350,
     "subCmd": 1288,
@@ -243,20 +262,23 @@
    "access": "ro",
    "default": "{\"trigger\":[12],\"action\":[0,3,5]}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "automation_config__v1": {
    "access": "ro",
    "default": "{\"trigger\":[],\"action\":[0,3,5]}",
    "kind": "string",
    "read": null,
+   "section": "modes",
    "variant_of": "automation_config"
   },
   "automation_detect_motion_trigger": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "automation_detect_trigger_type": {
    "access": "ro",
@@ -268,6 +290,7 @@
     "4": "Detected motion"
    },
    "read": null,
+   "section": "modes",
    "values": [
     0,
     1,
@@ -278,38 +301,44 @@
   "battery_value": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "power"
   },
   "camera_on_off": {
    "access": "ro",
    "default": "1",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "change_wifi_is_support": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "charging_status": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "power"
   },
   "cloud_storage_support_show_device": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "detected_events": {
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "detection_sensitivity": {
    "access": "rw",
@@ -370,6 +399,7 @@
     "map": null,
     "param": 6070
    },
+   "section": "detection",
    "step": 1,
    "write": {
     "cmd": 1700,
@@ -453,6 +483,7 @@
     "map": null,
     "param": 6070
    },
+   "section": "detection",
    "step": 1,
    "variant_of": "detection_sensitivity",
    "write": {
@@ -490,6 +521,7 @@
     "map": null,
     "param": 1298
    },
+   "section": "detection",
    "write": {
     "cmd": 1350,
     "subCmd": 1298,
@@ -508,30 +540,35 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_charging_mode": {
    "access": "ro",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "power"
   },
   "device_is_battery_device": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "power"
   },
   "device_is_online": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_model": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_name": {
    "access": "rw",
@@ -540,6 +577,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "section": "system",
    "write": {
     "cmd": 1217,
     "params": {
@@ -567,6 +605,7 @@
     },
     "param": 6287
    },
+   "section": "system",
    "write": {
     "cmd": 1350,
     "subCmd": 6287,
@@ -605,6 +644,7 @@
     },
     "param": 1271
    },
+   "section": "notifications",
    "values": [
     0,
     1,
@@ -647,7 +687,8 @@
    "access": "ro",
    "default": "1",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_storage_type": {
    "access": "ro",
@@ -656,6 +697,7 @@
     "2": "NAS"
    },
    "read": null,
+   "section": "storage",
    "values": [
     2
    ]
@@ -664,36 +706,42 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "firmware_main_version": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "firmware_sub_version": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "page": "AboutDevice",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "hb_connect_is_connected": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "hb_connect_nas_storage_type": {
    "access": "rw",
@@ -706,6 +754,7 @@
     "map": null,
     "param": 40004
    },
+   "section": "storage",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -730,6 +779,7 @@
     "map": null,
     "param": 40003
    },
+   "section": "storage",
    "write": {
     "cmd": 1350,
     "subCmd": 1310,
@@ -751,6 +801,7 @@
     "map": null,
     "param": 3103
    },
+   "section": "storage",
    "write": {
     "cmd": 1350,
     "subCmd": 3103,
@@ -767,25 +818,29 @@
   "hb_connect_support_version": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "is_connected_solar_panel": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "power"
   },
   "is_device_upgrade": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "is_support_silent_ota_switch": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "led_on_off": {
    "access": "rw",
@@ -801,6 +856,7 @@
     },
     "param": 1045
    },
+   "section": "picture",
    "write": {
     "cmd": 1045,
     "params": {
@@ -822,6 +878,7 @@
     "4": "Sound"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     4,
@@ -841,6 +898,7 @@
     "8": "Auto Night Vision"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     4,
@@ -854,7 +912,8 @@
   "live_support_long_time_watch": {
    "access": "ro",
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "live_top_hor_toolbar_list": {
    "access": "ro",
@@ -863,6 +922,7 @@
     "0": "Alarm"
    },
    "read": null,
+   "section": "system",
    "values": [
     0
    ]
@@ -875,6 +935,7 @@
     "1": "Setting"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     1
@@ -894,6 +955,7 @@
     },
     "param": 1240
    },
+   "section": "audio",
    "write": {
     "cmd": 1240,
     "params": {
@@ -910,7 +972,8 @@
    "access": "ro",
    "default": "{\"HB3+AI\": 1}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "motion_detection_status": {
    "access": "rw",
@@ -922,6 +985,7 @@
     "map": null,
     "param": 1011
    },
+   "section": "detection",
    "write": {
     "cmd": 1011,
     "params": {
@@ -953,6 +1017,7 @@
     },
     "param": 1251
    },
+   "section": "recording",
    "write": {
     "cmd": 1251,
     "params": {
@@ -988,6 +1053,7 @@
     },
     "param": 1145
    },
+   "section": "storage",
    "write": {
     "cmd": 1146,
     "params": {
@@ -1013,6 +1079,7 @@
     },
     "param": 1013
    },
+   "section": "picture",
    "write": {
     "cmd": 1013,
     "params": {
@@ -1045,6 +1112,7 @@
     },
     "param": 1289
    },
+   "section": "notifications",
    "values": [
     0,
     1,
@@ -1087,6 +1155,7 @@
     "5": "Monitoring alarm"
    },
    "read": null,
+   "section": "modes",
    "values": [
     0,
     1,
@@ -1100,7 +1169,8 @@
    "access": "ro",
    "default": "{\"style\":{\"nightvision_type\":\"v1\"},\"position\":{\"Live\":[\"set_alarm_type#C#2\",\"event_device_setting#C#1\",\"live_stream_mute#E#1\",\"media_record#F#1\",\"event_device_intercom#F#2\",\"nightvision_type#F#3\",\"media_screenshot#F#4\",\"live_streaming_resolution#G#1\"]}}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "power_charge_mode": {
    "access": "rw",
@@ -1119,6 +1189,7 @@
     },
     "param": 1293
    },
+   "section": "power",
    "values": [
     0,
     1
@@ -1157,6 +1228,7 @@
     },
     "param": 1246
    },
+   "section": "power",
    "values": [
     0,
     1,
@@ -1201,6 +1273,7 @@
     "7": "External and built-in solar charging"
    },
    "read": null,
+   "section": "power",
    "values": [
     0,
     1,
@@ -1216,12 +1289,14 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "reset_device_mode": {
    "access": "ro",
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "speaker_on_off": {
    "access": "rw",
@@ -1237,6 +1312,7 @@
     },
     "param": 1241
    },
+   "section": "audio",
    "write": {
     "cmd": 1241,
     "params": {
@@ -1257,6 +1333,7 @@
     "1": "H265"
    },
    "read": null,
+   "section": "recording",
    "values": [
     0,
     1
@@ -1279,6 +1356,7 @@
     "map": null,
     "param": 1250
    },
+   "section": "recording",
    "step": 1,
    "unit": "s",
    "write": {
@@ -1310,6 +1388,7 @@
     "map": null,
     "param": 1249
    },
+   "section": "recording",
    "step": 1,
    "unit": "s",
    "write": {
@@ -1332,6 +1411,7 @@
     "1": "PCM"
    },
    "read": null,
+   "section": "audio",
    "values": [
     0,
     1
@@ -1341,7 +1421,8 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "audio"
   },
   "watermark_set": {
    "access": "rw",
@@ -1356,6 +1437,7 @@
     },
     "param": 1214
    },
+   "section": "picture",
    "write": {
     "cmd": 1214,
     "params": {
@@ -1382,7 +1464,8 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "recording"
   }
  },
  "source": {

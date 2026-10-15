@@ -16,6 +16,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "section": "detection",
    "values": [
     "sideNum",
     "normalized",
@@ -31,7 +32,8 @@
    "default": "1",
    "kind": "other",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "ai_tracking_status": {
    "access": "rw",
@@ -43,6 +45,7 @@
     "map": null,
     "param": 6016
    },
+   "section": "ptz",
    "write": {
     "cmd": 1700,
     "subCmd": 6016,
@@ -71,6 +74,7 @@
    "note": "handler rejects the probed values",
    "page": "ThingDeveloperScreen",
    "read": null,
+   "section": "detection",
    "values": [
     "sideNum",
     "normalized",
@@ -94,6 +98,7 @@
     },
     "param": 2735
    },
+   "section": "alarm",
    "write": {
     "cmd": 1350,
     "subCmd": 2735,
@@ -111,7 +116,8 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "audio_recording_on_off": {
    "access": "rw",
@@ -128,6 +134,7 @@
     },
     "param": 1288
    },
+   "section": "recording",
    "write": {
     "cmd": 1350,
     "subCmd": 1288,
@@ -156,13 +163,15 @@
    "access": "ro",
    "kind": "string",
    "note": "handler rejects the probed values",
-   "read": null
+   "read": null,
+   "section": "ptz"
   },
   "automation_config": {
    "access": "ro",
    "default": "{\"trigger\":[12],\"action\":[4,6]}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "modes"
   },
   "automation_detect_trigger_type": {
    "access": "ro",
@@ -174,6 +183,7 @@
     "4": "Detected motion"
    },
    "read": null,
+   "section": "modes",
    "values": [
     0,
     1,
@@ -195,6 +205,7 @@
     },
     "param": 6474
    },
+   "section": "ptz",
    "write": {
     "cmd": 1350,
     "subCmd": 6474,
@@ -213,7 +224,8 @@
    "default": "1",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "detection_sensitivity": {
    "access": "rw",
@@ -226,6 +238,7 @@
     "map": null,
     "param": 1276
    },
+   "section": "detection",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -246,20 +259,23 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "page": "MotionDetectionV2",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "device_ability_data": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_connect_type": {
    "access": "ro",
    "default": "1",
    "kind": "other",
    "page": "NVRPairedDevice",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_continuous_recording_time": {
    "access": "rw",
@@ -275,6 +291,7 @@
     "map": null,
     "param": 6011
    },
+   "section": "recording",
    "values": [
     0,
     2,
@@ -298,7 +315,8 @@
    "default": "-",
    "kind": "string",
    "note": "handler rejects the probed values",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "device_event_create_switch": {
    "access": "rw",
@@ -314,6 +332,7 @@
     },
     "param": 9201
    },
+   "section": "recording",
    "write": {
     "cmd": 1350,
     "subCmd": 9201,
@@ -332,31 +351,36 @@
    "kind": "string",
    "note": "handler transforms the value",
    "page": "NVREventRecordingScreen",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "device_event_show_trigger_sensor_icon": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "device_is_online": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_linkage_tracking_bypass": {
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null
+   "read": null,
+   "section": "ptz"
   },
   "device_model": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_motion_detection": {
    "access": "ro",
@@ -370,6 +394,7 @@
    },
    "note": "handler ignores the value",
    "read": null,
+   "section": "detection",
    "values": [
     0,
     1,
@@ -391,6 +416,7 @@
    },
    "note": "handler ignores the value",
    "read": null,
+   "section": "detection",
    "values": [
     0,
     1,
@@ -405,7 +431,8 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "device_name": {
    "access": "rw",
@@ -413,6 +440,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "section": "system",
    "write": {
     "cmd": 1217,
     "params": {
@@ -431,7 +459,8 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "device_recording_type": {
    "access": "rw",
@@ -441,6 +470,7 @@
     "map": null,
     "param": 6010
    },
+   "section": "recording",
    "write": {
     "cmd": 1700,
     "subCmd": 6010,
@@ -457,13 +487,15 @@
   "device_sensor_count": {
    "access": "ro",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_serial_number": {
    "access": "ro",
    "default": "-",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_set_alarm_light_type": {
    "access": "rw",
@@ -478,6 +510,7 @@
     "map": null,
     "param": 9251
    },
+   "section": "alarm",
    "values": [
     0,
     1
@@ -508,6 +541,7 @@
     },
     "param": 6287
    },
+   "section": "system",
    "write": {
     "cmd": 1350,
     "subCmd": 6287,
@@ -548,6 +582,7 @@
     },
     "param": 1271
    },
+   "section": "notifications",
    "values": [
     -1,
     5,
@@ -593,7 +628,8 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_storage_type": {
    "access": "ro",
@@ -603,6 +639,7 @@
     "0": "Local"
    },
    "read": null,
+   "section": "storage",
    "values": [
     0
    ]
@@ -616,6 +653,7 @@
     "2": "NAS"
    },
    "read": null,
+   "section": "storage",
    "values": [
     0,
     2
@@ -627,32 +665,37 @@
    "default": "11",
    "kind": "other",
    "page": "NVRPairedDevice",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "firmware_main_version": {
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "firmware_main_version_time": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "page": "AboutDevice",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "gesture_control_quick_focus_tap_switch": {
    "access": "rw",
@@ -661,6 +704,7 @@
    "kind": "bool",
    "name": "Quick focus tap",
    "read": null,
+   "section": "ptz",
    "write": {
     "storeToLocal": true,
     "localParams": {
@@ -675,6 +719,7 @@
    "kind": "bool",
    "name": "Swipe to control",
    "read": null,
+   "section": "ptz",
    "write": {
     "storeToLocal": true,
     "localParams": {
@@ -686,38 +731,44 @@
    "access": "ro",
    "default": "{parentSn:\"\",connected:false}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "storage"
   },
   "home_card_show_video_playback": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "ip_address": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "name": "IP address",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "is_device_upgrade": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "is_support_dynamic_privacy_zone": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "is_support_silent_ota_switch": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "led_on_off": {
    "access": "rw",
@@ -729,6 +780,7 @@
     "map": null,
     "param": 6014
    },
+   "section": "picture",
    "write": {
     "cmd": 1700,
     "subCmd": 6014,
@@ -747,7 +799,8 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "page": "NightVisionAlwaysOn",
-   "read": null
+   "read": null,
+   "section": "picture"
   },
   "live_ai_box_toolbar_list": {
    "access": "ro",
@@ -759,6 +812,7 @@
    },
    "note": "no handler write path",
    "read": null,
+   "section": "system",
    "values": [
     0,
     1,
@@ -776,6 +830,7 @@
     "4": "Sound"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     4,
@@ -802,6 +857,7 @@
     "9": "Playback"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     1,
@@ -827,6 +883,7 @@
     "2": "Panorama"
    },
    "read": null,
+   "section": "ptz",
    "values": [
     0,
     1,
@@ -859,6 +916,7 @@
      }
     }
    },
+   "section": "recording",
    "values": [
     0,
     8,
@@ -895,31 +953,36 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "live_support_long_time_watch": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "live_support_mute": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "live_support_record": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "live_support_screenshot": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "live_top_hor_toolbar_list": {
    "access": "ro",
@@ -930,6 +993,7 @@
     "7": "Multiple Live"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     1,
@@ -945,6 +1009,7 @@
     "7": "Multiple Live"
    },
    "read": null,
+   "section": "system",
    "values": [
     0,
     1,
@@ -956,7 +1021,8 @@
    "default": "0",
    "kind": "string",
    "name": "MAC address",
-   "read": null
+   "read": null,
+   "section": "network"
   },
   "microphone_on_off": {
    "access": "rw",
@@ -972,6 +1038,7 @@
     },
     "param": 1240
    },
+   "section": "audio",
    "write": {
     "cmd": 1240,
     "params": {
@@ -989,21 +1056,24 @@
    "default": "{\"GoAnywhere\":1,\"SwipePanTilt\":1,\"style\":{\"watermark_set_multi_select\":1,\"activityZone\":2},\"streamConfig\":{\"2\":{\"fps\":[15,20],\"defaultFps\":15},\"4\":{\"fps\":[15,20],\"defaultFps\":15},\"5\":{\"fps\":[15,20],\"defaultFps\":15}},\"playerConfig\":{\"GoAnywhere_0\":1,\"GoAnywhere_1\":1,\"SwipePanTilt\":1}}",
    "kind": "string",
    "page": "IPCRecordingQualityScreen",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "motion_activated_light_setting": {
    "access": "ro",
    "kind": "string",
    "name": "Motion-activated light",
    "note": "handler ignores the value",
-   "read": null
+   "read": null,
+   "section": "picture"
   },
   "motion_detection_follow_global_setting": {
    "access": "ro",
    "default": true,
    "kind": "bool",
    "page": "MotionDetection",
-   "read": null
+   "read": null,
+   "section": "detection"
   },
   "motion_detection_status": {
    "access": "rw",
@@ -1018,6 +1088,7 @@
     },
     "param": 1298
    },
+   "section": "detection",
    "write": {
     "cmd": 1350,
     "subCmd": 1298,
@@ -1045,7 +1116,8 @@
    "default": false,
    "kind": "bool",
    "page": "MotionActivatedLight",
-   "read": null
+   "read": null,
+   "section": "picture"
   },
   "nas_select_video_type": {
    "access": "rw",
@@ -1060,6 +1132,7 @@
     "map": null,
     "param": 6050
    },
+   "section": "storage",
    "values": [
     0,
     1
@@ -1105,6 +1178,7 @@
     },
     "param": 1145
    },
+   "section": "storage",
    "write": {
     "cmd": 1145,
     "params": {
@@ -1130,6 +1204,7 @@
    "note": "round trip does not return the written value",
    "page": "NightVision",
    "read": null,
+   "section": "picture",
    "values": [
     1,
     0,
@@ -1183,6 +1258,7 @@
     },
     "param": 1277
    },
+   "section": "picture",
    "values": [
     11,
     7,
@@ -1235,6 +1311,7 @@
     },
     "param": 1277
    },
+   "section": "picture",
    "values": [
     102,
     103,
@@ -1291,6 +1368,7 @@
     },
     "param": 9258
    },
+   "section": "notifications",
    "values": [
     0,
     1,
@@ -1333,7 +1411,8 @@
    "access": "ro",
    "kind": "string",
    "note": "handler rejects the probed values",
-   "read": null
+   "read": null,
+   "section": "notifications"
   },
   "notification_type": {
    "access": "rw",
@@ -1353,6 +1432,7 @@
     },
     "param": 1289
    },
+   "section": "notifications",
    "values": [
     0,
     1,
@@ -1394,6 +1474,7 @@
    },
    "note": "handler ignores the value",
    "read": null,
+   "section": "recording",
    "values": [
     0,
     1,
@@ -1405,14 +1486,16 @@
    "access": "ro",
    "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"set_picture_zoom#E#2\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"ptz_action_control#F#3\", \"camera_gun_ball_linkage_switch#F#4\", \"video_playback#G#1\", \"media_screenshot#G#2\", \"ai_tracking_status#G#3\", \"nightvision_type#G#4\", \"set_round_look_360#G#5\", \"Panorama#G#6\", \"set_preset_positions#G#7\", \"spotlight_switch#G#8\", \"live_streaming_resolution#G#9\"]}, \"style\": {\"spotlight_switch\": \"v1\", \"nightvision_type\": \"v3\"}, \"config\": {\"supportLiveViewModeSwitch\": true, \"SwipePanTilt\": 1, \"GoAnywhere\": 1, \"presetCount\": 8}}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "preset_positions_calibrate_time": {
    "access": "ro",
    "default": "10",
    "kind": "other",
    "page": "PanTiltSpeed",
-   "read": null
+   "read": null,
+   "section": "ptz"
   },
   "ptz_turn_speed": {
    "access": "rw",
@@ -1438,6 +1521,7 @@
     },
     "param": 6015
    },
+   "section": "ptz",
    "values": [
     0,
     1,
@@ -1486,13 +1570,15 @@
    "kind": "string",
    "name": "Recording quality",
    "note": "handler ignores the value",
-   "read": null
+   "read": null,
+   "section": "recording"
   },
   "sdk_model_config": {
    "access": "ro",
    "default": "{\"extraJsData\":{\"parent\":{\"property\":[],\"params\":[1224]}},\"jsTdList\":[\"activityzone_config\",\"set_privacy_zone\",\"set_ignore_zone\",\"porch_set_ignore_zone\",\"set_ignore_object\",\"porch_activityzone_config\",\"aic_activityzone_config\"]}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "set_privacy_zone": {
    "access": "ro",
@@ -1508,6 +1594,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "section": "detection",
    "values": [
     "sideNum",
     "normalized",
@@ -1522,7 +1609,8 @@
    "access": "ro",
    "default": "{\"style\": {\"notification_type\": \"v1\"},\"config\":{\"streamConfig\":{\"2\":{\"fps\":[15,20],\"defaultFps\":15},\"4\":{\"fps\":[15,20],\"defaultFps\":15},\"5\":{\"fps\":[15,20],\"defaultFps\":15}},\"disable_preset_positions_calibrate\":true}}",
    "kind": "string",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "speaker_on_off": {
    "access": "rw",
@@ -1538,6 +1626,7 @@
     },
     "param": 1241
    },
+   "section": "audio",
    "write": {
     "cmd": 1241,
     "params": {
@@ -1561,6 +1650,7 @@
     "map": null,
     "param": 2003
    },
+   "section": "audio",
    "step": 1,
    "write": {
     "cmd": 1230,
@@ -1596,6 +1686,7 @@
     "map": null,
     "param": 1401
    },
+   "section": "picture",
    "step": 1,
    "write": {
     "cmd": 1401,
@@ -1623,6 +1714,7 @@
     },
     "param": 1403
    },
+   "section": "picture",
    "write": {
     "cmd": 1403,
     "params": {
@@ -1650,6 +1742,7 @@
     },
     "param": 1400
    },
+   "section": "picture",
    "write": {
     "cmd": 1700,
     "subCmd": 1400,
@@ -1670,13 +1763,15 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "picture"
   },
   "support_setting_spotlight_switch": {
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null
+   "read": null,
+   "section": "picture"
   },
   "time_format_set": {
    "access": "rw",
@@ -1690,6 +1785,7 @@
     "map": null,
     "param": 1253
    },
+   "section": "system",
    "values": [
     0,
     1
@@ -1716,6 +1812,7 @@
     "map": null,
     "param": 1215
    },
+   "section": "system",
    "write": {
     "cmd": 1215,
     "params": {
@@ -1741,6 +1838,7 @@
     },
     "param": 6031
    },
+   "section": "ptz",
    "write": {
     "cmd": 1700,
     "subCmd": 6031,
@@ -1758,7 +1856,8 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null
+   "read": null,
+   "section": "system"
   },
   "video_mirror_mode_set": {
    "access": "rw",
@@ -1774,6 +1873,7 @@
    "note": "round trip does not return the written value",
    "page": "IPCOrientation",
    "read": null,
+   "section": "picture",
    "values": [
     0,
     1,
@@ -1819,6 +1919,7 @@
     "map": null,
     "param": 9208
    },
+   "section": "picture",
    "values": [
     0,
     1
@@ -1849,6 +1950,7 @@
     "map": null,
     "param": 8000
    },
+   "section": "picture",
    "values": [
     3,
     1,
@@ -1873,13 +1975,15 @@
    "kind": "string",
    "note": "handler ignores the value",
    "page": "IPCImageSetting",
-   "read": null
+   "read": null,
+   "section": "picture"
   },
   "video_watch_view_mode": {
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null
+   "read": null,
+   "section": "picture"
   },
   "watermark_set": {
    "access": "rw",
@@ -1901,6 +2005,7 @@
     },
     "param": 9210
    },
+   "section": "picture",
    "values": [
     0,
     1,

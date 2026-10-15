@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
@@ -38,8 +38,9 @@ def data_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]
     model_settings.bundled_codes.cache_clear()
 
 
-def _load(root: Path, settings: dict[str, object]) -> dict[str, Setting]:
-    doc = {"schema_version": 3, "product_code": "T0001", "settings": settings}
+def _load(root: Path, settings: Mapping[str, Mapping[str, object]]) -> dict[str, Setting]:
+    entries = {k: {"section": "other", **e} for k, e in settings.items()}
+    doc = {"schema_version": 3, "product_code": "T0001", "settings": entries}
     (root / "T0001.json").write_text(json.dumps(doc), encoding="utf-8")
     model_settings._load.cache_clear()
     model_settings._resolved.cache_clear()

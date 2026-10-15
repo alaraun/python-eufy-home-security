@@ -38,6 +38,7 @@ from .devices.model_settings import (
     mode_table_settings,
     product_code_of,
     settings_of,
+    sort_settings,
 )
 from .devices.ptz import PtzForm, has_ptz_recipes, ptz_actions, ptz_form
 from .devices.ptz import app_version as ptz_app_version
@@ -793,29 +794,10 @@ async def _held_size_keyframe(stream: MediaStream, settle: float, bound: float) 
     return best
 
 
-def _ranks(names: Sequence[str | None]) -> dict[str | None, int]:
-    """Each name's first position in ``names``; None ranks after every name."""
-    ranks: dict[str | None, int] = {}
-    for name in names:
-        if name is not None:
-            ranks.setdefault(name, len(ranks))
-    ranks[None] = len(ranks)
-    return ranks
-
-
 def _without_parentless_only(settings: tuple[Setting, ...]) -> tuple[Setting, ...]:
     """``settings`` less those the eufy app offers only for a device without a parent
     (:data:`~.devices.model_settings.PARENTLESS_ONLY`)."""
     return tuple(s for s in settings if s.key not in PARENTLESS_ONLY)
-
-
-def _sorted_settings(settings: Mapping[str, Setting]) -> tuple[Setting, ...]:
-    """``settings`` by (group, page, order, key): a group ranks where its first setting
-    stands in (order, key) order, pages sort by name; settings without a group, page or
-    order come after those that have one."""
-    by_order = sorted(settings.values(), key=lambda s: (s.order is None, s.order or 0, s.key))
-    groups = _ranks([s.group for s in by_order])
-    return tuple(sorted(by_order, key=lambda s: (groups[s.group], s.page is None, s.page or "")))
 
 
 def _load_settings(codes: set[str]) -> None:
@@ -953,9 +935,10 @@ class Station:
 
     def settings_for(self, device_sn: str | None = None) -> tuple[Setting, ...]:
         """The settings of the station (``None``, or its own serial) or of a paired
-        device: its model's settings sorted by (group, page, order, key), then for a
-        paired device the per-mode delays and actions of its kind
-        (:func:`~.devices.model_settings.mode_table_settings`). A paired device's list
+        device: its model's settings and, for a paired device, the per-mode delays and
+        actions of its kind (:func:`~.devices.model_settings.mode_table_settings`, section
+        ``modes``), in :func:`~.devices.model_settings.sort_settings` order: by section,
+        then the eufy app's page, group and order, then the name. A paired device's list
         leaves out the settings the eufy app offers only without a parent
         (:data:`~.devices.model_settings.PARENTLESS_ONLY`). A model the library has
         no settings file for lists the read-only settings of its cloud thing description
@@ -1012,11 +995,12 @@ class Station:
                 # Not memoised: a listing can arrive after the first lookup.
                 listed = tuple(self._listed_settings(code))
                 return _without_parentless_only(listed) if paired else listed
-            memo = _sorted_settings(bundled)
+            memo = tuple(bundled.values())
             if memo and paired:
                 memo = _without_parentless_only(memo)
                 model = model_for_serial(serial)
                 memo += mode_table_settings(scope_for_kind(model.kind if model else None))
+            memo = sort_settings(memo)
             self._settings_memo[(serial, code)] = memo
         return memo
 

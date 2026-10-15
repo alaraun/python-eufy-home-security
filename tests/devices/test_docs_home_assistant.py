@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from eufy_home_security.devices.model_settings import settings_of
+from eufy_home_security.devices.sections import SETTING_SECTIONS
 from eufy_home_security.devices.td import LISTED_NOTE
 
 DOC = Path(__file__).resolve().parents[2] / "docs" / "how-to" / "home-assistant.md"
@@ -58,9 +59,16 @@ def test_the_section_names_the_settings_api() -> None:
         "station.async_set_setting(key, value, device_sn=…, channel=…)",
         "station.async_set_mode_action(",
         "CommandOutcome",
-        "(group, page, order, key)",
+        "[Grouping settings in a UI](#grouping-settings-in-a-ui)",
     ):
         assert phrase in ENTITIES, phrase
+
+
+def test_the_grouping_section_lists_every_ui_section() -> None:
+    grouping = TEXT.split("\n### Grouping settings in a UI\n", 1)[1].split("\n### ", 1)[0]
+    for section in SETTING_SECTIONS:
+        row = f"| `{section.id}` | {section.heading} | {section.order} |"
+        assert row in grouping, row
 
 
 def test_the_unknown_model_section_names_the_listing_and_its_status() -> None:

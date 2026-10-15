@@ -456,7 +456,7 @@ def _write_index(root: Path, codes: object, schema_version: int = 3) -> None:
     model_settings.bundled_codes.cache_clear()
 
 
-GOOD_ENTRY = {"access": "ro", "kind": "bool", "read": None}
+GOOD_ENTRY = {"access": "ro", "kind": "bool", "read": None, "section": "other"}
 
 
 @pytest.mark.parametrize(
@@ -531,6 +531,33 @@ def test_variant_of_must_name_another_setting(data_root: Path, target: str) -> N
         settings_of("T0001")
 
 
+def test_section_comes_from_the_file(data_root: Path) -> None:
+    _write_model(data_root, {"mode": {**GOOD_ENTRY, "section": "power"}})
+    loaded = settings_of("T0001")["mode"]
+    assert (loaded.section, loaded.section_info.heading) == ("power", "Power")
+
+
+@pytest.mark.parametrize("section", ["lights", None, 3])
+def test_section_must_be_a_catalogue_id(data_root: Path, section: object) -> None:
+    _write_model(data_root, {"mode": {**GOOD_ENTRY, "section": section}})
+    with pytest.raises(ModelDataError, match=r"T0001\.json.*section"):
+        settings_of("T0001")
+
+
+def test_section_is_required(data_root: Path) -> None:
+    entry = {k: v for k, v in GOOD_ENTRY.items() if k != "section"}
+    _write_model(data_root, {"mode": entry})
+    with pytest.raises(ModelDataError, match=r"T0001\.json.*section"):
+        settings_of("T0001")
+
+
+def test_a_variant_shares_its_primary_s_section(data_root: Path) -> None:
+    variant = {**GOOD_ENTRY, "variant_of": "mode", "section": "power"}
+    _write_model(data_root, {"mode": GOOD_ENTRY, "mode__v1": variant})
+    with pytest.raises(ModelDataError, match=r"T0001\.json.*mode__v1.*primary"):
+        settings_of("T0001")
+
+
 def test_identifiers_outside_the_pattern_are_skipped(data_root: Path) -> None:
     doc = {
         "schema_version": 3,
@@ -552,6 +579,7 @@ def _report(first: int, second: int, cur_mode: int) -> str:
 
 
 _QUALITY = {
+    "section": "recording",
     "kind": "enum",
     "values": [1, 2],
     "access": "rw",

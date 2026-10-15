@@ -21,6 +21,13 @@ if TYPE_CHECKING:
     )
     from .devices.model_settings import Setting, SettingControl, SettingKind
     from .devices.recipes import MAX_PRESET_SLOTS, MAX_ZOOM, MIN_ZOOM, PanTilt, PresetPosition
+    from .devices.sections import (
+        MODES_SECTION,
+        OTHER_SECTION,
+        SETTING_SECTIONS,
+        SettingSection,
+        setting_section,
+    )
     from .devices.settings import SettingUnit
     from .diagnostics import AccountReport
     from .events import (
@@ -149,6 +156,16 @@ _EXPORTS: dict[str, str] = {
         "cloud.status",
     ),
     **dict.fromkeys(("Setting", "SettingControl", "SettingKind"), "devices.model_settings"),
+    **dict.fromkeys(
+        (
+            "MODES_SECTION",
+            "OTHER_SECTION",
+            "SETTING_SECTIONS",
+            "SettingSection",
+            "setting_section",
+        ),
+        "devices.sections",
+    ),
     "SettingUnit": "devices.settings",
     **dict.fromkeys(
         ("MAX_PRESET_SLOTS", "MAX_ZOOM", "MIN_ZOOM", "PanTilt", "PresetPosition"), "devices.recipes"
@@ -293,6 +310,9 @@ __all__ = [
     "MAX_ZOOM",
     "MIN_STATION_SESSIONS",
     "MIN_ZOOM",
+    "MODES_SECTION",
+    "OTHER_SECTION",
+    "SETTING_SECTIONS",
     "SETTLE_STANDALONE",
     "SETTLE_STATION",
     "STATION_SESSION_LIMIT",
@@ -390,6 +410,7 @@ __all__ = [
     "Setting",
     "SettingControl",
     "SettingKind",
+    "SettingSection",
     "SettingUnit",
     "SettingsCoverage",
     "SkippedDevice",
@@ -422,6 +443,7 @@ __all__ = [
     "redact_serial",
     "set_secret_logging",
     "set_wire_logging",
+    "setting_section",
     "suggest_local_ports",
 ]
 

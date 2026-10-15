@@ -35,8 +35,9 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. Either may carry `view` (below). `null`: not readable |
 | `contexts` | What other contexts change (below); absent when every context sees the base entry |
 | `labels` | `{"<value>": "<title>"}` from the app's titles, else the cleaned TD description. The app's option titles of `working_mode_value`: `Standard` (EU), `Performance (beta)` (US) |
-| `group`, `order` | Section and position on the app's settings page. Always present together |
-| `page` | The app page the setting lives on |
+| `section` | Always present: the UI section id, one of `devices/sections.py`'s `SETTING_SECTIONS`. Assigned by `scripts/gen_models_sections.py` from the app page the setting lives on, else the station rules (station models), else the identifier rules, else `other`; a variant has its primary's. Every context has the same section |
+| `group`, `order` | Block and position on the app's settings page, where the app's layout names them. Always present together; they order settings within a section |
+| `page` | The app page the setting lives on; it decides `section` where the page holds one kind of setting |
 | `applies_when` | `[<enum setting>, <value>]`: the app shows the setting only while that setting has that value |
 | `note` | Why a setting is `ro`, or what is limited on an `rw` one; on an `advanced` setting it ends with the app's warning |
 | `name` | The app's title for the setting (the model's own branch title where the app has one), in sentence case: a capitalised word after the first is lower-cased unless it is a proper noun (`Wi-Fi`, `Alexa`, weekdays); acronyms and mixed case (`LED`, `HomeBase`, `2K`) stay. Models whose settings the app shows on its React Native screens take the RN titles; models on the native settings screens only the titles read from that model's own native screens |

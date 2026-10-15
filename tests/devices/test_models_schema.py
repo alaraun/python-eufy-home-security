@@ -19,6 +19,7 @@ import pytest
 
 from eufy_home_security.devices import model_settings
 from eufy_home_security.devices.recipes import ConnectType
+from eufy_home_security.devices.sections import SETTING_SECTIONS
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models"
@@ -58,6 +59,7 @@ SETTING_KEYS = {
     "group",
     "order",
     "page",
+    "section",
     "applies_when",
     "note",
     "name",
@@ -83,6 +85,7 @@ UNITS = {"s", "ms", "d", "%"}
 IDENT = re.compile(r"[a-z0-9_]+")
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 SERIAL = re.compile(r"T[0-9A-Z]{4}[A-Z0-9]{11}")
+SECTIONS = {s.id for s in SETTING_SECTIONS}
 
 
 def _load(name: str) -> ModuleType:
@@ -247,6 +250,8 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
         assert primary != ident
         assert primary in settings
         assert "variant_of" not in settings[primary]
+        assert s["section"] == settings[primary]["section"], ident
+    assert s["section"] in SECTIONS, ident
     assert ("group" in s) == ("order" in s)
     if "group" in s:
         assert isinstance(s["group"], str)
@@ -280,6 +285,7 @@ def test_model_file_matches_the_schema(code: str) -> None:
             assert set(item["names"]) <= CONTEXTS, item["names"]
             assert item["entry"], "a contexts item changes nothing"
             assert "contexts" not in item["entry"]
+            assert "section" not in item["entry"]  # one section in every context
             named.update(item["names"])
     for context in sorted(named):
         resolved = {k: _in_context(v, context) for k, v in settings.items()}
