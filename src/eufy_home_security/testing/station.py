@@ -372,6 +372,9 @@ class FakeStation:
     """The mode a schedule slot puts in force while Schedule (2) is selected."""
     ignore_searches: int = 0
     reply_to_settings: bool = False
+    reply_codes: dict[int, int] = field(default_factory=dict)
+    """Command → the non-zero ``code`` its 0x0547 reply carries under :attr:`reply_to_settings`
+    (the command is then still recorded, as a station that rejects it after reading it)."""
     params: dict[int, dict[int, str]] = field(
         default_factory=lambda: {
             0: {1101: "87", 1142: "-52", 1217: "Front"},
@@ -1057,7 +1060,8 @@ class FakeStation:
                 reported = self.params.setdefault(payload["channel"], {})
                 reported[cmd] = _stored_report(reported.get(cmd), payload, str(value))
             if self.reply_to_settings:
-                self.send_json(FrameType.NOTIFY_PAYLOAD, {"cmd": cmd, "code": 0})
+                code = self.reply_codes.get(cmd, 0)
+                self.send_json(FrameType.NOTIFY_PAYLOAD, {"cmd": cmd, "code": code})
 
     def _answer_history(self, inner: dict[str, Any]) -> None:
         """A history page (10011), shaped and cut like the real station's.

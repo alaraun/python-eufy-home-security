@@ -46,6 +46,10 @@ CMD_SET_ARMING = GUARD_MODE_PARAM
 CMD_DATABASE = int(FrameType.DB_SYNC)
 CMD_DATABASE_IMAGE = int(FrameType.MEDIA_DOWNLOAD)
 CMD_CAMERA_PUSH_NOTIFY = 2037
+#: Sound (``time_out`` seconds) or stop (0) the station's siren: a 1350 ``DeviceMsgBean``.
+CMD_SET_TONE_FILE = 1201
+#: The siren durations (seconds) the eufy app sounds a station's alarm for with 1201.
+SOUND_ALARM_SECONDS = (30,)
 #: Events-DB query verb (inside a CMD_DATABASE) with an explicit ``device_info``
 #: list, used for the ``event_record`` / person tables. On history it returns only
 #: a subset of the records.
@@ -237,6 +241,11 @@ def device_msg(
 def arm_payload(mode: GuardMode, user_name: str) -> dict[str, Any]:
     """The ALARM_MODE (1224) payload object. ``user_name`` is free text."""
     return {"mode_type": int(mode), "user_name": user_name}
+
+
+def tone_file_payload(seconds: int, user_name: str) -> dict[str, Any]:
+    """The SET_TONE_FILE (1201) payload object: ``seconds`` 0 stops the siren."""
+    return {"time_out": seconds, "user_name": user_name}
 
 
 def database_query_payload(

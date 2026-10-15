@@ -706,6 +706,25 @@ char[128] owner account id`. The app's slider maximum sent 26.
 app sends it from the live view it opens on an alarm; the station stops the siren and
 light and reports `0x04B1` = `[16, 0]` on channel 255 ([events.md](events.md#alarm-over-p2p)).
 
+## Station actions **[declared: app]**
+
+Explicit calls, not settings (`Station.async_restart`, `async_trigger_alarm`,
+`async_stop_alarm`). Per-model support and the restart request come from
+`devices/station_config_support.py` (`config_support`, `restart_command`); a model graded
+*unknown* there is refused before anything is sent. Not checked on hardware.
+
+| action | wire | success |
+|---|---|---|
+| restart | ECB station scalar 1034 (`HUB_REBOOT`), value 0, header channel 255 | the 1034 result frame with code 0; the station then drops the session while it boots |
+| sound the alarm | `DeviceMsgBean` cmd 1201 (`SET_TONE_FILE`), `mChannel` 0, payload `{"time_out": 30, "user_name": <name>}` | a `0x0547` reply naming 1201 with code 0 |
+| stop the alarm | the same with `"time_out": 0` | as sound |
+
+`time_out` is the siren's duration in seconds; the app sounds it for 30
+(`SOUND_ALARM_SECONDS`). The station also reports the siren in its `0x04B1` alarm frames
+([events.md](events.md#alarm-over-p2p)). A reply with a non-zero code is a rejection; an
+ACK without a reply is not success. The models per action are in
+[devices.md § Station configuration](../reference/devices.md#station-configuration).
+
 ## Station configuration params **[app]**
 
 A station keeps its mode list, schedule, stored mode tables and cross-camera tracking

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 
@@ -72,6 +73,15 @@ async def station(fake: FakeStation) -> AsyncIterator[Station]:
     await st.async_close()
 
 
+def _sent(fake: FakeStation, cmd: int) -> list[dict[str, Any]]:
+    """Every ``cmd`` command the fake received, without its time-stamp transaction."""
+    return [
+        {k: v for k, v in obj.items() if k != "transaction"}
+        for obj in fake.received
+        if obj.get("cmd") == cmd
+    ]
+
+
 def test_every_restart_request_is_an_ecb_station_scalar() -> None:
     assert RESTART_MODELS == ("T8001", "T8002", "T8010", "T8020", "T8025", "T8026", "T8030")
     for pn in station_config_models():
@@ -135,3 +145,89 @@ async def test_restart_is_refused_below_a_firmware_gate(
     with pytest.raises(UnsupportedError, match=r"from firmware 9\.0"):
         await station.async_restart()
     assert fake.ecb_received == []
+
+
+# ── sound / stop the alarm ────────────────────────────────────────────────────────
+
+
+def _tone_file(seconds: int) -> dict[str, Any]:
+    return {
+        "account_id": SYNTHETIC.account_id,
+        "cmd": 1201,
+        "mChannel": 0,
+        "mValue3": 0,
+        "payload": {"time_out": seconds, "user_name": "user"},
+    }
+
+
+def test_sound_alarm_is_declared_where_the_library_sends_it() -> None:
+    declared = {
+        pn
+        for pn in station_config_models()
+        if config_support(pn, StationFeature.SOUND_ALARM).support is not Support.UNKNOWN
+    }
+    assert declared == {"T8001", "T8002", "T8010", "T8020", "T8023", "T8025", "T8030"}
+
+
+async def test_trigger_and_stop_send_the_tone_file_body(
+    station: Station, fake: FakeStation
+) -> None:
+    assert await station.async_trigger_alarm(30) is CommandOutcome.APPLIED
+    assert await station.async_stop_alarm() is CommandOutcome.APPLIED
+    assert _sent(fake, 1201) == [_tone_file(30), _tone_file(0)]
+    assert fake.received_header_channels == [0, 0]
+
+
+async def test_trigger_defaults_to_the_apps_30_seconds(station: Station, fake: FakeStation) -> None:
+    await station.async_trigger_alarm()
+    assert _sent(fake, 1201) == [_tone_file(30)]
+
+
+@pytest.mark.parametrize("seconds", [0, 2, 29, 60, -1])
+async def test_seconds_outside_the_apps_options_send_nothing(
+    station: Station, fake: FakeStation, seconds: int
+) -> None:
+    with pytest.raises(ValueError, match="alarm seconds"):
+        await station.async_trigger_alarm(seconds)
+    assert fake.received == []
+
+
+async def test_a_rejected_alarm_raises(station: Station, fake: FakeStation) -> None:
+    fake.reply_codes[1201] = -1
+    with pytest.raises(CommandRejectedError) as err:
+        await station.async_trigger_alarm(30)
+    assert (err.value.command, err.value.code) == (1201, -1)
+    with pytest.raises(CommandRejectedError):
+        await station.async_stop_alarm()
+
+
+async def test_an_unanswered_alarm_is_not_success(station: Station, fake: FakeStation) -> None:
+    fake.reply_to_settings = False
+    with pytest.raises(CommandNotAppliedError):
+        await station.async_trigger_alarm(30, timeout=0.5)
+    with pytest.raises(CommandNotAppliedError):
+        await station.async_stop_alarm(timeout=0.5)
+
+
+@pytest.mark.parametrize(
+    ("pn", "reason"),
+    [
+        ("T8024", "declares no set_alarm_type"),
+        ("T8026", "declares no set_alarm_type"),
+        ("T8N00", "declares no set_alarm_type"),
+        ("T9000", "WebRTC"),
+    ],
+)
+async def test_the_alarm_is_refused_without_sending_on_a_model_without_it(
+    fake: FakeStation, pn: str, reason: str
+) -> None:
+    station = _station(fake, _as(pn))
+    try:
+        assert station.config_support(StationFeature.SOUND_ALARM).support is Support.UNKNOWN
+        with pytest.raises(UnsupportedError, match=reason):
+            await station.async_trigger_alarm(30)
+        with pytest.raises(UnsupportedError, match=reason):
+            await station.async_stop_alarm()
+    finally:
+        await station.async_close()
+    assert fake.received == []

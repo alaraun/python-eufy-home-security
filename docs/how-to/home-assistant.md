@@ -1219,6 +1219,30 @@ True when the cloud's thing description is newer than the bundled file: the bund
 stays in use, and the library logs it once at INFO. Put it in diagnostics, and raise a
 repair issue at most for `"unknown"`.
 
+### Station actions
+
+Restart and sound/stop the alarm are calls on `Station`, not settings:
+
+| call | does | refuses |
+|---|---|---|
+| `async_restart()` | reboots the station; returns after its answer | `config_support(StationFeature.RESTART)` is `UNKNOWN` |
+| `async_trigger_alarm(seconds=30)` | sounds the station's siren (**alarm-affecting**) | `config_support(StationFeature.SOUND_ALARM)` is `UNKNOWN`; `ValueError` for seconds not in `SOUND_ALARM_SECONDS` (30) |
+| `async_stop_alarm()` | stops the siren (**alarm-affecting**) | as the trigger, without the seconds |
+
+Each returns `CommandOutcome.APPLIED` only once the station answered; a rejection raises
+`CommandRejectedError`, an acknowledged command without an answer
+`CommandNotAppliedError`. A refusal (`UnsupportedError`, naming the grade's reason)
+comes before anything is sent.
+
+Support per model is the station configuration support above
+([§ Station configuration support](#station-configuration-support)): offer an action
+only where `station.config_support(StationFeature.RESTART)` (or `SOUND_ALARM`) is not
+`UNKNOWN`, behind a confirmation in the UI (both features are `alarm_affecting`), and
+show the grade. After a restart the station's state is unavailable until the session
+reconnects on its own (a `ConnectionChanged` reports the drop and the return); do not
+retry the restart meanwhile. Wire formats:
+[commands.md](../protocol/commands.md#station-actions-declared-app).
+
 ### Camera images
 
 A camera has three image sources, described as data in `IMAGE_SOURCES`

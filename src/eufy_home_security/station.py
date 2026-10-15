@@ -155,7 +155,13 @@ from .p2p._json import json_int
 from .p2p.clip import ClipWriter, MediaClip
 from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
 from .p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
-from .p2p.messages import RECEIPT_NOT_HANDLED, decode_preset_picture, record_id_day
+from .p2p.messages import (
+    CMD_SET_TONE_FILE,
+    RECEIPT_NOT_HANDLED,
+    SOUND_ALARM_SECONDS,
+    decode_preset_picture,
+    record_id_day,
+)
 from .p2p.mode_actions import (
     FIELD_PARAMS,
     MODE_TABLE_MODES,
@@ -3704,6 +3710,49 @@ class Station:
         # Every model's request is an ECB station scalar without a sub-command.
         await self.session.async_send_ecb_scalar(command[0], 0, timeout=timeout)
         return CommandOutcome.APPLIED
+
+    def _require_action(self, feature: StationFeature) -> None:
+        """Raise ``UnsupportedError`` with the reason where :meth:`config_support` grades
+        ``feature`` ``UNKNOWN`` on this station; nothing is sent."""
+        evidence = self.config_support(feature)
+        if evidence.support is Support.UNKNOWN:
+            raise UnsupportedError(f"no {feature.value}: {evidence.source}")
+
+    @staticmethod
+    def _answered(command: int, outcome: CommandOutcome) -> CommandOutcome:
+        """``outcome`` when the station answered; an ACK alone raises ``CommandNotAppliedError``."""
+        if outcome is not CommandOutcome.APPLIED:
+            raise CommandNotAppliedError(command, f"command {command} acknowledged, never answered")
+        return outcome
+
+    async def async_trigger_alarm(
+        self, seconds: int = 30, *, timeout: float | None = None
+    ) -> CommandOutcome:
+        """Sound the station's own siren for ``seconds`` (the eufy app's alarm action;
+        declared, not checked on hardware). **Alarm-affecting.**
+
+        ``seconds`` is one of :data:`~.p2p.messages.SOUND_ALARM_SECONDS` (``ValueError``
+        otherwise, nothing sent). Returns ``APPLIED`` once the station answered
+        SET_TONE_FILE (1201); the siren then also shows as :class:`~.events.AlarmChanged`.
+        Raises ``UnsupportedError`` before sending where :meth:`config_support` grades
+        :attr:`~.devices.station_config_support.StationFeature.SOUND_ALARM` ``UNKNOWN``,
+        :class:`CommandRejectedError` for a non-zero result, :class:`CommandNotAppliedError`
+        when the station acknowledged it but never answered, and
+        :class:`DeviceTimeoutError` without even an ACK.
+        """
+        if seconds not in SOUND_ALARM_SECONDS:
+            raise ValueError(f"alarm seconds must be one of {SOUND_ALARM_SECONDS}, not {seconds!r}")
+        self._require_action(StationFeature.SOUND_ALARM)
+        outcome = await self.session.async_set_tone_file(seconds, timeout=timeout)
+        return self._answered(CMD_SET_TONE_FILE, outcome)
+
+    async def async_stop_alarm(self, *, timeout: float | None = None) -> CommandOutcome:
+        """Stop the station's siren, whether sounded by :meth:`async_trigger_alarm` or by
+        an alarm (SET_TONE_FILE with 0 seconds; declared, not checked on hardware).
+        **Alarm-affecting.** Refuses, returns and raises as :meth:`async_trigger_alarm`."""
+        self._require_action(StationFeature.SOUND_ALARM)
+        outcome = await self.session.async_set_tone_file(0, timeout=timeout)
+        return self._answered(CMD_SET_TONE_FILE, outcome)
 
     @property
     def storage(self) -> StorageInfo | None:

@@ -17,7 +17,12 @@ from hypothesis import strategies as st
 from eufy_home_security.exceptions import ProtocolError, UnsupportedError
 from eufy_home_security.models import GuardMode
 from eufy_home_security.p2p import _json, crypto, messages
-from eufy_home_security.p2p.messages import DB_EVENT_COUNT, event_count_payload
+from eufy_home_security.p2p.messages import (
+    CMD_SET_TONE_FILE,
+    DB_EVENT_COUNT,
+    event_count_payload,
+    tone_file_payload,
+)
 from eufy_home_security.p2p.xzyh import MAGIC, Frame, FrameCipher, FrameType
 from eufy_home_security.testing import SYNTHETIC
 
@@ -484,3 +489,11 @@ def test_a_string_command_body_refuses_what_its_fields_cannot_carry(
 def test_a_short_string_command_body_does_not_decode() -> None:
     with pytest.raises(ValueError, match="short"):
         messages.decode_string_command_body(bytes(100))
+
+
+def test_the_tone_file_body_byte_for_byte() -> None:
+    assert messages.device_msg("acct", CMD_SET_TONE_FILE, tone_file_payload(30, "user")) == (
+        b'{"account_id":"acct","cmd":1201,"mChannel":0,"mValue3":0,'
+        b'"payload":{"time_out":30,"user_name":"user"}}'
+    )
+    assert messages.SOUND_ALARM_SECONDS == (30,)

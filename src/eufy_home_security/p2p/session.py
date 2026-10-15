@@ -174,6 +174,7 @@ from .messages import (
     CMD_DOWNLOAD_VIDEO,
     CMD_RECORD_VIEW,
     CMD_SET_ARMING,
+    CMD_SET_TONE_FILE,
     CMD_START_REALTIME_MEDIA,
     CMD_STOP_REALTIME_MEDIA,
     DB_EVENT_COUNT,
@@ -207,6 +208,7 @@ from .messages import (
     local_events_query_payload,
     record_id_day,
     string_command_body,
+    tone_file_payload,
 )
 from .mode_actions import CMD_SET_ALL_ACTION, ModeTable
 from .notify import decode_camera_push, stamped_accounts
@@ -2323,6 +2325,25 @@ class StationSession:
             if attempt + 1 < MODE_TABLE_READBACK_ATTEMPTS:
                 await asyncio.sleep(MODE_TABLE_READBACK_DELAY)
         raise CommandNotAppliedError(command, f"command {command} not confirmed: {problem}")
+
+    async def async_set_tone_file(
+        self, seconds: int, *, timeout: float | None = None
+    ) -> CommandOutcome:
+        """Sound the station's siren for ``seconds`` (0 stops it): SET_TONE_FILE (1201)
+        :func:`~.messages.tone_file_payload` with the session's user name, ``mChannel`` 0.
+
+        Alarm-affecting. Returns as :meth:`async_send_command` does and raises its
+        typed errors; the station also reports the alarm in its 1201 alarm frames
+        (:mod:`.alarm`).
+        """
+        await self.async_connect()
+        creds = self._require_creds()
+        return await self.async_send_command(
+            CMD_SET_TONE_FILE,
+            channel=0,
+            payload=tone_file_payload(seconds, creds.user_name),
+            timeout=timeout,
+        )
 
     async def async_run_recipe(
         self,

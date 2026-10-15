@@ -118,6 +118,7 @@ if TYPE_CHECKING:
     from .p2p.clip import CLIP_CONTENT_TYPE, ClipWriter, MediaClip
     from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
     from .p2p.media import MediaKeyType, Still, StillFormat, VideoCodec, picture_codec
+    from .p2p.messages import SOUND_ALARM_SECONDS
     from .p2p.pppp import LAN_DISCOVERY_TIMEOUT
     from .p2p.session import (
         DEFAULT_STATION_SESSIONS,
@@ -188,6 +189,7 @@ _EXPORTS: dict[str, str] = {
     ),
     **dict.fromkeys(("CLIP_CONTENT_TYPE", "ClipWriter", "MediaClip"), "p2p.clip"),
     **dict.fromkeys(("SETTLE_STANDALONE", "SETTLE_STATION"), "p2p.encoder"),
+    "SOUND_ALARM_SECONDS": "p2p.messages",
     **dict.fromkeys(
         (
             "AccountMismatch",
@@ -343,6 +345,7 @@ __all__ = [
     "SETTING_SECTIONS",
     "SETTLE_STANDALONE",
     "SETTLE_STATION",
+    "SOUND_ALARM_SECONDS",
     "STATION_SESSION_LIMIT",
     "AccountMismatch",
     "AccountReport",
