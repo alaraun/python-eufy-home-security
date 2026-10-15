@@ -286,8 +286,11 @@ def build_station_config(state: StationState) -> StationConfig:
             sources[name] = state.param_sources.get(pid, ValueSource.P2P)
 
     modes = _defined_modes(custom_modes, schedule, (guard_mode, active_mode))
+    # Off is report-only; geofencing follows the phones running the eufy app.
     settable = tuple(
-        m.code for m in modes if isinstance(m.code, GuardMode) and m.code is not GuardMode.OFF
+        m.code
+        for m in modes
+        if isinstance(m.code, GuardMode) and m.code not in (GuardMode.OFF, GuardMode.GEOFENCE)
     )
     defined = [m.code for m in modes if isinstance(m.code, GuardMode)]
     mode_tables = {

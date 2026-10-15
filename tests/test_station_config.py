@@ -192,13 +192,13 @@ def test_schedule_is_defined_by_a_slot_or_the_selection(
     assert (GuardMode.SCHEDULE in config.settable_modes) is defined
 
 
-def test_geofencing_and_off_are_defined_only_while_reported_and_off_is_never_settable() -> None:
+def test_geofencing_and_off_are_defined_only_while_reported_and_never_settable() -> None:
     assert not config_of({1224: "0"}).is_defined(GuardMode.GEOFENCE)
     assert not config_of({1224: "0"}).is_defined(GuardMode.OFF)
 
     geofence = config_of({1224: "47", 1151: "1"})
     assert geofence.mode_name(GuardMode.GEOFENCE) == "Geofencing"
-    assert GuardMode.GEOFENCE in geofence.settable_modes
+    assert GuardMode.GEOFENCE not in geofence.settable_modes
 
     off = config_of({1224: "6"})
     assert off.is_defined(GuardMode.OFF)

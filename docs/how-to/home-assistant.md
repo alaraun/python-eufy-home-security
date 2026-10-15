@@ -2201,15 +2201,14 @@ station.config  # the same, built from the current state, no I/O
   - Geofencing while it is selected and Off while the station reports it: the library
     cannot tell whether a station offers either otherwise. The eufy app shows a
     Geofencing tile among its modes all the time, but geofencing follows the phones
-    running the app, which Home Assistant cannot do: do not offer it as a choice (it is
-    in `settable_modes` only while the station is already in it).
+    running the app, which Home Assistant cannot do, so it is never in `settable_modes`.
 
   A mode outside `modes` does not exist on the station: mark its per-mode entities
   unavailable (or do not create them) instead of showing `unknown`. Without a mode list
   from either source (`config.sources["modes"]` is `APP_DEFAULT`) only the built-in modes
   are listed; the client's cloud refresh fills it in.
 - **Setting a mode.** `async_set_guard_mode` writes every mode in `settable_modes`: the
-  defined modes except Off, which is report-only. A custom mode is written through 1224
+  defined modes except Off, which is report-only, and Geofencing. A custom mode is written through 1224
   like a built-in one; one the station does not have is refused (`UnsupportedError`,
   nothing sent) while its mode list is known, and sent as asked while it is not.
 - **Names.** `ModeInfo.name` is the display name. For a code alone, `GuardMode.label` (or
