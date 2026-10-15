@@ -4,6 +4,81 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.0](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.17...v0.4.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* schedule slots that run to midnight read as ending at 00:00 (the stored 23:59 round-trips unchanged)
+* cross-camera tracking needs at least two cameras, as the eufy app requires
+* the guard-mode write is refused on station models graded unknown (T8N00, T9000, models without app data)
+* arming-group updates send the name and every member each time (the cloud refuses one alone); EufyCloudApi.async_update_arming_group takes both
+* async_set_guard_mode refuses a custom mode the station does not define; Geofencing is never a settable mode
+* a motion sensor's React to motion (motion_sensor_respond) is on while action bit 32 is clear, as in the eufy app; turning it off also turns off its notification and HomeBase alarm
+* per-mode entry and exit delays take only the eufy app's choices (MODE_DELAY_CHOICES: 0, 15, 30, 45, 60, 180, 300 s)
+* the keypad password status is read-only
+* set_alarm_type is no longer a setting: it sounds the HomeBase (see Station.async_trigger_alarm)
+* sub-device serials come from the cloud device list only; parameter 1072 is the cross-camera tracking selection (SubDeviceState.serial_source "param_1072", SUB_DEVICE_SERIALS_ORDER_EVIDENCE and ParamDump.sub_device_serials removed)
+
+### Features
+
+* AlarmChanged carries when it was seen and the push's own time ([abacbed](https://github.com/alaraun/python-eufy-home-security/commit/abacbedd6cc48249dddd276b33faf9df68db6155))
+* arming groups (the eufy app's Group Control) ([#94](https://github.com/alaraun/python-eufy-home-security/issues/94)) ([fbacd16](https://github.com/alaraun/python-eufy-home-security/commit/fbacd1697e9445486d3e193c651e39603f93a0f8))
+* arming-group activations are recorded under the account's profile nickname ([05dbb4c](https://github.com/alaraun/python-eufy-home-security/commit/05dbb4cb1d0f47ad040713dcdfb429101d62af95))
+* ArmingGroupLog.created_at; guard-mode labels come from one table (GUARD_MODE_LABELS) ([d00a1c2](https://github.com/alaraun/python-eufy-home-security/commit/d00a1c2d51fb39f81d9f5982136c34edd417c60e))
+* async_set_guard_mode refuses a custom mode the station does not define; Geofencing is never a settable mode ([d00a1c2](https://github.com/alaraun/python-eufy-home-security/commit/d00a1c2d51fb39f81d9f5982136c34edd417c60e))
+* bulk per-mode table write and action flag labels ([4dc961d](https://github.com/alaraun/python-eufy-home-security/commit/4dc961d830440915e3026f1ea31af58421bb2bbd))
+* codecs for HomeBase mode list, schedule, stored mode tables and cross-camera selection ([#93](https://github.com/alaraun/python-eufy-home-security/issues/93)) ([b728765](https://github.com/alaraun/python-eufy-home-security/commit/b7287657623160a293315b5ed29a1dda83dea576))
+* cross-camera tracking names the devices it can follow; paired doorbells can be chosen ([abacbed](https://github.com/alaraun/python-eufy-home-security/commit/abacbedd6cc48249dddd276b33faf9df68db6155))
+* errors list every device they name in device_sns ([abacbed](https://github.com/alaraun/python-eufy-home-security/commit/abacbedd6cc48249dddd276b33faf9df68db6155))
+* every setting carries a UI section ([#95](https://github.com/alaraun/python-eufy-home-security/issues/95)) ([0bbbe57](https://github.com/alaraun/python-eufy-home-security/commit/0bbbe57837fcbb784856ed1f8697c630aea28d5a))
+* export Schedule, ScheduleSlot, Weekday and ModeTable from the package root ([abacbed](https://github.com/alaraun/python-eufy-home-security/commit/abacbedd6cc48249dddd276b33faf9df68db6155))
+* HomeBase configuration writes: custom modes, schedule and its default mode, cross-camera cameras and groups ([d00a1c2](https://github.com/alaraun/python-eufy-home-security/commit/d00a1c2d51fb39f81d9f5982136c34edd417c60e))
+* per-mode entry and exit delays take only the eufy app's choices (MODE_DELAY_CHOICES: 0, 15, 30, 45, 60, 180, 300 s) ([d00a1c2](https://github.com/alaraun/python-eufy-home-security/commit/d00a1c2d51fb39f81d9f5982136c34edd417c60e))
+* per-model station configuration support (config_support) ([c69663d](https://github.com/alaraun/python-eufy-home-security/commit/c69663d139deaabf87bd827ae95d7521d86da9f5))
+* pro-alarm stations (T8020, T8023, T8024, T8026) read, write and confirm their mode tables as the eufy app does ([534621a](https://github.com/alaraun/python-eufy-home-security/commit/534621ac9ad94aa058aa7f477417c8a0c8e978c2))
+* schedule slots that run to midnight read as ending at 00:00 (the stored 23:59 round-trips unchanged) ([abacbed](https://github.com/alaraun/python-eufy-home-security/commit/abacbedd6cc48249dddd276b33faf9df68db6155))
+* setting existence, error device serial, alarm-affecting flags, cross-camera seconds, alarm state ([#103](https://github.com/alaraun/python-eufy-home-security/issues/103)) ([3eb31cb](https://github.com/alaraun/python-eufy-home-security/commit/3eb31cbb330f7c2734bcea3082fa3d8e90bd5c1a))
+* setting names are in sentence case, as Home Assistant names entities ([23974a7](https://github.com/alaraun/python-eufy-home-security/commit/23974a7b6b7ffcab4e489ec9e07c75992059781c))
+* station configuration read model (modes, mode tables, schedule, cross-camera) ([#97](https://github.com/alaraun/python-eufy-home-security/issues/97)) ([127f5d3](https://github.com/alaraun/python-eufy-home-security/commit/127f5d3764d6b754d174796c89f8c69312684b01))
+* station restart and sound/stop alarm ([#100](https://github.com/alaraun/python-eufy-home-security/issues/100)) ([430e39c](https://github.com/alaraun/python-eufy-home-security/commit/430e39cf34faa7e320a4a23591bb9e68f254e412))
+* station settings read from the P2P dump, then the cloud device list, then the app default (StationState.setting_source) ([3f99ddf](https://github.com/alaraun/python-eufy-home-security/commit/3f99ddf3a3995074e1ad64635b895dc4fd22335b))
+* **testing:** seed a station's mode list and schedule with typed helpers ([abacbed](https://github.com/alaraun/python-eufy-home-security/commit/abacbedd6cc48249dddd276b33faf9df68db6155))
+* the arming-group models are exported from the package root ([05dbb4c](https://github.com/alaraun/python-eufy-home-security/commit/05dbb4cb1d0f47ad040713dcdfb429101d62af95))
+* the cloud device list is refreshed hourly for every station, and at start when it carries no station parameters ([3f99ddf](https://github.com/alaraun/python-eufy-home-security/commit/3f99ddf3a3995074e1ad64635b895dc4fd22335b))
+* the guard-mode write is refused on station models graded unknown (T8N00, T9000, models without app data) ([534621a](https://github.com/alaraun/python-eufy-home-security/commit/534621ac9ad94aa058aa7f477417c8a0c8e978c2))
+* working mode carries the eufy app's names (Standard, Performance (beta)) and is marked advanced (Setting.advanced) ([23974a7](https://github.com/alaraun/python-eufy-home-security/commit/23974a7b6b7ffcab4e489ec9e07c75992059781c))
+
+
+### Bug Fixes
+
+* a mode-table write right after another configuration write is not refused as stale ([534621a](https://github.com/alaraun/python-eufy-home-security/commit/534621ac9ad94aa058aa7f477417c8a0c8e978c2))
+* a motion sensor's React to motion (motion_sensor_respond) is on while action bit 32 is clear, as in the eufy app; turning it off also turns off its notification and HomeBase alarm ([d00a1c2](https://github.com/alaraun/python-eufy-home-security/commit/d00a1c2d51fb39f81d9f5982136c34edd417c60e))
+* an empty working-mode read shows Standard, as the eufy app does ([23974a7](https://github.com/alaraun/python-eufy-home-security/commit/23974a7b6b7ffcab4e489ec9e07c75992059781c))
+* arming-group updates send the name and every member each time (the cloud refuses one alone); EufyCloudApi.async_update_arming_group takes both ([05dbb4c](https://github.com/alaraun/python-eufy-home-security/commit/05dbb4cb1d0f47ad040713dcdfb429101d62af95))
+* cross-camera tracking needs at least two cameras, as the eufy app requires ([abacbed](https://github.com/alaraun/python-eufy-home-security/commit/abacbedd6cc48249dddd276b33faf9df68db6155))
+* cross-camera tracking offers every paired device the eufy app lists, locks included ([bcaa7d9](https://github.com/alaraun/python-eufy-home-security/commit/bcaa7d906e4367e6bb597f39dc6cc7772a8b1444))
+* light settings carry the eufy app's names; no two controls of a model share one ([#88](https://github.com/alaraun/python-eufy-home-security/issues/88)) ([b8ed387](https://github.com/alaraun/python-eufy-home-security/commit/b8ed3871711f8508a9fc4320c86c9661ca91a29a))
+* per-mode settings are listed only where the eufy app offers mode tables or delays ([0452b01](https://github.com/alaraun/python-eufy-home-security/commit/0452b0101609268d0c77fe2a39012778737261d7))
+* set_alarm_type is no longer a setting: it sounds the HomeBase (see Station.async_trigger_alarm) ([23974a7](https://github.com/alaraun/python-eufy-home-security/commit/23974a7b6b7ffcab4e489ec9e07c75992059781c))
+* single mode-table writes refuse models without mode-table or delay support ([534621a](https://github.com/alaraun/python-eufy-home-security/commit/534621ac9ad94aa058aa7f477417c8a0c8e978c2))
+* sub-device serials come from the cloud device list only; parameter 1072 is the cross-camera tracking selection (SubDeviceState.serial_source "param_1072", SUB_DEVICE_SERIALS_ORDER_EVIDENCE and ParamDump.sub_device_serials removed) ([e631835](https://github.com/alaraun/python-eufy-home-security/commit/e631835081b1d1365d4173d733dab5c96dd375e0))
+* switching_notification names no keyfob member and no Start Alarm Delay ([23974a7](https://github.com/alaraun/python-eufy-home-security/commit/23974a7b6b7ffcab4e489ec9e07c75992059781c))
+* T8023, T8024 and T8026 offer no mode delays and offer arming groups, as the eufy app reports ([534621a](https://github.com/alaraun/python-eufy-home-security/commit/534621ac9ad94aa058aa7f477417c8a0c8e978c2))
+* the keypad password status is read-only ([23974a7](https://github.com/alaraun/python-eufy-home-security/commit/23974a7b6b7ffcab4e489ec9e07c75992059781c))
+* tracking assistance on a HomeBase 3 defaults to on, as the eufy app shows it ([23974a7](https://github.com/alaraun/python-eufy-home-security/commit/23974a7b6b7ffcab4e489ec9e07c75992059781c))
+
+
+### Documentation
+
+* a UI takes setting sections from one layout request; the attribute is for templates ([#96](https://github.com/alaraun/python-eufy-home-security/issues/96)) ([0a33c5f](https://github.com/alaraun/python-eufy-home-security/commit/0a33c5f0e968ffce14a6e08dadf21195cb7ed619))
+* arming groups verified on the HomeBase 3 (T8030) ([bcaa7d9](https://github.com/alaraun/python-eufy-home-security/commit/bcaa7d906e4367e6bb597f39dc6cc7772a8b1444))
+
+
+### Miscellaneous Chores
+
+* release 0.4.0 ([#108](https://github.com/alaraun/python-eufy-home-security/issues/108)) ([178f179](https://github.com/alaraun/python-eufy-home-security/commit/178f1797cde0226f65d0704d558f4ff704806b49))
+
 ## [0.3.17](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.16...v0.3.17) (2026-10-14)
 
 
