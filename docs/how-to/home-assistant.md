@@ -934,7 +934,7 @@ A closed session (`async_close`) never reconnects on its own — build a new
   await station.async_set_mode_delays("home", exit_s=60)  # delays only, one write
   ```
 
-  It returns the mode's `ModeTable` (`eufy_home_security.p2p.mode_actions`: per-channel
+  It returns the mode's `ModeTable` (`from eufy_home_security import ModeTable`: per-channel
   `actions`, `alarm_delays`, `leaving_delays`). The delays keep the one-value-per-mode
   rule: `entry_s`/`exit_s` set the value of every device that has the delay on afterwards
   (0 turns it off on all); a device turned on without a value takes the value the others
@@ -2346,10 +2346,12 @@ station.config  # the same, built from the current state, no I/O
 info = await station.async_create_custom_mode("Garden", icon=3, expect_revision=rev)
 info = await station.async_rename_custom_mode(GuardMode.CUSTOM_2, "Yard")  # ModeInfo
 await station.async_delete_custom_mode("custom_2")
+from eufy_home_security import GuardMode, Schedule, ScheduleSlot, Weekday
+
 schedule = Schedule(
     account_id=None,
     slots=(ScheduleSlot(Weekday.MONDAY, time(8), time(17), GuardMode.AWAY),),
-)  # from eufy_home_security.p2p.station_config_codecs
+)
 slots, default = await station.async_set_schedule(schedule, default_mode=GuardMode.DISARMED)
 await station.async_set_cross_camera_cameras([cam_sn, other_sn])  # None: every camera
 await station.async_set_cross_camera_groups([[cam_sn, other_sn]])  # []: no group

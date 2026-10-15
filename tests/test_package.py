@@ -73,6 +73,15 @@ def test_the_card_constants_are_exported_from_the_root() -> None:
     assert eufy_home_security.MODE_ACTION_LABELS is settings.MODE_ACTION_LABELS
 
 
+def test_the_schedule_and_mode_table_types_are_exported_from_the_root() -> None:
+    from eufy_home_security.p2p import mode_actions, station_config_codecs  # noqa: PLC0415
+
+    assert eufy_home_security.ModeTable is mode_actions.ModeTable
+    for name in ("Schedule", "ScheduleSlot", "Weekday"):
+        assert name in eufy_home_security.__all__
+        assert getattr(eufy_home_security, name) is getattr(station_config_codecs, name)
+
+
 def test_every_cloud_public_name_resolves() -> None:
     for name in eufy_home_security.cloud.__all__:
         assert getattr(eufy_home_security.cloud, name) is not None

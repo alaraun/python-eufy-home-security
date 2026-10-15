@@ -129,7 +129,7 @@ if TYPE_CHECKING:
     from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
     from .p2p.media import MediaKeyType, Still, StillFormat, VideoCodec, picture_codec
     from .p2p.messages import SOUND_ALARM_SECONDS
-    from .p2p.mode_actions import MODE_DELAY_CHOICES
+    from .p2p.mode_actions import MODE_DELAY_CHOICES, ModeTable
     from .p2p.pppp import LAN_DISCOVERY_TIMEOUT
     from .p2p.session import (
         DEFAULT_STATION_SESSIONS,
@@ -138,6 +138,7 @@ if TYPE_CHECKING:
         CommandOutcome,
         SessionStats,
     )
+    from .p2p.station_config_codecs import Schedule, ScheduleSlot, Weekday
     from .p2p.storage_info import DiskInfo, EmmcInfo, StorageInfo, StorageMedium
     from .station import RemoteStation, SettingsCoverage, Station, StationState, SubDeviceState
     from .station_config import (
@@ -216,7 +217,8 @@ _EXPORTS: dict[str, str] = {
     **dict.fromkeys(("CLIP_CONTENT_TYPE", "ClipWriter", "MediaClip"), "p2p.clip"),
     **dict.fromkeys(("SETTLE_STANDALONE", "SETTLE_STATION"), "p2p.encoder"),
     "SOUND_ALARM_SECONDS": "p2p.messages",
-    "MODE_DELAY_CHOICES": "p2p.mode_actions",
+    **dict.fromkeys(("MODE_DELAY_CHOICES", "ModeTable"), "p2p.mode_actions"),
+    **dict.fromkeys(("Schedule", "ScheduleSlot", "Weekday"), "p2p.station_config_codecs"),
     **dict.fromkeys(
         (
             "AccountMismatch",
@@ -455,6 +457,7 @@ __all__ = [
     "ModeDeviceAction",
     "ModeInUseError",
     "ModeInfo",
+    "ModeTable",
     "ModeTableStorage",
     "ModeTableView",
     "ModelDataError",
@@ -477,6 +480,8 @@ __all__ = [
     "RegionStatus",
     "RemoteStation",
     "ResizePolicy",
+    "Schedule",
+    "ScheduleSlot",
     "SecurityEvent",
     "SessionCache",
     "SessionRejectedError",
@@ -513,6 +518,7 @@ __all__ = [
     "UnsupportedError",
     "ValueSource",
     "VideoCodec",
+    "Weekday",
     "ZoomChanged",
     "__version__",
     "async_forget_account",
