@@ -1122,9 +1122,16 @@ for an unknown id). All are exported from the package root.
 - The same setting key can sit in different sections on different device kinds
   (`led_on_off`: `picture` on a camera, `system` on a HomeBase).
 - A setting from a model without a settings file (see below) is in `other`.
-- **What a frontend needs:** the section id per entity (an entity attribute, or the
-  integration's own data path to its card); headings and order come from
-  `SETTING_SECTIONS`, so pass that table once rather than per entity.
+- **What a frontend needs:** the whole layout per device, from one request: the
+  sections in `SETTING_SECTIONS` order, each with its `heading` and the device's
+  entities in `settings_for()` order. In Home Assistant that is a websocket command
+  the integration registers (`websocket_api.async_register_command`, on the existing
+  websocket), which the card or panel calls with `hass.callWS`. A UI takes sections,
+  headings and order only from that layout and keeps no section table of its own.
+- **An entity attribute is for templates only.** A `section` attribute with the id
+  (kept out of the recorder) lets templates and automations filter entities by
+  section; a card or panel does not read it, since it carries neither the heading
+  nor the order.
 
 ### Models without a settings file
 
