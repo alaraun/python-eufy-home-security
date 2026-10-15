@@ -2733,6 +2733,10 @@ can prove what a boundary mock cannot:
   Lower `DISCOVERY_ATTEMPTS` / `DISCOVERY_TIMEOUT` in `eufy_home_security.p2p.session`
   first, or the test waits the production timeouts.
 - **Events:** `fake.push_camera_event(cipher=…)` reaches `eufy.subscribe`, GCM or ECB.
+- **Modes and schedule:** `fake.set_mode_list({GuardMode.CUSTOM_1: "Night watch"})` and
+  `fake.set_schedule([ScheduleSlot(...)], default=...)` seed what `StationConfig` reads;
+  `mode_list_params` / `schedule_params` give the same values for the cloud's copy
+  (`FakeCloud.set_station_params`). See [testing.md](testing.md#controlling-the-fakes).
 - **A standalone battery camera:** a device-list entry whose `parent_sn` is its own serial
   (build it as `"T8170" + SYNTHETIC.station_sn[5:]`), `device_type` 48, `device_channel` 0,
   a `p2p_did`, and a `params` list (`param_type`, `param_value`, `update_time`) for its

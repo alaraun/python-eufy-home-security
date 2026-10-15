@@ -24,7 +24,7 @@ import base64
 import json
 import os
 import struct
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
@@ -37,7 +37,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from ..cloud.const import CIPHER_ID_P2P
 from ..devices.recipes import MAX_PRESET_SLOTS, ConnectType, connect_type
 from ..devices.types import model_for_serial
-from ..models import STATION_CHANNEL
+from ..models import STATION_CHANNEL, GuardMode
 from ..p2p.crypto import (
     CONN_INIT_ECC_VERSION,
     CONN_INIT_RSA_BLOB_LEN,
@@ -89,9 +89,12 @@ from ..p2p.station_config_codecs import (
     CMD_SCHEDULE,
     PARAM_TRACKING_CAMERAS,
     PARAM_TRACKING_GROUPS,
+    Schedule,
+    ScheduleSlot,
 )
 from ..p2p.storage_info import CMD_SD_INFO
 from ..p2p.xzyh import FrameCipher, FrameType, StreamDecoder, encode_frame
+from .station_config import mode_list_params, schedule_params
 from .synthetic import SYNTHETIC
 
 SESSION_KEY = SYNTHETIC.session_key
@@ -1502,6 +1505,29 @@ class FakeStation:
             )
         else:
             self.send_frame(ftype, body, cipher=FrameCipher.GCM, subheader=subheader)
+
+    def set_mode_list(
+        self,
+        titles: Mapping[GuardMode | int, str],
+        *,
+        icons: Mapping[GuardMode | int, int] | None = None,
+    ) -> None:
+        """Report a mode list (1256) naming custom modes ``titles`` (Custom 1-3 → title)
+        in the station's dump; see :func:`~.station_config.mode_list_params`."""
+        own = self.params.setdefault(STATION_CHANNEL, {})
+        own.update(mode_list_params(titles, icons=icons, account_id=self.account_id))
+
+    def set_schedule(
+        self,
+        slots: Schedule | Iterable[ScheduleSlot],
+        *,
+        default: GuardMode | int | None = None,
+    ) -> None:
+        """Report the weekly schedule (1254) of ``slots`` and, with ``default``, the mode
+        outside every slot (1257) in the station's dump; see
+        :func:`~.station_config.schedule_params`."""
+        own = self.params.setdefault(STATION_CHANNEL, {})
+        own.update(schedule_params(slots, default=default, account_id=self.account_id))
 
     def send_alarm_mode(self, mode: int, *, cipher: int = FrameCipher.GCM) -> None:
         """A guard-mode report (0x047F): GCM u64-LE, or ECB with the mode as the first u32."""

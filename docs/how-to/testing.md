@@ -17,6 +17,7 @@ session serves a poll, a snapshot and an arm, and a push reaches an entity.
 | `FakeCloud` | The eufy cloud answered below the HTTP envelope. The real client's session cache, hold-offs, login budget and owner-id rules still run. |
 | `warm_store(email=, cloud=, country=, region=, scan_regions=)` | A `MemoryStore` holding the cache document as after one login, written by the library's own cache writers. |
 | `build_eufy_security(email=, store=, cloud=, stations=)` | A real `EufySecurity` wired to the fakes at the cloud-HTTP and discovery-port seams. |
+| `mode_list_params(titles, icons=)`, `schedule_params(slots, default=)` | A station's mode list (1256) and weekly schedule (1254, with the 1257 default) as `{param: value}`, encoded by the library's own codecs. |
 
 ## A test
 
@@ -95,6 +96,30 @@ async def test_warm_start_needs_no_cloud() -> None:
   `live_ends_unpinged_after` ends a live stream that gets no ping, as the camera does.
   `push_camera_event(cipher=...)` sends a camera event under either frame cipher, and
   `send_alarm_frame(FrameType.ALARM_TONE_NOTIFY, 3, 30, channel=1)` an alarm frame.
+- **Station configuration.** Seed the guard modes and the schedule a
+  `StationConfig` reads with typed helpers instead of hand-built base64:
+
+  ```python
+  from datetime import time
+
+  from eufy_home_security import GuardMode, ScheduleSlot, Weekday
+  from eufy_home_security.testing import mode_list_params, schedule_params
+
+  station.set_mode_list({GuardMode.CUSTOM_1: "Night watch"}, icons={GuardMode.CUSTOM_1: 6})
+  station.set_schedule(
+      [ScheduleSlot(Weekday.MONDAY, time(8), time(17, 30), GuardMode.AWAY)],
+      default=GuardMode.DISARMED,
+  )
+  cloud.set_station_params(station.serial, mode_list_params({3: "Night watch"}))
+  ```
+
+  `FakeStation.set_mode_list` lists Home and Away and the custom modes named (a custom
+  mode left out does not exist on the station); `set_schedule` takes `ScheduleSlot`s or a
+  `Schedule`, and `default` sets the mode outside every slot. Both put the values in the
+  fake's parameter dump. A HomeBase 3 keeps them in the cloud's copy instead: pass the
+  same `{param: value}` to `station_device(params=...)` or
+  `FakeCloud.set_station_params(serial, params)`, which the client reads at its next
+  device-list fetch (`async_discover(refresh=True)`).
 - **Sessions.** Like the real station, the fake holds several client sessions at once
   (a trigger frame opens a short-lived second one): replies go to the session that
   asked, and what a test sends directly (`push_camera_event`, `send_close`) goes to

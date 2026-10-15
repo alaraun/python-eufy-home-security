@@ -11,6 +11,8 @@ Never imported by the package itself: import it from a test suite only.
 - :func:`build_eufy_security`: a real :class:`~eufy_home_security.EufySecurity` wired
   to the fakes.
 - :func:`short_timeouts`: the library's hardware waits shortened for a test.
+- :func:`mode_list_params`, :func:`schedule_params`: a station's mode list and schedule
+  as parameter values, for the fake station's dump or the cloud's copy.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from .cloud import (
     warm_store,
 )
 from .station import FakeStation, v1_still
+from .station_config import mode_list_params, schedule_params
 from .synthetic import SYNTHETIC, Synthetic
 from .timeouts import short_timeouts
 
@@ -35,6 +38,8 @@ __all__ = [
     "Synthetic",
     "build_eufy_security",
     "camera_device",
+    "mode_list_params",
+    "schedule_params",
     "security_device",
     "security_station",
     "short_timeouts",

@@ -158,9 +158,15 @@ def _answer_of(error: EufySecurityError) -> _HttpAnswer | None:
 
 
 def station_device(
-    serial: str = SYNTHETIC.station_sn, *, did: str = SYNTHETIC.did, name: str = "Home Base"
+    serial: str = SYNTHETIC.station_sn,
+    *,
+    did: str = SYNTHETIC.did,
+    name: str = "Home Base",
+    params: Mapping[int, str] | None = None,
 ) -> dict[str, Any]:
-    """A device-list entry for a station, as ``get_devs_list`` returns it."""
+    """A device-list entry for a station, as ``get_devs_list`` returns it; ``params``
+    is the cloud's copy of station parameters (the mode list and schedule of
+    :mod:`.station_config`, say)."""
     model = model_for_serial(serial)
     return {
         "device_sn": serial,
@@ -170,8 +176,12 @@ def station_device(
         "local_ip": SYNTHETIC.station_ip,
         "main_sw_version": "3.8.7.4",
         # A station's entry always carries a parameter snapshot; 1140 no setting reads.
-        "params": [{"param_type": 1140, "param_value": "0"}],
+        "params": _param_list({1140: "0", **(params or {})}),
     }
+
+
+def _param_list(params: Mapping[int, str]) -> list[dict[str, Any]]:
+    return [{"param_type": param, "param_value": value} for param, value in params.items()]
 
 
 def camera_device(
@@ -209,9 +219,7 @@ def security_station(
         "p2p_did": did,
         "main_sw_version": "2.1.6.9h",
         "main_hw_version": "P1",
-        "params": [
-            {"param_type": param, "param_value": value} for param, value in (params or {}).items()
-        ],
+        "params": _param_list(params or {}),
     }
 
 
@@ -446,6 +454,19 @@ class FakeCloud:
             rsa_cipher_keys={s.serial: s.rsa_private_key_pem for s in stations if s.rsa_session},
             **kwargs,
         )
+
+    def set_station_params(self, serial: str, params: Mapping[int, str]) -> None:
+        """Merge ``params`` into the cloud's copy of station ``serial``'s parameters (its
+        device-list entry), replacing a parameter it already lists; the client sees them
+        at its next device-list fetch. Raises ``KeyError`` when no listed station has
+        that serial."""
+        entry = next(
+            (d for d in self.devices if d.get("device_sn") == serial and "p2p_did" in d), None
+        )
+        if entry is None:
+            raise KeyError("no station with that serial in the device list")
+        merged = {p["param_type"]: p["param_value"] for p in entry.get("params", [])}
+        entry["params"] = _param_list({**merged, **params})
 
     def make_api(
         self,
