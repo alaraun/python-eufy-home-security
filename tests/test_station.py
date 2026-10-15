@@ -51,6 +51,7 @@ from eufy_home_security.exceptions import (
     CommandNotAppliedError,
     CommandRejectedError,
     CommandUnsupportedError,
+    ConfigChangedError,
     DeviceBusyError,
     DeviceTimeoutError,
     LiveStreamLimitError,
@@ -1504,6 +1505,19 @@ async def test_mode_delays_alone_are_one_table_write(station: Station, fake: Fak
     }
     assert (table.alarm_delays, table.leaving_delays) == ({0: 45, 16: 0}, {0: 20, 16: 0})
     assert (fake.params[0][1166], fake.params[16][1166], fake.params[0][1171]) == ("45", "0", "20")
+    assert len(fake.mode_tables_received) == 1
+
+
+async def test_a_stale_revision_sends_no_table(station: Station, fake: FakeStation) -> None:
+    _mode_table_blocks(fake)
+    hub = _matrix_hub(station)
+    revision = (await hub.async_get_config(refresh=True)).revision
+    edit = {SYNTHETIC.camera_sn: {"camera_siren": True}}
+    with pytest.raises(ConfigChangedError) as err:
+        await hub.async_set_mode_actions("away", edit, expect_revision=revision + 1)
+    assert err.value.config.revision == revision
+    assert fake.mode_tables_received == []
+    await hub.async_set_mode_actions("away", edit, expect_revision=revision)
     assert len(fake.mode_tables_received) == 1
 
 

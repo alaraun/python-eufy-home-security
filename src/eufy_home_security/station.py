@@ -1643,14 +1643,6 @@ class Station:
         other's changes."""
         return self._shared_locks.setdefault(group, asyncio.Lock())
 
-    def _check_config_revision(self, expect_revision: int | None) -> None:
-        """Refuse a write made against an older station configuration.
-
-        Called under the write's lock after the fresh read and before anything is sent.
-        The revision check is applied when the read model provides one; until then
-        every ``expect_revision`` passes.
-        """
-
     async def async_set_mode_actions(
         self,
         mode: GuardMode | str | int,
@@ -1680,7 +1672,8 @@ class Station:
         holds the result, nor for an empty edit (which returns the current table).
         Single-flag writes (:meth:`async_set_mode_action`, :meth:`async_set_setting`)
         share the station's mode-table lock, so concurrent writes keep each other's bits.
-        ``expect_revision`` is checked after the fresh read (:meth:`_check_config_revision`).
+        ``expect_revision`` is checked against the configuration of the fresh read
+        (:class:`~.exceptions.ConfigChangedError`, nothing sent, when it differs).
 
         Raises, before anything is sent: ``UnsupportedError`` for a mode without
         per-device actions (Schedule, Off, Disarmed, Geofence) or for which the station
@@ -1823,7 +1816,8 @@ class Station:
                         f"setting {spec.key!r} is a {spec.scope} setting, not one of "
                         f"channel {target}"
                     )
-            self._check_config_revision(expect_revision)
+            if expect_revision is not None:
+                check_revision(build_station_config(state), expect_revision)
             table = mode_table_from_params(dump.devices, mode)
             if not table.actions:
                 raise UnsupportedError(

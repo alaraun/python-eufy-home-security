@@ -928,9 +928,9 @@ A closed session (`async_close`) never reconnects on its own — build a new
   the unknown-kind and delay cases above, a flag value that is not a bool and a device
   turned on with no delay value to take (`ValueError`). A read-back that does not show
   the table raises `CommandNotAppliedError` naming the device and flag (`… camera_siren:
-  wrote on, station reports off`). `expect_revision` is checked against the station
-  configuration's revision before the write (`ConfigChangedError`) once the station's
-  configuration read model provides one.
+  wrote on, station reports off`). `expect_revision` is checked against the revision of
+  the configuration the fresh read gives (`ConfigChangedError`, nothing sent, when it
+  differs; see [Station configuration](#station-configuration)).
 
   **Labels:** `mode_action_label(flag)` (or `MODE_ACTION_LABELS`, from
   `eufy_home_security.devices`) gives each flag's display title in sentence case, the
