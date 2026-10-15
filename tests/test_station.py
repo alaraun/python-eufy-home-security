@@ -98,6 +98,7 @@ from eufy_home_security.testing.station import (
     synthetic_hub_storage,
     v1_still,
 )
+from tests.test_station_config import _cloud_entry, mode_list
 
 STATION = CloudDevice(
     device_sn=SYNTHETIC.station_sn,
@@ -1601,8 +1602,6 @@ async def test_the_revision_after_a_receipt_confirmed_write_is_not_stale(
 ) -> None:
     """A table write taking the revision `config` shows right after a custom-mode write
     (confirmed by receipt, absent from the dump) goes through."""
-    from tests.test_station_config import _cloud_entry, mode_list
-
     fake.reply_to_settings = True
     _mode_table_blocks(fake)
     hub = _matrix_hub(station)

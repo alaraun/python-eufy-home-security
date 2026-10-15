@@ -319,10 +319,10 @@ Which station configuration features each station model offers (`Station.config_
 | custom_modes | no | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | verified | unknown | unknown | unknown |
 | schedule | yes | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | verified | unknown | unknown | unknown |
 | mode_tables | yes | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | verified | unknown | unknown | unknown |
-| mode_delays | yes | unknown | declared | declared | declared | unknown | unknown | declared | declared | declared | declared | unknown | verified | unknown | unknown | unknown |
+| mode_delays | yes | unknown | declared | declared | declared | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | cross_camera | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | cross_camera_groups | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
-| arming_groups | yes | unknown | declared | declared | declared | declared | unknown | unknown | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
+| arming_groups | yes | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | declared | unknown | declared | unknown |
 | restart | yes | unknown | declared | declared | declared | declared | unknown | unknown | unknown | declared | declared | unknown | verified | unknown | unknown | unknown |
 | sound_alarm | yes | unknown | declared | declared | declared | declared | unknown | declared | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | working_mode | no | unknown | declared | declared | declared | unknown | unknown | unknown | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
@@ -358,7 +358,7 @@ Restart: 1034
 | mode_delays | declared | - | the T8001 handler builds arming_config as 1255 (eufy app 6.1.10) |
 | cross_camera | unknown | - | the T8001 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list |
 | cross_camera_groups | unknown | - | the T8001 thing description declares no device_cross_cam_group |
-| arming_groups | declared | - | the T8001 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8001 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
 | restart | declared | - | the T8001 handler builds restart_device as 1034 (eufy app 6.1.10) |
 | sound_alarm | declared | - | the T8001 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | declared | - | the T8001 handler builds working_mode_value as 1296 (eufy app 6.1.10) |
@@ -378,7 +378,7 @@ Restart: 1034
 | mode_delays | declared | - | the T8002 handler builds arming_config as 1255 (eufy app 6.1.10) |
 | cross_camera | unknown | - | the T8002 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list |
 | cross_camera_groups | unknown | - | the T8002 thing description declares no device_cross_cam_group |
-| arming_groups | declared | - | the T8002 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8002 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
 | restart | declared | - | the T8002 handler builds restart_device as 1034 (eufy app 6.1.10) |
 | sound_alarm | declared | - | the T8002 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | declared | - | the T8002 handler builds working_mode_value as 1296 (eufy app 6.1.10) |
@@ -398,7 +398,7 @@ Restart: 1034
 | mode_delays | declared | - | the T8010 handler builds arming_config as 1255 (eufy app 6.1.10) |
 | cross_camera | unknown | - | the T8010 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list |
 | cross_camera_groups | unknown | - | the T8010 thing description declares no device_cross_cam_group |
-| arming_groups | declared | - | the T8010 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8010 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
 | restart | declared | - | the T8010 handler builds restart_device as 1034 (eufy app 6.1.10) |
 | sound_alarm | declared | - | the T8010 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | declared | - | the T8010 handler builds working_mode_value as 1296 (eufy app 6.1.10) |
@@ -415,10 +415,10 @@ Restart: 1034
 | custom_modes | declared | - | the T8020 handler builds arming_cust_mode_config as 1256 (eufy app 6.1.10) |
 | schedule | declared | - | the T8020 handler builds arming_schedule_config as 1254 (eufy app 6.1.10) |
 | mode_tables | declared | - | the T8020 handler builds arming_config as 1255 (eufy app 6.1.10) |
-| mode_delays | unknown | - | the T8020 thing description sets arming_support_arm_delay false |
+| mode_delays | unknown | - | the eufy app sets arming_support_arm_delay false for a T8020 |
 | cross_camera | unknown | - | the T8020 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list |
 | cross_camera_groups | unknown | - | the T8020 thing description declares no device_cross_cam_group |
-| arming_groups | declared | - | the T8020 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8020 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
 | restart | declared | - | the T8020 handler builds restart_device as 1034 (eufy app 6.1.10) |
 | sound_alarm | declared | - | the T8020 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | unknown | - | the T8020 thing description declares no working_mode_value |
@@ -449,10 +449,10 @@ Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, 
 | custom_modes | declared | - | the T8023 handler builds arming_cust_mode_config as 1256 (eufy app 6.1.10) |
 | schedule | declared | - | the T8023 handler builds arming_schedule_config as 1254 (eufy app 6.1.10) |
 | mode_tables | declared | - | the T8023 handler builds arming_config as 1255 (eufy app 6.1.10) |
-| mode_delays | declared | - | the T8023 handler builds arming_config as 1255 (eufy app 6.1.10) |
+| mode_delays | unknown | - | the eufy app sets arming_support_arm_delay false for a T8023 |
 | cross_camera | unknown | - | the T8023 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list |
 | cross_camera_groups | unknown | - | the T8023 thing description declares no device_cross_cam_group |
-| arming_groups | unknown | - | the T8023 thing description does not set arming_support_arming: the app offers groups only for a house with a station that does |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8023 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
 | restart | unknown | - | the T8023 thing description declares no restart_device |
 | sound_alarm | declared | - | the T8023 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | unknown | - | the T8023 thing description declares no working_mode_value |
@@ -467,10 +467,10 @@ Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, 
 | custom_modes | declared | - | the T8024 handler builds arming_cust_mode_config as 1256 (eufy app 6.1.10) |
 | schedule | declared | - | the T8024 handler builds arming_schedule_config as 1254 (eufy app 6.1.10) |
 | mode_tables | declared | - | the T8024 handler builds arming_config as 1255 (eufy app 6.1.10) |
-| mode_delays | declared | - | the T8024 handler builds arming_config as 1255 (eufy app 6.1.10) |
+| mode_delays | unknown | - | the eufy app sets arming_support_arm_delay false for a T8024 |
 | cross_camera | unknown | - | the T8024 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list |
 | cross_camera_groups | unknown | - | the T8024 thing description declares no device_cross_cam_group |
-| arming_groups | unknown | - | the T8024 thing description does not set arming_support_arming: the app offers groups only for a house with a station that does |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8024 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
 | restart | unknown | - | the T8024 thing description declares no restart_device |
 | sound_alarm | unknown | - | the T8024 thing description declares no set_alarm_type |
 | working_mode | unknown | - | the T8024 thing description declares no working_mode_value |
@@ -492,7 +492,7 @@ Restart: 1034
 | mode_delays | declared | - | the T8025 handler builds arming_config as 1255 (eufy app 6.1.10) |
 | cross_camera | declared | - | the T8025 handler builds device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list as 1065, 1069, 1070, 1072 (eufy app 6.1.10) |
 | cross_camera_groups | declared | - | the T8025 thing description declares device_cross_cam_group (eufy app 6.1.10); the app writes the groups as 1073 |
-| arming_groups | declared | - | the T8025 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8025 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
 | restart | declared | - | the T8025 handler builds restart_device as 1034 (eufy app 6.1.10) |
 | sound_alarm | declared | - | the T8025 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | declared | - | the T8025 handler builds working_mode_value as 1296 (eufy app 6.1.10) |
@@ -509,10 +509,10 @@ Restart: 1034
 | custom_modes | declared | - | the T8026 handler builds arming_cust_mode_config as 1256 (eufy app 6.1.10) |
 | schedule | declared | - | the T8026 handler builds arming_schedule_config as 1254 (eufy app 6.1.10) |
 | mode_tables | declared | - | the T8026 handler builds arming_config as 1255 (eufy app 6.1.10) |
-| mode_delays | declared | - | the T8026 handler builds arming_config as 1255 (eufy app 6.1.10) |
+| mode_delays | unknown | - | the eufy app sets arming_support_arm_delay false for a T8026 |
 | cross_camera | unknown | - | the T8026 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list |
 | cross_camera_groups | unknown | - | the T8026 thing description declares no device_cross_cam_group |
-| arming_groups | unknown | - | the T8026 thing description does not set arming_support_arming: the app offers groups only for a house with a station that does |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8026 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
 | restart | declared | - | the T8026 handler builds restart_device as 1034 (eufy app 6.1.10) |
 | sound_alarm | unknown | - | the T8026 thing description declares no set_alarm_type |
 | working_mode | unknown | - | the T8026 thing description declares no working_mode_value |
@@ -550,7 +550,7 @@ Restart: 1034
 | mode_delays | verified | - | live 1255 write + read-back of the Home, Away and Custom 1 entry and exit delays, T8030 HomeBase 3 fw 3.8.7.4 (Custom 2 and 3 declared) |
 | cross_camera | verified | 3.3.6.2 | live 1072 write of the chosen cameras + read-back, checked in the eufy app and restored, T8030 HomeBase 3 fw 3.8.7.4 (the tracking switches (1065, 1069, 1070) are settings, not written here; the eufy app offers it from firmware 3.3.6.2) |
 | cross_camera_groups | verified | 3.3.6.2 | live 1073 write of the groups + read-back, checked in the eufy app and restored, T8030 HomeBase 3 fw 3.8.7.4 (the eufy app offers it from firmware 3.3.6.2) |
-| arming_groups | declared | - | the T8030 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode (the group list read for a house with a T8030; not written or activated) |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8030 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode (the group list read for a house with a T8030; not written or activated) |
 | restart | verified | - | live library restart (1034): the station answered, rebooted and its session came back, T8030 HomeBase 3 fw 3.8.7.4 |
 | sound_alarm | verified | - | live library 1201 sound (30 s) and stop, each confirmed by the station's alarm-tone frame, the siren heard and then silent, T8030 HomeBase 3 fw 3.8.7.4 (the station acknowledges 1201 without a result) |
 | working_mode | declared | - | the T8030 handler builds working_mode_value as 1296 (eufy app 6.1.10) |
@@ -584,7 +584,7 @@ Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, 
 | mode_delays | unknown | - | the eufy app sends arming_config to a T8N00 over WebRTC, which this library does not implement |
 | cross_camera | unknown | - | the eufy app sends device_cross_cam_tracking_swtich to a T8N00 over WebRTC, which this library does not implement |
 | cross_camera_groups | unknown | - | the eufy app sends device_cross_cam_tracking_swtich to a T8N00 over WebRTC, which this library does not implement |
-| arming_groups | unknown | - | the T8N00 thing description does not set arming_support_arming: the app offers groups only for a house with a station that does |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8N00 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
 | restart | unknown | - | the eufy app sends restart_device to a T8N00 over WebRTC, which this library does not implement |
 | sound_alarm | unknown | - | the T8N00 thing description declares no set_alarm_type |
 | working_mode | unknown | - | the eufy app sends working_mode_value to a T8N00 over WebRTC, which this library does not implement |

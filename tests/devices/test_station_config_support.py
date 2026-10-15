@@ -206,7 +206,8 @@ def test_a_station_below_the_apps_firmware_gate_is_unknown() -> None:
     [
         ("T8N00", StationFeature.CUSTOM_MODES, "WebRTC"),
         ("T9000", StationFeature.ARMING_GROUPS, "professional arming"),
-        ("T8023", StationFeature.ARMING_GROUPS, "arming_support_arming"),
+        ("T8023", StationFeature.MODE_DELAYS, "arming_support_arm_delay false"),
+        ("T8026", StationFeature.MODE_DELAYS, "arming_support_arm_delay false"),
         ("T8020", StationFeature.MODE_DELAYS, "arming_support_arm_delay false"),
         ("T8001", StationFeature.CROSS_CAMERA, "declares no"),
         ("T8024", StationFeature.RESTART, "declares no restart_device"),

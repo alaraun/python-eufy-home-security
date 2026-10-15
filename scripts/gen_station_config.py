@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
@@ -191,8 +192,26 @@ def wire_of(recipe: Mapping[str, Any]) -> int | None:
     return recipe.get("subCmd") if cmd == 1350 else cmd
 
 
-def _gate(td_properties: Mapping[str, Any], identifier: str) -> bool | None:
-    """A thing-description capability flag: its default value, None when unset."""
+#: A capability flag the model's handler reports (``name:!0`` true, ``name:!1`` false).
+_HANDLER_FLAG = re.compile(r"\b(arming_support_[a-z_]+):(!0|!1|true|false)\b")
+
+
+def _handler_flags(handler: Path) -> dict[str, bool]:
+    """The capability flags the model's handler reports to the app; a flag set to
+    both values is left out."""
+    seen: dict[str, set[bool]] = {}
+    for name, value in _HANDLER_FLAG.findall(handler.read_text(encoding="utf-8")):
+        seen.setdefault(name, set()).add(value in ("!0", "true"))
+    return {name: values.pop() for name, values in seen.items() if len(values) == 1}
+
+
+def _gate(
+    td_properties: Mapping[str, Any], identifier: str, handler_flags: Mapping[str, bool]
+) -> bool | None:
+    """A capability flag as the app sees it: the handler's value, else the thing
+    description's default; None when neither sets it."""
+    if identifier in handler_flags:
+        return handler_flags[identifier]
     prop = td_properties.get(identifier)
     if prop is None:
         return None
@@ -280,6 +299,7 @@ def _model(
                 }
             )
     recipes = _run(tm, tm.handler_file(cache, code), jobs) if jobs else []
+    flags = _handler_flags(tm.handler_file(cache, code))
 
     built: dict[tuple[str, str], Mapping[str, Any]] = {}
     mode_params: dict[int, int] = {}
@@ -300,6 +320,7 @@ def _model(
             declared=declared,
             built=built,
             properties=properties,
+            flags=flags,
             professional=professional,
         )
         if feature is StationFeature.RESTART and features[feature.value][0] == "declared":
@@ -319,6 +340,7 @@ def _grade(
     declared: Callable[[Request], bool],
     built: Mapping[tuple[str, str], Mapping[str, Any]],
     properties: Mapping[str, Any],
+    flags: Mapping[str, bool],
     professional: frozenset[str],
 ) -> tuple[str, str]:
     """``(grade, source)`` of one feature on one model."""
@@ -329,15 +351,15 @@ def _grade(
                 "unknown",
                 f"a house with a {code} gets the app's professional arming, not groups",
             )
-        if _gate(properties, ARMING_GATE) is not True:
+        if _gate(properties, ARMING_GATE, flags) is not True:
             return (
                 "unknown",
-                f"the {code} thing description does not set {ARMING_GATE}: the app offers "
+                f"the eufy app does not set {ARMING_GATE} for a {code}: it offers "
                 "groups only for a house with a station that does",
             )
         return (
             "declared",
-            f"the {code} thing description sets {ARMING_GATE} ({app}); a house-level "
+            f"the eufy app sets {ARMING_GATE} for a {code} ({app}); a house-level "
             "cloud feature that sets each member's guard mode",
         )
     if feature is StationFeature.CROSS_CAMERA_GROUPS:
@@ -349,6 +371,7 @@ def _grade(
             declared=declared,
             built=built,
             properties=properties,
+            flags=flags,
             professional=professional,
         )
         if cross[0] != "declared":
@@ -377,8 +400,8 @@ def _grade(
                 f"the {code} handler builds {request.identifier} as {wire}, not {request.wire}",
             )
     gate = GATES.get(feature)
-    if gate is not None and _gate(properties, gate) is False:
-        return ("unknown", f"the {code} thing description sets {gate} false")
+    if gate is not None and _gate(properties, gate, flags) is False:
+        return ("unknown", f"the eufy app sets {gate} false for a {code}")
     names = ", ".join(dict.fromkeys(r.identifier for r in requests))
     wires = ", ".join(str(w) for w in dict.fromkeys(r.wire for r in requests))
     return ("declared", f"the {code} handler builds {names} as {wires} ({app})")

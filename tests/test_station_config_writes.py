@@ -613,21 +613,19 @@ async def test_a_pro_alarm_write_edits_the_stored_table_and_the_dump_confirms_it
     pro_alarm: Station, fake: FakeStation
 ) -> None:
     camera = CAMERA.device_sn
-    table = await pro_alarm.async_set_mode_actions(
-        "away", {camera: {"camera_siren": True}}, entry_s=60
-    )
-    assert fake.mode_tables_received == [_body(0, 11, ([0], 60))]
+    table = await pro_alarm.async_set_mode_actions("away", {camera: {"camera_siren": True}})
+    assert fake.mode_tables_received == [_body(0, 11, ([0], 30))]
     assert fake.params[255][61301] == fake.stored_config[61301] != AWAY_TABLE
-    assert (dict(table.actions), dict(table.alarm_delays)) == ({0: 11}, {0: 60})
+    assert (dict(table.actions), dict(table.alarm_delays)) == ({0: 11}, {0: 30})
     config = pro_alarm.config
     assert config is not None
     away = config.mode_tables[GuardMode.AWAY]
     assert away is not None
-    assert [(d.action, d.alarm_delay) for d in away.devices] == [(11, 60)]
+    assert [(d.action, d.alarm_delay) for d in away.devices] == [(11, 30)]
     state = pro_alarm.state
     assert state is not None
     assert state.setting("camera_action_away", device_sn=camera) == 11
-    assert state.setting("alarm_delay_away", device_sn=camera) == 60
+    assert state.setting("alarm_delay_away", device_sn=camera) == 30
 
 
 async def test_a_pro_alarm_table_the_dump_lacks_is_confirmed_by_the_receipt(
@@ -648,9 +646,9 @@ async def test_a_pro_alarm_table_the_dump_lacks_is_confirmed_by_the_receipt(
     assert [d.action for d in home.devices] == [3]
     assert config.sources["mode_tables.home"] is ValueSource.P2P
 
-    outcome = await pro_alarm.async_set_setting("alarm_delay_home", 30, device_sn=camera)
+    outcome = await pro_alarm.async_set_setting("camera_action_home", 1, device_sn=camera)
     assert outcome is CommandOutcome.APPLIED
-    assert fake.mode_tables_received[-1] == _body(1, 3, ([0], 30))
+    assert fake.mode_tables_received[-1] == _body(1, 1, ([], 0))
 
 
 async def test_a_pro_alarm_write_the_dump_does_not_show_is_not_applied(
@@ -658,7 +656,16 @@ async def test_a_pro_alarm_write_the_dump_does_not_show_is_not_applied(
 ) -> None:
     fake.apply_settings = False  # receipted, never stored
     with pytest.raises(CommandNotAppliedError, match="61301 not confirmed"):
+        await pro_alarm.async_set_mode_actions("away", {CAMERA.device_sn: {"camera_siren": True}})
+
+
+async def test_a_pro_alarm_station_offers_no_delays(pro_alarm: Station, fake: FakeStation) -> None:
+    """The eufy app shows no entry or exit delay on a pro-alarm station."""
+    with pytest.raises(UnsupportedError, match="arming_support_arm_delay false"):
         await pro_alarm.async_set_mode_delays("away", entry_s=60)
+    with pytest.raises(UnsupportedError, match="arming_support_arm_delay false"):
+        await pro_alarm.async_set_setting("alarm_delay_home", 30, device_sn=CAMERA.device_sn)
+    assert fake.mode_tables_received == []
 
 
 @pytest.mark.parametrize(

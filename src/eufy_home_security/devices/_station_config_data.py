@@ -87,7 +87,7 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
         ),
         "arming_groups": (
             "declared",
-            "the T8001 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
+            "the eufy app sets arming_support_arming for a T8001 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "declared",
@@ -133,7 +133,7 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
         ),
         "arming_groups": (
             "declared",
-            "the T8002 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
+            "the eufy app sets arming_support_arming for a T8002 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "declared",
@@ -179,7 +179,7 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
         ),
         "arming_groups": (
             "declared",
-            "the T8010 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
+            "the eufy app sets arming_support_arming for a T8010 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "declared",
@@ -213,7 +213,7 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
         ),
         "mode_delays": (
             "unknown",
-            "the T8020 thing description sets arming_support_arm_delay false",
+            "the eufy app sets arming_support_arm_delay false for a T8020",
         ),
         "cross_camera": (
             "unknown",
@@ -225,7 +225,7 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
         ),
         "arming_groups": (
             "declared",
-            "the T8020 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
+            "the eufy app sets arming_support_arming for a T8020 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "declared",
@@ -304,8 +304,8 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
             "the T8023 handler builds arming_config as 1255 (eufy app 6.1.10)",
         ),
         "mode_delays": (
-            "declared",
-            "the T8023 handler builds arming_config as 1255 (eufy app 6.1.10)",
+            "unknown",
+            "the eufy app sets arming_support_arm_delay false for a T8023",
         ),
         "cross_camera": (
             "unknown",
@@ -316,8 +316,8 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
             "the T8023 thing description declares no device_cross_cam_group",
         ),
         "arming_groups": (
-            "unknown",
-            "the T8023 thing description does not set arming_support_arming: the app offers groups only for a house with a station that does",
+            "declared",
+            "the eufy app sets arming_support_arming for a T8023 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "unknown",
@@ -350,8 +350,8 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
             "the T8024 handler builds arming_config as 1255 (eufy app 6.1.10)",
         ),
         "mode_delays": (
-            "declared",
-            "the T8024 handler builds arming_config as 1255 (eufy app 6.1.10)",
+            "unknown",
+            "the eufy app sets arming_support_arm_delay false for a T8024",
         ),
         "cross_camera": (
             "unknown",
@@ -362,8 +362,8 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
             "the T8024 thing description declares no device_cross_cam_group",
         ),
         "arming_groups": (
-            "unknown",
-            "the T8024 thing description does not set arming_support_arming: the app offers groups only for a house with a station that does",
+            "declared",
+            "the eufy app sets arming_support_arming for a T8024 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "unknown",
@@ -409,7 +409,7 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
         ),
         "arming_groups": (
             "declared",
-            "the T8025 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
+            "the eufy app sets arming_support_arming for a T8025 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "declared",
@@ -442,8 +442,8 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
             "the T8026 handler builds arming_config as 1255 (eufy app 6.1.10)",
         ),
         "mode_delays": (
-            "declared",
-            "the T8026 handler builds arming_config as 1255 (eufy app 6.1.10)",
+            "unknown",
+            "the eufy app sets arming_support_arm_delay false for a T8026",
         ),
         "cross_camera": (
             "unknown",
@@ -454,8 +454,8 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
             "the T8026 thing description declares no device_cross_cam_group",
         ),
         "arming_groups": (
-            "unknown",
-            "the T8026 thing description does not set arming_support_arming: the app offers groups only for a house with a station that does",
+            "declared",
+            "the eufy app sets arming_support_arming for a T8026 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "declared",
@@ -547,7 +547,7 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
         ),
         "arming_groups": (
             "declared",
-            "the T8030 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
+            "the eufy app sets arming_support_arming for a T8030 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "declared",
@@ -638,8 +638,8 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
             "the eufy app sends device_cross_cam_tracking_swtich to a T8N00 over WebRTC, which this library does not implement",
         ),
         "arming_groups": (
-            "unknown",
-            "the T8N00 thing description does not set arming_support_arming: the app offers groups only for a house with a station that does",
+            "declared",
+            "the eufy app sets arming_support_arming for a T8N00 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "unknown",
