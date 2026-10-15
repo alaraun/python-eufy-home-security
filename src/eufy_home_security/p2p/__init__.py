@@ -1,11 +1,11 @@
 """Local P2P to a eufy station: PPPP transport, XZYH framing, session crypto, codecs.
 
 The codec modules (``pppp``, ``xzyh``, ``did``, ``crypto``, ``messages``,
-``params``, ``notify``, ``alarm``, ``media``, ``mode_actions``, ``storage_info``,
-``mpegts``, ``encoder``) are pure: no I/O. The modules that touch the
-network — ``discovery`` (LAN search), ``transport`` and ``session`` — drive those
-codecs over a UDP socket. ``clip`` and ``broadcast`` mux and share a session's media
-streams and open no socket themselves.
+``params``, ``notify``, ``alarm``, ``media``, ``mode_actions``,
+``station_config_codecs``, ``storage_info``, ``mpegts``, ``encoder``) are pure: no
+I/O. The modules that touch the network — ``discovery`` (LAN search), ``transport``
+and ``session`` — drive those codecs over a UDP socket. ``clip`` and ``broadcast``
+mux and share a session's media streams and open no socket themselves.
 """
 
 from __future__ import annotations
@@ -15,7 +15,16 @@ from typing import TYPE_CHECKING
 from .._lazy import lazy_exports
 
 if TYPE_CHECKING:
-    from . import alarm, crypto, media, messages, mode_actions, notify, params
+    from . import (
+        alarm,
+        crypto,
+        media,
+        messages,
+        mode_actions,
+        notify,
+        params,
+        station_config_codecs,
+    )
     from .did import Did, static_key
     from .pppp import (
         DISCOVERY_PORT,
@@ -56,6 +65,7 @@ __all__ = [
     "notify",
     "params",
     "static_key",
+    "station_config_codecs",
 ]
 
 __getattr__, __dir__ = lazy_exports(
@@ -64,7 +74,16 @@ __getattr__, __dir__ = lazy_exports(
     {
         **{
             name: name
-            for name in ("alarm", "crypto", "media", "messages", "mode_actions", "notify", "params")
+            for name in (
+                "alarm",
+                "crypto",
+                "media",
+                "messages",
+                "mode_actions",
+                "notify",
+                "params",
+                "station_config_codecs",
+            )
         },
         **dict.fromkeys(("Did", "static_key"), "did"),
         **dict.fromkeys(

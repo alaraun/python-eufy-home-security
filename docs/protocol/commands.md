@@ -706,6 +706,50 @@ char[128] owner account id`. The app's slider maximum sent 26.
 app sends it from the live view it opens on an alarm; the station stops the siren and
 light and reports `0x04B1` = `[16, 0]` on channel 255 ([events.md](events.md#alarm-over-p2p)).
 
+## Station configuration params **[app]**
+
+A station keeps its mode list, schedule, stored mode tables and cross-camera tracking
+choice as parameters whose value is the base64 of a compact JSON document. On a
+HomeBase 3 the cloud device list carries 1254, 1256 and 1157–1159, and the parameter
+dump carries 1072, 1073 and 1257 (shapes seen on hardware; no library write).
+Codec: `p2p/station_config_codecs.py` (pure); absent or blank means "not set".
+
+| param | holds | JSON |
+|---|---|---|
+| 1256 `SET_CUSTOM_MODE` | the mode list | `{"account_id", "mode_id", "modes": [{"detail", "iconType", "mode", "mode_action", "title"}], "operate_type"}` |
+| 1254 `SET_JSON_SCHEDULE` | the weekly schedule | `{"account_id", "schedules": [{"end_h", "end_m", "mode_id", "start_h", "start_m", "week"}]}` |
+| 1257 `SET_SCHEDULE_DEFAULT` | the mode outside every slot | a plain integer, not base64 |
+| 1157 Home, 1158 Away, 1159–1161 Custom 1–3, 1177 Disarmed | a mode's whole action table (HomeBase 3) | the 1255 body above |
+| 1072 | cameras chosen for cross-camera tracking | `["<serial>", ...]`; absent = every camera of the station |
+| 1073 | cross-camera tracking groups | `[{"value": ["<serial>", ...]}, ...]` |
+
+**Mode list (1256).** Home (1), Away (0) and Disarmed (63) always exist and the app
+shows them as "Home", "Away" and "Disarmed" whatever the list says; Custom 1–3 (3, 4,
+5) exist only when listed, under their `title`. A write is a frame of type 1256 whose
+body is the same document, stored as-is: `operate_type` 100 adds (the list with the new
+entry), 101 deletes (the list without the mode), 102 modifies (the list with the entry
+changed); `mode_id` names the mode concerned. The written list never carries Disarmed.
+An added entry has `mode_action` = `mode << 24 | 9` (record and notification) and
+`detail` "" unless given. The codec refuses (`ValueError`): deleting or modifying a
+built-in mode, a fourth custom mode, a title that is empty or longer than 30
+characters after trimming or already used by another mode, a `detail` over 60
+characters, and deleting a mode the schedule uses.
+
+**Schedule (1254).** `week` 0 is Sunday; a slot runs from `start` up to `end` within one
+day (the app's whole day is 00:00–23:59). A write (frame type 1254) carries the whole
+table. The codec requires `start < end`, no two slots of a weekday sharing a minute,
+and a slot mode (and the 1257 default) among Away, Home, Custom 1–3 and Disarmed.
+
+**Stored mode tables.** The same keys and key order as the 1255 body. The codec reads
+a count-down as the app does (each listed device of the table at `delay_time`, the
+others at 0) and turns a table into the `mode_actions.ModeTable` a 1255 write
+starts from; Disarmed has no 1255 table.
+
+**JSON style.** The codec writes compact JSON (`,` and `:` without spaces), non-ASCII
+as UTF-8, `<` `>` `&` `=` `'` U+2028 U+2029 as `\uXXXX`, keys sorted in 1256 and 1254,
+the 1255 order in mode tables, and standard padded base64: the style of the values
+the station stores, which therefore round-trip byte for byte.
+
 ## Recording triggers
 
 HomeBase 3 fw 3.8.7.4, eufyCam 3 (T8160). The station starts a camera recording only on
