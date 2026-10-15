@@ -619,6 +619,7 @@ class EufySecurity:
                 sub_devices=sub_devices,
                 cache=self.cache,
                 listed_settings=self._listed_settings,
+                cloud_refresh=self.async_refresh_cloud_state,
             )
             station.apply_cloud_device(device)  # the cached snapshot, until a fresh one
             self.stations[serial] = station

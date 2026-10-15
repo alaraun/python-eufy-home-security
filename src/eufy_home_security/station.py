@@ -8,7 +8,7 @@ import contextlib
 import ipaddress
 import logging
 import time
-from collections.abc import Callable, Coroutine, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
@@ -166,6 +166,7 @@ from .p2p.session import (
     StationSession,
 )
 from .p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
+from .station_config import StationConfig, build_station_config, check_revision
 
 if TYPE_CHECKING:
     from .storage import SessionCache
@@ -851,14 +852,18 @@ class Station:
         sub_devices: Sequence[CloudDevice] = (),
         cache: SessionCache | None = None,
         listed_settings: Callable[[str], Sequence[Setting]] | None = None,
+        cloud_refresh: Callable[[], Awaitable[object]] | None = None,
     ) -> None:
         """``listed_settings`` gives the read-only settings listed for a product code
-        without a bundled file (the client's model scan); None lists nothing."""
+        without a bundled file (the client's model scan); None lists nothing.
+        ``cloud_refresh`` reads the cloud device list and applies it
+        (:meth:`async_get_config` with ``refresh``); None reads no cloud."""
         self.device = device
         self.session = session
         self.sub_devices: tuple[CloudDevice, ...] = tuple(sub_devices)
         self._cache = cache
         self._listed_settings = listed_settings
+        self._cloud_refresh = cloud_refresh
         self._log_name = redact_serial(device.device_sn)
         self._bus = EventBus()
         self._presets: dict[str, tuple[PresetPosition, ...]] = {}
@@ -1656,6 +1661,42 @@ class Station:
         if wanted == current:
             return current
         return await self._async_set_mode_table_value(spec, wanted, target)
+
+    # ── station configuration ────────────────────────────────────────────────
+
+    @property
+    def config(self) -> StationConfig | None:
+        """The configuration of :attr:`state` (no I/O); None before the station's own
+        block has arrived. See :class:`~.station_config.StationConfig`."""
+        state = self.state
+        return None if state is None else build_station_config(state)
+
+    async def async_get_config(self, *, refresh: bool = False) -> StationConfig:
+        """The station's configuration: modes, mode tables, schedule, cross-camera
+        tracking, alarm and time settings, with sources and a revision.
+
+        Built from :attr:`state` (the session's parameters and the cloud's copy); a
+        station without a state yet is read first (:meth:`async_update`). ``refresh``
+        reads the parameters fresh, waking a station reached on demand, then the cloud
+        device list once (read-only) when the client gave this station that read. Raises
+        the typed errors of those reads.
+        """
+        if refresh:
+            await self.async_update(wake=True)
+            if self._cloud_refresh is not None:
+                await self._cloud_refresh()
+        state = self.state or await self.async_update()
+        return build_station_config(state)
+
+    async def _check_revision(self, expect_revision: int | None) -> StationConfig | None:
+        """For a write taking ``expect_revision``: None when it is None; else the
+        configuration of a fresh parameter read, raising
+        :class:`~.exceptions.ConfigChangedError` (nothing sent) when its revision differs."""
+        if expect_revision is None:
+            return None
+        config = build_station_config(await self.async_update(wake=True))
+        check_revision(config, expect_revision)
+        return config
 
     def _kind_on(self, channel: int) -> DeviceKind | None:
         """The kind of the device on ``channel``: its cloud serial's model, else the last

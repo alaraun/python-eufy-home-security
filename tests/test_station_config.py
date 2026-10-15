@@ -3,12 +3,16 @@ from __future__ import annotations
 import base64
 import dataclasses
 import json
+import os
+import subprocess
+import sys
 from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.exceptions import ConfigChangedError
 from eufy_home_security.models import GUARD_MODE_LABELS, GuardMode, ValueSource
 from eufy_home_security.p2p.params import ParamDump
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
@@ -17,6 +21,8 @@ from eufy_home_security.station_config import (
     MODE_ORDER,
     StationConfig,
     build_station_config,
+    changed_fields,
+    check_revision,
     guard_mode_label,
 )
 from eufy_home_security.testing import SYNTHETIC
@@ -254,3 +260,229 @@ async def test_a_custom_mode_is_set_through_1224(
 ) -> None:
     assert await station.async_set_guard_mode(mode.name.lower()) == mode
     assert fake.guard_mode == mode
+
+
+# ── mode tables ──────────────────────────────────────────────────────────────
+
+
+def stored_table(mode: int, actions: dict[int, int], *, alarm: tuple[list[int], int]) -> str:
+    """A stored mode table (1157-1161, 1177) of ``actions`` with an alarm count-down."""
+    devices = [{"device_channel": ch, "action": a} for ch, a in actions.items()]
+    return b64(
+        {
+            "account_id": SYNTHETIC.account_id,
+            "mode_id": mode,
+            "devices": devices,
+            "count_down_alarm": {"channel_list": alarm[0], "delay_time": alarm[1]},
+            "count_down_arm": {"channel_list": [], "delay_time": 0},
+            "siren_sensor_action": [{"device_channel": ch, "action": 0} for ch in actions],
+        }
+    )
+
+
+CUSTOM_1_LISTED = mode_list((1, "Home", 1), (0, "Away", 0), (3, "Night watch", 6))
+
+
+def test_mode_tables_come_from_the_stored_table_else_the_dump() -> None:
+    config = config_of(
+        {1224: "0"},
+        cloud={1256: CUSTOM_1_LISTED, 1157: stored_table(1, {0: 9}, alarm=([0], 30))},
+        blocks={0: {1239: "5", 1167: "10", 1172: "0"}},
+    )
+    home = config.mode_tables[GuardMode.HOME]
+    assert home is not None
+    entry = home.device(SYNTHETIC.camera_sn)
+    assert entry is not None
+    assert (entry.channel, entry.action, entry.alarm_delay, entry.leaving_delay) == (0, 9, 30, 0)
+    assert entry.flags == {"record", "notification"}
+    assert config.sources["mode_tables.home"] is ValueSource.CLOUD
+
+    away = config.mode_tables[GuardMode.AWAY]
+    assert away is not None
+    assert [(d.device_sn, d.action, d.alarm_delay) for d in away.devices] == [
+        (SYNTHETIC.camera_sn, 5, 10)
+    ]
+    assert config.sources["mode_tables.away"] is ValueSource.P2P
+
+    # Defined but never configured: no table, never an invented one.
+    assert config.mode_tables[GuardMode.CUSTOM_1] is None
+    assert config.mode_tables[GuardMode.DISARMED] is None
+    assert "mode_tables.custom_1" not in config.sources
+    # An undefined mode has no entry at all.
+    assert set(config.mode_tables) == {
+        GuardMode.HOME,
+        GuardMode.AWAY,
+        GuardMode.CUSTOM_1,
+        GuardMode.DISARMED,
+    }
+
+
+def test_the_disarmed_table_comes_from_its_stored_param_only() -> None:
+    config = config_of({1224: "63", 1177: stored_table(63, {0: 0}, alarm=([], 0))})
+    disarmed = config.mode_tables[GuardMode.DISARMED]
+    assert disarmed is not None
+    assert [d.action for d in disarmed.devices] == [0]
+
+
+def test_an_undecodable_stored_table_falls_back_to_the_dump_and_says_why() -> None:
+    config = config_of({1224: "0", 1157: b64({"mode_id": 0})}, blocks={0: {1225: "1"}})
+    home = config.mode_tables[GuardMode.HOME]
+    assert home is not None
+    assert [d.action for d in home.devices] == [1]
+    assert "mode_tables.home" in config.unreadable
+    assert config.sources["mode_tables.home"] is ValueSource.P2P
+
+
+@pytest.mark.parametrize(
+    "blocks",
+    [
+        {0: {1225: "-1"}},  # not a mask
+        {300: {1225: "1"}},  # not a sub-device channel
+    ],
+)
+def test_a_dump_table_that_cannot_be_built_is_none_and_says_why(
+    blocks: dict[int, dict[int, str]],
+) -> None:
+    config = config_of({1224: "0"}, blocks=blocks)
+    assert config.mode_tables[GuardMode.HOME] is None
+    assert "mode_tables.home" in config.unreadable
+
+
+# ── schedule, cross-camera, settings ─────────────────────────────────────────
+
+
+def test_schedule_and_its_default_mode() -> None:
+    config = config_of({1224: "2", 1151: "0", 1257: "63"}, cloud={1254: schedule((1, 8, 17, 0))})
+    assert config.schedule is not None
+    assert [(s.weekday, s.mode) for s in config.schedule.slots] == [(1, GuardMode.AWAY)]
+    assert config.schedule_default is GuardMode.DISARMED
+    assert (config.guard_mode, config.effective_mode) == (GuardMode.SCHEDULE, GuardMode.AWAY)
+    assert config.sources["schedule"] is ValueSource.CLOUD
+    assert config.sources["schedule_default"] is ValueSource.P2P
+
+
+def test_cross_camera_reads_the_settings_and_the_lists() -> None:
+    other = "T8160P2000067891"
+    config = config_of(
+        {1224: "0", 1072: b64([SYNTHETIC.camera_sn]), 1073: b64([{"value": [other]}])},
+        cloud={1065: "1"},
+    )
+    cross = config.cross_camera
+    assert cross is not None
+    assert (cross.enabled, cross.assistance) == (True, True)
+    assert cross.cameras == (SYNTHETIC.camera_sn,)
+    assert cross.groups == ((other,),)
+    assert config.sources["cross_camera.enabled"] is ValueSource.CLOUD
+    assert config.sources["cross_camera.assistance"] is ValueSource.APP_DEFAULT
+    assert config.sources["cross_camera.cameras"] is ValueSource.P2P
+    assert config.setting_keys["cross_camera.enabled"] == "device_cross_cam_tracking_swtich"
+
+
+def test_alarm_and_time_values_reuse_the_station_settings() -> None:
+    config = config_of({1224: "0", 1235: "20", 1281: "2"})
+    assert (config.alarm_volume, config.alarm_tone) == (20, 2)
+    assert config.sources["alarm_volume"] is ValueSource.P2P
+    assert config.setting_keys["alarm_tone"] == "alarm_tones_mode"
+    assert config.setting_keys["time_zone"] == "timezone_set"
+    assert config.time_format is None  # not reported and no default
+    assert "time_format" not in config.sources
+
+
+# ── revision ─────────────────────────────────────────────────────────────────
+
+
+def test_the_revision_follows_the_content() -> None:
+    params = {1224: "0", 1254: schedule((1, 8, 17, 0)), 1256: CUSTOM_1_LISTED}
+    first, again = config_of(params), config_of(dict(params))
+    assert first.revision == again.revision
+    assert 0 <= first.revision < 2**53  # exact as a JSON number
+
+    changed = config_of({**params, 1254: schedule((1, 8, 18, 0))})
+    assert changed.revision != first.revision
+    assert changed_fields(first, changed) == {"schedule"}
+    assert changed_fields(None, first) >= {"modes", "schedule", "sources"}
+    assert "revision" not in changed_fields(None, first)
+
+
+def test_the_revision_is_the_same_in_another_process() -> None:
+    """A revision survives a restart: no per-process hash seed goes into it."""
+    code = (
+        "import tests.test_station_config as t;"
+        "print(t.config_of({1224: '0', 1256: t.CUSTOM_1_LISTED}).revision)"
+    )
+    revisions = {
+        subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={**os.environ, "PYTHONHASHSEED": seed},
+        ).stdout.strip()
+        for seed in ("1", "2")
+    }
+    assert revisions == {str(config_of({1224: "0", 1256: CUSTOM_1_LISTED}).revision)}
+
+
+def test_check_revision_raises_with_the_fresh_config() -> None:
+    config = config_of({1224: "0"})
+    check_revision(config, None)
+    check_revision(config, config.revision)
+    with pytest.raises(ConfigChangedError) as caught:
+        check_revision(config, config.revision + 1)
+    assert caught.value.config is config
+    assert caught.value.expected == config.revision + 1
+
+
+# ── Station.async_get_config ─────────────────────────────────────────────────
+
+
+async def test_get_config_reads_a_station_without_state_first(
+    station: Station, fake: FakeStation
+) -> None:
+    fake.params[255][1256] = CUSTOM_1_LISTED
+    assert station.config is None
+    config = await station.async_get_config()
+    assert config.guard_mode is GuardMode.DISARMED
+    assert config.mode_name(GuardMode.CUSTOM_1) == "Night watch"
+    assert station.config == config
+
+
+async def test_get_config_refresh_reads_the_station_and_the_cloud_once(
+    fake: FakeStation,
+) -> None:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    calls: list[str] = []
+
+    async def cloud_refresh() -> int:
+        calls.append("cloud")
+        st.apply_cloud_device(_cloud_entry({1254: schedule((2, 9, 10, 1))}))
+        return 1
+
+    st = Station(STATION, session, sub_devices=[CAMERA], cloud_refresh=cloud_refresh)
+    try:
+        before = await st.async_get_config()
+        assert calls == []
+        fake.params[255][1224] = "1"
+        config = await st.async_get_config(refresh=True)
+        assert calls == ["cloud"]
+        assert config.guard_mode is GuardMode.HOME
+        assert config.is_defined(GuardMode.SCHEDULE)
+        assert config.revision != before.revision
+    finally:
+        await st.async_close()
+
+
+async def test_a_write_s_revision_check_reads_fresh(station: Station, fake: FakeStation) -> None:
+    assert await station._check_revision(None) is None
+    config = await station.async_get_config()
+    assert await station._check_revision(config.revision) == config
+
+    fake.params[255][1254] = schedule((3, 6, 7, 0))  # changed elsewhere
+    with pytest.raises(ConfigChangedError) as caught:
+        await station._check_revision(config.revision)
+    assert caught.value.config.is_defined(GuardMode.SCHEDULE)

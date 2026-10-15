@@ -394,7 +394,7 @@ def _mode_table(
     blocks = {ch: d.params for ch, d in state.devices.items()}
     try:
         table = mode_table_from_params(blocks, mode)
-    except UnsupportedError as err:
+    except (UnsupportedError, ValueError) as err:
         unreadable[name] = str(err)
         return None
     if not table.actions:
