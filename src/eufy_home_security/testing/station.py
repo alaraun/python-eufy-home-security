@@ -435,6 +435,11 @@ class FakeStation:
     value)``, in arrival order; the value is stored as the param of that channel."""
     mode_table_receipt_code: int = 0
     """The code a 1255 receipt carries; non-zero leaves the parameters untouched."""
+    mode_table_store: dict[int, int] | None = None
+    """``mode_id`` → the station param a pro-alarm station keeps that mode's table in
+    (61301 Away, 61300 Home, …). With it a 1255 is stored as the base64 of its body in
+    :attr:`stored_config` (and in :attr:`params` where the station block already carries
+    the param) instead of being applied to the per-device params."""
     config_frames_received: list[tuple[int, bytes]] = field(default_factory=list)
     """Every mode-list (1256) and schedule (1254) body as ``(frame type, body bytes)``,
     in arrival order (whatever its account id)."""
@@ -817,7 +822,7 @@ class FakeStation:
             if obj is None:
                 return
             self.mode_tables_received.append(obj)
-            self._on_mode_table(obj)
+            self._on_mode_table(obj, plain)
         elif ftype in _CONFIG_FRAMES:
             obj = decode_json_payload(plain)
             if obj is None:
@@ -1171,14 +1176,23 @@ class FakeStation:
         else:
             self.send_json(ftype, obj)
 
-    def _on_mode_table(self, obj: dict[str, Any]) -> None:
+    def _on_mode_table(self, obj: dict[str, Any], plain: bytes) -> None:
         """As the live station: a receipt of the request's own type on channel 0 (no
         0x0547), and the table applied — each listed device's action, each count-down's
-        delay into the channels it lists, every other value left as it was."""
+        delay into the channels it lists, every other value left as it was; or, with
+        :attr:`mode_table_store`, the body stored in the mode's param."""
         if obj.get("account_id") != self.account_id:
             return  # the real station drops these without a word
         code = self.mode_table_receipt_code
-        if code == 0 and self.apply_settings:
+        if code == 0 and self.apply_settings and self.mode_table_store is not None:
+            param = self.mode_table_store.get(obj.get("mode_id", -1))
+            if param is not None:
+                stored = base64.b64encode(plain).decode("ascii")
+                self.stored_config[param] = stored
+                own = self.params.setdefault(STATION_CHANNEL, {})
+                if param in own:
+                    own[param] = stored
+        elif code == 0 and self.apply_settings:
             for channel, values in applied_params(obj).items():
                 block = self.params.setdefault(channel, {})
                 block.update({param: str(value) for param, value in values.items()})

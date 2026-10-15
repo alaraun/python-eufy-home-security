@@ -18,15 +18,23 @@ from eufy_home_security.exceptions import (
     ModeInUseError,
     UnsupportedError,
 )
-from eufy_home_security.models import GuardMode
+from eufy_home_security.models import GuardMode, ValueSource
 from eufy_home_security.p2p import session as session_module
-from eufy_home_security.p2p.session import P2PCredentials, StationSession
+from eufy_home_security.p2p.session import CommandOutcome, P2PCredentials, StationSession
 from eufy_home_security.p2p.station_config_codecs import Schedule, ScheduleSlot, Weekday
 from eufy_home_security.station import Station
 from eufy_home_security.station_config import ModeInfo
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import FakeStation
-from tests.test_station_config import CAMERA, STATION, _cloud_entry, b64, mode_list, schedule
+from tests.test_station_config import (
+    CAMERA,
+    STATION,
+    _cloud_entry,
+    b64,
+    mode_list,
+    pro_alarm_table,
+    schedule,
+)
 
 ACCOUNT = SYNTHETIC.account_id
 LISTED = mode_list((1, "Home", 1), (0, "Away", 0), (3, "Night watch", 6))
@@ -512,3 +520,145 @@ async def test_bulk_mode_table_writes_need_known_support(
         await station.async_set_mode_delays("away", entry_s=30)
     assert fake.param_queries == 0
     assert fake.mode_tables_received == []
+
+
+# ── pro-alarm mode tables (61300-61309) ──────────────────────────────────────
+
+PRO_ALARM_STORE = {0: 61301, 1: 61300, 3: 61307, 4: 61308, 5: 61309}
+AWAY_TABLE = pro_alarm_table(0, {0: 9}, alarm=([0], 30))
+HOME_TABLE = pro_alarm_table(1, {0: 1}, alarm=([], 0))
+
+
+@pytest.fixture
+async def pro_alarm(fake: FakeStation, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[Station]:
+    """A synthetic T8024 whose camera reports no per-mode params: Away is stored in its
+    dump (61301), Home only in the cloud list (61300)."""
+    monkeypatch.setattr(station_module, "READBACK_DELAY", 0)
+    fake.mode_table_store = PRO_ALARM_STORE
+    fake.params[255][61301] = AWAY_TABLE
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(ACCOUNT, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    hub = dataclasses.replace(STATION, raw={"device_new_pn": "T8024"})
+    st = Station(hub, session, sub_devices=[CAMERA])
+    st.apply_cloud_device(_cloud_entry({61301: AWAY_TABLE, 61300: HOME_TABLE}, pn="T8024"))
+    yield st
+    await st.async_close()
+
+
+def _body(mode: int, action: int, alarm: tuple[list[int], int]) -> dict[str, object]:
+    return {
+        "account_id": ACCOUNT,
+        "mode_id": mode,
+        "devices": [{"device_channel": 0, "action": action}],
+        "count_down_alarm": {"channel_list": alarm[0], "delay_time": alarm[1]},
+        "count_down_arm": {"channel_list": [], "delay_time": 0},
+        "siren_sensor_action": [{"device_channel": 0, "action": 0}],
+    }
+
+
+async def test_a_pro_alarm_write_edits_the_stored_table_and_the_dump_confirms_it(
+    pro_alarm: Station, fake: FakeStation
+) -> None:
+    camera = CAMERA.device_sn
+    table = await pro_alarm.async_set_mode_actions(
+        "away", {camera: {"camera_siren": True}}, entry_s=60
+    )
+    assert fake.mode_tables_received == [_body(0, 11, ([0], 60))]
+    assert fake.params[255][61301] == fake.stored_config[61301] != AWAY_TABLE
+    assert (dict(table.actions), dict(table.alarm_delays)) == ({0: 11}, {0: 60})
+    config = pro_alarm.config
+    assert config is not None
+    away = config.mode_tables[GuardMode.AWAY]
+    assert away is not None
+    assert [(d.action, d.alarm_delay) for d in away.devices] == [(11, 60)]
+    state = pro_alarm.state
+    assert state is not None
+    assert state.setting("camera_action_away", device_sn=camera) == 11
+    assert state.setting("alarm_delay_away", device_sn=camera) == 60
+
+
+async def test_a_pro_alarm_table_the_dump_lacks_is_confirmed_by_the_receipt(
+    pro_alarm: Station, fake: FakeStation
+) -> None:
+    """Home lives in the cloud list only: the zero receipt confirms the write and the sent
+    body shows at once."""
+    camera = CAMERA.device_sn
+    mask = await pro_alarm.async_set_mode_action("home", "camera_siren", True, device_sn=camera)
+    assert mask == 3
+    assert fake.mode_tables_received == [_body(1, 3, ([], 0))]
+    assert 61300 not in fake.params[255]
+    assert 61300 in fake.stored_config
+    config = pro_alarm.config
+    assert config is not None
+    home = config.mode_tables[GuardMode.HOME]
+    assert home is not None
+    assert [d.action for d in home.devices] == [3]
+    assert config.sources["mode_tables.home"] is ValueSource.P2P
+
+    outcome = await pro_alarm.async_set_setting("alarm_delay_home", 30, device_sn=camera)
+    assert outcome is CommandOutcome.APPLIED
+    assert fake.mode_tables_received[-1] == _body(1, 3, ([0], 30))
+
+
+async def test_a_pro_alarm_write_the_dump_does_not_show_is_not_applied(
+    pro_alarm: Station, fake: FakeStation
+) -> None:
+    fake.apply_settings = False  # receipted, never stored
+    with pytest.raises(CommandNotAppliedError, match="61301 not confirmed"):
+        await pro_alarm.async_set_mode_delays("away", entry_s=60)
+
+
+@pytest.mark.parametrize(
+    ("station_params", "cloud", "match"),
+    [
+        ({}, {}, "stores no away mode table .*1239.*no source carries"),
+        ({61301: b64({"mode_id": 0})}, {}, "stored away mode table cannot be read"),
+        (
+            {
+                61301: b64(
+                    {
+                        **_body(0, 9, ([], 0)),
+                        "siren_sensor_action": [{"device_channel": 0, "action": 1}],
+                    }
+                )
+            },
+            {},
+            "siren accessory",
+        ),
+    ],
+)
+async def test_pro_alarm_writes_without_a_usable_table_send_nothing(
+    *,
+    pro_alarm: Station,
+    fake: FakeStation,
+    station_params: dict[int, str],
+    cloud: dict[int, str],
+    match: str,
+) -> None:
+    del fake.params[255][61301]
+    fake.params[255].update(station_params)
+    pro_alarm.apply_cloud_device(_cloud_entry(cloud, pn="T8024"))
+    with pytest.raises(UnsupportedError, match=match):
+        await pro_alarm.async_set_mode_actions("away", {CAMERA.device_sn: {"record": True}})
+    assert fake.mode_tables_received == []
+
+
+async def test_a_pro_alarm_station_whose_devices_report_their_params_writes_as_before(
+    pro_alarm: Station, fake: FakeStation
+) -> None:
+    """The field shape of a T8024: the camera reports 1239; the table comes from it and
+    the per-device read-back confirms it, the stored copy untouched."""
+    fake.mode_table_store = None
+    fake.params[0].update({1239: "5", 1167: "0", 1172: "0"})
+    mask = await pro_alarm.async_set_mode_action(
+        "away", "camera_siren", True, device_sn=CAMERA.device_sn
+    )
+    assert mask == 7
+    assert fake.mode_tables_received == [_body(0, 7, ([], 0))]
+    assert fake.params[0][1239] == "7"
+    assert fake.params[255][61301] == AWAY_TABLE
