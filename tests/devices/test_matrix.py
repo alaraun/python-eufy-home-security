@@ -104,3 +104,12 @@ def test_a_profile_links_its_models_settings_section() -> None:
 def test_a_range_renders_min_max_and_step() -> None:
     row = _settings_rows(render_support_matrix(), "T8030")["alarm_volume_value"]
     assert row[1:5] == ["range", "1..26 step 1", "-", "yes"]
+
+
+def test_station_configuration_has_a_grid_and_a_table_per_station_model() -> None:
+    text = render_support_matrix()
+    assert "## Station configuration" in text
+    assert "| mode_tables | yes |" in text
+    assert "### Station configuration of T8030" in text
+    assert "Mode tables: hb3_tables (away 1158, home 1157" in text
+    assert "### Station configuration of T8040" in text

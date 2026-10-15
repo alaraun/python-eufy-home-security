@@ -2165,6 +2165,39 @@ station.config  # the same, built from the current state, no I/O
   (an `UnsupportedError`) refuses a change to a mode that is in use; its `reason` is a
   sentence a UI can show.
 
+### Station configuration support
+
+Which configuration sections a station offers comes from the library, per model, never
+from a model list in the integration. `station.config_support(feature)` takes a
+`StationFeature` (`GUARD_MODE`, `CUSTOM_MODES`, `SCHEDULE`, `MODE_TABLES`, `MODE_DELAYS`,
+`CROSS_CAMERA`, `CROSS_CAMERA_GROUPS`, `ARMING_GROUPS`, `RESTART`, `SOUND_ALARM`,
+`WORKING_MODE`) and returns an `Evidence`:
+
+```python
+from eufy_home_security import StationFeature
+from eufy_home_security.devices import Support
+
+support = {f: station.config_support(f) for f in StationFeature}
+shown = [f for f, e in support.items() if e.support is not Support.UNKNOWN]
+```
+
+- **`UNKNOWN`: hide the section.** `source` says why (the model's thing description
+  lacks it, the app reaches the model over WebRTC, the station's firmware is below the
+  app's gate, no data for the model).
+- **`DECLARED`: show it with a "not yet tested on this model" badge.** The eufy app
+  offers it on the model and the library sends what the model's handler sends.
+- **`VERIFIED`: show it plainly** (written and read back on hardware: the HomeBase 3's
+  guard mode, mode tables and delays). `note` carries caveats, such as what was only read.
+- **Confirm alarm-affecting writes.** `feature.alarm_affecting` is true for the guard
+  mode, schedule, mode tables, delays, arming groups, restart and sound alarm: ask the
+  user before sending, naming the effect. The library does not prompt.
+
+Without a `Station` (a config flow, a diagnostics dump), the same answers come from
+`eufy_home_security.devices.config_support(product_code, feature, firmware=...)`, with
+`mode_table_storage`, `mode_table_params`, `max_custom_modes` and
+`cross_camera_intervals` for the per-model data. The grades per model are in
+[devices.md § Station configuration](../reference/devices.md#station-configuration).
+
 ## Errors map to HA control flow
 
 The library raises typed errors; translate them at the coordinator / setup boundary:

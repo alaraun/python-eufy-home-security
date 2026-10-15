@@ -75,6 +75,8 @@ from .devices.settings import (
     report_value,
     scope_for_kind,
 )
+from .devices.station_config_support import StationFeature
+from .devices.station_config_support import config_support as station_config_support
 from .devices.support import Evidence, Support
 from .devices.timezones import TIMEZONE_DOMAIN
 from .devices.types import DeviceKind, DeviceModel, model_for_serial
@@ -1956,6 +1958,16 @@ class Station:
             f"the {code} handler's {' and '.join(actions)} under {connect.value} "
             f"{'is' if len(actions) == 1 else 'are'} the library's recipe "
             f"(eufy app {ptz_app_version()})",
+        )
+
+    def config_support(self, feature: StationFeature) -> Evidence:
+        """How well the station configuration ``feature`` is supported on this station:
+        :func:`~.devices.station_config_support.config_support` for its product code and
+        firmware (a station below the app's firmware gate is ``UNKNOWN``).
+        ``feature.alarm_affecting`` says whether a write needs the user's confirmation.
+        """
+        return station_config_support(
+            self._product_code(self.serial), feature, firmware=self.device.main_sw_version
         )
 
     def _ptz_unsupported_reason(self, device_sn: str, actions: Sequence[str]) -> str:

@@ -90,7 +90,8 @@ uv run python scripts/gen_station_config.py --data DIR --cache DIR --remote-conf
 
 Hardware grades (*verified*) are not generated: they live in
 `devices/station_config_support.py`, each traced to a row of
-[hardware-verification.md](../reference/hardware-verification.md).
+[hardware-verification.md](../reference/hardware-verification.md). Regenerate the
+support matrix afterwards (`scripts/gen_device_matrix.py`).
 
 ## Check
 

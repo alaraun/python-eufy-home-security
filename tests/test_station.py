@@ -34,6 +34,7 @@ from eufy_home_security.devices.recipes import (
 )
 from eufy_home_security.devices.sections import MODES_SECTION
 from eufy_home_security.devices.settings import Scope
+from eufy_home_security.devices.station_config_support import StationFeature
 from eufy_home_security.devices.support import Support
 from eufy_home_security.devices.timezones import encode_zone, zone_ids
 from eufy_home_security.devices.types import DeviceKind
@@ -2414,6 +2415,21 @@ def test_ptz_support_follows_the_handlers_actions_behind_a_homebase_3() -> None:
         assert hub.ptz_support(SYNTHETIC.camera_sn, capability).support is Support.UNKNOWN
     with pytest.raises(ValueError, match="not a pan/tilt/zoom capability"):
         hub.ptz_support(_FLOODLIGHT.device_sn, Capability.LIVE_STREAM)
+
+
+def test_config_support_grades_the_station_model_at_its_firmware() -> None:
+    hub = _hub_with(CAMERA)
+    assert hub.config_support(StationFeature.MODE_TABLES).support is Support.VERIFIED
+    assert hub.config_support(StationFeature.SCHEDULE).support is Support.DECLARED
+    assert hub.config_support(StationFeature.CROSS_CAMERA).support is Support.DECLARED
+    old = Station(
+        dataclasses.replace(STATION, main_sw_version="3.2.0.0"), hub.session, sub_devices=[CAMERA]
+    )
+    evidence = old.config_support(StationFeature.CROSS_CAMERA)
+    assert evidence.support is Support.UNKNOWN
+    assert "3.2.0.0" in evidence.source
+    nvr = Station(dataclasses.replace(STATION, device_sn="T8N00P2000012345"), hub.session)
+    assert nvr.config_support(StationFeature.SCHEDULE).support is Support.UNKNOWN
 
 
 def test_ptz_support_is_unknown_where_the_app_takes_another_route() -> None:

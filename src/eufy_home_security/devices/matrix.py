@@ -7,6 +7,16 @@ from collections.abc import Iterable, Sequence
 
 from .capabilities import GUARD_MODE_EVIDENCE, PROFILES, Capability
 from .model_settings import Setting, SettingKind, Value, bundled_codes, settings_of
+from .station_config_support import (
+    StationFeature,
+    config_support,
+    cross_camera_intervals,
+    min_firmware,
+    mode_table_params,
+    mode_table_storage,
+    restart_command,
+    station_config_models,
+)
 from .support import Evidence, Support
 from .types import MODELS
 
@@ -93,6 +103,62 @@ def _settings_section(code: str) -> list[str]:
     return out
 
 
+def _station_config_section() -> list[str]:
+    """Per station model, the grade of each station configuration feature."""
+    models = station_config_models()
+    out = [
+        "",
+        "## Station configuration",
+        "",
+        "Which station configuration features each station model offers "
+        "(`Station.config_support`, `devices.station_config_support`). *alarm* marks a "
+        "feature whose writes change the alarm: a UI confirms them. Models the eufy app "
+        "names without a thing description on record are *unknown* throughout.",
+        "",
+    ]
+    out += _table(
+        ("feature", "alarm", *models),
+        (
+            (
+                feature.value,
+                "yes" if feature.alarm_affecting else "no",
+                *(config_support(code, feature).support for code in models),
+            )
+            for feature in StationFeature
+        ),
+    )
+    for code in models:
+        model = MODELS.get(code)
+        title = f"{code} {model.name}" if model is not None else code
+        out += ["", f"### Station configuration of {title}", ""]
+        storage = mode_table_storage(code)
+        if storage is not None:
+            params = ", ".join(
+                f"{mode.name.lower()} {param}" for mode, param in mode_table_params(code).items()
+            )
+            out += [f"Mode tables: {storage.value} ({params})", ""]
+        intervals = cross_camera_intervals(code)
+        if intervals:
+            out += [f"Cross-camera tracking times (s): {', '.join(map(str, intervals))}", ""]
+        restart = restart_command(code)
+        if restart is not None:
+            cmd, sub = restart
+            out += [f"Restart: {cmd}" + ("" if sub is None else f"/{sub}"), ""]
+        out += _table(
+            ("feature", "support", "min firmware", "source"),
+            (
+                (
+                    feature.value,
+                    config_support(code, feature).support,
+                    min_firmware(code, feature) or "-",
+                    _source(config_support(code, feature)),
+                )
+                for feature in StationFeature
+            ),
+        )
+    return out
+
+
 def render_support_matrix() -> str:
     """The whole support matrix, deterministically ordered."""
     out = [
@@ -155,6 +221,7 @@ def render_support_matrix() -> str:
         ),
     )
     out += ["", "Modes not listed carry no recorded evidence."]
+    out += _station_config_section()
     out += [
         "",
         "## Settings",
