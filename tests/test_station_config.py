@@ -13,7 +13,7 @@ import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.events import Event, StationConfigChanged, StationStateChanged
-from eufy_home_security.exceptions import ConfigChangedError
+from eufy_home_security.exceptions import ConfigChangedError, UnsupportedError
 from eufy_home_security.models import GUARD_MODE_LABELS, GuardMode, ValueSource
 from eufy_home_security.p2p.params import ParamDump
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
@@ -419,9 +419,9 @@ def test_a_pro_alarm_station_reads_its_stored_tables_dump_first() -> None:
     assert config.sources["mode_tables.home"] is ValueSource.CLOUD
     camera = SYNTHETIC.camera_sn
     assert state.setting("camera_action_away", device_sn=camera) == 9
-    assert state.setting("alarm_delay_away", device_sn=camera) == 30
-    assert state.setting("leaving_delay_away", device_sn=camera) == 0
     assert state.setting("camera_action_home", device_sn=camera) == 143
+    with pytest.raises(UnsupportedError, match="alarm_delay_away"):
+        state.setting("alarm_delay_away", device_sn=camera)  # the app offers no delays here
     assert state.setting("camera_action_custom_1", device_sn=camera) is None
     assert state.devices[0].params == {1101: "87"}  # the block itself is as reported
 

@@ -2313,8 +2313,11 @@ station.config  # the same, built from the current state, no I/O
   has a list of its own; a station whose `config_support(StationFeature.MODE_DELAYS)` is
   `UNKNOWN` (the app offers no delays there, or the library cannot send them) gets no
   delay control at all: among the declared models, the pro-alarm stations (T8020, T8023,
-  T8024, T8026), where the eufy app shows no entry or exit delay. The per-mode delay
-  settings carry the same list as `setting.values`.
+  T8024, T8026), where the eufy app shows no entry or exit delay. On such a station the
+  paired devices list no per-mode delay settings (`station.has_setting(key, sn)` is
+  False), and none of the per-mode actions where mode tables are `UNKNOWN`; a station of
+  no model on record lists all of them. The per-mode delay settings carry the same list
+  as `setting.values`.
 - **Cross-camera tracking time.** `config.cross_camera.continuous_time_s` is the
   continuous tracking time in seconds (120-1800); `continuous_time` is the same choice
   as the setting's value (`setting_keys["cross_camera.continuous_time"]` names the

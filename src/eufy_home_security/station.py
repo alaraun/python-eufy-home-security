@@ -1110,10 +1110,33 @@ class Station:
             if memo and paired:
                 memo = _without_parentless_only(memo)
                 model = model_for_serial(serial)
-                memo += mode_table_settings(scope_for_kind(model.kind if model else None))
+                memo += self._mode_table_settings(scope_for_kind(model.kind if model else None))
             memo = sort_settings(memo)
             self._settings_memo[(serial, code)] = memo
         return memo
+
+    def _mode_table_settings(self, scope: Scope) -> tuple[Setting, ...]:
+        """The per-mode actions and delays of a paired device of ``scope``: on a station
+        model on record, only those whose feature (mode tables, mode delays) the eufy
+        app offers there; on any other station all of them."""
+        settings = mode_table_settings(scope)
+        code = self._product_code(self.serial)
+        if code is None or code.upper() not in station_config_models():
+            return settings
+        offered = {
+            feature: self.config_support(feature).support is not Support.UNKNOWN
+            for feature in (StationFeature.MODE_TABLES, StationFeature.MODE_DELAYS)
+        }
+        return tuple(
+            s
+            for s in settings
+            if offered[
+                StationFeature.MODE_TABLES
+                if s.read_param is not None
+                and MODE_TABLE_PARAMS[s.read_param][1] is ModeTableField.ACTION
+                else StationFeature.MODE_DELAYS
+            ]
+        )
 
     def setting(
         self, key: str, *, device_sn: str | None = None, channel: int | None = None

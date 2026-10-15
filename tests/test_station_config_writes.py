@@ -555,7 +555,14 @@ async def test_bulk_mode_table_writes_need_known_support(
     def unknown(self: Station, feature: StationFeature) -> Evidence:
         return Evidence(Support.UNKNOWN, "not on record")
 
+    product_code = Station._product_code
+
+    def off_record(self: Station, serial: str) -> str | None:
+        # A station of no model on record lists every per-mode setting.
+        return None if serial == self.serial else product_code(self, serial)
+
     monkeypatch.setattr(Station, "config_support", unknown)
+    monkeypatch.setattr(Station, "_product_code", off_record)
     with pytest.raises(UnsupportedError, match="mode_tables is not supported"):
         await station.async_set_mode_actions("away", {CAMERA.device_sn: {"record": True}})
     with pytest.raises(UnsupportedError, match="mode_delays is not supported"):
@@ -625,7 +632,6 @@ async def test_a_pro_alarm_write_edits_the_stored_table_and_the_dump_confirms_it
     state = pro_alarm.state
     assert state is not None
     assert state.setting("camera_action_away", device_sn=camera) == 11
-    assert state.setting("alarm_delay_away", device_sn=camera) == 30
 
 
 async def test_a_pro_alarm_table_the_dump_lacks_is_confirmed_by_the_receipt(
@@ -663,8 +669,9 @@ async def test_a_pro_alarm_station_offers_no_delays(pro_alarm: Station, fake: Fa
     """The eufy app shows no entry or exit delay on a pro-alarm station."""
     with pytest.raises(UnsupportedError, match="arming_support_arm_delay false"):
         await pro_alarm.async_set_mode_delays("away", entry_s=60)
-    with pytest.raises(UnsupportedError, match="arming_support_arm_delay false"):
+    with pytest.raises(UnsupportedError, match="unknown setting 'alarm_delay_home'"):
         await pro_alarm.async_set_setting("alarm_delay_home", 30, device_sn=CAMERA.device_sn)
+    assert pro_alarm.has_setting("alarm_delay_home", CAMERA.device_sn) is False
     assert fake.mode_tables_received == []
 
 

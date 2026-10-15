@@ -1200,6 +1200,25 @@ def test_has_battery_follows_the_models_thing_description() -> None:
     assert standalone.has_battery(_T8170_SN) is True
 
 
+def test_per_mode_settings_follow_the_station_models_support() -> None:
+    """A camera behind a pro-alarm station gets its per-mode actions but no delays (the
+    eufy app offers none there); behind a HomeBase 3, both."""
+    hub = _hub_with(CAMERA)
+    t8024 = Station(
+        dataclasses.replace(hub.device, raw={"device_new_pn": "T8024"}),
+        hub.session,
+        sub_devices=[CAMERA],
+    )
+    delays = {"alarm_delay_away", "leaving_delay_home"}
+    actions = {"camera_action_away", "camera_action_custom_1"}
+    on_hb3 = {s.key for s in hub.settings_for(SYNTHETIC.camera_sn)}
+    on_t8024 = {s.key for s in t8024.settings_for(SYNTHETIC.camera_sn)}
+    assert delays | actions <= on_hb3
+    assert actions <= on_t8024
+    assert not delays & on_t8024
+    assert t8024.has_setting("alarm_delay_away", SYNTHETIC.camera_sn) is False
+
+
 def test_has_setting_answers_from_the_device_s_own_list() -> None:
     """True for a key of the device's list (its model's file, a paired device's per-mode
     settings), False for a key the list lacks, None while the list is unknown."""
