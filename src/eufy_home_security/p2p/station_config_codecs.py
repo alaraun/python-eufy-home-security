@@ -303,9 +303,9 @@ def decode_custom_modes(raw: str | None) -> CustomModes | None:
     if _blank(raw):
         return None
     what = "custom modes (1256)"
-    doc = _obj(_b64_json(raw, what), what)
+    body = _obj(_b64_json(raw, what), what)
     modes: list[ModeDefinition] = []
-    for entry in _list(doc.get("modes"), f"{what} modes"):
+    for entry in _list(body.get("modes"), f"{what} modes"):
         item = _obj(entry, f"{what} mode entry")
         mode = _guard_mode(_int(item, "mode", what), what)
         if any(m.mode == mode for m in modes):
@@ -320,11 +320,11 @@ def decode_custom_modes(raw: str | None) -> CustomModes | None:
                 extra={k: v for k, v in item.items() if k not in _MODE_KEYS},
             )
         )
-    mode_id = _opt_int(doc, "mode_id", what)
+    mode_id = _opt_int(body, "mode_id", what)
     return CustomModes(
-        account_id=_opt_str(doc, "account_id", what),
+        account_id=_opt_str(body, "account_id", what),
         mode_id=None if mode_id is None else _guard_mode(mode_id, what),
-        operate_type=_opt_int(doc, "operate_type", what),
+        operate_type=_opt_int(body, "operate_type", what),
         modes=tuple(modes),
     )
 
@@ -596,9 +596,9 @@ def decode_schedule(raw: str | None) -> Schedule | None:
     if _blank(raw):
         return None
     what = "schedule (1254)"
-    doc = _obj(_b64_json(raw, what), what)
+    body = _obj(_b64_json(raw, what), what)
     slots: list[ScheduleSlot] = []
-    for entry in _list(doc.get("schedules"), f"{what} schedules"):
+    for entry in _list(body.get("schedules"), f"{what} schedules"):
         item = _obj(entry, f"{what} slot")
         try:
             slots.append(
@@ -612,7 +612,7 @@ def decode_schedule(raw: str | None) -> Schedule | None:
         except ValueError as exc:
             raise ProtocolError(f"{what}: {exc}") from None
     try:
-        return Schedule(account_id=_opt_str(doc, "account_id", what), slots=tuple(slots))
+        return Schedule(account_id=_opt_str(body, "account_id", what), slots=tuple(slots))
     except ValueError as exc:
         raise ProtocolError(f"{what}: {exc}") from None
 
@@ -746,20 +746,20 @@ def decode_stored_mode_table(
     if _blank(raw):
         return None
     what = "mode table"
-    doc = _obj(_b64_json(raw, what), what)
-    table_mode = _guard_mode(_int(doc, "mode_id", what), what, STORED_MODE_TABLE_PARAMS)
+    body = _obj(_b64_json(raw, what), what)
+    table_mode = _guard_mode(_int(body, "mode_id", what), what, STORED_MODE_TABLE_PARAMS)
     if mode is not None and table_mode != _to_mode(mode, "mode"):
         raise ProtocolError(
             f"{what}: holds {table_mode.name.lower()}, expected {GuardMode(mode).name.lower()}"
         )
     return StoredModeTable(
-        account_id=_opt_str(doc, "account_id", what),
+        account_id=_opt_str(body, "account_id", what),
         mode=table_mode,
-        actions=_channel_actions(doc.get("devices"), f"{what} devices"),
-        alarm=_count_down(doc.get("count_down_alarm"), f"{what} count_down_alarm"),
-        arm=_count_down(doc.get("count_down_arm"), f"{what} count_down_arm"),
+        actions=_channel_actions(body.get("devices"), f"{what} devices"),
+        alarm=_count_down(body.get("count_down_alarm"), f"{what} count_down_alarm"),
+        arm=_count_down(body.get("count_down_arm"), f"{what} count_down_arm"),
         siren_actions=_channel_actions(
-            doc.get("siren_sensor_action", []), f"{what} siren_sensor_action"
+            body.get("siren_sensor_action", []), f"{what} siren_sensor_action"
         ),
     )
 
