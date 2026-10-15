@@ -216,7 +216,8 @@ _AB_WANTED_KEY: Final = "ab_wanted"
 _ENDED_KEY: Final = "ended"
 """A cached session section's record of why its session was dropped (a :class:`SessionState`)."""
 _NICK_NAME_KEY: Final = "nick_name"
-"""The login answer's account nickname, kept in the session section it came with."""
+"""The account nickname from a login answer or the profile, kept in the session section
+it came with."""
 _EXTRA_HOMES_KEY: Final = "extra_countries"
 """``cloud.extra_countries``: each looked-up extra country's home region."""
 
@@ -357,6 +358,9 @@ class EufyCloudApi:
         """Whether a lookup of the login country answered in this process."""
         self._country_error: EufySecurityError | None = None
         """The last login country lookup's failure while it did not answer."""
+        self._profile_answered = False
+        """Whether a profile request (:meth:`async_get_nick_name`) was answered in this
+        process, with or without a nickname, or refused by the cloud."""
         self._region_override = None if region is None else const.check_region(region)
         self._scan_regions = scan_regions
         self._identities: dict[str, _Identity] = {}
@@ -382,8 +386,8 @@ class EufyCloudApi:
 
     @property
     def nick_name(self) -> str | None:
-        """The account's nickname (the login answer's ``nick_name``, kept with the cached
-        session); None until a login gave one."""
+        """The account's nickname (``nick_name`` of a login answer or of the profile,
+        kept with the cached session); None until one of them gave it."""
         for cloud in self._cache.cloud_sessions().values():
             nick = cloud.get(_NICK_NAME_KEY)
             if isinstance(nick, str) and nick.strip():
@@ -393,8 +397,53 @@ class EufyCloudApi:
     @property
     def activation_user_name(self) -> str:
         """The name an arming-group activation is recorded under: :attr:`nick_name`, as
-        the app sends it, else :attr:`user_name`."""
+        the app sends it, else :attr:`user_name`. No request: see
+        :meth:`async_activation_user_name`."""
         return self.nick_name or self.user_name
+
+    async def async_get_nick_name(self, region: str, *, login: bool = True) -> str | None:
+        """The account's nickname from its profile (``get_profile``, read-only) on
+        ``region``'s session; None when the profile names none. A nickname is kept with
+        that cached session, where :attr:`nick_name` reads it. ``login``: see
+        :meth:`_with_session`."""
+        data = await self._authenticated_call(
+            self._host("passport", region),
+            const.PROFILE_PATH,
+            {},
+            region=region,
+            expect_data=False,
+            login=login,
+        )
+        nick = data.get(_NICK_NAME_KEY) if isinstance(data, Mapping) else None
+        if not (isinstance(nick, str) and nick.strip()):
+            return None
+        cloud = self._cache.cloud_session(region)
+        if cloud.get(_NICK_NAME_KEY) != nick:
+            cloud[_NICK_NAME_KEY] = nick
+            await self._cache.async_save()
+        return nick
+
+    async def async_activation_user_name(self, region: str) -> str:
+        """:attr:`activation_user_name`, reading the profile first
+        (:meth:`async_get_nick_name` on ``region``'s session) while no nickname is
+        cached and no profile request was answered in this process: at most one
+        request per process, none once a login or the profile gave the nickname.
+
+        A profile the cloud refuses or answers malformed is not asked again; one the
+        network fails is asked on the next call. Either way :attr:`user_name` is
+        used. Session errors (login, hold-off) propagate.
+        """
+        if self.nick_name is None and not self._profile_answered:
+            try:
+                await self.async_get_nick_name(region)
+            except (CloudApiError, ProtocolError) as err:
+                self._profile_answered = True
+                _LOGGER.info("account profile refused (%s); no nickname", err)
+            except CommunicationError as err:
+                _LOGGER.info("account profile not read (%s); asked again next time", err)
+            else:
+                self._profile_answered = True
+        return self.activation_user_name
 
     def _http(self) -> aiohttp.ClientSession:
         """The aiohttp session, resolving and memoising a factory on first use."""
@@ -3010,11 +3059,12 @@ class EufyCloudApi:
     async def async_activate_arming_group(
         self, house_id: str, group_id: str, *, region: str, user_name: str | None = None
     ) -> None:
-        """Record an activation of a group by ``user_name`` (default
-        :attr:`activation_user_name`) (``setup_guard``). The cloud changes no station's mode: the members' guard-mode
-        writes are the caller's (see
-        :meth:`~..client.EufySecurity.async_activate_arming_group`)."""
-        body = arming.activate_body(house_id, group_id, user_name or self.activation_user_name)
+        """Record an activation of a group by ``user_name`` (``setup_guard``); by default
+        the account's nickname, as the app records it (:meth:`async_activation_user_name`).
+        The cloud changes no station's mode: the members' guard-mode writes are the
+        caller's (see :meth:`~..client.EufySecurity.async_activate_arming_group`)."""
+        name = user_name or await self.async_activation_user_name(region)
+        body = arming.activate_body(house_id, group_id, name)
         await self._security_call(const.ARMING_GROUP_ACTIVATE_PATH, body, region=region)
 
     async def async_arming_group_logs(

@@ -154,6 +154,13 @@ The eufy app logs in with the user's country, and the library does the same **[a
 any client **[verified]**. The account report shows it per region, with the IP country.
 The app compares it with the chosen country before logging in.
 
+`POST app-passport-{region}-pr.eufy.com/passport/get_profile`, body `{}`, on a session:
+the account's profile, read-only **[app]**. The library reads only `data.nick_name`, the
+account's nickname (the name the app records arming-group activations under), and only
+when no login answer gave one: `EufyCloudApi.async_get_nick_name`, at most once per
+process from `async_activation_user_name`, cached with the session like a login's
+`nick_name`. The answer's other keys (expected: `user_id`, `email`) are **[open]**.
+
 **What a country login lists [verified].** Within one cluster the login's `ab` decides
 which devices the lists show: a login with another country lists the devices held under
 that country and not the others. On a member account that holds a home shared under one
@@ -316,8 +323,9 @@ serial, never a paired device's; `mode_id` the guard mode it takes (command 1224
 display name when saved (`Away`, `Home`, `Disarmed`, `Schedule`, `Geofencing`, or a custom
 mode's own name), display only. The library sends those English names and `Custom N` for
 a custom mode whose name it does not know, and keeps a stored name for a member whose mode
-does not change. `user_name` is what the library's guard-mode writes carry (the e-mail's
-local part); the app sends the account's nickname.
+does not change. `user_name` is the account's nickname, as the app sends it: the login
+answer's `nick_name`, else the profile's (`get_profile` above, asked once and cached with
+the session), else the e-mail's local part.
 
 A group (`data.groups[]`): `group_id` (string), `group_name`, `status` (`"1"` on the group
 the app shows highlighted, `"0"` otherwise; read as the last activated group, inferred),

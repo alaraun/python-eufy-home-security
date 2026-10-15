@@ -335,9 +335,73 @@ async def test_an_activation_is_recorded_under_the_login_s_nickname(
             cached = _api(session, cache)  # no new login
             await cached.async_activate_arming_group(HOUSE, GROUP, region="eu")
     assert [e for e, _ in fake_mega.region_calls if e == "login"] == ["login"]
+    assert _sent(fake_mega, "profile") == []  # the login gave it
     assert [body for name, body in fake_mega.calls if name == "setup_guard"] == [
         {"house_id": HOUSE, "group_id": GROUP, "user_name": "Kim R", "enable": True}
     ]
+
+
+def _sent(fake_mega: FakeMega, endpoint: str) -> list[dict[str, Any]]:
+    return [body for name, body in fake_mega.calls if name == endpoint]
+
+
+async def test_a_session_without_a_nickname_reads_the_profile_once_and_keeps_it(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """A cached session from a login that gave no nickname: the first activation reads
+    the profile (body ``{}``, no login), the nickname is cached with the session, and
+    no later activation, nor another client on the cache, asks again."""
+    fake_mega.profile["nick_name"] = "Kim R"
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            await _api(session, cache).async_login()
+            api = _api(session, cache)  # a cached session, no new login
+            await api.async_activate_arming_group(HOUSE, GROUP, region="eu")
+            await api.async_activate_arming_group(HOUSE, GROUP, region="eu")
+            assert cache.cloud_sessions()["eu"]["nick_name"] == "Kim R"
+            await _api(session, cache).async_activate_arming_group(HOUSE, GROUP, region="eu")
+    assert fake_mega.login_calls == 1
+    assert _sent(fake_mega, "profile") == [{}]
+    assert [b["user_name"] for b in _sent(fake_mega, "setup_guard")] == ["Kim R"] * 3
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [pytest.param({}, id="no nickname"), pytest.param({"code": 10000}, id="refused")],
+)
+async def test_a_profile_without_a_nickname_falls_back_to_the_e_mail_name_once(
+    fake_mega: FakeMega, cache: SessionCache, answer: dict[str, int]
+) -> None:
+    if "code" in answer:
+        fake_mega.code_once["profile"] = answer["code"]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            await api.async_activate_arming_group(HOUSE, GROUP, region="eu")
+            await api.async_activate_arming_group(HOUSE, GROUP, region="eu")
+    local_part = SYNTHETIC.email.split("@")[0]
+    assert len(_sent(fake_mega, "profile")) == 1
+    assert [b["user_name"] for b in _sent(fake_mega, "setup_guard")] == [local_part] * 2
+
+
+async def test_a_profile_the_network_fails_is_asked_again_on_the_next_activation(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.profile["nick_name"] = "Kim R"
+    fake_mega.status_once["profile"] = (502, {})
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            await api.async_activate_arming_group(HOUSE, GROUP, region="eu")
+            await api.async_activate_arming_group(HOUSE, GROUP, region="eu")
+    assert len(_sent(fake_mega, "profile")) == 2
+    names = [b["user_name"] for b in _sent(fake_mega, "setup_guard")]
+    assert names == [SYNTHETIC.email.split("@")[0], "Kim R"]
 
 
 async def test_a_refused_activation_raises_the_clouds_error(

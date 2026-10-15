@@ -352,6 +352,20 @@ async def test_an_on_demand_station_is_woken_and_a_full_activation_is_complete()
     assert battery.writes == [(GuardMode.DISARMED, 2)]
 
 
+async def test_activation_is_recorded_under_the_profile_nickname_read_once() -> None:
+    """A warm store's session carries no nickname: the first activation reads the
+    profile, later ones reuse the cached nickname."""
+    cloud = _cloud()
+    cloud.nick_name = "Kim R"
+    eufy = _client(cloud)
+    _install(eufy, StubStation(SYNTHETIC.station_sn, cloud, mode=GuardMode.AWAY))
+    await eufy.async_activate_arming_group(GROUP)
+    await eufy.async_activate_arming_group(GROUP)
+    bodies = _arming_bodies(cloud, const.ARMING_GROUP_ACTIVATE_PATH)
+    assert [body["user_name"] for body in bodies] == ["Kim R", "Kim R"]
+    assert cloud.calls.count("profile") == 1
+
+
 async def test_a_refused_activation_record_touches_no_station() -> None:
     cloud = _cloud()
     cloud.arming_errors["setup_guard"] = CloudApiError(31001, "refused")

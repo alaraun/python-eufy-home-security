@@ -148,6 +148,8 @@ class FakeMega:
         # estimate_domain: country -> the region whose mega- domain it answers; any other
         # country gets a non-mega domain, as live.
         self.country_regions: dict[str, str] = {}
+        # get_profile's ``data`` (the account's profile; a nickname only when set).
+        self.profile: dict[str, Any] = {"user_id": SYNTHETIC.account_id}
         # The ``ab`` of the last successful login per region (get_last_login_code).
         self.last_login_ab: dict[str, str] = {}
         # Login ``ab`` -> the devices only a session made with it lists (its own token).
@@ -209,6 +211,11 @@ class FakeMega:
         mock.post(
             _url(passport, const.CLIENT_COUNTRY_PATH),
             callback=self._delayed("client_country", self._client_country, region),
+            repeat=True,
+        )
+        mock.post(
+            _url(passport, const.PROFILE_PATH),
+            callback=self._delayed("profile", self._profile, region),
             repeat=True,
         )
         mock.post(
@@ -431,6 +438,13 @@ class FakeMega:
         if failure := self._failure_once("client_country", kwargs):
             return failure
         return self._reply(self._shared_for(kwargs), 0, {"ab_code": self.client_country})
+
+    def _profile(self, url: str, **kwargs: Any) -> CallbackResult:
+        self.calls.append(("profile", self._decrypt_body(kwargs)))
+        self.headers.setdefault("profile", []).append(dict(kwargs["headers"]))
+        if failure := self._failure_once("profile", kwargs):
+            return failure
+        return self._reply(self._shared_for(kwargs), 0, self.profile)
 
     def _last_login_code(self, url: str, *, region: str = "", **kwargs: Any) -> CallbackResult:
         self.calls.append(("last_login_code", self._decrypt_body(kwargs)))

@@ -397,6 +397,9 @@ class FakeCloud:
     """``estimate_domain``: each country's home region; another country names no cluster."""
     last_login_ab: dict[str, str] = field(default_factory=dict)
     """The ``ab`` of the last login per region (``get_last_login_code``)."""
+    nick_name: str | None = None
+    """The account's nickname, which the profile (``get_profile``, recorded as
+    ``"profile"``) answers; None answers a profile without one."""
     arming_groups: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     """Each house id's raw arming groups; the arming-group requests change them."""
     arming_guided: int = 2
@@ -477,6 +480,11 @@ class FakeCloud:
             note("last_login_code")
             self._raise_call_error()
             return {"ab_code": self.last_login_ab.get(region, "").upper()}
+        if path == const.PROFILE_PATH:
+            note("profile")
+            self._raise_call_error()
+            nick = {} if self.nick_name is None else {"nick_name": self.nick_name}
+            return {"user_id": self.user_id, **nick}
         if path == const.CLIENT_COUNTRY_PATH:
             note("client_country")
             self._raise_call_error()
