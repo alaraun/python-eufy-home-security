@@ -345,12 +345,40 @@ def test_schedule_decode_and_round_trip() -> None:
     assert schedule.account_id == ACCOUNT
     assert schedule.slots == (
         ScheduleSlot(Weekday.MONDAY, time(7, 50), time(17, 10), GuardMode.AWAY),
-        ScheduleSlot(Weekday.MONDAY, time(17, 10), time(23, 59), GuardMode.HOME),
+        ScheduleSlot(Weekday.MONDAY, time(17, 10), time(0), GuardMode.HOME),  # to midnight
         ScheduleSlot(Weekday.SUNDAY, time(0), time(12), GuardMode.CUSTOM_1),
     )
+    assert [slot.ends_at_midnight for slot in schedule.slots] == [False, True, False]
     assert schedule.modes() == {GuardMode.AWAY, GuardMode.HOME, GuardMode.CUSTOM_1}
     assert schedule.param_value() == raw
     assert schedule.body() == SCHEDULE_JSON.encode()
+
+
+def test_a_slot_to_midnight_is_stored_as_the_app_stores_it() -> None:
+    """End 00:00 is the end of the day: stored as the app's 23:59, read back as 00:00."""
+    to_midnight = ScheduleSlot(Weekday.FRIDAY, time(22), time(0), GuardMode.AWAY)
+    assert ScheduleSlot(Weekday.FRIDAY, time(22), time(23, 59), GuardMode.AWAY) == to_midnight
+    assert to_midnight.to_json() == {
+        "week": 5,
+        "start_h": 22,
+        "start_m": 0,
+        "end_h": 23,
+        "end_m": 59,
+        "mode_id": 0,
+    }
+    whole_day = ScheduleSlot(Weekday.SATURDAY, time(0), time(0), GuardMode.HOME)
+    after = ScheduleSlot(Weekday.SATURDAY, time(0), time(1), GuardMode.AWAY)
+    assert whole_day.overlaps(after)
+    assert not to_midnight.overlaps(ScheduleSlot(Weekday.FRIDAY, time(0), time(22), GuardMode.HOME))
+    assert to_midnight.overlaps(ScheduleSlot(Weekday.FRIDAY, time(23, 58), time(0), GuardMode.HOME))
+
+
+def test_an_end_of_24_00_reads_as_midnight_and_is_written_as_the_app_writes_it() -> None:
+    stored = {"end_h": 24, "end_m": 0, "mode_id": 1, "start_h": 20, "start_m": 0, "week": 3}
+    schedule = decode_schedule(_value({"account_id": ACCOUNT, "schedules": [stored]}))
+    assert schedule is not None
+    assert schedule.slots == (ScheduleSlot(Weekday.WEDNESDAY, time(20), time(0), GuardMode.HOME),)
+    assert schedule.request()["schedules"][0] == {**stored, "end_h": 23, "end_m": 59}
 
 
 def test_slot_converts_integer_codes() -> None:
@@ -361,8 +389,10 @@ def test_slot_converts_integer_codes() -> None:
 @pytest.mark.parametrize(
     ("args", "match"),
     [
-        ((1, time(9), time(9), 0), "start before"),
-        ((1, time(10), time(9), 0), "start before"),
+        ((1, time(9), time(9), 0), "start before it ends: 09:00 to 09:00"),
+        ((1, time(10), time(9), 0), "start before it ends: 10:00 to 09:00"),
+        ((1, time(23, 59), time(0), 0), "must start by 23:58"),
+        ((1, time(23, 59), time(23, 59), 0), "must start by 23:58"),
         ((1, time(8), time(9), GuardMode.SCHEDULE), "cannot use"),
         ((1, time(8), time(9), GuardMode.GEOFENCE), "cannot use"),
         ((1, time(8), time(9), GuardMode.OFF), "cannot use"),
@@ -385,7 +415,7 @@ def test_schedule_refuses_overlapping_slots_of_a_weekday() -> None:
     other_day = ScheduleSlot(Weekday.WEDNESDAY, time(9), time(10), GuardMode.HOME)
     Schedule(account_id=ACCOUNT, slots=(first, touching, other_day))
     overlap = ScheduleSlot(Weekday.TUESDAY, time(11, 59), time(14), GuardMode.HOME)
-    with pytest.raises(ValueError, match="overlap on tuesday"):
+    with pytest.raises(ValueError, match="overlap on Tuesday: 08:00 to 12:00 and 11:59 to 14:00"):
         Schedule(account_id=ACCOUNT, slots=(first, overlap))
 
 
@@ -401,7 +431,8 @@ def test_schedule_require_defined() -> None:
 @pytest.mark.parametrize(
     "slot",
     [
-        {"end_h": 24, "end_m": 0, "mode_id": 0, "start_h": 8, "start_m": 0, "week": 1},
+        {"end_h": 24, "end_m": 1, "mode_id": 0, "start_h": 8, "start_m": 0, "week": 1},
+        {"end_h": 9, "end_m": 0, "mode_id": 0, "start_h": 24, "start_m": 0, "week": 1},
         {"end_h": 9, "end_m": 0, "mode_id": 0, "start_h": 8, "start_m": 0, "week": 7},
         {"end_h": 9, "end_m": 0, "mode_id": 47, "start_h": 8, "start_m": 0, "week": 1},
         {"end_h": 8, "end_m": 0, "mode_id": 0, "start_h": 9, "start_m": 0, "week": 1},

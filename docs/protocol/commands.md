@@ -782,9 +782,14 @@ characters after trimming or already used by another mode, a `detail` over 60
 characters, and deleting a mode the schedule uses.
 
 **Schedule (1254).** `week` 0 is Sunday; a slot runs from `start` up to `end` within one
-day (the app's whole day is 00:00–23:59). A write (frame type 1254) carries the whole
-table. The codec requires `start < end`, no two slots of a weekday sharing a minute,
-and a slot mode (and the 1257 default) among Away, Home, Custom 1–3 and Disarmed.
+day. A slot that runs to midnight ends at 23:59 as the app stores it (its whole day is
+00:00–23:59, and it stores a slot over midnight as one to 23:59 and one from 00:00 on the
+next day); it reads an end of 24:00 as 23:59 too. The codec reads both as an end of
+midnight (`ScheduleSlot.end` 00:00, `ends_at_midnight`) and writes it as 23:59, so the
+app's form round-trips unchanged; this is **[declared]** from the app, not tested on a
+station. A write (frame type 1254) carries the whole table. The codec requires `start`
+before `end`, no two slots of a weekday sharing a minute, and a slot mode (and the 1257
+default) among Away, Home, Custom 1–3 and Disarmed.
 
 **Stored mode tables.** The same keys and key order as the 1255 body. The codec reads
 a count-down as the app does (each listed device of the table at `delay_time`, the

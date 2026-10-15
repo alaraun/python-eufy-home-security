@@ -20,7 +20,8 @@ as ``\\uXXXX``: the style of the values the station stores. 1256 and 1254 object
 list their keys sorted; a stored mode table keeps the 1255 body's order. Standard
 base64 with padding. ``encode(decode(value))`` gives back ``value`` (without
 surrounding whitespace) for any document in that style whose numbers are JSON
-integers. See ``docs/protocol/commands.md`` § Station configuration.
+integers, except a schedule slot's end of 24:00, which comes back as the app's 23:59.
+See ``docs/protocol/commands.md`` § Station configuration.
 """
 
 from __future__ import annotations
@@ -496,6 +497,13 @@ def delete_custom_mode(
 
 # --- 1254 / 1257: the schedule ----------------------------------------------
 
+MIDNIGHT: Final = time(0)
+"""A slot's ``end`` for a slot that runs to the end of its day (24:00)."""
+STORED_DAY_END: Final = time(23, 59)
+"""The end the eufy app stores (and shows) for a slot that runs to midnight; an end of
+24:00 in stored data means the same. Both read as :data:`MIDNIGHT`."""
+_DAY_MINUTES: Final = 24 * 60
+
 
 def _check_time(what: str, value: object) -> time:
     if not isinstance(value, time):
@@ -505,13 +513,22 @@ def _check_time(what: str, value: object) -> time:
     return value
 
 
+def _hhmm(value: time, *, end: bool = False) -> str:
+    """``value`` as ``HH:MM``; an end of :data:`MIDNIGHT` as ``24:00``."""
+    return "24:00" if end and value == MIDNIGHT else f"{value.hour:02d}:{value.minute:02d}"
+
+
 @dataclass(frozen=True, slots=True)
 class ScheduleSlot:
     """One schedule slot: ``mode`` from ``start`` up to ``end`` on ``weekday``.
 
-    An integer ``weekday`` or ``mode`` is converted to its enum. Raises ``ValueError`` unless
-    ``start < end`` (whole minutes, no time zone) and ``mode`` is in
-    :data:`SCHEDULE_MODES`.
+    An ``end`` of :data:`MIDNIGHT` (00:00) runs the slot to the end of its day; an end of
+    23:59 is the same (:data:`STORED_DAY_END`, the form the eufy app stores) and is kept as
+    :data:`MIDNIGHT`. A slot over midnight is two slots, one to midnight and one from 00:00
+    on the next weekday, as the app stores it. An integer ``weekday`` or ``mode`` is
+    converted to its enum. Raises ``ValueError`` (a message a UI can show) unless ``start``
+    is before ``end`` (whole minutes, no time zone; a slot to midnight starts by 23:58)
+    and ``mode`` is in :data:`SCHEDULE_MODES`.
     """
 
     weekday: Weekday
@@ -526,23 +543,49 @@ class ScheduleSlot:
         object.__setattr__(self, "weekday", Weekday(weekday))
         mode = _to_mode(self.mode, "a slot's mode")
         if mode not in SCHEDULE_MODES:
-            raise ValueError(f"a schedule slot cannot use {mode.name.lower()}")
+            raise ValueError(f"a schedule slot cannot use {mode.label}")
         object.__setattr__(self, "mode", mode)
-        if _check_time("start", self.start) >= _check_time("end", self.end):
-            raise ValueError(f"a slot must start before it ends: {self.start} - {self.end}")
+        _check_time("start", self.start)
+        if _check_time("end", self.end) == STORED_DAY_END:
+            object.__setattr__(self, "end", MIDNIGHT)
+        if self.end == MIDNIGHT and self.start >= STORED_DAY_END:
+            raise ValueError("a time slot that runs to midnight must start by 23:58")
+        if self._start_minute >= self._end_minute:
+            raise ValueError(
+                f"a time slot must start before it ends: {_hhmm(self.start)} to "
+                f"{_hhmm(self.end, end=True)}"
+            )
+
+    @property
+    def ends_at_midnight(self) -> bool:
+        """Whether the slot runs to the end of its day."""
+        return self.end == MIDNIGHT
+
+    @property
+    def _start_minute(self) -> int:
+        return self.start.hour * 60 + self.start.minute
+
+    @property
+    def _end_minute(self) -> int:
+        return _DAY_MINUTES if self.ends_at_midnight else self.end.hour * 60 + self.end.minute
 
     def overlaps(self, other: ScheduleSlot) -> bool:
         """Whether both slots share a minute of the same weekday (an end is exclusive)."""
-        return self.weekday == other.weekday and self.start < other.end and other.start < self.end
+        return (
+            self.weekday == other.weekday
+            and self._start_minute < other._end_minute
+            and other._start_minute < self._end_minute
+        )
 
     def to_json(self) -> dict[str, int]:
-        """The slot as its JSON object."""
+        """The slot as its JSON object; an end of :data:`MIDNIGHT` as 23:59."""
+        end = STORED_DAY_END if self.ends_at_midnight else self.end
         return {
             "week": int(self.weekday),
             "start_h": self.start.hour,
             "start_m": self.start.minute,
-            "end_h": self.end.hour,
-            "end_m": self.end.minute,
+            "end_h": end.hour,
+            "end_m": end.minute,
             "mode_id": int(self.mode),
         }
 
@@ -566,8 +609,9 @@ class Schedule:
             for other in slots[:i]:
                 if slot.overlaps(other):
                     raise ValueError(
-                        f"slots overlap on {slot.weekday.name.lower()}: "
-                        f"{other.start}-{other.end} and {slot.start}-{slot.end}"
+                        f"time slots overlap on {slot.weekday.name.capitalize()}: "
+                        f"{_hhmm(other.start)} to {_hhmm(other.end, end=True)} and "
+                        f"{_hhmm(slot.start)} to {_hhmm(slot.end, end=True)}"
                     )
 
     def modes(self) -> frozenset[GuardMode]:
@@ -600,6 +644,8 @@ class Schedule:
 
 def _slot_time(item: Mapping[str, Any], prefix: str, what: str) -> time:
     hour, minute = _int(item, f"{prefix}_h", what), _int(item, f"{prefix}_m", what)
+    if prefix == "end" and (hour, minute) == (24, 0):
+        return MIDNIGHT
     try:
         return time(hour, minute)
     except ValueError:
@@ -616,8 +662,9 @@ def _weekday(code: int, what: str) -> Weekday:
 def decode_schedule(raw: str | None) -> Schedule | None:
     """Param 1254 → :class:`Schedule`; ``None`` when absent or blank.
 
-    Raises ``ProtocolError`` for input that is not that document or holds a slot
-    :class:`ScheduleSlot` or :class:`Schedule` would refuse.
+    An end of 23:59 or 24:00 reads as :data:`MIDNIGHT`. Raises ``ProtocolError`` for input
+    that is not that document or holds a slot :class:`ScheduleSlot` or :class:`Schedule`
+    would refuse.
     """
     if _blank(raw):
         return None

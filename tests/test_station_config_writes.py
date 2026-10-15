@@ -325,6 +325,30 @@ async def test_an_unchanged_schedule_and_default_send_nothing(
     assert fake.ecb_received == []
 
 
+async def test_a_card_resending_a_slot_to_midnight_changes_nothing(
+    station: Station, fake: FakeStation
+) -> None:
+    """The app's 23:59 reads as an end of 00:00; the same slots back send nothing, and an
+    edit next to them keeps the 23:59 as stored."""
+    stored = {"end_h": 23, "end_m": 59, "mode_id": 0, "start_h": 22, "start_m": 0, "week": 5}
+    station.apply_cloud_device(
+        _cloud_entry({1256: LISTED, 1254: b64({"account_id": ACCOUNT, "schedules": [stored]})})
+    )
+    config = await station.async_get_config()
+    assert config.schedule is not None
+    (slot,) = config.schedule.slots
+    assert (slot.end, slot.ends_at_midnight) == (dt.time(0), True)
+    card = ScheduleSlot(Weekday(slot.weekday), slot.start, dt.time(0), slot.mode)
+    await station.async_set_schedule(Schedule(account_id=None, slots=(card,)))
+    assert fake.config_frames_received == []
+    extra = ScheduleSlot(Weekday.MONDAY, dt.time(8), dt.time(9), GuardMode.HOME)
+    await station.async_set_schedule(Schedule(account_id=None, slots=(card, extra)))
+    assert (
+        b'{"end_h":23,"end_m":59,"mode_id":0,"start_h":22,"start_m":0,"week":5}'
+        in (sent(fake, 1254)[0])
+    )
+
+
 @pytest.mark.parametrize(
     ("schedule_", "default", "match"),
     [

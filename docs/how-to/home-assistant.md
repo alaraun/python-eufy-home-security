@@ -2360,6 +2360,13 @@ await station.async_set_cross_camera_groups([[cam_sn, other_sn]])  # []: no grou
 await station.async_set_mode_actions("away", {cam_sn: {"camera_siren": True}})
 ```
 
+- **Slots to midnight.** A slot that runs to the end of its day has `end` 00:00
+  (`slot.ends_at_midnight`; show it as 24:00). The eufy app stores and shows that end as
+  23:59, and the library reads 23:59 (or a stored 24:00) as 00:00 and writes it back as
+  23:59, so a card that re-sends the slots it read leaves them unchanged. Build one with
+  `end=time(0)` (an end of `time(23, 59)` is the same slot). A slot over midnight is two
+  slots, to 00:00 and from 00:00 on the next weekday, as the app stores it. Declared from
+  the app, not tested on a station.
 - **What is sent.** Each call reads the station fresh, changes the one object and writes
   it whole: the mode list (1256: add, rename or delete), the schedule (1254) and, when
   it changes, the mode outside its slots (1257), the tracking cameras (1072) or groups
