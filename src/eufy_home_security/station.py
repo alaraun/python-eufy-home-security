@@ -1021,6 +1021,22 @@ class Station:
             self.sub_device(serial)
         return self._settings_of(serial)
 
+    def has_setting(self, key: str, device_sn: str | None = None) -> bool | None:
+        """Whether ``key`` is a setting of the station (``None``, or its own serial) or of
+        the paired device ``device_sn`` in this release: in its :meth:`settings_for`
+        list, with the per-mode settings of a paired device and without the settings the
+        eufy app offers a paired device only without a parent.
+
+        None when that list is empty, so unknown: a model without a settings file whose
+        thing description the client's model scan has not listed (yet). Keep a stored
+        entity then; on False, remove it (the release dropped or renamed the key).
+        Sync; raises ``UnsupportedError`` as :meth:`settings_for`.
+        """
+        settings = self.settings_for(device_sn)
+        if not settings:
+            return None
+        return any(setting.key == key for setting in settings)
+
     def has_battery(self, device_sn: str | None = None) -> bool | None:
         """Whether the camera or doorbell ``device_sn`` (the station itself for ``None``)
         runs on a battery, as the eufy app decides whether to show one **[declared]**:

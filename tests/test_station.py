@@ -1199,6 +1199,32 @@ def test_has_battery_follows_the_models_thing_description() -> None:
     assert standalone.has_battery(_T8170_SN) is True
 
 
+def test_has_setting_answers_from_the_device_s_own_list() -> None:
+    """True for a key of the device's list (its model's file, a paired device's per-mode
+    settings), False for a key the list lacks, None while the list is unknown."""
+    unknown = dataclasses.replace(CAMERA, device_sn="T9999P0000000002", channel=3)
+    hub = _hub_with(CAMERA, unknown)
+    assert hub.has_setting("watermark_set", SYNTHETIC.camera_sn) is True
+    assert hub.has_setting("alarm_delay_away", SYNTHETIC.camera_sn) is True
+    assert hub.has_setting("hb_connect_nas_switch", SYNTHETIC.camera_sn) is False  # parentless
+    assert hub.has_setting("detection_sensitivity_test_mode", SYNTHETIC.camera_sn) is False
+    assert hub.has_setting("time_format_set") is True
+    assert hub.has_setting("alarm_delay_away") is False  # the station has no mode tables
+    assert hub.has_setting("watermark_set", "T9999P0000000002") is None
+    with pytest.raises(UnsupportedError, match="not paired"):
+        hub.has_setting("watermark_set", "T8160P2000099999")
+    listed = settings_of("T8160")["watermark_set"]
+    station = _unconnected_station(host=None, local_ip=None, local_port=0)
+    scanned = Station(
+        station.device,
+        station.session,
+        sub_devices=(dataclasses.replace(unknown, raw={"device_new_pn": "T9999"}),),
+        listed_settings=lambda code: (listed,) if code == "T9999" else (),
+    )
+    assert scanned.has_setting("watermark_set", "T9999P0000000002") is True
+    assert scanned.has_setting("alarm_delay_away", "T9999P0000000002") is False
+
+
 def test_setting_returns_the_listed_object_per_target() -> None:
     hub = _hub_with(CAMERA)
     by_channel = hub.setting("watermark_set", channel=0)

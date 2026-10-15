@@ -1102,6 +1102,30 @@ it disabled by default and show `setting.note`, the warning, where the user enab
 A readable setting that is not writable and has no control (`hb_keypad_is_password_set`,
 a status the app only reads) is a sensor, not a switch.
 
+**Settings a release drops.** A later release can drop a key (a variant folded into its
+primary, a vendor property removed, a key the app offers a paired device only without a
+parent). Ask the library instead of matching key patterns: for every stored setting
+entity, at setup once the stations are built (after `async_discover()`),
+`station.has_setting(key, device_sn)` (`device_sn` None for the station itself) says
+whether the key is still a setting of that device here:
+
+```python
+for entry in entity_registry.entries_for_config_entry(entry_id):
+    device_sn, key = parse_unique_id(entry.unique_id)  # the integration's own scheme
+    if station.has_setting(key, device_sn) is False:
+        entity_registry.async_remove(entry.entity_id)
+```
+
+- **True**: the key is in `settings_for(device_sn)`, the model's file in the device's
+  context plus a paired device's per-mode delays and actions.
+- **False**: the device's list is known and lacks the key: remove the entity.
+- **None**: the list is unknown (a model without a settings file whose thing
+  description is not listed yet, or no product code): keep the entity and ask again
+  after the next discovery.
+
+It covers settings only: a per-(mode, flag) switch is the integration's own key and
+stays as long as `mode_action_flags` of the device names its flag.
+
 #### One entity per writable setting: `setting.control`
 
 `setting.control` (`SettingControl`, None when the library does not write the setting)
