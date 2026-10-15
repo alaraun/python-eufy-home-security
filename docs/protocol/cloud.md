@@ -278,6 +278,61 @@ with four paired cameras) **[verified, one account]**.
   `security_device_entry` maps an entry to the house list's shape, tagged
   `cloud_source: "security"` (`CloudDevice.source`).
 
+## Arming groups
+
+The eufy app's Group Control: house-level groups of (station or standalone device,
+guard mode). Read and written by `EufyCloudApi.async_list_arming_groups`,
+`async_add_arming_group`, `async_update_arming_group`, `async_delete_arming_group`,
+`async_activate_arming_group` and `async_arming_group_logs` (models and bodies in
+`cloud/arming.py`). Paths and bodies are the app's **[declared: app]**; none has been
+sent to the live cloud **[open]**.
+
+All six are `POST <security host>/v3/house/<op>` on the security realm, with the same
+identity as `get_ciphers` (the eufy_security key exchange on the logged-in session, then
+`category: eufy_security`); success is `code 0`, `data` as below or none.
+
+| op | body | answer used |
+|---|---|---|
+| `guard_list` | `{"house_id"}` | `data.guided` (int), `data.groups[]` |
+| `add_guard` | `{"house_id", "group_name", "devices": [member…], "default": 0}` | none: the new `group_id` only appears in the list |
+| `update_guard` | `{"house_id", "group_id", ["group_name"], ["devices": [member…]]}`: a key only for what changes; `devices` is the whole list, never a delta | none |
+| `delete_guard` | `{"house_id", "group_id"}` | none |
+| `setup_guard` | `{"house_id", "group_id", "user_name", "enable": true}` | none |
+| `get_guard_logs` | `{"house_id", "group_id"}` | `data.logs[]` |
+
+A member is `{"device_sn", "mode", "mode_id"}`: the station's (or standalone device's)
+serial, never a paired device's; `mode_id` the guard mode it takes (command 1224's codes:
+0 Away, 1 Home, 2 Schedule, 3–5 Custom 1–3, 47 Geofencing, 63 Disarmed); `mode` the mode's
+display name when saved (`Away`, `Home`, `Disarmed`, `Schedule`, `Geofencing`, or a custom
+mode's own name), display only. The library sends those English names and `Custom N` for
+a custom mode whose name it does not know, and keeps a stored name for a member whose mode
+does not change. `user_name` is what the library's guard-mode writes carry (the e-mail's
+local part); the app sends the account's nickname.
+
+A group (`data.groups[]`): `group_id` (string), `group_name`, `status` (`"1"` on the group
+the app shows highlighted, `"0"` otherwise; read as the last activated group, inferred),
+`default` (0 a user group, 1 the app's "I'm Leaving" preset, 2 "I'm Staying"; an icon
+only) and `devices[]` (members, each with `isBypass`, which the app only dims). `guided`
+2 means the app's introduction was completed. A log (`data.logs[]`): `group_id`,
+`group_name`, `user_id`, `user_name`, `create_time` (epoch; seconds or milliseconds is
+**[open]**), the first entry taken as the latest. The parser ignores unknown keys and
+raises `ProtocolError` for a missing `groups`, `group_id`, `group_name`, member
+`device_sn` or `mode_id`, or log `group_id` or `create_time`.
+
+The app's rules, which `EufySecurity` checks before any write: a name of at most 31
+characters (one above U+00FF counts two), trimmed, not blank, without
+`` ` ~ ! $ % = | { } : ; [ ] < > / ? \ ' " ``, some full-width punctuation or emoji, unique in
+the house; at most 20 groups per house; real houses only (not the app's `shared.devices`
+view); and no groups in a house holding a T9000, which the app arms with its separate
+professional-arming flow.
+
+**Activation is two steps, both the client's:** `setup_guard` records it (inferred: the cloud
+changes no station, since the app sends the guard-mode writes itself), and only after it succeeds the client sends the guard-mode
+command (1224, [commands.md](commands.md)) to each member that is online and not already
+in its mode, in parallel; offline or failing members are skipped, without retry, and the
+group's status is the comparison of each member's mode with its target. A server-side
+rejection code for these paths is **[open]**.
+
 ## Owner account_id
 
 The station accepts commands only from the id it is bound to: the **owner's** cloud

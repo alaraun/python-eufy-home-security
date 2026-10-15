@@ -25,6 +25,7 @@ from ..cloud import const
 from ..cloud.api import EufyCloudApi, HttpSession, PasswordSource, _Identity
 from ..devices.types import model_for_serial
 from ..exceptions import (
+    CloudApiError,
     CommunicationError,
     EufySecurityError,
     LoginLimitedError,
@@ -61,6 +62,17 @@ _KEY_IDENT = "synthetic-key-ident"
 _DSK_KEY = "0123456789abcdef0123456789abcdef"  # a synthetic device session key
 _DSK_TTL = 3600.0
 _IDENTS = itertools.count(1)  # every key exchange mints a new identity, as the cloud's
+_ARMING_PATHS = frozenset(
+    {
+        const.ARMING_GROUPS_PATH,
+        const.ARMING_GROUP_ADD_PATH,
+        const.ARMING_GROUP_UPDATE_PATH,
+        const.ARMING_GROUP_DELETE_PATH,
+        const.ARMING_GROUP_ACTIVATE_PATH,
+        const.ARMING_GROUP_LOGS_PATH,
+    }
+)
+_UNKNOWN_GROUP_CODE = 999_002  # a synthetic body code: the fake's refusal of an unknown group
 
 # The region whose cluster the current request goes to.
 _request_region: contextvars.ContextVar[str] = contextvars.ContextVar(
@@ -311,6 +323,16 @@ class FakeCloud:
     ``things_error``, when set, refuses every such request as a ``call_errors`` entry
     does; it is independent of ``call_errors``, which a things request never consumes.
 
+    ``arming_groups`` holds each house id's raw arming groups (``guard_list``
+    ``data.groups``), served by the ``region`` cluster with ``arming_guided`` and changed
+    by the requests as the cloud would: ``add_guard`` appends a group with a new
+    ``group_id``, ``update_guard`` replaces its name and/or devices, ``delete_guard``
+    removes it, and ``setup_guard`` sets its ``status`` ``"1"`` (the others ``"0"``) and
+    puts a record first in ``arming_logs`` (each group id's ``get_guard_logs`` entries).
+    ``arming_requests`` records each such request's path and body; ``calls`` records them
+    as ``"arming:<path tail>"`` (``"arming:guard_list"``, ``"arming:setup_guard"``), and
+    ``arming_errors`` refuses the next request of a path tail once.
+
     The login country lookups are answered from ``client_country`` (the IP country) and
     ``country_regions`` (each country's home region) and are not recorded in ``calls``;
     ``last_login_ab`` keeps each region's last login ``ab``, which a
@@ -372,6 +394,17 @@ class FakeCloud:
     """``estimate_domain``: each country's home region; another country names no cluster."""
     last_login_ab: dict[str, str] = field(default_factory=dict)
     """The ``ab`` of the last login per region (``get_last_login_code``)."""
+    arming_groups: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    """Each house id's raw arming groups; the arming-group requests change them."""
+    arming_guided: int = 2
+    """``guard_list`` ``data.guided``."""
+    arming_logs: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    """Each group id's raw activation records, newest first."""
+    arming_requests: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    """(path, body) of every arming-group request, in order."""
+    arming_errors: dict[str, EufySecurityError] = field(default_factory=dict)
+    """Path tail (``"setup_guard"``) -> the refusal its next request meets, consumed
+    once and served as a ``call_errors`` entry is."""
 
     @staticmethod
     def refusal(
@@ -528,7 +561,59 @@ class FakeCloud:
             if self.things_error is not None:
                 raise _Refusal(self.things_error)
             return {"things_list": [self.things[c] for c in codes if c in self.things]}
+        if path in _ARMING_PATHS:
+            tail = path.rsplit("/", 1)[-1]
+            note(f"arming:{tail}")
+            self.arming_requests.append((path, dict(payload)))
+            self._raise_call_error()
+            if (error := self.arming_errors.pop(tail, None)) is not None:
+                raise _Refusal(error)
+            return self._arming_answer(path, payload) if region == self.region else None
         raise CommunicationError(f"the fake cloud does not answer {path}")
+
+    def _arming_answer(self, path: str, payload: Mapping[str, Any]) -> Any:
+        """The ``region`` cluster's answer to an arming-group request, applied to the store."""
+        house_id = str(payload.get("house_id"))
+        groups = self.arming_groups.setdefault(house_id, [])
+        group_id = str(payload.get("group_id"))
+        group = next((g for g in groups if str(g.get("group_id")) == group_id), None)
+        if path == const.ARMING_GROUPS_PATH:
+            return {"guided": self.arming_guided, "groups": [dict(g) for g in groups]}
+        if path == const.ARMING_GROUP_LOGS_PATH:
+            return {"logs": list(self.arming_logs.get(group_id, []))}
+        if path == const.ARMING_GROUP_ADD_PATH:
+            groups.append(
+                {
+                    "group_id": f"group-{next(_IDENTS)}",
+                    "group_name": payload["group_name"],
+                    "status": "0",
+                    "default": payload.get("default", 0),
+                    "devices": [dict(d) for d in payload["devices"]],
+                }
+            )
+            return None
+        if group is None:
+            # The cloud's code for an unknown group is not established; any refusal does.
+            raise _Refusal(CloudApiError(_UNKNOWN_GROUP_CODE, "no such group", endpoint=path))
+        if path == const.ARMING_GROUP_UPDATE_PATH:
+            if "group_name" in payload:
+                group["group_name"] = payload["group_name"]
+            if "devices" in payload:
+                group["devices"] = [dict(d) for d in payload["devices"]]
+        elif path == const.ARMING_GROUP_DELETE_PATH:
+            groups.remove(group)
+        else:  # setup_guard
+            for other in groups:
+                other["status"] = "1" if other is group else "0"
+            record = {
+                "group_id": group_id,
+                "group_name": group.get("group_name", ""),
+                "user_id": self.user_id,
+                "user_name": payload.get("user_name", ""),
+                "create_time": int(time.time()),
+            }
+            self.arming_logs.setdefault(group_id, []).insert(0, record)
+        return None
 
     def _raise_call_error(self) -> None:
         if self.call_errors:

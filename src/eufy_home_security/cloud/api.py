@@ -58,7 +58,8 @@ from ..exceptions import (
     SessionReplacedError,
 )
 from ..storage import INSTALL_IDS_KEY, SessionCache
-from . import const, crypto
+from . import arming, const, crypto
+from .arming import ArmingGroupList, ArmingGroupLog, ArmingGroupMember
 from .const import DSK_REFRESH_MARGIN
 from .models import (
     REGION_KEY,
@@ -2914,6 +2915,96 @@ class EufyCloudApi:
         if code in const.AUTH_FAILURE_CODES:
             raise AuthenticationError(f"cloud rejected the credentials (code {code}): {msg}")
         raise CloudApiError(code, msg, endpoint=path)
+
+    # ── arming groups (security realm) ───────────────────────────────────────
+
+    async def _security_call(
+        self, path: str, body: Mapping[str, Any], *, region: str, login: bool = True
+    ) -> Any:
+        """POST ``body`` to ``path`` on ``region``'s security host under a security-realm
+        identity minted on the session (``category: eufy_security``); returns ``data``,
+        None for a bare success. The key exchange and the call share one session retry
+        (see :meth:`_with_session`)."""
+
+        async def call(base: _Identity) -> Any:
+            sec = await self._security_identity(base)
+            _code, _resp, data = await self._call(
+                const.security_host(const.scope_region(region)), path, body, sec, category=True
+            )
+            return data
+
+        return await self._with_session(call, region, login=login)
+
+    async def async_list_arming_groups(
+        self, house_id: str, *, region: str, login: bool = True
+    ) -> ArmingGroupList:
+        """The arming groups of ``house_id`` (``guard_list``), in the cloud's order;
+        not cached. ``region`` is the login scope that lists the house."""
+        path = const.ARMING_GROUPS_PATH
+        data = await self._security_call(
+            path, arming.list_body(house_id), region=region, login=login
+        )
+        return arming.parse_group_list(data, house_id, path)
+
+    async def async_add_arming_group(
+        self,
+        house_id: str,
+        name: str,
+        members: Sequence[ArmingGroupMember],
+        *,
+        region: str,
+    ) -> None:
+        """Create a user group (``add_guard``) as given; the cloud answers no group id,
+        so list the groups to find it. Nothing is validated here (see
+        :meth:`~..client.EufySecurity.async_create_arming_group`)."""
+        await self._security_call(
+            const.ARMING_GROUP_ADD_PATH, arming.add_body(house_id, name, members), region=region
+        )
+
+    async def async_update_arming_group(
+        self,
+        house_id: str,
+        group_id: str,
+        *,
+        region: str,
+        name: str | None = None,
+        members: Sequence[ArmingGroupMember] | None = None,
+    ) -> None:
+        """Rename a group and/or replace its whole member list (``update_guard``).
+
+        ``ValueError`` when neither is given, before anything is sent.
+        """
+        if name is None and members is None:
+            raise ValueError("pass a name or members to update an arming group")
+        body = arming.update_body(house_id, group_id, name=name, members=members)
+        await self._security_call(const.ARMING_GROUP_UPDATE_PATH, body, region=region)
+
+    async def async_delete_arming_group(self, house_id: str, group_id: str, *, region: str) -> None:
+        """Delete a group (``delete_guard``)."""
+        await self._security_call(
+            const.ARMING_GROUP_DELETE_PATH, arming.delete_body(house_id, group_id), region=region
+        )
+
+    async def async_activate_arming_group(
+        self, house_id: str, group_id: str, *, region: str, user_name: str | None = None
+    ) -> None:
+        """Record an activation of a group by ``user_name`` (default :attr:`user_name`)
+        (``setup_guard``). The cloud changes no station's mode: the members' guard-mode
+        writes are the caller's (see
+        :meth:`~..client.EufySecurity.async_activate_arming_group`)."""
+        body = arming.activate_body(house_id, group_id, user_name or self.user_name)
+        await self._security_call(const.ARMING_GROUP_ACTIVATE_PATH, body, region=region)
+
+    async def async_arming_group_logs(
+        self, house_id: str, group_id: str, *, region: str, login: bool = True
+    ) -> tuple[ArmingGroupLog, ...]:
+        """The activation records of a group (``get_guard_logs``), in the cloud's order;
+        not cached."""
+        path = const.ARMING_GROUP_LOGS_PATH
+        data = await self._security_call(
+            path, arming.logs_body(house_id, group_id), region=region, login=login
+        )
+        return arming.parse_logs(data, path)
 
 
 def _check_owner_id(owner: str, station_sn: str) -> None:

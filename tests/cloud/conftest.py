@@ -50,6 +50,18 @@ FAKE_ECC_KEY = "ab" * 32
 MEGA_REALM = "mega"
 SECURITY_REALM = "security"
 _REALMS = {const.MEGA_PRESET_KEY: MEGA_REALM, const.SECURITY_PRESET_KEY: SECURITY_REALM}
+# The arming-group paths on the security host, by the endpoint name calls record.
+ARMING_ENDPOINTS = {
+    path: path.rsplit("/", 1)[-1]
+    for path in (
+        const.ARMING_GROUPS_PATH,
+        const.ARMING_GROUP_ADD_PATH,
+        const.ARMING_GROUP_UPDATE_PATH,
+        const.ARMING_GROUP_DELETE_PATH,
+        const.ARMING_GROUP_ACTIVATE_PATH,
+        const.ARMING_GROUP_LOGS_PATH,
+    )
+}
 # The body code the fake answers a request the gateway would refuse for its headers.
 FAKE_MALFORMED_CODE = 999_001
 
@@ -119,6 +131,9 @@ class FakeMega:
         # The security realm's get_hub_list / get_devs_list entries.
         self.security_stations: list[dict[str, Any]] = []
         self.security_devices: list[dict[str, Any]] = []
+        # Arming-group endpoint ("guard_list", "add_guard" …) -> its answer's data (None:
+        # a bare success).
+        self.arming_data: dict[str, Any] = {}
         # "house_invites" / "device_invites" -> the answer's data (default: an empty list).
         self.invite_data: dict[str, Any] = {}
         # Endpoint -> the request headers of each call, in order.
@@ -251,6 +266,14 @@ class FakeMega:
             callback=self._delayed("ciphers", self._get_ciphers, region),
             repeat=True,
         )
+        for path, endpoint in ARMING_ENDPOINTS.items():
+            mock.post(
+                _url(sec, path),
+                callback=self._delayed(
+                    endpoint, functools.partial(self._arming, endpoint=endpoint), region
+                ),
+                repeat=True,
+            )
         mock.post(
             _url(const.cluster_host("devicerelation", region), const.DSK_KEYS_PATH),
             callback=self._delayed("dsk", self._get_dsk, region),
@@ -484,6 +507,17 @@ class FakeMega:
             self.security_stations if endpoint == "security_stations" else self.security_devices
         )
         return self._reply(self._shared_for(kwargs, SECURITY_REALM), 0, entries)
+
+    def _arming(self, url: str, *, endpoint: str, **kwargs: Any) -> CallbackResult:
+        self.headers.setdefault(endpoint, []).append(dict(kwargs["headers"]))
+        if refused := self._security_refusal(endpoint, kwargs, category=True):
+            return refused
+        self.calls.append((endpoint, self._decrypt_body(kwargs, SECURITY_REALM)))
+        if failure := self._failure_once(endpoint, kwargs, SECURITY_REALM):
+            return failure
+        return self._reply(
+            self._shared_for(kwargs, SECURITY_REALM), 0, self.arming_data.get(endpoint)
+        )
 
     def _get_ciphers(self, url: str, **kwargs: Any) -> CallbackResult:
         self.headers.setdefault("ciphers", []).append(dict(kwargs["headers"]))

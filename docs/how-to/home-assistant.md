@@ -1987,6 +1987,52 @@ How the camera behaves during a view (T8170, see the
   reaches both, with no error and no size change; one leaving does not end the other's
   view.
 
+### Arming groups
+
+The eufy app's Group Control arms or disarms several stations at once: a group is a
+house-level list of members (a HomeBase or a standalone device) each with the guard mode
+it takes. The library reads and writes the groups in the cloud and activates them as the
+app does; none of it is verified on hardware or against the live cloud yet.
+
+```python
+from eufy_home_security.cloud.arming import ArmingOutcome  # models live in this module
+
+listing = await eufy.async_arming_groups()  # ArmingGroupList(house_id, groups, guided)
+group = await eufy.async_create_arming_group("Leaving", {hub_sn: "away", solo_sn: GuardMode.AWAY})
+await eufy.async_update_arming_group(group.group_id, name="Out")  # or members={...}
+activation = await eufy.async_activate_arming_group(group.group_id)  # changes alarm state
+logs = await eufy.async_arming_group_logs(group.group_id)
+await eufy.async_delete_arming_group(group.group_id)
+```
+
+- **The house.** Without `house_id` every call works on the house holding this account's
+  stations (`ValueError` when they are in several houses: pass `house_id`). The app's
+  shared-devices view has no groups, and a house with a T9000 uses the app's professional
+  arming instead (`UnsupportedError` for both). Each call reads the house list and the
+  house's device list first; nothing is cached, so read groups on a user's request or on
+  a slow timer, not per poll.
+- **Refusals before any write.** A name the app refuses (blank, over 31 characters with
+  one above U+00FF counting two, special characters such as `!`, `/`, `'` or an emoji)
+  or already used in the house, no member, or a mode that cannot be written
+  (`GuardMode.OFF`, an unknown code): `ValueError`, before any request for the name and
+  the modes. A member that is not a station or standalone device of the house (a paired
+  camera, say), or a 21st group: `UnsupportedError`. The library does not read a
+  station's defined custom modes, so every writable `GuardMode` is accepted.
+- **Activation changes the alarm state** of every member: offer it as a button or a
+  service action the user presses, never from an automation the integration starts by
+  itself. The activation is recorded in the cloud first; if that fails it raises and no
+  station is touched. Then each member gets its mode over its own session, concurrently
+  and without retry. `activation.results` has one `ArmingMemberResult` per member:
+  `CHANGED` (with `applied`), `ALREADY` (it reported that mode; nothing sent),
+  `SKIPPED_OFFLINE` (its session is down; a station reached on demand is woken instead)
+  or `FAILED` with `error` (the station's typed error, or `UnsupportedError` for a member
+  this client has no local station for: remote, served by another account, left out).
+  `activation.complete` is true when every member is in its mode; otherwise tell the user
+  which members failed, as the app's "Activate Again" does. The guard-mode changes arrive
+  as `GuardModeChanged` like any other.
+- **Status.** `ArmingGroup.active` is the cloud's flag for the last activated group; whether
+  a group is in effect is better read from the members' own guard modes.
+
 ## Errors map to HA control flow
 
 The library raises typed errors; translate them at the coordinator / setup boundary:

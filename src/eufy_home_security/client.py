@@ -22,6 +22,7 @@ from types import MappingProxyType, TracebackType
 from typing import TYPE_CHECKING, Any, Literal, Self
 
 from ._logging import Identifier, LogThrottle, Secret, redact_serial
+from .cloud import arming
 from .cloud.api import CipherKeys, EufyCloudApi, HttpSession, PasswordSource
 from .cloud.const import CLOUD_STATE_REFRESH, firmware_ota_type
 from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
@@ -63,6 +64,7 @@ from .exceptions import (
     NoCachedSessionError,
     ProtocolError,
     SessionReplacedError,
+    UnsupportedError,
 )
 from .identity import StationClaims, is_device_serial
 from .inclusion import Reach, StationChoice
@@ -1284,6 +1286,221 @@ class EufySecurity:
             alarm = self._alarms.disarmed(event.station_sn, event.source)
             if alarm is not None:
                 self._bus.emit(alarm)
+
+    # ── arming groups ────────────────────────────────────────────────────────
+
+    async def async_arming_groups(self, house_id: str | None = None) -> arming.ArmingGroupList:
+        """The arming groups (the eufy app's Group Control) of a house, in the cloud's order.
+
+        ``house_id`` None is the house that holds this account's stations, ``ValueError``
+        when they are in several. :class:`UnsupportedError` for the app's shared-devices
+        view, a house no login scope lists, or a house the app arms with professional
+        arming instead. Not cached: the house list, the house's device list and the
+        groups are read each time; every arming-group call resolves the house this way.
+        """
+        house = await self._arming_house(house_id)
+        return await self._arming_groups_of(house)
+
+    async def async_create_arming_group(
+        self,
+        name: str,
+        members: Mapping[str, GuardMode | int | str],
+        house_id: str | None = None,
+    ) -> arming.ArmingGroup:
+        """Create a group of ``members`` (serial → the guard mode it takes on activation)
+        in a house (``house_id`` as for :meth:`async_arming_groups`); returns it as listed.
+
+        Refused before any write: a name the app refuses (:func:`~.cloud.arming.check_group_name`)
+        or that another group of the house has, no member or a mode that cannot be a
+        target (``ValueError``, both before any request); a member that is not a station
+        or standalone device of the house, or a house already holding
+        :data:`~.cloud.arming.MAX_GROUPS_PER_HOUSE` groups (:class:`UnsupportedError`).
+        Every writable :class:`GuardMode` is accepted: the library does not read a
+        station's defined custom modes. :class:`ProtocolError` when the cloud accepts the
+        group but does not list it.
+        """
+        trimmed = arming.check_group_name(name)
+        targets = arming.target_modes(members)
+        house = await self._arming_house(house_id)
+        listing = await self._arming_groups_of(house)
+        arming.check_unique_name(listing, trimmed)
+        if len(listing.groups) >= arming.MAX_GROUPS_PER_HOUSE:
+            raise UnsupportedError(
+                f"the house already has {len(listing.groups)} arming groups "
+                f"(at most {arming.MAX_GROUPS_PER_HOUSE})"
+            )
+        chosen = arming.build_members(house, targets)
+        await self.cloud.async_add_arming_group(
+            house.house_id, trimmed, chosen, region=house.region
+        )
+        known = {group.group_id for group in listing.groups}
+        after = await self._arming_groups_of(house)
+        created = [g for g in after.groups if g.group_id not in known and g.name == trimmed]
+        if len(created) != 1:
+            raise ProtocolError("the cloud accepted the arming group but lists no new group")
+        return created[0]
+
+    async def async_update_arming_group(
+        self,
+        group_id: str,
+        *,
+        name: str | None = None,
+        members: Mapping[str, GuardMode | int | str] | None = None,
+        house_id: str | None = None,
+    ) -> arming.ArmingGroup:
+        """Rename group ``group_id`` and/or replace its whole member list; returns the
+        group as listed afterwards.
+
+        The same refusals as :meth:`async_create_arming_group`, plus ``ValueError`` when
+        neither ``name`` nor ``members`` is given and :class:`UnsupportedError` for a group
+        the house does not have. A member keeping its mode keeps the mode name stored
+        with it.
+        """
+        if name is None and members is None:
+            raise ValueError("pass a name or members to update an arming group")
+        trimmed = None if name is None else arming.check_group_name(name)
+        targets = None if members is None else arming.target_modes(members)
+        house = await self._arming_house(house_id)
+        listing = await self._arming_groups_of(house)
+        group = arming.find_group(listing, group_id)
+        if trimmed is not None:
+            arming.check_unique_name(listing, trimmed, group_id=group_id)
+        chosen = None if targets is None else arming.build_members(house, targets, group)
+        await self.cloud.async_update_arming_group(
+            house.house_id, group_id, region=house.region, name=trimmed, members=chosen
+        )
+        return arming.find_group(await self._arming_groups_of(house), group_id)
+
+    async def async_delete_arming_group(
+        self, group_id: str, *, house_id: str | None = None
+    ) -> None:
+        """Delete group ``group_id``; :class:`UnsupportedError` for a group the house does
+        not have (checked before the delete is sent)."""
+        house = await self._arming_house(house_id)
+        arming.find_group(await self._arming_groups_of(house), group_id)
+        await self.cloud.async_delete_arming_group(house.house_id, group_id, region=house.region)
+
+    async def async_arming_group_logs(
+        self, group_id: str, *, house_id: str | None = None
+    ) -> tuple[arming.ArmingGroupLog, ...]:
+        """The activation records of group ``group_id``, in the cloud's order."""
+        house = await self._arming_house(house_id)
+        return await self.cloud.async_arming_group_logs(
+            house.house_id, group_id, region=house.region
+        )
+
+    async def async_activate_arming_group(
+        self, group_id: str, *, house_id: str | None = None
+    ) -> arming.ArmingActivation:
+        """Activate group ``group_id`` as the eufy app does. **This changes the alarm
+        state** of every member at once (arms or disarms stations, with their sirens,
+        delays and notifications): call it only on a user's explicit request.
+
+        The activation is recorded in the cloud first; if that fails, its error is raised
+        and no station is touched. Then each member gets its target mode, concurrently,
+        through :meth:`Station.async_set_guard_mode` (no retry):
+        :attr:`~.cloud.arming.ArmingOutcome.SKIPPED_OFFLINE` when its session is down
+        (a station reached on demand is woken), ``ALREADY`` when it reports the target mode,
+        else ``CHANGED`` with the mode it applied, or ``FAILED`` with the error, also
+        for a member this client has no local station for (remote, served by another
+        account, left out) or whose target mode the library cannot write. Partial
+        application is normal: :attr:`~.cloud.arming.ArmingActivation.complete` says
+        whether every member is in its target mode.
+        """
+        house = await self._arming_house(house_id)
+        group = arming.find_group(await self._arming_groups_of(house), group_id)
+        await self.cloud.async_activate_arming_group(house.house_id, group_id, region=house.region)
+        results = await asyncio.gather(*(self._arm_member(member) for member in group.members))
+        _LOGGER.info(
+            "arming group %r activated: %s",
+            group.group_id,
+            ", ".join(f"{redact_serial(r.device_sn)} {r.outcome}" for r in results) or "no members",
+        )
+        return arming.ArmingActivation(group=group, results=tuple(results))
+
+    async def _arm_member(self, member: arming.ArmingGroupMember) -> arming.ArmingMemberResult:
+        """One member's guard-mode write of an activation; never raises a library error."""
+
+        def result(
+            outcome: arming.ArmingOutcome,
+            *,
+            applied: GuardMode | int | None = None,
+            error: EufySecurityError | None = None,
+        ) -> arming.ArmingMemberResult:
+            return arming.ArmingMemberResult(
+                device_sn=member.device_sn,
+                mode=member.mode,
+                outcome=outcome,
+                applied=applied,
+                error=error,
+            )
+
+        mode = member.mode
+        if not isinstance(mode, GuardMode) or mode not in arming.MODE_TITLES:
+            error = UnsupportedError(f"guard mode {int(mode)} cannot be written")
+            return result(arming.ArmingOutcome.FAILED, error=error)
+        station = self.stations.get(member.device_sn)
+        if station is None:
+            error = UnsupportedError(
+                f"{redact_serial(member.device_sn)} has no local station in this client"
+            )
+            return result(arming.ArmingOutcome.FAILED, error=error)
+        if not station.connected and not station.connects_on_demand:
+            return result(arming.ArmingOutcome.SKIPPED_OFFLINE)
+        state = station.state
+        if state is not None and state.guard_mode == mode:
+            return result(arming.ArmingOutcome.ALREADY)
+        try:
+            applied = await station.async_set_guard_mode(mode)
+        except EufySecurityError as err:
+            return result(arming.ArmingOutcome.FAILED, error=err)
+        return result(arming.ArmingOutcome.CHANGED, applied=applied)
+
+    async def _arming_groups_of(self, house: arming.ArmingHouse) -> arming.ArmingGroupList:
+        return await self.cloud.async_list_arming_groups(house.house_id, region=house.region)
+
+    async def _arming_house(self, house_id: str | None) -> arming.ArmingHouse:
+        """The house an arming-group call works on.
+
+        ``house_id`` None picks the one house (of every login scope holding this
+        account's stations) whose device list names one of them; stations in several
+        houses is ``ValueError``. Refused with :class:`UnsupportedError`: the app's
+        shared-devices view or an empty id, a house no scope lists (or none holding the
+        stations), and a house with a model armed by the app's professional-arming flow
+        (:data:`~.cloud.arming.PROFESSIONAL_ARMING_MODELS`).
+        """
+        await self._ensure_cache_loaded()
+        if house_id is not None and house_id in ("", arming.SHARED_DEVICES_HOUSE_ID):
+            raise UnsupportedError("arming groups belong to a house, not to shared devices")
+        devices = await self.cloud.async_get_devices()
+        own = {d.device_sn for d in devices if d.is_station}
+        regions = sorted({d.region for d in devices if d.is_station and d.region})
+        found: list[tuple[str, str, list[CloudDevice]]] = []
+        for region in regions:
+            for house in await self.cloud.async_list_houses(region):
+                if house_id is not None and house.house_id != house_id:
+                    continue
+                listed = await self.cloud.async_list_house_devices(region, house.house_id)
+                if house_id is None and not any(d.device_sn in own for d in listed):
+                    continue
+                found.append((house.house_id, region, listed))
+        if not found:
+            what = (
+                "the house" if house_id is not None else "a house holding this account's stations"
+            )
+            raise UnsupportedError(f"no login scope lists {what}")
+        if house_id is None and len(found) > 1:
+            raise ValueError(f"this account's stations are in {len(found)} houses; pass house_id")
+        chosen_id, region, listed = found[0]
+        if arming.uses_professional_arming(d.device_sn for d in listed):
+            raise UnsupportedError(
+                "the house is armed with the eufy app's professional arming, not groups"
+            )
+        return arming.ArmingHouse(
+            house_id=chosen_id,
+            region=region,
+            stations=frozenset(d.device_sn for d in listed if d.is_station),
+        )
 
 
 class _CachedKeyRefreshLatch:

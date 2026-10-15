@@ -144,6 +144,14 @@ DSK_KEYS_PATH: Final = "/app/devicerelation/get_dsk_keys"
 PUSH_TOKEN_PATH: Final = "/app/push/register_push_token"  # noqa: S105 — a URL path, not a secret
 OTA_ROM_PATH: Final = "/app/ota/get_rom_version"
 THINGS_PATH: Final = "/app/things/get_things_list"
+# Arming groups ("Group Control"): house-level lists of (station, guard mode) on the
+# security realm (see docs/protocol/cloud.md § Arming groups).
+ARMING_GROUPS_PATH: Final = "/v3/house/guard_list"
+ARMING_GROUP_ADD_PATH: Final = "/v3/house/add_guard"
+ARMING_GROUP_UPDATE_PATH: Final = "/v3/house/update_guard"
+ARMING_GROUP_DELETE_PATH: Final = "/v3/house/delete_guard"
+ARMING_GROUP_ACTIVATE_PATH: Final = "/v3/house/setup_guard"
+ARMING_GROUP_LOGS_PATH: Final = "/v3/house/get_guard_logs"
 
 # The only hosts a thing description's ``profile.plugin_path`` (the handler bundle) is
 # downloaded from: the vendor CDN hosts every fetched description names (eufy's own CDN
