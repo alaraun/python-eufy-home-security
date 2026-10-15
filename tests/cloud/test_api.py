@@ -991,8 +991,9 @@ async def test_a_cipher_entry_is_read_as_the_cipher_table_reads_it(
         async with aiohttp.ClientSession() as session:
             api = _api(session, cache)
             await api.async_login()
-            with pytest.raises(EmptyResponseError, match="no private key"):
+            with pytest.raises(EmptyResponseError, match="no private key") as blank:
                 await api.async_get_cipher_keys(SYNTHETIC.station_sn)
+            assert blank.value.device_sn == SYNTHETIC.station_sn
             fake_mega.cipher_objects = [{"cipher_id": "40", "ecc_private_key": f" {FAKE_ECC_KEY}"}]
             keys = await api.async_get_cipher_keys(SYNTHETIC.station_sn)
             (record,) = await api.async_list_ciphers(SYNTHETIC.station_sn, FAKE_OWNER_ID, [40])
@@ -1120,6 +1121,7 @@ async def test_cipher_refresh_honours_the_cooldown(
     assert caught.value.code == 0
     assert caught.value.retry_after is not None
     assert (caught.value.origin, caught.value.scope) == ("cooldown", None)
+    assert caught.value.device_sn == SYNTHETIC.station_sn
 
 
 async def test_register_push_token(fake_mega: FakeMega, cache: SessionCache) -> None:

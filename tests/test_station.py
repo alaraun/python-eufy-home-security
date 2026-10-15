@@ -1211,8 +1211,9 @@ def test_has_setting_answers_from_the_device_s_own_list() -> None:
     assert hub.has_setting("time_format_set") is True
     assert hub.has_setting("alarm_delay_away") is False  # the station has no mode tables
     assert hub.has_setting("watermark_set", "T9999P0000000002") is None
-    with pytest.raises(UnsupportedError, match="not paired"):
+    with pytest.raises(UnsupportedError, match="not paired") as err:
         hub.has_setting("watermark_set", "T8160P2000099999")
+    assert err.value.device_sn == "T8160P2000099999"
     listed = settings_of("T8160")["watermark_set"]
     station = _unconnected_station(host=None, local_ip=None, local_port=0)
     scanned = Station(

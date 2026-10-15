@@ -492,8 +492,9 @@ async def test_a_custom_mode_the_known_list_lacks_is_not_set(
     station: Station, fake: FakeStation
 ) -> None:
     await station.async_update()
-    with pytest.raises(UnsupportedError, match="has no Custom 2"):
+    with pytest.raises(UnsupportedError, match="has no Custom 2") as err:
         await station.async_set_guard_mode("custom_2")
+    assert err.value.device_sn == station.serial
     assert [c for c in fake.received if c["cmd"] == 1224] == []
     assert await station.async_set_guard_mode("custom_1") is GuardMode.CUSTOM_1
 

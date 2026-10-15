@@ -2427,6 +2427,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `ConfigChangedError` (`config`, `expected`) | a write's `expect_revision` is stale: the station's configuration changed elsewhere and nothing was sent. Show `err.config` and let the user redo the edit; not an outage |
 | `ModeInUseError` (an `UnsupportedError`; `reason`) | the mode is in use (current, or named by the schedule or its default); nothing was sent. `raise HomeAssistantError` with `reason` |
 | `KeyExchangeRefusedError` (a `CloudApiError`; `code` 4404 or 463, `status` 463) | the cloud gateway refused the client's key identity and a new key exchange did not restore it. Not a reauth and not a kick-out: no login was attempted and none helps by itself. Carry on from the cache and retry on the next interval; the library re-keys at each attempt. Raise a repair issue only if it persists (hours) |
+| any error with `device_sn` (every `EufySecurityError` has the attribute, None by default) | the message names a device by its redacted serial (`T8030***4321 has no local station`); `err.device_sn` is that device's full serial (the first one the message names). Map it to the device's name for the user instead of matching the redacted form in the text; the message itself stays as it is, fit for logs |
 
 Errors that happen in the background (a key or owner-id refresh inside a running session,
 the push listener's token upload) do not raise anywhere the integration can catch. They

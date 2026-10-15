@@ -1963,11 +1963,13 @@ class EufyCloudApi:
                 _SUCCESS,
                 f"{redact_serial(station_sn)} has no owner id",
                 endpoint=const.DEVICES_PATH,
+                device_sn=station_sn,
             )
         raise CloudApiError(
             _SUCCESS,
             f"{redact_serial(station_sn)} is not on this account",
             endpoint=const.DEVICES_PATH,
+            device_sn=station_sn,
         )
 
     # ── device session key (DSK) ───────────────────────────────────────────
@@ -2036,6 +2038,7 @@ class EufyCloudApi:
             _SUCCESS,
             f"no DSK for {redact_serial(station_sn)} in the cloud response",
             endpoint=const.DSK_KEYS_PATH,
+            device_sn=station_sn,
         )
 
     # ── firmware (OTA) ─────────────────────────────────────────────────────
@@ -2098,6 +2101,7 @@ class EufyCloudApi:
                 _SUCCESS,
                 f"cipher {cipher_id} for {redact_serial(station_sn)} carried no ecc_private_key",
                 endpoint=const.CIPHERS_PATH,
+                device_sn=station_sn,
             )
         return keys.ecc_private_key
 
@@ -2138,6 +2142,7 @@ class EufyCloudApi:
                 raise RefreshCooldownError(
                     f"cipher refresh for {redact_serial(station_sn)} is on cooldown ({left:.0f}s left)",
                     retry_after=left,
+                    device_sn=station_sn,
                 )
             self._cache.note_refresh("cipher", station_sn)
             await self._cache.async_save()
@@ -2187,6 +2192,7 @@ class EufyCloudApi:
                 owner_source=source,
                 retry_after=backoff,
                 endpoint=const.CIPHERS_PATH,
+                device_sn=station_sn,
             )
         for item in _cipher_items(data):
             record = CipherRecord.from_api(item)
@@ -2200,6 +2206,7 @@ class EufyCloudApi:
             _SUCCESS,
             f"cipher {cipher_id} for {redact_serial(station_sn)} carried no private key",
             endpoint=const.CIPHERS_PATH,
+            device_sn=station_sn,
         )
 
     async def _cipher_answer(
@@ -2461,6 +2468,7 @@ class EufyCloudApi:
             owner_source=source,
             retry_after=left,
             endpoint=const.CIPHERS_PATH,
+            device_sn=station_sn,
         )
 
     def _cipher_cooldown_left(self, station_sn: str) -> float:
@@ -3040,7 +3048,8 @@ def _check_owner_id(owner: str, station_sn: str) -> None:
     if not (owner and owner.isascii() and owner.isprintable() and len(owner) < _ECB_ACCOUNT_LEN):
         raise ProtocolError(
             f"owner id for {redact_serial(station_sn)} is not printable ASCII of at most "
-            f"{_ECB_ACCOUNT_LEN - 1} characters ({len(owner)} characters)"
+            f"{_ECB_ACCOUNT_LEN - 1} characters ({len(owner)} characters)",
+            device_sn=station_sn,
         )
 
 

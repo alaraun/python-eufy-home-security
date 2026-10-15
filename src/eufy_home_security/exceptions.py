@@ -27,7 +27,18 @@ if TYPE_CHECKING:
 
 
 class EufySecurityError(Exception):
-    """Base class for every error raised by this library."""
+    """Base class for every error raised by this library.
+
+    ``device_sn`` is the serial of the device the error is about when its message names
+    one (redacted there, as the first serial it names); None otherwise. Map it to the
+    device's name instead of parsing the message.
+    """
+
+    device_sn: str | None = None
+
+    def __init__(self, *args: object, device_sn: str | None = None) -> None:
+        super().__init__(*args)
+        self.device_sn = device_sn
 
 
 # ── cloud ────────────────────────────────────────────────────────────────────
@@ -44,12 +55,14 @@ class CloudApiError(CloudError):
     the body, so this carries that code rather than an HTTP status.
     """
 
-    def __init__(self, code: int, message: str = "", *, endpoint: str = "") -> None:
+    def __init__(
+        self, code: int, message: str = "", *, endpoint: str = "", device_sn: str | None = None
+    ) -> None:
         self.code = code
         self.message = message
         self.endpoint = endpoint
         where = f" ({endpoint})" if endpoint else ""
-        super().__init__(f"cloud error {code}{where}: {message}".rstrip(": "))
+        super().__init__(f"cloud error {code}{where}: {message}".rstrip(": "), device_sn=device_sn)
 
 
 class EmptyResponseError(CloudApiError):
@@ -79,11 +92,12 @@ class CipherUnavailableError(EmptyResponseError):
         owner_source: str,
         retry_after: float,
         endpoint: str = "",
+        device_sn: str | None = None,
     ) -> None:
         self.cipher_id = cipher_id
         self.owner_source = owner_source
         self.retry_after = retry_after
-        super().__init__(0, message, endpoint=endpoint)
+        super().__init__(0, message, endpoint=endpoint, device_sn=device_sn)
 
 
 class KeyExchangeRefusedError(CloudApiError):
@@ -134,12 +148,15 @@ class RateLimitedError(CloudError):
         code: int = 0,
         scope: str | None = None,
         origin: RateLimitOrigin | None = None,
+        device_sn: str | None = None,
     ) -> None:
         self.retry_after = retry_after
         self.code = code
         self.scope = scope
         self.origin: RateLimitOrigin = origin or self._ORIGIN
-        super().__init__(message or "the eufy cloud is rate-limiting this account")
+        super().__init__(
+            message or "the eufy cloud is rate-limiting this account", device_sn=device_sn
+        )
 
 
 class RefreshCooldownError(RateLimitedError):
@@ -348,9 +365,11 @@ class CommandNotAppliedError(CommandError):
     because a shared member's own id was used instead of the station owner's.
     """
 
-    def __init__(self, command: int, message: str = "") -> None:
+    def __init__(self, command: int, message: str = "", *, device_sn: str | None = None) -> None:
         self.command = command
-        super().__init__(message or f"command {command} was acknowledged but not applied")
+        super().__init__(
+            message or f"command {command} was acknowledged but not applied", device_sn=device_sn
+        )
 
 
 class PresetSlotsFullError(CommandNotAppliedError):
