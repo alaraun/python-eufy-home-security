@@ -8,6 +8,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast
@@ -720,6 +721,10 @@ async def test_an_alarm_is_one_start_and_one_end_across_channels() -> None:
     ]
     assert states == [alarming for alarming, _ in lifecycle]
     assert not station.alarming
+    cloud_start = [e for e in events if isinstance(e, AlarmChanged)][2]
+    assert cloud_start.event_time == datetime.fromtimestamp((now_ms + 60_000) / 1000, UTC)
+    assert station.last_alarm is not None
+    assert station.last_alarm.at.tzinfo is UTC  # the disarm that ended it, as last seen
     assert sum(isinstance(e, SecurityEvent) and e.msg_type == 10 for e in events) == 4
 
 

@@ -11,6 +11,7 @@ import struct
 import time
 from collections.abc import AsyncIterator
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
@@ -482,6 +483,7 @@ async def test_alarm_frames_become_param_and_alarm_changes(
     under the static key is refused, and one that does not decrypt is dropped."""
     session = make_rsa_session(station) if rsa else make_session(station, Provider(station))
     events: list[Event] = []
+    started = datetime.now(UTC)
     try:
         await session.async_get_params()
         session.subscribe(events.append)
@@ -514,6 +516,7 @@ async def test_alarm_frames_become_param_and_alarm_changes(
         (0, 1201, None, "0"),
     ]
     alarms = [e for e in events if isinstance(e, AlarmChanged)]
+    assert all(started <= e.at <= datetime.now(UTC) for e in alarms)  # when it arrived
     assert alarms == [
         AlarmChanged(
             station_sn=SYNTHETIC.station_sn,

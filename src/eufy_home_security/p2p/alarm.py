@@ -28,6 +28,7 @@ from __future__ import annotations
 import struct
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
@@ -56,12 +57,13 @@ class AlarmFrame:
         (the event type of a tone or siren frame, the light state)."""
         return str(self.values[0])
 
-    def alarm_change(self, station_sn: str) -> AlarmChanged | None:
+    def alarm_change(self, station_sn: str, *, at: datetime) -> AlarmChanged | None:
         """The alarm state an alarm-tone frame (1201) reports; None for other frames.
 
         A non-zero event type that is not an :class:`~..events.AlarmStopSource` starts
         the alarm (``duration_s`` from the seconds, None when 0); 0 ends it, and a stop
-        code (16 from the app) ends it naming its source. Emit it only on a transition:
+        code (16 from the app) ends it naming its source. ``at`` is when the frame
+        arrived (the frame carries no time of its own). Emit it only on a transition:
         arming sends ``[0, 0]`` on every channel.
         """
         if self.param_id != FrameType.ALARM_TONE_NOTIFY:
@@ -80,6 +82,7 @@ class AlarmFrame:
             event_type=event_type or None,
             duration_s=(seconds or None) if alarming else None,
             stop_source=stop,
+            at=at,
         )
 
 

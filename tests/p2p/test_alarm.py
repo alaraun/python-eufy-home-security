@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import struct
+from datetime import UTC, datetime
 
 import pytest
 
@@ -47,6 +48,9 @@ def test_the_cached_value_is_the_first_u32() -> None:
     assert AlarmFrame(1400, 1, (0,)).value == "0"
 
 
+_AT = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
+
+
 def _change(**fields: object) -> AlarmChanged:
     return AlarmChanged(
         station_sn=SYNTHETIC.station_sn,
@@ -73,4 +77,7 @@ def _change(**fields: object) -> AlarmChanged:
     ],
 )
 def test_the_tone_frame_is_the_alarm_state(frame: AlarmFrame, change: AlarmChanged | None) -> None:
-    assert frame.alarm_change(SYNTHETIC.station_sn) == change
+    got = frame.alarm_change(SYNTHETIC.station_sn, at=_AT)
+    assert got == change
+    if got is not None:
+        assert (got.at, got.event_time) == (_AT, None)  # a frame carries no time of its own

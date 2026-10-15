@@ -291,6 +291,10 @@ def wall_ms() -> int:
     return time.time_ns() // 1_000_000
 
 
+def _utc_ms(ms: int) -> datetime:
+    return datetime.fromtimestamp(ms / 1000, UTC)
+
+
 def is_station_media_path(value: object, suffix: str) -> TypeGuard[str]:
     """Whether ``value`` is a plausible station media path ending in ``suffix``.
 
@@ -803,6 +807,11 @@ class AlarmChanged:
     the tone's event type or the push's ``alarm_type`` (3 = the HomeBase alarm, 25 =
     the camera siren, or the stop code), ``duration_s`` the tone's length (P2P only),
     ``stop_source`` who ended it when known (never for a timeout or a disarm).
+
+    ``at`` is when the library saw the change (UTC, the host clock); it is not part of
+    equality. ``event_time`` is the time the change carries itself (UTC): an alarm
+    push's :attr:`SecurityEvent.event_time_ms`, the station's trigger time where the
+    push's payload names one; None for a P2P frame or a disarm, which carry none.
     """
 
     station_sn: str
@@ -812,6 +821,8 @@ class AlarmChanged:
     event_type: int | None = None
     duration_s: int | None = None
     stop_source: AlarmStopSource | None = None
+    at: datetime = field(default_factory=lambda: datetime.now(UTC), compare=False)
+    event_time: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -1277,13 +1288,16 @@ class AlarmTracker:
             channel=event.channel,
             event_type=event.alarm_type,
             stop_source=None if alarming else _enum_or_none(AlarmStopSource, event.alarm_type),
+            at=_utc_ms(now),
+            event_time=None if event.event_time_ms is None else _utc_ms(event.event_time_ms),
         )
 
     def disarmed(self, station_sn: str, source: EventSource) -> AlarmChanged | None:
         """End the station's alarm on a disarm; None when none was on."""
-        if not self._apply(station_sn, False, self._now_ms()):
+        now = self._now_ms()
+        if not self._apply(station_sn, False, now):
             return None
-        return AlarmChanged(station_sn=station_sn, alarming=False, source=source)
+        return AlarmChanged(station_sn=station_sn, alarming=False, source=source, at=_utc_ms(now))
 
     def _apply(self, station_sn: str, alarming: bool, at_ms: int) -> bool:
         if self.alarming(station_sn) == alarming:

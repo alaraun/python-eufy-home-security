@@ -45,7 +45,7 @@ import time
 from collections import Counter, deque
 from collections.abc import AsyncIterator, Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Protocol, cast
@@ -4669,7 +4669,7 @@ class StationSession:
                     new=new,
                 )
             )
-        change = alarm.alarm_change(self.serial)
+        change = alarm.alarm_change(self.serial, at=datetime.now(UTC))
         if change is not None:
             for alarming, future in self._tone_waiters:
                 if alarming == change.alarming and not future.done():

@@ -778,7 +778,9 @@ A closed session (`async_close`) never reconnects on its own — build a new
   start and one end per alarm across both channels (the P2P tone frames and the cloud
   alarm pushes), transitions only, and a disarm ends it; `stop_source` says `APP`
   (verified), `KEYPAD` or `HOMEBASE` when a stop named one, `duration_s` the tone's
-  length over P2P. A cloud-only station gets no end when the alarm times out: expect it
+  length over P2P. `at` is when the library saw the change (UTC, aware: the time to show
+  as "triggered at"), `event_time` the time an alarm push carries itself (the station's
+  trigger time where its payload names one), None for a P2P frame or a disarm. A cloud-only station gets no end when the alarm times out: expect it
   to stay triggered until a stop or disarm, or end it on a timer of your own. The same
   state is on the station: `station.alarming` (bool) and `station.last_alarm` (the last
   `AlarmChanged`, None before any), already set when a subscriber receives the event, so

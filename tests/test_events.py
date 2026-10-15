@@ -582,6 +582,10 @@ def _alarm_push(
     )
 
 
+def _utc(ms: int) -> datetime:
+    return datetime.fromtimestamp(ms / 1000, UTC)
+
+
 def _p2p_alarm(alarming: bool) -> AlarmChanged:
     return AlarmChanged(station_sn=SYNTHETIC.station_sn, alarming=alarming, source=EventSource.P2P)
 
@@ -620,16 +624,32 @@ def test_a_cloud_only_alarm() -> None:
         source=EventSource.CLOUD,
         channel=1,
         event_type=25,
+        event_time=_utc(_NOW_MS - 1_000),  # the push's own time
     )
+    assert started.at == _utc(_NOW_MS)  # when the tracker saw it
+    clock.now += 5_000
     stopped = alarms.push(_alarm_push(AlarmStopSource.KEYPAD, _NOW_MS))
     assert stopped is not None
     assert (stopped.alarming, stopped.stop_source) == (False, AlarmStopSource.KEYPAD)
-    assert alarms.push(_alarm_push(3, None)) is not None  # no time: now
+    assert (stopped.at, stopped.event_time) == (_utc(clock.now), _utc(_NOW_MS))
+    untimed = alarms.push(_alarm_push(3, None))  # no time: now
+    assert untimed is not None
+    assert untimed.event_time is None
+    clock.now += 1_000
     disarm = alarms.disarmed(SYNTHETIC.station_sn, EventSource.CLOUD)
     assert disarm == AlarmChanged(
         station_sn=SYNTHETIC.station_sn, alarming=False, source=EventSource.CLOUD
     )
+    assert (disarm.at, disarm.event_time) == (_utc(clock.now), None)
     assert alarms.disarmed(SYNTHETIC.station_sn, EventSource.CLOUD) is None
+
+
+def test_an_alarm_change_built_without_a_time_is_stamped_now_in_utc() -> None:
+    before = datetime.now(UTC)
+    change = _p2p_alarm(True)
+    assert change.at.tzinfo is UTC
+    assert before <= change.at <= datetime.now(UTC)
+    assert change == dataclasses.replace(change, at=before - timedelta(days=1))  # not compared
 
 
 @pytest.mark.parametrize(
