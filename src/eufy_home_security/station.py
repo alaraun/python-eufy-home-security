@@ -2394,6 +2394,7 @@ class Station:
                     command,
                     f"{mode.name.lower()} mode table: channels {missing} are missing from the "
                     "parameter dump; refusing to write a mode table without them",
+                    device_sns=self._serials_on(missing),
                 )
             state = self._state(dump)
             for target, spec in sorted(targets.items()):
@@ -2433,7 +2434,8 @@ class Station:
                 raise UnsupportedError(
                     f"{mode.name.lower()} mode table: channels {unknown} are of no known "
                     "device kind; a mode table always clears siren-accessory triggers, so it "
-                    "is not written"
+                    "is not written",
+                    device_sns=self._serials_on(unknown),
                 )
             new.request("")  # refuses a delay the table cannot carry, before any traffic
             if stored_param is not None:
@@ -2442,10 +2444,17 @@ class Station:
             try:
                 await self.session.async_set_mode_table(new)
             except CommandNotAppliedError as err:
+                detail, serials = self._mode_table_mismatch(new)
                 raise CommandNotAppliedError(
-                    err.command, f"{self._mode_table_mismatch(new)}: {err}"
+                    err.command, f"{detail}: {err}", device_sns=serials
                 ) from err
             return table, new
+
+    def _serials_on(self, channels: Iterable[int]) -> tuple[str, ...]:
+        """The cloud serials of the devices on ``channels``, in their order; a channel the
+        cloud lists no device on (or several) is left out."""
+        cloud = self._cloud_by_channel()
+        return tuple(d.device_sn for ch in channels if (d := cloud.get(ch)) is not None)
 
     @staticmethod
     def _stored_table_for_write(
@@ -2511,16 +2520,19 @@ class Station:
         receipted = await self.session.async_send_json_frame(CMD_SET_ALL_ACTION, body)
         await self._async_confirm_param(param, encode_stored_mode_table(sent[-1]), holds, receipted)
 
-    def _mode_table_mismatch(self, table: ModeTable) -> str:
-        """Which device's flag or delay the last read does not show as ``table`` set it."""
+    def _mode_table_mismatch(self, table: ModeTable) -> tuple[str, tuple[str, ...]]:
+        """Which device's flag or delay the last read does not show as ``table`` set it,
+        and the serials of those devices, in the order the text names them."""
         reported = self.session.merged_params().devices
         cloud = self._cloud_by_channel()
         action_param = FIELD_PARAMS[ModeTableField.ACTION][table.mode]
         problems: list[str] = []
+        serials: list[str] = []
         for channel, values in sorted(table.params().items()):
             entry = cloud.get(channel)
             name = redact_serial(entry.device_sn) if entry else f"channel {channel}"
             block = reported.get(channel, {})
+            before = len(problems)
             for param, want in sorted(values.items()):
                 raw = block.get(param)
                 got = json_int(raw) if raw is not None else None
@@ -2544,8 +2556,10 @@ class Station:
                     named |= bit
                 if (want ^ got) & ~named:
                     problems.append(f"{name} action: wrote {want}, station reports {got}")
+            if entry is not None and len(problems) > before:
+                serials.append(entry.device_sn)
         detail = "; ".join(problems) or "the read-back differs"
-        return f"{table.mode.name.lower()} mode table not confirmed ({detail})"
+        return f"{table.mode.name.lower()} mode table not confirmed ({detail})", tuple(serials)
 
     async def async_set_mode_action(
         self,

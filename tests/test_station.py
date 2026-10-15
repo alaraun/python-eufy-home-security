@@ -1455,8 +1455,9 @@ async def test_a_listed_siren_accessory_blocks_a_mode_table_write(
     )
     fake.params[3] = {1239: "1"}
     hub = Station(STATION, station.session, sub_devices=[CAMERA, siren])
-    with pytest.raises(UnsupportedError, match="no known device kind"):
+    with pytest.raises(UnsupportedError, match="no known device kind") as err:
         await hub.async_set_mode_action("away", "camera_siren", True, channel=0)
+    assert err.value.device_sns == ("T90R0P0000000001",)
     assert fake.mode_tables_received == []
 
 
@@ -1672,7 +1673,39 @@ async def test_a_bulk_read_back_mismatch_names_the_device_and_flag(
     assert message.startswith("away mode table not confirmed (")
     assert "T8160***7890 camera_siren: wrote on, station reports off" in message
     assert "T8910***0001 notification: wrote off, station reports on" in message
+    assert err.value.device_sns == (SYNTHETIC.camera_sn, SENSOR_SN)  # in channel order
+    assert err.value.device_sn == SYNTHETIC.camera_sn
     assert len(fake.mode_tables_received) == 1
+
+
+async def test_a_device_missing_from_the_dump_is_named_and_nothing_is_sent(
+    station: Station, fake: FakeStation
+) -> None:
+    _mode_table_blocks(fake)
+    absent = CloudDevice(
+        device_sn="T8160P2000099999",
+        device_type=CAMERA.device_type,
+        name="Garage",
+        station_sn=SYNTHETIC.station_sn,
+        channel=5,
+    )
+    hub = Station(STATION, station.session, sub_devices=[CAMERA, MOTION_SENSOR, absent])
+    with pytest.raises(CommandNotAppliedError, match=r"channels \[5\] are missing") as err:
+        await hub.async_set_mode_actions("away", {SENSOR_SN: {"notification": False}})
+    assert err.value.device_sns == ("T8160P2000099999",)
+    assert fake.mode_tables_received == []
+
+
+async def test_a_read_back_mismatch_lists_only_the_devices_that_differ(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_module, "MODE_TABLE_READBACK_DELAY", 0.0)
+    _mode_table_blocks(fake)
+    fake.apply_settings = False
+    hub = _matrix_hub(station)
+    with pytest.raises(CommandNotAppliedError) as err:
+        await hub.async_set_mode_actions("away", {SENSOR_SN: {"notification": False}})
+    assert err.value.device_sns == (SENSOR_SN,)
 
 
 async def test_concurrent_mode_table_writes_keep_each_others_bits(

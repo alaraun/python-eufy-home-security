@@ -23,6 +23,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from .station_config import StationConfig
 
 
@@ -30,15 +32,25 @@ class EufySecurityError(Exception):
     """Base class for every error raised by this library.
 
     ``device_sn`` is the serial of the device the error is about when its message names
-    one (redacted there, as the first serial it names); None otherwise. Map it to the
-    device's name instead of parsing the message.
+    one (redacted there, as the first serial it names); None otherwise. ``device_sns``
+    lists every device the error is about, in the order the message names them
+    (``device_sn`` first): one entry for an error about one device, several for one that
+    names several (a mode table that did not take), empty otherwise. Map them to the
+    devices' names instead of parsing the message.
     """
 
     device_sn: str | None = None
+    device_sns: tuple[str, ...] = ()
 
-    def __init__(self, *args: object, device_sn: str | None = None) -> None:
+    def __init__(
+        self, *args: object, device_sn: str | None = None, device_sns: Iterable[str] = ()
+    ) -> None:
         super().__init__(*args)
-        self.device_sn = device_sn
+        serials = tuple(dict.fromkeys(device_sns))
+        if device_sn is not None:
+            serials = (device_sn, *(s for s in serials if s != device_sn))
+        self.device_sns = serials
+        self.device_sn = serials[0] if serials else None
 
 
 # ── cloud ────────────────────────────────────────────────────────────────────
@@ -365,10 +377,19 @@ class CommandNotAppliedError(CommandError):
     because a shared member's own id was used instead of the station owner's.
     """
 
-    def __init__(self, command: int, message: str = "", *, device_sn: str | None = None) -> None:
+    def __init__(
+        self,
+        command: int,
+        message: str = "",
+        *,
+        device_sn: str | None = None,
+        device_sns: Iterable[str] = (),
+    ) -> None:
         self.command = command
         super().__init__(
-            message or f"command {command} was acknowledged but not applied", device_sn=device_sn
+            message or f"command {command} was acknowledged but not applied",
+            device_sn=device_sn,
+            device_sns=device_sns,
         )
 
 

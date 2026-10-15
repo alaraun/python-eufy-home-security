@@ -1,4 +1,4 @@
-"""``exceptions.py``: the serial an error names, on every error class."""
+"""``exceptions.py``: the serials an error names, on every error class."""
 
 from __future__ import annotations
 
@@ -61,6 +61,16 @@ def test_an_error_names_no_device_by_default() -> None:
 )
 def test_an_error_carries_the_serial_it_names(err: EufySecurityError) -> None:
     assert err.device_sn == SN
+
+
+def test_an_error_lists_every_device_it_names() -> None:
+    other = SYNTHETIC.station_sn
+    assert EufySecurityError("x").device_sns == ()
+    assert UnsupportedError("m", device_sn=SN).device_sns == (SN,)
+    listed = CommandNotAppliedError(1, "m", device_sns=[SN, other, SN])
+    assert (listed.device_sn, listed.device_sns) == (SN, (SN, other))
+    first = UnsupportedError("m", device_sn=other, device_sns=(SN, other))
+    assert (first.device_sn, first.device_sns) == (other, (other, SN))
 
 
 def _unnamed_sites() -> list[str]:
