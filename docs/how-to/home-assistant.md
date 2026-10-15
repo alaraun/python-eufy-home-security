@@ -2257,8 +2257,9 @@ await station.async_set_mode_actions("away", {cam_sn: {"camera_siren": True}})
   it changes, the mode outside its slots (1257), the tracking cameras (1072) or groups
   (1073), a mode table (1255). Nothing is sent for a value the station already holds.
   Writes of one object are serialised per station, so two concurrent edits keep each
-  other's changes. All but the mode tables are declared from the eufy app and not yet
-  written on hardware (`config_support` grades them).
+  other's changes. On a HomeBase 3 (T8030) each is verified: written, confirmed, checked
+  in the eufy app and restored (the 1257 default and the tracking switches aside); on
+  other models they are declared from the eufy app (`config_support` grades them).
 - **Refused before sending.** `UnsupportedError` when `config_support` of the call's
   feature is `UNKNOWN`, for a serial that is not a camera paired to the station (a
   sensor, another station's camera), for a mode list that cannot be read or that no

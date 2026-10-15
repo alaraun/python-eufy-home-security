@@ -105,6 +105,30 @@ _VERIFIED: Final[Mapping[tuple[str, StationFeature], Evidence]] = MappingProxyTy
         ("T8030", StationFeature.GUARD_MODE): PROFILES["T8030"].capabilities[
             Capability.GUARD_MODE_WRITE
         ],
+        ("T8030", StationFeature.CUSTOM_MODES): Evidence(
+            Support.VERIFIED,
+            "live 1256 create, rename and delete, each confirmed and checked in the eufy "
+            "app, T8030 HomeBase 3 fw 3.8.7.4",
+            "the station seeds an added mode's tables (cameras record and notification, "
+            "sensors notification)",
+        ),
+        ("T8030", StationFeature.SCHEDULE): Evidence(
+            Support.VERIFIED,
+            "live 1254 write of the weekly slots, confirmed, checked in the eufy app and "
+            "restored, T8030 HomeBase 3 fw 3.8.7.4",
+            "the mode outside every slot (1257) declared",
+        ),
+        ("T8030", StationFeature.CROSS_CAMERA): Evidence(
+            Support.VERIFIED,
+            "live 1072 write of the chosen cameras + read-back, checked in the eufy app and "
+            "restored, T8030 HomeBase 3 fw 3.8.7.4",
+            "the tracking switches (1065, 1069, 1070) are settings, not written here",
+        ),
+        ("T8030", StationFeature.CROSS_CAMERA_GROUPS): Evidence(
+            Support.VERIFIED,
+            "live 1073 write of the groups + read-back, checked in the eufy app and "
+            "restored, T8030 HomeBase 3 fw 3.8.7.4",
+        ),
         ("T8030", StationFeature.MODE_TABLES): Evidence(
             Support.VERIFIED,
             "live 1255 write + read-back of one device's action mask per mode, "
@@ -123,14 +147,6 @@ _VERIFIED: Final[Mapping[tuple[str, StationFeature], Evidence]] = MappingProxyTy
 #: Read-only hardware observations: the feature's data was read, nothing written.
 _READ_SEEN: Final[Mapping[tuple[str, StationFeature], str]] = MappingProxyType(
     {
-        ("T8030", StationFeature.CUSTOM_MODES): "the mode list (1256) read on a T8030 fw "
-        "3.8.7.4; not written",
-        ("T8030", StationFeature.SCHEDULE): "the schedule (1254, 1257) read on a T8030 fw "
-        "3.8.7.4; not written",
-        ("T8030", StationFeature.CROSS_CAMERA): "1065, 1069, 1070 and 1072 read on a T8030 "
-        "fw 3.8.7.4; not written",
-        ("T8030", StationFeature.CROSS_CAMERA_GROUPS): "1073 read on a T8030 fw 3.8.7.4; "
-        "not written",
         ("T8030", StationFeature.ARMING_GROUPS): "the group list read for a house with a "
         "T8030; not written or activated",
     }
@@ -187,18 +203,18 @@ def config_support(
     *Verified* from a hardware check on that model; else the generated grade:
     *declared* when the eufy app offers the feature on the model and its handler builds
     the request the library sends, *unknown* with the reason otherwise. With
-    ``firmware``, a station below the app's gate (:func:`min_firmware`) is *unknown*; a
-    firmware string that is not dotted numbers is not compared.
+    ``firmware``, a station below the app's gate (:func:`min_firmware`) is *unknown*, a
+    verified feature too; a firmware string that is not dotted numbers is not compared.
     """
     code = _key(product_code)
     if code is None or code not in FEATURES:
         return Evidence(Support.UNKNOWN, f"{code or 'this model'} is not a station model on record")
     verified = _VERIFIED.get((code, feature))
-    if verified is not None:
-        return verified
     grade, source = FEATURES[code][feature.value]
     support = Support(grade)
     gate = min_firmware(code, feature)
+    if verified is not None and gate is None:
+        return verified
     if support is Support.DECLARED and gate is not None and firmware is not None:
         have, need = _version(firmware), _version(gate)
         if have is not None and need is not None and have < need:
@@ -207,7 +223,9 @@ def config_support(
                 f"the eufy app offers {feature.value} on a {code} from firmware {gate}; "
                 f"this station runs {firmware}",
             )
-    notes = [n for n in (_READ_SEEN.get((code, feature)),) if n]
+    if verified is not None:
+        support, source = verified.support, verified.source
+    notes = [n for n in (verified.note if verified else _READ_SEEN.get((code, feature)),) if n]
     if gate is not None:
         notes.append(f"the eufy app offers it from firmware {gate}")
     return Evidence(support, source, "; ".join(notes))

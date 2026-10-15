@@ -755,8 +755,9 @@ type with the document as the body, each answered by a receipt; the 1257 default
 an ECB scalar (`u32le mode ‖ char[128] owner account id`). The cross-camera calls send
 the 1350 lists above. A write is confirmed by a fresh parameter dump where it carries the
 param; on a HomeBase 3 the dump lacks 1256 and 1254, so a zero receipt confirms them and
-the library files the written value as its own until the cloud's copy changes. Not
-written on hardware yet.
+the library files the written value as its own until the cloud's copy changes.
+Verified on a HomeBase 3 (fw 3.8.7.4) for 1256, 1254, 1072 and 1073: written,
+confirmed, checked in the eufy app and restored; the 1257 write is declared.
 
 **JSON style.** The codec writes compact JSON (`,` and `:` without spaces), non-ASCII
 as UTF-8, `<` `>` `&` `=` `'` U+2028 U+2029 as `\uXXXX`, keys sorted in 1256 and 1254,

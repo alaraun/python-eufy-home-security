@@ -55,6 +55,13 @@ NOT_ON_RECORD = ("T7000", "T8021", "T8028", "T8040")
 # The hardware-verification row that traces each verified (model, feature).
 LOG_AREA: dict[tuple[str, StationFeature], str] = {
     ("T8030", StationFeature.GUARD_MODE): "Guard mode write",
+    ("T8030", StationFeature.CUSTOM_MODES): "Custom modes (1256) library write",
+    ("T8030", StationFeature.SCHEDULE): "Schedule (1254) library write",
+    ("T8030", StationFeature.CROSS_CAMERA): "Cross-camera tracking cameras (1072) library write",
+    (
+        "T8030",
+        StationFeature.CROSS_CAMERA_GROUPS,
+    ): "Cross-camera tracking groups (1073) library write",
     ("T8030", StationFeature.MODE_TABLES): "Settings, mode table (1255) library write",
     ("T8030", StationFeature.MODE_DELAYS): "Settings, mode table (1255) library write",
 }
@@ -81,17 +88,16 @@ def test_a_model_without_a_thing_description_is_unknown_throughout() -> None:
 
 def test_homebase_3_grades_follow_the_hardware_checks() -> None:
     verified = {StationFeature.GUARD_MODE, StationFeature.MODE_TABLES, StationFeature.MODE_DELAYS}
-    for feature in StationFeature:
-        expected = Support.VERIFIED if feature in verified else Support.DECLARED
-        assert config_support("T8030", feature).support is expected, feature
-    for feature in (
+    verified |= {
         StationFeature.CUSTOM_MODES,
         StationFeature.SCHEDULE,
         StationFeature.CROSS_CAMERA,
         StationFeature.CROSS_CAMERA_GROUPS,
-        StationFeature.ARMING_GROUPS,
-    ):
-        assert "not written" in config_support("T8030", feature).note, feature
+    }
+    for feature in StationFeature:
+        expected = Support.VERIFIED if feature in verified else Support.DECLARED
+        assert config_support("T8030", feature).support is expected, feature
+    assert "not written" in config_support("T8030", StationFeature.ARMING_GROUPS).note
 
 
 def test_every_verified_entry_is_in_the_verification_log() -> None:
@@ -166,16 +172,20 @@ def test_cross_camera_intervals_match_the_settings_file() -> None:
 
 
 def test_a_station_below_the_apps_firmware_gate_is_unknown() -> None:
+    """A verified feature too: the hardware check ran above the gate."""
     gate = min_firmware("T8030", StationFeature.CROSS_CAMERA)
     assert gate is not None
     old = config_support("T8030", StationFeature.CROSS_CAMERA, firmware="3.3.0.0")
     assert old.support is Support.UNKNOWN
     assert gate in old.source
     new = config_support("T8030", StationFeature.CROSS_CAMERA, firmware="3.8.7.4")
-    assert new.support is Support.DECLARED
-    assert gate in new.note
+    assert new == config_support("T8030", StationFeature.CROSS_CAMERA)
+    assert new.support is Support.VERIFIED
+    assert new.note.endswith(
+        f"settings, not written here; the eufy app offers it from firmware {gate}"
+    )
     odd = config_support("T8030", StationFeature.CROSS_CAMERA, firmware="3.3.1.5m_2.6")
-    assert odd.support is Support.DECLARED
+    assert odd.support is Support.VERIFIED
     assert min_firmware("T8030", StationFeature.SCHEDULE) is None
 
 

@@ -316,12 +316,12 @@ Which station configuration features each station model offers (`Station.config_
 | feature | alarm | T7000 | T8001 | T8002 | T8010 | T8020 | T8021 | T8023 | T8024 | T8025 | T8026 | T8028 | T8030 | T8040 | T8N00 | T9000 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | guard_mode | yes | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | verified | unknown | unknown | unknown |
-| custom_modes | no | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | declared | unknown | unknown | unknown |
-| schedule | yes | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | declared | unknown | unknown | unknown |
+| custom_modes | no | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | verified | unknown | unknown | unknown |
+| schedule | yes | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | verified | unknown | unknown | unknown |
 | mode_tables | yes | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | verified | unknown | unknown | unknown |
 | mode_delays | yes | unknown | declared | declared | declared | unknown | unknown | declared | declared | declared | declared | unknown | verified | unknown | unknown | unknown |
-| cross_camera | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
-| cross_camera_groups | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
+| cross_camera | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
+| cross_camera_groups | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | arming_groups | yes | unknown | declared | declared | declared | declared | unknown | unknown | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
 | restart | yes | unknown | declared | declared | declared | declared | unknown | unknown | unknown | declared | declared | unknown | declared | unknown | unknown | unknown |
 | sound_alarm | yes | unknown | declared | declared | declared | declared | unknown | declared | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
@@ -544,12 +544,12 @@ Restart: 1034
 | feature | support | min firmware | source |
 |---|---|---|---|
 | guard_mode | verified | - | live arm Away -> Home -> Away with dump read-back, T8030 HomeBase 3 fw 3.8.7.4 (commands must carry the station owner's account id) |
-| custom_modes | declared | - | the T8030 handler builds arming_cust_mode_config as 1256 (eufy app 6.1.10) (the mode list (1256) read on a T8030 fw 3.8.7.4; not written) |
-| schedule | declared | - | the T8030 handler builds arming_schedule_config as 1254 (eufy app 6.1.10) (the schedule (1254, 1257) read on a T8030 fw 3.8.7.4; not written) |
+| custom_modes | verified | - | live 1256 create, rename and delete, each confirmed and checked in the eufy app, T8030 HomeBase 3 fw 3.8.7.4 (the station seeds an added mode's tables (cameras record and notification, sensors notification)) |
+| schedule | verified | - | live 1254 write of the weekly slots, confirmed, checked in the eufy app and restored, T8030 HomeBase 3 fw 3.8.7.4 (the mode outside every slot (1257) declared) |
 | mode_tables | verified | - | live 1255 write + read-back of one device's action mask per mode, T8030 HomeBase 3 fw 3.8.7.4 (one mask per write; the flag names are declared; Custom 2 and 3 not written) |
 | mode_delays | verified | - | live 1255 write + read-back of the Home, Away and Custom 1 entry and exit delays, T8030 HomeBase 3 fw 3.8.7.4 (Custom 2 and 3 declared) |
-| cross_camera | declared | 3.3.6.2 | the T8030 handler builds device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list as 1065, 1069, 1070, 1072 (eufy app 6.1.10) (1065, 1069, 1070 and 1072 read on a T8030 fw 3.8.7.4; not written; the eufy app offers it from firmware 3.3.6.2) |
-| cross_camera_groups | declared | 3.3.6.2 | the T8030 thing description declares device_cross_cam_group (eufy app 6.1.10); the app writes the groups as 1073 (1073 read on a T8030 fw 3.8.7.4; not written; the eufy app offers it from firmware 3.3.6.2) |
+| cross_camera | verified | 3.3.6.2 | live 1072 write of the chosen cameras + read-back, checked in the eufy app and restored, T8030 HomeBase 3 fw 3.8.7.4 (the tracking switches (1065, 1069, 1070) are settings, not written here; the eufy app offers it from firmware 3.3.6.2) |
+| cross_camera_groups | verified | 3.3.6.2 | live 1073 write of the groups + read-back, checked in the eufy app and restored, T8030 HomeBase 3 fw 3.8.7.4 (the eufy app offers it from firmware 3.3.6.2) |
 | arming_groups | declared | - | the T8030 thing description sets arming_support_arming (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode (the group list read for a house with a T8030; not written or activated) |
 | restart | declared | - | the T8030 handler builds restart_device as 1034 (eufy app 6.1.10) |
 | sound_alarm | declared | - | the T8030 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
