@@ -8,6 +8,7 @@ import pytest
 from eufy_home_security.devices.settings import (
     DUAL_VIEW,
     MODE_ACTION_FLAGS,
+    MODE_ACTION_LABELS,
     MODE_TABLE_SETTINGS,
     SCOPE_DEFAULT_CHANNEL,
     Scope,
@@ -15,6 +16,7 @@ from eufy_home_security.devices.settings import (
     SettingUnit,
     mode_action_flags,
     mode_action_key,
+    mode_action_label,
     mode_delay_key,
     mode_table_setting,
     report_value,
@@ -181,6 +183,19 @@ def test_flags_refuse_unknown_names_other_kinds_and_negatives() -> None:
         action.decode_flags(-1)
     with pytest.raises(ValueError, match="not a bitmask"):
         action.with_flag(-1, "record", True)
+
+
+def test_every_action_flag_has_a_sentence_case_label() -> None:
+    assert MODE_ACTION_LABELS.keys() == ACTION_FLAGS.keys()
+    assert len(set(MODE_ACTION_LABELS.values())) == len(MODE_ACTION_LABELS)
+    for label in MODE_ACTION_LABELS.values():
+        assert label[0].isupper()
+        rest = label.replace("HomeBase", "homebase")[1:]  # the product name keeps its case
+        assert rest == rest.lower()
+    assert mode_action_label("camera_siren") == "Camera alarm"
+    assert mode_action_label("station_alarm") == "HomeBase alarm"
+    with pytest.raises(UnsupportedError, match="unknown action flag 'siren'; known: record"):
+        mode_action_label("siren")
 
 
 def test_scope_for_kind() -> None:

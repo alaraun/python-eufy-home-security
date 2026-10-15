@@ -25,12 +25,14 @@ from .sections import (
 )
 from .settings import (
     MODE_ACTION_FLAGS,
+    MODE_ACTION_LABELS,
     MOTION_SENSOR_DEVICE_TYPES,
     SCOPE_DEFAULT_CHANNEL,
     Scope,
     SettingUnit,
     mode_action_flags,
     mode_action_key,
+    mode_action_label,
     mode_delay_key,
     scope_for_kind,
 )
@@ -55,6 +57,7 @@ __all__ = [
     "MODELS",
     "MODES_SECTION",
     "MODE_ACTION_FLAGS",
+    "MODE_ACTION_LABELS",
     "MOTION_SENSOR_DEVICE_TYPES",
     "ON_DEMAND_EVIDENCE",
     "ON_DEMAND_PREFIXES",
@@ -82,6 +85,7 @@ __all__ = [
     "connects_on_demand",
     "mode_action_flags",
     "mode_action_key",
+    "mode_action_label",
     "mode_delay_key",
     "model_for_serial",
     "profile_for_serial",

@@ -256,6 +256,34 @@ MODE_ACTION_FLAGS: Final[Mapping[Scope, Mapping[str, int]]] = MappingProxyType(
 )
 """The named action bits per device scope; the other bits of a mask are kept on a write."""
 
+MODE_ACTION_LABELS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "record": "Record video",
+        "camera_siren": "Camera alarm",
+        "station_alarm": "HomeBase alarm",
+        "notification": "Notification",
+        "privacy": "Privacy mode",
+        "motion_sensor_respond": "Motion sensor response",
+        "report_monitor_center": "Monitoring center",
+        "light_alarm": "Light alarm",
+        "privacy_new": "Switch to privacy mode",
+    }
+)
+"""The display title of every action flag (:data:`~..p2p.mode_actions.ACTION_FLAGS`), in
+sentence case: the eufy app's title where it shows the action (``motion_sensor_respond``
+has none and is the library's)."""
+
+
+def mode_action_label(flag: str) -> str:
+    """The display title of action ``flag``; ``UnsupportedError`` for an unknown flag."""
+    try:
+        return MODE_ACTION_LABELS[flag]
+    except KeyError:
+        raise UnsupportedError(
+            f"unknown action flag {flag!r}; known: {', '.join(MODE_ACTION_LABELS)}"
+        ) from None
+
+
 #: The cloud device types of a motion sensor: the only sensors with the
 #: ``motion_sensor_respond`` action.
 MOTION_SENSOR_DEVICE_TYPES: Final = frozenset({10, 127})

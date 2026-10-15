@@ -14,6 +14,7 @@ import pytest
 
 from eufy_home_security.devices.model_settings import settings_of
 from eufy_home_security.devices.sections import SETTING_SECTIONS
+from eufy_home_security.devices.settings import MODE_ACTION_LABELS
 from eufy_home_security.devices.td import LISTED_NOTE
 
 DOC = Path(__file__).resolve().parents[2] / "docs" / "how-to" / "home-assistant.md"
@@ -58,10 +59,18 @@ def test_the_section_names_the_settings_api() -> None:
         "state.setting(key, device_sn=…)",
         "station.async_set_setting(key, value, device_sn=…, channel=…)",
         "station.async_set_mode_action(",
+        "station.async_set_mode_actions(",
+        "station.async_set_mode_delays(",
         "CommandOutcome",
         "[Grouping settings in a UI](#grouping-settings-in-a-ui)",
     ):
         assert phrase in ENTITIES, phrase
+
+
+def test_the_section_lists_every_action_label() -> None:
+    for flag, label in MODE_ACTION_LABELS.items():
+        row = f"| `{flag}` | {label} |"
+        assert row in ENTITIES, row
 
 
 def test_the_grouping_section_lists_every_ui_section() -> None:

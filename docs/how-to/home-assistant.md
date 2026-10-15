@@ -888,7 +888,9 @@ A closed session (`async_close`) never reconnects on its own — build a new
   - Each write replaces the mode's whole table on the station (`SET_ALL_ACTION`): the
     library reads every device's current values fresh and writes them back unchanged,
     so a write is slower than other settings (a dump, the write, a read-back of every
-    device) and two writes should not race.
+    device). Every mode-table write of a station (single flag, bulk, delay setting)
+    holds the same per-station lock, so concurrent writes run one after the other and
+    keep each other's bits.
   - **A delay is one value per mode.** Setting a device's Away alarm delay to 30 also
     sets it to 30 on every device whose Away alarm delay is on; setting it to 0 turns
     off only that device. Refresh every delay entity after a write, and say so in the
@@ -897,6 +899,54 @@ A closed session (`async_close`) never reconnects on its own — build a new
     paired device of no known kind (it may be a siren accessory whose triggers the
     table would clear), or when devices hold different values for a delay the table
     must carry unchanged; surface the message instead of retrying.
+
+  **Bulk edits** (a matrix of devices × flags, and the delays, behind one Save) go in one
+  call per mode, which reads the mode once, writes one table and confirms it by read-back:
+
+  ```python
+  table = await station.async_set_mode_actions(
+      "away",
+      {front_sn: {"record": True, "camera_siren": True}, hall_sn: {"station_alarm": False}},
+      entry_s=30,  # alarm (entry) delay of every device that has it on
+      entry_devices={front_sn: True},  # turn the entry delay on / off per device
+      exit_s=None,
+      exit_devices=None,  # leaving (exit) delay, same shape
+      expect_revision=None,
+  )
+  table.actions[station.channel_for(front_sn)]  # the mask now in effect
+  await station.async_set_mode_delays("home", exit_s=60)  # delays only, one write
+  ```
+
+  It returns the mode's `ModeTable` (`eufy_home_security.p2p.mode_actions`: per-channel
+  `actions`, `alarm_delays`, `leaving_delays`). The delays keep the one-value-per-mode
+  rule: `entry_s`/`exit_s` set the value of every device that has the delay on afterwards
+  (0 turns it off on all); a device turned on without a value takes the value the others
+  share. Nothing is sent for an empty edit or one the table already holds (the current
+  table is returned). Refused before anything is sent: a serial not paired to the
+  station or a flag its kind does not have (`UnsupportedError`), a mode without
+  per-device actions or one the station stores no table for (an undefined custom mode),
+  the unknown-kind and delay cases above, a flag value that is not a bool and a device
+  turned on with no delay value to take (`ValueError`). A read-back that does not show
+  the table raises `CommandNotAppliedError` naming the device and flag (`… camera_siren:
+  wrote on, station reports off`). `expect_revision` is checked against the station
+  configuration's revision before the write (`ConfigChangedError`) once the station's
+  configuration read model provides one.
+
+  **Labels:** `mode_action_label(flag)` (or `MODE_ACTION_LABELS`, from
+  `eufy_home_security.devices`) gives each flag's display title in sentence case, the
+  eufy app's title where it has one:
+
+  | flag | label |
+  |---|---|
+  | `record` | Record video |
+  | `camera_siren` | Camera alarm |
+  | `station_alarm` | HomeBase alarm |
+  | `notification` | Notification |
+  | `privacy` | Privacy mode |
+  | `motion_sensor_respond` | Motion sensor response |
+  | `report_monitor_center` | Monitoring center |
+  | `light_alarm` | Light alarm |
+  | `privacy_new` | Switch to privacy mode |
 - **Diagnostic sensors** — from the typed state, never from `params`:
   - station: `StationState.name`, `lan_ip`, `firmware`, `sec_firmware`,
     `emmc_used_percent`. Disk figures come only from the storage record: param 1189
@@ -1015,8 +1065,8 @@ For the integration this means:
   show each value by its label; do not ship translations of vendor keys.
 - **Import the types from the package root:** `Setting`, `SettingKind`, `SettingControl`,
   `SettingUnit`, `CommandOutcome` and `SettingsCoverage` are exported there; capability grades
-  (`Capability`, `Support`, `profile_for_serial`) and `MODE_ACTION_FLAGS` from
-  `eufy_home_security.devices`.
+  (`Capability`, `Support`, `profile_for_serial`), `MODE_ACTION_FLAGS` and
+  `MODE_ACTION_LABELS` from `eufy_home_security.devices`.
 
 `setting.name` is the eufy app's own title where the app has one (`Clip length`,
 `Intervals between triggers`, `Working mode` on a T8160), else a title made from the key;
