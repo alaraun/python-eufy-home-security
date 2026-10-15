@@ -64,7 +64,7 @@ exception, because it can only be woken through eufy's servers.
 | owner `admin_user_id` | every P2P command (any other id is acknowledged and dropped) | until the sharing changes | cached; a station push also carries it (`rec_content[].account`) |
 | `ecc_private_key` of the cipher the station names (40 on a HomeBase 3, 98 on a T8170) | unwrapping the CONN_INIT session key: **the hard dependency** | until the station is re-bound **[open]** | **none.** The station encrypts the session key to the account's P-256 key from pairing; the private half exists only in eufy's cloud. Cached for good; a rotation costs one fetch |
 | DSK and the rendezvous servers (`app_conn`) | waking a sleeping battery station ([p2p-transport.md](p2p-transport.md#waking-a-battery-station-verified)) | ~1 h, per client | none (see below) |
-| cloud `params` snapshot | the state of a sleeping camera without waking it | refreshed hourly | wake the camera, which needs the cloud anyway |
+| cloud `params` snapshot | the state of a sleeping camera without waking it; a station's settings its dump lacks | refreshed hourly while a battery station is on the account, else with the device list | wake the camera, which needs the cloud anyway; a hub's cloud-only settings show the app's defaults |
 | cloud push (FCM) | a guard-mode change as it happens | install-scoped | on fw 3.8.7.4 the station announces app, schedule and P2P changes itself (`0x047F`, [events.md](events.md#guard-mode-announcements)); keypad changes are untested. On fw 3.8.6.0 app changes reach only the push |
 
 **HomeBase 3 and its paired cameras.** After the bootstrap (login, device list, owner

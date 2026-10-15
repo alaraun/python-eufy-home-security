@@ -35,6 +35,7 @@ from eufy_home_security.devices.recipes import (
 )
 from eufy_home_security.devices.settings import Scope
 from eufy_home_security.devices.support import Support
+from eufy_home_security.devices.timezones import encode_zone, zone_ids
 from eufy_home_security.devices.types import DeviceKind
 from eufy_home_security.events import (
     CameraBusyChanged,
@@ -59,7 +60,7 @@ from eufy_home_security.exceptions import (
     UnsupportedError,
 )
 from eufy_home_security.images import HEVC_CONTENT_TYPE, JPEG_CONTENT_TYPE, CameraImage, ImageSource
-from eufy_home_security.models import STATION_CHANNEL, GuardMode
+from eufy_home_security.models import STATION_CHANNEL, GuardMode, ValueSource
 from eufy_home_security.network import HostSource
 from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p.did import static_key
@@ -1943,6 +1944,138 @@ def test_apply_cloud_device(on_demand_pair: tuple[Station, FakeStation]) -> None
     on_demand_station.apply_cloud_device(dev)
     # block aliases apply to the session
     assert on_demand_station.session.params[(255, 1224)] == "1"
+
+
+def _station_entry(
+    params: dict[int, str], *, updated_at: float | None = None, time_zone: str | None = None
+) -> CloudDevice:
+    """The synthetic hub's device-list entry with ``params`` (one ``update_time``)."""
+    raw: dict[str, Any] = {
+        "params": [
+            {"param_type": pid, "param_value": value, "update_time": updated_at}
+            for pid, value in params.items()
+        ]
+    }
+    if time_zone is not None:
+        raw["time_zone"] = time_zone
+    return dataclasses.replace(STATION, raw=raw)
+
+
+async def test_a_station_setting_reads_p2p_then_cloud_then_the_app_default(
+    station: Station, fake: FakeStation
+) -> None:
+    """P2P wins where both carry the parameter; the cloud fills what the dump lacks; the
+    setting's default stands in only where neither carries it."""
+    fake.params[255][1235] = "20"
+    station.apply_cloud_device(_station_entry({1235: "26", 1065: "1"}, updated_at=1.7e9))
+    state = await station.async_update()
+
+    assert state.setting("alarm_volume_value") == 20
+    assert state.setting_source("alarm_volume_value") is ValueSource.P2P
+    assert state.setting("device_cross_cam_tracking_swtich") is True
+    assert state.setting_source("device_cross_cam_tracking_swtich") is ValueSource.CLOUD
+    assert state.setting("device_cross_cam_assistance_switch") is True  # the app's default
+    assert state.setting_source("device_cross_cam_assistance_switch") is ValueSource.APP_DEFAULT
+    assert state.setting("time_format_set") is None  # no default: no value
+    assert state.setting_source("time_format_set") is None
+    # The station's own serial addresses the same values.
+    assert state.setting_source("alarm_volume_value", device_sn=STATION.device_sn) is (
+        ValueSource.P2P
+    )
+    assert state.cloud_param_ids == (1065,)
+    with pytest.raises(UnsupportedError):
+        state.setting_source("no_such_setting")
+
+
+async def test_a_paired_devices_setting_has_no_cloud_or_default_source(
+    station: Station, fake: FakeStation
+) -> None:
+    fake.params[0][1288] = "0"
+    state = await station.async_update()
+    assert state.setting("audio_recording_on_off", device_sn=CAMERA.device_sn) is not None
+    assert state.setting_source("audio_recording_on_off", channel=0) is ValueSource.P2P
+    # Absent from the block: no value, never the default.
+    assert state.setting("detection_sensitivity", device_sn=CAMERA.device_sn) is None
+    assert state.setting_source("detection_sensitivity", device_sn=CAMERA.device_sn) is None
+
+
+async def test_the_time_zone_comes_from_the_station_entry_when_the_dump_lacks_it(
+    station: Station, fake: FakeStation
+) -> None:
+    zone = zone_ids()[1]
+    station.apply_cloud_device(_station_entry({}, time_zone=encode_zone(zone)))
+    state = await station.async_update()
+    assert state.setting("timezone_set") == zone
+    assert state.setting_source("timezone_set") is ValueSource.CLOUD
+
+    other = zone_ids()[2]
+    fake.params[255][1215] = encode_zone(other)
+    state = await station.async_update()
+    assert (state.setting("timezone_set"), state.setting_source("timezone_set")) == (
+        other,
+        ValueSource.P2P,
+    )
+
+
+async def test_a_cloud_change_emits_the_new_state(station: Station) -> None:
+    await station.async_update()
+    events: list[Event] = []
+    station.subscribe(events.append)
+
+    assert station.apply_cloud_device(_station_entry({1065: "1"}, updated_at=1.7e9)) == 1
+    assert station.apply_cloud_device(_station_entry({1065: "1"}, updated_at=1.7e9)) == 0
+    assert station.apply_cloud_device(_station_entry({}, updated_at=1.7e9)) == 1  # dropped
+    changes = [e for e in events if isinstance(e, StationStateChanged)]
+    assert [e.state.setting_source("device_cross_cam_tracking_swtich") for e in changes] == [
+        ValueSource.CLOUD,
+        ValueSource.APP_DEFAULT,
+    ]
+
+
+async def test_an_own_write_shows_until_the_cloud_changes_after_it(child: Station) -> None:
+    """A value written over P2P that the dump never reports wins over the cloud's older
+    copy; a cloud value that changed after the write, and is not dated before it, wins."""
+    key, param = "device_cross_cam_tracking_swtich", 1065
+    child.apply_cloud_device(_station_entry({param: "0"}, updated_at=1.7e9))
+    assert (await child.async_update()).setting(key) is False
+
+    await child.async_set_setting(key, True)
+    written_at = time.time()
+    state = child.state
+    assert state is not None
+    assert (state.setting(key), state.setting_source(key)) == (True, ValueSource.P2P)
+
+    # A refresh that still shows the old copy: the write stands, after a dump too.
+    child.apply_cloud_device(_station_entry({param: "0"}, updated_at=1.7e9))
+    state = await child.async_update()
+    assert (state.setting(key), state.setting_source(key)) == (True, ValueSource.P2P)
+
+    # A changed copy the cloud dates before the write is older news.
+    child.apply_cloud_device(_station_entry({param: "0"}, updated_at=written_at - 60))
+    assert child.state is not None
+    assert child.state.setting(key) is True
+
+    # One changed after the write (the app turned it off since) wins.
+    child.apply_cloud_device(_station_entry({param: "0"}, updated_at=written_at + 60))
+    state = child.state
+    assert state is not None
+    assert (state.setting(key), state.setting_source(key)) == (False, ValueSource.CLOUD)
+
+
+def test_an_on_demand_stations_snapshot_values_report_the_cloud(
+    on_demand_pair: tuple[Station, FakeStation],
+) -> None:
+    station, _ = on_demand_pair
+    station.apply_cloud_device(
+        dataclasses.replace(
+            station.device,
+            raw={"params": [{"param_type": 1224, "param_value": "1", "update_time": 1.7e9}]},
+        )
+    )
+    state = station.state
+    assert state is not None
+    assert state.param_sources[1224] is ValueSource.CLOUD
+    assert state.cloud_param_ids == (1224,)
 
 
 def test_connects_on_demand_mirrors_session(

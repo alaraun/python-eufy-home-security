@@ -47,6 +47,7 @@ from collections.abc import AsyncIterator, Callable, Collection, Iterable, Mappi
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any, Protocol, cast
 
 from .._logging import (
@@ -458,6 +459,15 @@ class CommandOutcome(StrEnum):
     """The station answered at the application level."""
     DELIVERED = "delivered"
     """The station acknowledged the datagram but sent no result (confirm by read-back)."""
+
+
+class ParamOrigin(StrEnum):
+    """Where a held parameter value came from when no dump delivered it."""
+
+    CLOUD = "cloud"
+    """A cloud snapshot (:meth:`StationSession.ingest_cloud_params`)."""
+    LOCAL_WRITE = "local_write"
+    """This library's own write (:meth:`StationSession.apply_local_params`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1308,6 +1318,8 @@ class StationSession:
         self._param_at: dict[tuple[int, int], float] = {}
         """Epoch seconds each parameter's value dates from: its arrival over P2P, or the
         cloud snapshot's ``update_time`` (an older snapshot never overwrites it)."""
+        self._param_origin: dict[tuple[int, int], ParamOrigin] = {}
+        """Where each parameter's value came from when not a dump (:attr:`param_origins`)."""
         self._meta: dict[str, Any] = {}
         """The dump's frame-level fields (firmware versions), latest value of each."""
         self._unread_dump_keys: set[str] = set()
@@ -1601,7 +1613,14 @@ class StationSession:
             return 0
         dump = ParamDump()
         dump.ingest({"params": fresh}, aliases=self._block_aliases)
-        self._merge_dump(dump, "cloud snapshot", time.time(), stamps, source=EventSource.CLOUD)
+        self._merge_dump(
+            dump,
+            "cloud snapshot",
+            time.time(),
+            stamps,
+            source=EventSource.CLOUD,
+            origin_kind=ParamOrigin.CLOUD,
+        )
         self._complete_dump(None)
         return len(fresh)
 
@@ -1627,7 +1646,7 @@ class StationSession:
             },
             aliases=self._block_aliases,
         )
-        self._merge_dump(dump, "local write", time.time())
+        self._merge_dump(dump, "local write", time.time(), origin_kind=ParamOrigin.LOCAL_WRITE)
         self._notify_dump_listeners()
 
     @property
@@ -1640,6 +1659,18 @@ class StationSession:
         """Every parameter held, keyed by ``(dev_type, param_id)``: the latest value of
         each, minus the blocks a full read no longer carries (see :meth:`add_dump_listener`)."""
         return self._params
+
+    @property
+    def param_origins(self) -> Mapping[tuple[int, int], ParamOrigin]:
+        """The :attr:`params` keys whose value no dump delivered: a cloud snapshot's
+        (:meth:`ingest_cloud_params`) or this library's own write
+        (:meth:`apply_local_params`), until a dump carries the key again."""
+        return MappingProxyType(self._param_origin)
+
+    def param_time(self, key: tuple[int, int]) -> float | None:
+        """Epoch seconds :attr:`params` ``[key]`` dates from (see :meth:`ingest_cloud_params`);
+        None when the key is not held."""
+        return self._param_at.get(key)
 
     @property
     def expect_channels(self) -> frozenset[int]:
@@ -4450,10 +4481,12 @@ class StationSession:
         stamps: Mapping[int, float] | None = None,
         *,
         source: EventSource = EventSource.P2P,
+        origin_kind: ParamOrigin | None = None,
     ) -> None:
         """Merge ``dump`` into the held parameters: emit each change, then the guard modes.
 
         ``stamps`` date values by parameter id (a cloud snapshot); others date from ``now``.
+        ``origin_kind`` marks the values as not a dump's (:attr:`param_origins`).
         """
         self._meta.update(dump.meta)
         for unread in sorted(dump.unread.keys() - self._unread_dump_keys):
@@ -4481,6 +4514,10 @@ class StationSession:
             old = self._params.get(key)
             self._params[key] = new
             self._param_at[key] = stamps.get(key[1], now) if stamps else now
+            if origin_kind is None:
+                self._param_origin.pop(key, None)
+            else:
+                self._param_origin[key] = origin_kind
             if known and old != new:
                 if key[0] not in self._alias_copies and _LOGGER.isEnabledFor(logging.DEBUG):
                     info = self._param(key[1], key[0])
@@ -4536,6 +4573,7 @@ class StationSession:
         )
         key = (alarm.channel, alarm.param_id)
         old, new = self._params.get(key), alarm.value
+        self._param_origin.pop(key, None)
         if old != new:
             self._params[key] = new
             self._bus.emit(
@@ -4586,6 +4624,7 @@ class StationSession:
         if carried is not None:
             for key in [key for key in self._params if key[0] not in carried]:
                 del self._params[key]
+                self._param_origin.pop(key, None)
                 # The freshness stamp is only meaningful with the value it describes.
                 # Leaving it behind leaks a key per departed device, and a re-paired
                 # device's fresh cloud value would be rejected as older than a stamp

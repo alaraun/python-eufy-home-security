@@ -274,6 +274,7 @@ _FULL_ENTRY = {
     "sec_sw_version": "4.5.6",
     "app_conn": "EBGCEBGCEBGC",
     "device_new_pn": "T8170",
+    "time_zone": "UTC0|1.1",
     "member": {
         "admin_user_id": "owner-id",
         "member_type": 2,
@@ -310,6 +311,7 @@ def test_device_cache_entry_keeps_exactly_what_the_model_reads() -> None:
         "has_member_relation",
         "account_is_owner",
         "cloud_params",
+        "time_zone",
         "rendezvous_servers",
         "model_id",
         "model_name",

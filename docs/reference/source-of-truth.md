@@ -51,7 +51,7 @@ Reported parameters never create entities — they only audit the settings, thro
 | Is a **sub-device** reachable | **P2P param 1131** | the cloud's copy is a last-known snapshot |
 | Is the **station** reachable | the session itself | a `StationState` exists only because a dump arrived; 1140 is not in the dump |
 | Current guard mode | P2P 1224, and `0x047f` for changes, ordered by `GuardModeTracker` | the cloud push for the same change lands about 1 s later |
-| Current setting value | the P2P dump's parameter | the cloud's copy is last-known, not live |
+| Current setting value | the P2P dump's parameter; for a station setting the dump lacks, the cloud's copy, then the setting's default ([below](#where-a-station-settings-value-comes-from)) | the cloud's copy is last-known, not live |
 | **Which entities to offer** | **the model's settings (`Station.settings_for`)** | a parameter block is a template, not a capability list |
 | Whether a setting is a control | `Setting.writable` (its `note` says why not) | a reported value says nothing about how to write it |
 | What a parameter means | the eufy app's code: thing description and handler, at generate time | never a runtime source |
@@ -114,11 +114,39 @@ name), 14000 (country).
 
 So `PARAM_QUERY_ALL` is not "every parameter the station holds", and the cloud
 snapshot is not a superset either. A value missing from one may simply live in the
-other: a setting read from 1158 or 1235 shows as unknown, because the dump is the
-library's read path and it never reports them. It is also the only local read: every
-`GET_*` command the app defines is rejected by the station, and a narrowed parameter
-query returns nothing
-([commands.md](../protocol/commands.md#get-commands-not-served-verified)).
+other. The dump is also the only local read: every `GET_*` command the app defines is
+rejected by the station, and a narrowed parameter query returns nothing
+([commands.md](../protocol/commands.md#get-commands-not-served-verified)). So the
+station's own settings read both, as below.
+
+## Where a station setting's value comes from
+
+`StationState.setting(key)` reads a setting of the station itself (no target, its own
+serial, or channel 255) from three sources in turn, and
+`StationState.setting_source(key)` names the one that answered (`ValueSource`):
+
+| order | source | what it holds |
+|---|---|---|
+| 1 | `P2P`: the parameter dump | the station's live value. It wins whenever it carries the parameter (a HomeBase 3 reports 1280 as 0 where the cloud copy says 30) |
+| 2 | `CLOUD`: the device list's station entry | its `params` (1065, 1069, 1070, 1235, 1254, 1256 and the 1157-1159 mode tables on a HomeBase 3, which its dump never carries) and its `time_zone` field, read by the time-zone setting (`domain` `timezone`); a HomeBase 3 never reports 1215 |
+| 3 | `APP_DEFAULT`: the setting's `default` | used only when neither source carries the parameter: the value the eufy app shows then |
+
+`None` from `setting_source` means no value: the setting is not readable, has no
+default, or a source carries the parameter in a form the setting cannot place (then no
+default stands in for it). A paired device's settings read its dump block only.
+
+The cloud copy is the list the library already fetches: it is cached with the device
+list (a warm start has it without a cloud call) and replaced on every fetch of that list
+(`async_discover(refresh=True)`, `EufySecurity.async_refresh_cloud_state()`, and the
+hourly refresh that runs while a station is reached on demand). A station reached on
+demand files the list's parameters into its state as before; they report `CLOUD`.
+
+A write the library sends shows at once (`P2P`), also for a parameter only the cloud
+carries, whose cloud copy is stale until the station uploads the change. The written
+value stays until a dump reports the parameter or a later list fetch shows the cloud
+value changed after the write (and not dated before it by its `update_time`); then
+that cloud value wins. `StationState.cloud_param_ids` lists the ids read from the
+cloud, for diagnostics.
 
 ## Freshness
 

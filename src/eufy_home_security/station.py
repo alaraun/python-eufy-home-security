@@ -75,6 +75,7 @@ from .devices.settings import (
     scope_for_kind,
 )
 from .devices.support import Evidence, Support
+from .devices.timezones import TIMEZONE_DOMAIN
 from .devices.types import DeviceKind, DeviceModel, model_for_serial
 from .events import (
     RECORDING_SUFFIX,
@@ -140,6 +141,7 @@ from .models import (
     SUBSYSTEM_FIRMWARE_PARAMS,
     FrameCipher,
     GuardMode,
+    ValueSource,
 )
 from .network import LanPath, lan_path_for
 from .p2p._json import json_int
@@ -157,6 +159,7 @@ from .p2p.params import (
 from .p2p.session import (
     CommandOutcome,
     MediaStream,
+    ParamOrigin,
     RecipeReply,
     SessionStats,
     StationSession,
@@ -533,6 +536,19 @@ class StationState:
         default_factory=dict, repr=False, compare=False
     )
     """The same settings by the channel the cloud lists each device on."""
+    setting_params: Mapping[int, str | None] = field(default_factory=dict, repr=False)
+    """The station's own parameters as its settings read them: :attr:`params`, and the
+    cloud's copy (the device list's ``params``, the ``time_zone`` field for the time-zone
+    setting) for every id :attr:`params` lacks. A value :attr:`params` holds only from
+    this library's own write yields to a cloud value that changed after the write."""
+    param_sources: Mapping[int, ValueSource] = field(default_factory=dict, repr=False)
+    """Where each value of :attr:`setting_params` came from (P2P or CLOUD)."""
+
+    @property
+    def cloud_param_ids(self) -> tuple[int, ...]:
+        """The ids of :attr:`setting_params` taken from the cloud, sorted; ids only, for
+        diagnostics (values can be private: mode names, schedules)."""
+        return tuple(sorted(p for p, s in self.param_sources.items() if s is ValueSource.CLOUD))
 
     @property
     def storage_ok(self) -> bool | None:
@@ -574,18 +590,53 @@ class StationState:
     def setting(
         self, key: str, *, device_sn: str | None = None, channel: int | None = None
     ) -> Value | None:
-        """The public value of setting ``key``: the station's own (no target, or channel
-        255) or a paired device's, by its cloud serial or its channel.
+        """The public value of setting ``key``: the station's own (no target, its own
+        serial, or channel 255) or a paired device's, by its cloud serial or its channel.
 
-        None when the param, or the device's whole block, is absent from this
-        snapshot, or the setting is not readable — never a default. Raises
+        A station setting reads the P2P dump, then the cloud's copy, then the setting's
+        ``default`` (the value the eufy app shows when neither carries the parameter);
+        :meth:`setting_source` says which. A paired device's reads its dump block only.
+        None when no source gives a value (a parameter carried in a form the setting
+        cannot place gets no default), or the setting is not readable. Raises
         ``UnsupportedError`` for a key the addressed device does not have (an unknown
         device has none), and ``ValueError`` when both targets are given.
         """
+        return self._sourced(key, device_sn, channel)[0]
+
+    def setting_source(
+        self, key: str, *, device_sn: str | None = None, channel: int | None = None
+    ) -> ValueSource | None:
+        """Where :meth:`setting` of the same arguments takes its value from; None when it
+        is None. A paired device's value is always :attr:`ValueSource.P2P`. Raises as
+        :meth:`setting`."""
+        return self._sourced(key, device_sn, channel)[1]
+
+    def _sourced(
+        self, key: str, device_sn: str | None, channel: int | None
+    ) -> tuple[Value | None, ValueSource | None]:
         if device_sn is not None and channel is not None:
             raise ValueError("pass at most one of device_sn or channel")
-        if device_sn is None and channel in (None, STATION_CHANNEL):
-            return _read(self.settings, key, self.params)
+        if device_sn == self.serial or (device_sn is None and channel in (None, STATION_CHANNEL)):
+            return self._station_setting(key)
+        value = self._device_setting(key, device_sn, channel)
+        return value, None if value is None else ValueSource.P2P
+
+    def _station_setting(self, key: str) -> tuple[Value | None, ValueSource | None]:
+        setting = self.settings.get(key)
+        if setting is None:
+            raise UnsupportedError(f"unknown setting {key!r} for this device")
+        param = setting.read_param
+        if param is None:
+            return None, None
+        if param in self.setting_params:
+            value = _read(self.settings, key, self.setting_params)
+            source = self.param_sources.get(param, ValueSource.P2P)
+            return value, None if value is None else source
+        if setting.default is None:
+            return None, None
+        return setting.default, ValueSource.APP_DEFAULT
+
+    def _device_setting(self, key: str, device_sn: str | None, channel: int | None) -> Value | None:
         if device_sn is not None:
             device = next((d for d in self.devices.values() if d.serial == device_sn), None)
             settings = self.settings_by_serial.get(device_sn, {})
@@ -773,6 +824,33 @@ def _load_settings(codes: set[str]) -> None:
 
 
 @dataclass(frozen=True, slots=True)
+class _CloudValue:
+    """One value of the cloud's copy of a station parameter."""
+
+    value: str
+    updated_at: float | None
+    """The cloud's ``update_time`` (epoch seconds), None when it gives none."""
+    seen_at: float
+    """When this library first saw the value as it stands (its own clock)."""
+
+    def newer_than(self, written_at: float) -> bool:
+        """Whether this value supersedes one this library wrote at ``written_at``: it
+        changed on a refresh after the write, and the cloud does not date it before."""
+        return self.seen_at > written_at and (
+            self.updated_at is None or self.updated_at >= written_at
+        )
+
+
+def _cloud_value(
+    held: _CloudValue | None, value: str, updated_at: float | None, now: float
+) -> _CloudValue:
+    """``held`` when the cloud still reports it, else the value seen ``now``."""
+    if held is not None and (held.value, held.updated_at) == (value, updated_at):
+        return held
+    return _CloudValue(value, updated_at, now)
+
+
+@dataclass(frozen=True, slots=True)
 class _Capture:
     """The capture holding a camera: a live image (``preset`` None) or a preset image."""
 
@@ -809,6 +887,11 @@ class Station:
         self._settings_memo: dict[tuple[str, str], tuple[Setting, ...]] = {}
         """:meth:`settings_for` per ``(serial, product code)``."""
         self._zooms: dict[str, float] = {}
+        self._cloud: dict[int, _CloudValue] = {}
+        """The cloud list's copy of the station's own parameters (a station reached on
+        demand files them in its session instead)."""
+        self._cloud_time_zone: _CloudValue | None = None
+        """The station entry's ``time_zone``."""
         session.add_dump_listener(self._on_dump_complete)
         session.add_notify_listener(self._on_notify)
         session.subscribe(self._on_session_event)
@@ -1232,19 +1315,39 @@ class Station:
         return self.session.on_demand
 
     def apply_cloud_device(self, device: CloudDevice) -> int:
-        """Merge a device-list entry's parameter snapshot into this station's state;
-        returns how many values were news (see
-        :meth:`~.p2p.session.StationSession.ingest_cloud_params`).
+        """Take a device-list entry's parameter snapshot and ``time_zone`` as this
+        station's cloud copy; returns how many values were news.
 
+        The copy is the second source of the station's settings
+        (:attr:`StationState.setting_params`); the entry replaces the previous copy. A
+        station reached on demand merges the snapshot into its session instead (see
+        :meth:`~.p2p.session.StationSession.ingest_cloud_params`), where it is its state.
+        News emits :class:`~.events.StationStateChanged` once the station has a state.
         Only this station's own entry counts (a hub's paired devices report through the
-        hub); an entry without a snapshot, or of another serial, changes nothing.
+        hub); an entry of another serial changes nothing.
         """
         if device.device_sn != self.serial:
             return 0
-        dev_type = device.device_type if self.is_standalone else STATION_CHANNEL
-        return self.session.ingest_cloud_params(
-            dev_type, ((p.param_id, p.value, p.updated_at) for p in device.cloud_params)
-        )
+        now = time.time()
+        params = {} if self.connects_on_demand else {p.param_id: p for p in device.cloud_params}
+        cloud = {
+            pid: _cloud_value(self._cloud.get(pid), p.value, p.updated_at, now)
+            for pid, p in params.items()
+        }
+        news = sum(1 for pid, v in cloud.items() if self._cloud.get(pid) != v)
+        news += len(self._cloud.keys() - cloud.keys())
+        zone = device.time_zone
+        time_zone = None if zone is None else _cloud_value(self._cloud_time_zone, zone, None, now)
+        news += time_zone != self._cloud_time_zone
+        self._cloud, self._cloud_time_zone = cloud, time_zone
+        if self.connects_on_demand:
+            dev_type = device.device_type if self.is_standalone else STATION_CHANNEL
+            news += self.session.ingest_cloud_params(
+                dev_type, ((p.param_id, p.value, p.updated_at) for p in device.cloud_params)
+            )
+        if news:
+            self._on_dump_complete()
+        return news
 
     @property
     def state(self) -> StationState | None:
@@ -1336,6 +1439,8 @@ class Station:
             {ch: scope_for_kind(d.kind) for ch, d in devices.items() if d.kind is not None}
         )
         station = dump.station
+        own_settings = self._settings_by_key(self.serial)
+        setting_params, param_sources = self._setting_params(station, own_settings)
         return StationState(
             serial=self.serial,
             guard_mode=dump.guard_mode,
@@ -1355,7 +1460,9 @@ class Station:
                 for pid in SUBSYSTEM_FIRMWARE_PARAMS
                 if (version := _text_or_none(station.get(pid))) is not None
             },
-            settings=self._settings_by_key(self.serial),
+            settings=own_settings,
+            setting_params=setting_params,
+            param_sources=param_sources,
             settings_by_serial={
                 serial: self._settings_by_key(serial)
                 for serial in dict.fromkeys((self.serial, *(d.device_sn for d in self.devices)))
@@ -1366,6 +1473,34 @@ class Station:
                 if cloud is not None and channel != STATION_CHANNEL
             },
         )
+
+    def _setting_params(
+        self, station: Mapping[int, str], settings: Mapping[str, Setting]
+    ) -> tuple[dict[int, str | None], dict[int, ValueSource]]:
+        """:attr:`StationState.setting_params` and :attr:`StationState.param_sources` of
+        the station block ``station``: the dump's value wins over the cloud's, except a
+        value of this library's own write that the cloud changed after."""
+        cloud = dict(self._cloud)
+        zone_param = next(
+            (s.read_param for s in settings.values() if s.domain == TIMEZONE_DOMAIN), None
+        )
+        if zone_param is not None and self._cloud_time_zone is not None:
+            cloud.setdefault(zone_param, self._cloud_time_zone)
+        values: dict[int, str | None] = {pid: c.value for pid, c in cloud.items()}
+        sources = dict.fromkeys(values, ValueSource.CLOUD)
+        origins = self.session.param_origins
+        for pid, value in station.items():
+            key = (STATION_CHANNEL, pid)
+            origin = origins.get(key)
+            if (
+                origin is ParamOrigin.LOCAL_WRITE
+                and pid in cloud
+                and cloud[pid].newer_than(self.session.param_time(key) or 0.0)
+            ):
+                continue
+            values[pid] = value
+            sources[pid] = ValueSource.CLOUD if origin is ParamOrigin.CLOUD else ValueSource.P2P
+        return values, sources
 
     # ── writes ───────────────────────────────────────────────────────────────
 

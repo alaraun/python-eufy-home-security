@@ -170,7 +170,7 @@ provides where it lives.
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
 | `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`) and its RSA private key when served (`rsa_ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), the key-refresh latch, a standalone camera's device session key (`dsk`, with its expiry) and each camera's preset slots (`presets`) | keys on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass. `dsk` when a wake needs it and less than 5 min of it remain; `presets` on each preset read that differs |
-| `devices` | the `get_devs_list` entries, each reduced to the fields `CloudDevice` reads (serials, type, name, channel, DID, IP, firmware versions, `app_conn`, the product code `device_new_pn`, the member's `admin_user_id` and `member_type`, and `cloud_region`, the region that listed it); the cloud's `params` snapshot only for a device reached on demand. The member's e-mail and phone, MAC addresses and the rest never reach the store | only on `async_discover(refresh=True)`; an entry stored with more fields is reduced on load |
+| `devices` | the `get_devs_list` entries, each reduced to the fields `CloudDevice` reads (serials, type, name, channel, DID, IP, firmware versions, `app_conn`, the product code `device_new_pn`, the member's `admin_user_id` and `member_type`, and `cloud_region`, the region that listed it); the cloud's `params` snapshot for a station and a device reached on demand, and a station's `time_zone`. The member's e-mail and phone, MAC addresses and the rest never reach the store | only on `async_discover(refresh=True)`; an entry stored with more fields is reduced on load |
 | `push` | FCM credentials, the registered token, recent push ids and guard-mode times | on push start; delivery state written at most 30 s after it changes, and on close |
 | `refresh_attempts` | when the owner id (account-wide) and each station's cipher key were last force-fetched | with those fetches |
 | `throttle` | hold-off end times (requests, logins) and recent login attempts | when the cloud throttles, and on every login |
@@ -585,7 +585,9 @@ A `DataUpdateCoordinator[StationState]` per station:
     arriving as `StationStateChanged`. A guard-mode push updates it at once, and so does
     a confirmed arm: `station.state` and the next `async_update()` carry the mode the
     station confirmed until a newer cloud snapshot or push reports another one.
-    `await eufy.async_refresh_cloud_state()` fetches on request (a "refresh" button).
+    `await eufy.async_refresh_cloud_state()` fetches on request (a "refresh" button);
+    it also refreshes every other station's cloud copy of its settings (see **State**
+    below).
   - Every command (arm, a setting, a snapshot) **wakes the camera first**: the library
     fetches its device session key (DSK, cached ~1 h) and pokes its rendezvous servers
     so it punches back over the LAN, then connects — the same path the eufy app uses. A
@@ -805,7 +807,8 @@ A closed session (`async_close`) never reconnects on its own — build a new
   - `readable=False` → the dump never reports it, so its state is always unknown.
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
-    bool for a bool, str for a string. `default` is the vendor default, for display only.
+    bool for a bool, str for a string. `default` is the vendor default; a station setting
+    neither source carries reads it (see **State**).
   - Unique ids: `entity_unique_id(serial, setting.key)`; every setting key is valid for it.
   - Display text: `name` (a short English title) and `labels` (value → the app's title,
     also `setting.label(value)`). Show an option by its label and map the picked label
@@ -826,8 +829,19 @@ A closed session (`async_close`) never reconnects on its own — build a new
 
   **State:** `state.setting(key, device_sn=…)` (or `channel=…`) on the coordinator's
   `StationState`, or `SubDeviceState.setting(key)`, returns the decoded public value (the
-  type above), or None when the dump does not carry it or the setting is not readable.
-  Show None as unknown; never substitute a default. `setting()` raises
+  type above), or None when no source has a value or the setting is not readable. Show
+  None as unknown; never substitute a default yourself. A paired device's value comes
+  from the dump. A station setting (no target, the station's serial, or channel 255)
+  reads the dump, then the cloud's copy of the station (the device list's `params`, and
+  its `time_zone` for the time-zone setting), then the setting's `default`, which is what
+  the eufy app shows when neither carries the parameter; `state.setting_source(key, …)`
+  says which (`ValueSource.P2P`, `CLOUD`, `APP_DEFAULT`, or None for no value). So a
+  HomeBase 3's cross-camera tracking switches, alarm volume and time zone have values
+  although its dump never reports them. Put the source in an entity attribute if you
+  like; a `CLOUD` value is as fresh as the last device-list fetch
+  ([source-of-truth.md](../reference/source-of-truth.md#where-a-station-settings-value-comes-from)),
+  so a change made in the eufy app shows after the next `async_discover(refresh=True)` or
+  `async_refresh_cloud_state()`. `setting()` raises
   `UnsupportedError` for a key the device does not have, so build entities from
   `settings_for` and it never fires. A T8170 reports `live_streaming_resolution` per
   view (single and dual view each keep one); the library reads the quality of the view
@@ -843,7 +857,8 @@ A closed session (`async_close`) never reconnects on its own — build a new
   write-failed error. A setting the library does not write raises `UnsupportedError`
   with its `note`. Nothing is read back: the state shows the written value until the
   next dump replaces it, so the entity follows the write at once and the next poll
-  settles it. On a standalone camera (a T8170) address a setting with
+  settles it. A station setting the dump never reports keeps the written value until a
+  later device-list fetch shows the cloud's value changed after the write. On a standalone camera (a T8170) address a setting with
   `device_sn=station.serial` (or no target): the library renders it for the camera's
   own channel.
 
@@ -2206,6 +2221,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
             "last_error": type(s.last_error).__name__ if s.last_error else None,
             "lan_path_warnings": [w.value for w in s.lan_path.warnings],
             "sub_devices": [d.as_redacted_dict() for d in s.sub_devices],
+            "cloud_params": list(s.state.cloud_param_ids) if s.state else None,
         }
         for s in eufy.stations.values()
     }
@@ -2227,6 +2243,8 @@ async def async_get_config_entry_diagnostics(hass, entry):
   is), and the key-refresh latch state.
 - `CloudDevice.as_redacted_dict()` gives a device without its DID, IP or owner id (only
   whether each is present) and with redacted serials.
+- `StationState.cloud_param_ids` names the station parameters read from the cloud's copy
+  (ids only: their values can hold mode names and schedules).
 - Put any other serial through `redact_serial` (exported from the package root).
 - A non-empty `unclassified_sections` in the summary means the library is newer than the
   integration; it lists names only and is safe to show.

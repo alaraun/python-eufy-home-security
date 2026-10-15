@@ -38,7 +38,7 @@ from .cloud.const import (
     REGIONS,
     region_from_mega_domain,
 )
-from .cloud.models import REGION_KEY, device_cache_entry
+from .cloud.models import REGION_KEY, CloudDevice, device_cache_entry
 from .devices.types import connects_on_demand
 
 CACHE_VERSION = 2
@@ -520,8 +520,9 @@ class SessionCache:
         """Store the ``get_devs_list`` entries, each reduced to what the library reads
         (:func:`~.cloud.models.device_cache_entry`): the member's e-mail and phone, MAC
         addresses and the like never reach the store. The cloud's ``params`` snapshot
-        is kept only for a device reached on demand (:func:`~.devices.connects_on_demand`),
-        whose state comes from it between sessions; elsewhere it is stale at once."""
+        is kept for a station (its settings the P2P dump lacks are read from it) and a
+        device reached on demand (:func:`~.devices.connects_on_demand`), whose state comes
+        from it between sessions; a paired device reports its own over P2P."""
         self._doc["devices"] = _device_entries(raw_devices)
 
     def station_serials(self) -> list[str]:
@@ -735,7 +736,8 @@ def _device_entries(raw_devices: list[Any]) -> list[dict[str, Any]]:
             continue
         serial = entry.get("device_sn")
         on_demand = isinstance(serial, str) and connects_on_demand(serial)
-        entries.append(device_cache_entry(entry, keep_params=on_demand))
+        keep = on_demand or CloudDevice.from_api(entry).is_station
+        entries.append(device_cache_entry(entry, keep_params=keep))
     return entries
 
 

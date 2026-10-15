@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from types import MappingProxyType
 from typing import Final
 
@@ -90,6 +90,19 @@ _ALIASES = {
     "disarm": "disarmed",
     "off": "disarmed",
 }
+
+
+class ValueSource(StrEnum):
+    """Where a station setting's value comes from (``StationState.setting_source``)."""
+
+    P2P = "p2p"
+    """The station's parameter dump over P2P, or a value this library wrote there."""
+    CLOUD = "cloud"
+    """The cloud's copy: the device list's ``params`` for the station, or its
+    ``time_zone`` field for the time-zone setting."""
+    APP_DEFAULT = "app_default"
+    """Neither carries the parameter: the setting's ``default``, which the eufy app
+    shows in that case."""
 
 
 # Parameter ids (param_type) every paired device reports in the station's dump.

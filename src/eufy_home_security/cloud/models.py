@@ -240,7 +240,7 @@ class CloudDevice:
     @property
     def cloud_params(self) -> tuple[CloudParam, ...]:
         """The cloud's snapshot of this device's parameters; ``()`` when the entry carries
-        none (the cache keeps it only for devices reached on demand).
+        none (the cache keeps it only for stations and devices reached on demand).
 
         An entry without an integer ``param_type`` or with a value that is neither a
         string nor an integer is skipped.
@@ -266,6 +266,15 @@ class CloudDevice:
             )
             params.append(CloudParam(param_id, value, updated_at))
         return tuple(params)
+
+    @property
+    def time_zone(self) -> str | None:
+        """A station entry's ``time_zone``: the device time zone in the form parameter
+        1215 takes (:func:`~..devices.timezones.decode_zone`); None when absent or empty.
+
+        A HomeBase never reports 1215 over P2P: this is where its time zone is read."""
+        value = self.raw.get("time_zone")
+        return value.strip() or None if isinstance(value, str) else None
 
     @property
     def camera_info(self) -> int | None:
@@ -612,6 +621,7 @@ CACHED_DEVICE_FIELDS: Final = (
     "sec_sw_version",
     "app_conn",  # rendezvous_servers: how a battery station is woken
     "device_new_pn",  # the product code that keys a model's settings
+    "time_zone",  # a station's time zone setting
     REGION_KEY,
     SOURCE_KEY,
 )
@@ -624,9 +634,9 @@ def device_cache_entry(data: Mapping[str, Any], *, keep_params: bool) -> dict[st
 
     :meth:`CloudDevice.from_api` of the result equals that of ``data`` in every
     field and property. ``params`` (the cloud's parameter snapshot) is kept only with
-    ``keep_params`` — for a device reached on demand, whose state comes from that
-    snapshot between sessions — and then reduced to what :attr:`CloudDevice.cloud_params`
-    reads.
+    ``keep_params`` — for a station, whose settings the P2P dump lacks read from it, and
+    a device reached on demand, whose state comes from it between sessions — and then
+    reduced to what :attr:`CloudDevice.cloud_params` reads.
     """
     entry = {key: data[key] for key in CACHED_DEVICE_FIELDS if key in data}
     member = data.get("member")

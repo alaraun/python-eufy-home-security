@@ -101,7 +101,7 @@ if TYPE_CHECKING:
     )
     from .inclusion import Reach, StationChoice
     from .install import InstallState
-    from .models import FrameCipher, GuardMode
+    from .models import FrameCipher, GuardMode, ValueSource
     from .network import HostSource, LanPath, PathWarning, suggest_local_ports
     from .p2p.broadcast import DEFAULT_QUEUE_CHUNKS, FrameStream, ResizePolicy, StreamBroadcast
     from .p2p.clip import CLIP_CONTENT_TYPE, ClipWriter, MediaClip
@@ -245,7 +245,7 @@ _EXPORTS: dict[str, str] = {
     ),
     "InstallState": "install",
     **dict.fromkeys(("Reach", "StationChoice"), "inclusion"),
-    **dict.fromkeys(("FrameCipher", "GuardMode"), "models"),
+    **dict.fromkeys(("FrameCipher", "GuardMode", "ValueSource"), "models"),
     **dict.fromkeys(("HostSource", "LanPath", "PathWarning", "suggest_local_ports"), "network"),
     **dict.fromkeys(
         ("MediaKeyType", "Still", "StillFormat", "VideoCodec", "picture_codec"), "p2p.media"
@@ -411,6 +411,7 @@ __all__ = [
     "StreamBroadcast",
     "SubDeviceState",
     "UnsupportedError",
+    "ValueSource",
     "VideoCodec",
     "ZoomChanged",
     "__version__",
