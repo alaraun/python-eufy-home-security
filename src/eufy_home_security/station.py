@@ -3732,8 +3732,9 @@ class Station:
         declared, not checked on hardware). **Alarm-affecting.**
 
         ``seconds`` is one of :data:`~.p2p.messages.SOUND_ALARM_SECONDS` (``ValueError``
-        otherwise, nothing sent). Returns ``APPLIED`` once the station answered
-        SET_TONE_FILE (1201); the siren then also shows as :class:`~.events.AlarmChanged`.
+        otherwise). Returns ``APPLIED`` once the station answered SET_TONE_FILE (1201)
+        or its alarm-tone frame shows the siren on (a HomeBase 3 answers only that way);
+        the siren also shows as :class:`~.events.AlarmChanged`.
         Raises ``UnsupportedError`` before sending where :meth:`config_support` grades
         :attr:`~.devices.station_config_support.StationFeature.SOUND_ALARM` ``UNKNOWN``,
         :class:`CommandRejectedError` for a non-zero result, :class:`CommandNotAppliedError`

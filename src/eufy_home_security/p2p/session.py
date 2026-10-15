@@ -75,6 +75,7 @@ from ..devices.recipes import (
 from ..devices.settings import Scope
 from ..events import (
     AccountMismatch,
+    AlarmChanged,
     CloudProblem,
     ConnectionChanged,
     DisconnectCause,
@@ -242,6 +243,8 @@ DISCOVERY_RETRY_DELAY = 0.5
 """Pause (seconds) before the next discovery attempt after one failed; none after the last."""
 HANDSHAKE_TIMEOUT = 6.0
 COMMAND_TIMEOUT = 6.0
+TONE_CONFIRM_TIMEOUT = 10.0
+"""How long a SET_TONE_FILE write waits, after its command, for the alarm-tone frame."""
 LOOP_STALL_STEP = 0.25
 """A reply wait checks this often (seconds) whether the event loop was held."""
 LOOP_STALL_LATENESS = 0.1
@@ -1337,6 +1340,8 @@ class StationSession:
         """The effective guard mode (param 1151, the 0x047F report)."""
         self._alarming = False
         """Whether the last alarm-tone frame started the alarm (see :meth:`_handle_alarm`)."""
+        self._tone_waiters: list[tuple[bool, asyncio.Future[AlarmChanged]]] = []
+        """SET_TONE_FILE writes waiting for an alarm-tone frame: (siren on?, result)."""
         self._arming_to: GuardMode | None = None
         """The mode an arm in flight asks for (see :meth:`_note_mode_report`)."""
         self.channel_scopes: dict[int, Scope] = {}
@@ -2332,18 +2337,34 @@ class StationSession:
         """Sound the station's siren for ``seconds`` (0 stops it): SET_TONE_FILE (1201)
         :func:`~.messages.tone_file_payload` with the session's user name, ``mChannel`` 0.
 
-        Alarm-affecting. Returns as :meth:`async_send_command` does and raises its
-        typed errors; the station also reports the alarm in its 1201 alarm frames
-        (:mod:`.alarm`).
+        Alarm-affecting. A HomeBase 3 acknowledges the command without a result and
+        reports the siren in its alarm-tone frame (:mod:`.alarm`): ``APPLIED`` when a
+        result or, within ``timeout`` (:data:`TONE_CONFIRM_TIMEOUT`) of sending, an
+        alarm-tone frame shows the siren on (``seconds`` > 0) or ended (0); else as
+        :meth:`async_send_command` returns and raises.
         """
         await self.async_connect()
         creds = self._require_creds()
-        return await self.async_send_command(
-            CMD_SET_TONE_FILE,
-            channel=0,
-            payload=tone_file_payload(seconds, creds.user_name),
-            timeout=timeout,
-        )
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[AlarmChanged] = loop.create_future()
+        entry = (seconds > 0, future)
+        self._tone_waiters.append(entry)
+        try:
+            outcome = await self.async_send_command(
+                CMD_SET_TONE_FILE,
+                channel=0,
+                payload=tone_file_payload(seconds, creds.user_name),
+                timeout=timeout,
+            )
+            if outcome is CommandOutcome.APPLIED:
+                return outcome
+            try:
+                await asyncio.wait_for(asyncio.shield(future), _or(timeout, TONE_CONFIRM_TIMEOUT))
+            except TimeoutError:
+                return outcome
+            return CommandOutcome.APPLIED
+        finally:
+            self._tone_waiters.remove(entry)
 
     async def async_run_recipe(
         self,
@@ -4623,6 +4644,10 @@ class StationSession:
                 )
             )
         change = alarm.alarm_change(self.serial)
+        if change is not None:
+            for alarming, future in self._tone_waiters:
+                if alarming == change.alarming and not future.done():
+                    future.set_result(change)
         if change is not None and change.alarming != self._alarming:
             self._alarming = change.alarming
             _LOGGER.debug("%s: alarm %s", self._log_name, "on" if change.alarming else "off")

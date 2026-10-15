@@ -209,6 +209,18 @@ async def test_an_unanswered_alarm_is_not_success(station: Station, fake: FakeSt
         await station.async_stop_alarm(timeout=0.5)
 
 
+async def test_the_alarm_tone_frame_confirms_an_unanswered_alarm(
+    station: Station, fake: FakeStation
+) -> None:
+    """A HomeBase 3 acknowledges 1201 without a result and reports the siren in its
+    alarm-tone frame: on for a trigger, stopped from the app for a stop."""
+    fake.reply_to_settings = False
+    fake.tone_frames = True
+    assert await station.async_trigger_alarm(30, timeout=0.5) is CommandOutcome.APPLIED
+    assert await station.async_stop_alarm(timeout=0.5) is CommandOutcome.APPLIED
+    assert _sent(fake, 1201) == [_tone_file(30), _tone_file(0)]
+
+
 @pytest.mark.parametrize(
     ("pn", "reason"),
     [

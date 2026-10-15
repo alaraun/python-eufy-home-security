@@ -63,6 +63,7 @@ from ..p2p.media import (
     pic_check_code,
 )
 from ..p2p.messages import (
+    CMD_SET_TONE_FILE,
     ECB_CHANNEL_VALUE_CMDS,
     HISTORY_RECORD_COUNTER,
     HISTORY_RECORD_ID_MIN,
@@ -372,6 +373,9 @@ class FakeStation:
     """The mode a schedule slot puts in force while Schedule (2) is selected."""
     ignore_searches: int = 0
     reply_to_settings: bool = False
+    tone_frames: bool = False
+    """Answer SET_TONE_FILE (1201) with an alarm-tone frame on the station's channel, as a
+    HomeBase 3 does (it sends no result): ``[3, seconds]`` on, ``[16, 0]`` stopped."""
     reply_codes: dict[int, int] = field(default_factory=dict)
     """Command → the non-zero ``code`` its 0x0547 reply carries under :attr:`reply_to_settings`
     (the command is then still recorded, as a station that rejects it after reading it)."""
@@ -1062,6 +1066,10 @@ class FakeStation:
             if self.reply_to_settings:
                 code = self.reply_codes.get(cmd, 0)
                 self.send_json(FrameType.NOTIFY_PAYLOAD, {"cmd": cmd, "code": code})
+            if cmd == CMD_SET_TONE_FILE and self.tone_frames and isinstance(payload, dict):
+                seconds = int(payload.get("time_out", 0))
+                start = (3, seconds) if seconds else (16, 0)
+                self.send_alarm_frame(FrameType.ALARM_TONE_NOTIFY, *start, channel=255)
 
     def _answer_history(self, inner: dict[str, Any]) -> None:
         """A history page (10011), shaped and cut like the real station's.
