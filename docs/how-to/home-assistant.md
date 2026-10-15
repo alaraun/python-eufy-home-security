@@ -2149,7 +2149,7 @@ it takes. The library reads and writes the groups in the cloud and activates the
 app does; none of it is verified on hardware or against the live cloud yet.
 
 ```python
-from eufy_home_security.cloud.arming import ArmingOutcome  # models live in this module
+from eufy_home_security import ArmingOutcome, GuardMode
 
 listing = await eufy.async_arming_groups()  # ArmingGroupList(house_id, groups, guided)
 group = await eufy.async_create_arming_group("Leaving", {hub_sn: "away", solo_sn: GuardMode.AWAY})
@@ -2158,6 +2158,10 @@ activation = await eufy.async_activate_arming_group(group.group_id)  # changes a
 logs = await eufy.async_arming_group_logs(group.group_id)
 await eufy.async_delete_arming_group(group.group_id)
 ```
+
+The models are exported from the package root: `ArmingGroupList`, `ArmingGroup`,
+`ArmingGroupMember`, `ArmingGroupPreset`, `ArmingGroupLog`, `ArmingActivation`,
+`ArmingMemberResult` and `ArmingOutcome`.
 
 - **The house.** Without `house_id` every call works on the house holding this account's
   stations (`ValueError` when they are in several houses: pass `house_id`). The app's

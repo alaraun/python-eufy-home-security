@@ -10,6 +10,16 @@ from ._lazy import lazy_exports
 if TYPE_CHECKING:
     from ._logging import redact, redact_serial, set_secret_logging, set_wire_logging
     from .client import EufySecurity, ModelStatus, SkippedDevice
+    from .cloud.arming import (
+        ArmingActivation,
+        ArmingGroup,
+        ArmingGroupList,
+        ArmingGroupLog,
+        ArmingGroupMember,
+        ArmingGroupPreset,
+        ArmingMemberResult,
+        ArmingOutcome,
+    )
     from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
     from .cloud.status import (
         CloudStatus,
@@ -155,6 +165,19 @@ _EXPORTS: dict[str, str] = {
         ("redact", "redact_serial", "set_secret_logging", "set_wire_logging"), "_logging"
     ),
     **dict.fromkeys(("EufySecurity", "ModelStatus", "SkippedDevice"), "client"),
+    **dict.fromkeys(
+        (
+            "ArmingActivation",
+            "ArmingGroup",
+            "ArmingGroupList",
+            "ArmingGroupLog",
+            "ArmingGroupMember",
+            "ArmingGroupPreset",
+            "ArmingMemberResult",
+            "ArmingOutcome",
+        ),
+        "cloud.arming",
+    ),
     "AccountReport": "diagnostics",
     **dict.fromkeys(("CloudDevice", "CloudInvite", "FirmwareUpdate"), "cloud.models"),
     **dict.fromkeys(
@@ -352,6 +375,14 @@ __all__ = [
     "AlarmChanged",
     "AlarmPhase",
     "AlarmStopSource",
+    "ArmingActivation",
+    "ArmingGroup",
+    "ArmingGroupList",
+    "ArmingGroupLog",
+    "ArmingGroupMember",
+    "ArmingGroupPreset",
+    "ArmingMemberResult",
+    "ArmingOutcome",
     "ArmingSource",
     "AuthenticationError",
     "CameraBusyChanged",

@@ -77,6 +77,24 @@ def test_the_cloud_package_exports_the_types_its_api_returns() -> None:
     assert (cloud.CipherKeys, cloud.RsaKeyCheck) == (api.CipherKeys, models.RsaKeyCheck)
 
 
+def test_the_arming_group_models_are_exported_from_the_root() -> None:
+    from eufy_home_security.cloud import arming  # noqa: PLC0415
+
+    names = (
+        "ArmingActivation",
+        "ArmingGroup",
+        "ArmingGroupList",
+        "ArmingGroupLog",
+        "ArmingGroupMember",
+        "ArmingGroupPreset",
+        "ArmingMemberResult",
+        "ArmingOutcome",
+    )
+    assert set(names) <= set(eufy_home_security.__all__)
+    for name in names:
+        assert getattr(eufy_home_security, name) is getattr(arming, name)
+
+
 def test_the_cache_layout_version_is_the_storage_version() -> None:
     from eufy_home_security import storage  # noqa: PLC0415
 
