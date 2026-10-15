@@ -247,7 +247,8 @@ def build_members(
     for serial, mode in targets.items():
         if serial not in house.stations:
             raise UnsupportedError(
-                f"{redact_serial(serial)} is not a station or standalone device of the house"
+                f"{redact_serial(serial)} is not a station or standalone device of the house",
+                device_sn=serial,
             )
         old = stored.get(serial)
         title = named.get(serial, "")

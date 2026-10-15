@@ -1455,7 +1455,8 @@ class EufySecurity:
         station = self.stations.get(member.device_sn)
         if station is None:
             error = UnsupportedError(
-                f"{redact_serial(member.device_sn)} has no local station in this client"
+                f"{redact_serial(member.device_sn)} has no local station in this client",
+                device_sn=member.device_sn,
             )
             return result(arming.ArmingOutcome.FAILED, error=error)
         if not station.connected and not station.connects_on_demand:
