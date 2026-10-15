@@ -27,7 +27,7 @@ from eufy_home_security.devices.model_settings import (
 from eufy_home_security.devices.recipes import ConnectType
 from eufy_home_security.devices.settings import Scope, SettingUnit, mode_table_setting
 from eufy_home_security.exceptions import ModelDataError, UnsupportedError
-from eufy_home_security.p2p.mode_actions import ACTION_FLAGS
+from eufy_home_security.p2p.mode_actions import ACTION_FLAGS, MODE_DELAY_CHOICES
 
 CHILD = WriteContext(
     standalone=False, channel=3, device_sn="T0000CHILDSN0001", station_sn="T0000STATION0001"
@@ -715,6 +715,11 @@ def test_mode_table_settings_wrap_the_hand_written_entries() -> None:
     assert action.validate(3) == 3
     with pytest.raises(ValueError, match=r"outside 0\.\.300"):
         delay.validate(301)
+    assert delay.values == MODE_DELAY_CHOICES
+    assert [delay.validate(s) for s in MODE_DELAY_CHOICES] == list(MODE_DELAY_CHOICES)
+    with pytest.raises(ValueError, match=r"20 is not one of \[0, 15, 30, 45, 60, 180, 300\]"):
+        delay.validate(20)
+    assert action.values == ()
 
 
 def test_bundled_td_version_comes_from_the_files_source_block() -> None:

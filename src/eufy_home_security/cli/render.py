@@ -525,9 +525,11 @@ def render_setting_value(setting: Setting, value: Value | None) -> str:
 
 def _domain(setting: Setting) -> str:
     """Enum values as ``value=label``, flags as ``member=label`` (several may be on), a
-    range as ``min..max step s``; ``-`` otherwise."""
+    range as ``min..max step s`` (its values when it takes only those); ``-`` otherwise."""
     if setting.kind is SettingKind.FLAGS:
         return "any of " + ", ".join(f"{f}={setting.flag_label(f)}" for f in setting.flags)
+    if setting.kind is SettingKind.RANGE and setting.values:
+        return ", ".join(setting_value(v) for v in setting.values)
     if setting.kind is SettingKind.ENUM and setting.values:
         return ", ".join(
             f"{setting_value(v)}={label}" if (label := setting.label(v)) else setting_value(v)

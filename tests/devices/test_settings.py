@@ -30,6 +30,7 @@ from eufy_home_security.p2p.mode_actions import (
     FIELD_PARAMS,
     MODE_ACTION_CLEARS,
     MODE_ACTION_INVERTED,
+    MODE_DELAY_CHOICES,
     MODE_TABLE_MODES,
     MODE_TABLE_PARAMS,
     ModeTableField,
@@ -61,6 +62,7 @@ def test_the_mode_table_settings_are_every_mode_table_param() -> None:
             assert setting.scope is Scope.SUB_DEVICE
             assert setting.kind is SettingKind.NUMBER
             assert (setting.value_range, setting.unit) == ((0, 300), SettingUnit.SECONDS)
+            assert setting.values == MODE_DELAY_CHOICES == (0, 15, 30, 45, 60, 180, 300)
 
 
 def test_mode_table_names() -> None:

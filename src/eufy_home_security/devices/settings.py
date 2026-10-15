@@ -25,6 +25,7 @@ from ..p2p.mode_actions import (
     ACTION_FLAGS,
     FIELD_PARAMS,
     MODE_ACTION_CLEARS,
+    MODE_DELAY_CHOICES,
     MODE_TABLE_MODES,
     ModeTableField,
     mode_action_bits,
@@ -73,7 +74,7 @@ class SettingKind(StrEnum):
     """The value shape of a mode-table setting (see :attr:`SettingDef.kind`)."""
 
     NUMBER = "number"
-    """An integer in ``value_range``."""
+    """An integer in ``value_range`` (one of ``values`` when it names any)."""
     FLAGS = "flags"
     """A bitmask with named single-bit ``flags``; unnamed bits must be preserved."""
 
@@ -103,6 +104,8 @@ class SettingDef:
     description: str
     unit: SettingUnit = SettingUnit.NONE
     value_range: tuple[int, int] | None = None
+    values: tuple[int, ...] = ()
+    """The only values a write takes, within ``value_range``; empty for any."""
     flags: Mapping[str, int] | None = None
 
     @property
@@ -383,7 +386,8 @@ MODE_TABLE_SETTINGS: Final[tuple[SettingDef, ...]] = (
                 "mode, so a non-zero write also moves every device whose delay is on"
             ),
             unit=SettingUnit.SECONDS,
-            value_range=(0, 300),
+            value_range=(MODE_DELAY_CHOICES[0], MODE_DELAY_CHOICES[-1]),
+            values=MODE_DELAY_CHOICES,
         )
         for table_field in _DELAY_DESCRIPTIONS
         for mode in sorted(MODE_TABLE_MODES, key=FIELD_PARAMS[table_field].__getitem__)

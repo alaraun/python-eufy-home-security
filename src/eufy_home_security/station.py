@@ -164,6 +164,7 @@ from .p2p.mode_actions import (
     ModeTableField,
     mode_action_on,
     mode_table_from_params,
+    require_mode_delay,
 )
 from .p2p.params import (
     ACTIVE_MODE_PARAM,
@@ -1711,7 +1712,8 @@ class Station:
         in the same write, as the app does (:data:`~.p2p.mode_actions.MODE_ACTION_CLEARS`).
         The delays follow the app's delay screen (one value per mode):
         ``entry_s`` / ``exit_s`` set the alarm (entry) / leaving (exit) delay of every
-        device that has it on afterwards (0 turns it off on all), and ``entry_devices``
+        device that has it on afterwards (0 turns it off on all), one of the app's
+        choices :data:`~.p2p.mode_actions.MODE_DELAY_CHOICES`, and ``entry_devices``
         / ``exit_devices`` turn it on or off per serial; see
         :meth:`~.p2p.mode_actions.ModeTable.with_count_down`.
 
@@ -1732,7 +1734,8 @@ class Station:
         known kind in the table (it may be a siren accessory, whose triggers a library
         table clears) or delays the table cannot carry unchanged; ``ValueError`` for a
         flag value that is not a bool, a flag turned on that a flag turned off in the
-        same edit clears, or a delay change :meth:`with_count_down` refuses;
+        same edit clears, a delay that is not one of ``MODE_DELAY_CHOICES``, or a delay
+        change :meth:`with_count_down` refuses;
         :class:`CommandNotAppliedError` when a device is missing from the fresh read or
         does not report its mask. After sending: :class:`CommandNotAppliedError` naming
         the device and flag (or delay) the read-back does not show, and the session's
@@ -1742,6 +1745,9 @@ class Station:
             self._require_feature(StationFeature.MODE_TABLES)
         if any(v is not None for v in (entry_s, exit_s)) or entry_devices or exit_devices:
             self._require_feature(StationFeature.MODE_DELAYS)
+        for what, seconds in (("entry_s", entry_s), ("exit_s", exit_s)):
+            if seconds is not None:
+                require_mode_delay(what, seconds)
         guard = GuardMode.parse(mode)
         if guard not in MODE_TABLE_MODES:
             raise UnsupportedError(f"guard mode {guard!r} has no per-device actions")

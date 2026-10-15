@@ -1523,7 +1523,7 @@ async def test_mode_delays_alone_are_one_table_write(station: Station, fake: Fak
         "home",
         entry_s=45,
         entry_devices={SENSOR_SN: False},
-        exit_s=20,
+        exit_s=15,
         exit_devices={SYNTHETIC.camera_sn: True},
     )
     assert fake.mode_tables_received[-1]["count_down_alarm"] == {
@@ -1532,11 +1532,28 @@ async def test_mode_delays_alone_are_one_table_write(station: Station, fake: Fak
     }
     assert fake.mode_tables_received[-1]["count_down_arm"] == {
         "channel_list": [0],
-        "delay_time": 20,
+        "delay_time": 15,
     }
-    assert (table.alarm_delays, table.leaving_delays) == ({0: 45, 16: 0}, {0: 20, 16: 0})
-    assert (fake.params[0][1166], fake.params[16][1166], fake.params[0][1171]) == ("45", "0", "20")
+    assert (table.alarm_delays, table.leaving_delays) == ({0: 45, 16: 0}, {0: 15, 16: 0})
+    assert (fake.params[0][1166], fake.params[16][1166], fake.params[0][1171]) == ("45", "0", "15")
     assert len(fake.mode_tables_received) == 1
+
+
+@pytest.mark.parametrize("seconds", [20, 301, -15, 600, True])
+async def test_a_delay_the_app_does_not_offer_is_refused(
+    station: Station, fake: FakeStation, seconds: int
+) -> None:
+    _mode_table_blocks(fake)
+    hub = _matrix_hub(station)
+    with pytest.raises(ValueError, match="entry_s must be one of 0, 15, 30, 45, 60, 180, 300 s"):
+        await hub.async_set_mode_actions(
+            "away", {SYNTHETIC.camera_sn: {"record": True}}, entry_s=seconds
+        )
+    with pytest.raises(ValueError, match="exit_s must be one of"):
+        await hub.async_set_mode_delays("home", exit_s=seconds)
+    with pytest.raises(ValueError, match="alarm_delay_home"):
+        await hub.async_set_setting("alarm_delay_home", seconds, channel=0)
+    assert fake.mode_tables_received == []
 
 
 async def test_a_stale_revision_sends_no_table(station: Station, fake: FakeStation) -> None:

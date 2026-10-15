@@ -744,7 +744,8 @@ async def test_settings_without_a_model_lists_the_per_mode_settings(
     assert await _run_offline(tmp_path, ["settings"]) == 0
     out = capsys.readouterr().out
     row = next(line for line in out.splitlines() if line.strip().startswith("alarm_delay_away "))
-    assert row.split()[1:] == ["0..300", "step", "1", "s", "cameras", "and", "sensors"]
+    values = ["0,", "15,", "30,", "45,", "60,", "180,", "300"]
+    assert row.split()[1:] == [*values, "s", "cameras", "and", "sensors"]
     camera = next(line for line in out.splitlines() if "camera_action_home " in line)
     assert camera.split()[-1] == "cameras"
     assert "settings --model PN" in out

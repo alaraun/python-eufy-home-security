@@ -176,6 +176,19 @@ def mode_action_bits(flag: str, mask: int, on: bool) -> int:
     return mask | bit if on is not (flag in MODE_ACTION_INVERTED) else mask & ~bit
 
 
+MODE_DELAY_CHOICES: Final[tuple[int, ...]] = (0, 15, 30, 45, 60, 180, 300)
+"""The alarm (entry) and leaving (exit) delays the eufy app offers, in seconds (0 is
+off); a library write refuses any other value."""
+
+
+def require_mode_delay(what: str, seconds: object) -> int:
+    """``seconds`` when it is one of :data:`MODE_DELAY_CHOICES`, else ``ValueError``."""
+    if isinstance(seconds, bool) or seconds not in MODE_DELAY_CHOICES:
+        choices = ", ".join(map(str, MODE_DELAY_CHOICES))
+        raise ValueError(f"{what} must be one of {choices} s (the app's choices), got {seconds!r}")
+    return seconds
+
+
 _DELAY_KEYS: Final[Mapping[ModeTableField, str]] = MappingProxyType(
     {
         ModeTableField.ALARM_DELAY: "count_down_alarm",

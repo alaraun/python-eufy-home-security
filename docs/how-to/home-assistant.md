@@ -884,8 +884,11 @@ A closed session (`async_close`) never reconnects on its own — build a new
   current mask fresh, changes that one bit, writes and confirms by read-back. **Never
   write a whole mask from Home Assistant state**: the bits without a name are mode bits,
   and a raw write clears them. The alarm and leaving delays (`alarm_delay_<mode>`,
-  `leaving_delay_<mode>`, `RANGE` in seconds) are `number` entities on every camera and
-  sensor, written with `async_set_setting`. These settings are not in the model files:
+  `leaving_delay_<mode>`, `RANGE` 0–300 s) are `number` entities on every camera and
+  sensor, written with `async_set_setting`. They take only the app's choices,
+  `setting.values` = `MODE_DELAY_CHOICES` (0, 15, 30, 45, 60, 180, 300 s): any other
+  value is a `ValueError` before anything is sent, so offer those (a select, or a number
+  that snaps to them). These settings are not in the model files:
   the library writes them through the station's mode tables. The table write is proven
   on hardware; the flag names come from the app.
 
@@ -930,8 +933,9 @@ A closed session (`async_close`) never reconnects on its own — build a new
   table is returned). Refused before anything is sent: a serial not paired to the
   station or a flag its kind does not have (`UnsupportedError`), a mode without
   per-device actions or one the station stores no table for (an undefined custom mode),
-  the unknown-kind and delay cases above, a flag value that is not a bool and a device
-  turned on with no delay value to take (`ValueError`). A read-back that does not show
+  the unknown-kind and delay cases above, a flag value that is not a bool, an `entry_s`
+  or `exit_s` outside `MODE_DELAY_CHOICES` and a device turned on with no delay value to
+  take (`ValueError`). A read-back that does not show
   the table raises `CommandNotAppliedError` naming the device and flag (`… camera_siren:
   wrote on, station reports off`). Turning `motion_sensor_respond` off clears the
   sensor's `notification` and `station_alarm` too, and asking for either on in the same

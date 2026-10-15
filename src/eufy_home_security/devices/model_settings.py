@@ -197,7 +197,8 @@ class Setting:
     """One setting of a model: domain, labels, layout and the handler's codecs.
 
     Values are thing-description values: int for enum and range, bool for bool, str for
-    string (a few enums have str values). ``writable`` is False for read-only settings
+    string (a few enums have str values). A ``RANGE`` with ``values`` takes only those
+    (a per-mode delay: the app's choices, ``MODE_DELAY_CHOICES``). ``writable`` is False for read-only settings
     and for writes the library does not send; ``note`` then names why.
 
     ``control`` is the control a UI offers (None when not writable). A ``FLAGS``
@@ -504,6 +505,8 @@ class Setting:
         lo, hi = self.minimum, self.maximum
         if lo is None or hi is None or not lo <= number <= hi:
             raise ValueError(f"{self.key}: {number} is outside {lo}..{hi}")
+        if self.values and not self._in_values(number):
+            raise ValueError(f"{self.key}: {number} is not one of {list(self.values)}")
         steps = (number - lo) / (self.step or 1)
         if not math.isclose(steps, round(steps), abs_tol=1e-9):
             raise ValueError(f"{self.key}: {number} is not on the {self.step} step from {lo}")
@@ -875,6 +878,7 @@ def _mode_table_setting(spec: SettingDef) -> Setting:
         product_code="",
         name=spec.name,
         kind=SettingKind.RANGE,
+        values=spec.values,
         minimum=spec.value_range[0] if delay and spec.value_range else 0,
         maximum=spec.value_range[1] if delay and spec.value_range else _ACTION_MASK_MAX,
         step=1,
