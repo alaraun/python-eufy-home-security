@@ -43,6 +43,14 @@ class GuardMode(IntEnum):
         """Whether the mode is a disarm (``DISARMED`` or ``OFF``)."""
         return self in (GuardMode.DISARMED, GuardMode.OFF)
 
+    @property
+    def label(self) -> str:
+        """The mode's display name in sentence case (:data:`GUARD_MODE_LABELS`).
+
+        A custom mode's own title lives in the station's mode list; see
+        :attr:`~.station_config.StationConfig.modes`."""
+        return GUARD_MODE_LABELS[self]
+
     @classmethod
     def parse(cls, value: str | int) -> GuardMode:
         """Parse a mode from its name (``"away"``, ``"custom_2"``, ``"off"``) or code.
@@ -90,6 +98,22 @@ _ALIASES = {
     "disarm": "disarmed",
     "off": "disarmed",
 }
+
+GUARD_MODE_LABELS: Final[Mapping[GuardMode, str]] = MappingProxyType(
+    {
+        GuardMode.AWAY: "Away",
+        GuardMode.HOME: "Home",
+        GuardMode.SCHEDULE: "Schedule",
+        GuardMode.CUSTOM_1: "Custom 1",
+        GuardMode.CUSTOM_2: "Custom 2",
+        GuardMode.CUSTOM_3: "Custom 3",
+        GuardMode.OFF: "Off",
+        GuardMode.GEOFENCE: "Geofencing",
+        GuardMode.DISARMED: "Disarmed",
+    }
+)
+"""Display name of every guard mode, the eufy app's English words in sentence case; a
+custom mode's entry stands in when the station lists no title for it."""
 
 
 class ValueSource(StrEnum):

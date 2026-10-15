@@ -20,7 +20,10 @@ branch maps onto one decision a caller (Home Assistant, in practice) has to make
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
+
+if TYPE_CHECKING:
+    from .station_config import StationConfig
 
 
 class EufySecurityError(Exception):
@@ -366,6 +369,35 @@ class PresetSlotsFullError(CommandNotAppliedError):
 
 class UnsupportedError(EufySecurityError):
     """The device or firmware does not support the requested operation."""
+
+
+class ModeInUseError(UnsupportedError):
+    """A guard mode cannot be changed or removed while it is in use.
+
+    ``reason`` says what uses it (the current mode, a schedule slot), in words a UI can
+    show. Raised before anything is sent.
+    """
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)
+
+
+class ConfigChangedError(EufySecurityError):
+    """The station's configuration changed since the revision a write was based on.
+
+    Raised before anything is sent when a write's ``expect_revision`` differs from the
+    revision of a fresh read. ``config`` is that fresh
+    :class:`~.station_config.StationConfig`: show it and let the user redo the edit.
+    """
+
+    def __init__(self, config: StationConfig, expected: int) -> None:
+        self.config = config
+        self.expected = expected
+        super().__init__(
+            f"the station configuration changed (revision {config.revision}, "
+            f"the write expected {expected})"
+        )
 
 
 class ModelDataError(EufySecurityError):
