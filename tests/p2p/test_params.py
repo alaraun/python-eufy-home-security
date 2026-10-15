@@ -144,35 +144,10 @@ def test_active_mode_is_param_1151() -> None:
     assert ParamDump().active_mode is None
 
 
-def test_flatten_and_sub_device_serials() -> None:
+def test_flatten() -> None:
     dump = ParamDump()
-    serials = base64.b64encode(json.dumps(["T8160P2000067890"]).encode()).decode()
-    dump.ingest({"params": [_param(255, 1072, serials), _param(0, 1101, "12")]})
-    assert dump.flatten()[(0, 1101)] == "12"
-    assert dump.sub_device_serials() == ["T8160P2000067890"]
-    # a bad blob yields no serials, never raises
-    bad = ParamDump()
-    bad.ingest({"params": [_param(255, 1072, "!!!not base64!!!")]})
-    assert bad.sub_device_serials() == []
-    assert ParamDump().sub_device_serials() == []
-
-
-def test_sub_device_serials_keep_the_positions_of_rejected_entries() -> None:
-    station, camera, other = "T8030P2000012345", "T8160P2000067890", "T8160P2000067892"
-    listed = [camera, station, camera.lower(), "T8160-BAD", 7, camera, other]
-    dump = ParamDump()
-    blob = base64.b64encode(json.dumps(listed).encode()).decode()
-    dump.ingest({"params": [_param(255, 1072, blob)]})
-    assert dump.sub_device_serials(station_sn=station) == [
-        camera,
-        None,  # the station itself
-        None,  # not uppercase
-        None,  # not serial-shaped
-        None,  # not a string
-        None,  # a repeat
-        other,
-    ]
-    assert dump.sub_device_serials()[1] == station  # only a named station serial is dropped
+    dump.ingest({"params": [_param(255, 1224, "1"), _param(0, 1101, "12")]})
+    assert dump.flatten() == {(255, 1224): "1", (0, 1101): "12"}
 
 
 def test_malformed_params_are_skipped_not_raised() -> None:
@@ -221,7 +196,6 @@ def test_any_json_ingests_and_reads_without_raising(params: Any) -> None:
     dump.ingest({"params": params, "main_sw_version": params})
     _ = dump.guard_mode
     dump.flatten()
-    dump.sub_device_serials()
     assert all(isinstance(v, str) for p in dump.devices.values() for v in p.values())
 
 

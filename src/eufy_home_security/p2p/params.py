@@ -14,13 +14,11 @@ different battery params), so a dump is grouped by ``dev_type``. A second list,
 from __future__ import annotations
 
 import base64
-import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from ..exceptions import ProtocolError
-from ..models import PARAM_SUB_DEVICE_SERIALS, STATION_CHANNEL, GuardMode
-from ._json import json_int, loads_json
+from ..models import STATION_CHANNEL, GuardMode
+from ._json import json_int
 
 #: param_type of the selected guard mode (a string int), reported on the station's
 #: dev_type (== its channel, 255): 2 while Schedule is selected. The arming command
@@ -30,10 +28,6 @@ GUARD_MODE_PARAM = 1224
 #: ``GET_ALARM_MODE``): a schedule slot's mode while Schedule is selected, else equal
 #: to :data:`GUARD_MODE_PARAM`. The ``0x047F`` report carries the same value.
 ACTIVE_MODE_PARAM = 1151
-#: param_type of the base64 JSON list of paired sub-device serials.
-SUB_DEVICE_SERIALS_PARAM = PARAM_SUB_DEVICE_SERIALS
-#: The shape a 1072 entry must have to be taken as a serial.
-_SERIAL_SHAPE = re.compile(r"T[0-9A-Z]{15}")
 #: The dump's second list: a paired device's own params (``channel``, ``device_sn``,
 #: ``param_type``, base64 ``param_value``) that the station's ``params`` table lacks,
 #: such as a T8170's 2730/2731 qualities behind a HomeBase 3. The eufy app reads both.
@@ -192,36 +186,6 @@ class ParamDump:
             for dev, params in self.devices.items()
             for pid, value in params.items()
         }
-
-    def sub_device_serials(self, *, station_sn: str | None = None) -> list[str | None]:
-        """The paired sub-device serials (station param 1072, a base64 JSON list).
-
-        Position-preserving: an entry that is not serial-shaped (``T`` + 15 uppercase
-        alphanumerics), repeats an earlier entry, or equals ``station_sn`` is None, so
-        the positions of the others do not move. ``[]`` when absent or undecodable.
-        """
-        raw = self.station.get(SUB_DEVICE_SERIALS_PARAM)
-        if not raw:
-            return []
-        try:
-            decoded = loads_json(base64.b64decode(raw + "=" * (-len(raw) % 4)))
-        except (ValueError, ProtocolError):
-            return []
-        if not isinstance(decoded, list):
-            return []
-        seen: set[str] = set()
-        serials: list[str | None] = []
-        for item in decoded:
-            valid = (
-                isinstance(item, str)
-                and _SERIAL_SHAPE.fullmatch(item) is not None
-                and item != station_sn
-                and item not in seen
-            )
-            if valid:
-                seen.add(item)
-            serials.append(item if valid else None)
-        return serials
 
 
 def standalone_aliases(device_type: int, channel: int) -> dict[int, tuple[int, ...]]:

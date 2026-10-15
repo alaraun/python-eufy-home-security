@@ -304,11 +304,10 @@ the integration is the device list:
   that built a station, or whose list no longer names a built one, emits
   `StationsChanged(added, removed, source)` (station serials, each removal once): reload
   on it too. A removed station stays in `eufy.stations` until the client is rebuilt.
-- A device paired after the last device-list refresh may still get an identity from
-  the station's own serial list: its `SubDeviceState.serial_source` is `"param_1072"`
-  instead of `"cloud"`. Use that serial for its entities (ids come from serials), but
-  expect a `DevicesChanged` once a refresh brings its cloud entry. A channel whose
-  identity is ambiguous gets `serial=None`: build no entities for it.
+- Serials come from the cloud device list only (`SubDeviceState.serial_source` is
+  `"cloud"`). A device paired after the last device-list refresh, or a channel whose
+  identity is ambiguous, has `serial=None`: build no entities for it until a refresh
+  brings its cloud entry and emits `DevicesChanged`.
 
 ### Cloud regions
 

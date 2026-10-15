@@ -46,7 +46,7 @@ Reported parameters never create entities — they only audit the settings, thro
 | Question | Source of truth | Why not the other |
 |---|---|---|
 | Which devices exist | cloud device list | the dump carries no serials and no device type |
-| Which channel a device is on | cloud `device_channel`, else param 1072 | 1072 is used only where cloud-known serials anchor its order |
+| Which channel a device is on | cloud `device_channel` | the dump carries no serials; 1072 is the cross-camera tracking camera selection, not a channel map |
 | Which model a device is | the serial's prefix | the dump has no type field; markers are the fallback |
 | Is a **sub-device** reachable | **P2P param 1131** | the cloud's copy is a last-known snapshot |
 | Is the **station** reachable | the session itself | a `StationState` exists only because a dump arrived; 1140 is not in the dump |
@@ -109,7 +109,7 @@ The station's cloud-only sixteen include 1140 (the hub's online flag),
 1157/1158/1159 (`ARM_DELAY_HOME`/`AWAY`/`CUS1`), 1235 (`SET_HUB_SPK_VOLUME`), 1254
 (the schedule JSON), 1256 (custom modes) and 1278 (automation data) — configuration
 and policy the live dump never serves. The dump's eighteen are runtime state the
-cloud has no copy of: 1072 (paired serials), 1189 and 1190 (storage), 1216 (the hub
+cloud has no copy of: 1072 (the cross-camera tracking camera selection), 1189 and 1190 (storage), 1216 (the hub
 name), 14000 (country).
 
 So `PARAM_QUERY_ALL` is not "every parameter the station holds", and the cloud

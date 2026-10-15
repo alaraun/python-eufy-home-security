@@ -522,8 +522,8 @@ APK_COMMAND_TYPES: Final[Mapping[int, str]] = MappingProxyType(
 
 WIRE_EXTRAS: Final[Mapping[int, str]] = MappingProxyType(
     {
-        1072: "SUB_DEVICE_SERIAL_LIST (base64)",
-        1073: "SUB_DEVICE_ASSOCIATION_MAP (base64)",
+        1072: "CROSS_CAMERA_TRACKING_CAMERAS (base64)",
+        1073: "CROSS_CAMERA_TRACKING_GROUPS (base64)",
         1363: "HOME_MODE_STATUS (json)",
         5006: "SUBSYSTEM_FW_5006 (version)",
         5007: "SUBSYSTEM_FW_5007 (version)",

@@ -5,7 +5,7 @@ the per-mode settings (:data:`~.settings.MODE_TABLE_SETTINGS`: key, description,
 and unit), the parameters the library reads into device state itself, and the
 app's name for the id (:data:`~.command_types.COMMAND_NAMES`, a lead rather than a
 meaning). An id none of them names is ``unknown``. Values that identify the account or
-the house (names, the serial list, the LAN address) are never shown in clear unless
+the house (names, the cross-camera tracking serials, the LAN address) are never shown in clear unless
 secret logging is on.
 """
 
@@ -115,10 +115,10 @@ STATE_PARAM_INFO: Final[Mapping[int, _StateParam]] = MappingProxyType(
         GUARD_MODE_PARAM: _StateParam("guard_mode", "selected guard mode", _guard_mode),
         ACTIVE_MODE_PARAM: _StateParam("active_mode", "guard mode in force", _guard_mode),
         PARAM_SUB_DEVICE_SERIALS: _StateParam(
-            "sub_device_serials", "paired device serials", _identifier
+            "sub_device_serials", "cross-camera tracking cameras", _identifier
         ),
         PARAM_SUB_DEVICE_ASSOCIATION: _StateParam(
-            "sub_device_association", "paired device map", _identifier
+            "sub_device_association", "cross-camera tracking groups", _identifier
         ),
         PARAM_BATTERY_TEMPERATURE: _StateParam("battery_temperature", "battery temperature"),
         PARAM_WORKING_DAYS: _StateParam("working_days", "days since last USB charge"),

@@ -151,7 +151,6 @@ from .p2p.mode_actions import MODE_TABLE_PARAMS, ModeTableField, mode_table_from
 from .p2p.params import (
     ACTIVE_MODE_PARAM,
     GUARD_MODE_PARAM,
-    SUB_DEVICE_SERIALS_PARAM,
     ParamDump,
     standalone_aliases,
 )
@@ -217,15 +216,7 @@ picture size to hold: a woken T8170 climbs 1280x720 -> 1920x1080 -> 2880x1616 at
 #: An epoch in seconds (10 digits) falls below it.
 EPOCH_MS_RANGE = (1_420_070_400_000, 4_102_444_800_000)
 
-type SerialSource = Literal["cloud", "param_1072"]
-
-SUB_DEVICE_SERIALS_ORDER_EVIDENCE: Final = Evidence(
-    Support.UNKNOWN,
-    "two parameter dumps of one HomeBase 3",
-    note="station param 1072 listed the two cameras in channel order both times; the "
-    "motion sensor was not in it. Relied on only where cloud-known serials anchor it.",
-)
-"""That 1072 lists the cameras by channel: the rule behind the ``param_1072`` serial."""
+type SerialSource = Literal["cloud"]
 
 
 def _int_or_none(value: str | None) -> int | None:
@@ -309,11 +300,9 @@ class SubDeviceState:
     channel: int
     serial: str | None
     serial_source: SerialSource | None = None
-    """Where ``serial`` came from: ``"cloud"`` (the device list's channel), or
-    ``"param_1072"`` for a channel the cloud list lacks (a device paired since it was
-    fetched), taken from the station's serial list only when cloud-known serials
-    anchor its order (:data:`SUB_DEVICE_SERIALS_ORDER_EVIDENCE`). None with no serial,
-    including a channel two cloud devices claim."""
+    """Where ``serial`` came from: ``"cloud"`` (the device list's channel). None with no
+    serial: a channel the cloud list lacks (a device paired since it was fetched) or one
+    two cloud devices claim."""
     kind: DeviceKind | None = None
     name: str | None
     battery: int | None
@@ -421,7 +410,6 @@ STATE_PARAMS: Final[Mapping[Scope, frozenset[int]]] = {
         {
             GUARD_MODE_PARAM,
             ACTIVE_MODE_PARAM,
-            SUB_DEVICE_SERIALS_PARAM,
             PARAM_LAN_IP,
             PARAM_EMMC_USED_PERCENT,
             PARAM_HUB_NAME,
@@ -1298,58 +1286,9 @@ class Station:
                 by_channel[device.channel] = device
         return by_channel
 
-    def _serials_from_1072(
-        self,
-        dump: ParamDump,
-        kinds: Mapping[int, DeviceKind | None],
-        cloud: Mapping[int, CloudDevice | None],
-    ) -> dict[int, str]:
-        """Serials for channels the cloud list lacks, from station param 1072 (anchored).
-
-        1072 is read as the camera serials in channel order
-        (:data:`SUB_DEVICE_SERIALS_ORDER_EVIDENCE`). Its positions are used only when
-        the dump's camera blocks number exactly ``len(1072)``, at least one cloud-known
-        serial appears in it, and every one that does sits at the rank of its own
-        channel among the camera channels. Otherwise nothing is assigned.
-        """
-        listed = dump.sub_device_serials(station_sn=self.serial)
-        cameras = sorted(ch for ch, kind in kinds.items() if kind is DeviceKind.CAMERA)
-        if not listed or len(listed) != len(cameras):
-            return {}
-        known = {d.device_sn: d.channel for d in self.sub_devices}
-        anchors = 0
-        for rank, serial in enumerate(listed):
-            if serial is None or serial not in known:
-                continue
-            channel = known[serial]
-            if channel != cameras[rank] or cloud.get(channel) is None:
-                return {}
-            anchors += 1
-        if not anchors:
-            return {}
-        assigned = {}
-        for rank, serial in enumerate(listed):
-            channel = cameras[rank]
-            model = model_for_serial(serial) if serial is not None else None
-            if (
-                serial is None
-                or serial in known
-                or channel in cloud
-                or (model is not None and model.kind is not DeviceKind.CAMERA)
-            ):
-                continue
-            assigned[channel] = serial
-        return assigned
-
     def _state(self, dump: ParamDump) -> StationState:
         cloud_by_channel = self._cloud_by_channel()
         blocks = {ch: params for ch, params in dump.devices.items() if ch != STATION_CHANNEL}
-        cloud_kinds = {}
-        for channel, params in blocks.items():
-            cloud = cloud_by_channel.get(channel)
-            model = model_for_serial(cloud.device_sn) if cloud else None
-            cloud_kinds[channel] = model.kind if model else kind_from_params(params)
-        from_1072 = self._serials_from_1072(dump, cloud_kinds, cloud_by_channel)
         devices = {}
         for channel, params in blocks.items():
             cloud = cloud_by_channel.get(channel)
@@ -1357,8 +1296,6 @@ class Station:
             source: SerialSource | None
             if cloud is not None:
                 serial, source = cloud.device_sn, "cloud"
-            elif channel in from_1072:
-                serial, source = from_1072[channel], "param_1072"
             else:
                 serial, source = None, None
             model = model_for_serial(serial) if serial else None

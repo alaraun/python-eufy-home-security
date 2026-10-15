@@ -849,34 +849,17 @@ def _listed_blocks(listed: list[str]) -> dict[int, dict[int, str]]:
     }
 
 
-def test_a_channel_the_cloud_lacks_takes_its_serial_from_anchored_1072() -> None:
+def test_1072_assigns_no_serial_to_a_channel_the_cloud_lacks() -> None:
+    """1072 is the cross-camera tracking camera selection: serials come from the cloud only."""
     state = _state_of(
         _listed_blocks([CAM_A, CAM_B, CAM_C]), sub_devices=(_camera(CAM_A, 0), _camera(CAM_C, 2))
     )
     assert [(d.serial, d.serial_source) for d in state.devices.values()] == [
         (CAM_A, "cloud"),
-        (CAM_B, "param_1072"),
+        (None, None),
         (CAM_C, "cloud"),
-        (None, None),  # the sensor is neither in 1072 nor a camera slot
+        (None, None),
     ]
-
-
-@pytest.mark.parametrize(
-    ("listed", "sub_devices"),
-    [
-        pytest.param(
-            [CAM_C, CAM_B, CAM_A], (_camera(CAM_A, 0), _camera(CAM_C, 2)), id="out-of-order"
-        ),
-        pytest.param([CAM_A, CAM_B, CAM_C], (), id="no-anchor"),
-        pytest.param([CAM_A, CAM_B], (_camera(CAM_A, 0),), id="fewer-serials-than-cameras"),
-    ],
-)
-def test_1072_is_not_used_without_consistent_anchors(
-    listed: list[str], sub_devices: tuple[CloudDevice, ...]
-) -> None:
-    state = _state_of(_listed_blocks(listed), sub_devices=sub_devices)
-    assert state.devices[1].serial is None
-    assert all(d.serial_source != "param_1072" for d in state.devices.values())
 
 
 def test_two_cloud_devices_on_one_channel_leave_its_serial_unknown(

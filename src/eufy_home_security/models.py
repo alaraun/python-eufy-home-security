@@ -144,9 +144,10 @@ PARAM_LAN_IP = 1176
 PARAM_EMMC_USED_PERCENT = 1190
 PARAM_HUB_NAME = 1216
 PARAM_SUB_DEVICE_SERIALS = 1072
-"""The station's list of paired serials (base64 JSON)."""
+"""The cameras chosen for cross-camera tracking (base64 JSON list of serials; absent =
+all the station's cameras). Not the paired devices: their serials come from the cloud."""
 PARAM_SUB_DEVICE_ASSOCIATION = 1073
-"""The station's map of paired devices (base64)."""
+"""The cross-camera tracking groups (base64 JSON)."""
 PARAM_SD_INFO = 1102
 """``SDINFO``: one integer the handlers never decode; use the storage record instead."""
 PARAM_STORAGE_STATUS = 1135

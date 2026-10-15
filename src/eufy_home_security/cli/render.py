@@ -38,7 +38,6 @@ from ..events import (
 )
 from ..models import STATION_CHANNEL, GuardMode
 from ..network import LanPath, PathWarning, suggest_local_ports
-from ..p2p.params import ParamDump
 
 if TYPE_CHECKING:
     from ..client import ModelStatus
@@ -49,7 +48,8 @@ if TYPE_CHECKING:
     from ..station import StationState, SubDeviceState
 
 _MAX_VALUE = 60
-# Station parameters the card shows elsewhere, so they are not repeated as profile rows.
+# Station parameters the card does not show as profile rows: the guard mode has its
+# own line, 1072 (the cross-camera tracking camera selection) is not a readable value.
 _CARD_PARAMS = frozenset({"guard_mode", "sub_device_serials"})
 
 
@@ -226,12 +226,6 @@ def _profile_label(name: str, value: str) -> tuple[str, str]:
     return " ".join(words), f"{value}%" if percent else value
 
 
-def _paired_serials(params: Mapping[int, str | None]) -> list[str]:
-    dump = ParamDump()
-    dump.devices[STATION_CHANNEL] = {pid: v for pid, v in params.items() if v is not None}
-    return [serial for serial in dump.sub_device_serials() if serial is not None]
-
-
 def _plain(text: str) -> str:
     """``text`` as is when it is printable ASCII, else its ``repr``: an identifier from
     data never reaches the terminal raw."""
@@ -265,9 +259,6 @@ def render_status(
             continue
         label, text = _profile_label(pname, str(value))
         lines.append(f"  {label + ':':<12} {text}")
-    paired = _paired_serials(state.params)
-    if paired:
-        lines.append(f"  Paired:      {len(paired)} device(s)")
     for channel in sorted(state.devices):
         dev = state.devices[channel]
         bits = [f"ch {channel}", f'"{dev.name}"' if dev.name else "(unnamed)"]

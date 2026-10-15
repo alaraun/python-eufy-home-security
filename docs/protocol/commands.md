@@ -301,13 +301,8 @@ chunks:
   device block is dropped only when a read that waited for at least every paired
   channel completes without it; a read-back of one channel drops nothing.
 - **Sub-device serials (library).** A channel's serial comes from the cloud device
-  list. For a channel the list lacks (a device paired since it was fetched), the
-  library takes the 1072 entry at that channel's rank among the dump's camera
-  channels, only when the camera blocks number exactly the list's length, at least
-  one cloud-known serial is listed, and every listed cloud-known serial sits at its
-  own channel's rank. An entry that is not `T` + 15 uppercase alphanumerics, repeats
-  an earlier one, or is the station's own serial is an empty position. A channel two
-  cloud devices claim has no serial.
+  list only; the dump carries none. A channel the list lacks (a device paired since it
+  was fetched) or one two cloud devices claim has no serial.
 
 | param | dev_type | meaning |
 |---|---|---|
@@ -315,7 +310,8 @@ chunks:
 | 1151 `GET_ALARM_MODE` | 255 | **effective** mode: equals 1224 except while Schedule is selected |
 | 1239 `GET_AWAY_ACTION`, 1225 home, 1148–1150 custom 1–3, 1177 off | sub-device | per-mode action mask of the device; written by `SET_ALL_ACTION` (below) |
 | 1166–1170 / 1171–1175 | sub-device | alarm / leaving delay per mode; written by `SET_ALL_ACTION` (below) |
-| 1072 | 255 | base64 JSON list of paired sub-device serials. Two dumps of one base listed the cameras in channel order and left the motion sensor out **[unknown]** (see below) |
+| 1072 | 255 | cross-camera tracking camera selection: base64 JSON list of camera serials; absent = all the station's cameras, unknown serials are ignored **[declared]**. Not the paired-device list |
+| 1073 | 255 | cross-camera tracking groups, base64 JSON **[declared]** |
 | 1102 `SDINFO`, 1190 eMMC % | 255 | storage. 1189 (app enum `GET_HB_HD_PERSENT`) stays 0 with an internal SSD attached and 6 % used — it does not track that disk; use the storage record ([Storage](#storage-1307-verified)). 1102 is one integer no handler decodes (`StationState.sd_info`) |
 | 1135 `GET_TFCARD_STATUS` | 255 | storage status code; the handlers show 0, 25 and 30 as normal (`StationState.storage_ok`) |
 | 5006–5012 | 255 | subsystem version strings; no vendor code names the subsystems |
@@ -352,8 +348,8 @@ Names for every id: `src/eufy_home_security/devices/command_types.py`.
 - **Query verb.** `10000` returns rows. `10017` (the app's QUERY_LOCAL) answers
   `-6006 ERROR_NO_SUPPORT`. `10006`, `10009` and `10011` answer `SUCCESSFUL` with no
   rows. `10013` returns only the newest crop per device.
-- `device_info` may list the station serial as well as cameras. Station param 1072
-  gives the paired serials.
+- `device_info` may list the station serial as well as cameras; the paired serials
+  come from the cloud device list.
 - **Reply:** `0x051A` with `{"cmd": 10000, "count": n, "data": [...], "mIntRet": 0, "msg": "SUCCESSFUL"}`.
   `data` is the string `"[]"` when empty.
 - Row fields include `device_sn`, `start_time`/`end_time` (local-time strings),
