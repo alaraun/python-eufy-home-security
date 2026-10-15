@@ -560,6 +560,12 @@ async def test_bulk_mode_table_writes_need_known_support(
         await station.async_set_mode_actions("away", {CAMERA.device_sn: {"record": True}})
     with pytest.raises(UnsupportedError, match="mode_delays is not supported"):
         await station.async_set_mode_delays("away", entry_s=30)
+    with pytest.raises(UnsupportedError, match="mode_tables is not supported"):
+        await station.async_set_mode_action("away", "record", True, device_sn=CAMERA.device_sn)
+    with pytest.raises(UnsupportedError, match="mode_tables is not supported"):
+        await station.async_set_setting("camera_action_away", 1, channel=0)
+    with pytest.raises(UnsupportedError, match="mode_delays is not supported"):
+        await station.async_set_setting("alarm_delay_away", 30, channel=0)
     assert fake.param_queries == 0
     assert fake.mode_tables_received == []
 

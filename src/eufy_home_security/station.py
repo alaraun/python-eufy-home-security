@@ -2546,7 +2546,8 @@ class Station:
         on hardware; of the flag names, ``record``, ``notification`` and
         ``motion_sensor_respond`` are checked against the app display.
 
-        Raises ``UnsupportedError`` for a mode without per-device actions (Schedule,
+        Raises ``UnsupportedError`` where :meth:`config_support` grades mode tables
+        *unknown*, for a mode without per-device actions (Schedule,
         Off, Disarmed, Geofence), a device whose kind is unknown or has no catalogued
         actions, or a flag that kind does not name (all before anything is sent);
         :class:`CommandNotAppliedError` when the current mask cannot be read; and
@@ -2554,6 +2555,7 @@ class Station:
         """
         if (device_sn is None) == (channel is None):
             raise ValueError("pass exactly one of device_sn or channel")
+        self._require_feature(StationFeature.MODE_TABLES)
         target = self.channel_for(device_sn) if device_sn is not None else cast(int, channel)
         guard = GuardMode.parse(mode)
         spec = self._mode_action_spec(guard, target)
@@ -2633,7 +2635,8 @@ class Station:
         """Write one mode-table value: read the whole mode fresh, change ``target``'s
         entry, send the table (``SET_ALL_ACTION``) and confirm every value by read-back.
 
-        Refuses (``UnsupportedError``, nothing sent) when the setting does not apply to
+        Refuses (``UnsupportedError``, nothing sent) where :meth:`config_support` grades
+        mode tables (an action) or mode delays (a delay) *unknown*, when the setting does not apply to
         the device on ``target``, when a device of the table is of no known kind (it may
         be a siren accessory, whose triggers a library table would clear), or when a
         delay the table must carry unchanged differs between devices; and
@@ -2643,6 +2646,11 @@ class Station:
         ``value`` without writing when the table already holds it.
         """
         mode, table_field = MODE_TABLE_PARAMS[spec.command_id]
+        self._require_feature(
+            StationFeature.MODE_TABLES
+            if table_field is ModeTableField.ACTION
+            else StationFeature.MODE_DELAYS
+        )
 
         def edit(table: ModeTable) -> ModeTable:
             if table_field is ModeTableField.ACTION:
