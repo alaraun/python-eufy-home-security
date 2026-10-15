@@ -43,6 +43,7 @@ RO_NOTES = {
     "serial embedded in a string",
 }
 ROUND_TRIP_NOTE = "round trip does not return the written value"
+STATUS_NOTE = "status the eufy app only reads"  # ro with its read kept
 SETTING_KEYS = {
     "kind",
     "access",
@@ -61,6 +62,7 @@ SETTING_KEYS = {
     "note",
     "name",
     "variant_of",
+    "advanced",
     "control",
     "flags",
     "bit",
@@ -184,17 +186,22 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
         assert "control" not in s, ident
     keys = {_key(v) for v in s.get("values", [])} if kind == "enum" else {"false", "true"}
     present = [k for k in WRITE_KEYS if k in s]
+    if "advanced" in s:
+        assert s["advanced"] is True, ident
+        assert s.get("note"), ident  # the app's warning
+    # the last note part of an advanced setting is the app's warning, free text
+    parts = s["note"].split("; ")[: -1 if "advanced" in s else None] if "note" in s else []
     if s["access"] == "rw":
         assert ("write" in s) != ("write_table" in s), "rw needs exactly one of write/write_table"
         if "write_table" in s:
             assert set(s["write_table"]) == keys
-        if "note" in s:
-            parts = s["note"].split("; ")
-            assert all(p == ROUND_TRIP_NOTE or p in RO_NOTES for p in parts), s["note"]
+        assert all(p == ROUND_TRIP_NOTE or p in RO_NOTES for p in parts), s["note"]
     else:
         assert present == [], present
-        assert s.get("read") is None
-        assert s.get("note", next(iter(RO_NOTES))) in RO_NOTES
+        if s.get("note") != STATUS_NOTE:
+            assert s.get("read") is None
+            assert len(parts) <= 1, s["note"]
+            assert all(p in RO_NOTES for p in parts), s["note"]
     templates = [s["write"]] if "write" in s else []
     templates += list(s.get("write_table", {}).values())
     for template in templates:

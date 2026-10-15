@@ -48,7 +48,7 @@
   "arming_get_alarm_away_mode": {
    "access": "ro",
    "kind": "string",
-   "name": "Away Mode",
+   "name": "Away mode",
    "read": null
   },
   "arming_modedetail_alarm_rules": {
@@ -197,7 +197,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Audio Recording",
+   "name": "Audio recording",
    "page": "SettingsHome",
    "read": {
     "map": {
@@ -856,7 +856,7 @@
   "ip_address": {
    "access": "ro",
    "kind": "string",
-   "name": "IP Address",
+   "name": "IP address",
    "read": null
   },
   "is_connected_solar_panel": {
@@ -1085,7 +1085,7 @@
     "8": "Low",
     "9": "Medium"
    },
-   "name": "Streaming Quality",
+   "name": "Streaming quality",
    "read": {
     "map": {
      "0": 0,
@@ -1172,7 +1172,7 @@
   "mac_address": {
    "access": "ro",
    "kind": "string",
-   "name": "MAC Address",
+   "name": "MAC address",
    "read": null
   },
   "microphone_on_off": {
@@ -1252,7 +1252,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Motion Detection",
+   "name": "Motion detection",
    "read": {
     "map": {
      "": false,
@@ -1559,7 +1559,7 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
-   "name": "Working Mode",
+   "name": "Working mode",
    "page": "MotionDetection",
    "read": {
     "map": {
@@ -1619,7 +1619,7 @@
     "2": "Full HD(1080P)",
     "5": "2K HD"
    },
-   "name": "Recording Quality",
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 5,
@@ -1664,7 +1664,7 @@
     "2": "Full HD(1080P)",
     "5": "2K HD"
    },
-   "name": "Recording Quality",
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 2,
@@ -1722,76 +1722,6 @@
    "default": false,
    "kind": "bool",
    "read": null
-  },
-  "set_alarm_type": {
-   "access": "rw",
-   "contexts": [
-    {
-     "entry": {
-      "write": {
-       "cmd": 1350,
-       "params": {
-        "channel": "$channel",
-        "type": 10,
-        "time_out": 0,
-        "user_name": ""
-       },
-       "subCmd": 1202
-      }
-     },
-     "names": [
-      "HB1",
-      "HB2",
-      "HB3",
-      "HB4",
-      "M8020",
-      "M8021",
-      "M8022",
-      "M8023",
-      "M8024",
-      "M8025",
-      "NVR",
-      "T7000",
-      "T9000"
-     ]
-    }
-   ],
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only"
-   },
-   "read": null,
-   "values": [
-    0
-   ],
-   "write": {
-    "cmd": 1350,
-    "params": {
-     "channel": "$channel",
-     "type": 10,
-     "time_out": 0,
-     "user_name": ""
-    },
-    "subCmd": 1201
-   }
-  },
-  "set_alarm_type__v1": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "3": "HomeBase alarm"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    3
-   ],
-   "variant_of": "set_alarm_type"
   },
   "set_privacy_zone": {
    "access": "ro",

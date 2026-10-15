@@ -1029,23 +1029,6 @@
     }
    }
   },
-  "set_alarm_type": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "1": "Light only",
-    "2": "Sound & light"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    1,
-    2
-   ]
-  },
   "set_privacy_zone": {
    "access": "ro",
    "kind": "enum",

@@ -220,7 +220,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Audio Recording",
+   "name": "Audio recording",
    "page": "SettingsHome",
    "read": {
     "map": {
@@ -248,7 +248,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "Auto Calibration",
+   "name": "Auto calibration",
    "read": {
     "map": {
      "": false,
@@ -464,7 +464,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "Continuous Recording",
+   "name": "Continuous recording",
    "read": {
     "map": {
      "": false,
@@ -847,7 +847,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "Privacy Zones",
+   "name": "Privacy zones",
    "read": {
     "map": {
      "": false,
@@ -892,7 +892,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Quick Focus Tap",
+   "name": "Quick focus tap",
    "read": null,
    "write": {
     "storeToLocal": true,
@@ -906,7 +906,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Swipe to Control",
+   "name": "Swipe to control",
    "read": null,
    "write": {
     "storeToLocal": true,
@@ -1026,7 +1026,7 @@
   "ip_address": {
    "access": "ro",
    "kind": "string",
-   "name": "IP Address",
+   "name": "IP address",
    "read": null
   },
   "is_device_upgrade": {
@@ -1299,7 +1299,7 @@
     "10": "High",
     "9": "Medium"
    },
-   "name": "Streaming Quality",
+   "name": "Streaming quality",
    "read": {
     "map": {
      "": 0,
@@ -1384,7 +1384,7 @@
   "mac_address": {
    "access": "ro",
    "kind": "string",
-   "name": "MAC Address",
+   "name": "MAC address",
    "read": null
   },
   "manual_light_brightness": {
@@ -1432,7 +1432,7 @@
   "motion_activated_light_setting": {
    "access": "ro",
    "kind": "string",
-   "name": "Motion-Activated Light",
+   "name": "Motion-activated light",
    "note": "handler ignores the value",
    "read": null
   },
@@ -1441,7 +1441,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Motion Detection",
+   "name": "Motion detection",
    "read": {
     "map": {
      "": false,
@@ -1625,7 +1625,7 @@
     "11": "C35 nightvision pure title",
     "7": "Spotlights"
    },
-   "name": "Night Vision",
+   "name": "Night vision",
    "read": {
     "map": {
      "": 11,
@@ -1695,7 +1695,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "All Other Motion",
+   "name": "All other motion",
    "read": {
     "map": {
      "": false,
@@ -1771,7 +1771,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "All Sound",
+   "name": "All sound",
    "read": {
     "map": null,
     "param": 6027
@@ -2073,7 +2073,7 @@
     "10": "High",
     "9": "Medium"
    },
-   "name": "Recording Quality",
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 10,
@@ -2160,43 +2160,6 @@
    "default": "256",
    "kind": "other",
    "read": null
-  },
-  "set_alarm_type": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "1": "Light only",
-    "2": "Sound and light"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    1,
-    2
-   ]
-  },
-  "set_alarm_type__v1": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "1": "Light only",
-    "2": "Sound and light",
-    "3": "HomeBase alarm"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    1,
-    2,
-    3
-   ],
-   "variant_of": "set_alarm_type"
   },
   "set_privacy_zone": {
    "access": "ro",
@@ -2287,7 +2250,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "Sound Detection",
+   "name": "Sound detection",
    "page": "SoundDetection",
    "read": {
     "map": {

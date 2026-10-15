@@ -224,6 +224,13 @@ def test_names_take_the_models_title_then_the_identifiers_matching_kind() -> Non
     assert counts["name:app"] == 3
 
 
+def test_app_titles_become_sentence_case_names() -> None:
+    settings = _settings()
+    titles = _titles(titles={"clip": {"title": "Continuous Tracking Time"}})
+    join.join(PN, settings, _td(MODE), None, _tree(**RN_TREE), titles=titles)
+    assert settings["clip"]["name"] == "Continuous tracking time"
+
+
 def test_app_title_another_setting_is_named_is_not_applied() -> None:
     settings = _settings()
     settings["flag_v"] = {"kind": "bool"}
@@ -331,6 +338,118 @@ def test_without_titles_no_name_unit_or_variant() -> None:
     assert not any({"name", "variant_of"} & set(v) for v in settings.values())
 
 
+def _station() -> dict[str, Any]:
+    return {
+        "assist": {"kind": "bool", "access": "rw", "default": False},
+        "pin_set": {
+            "kind": "bool",
+            "access": "rw",
+            "read": {"param": 1670, "map": None},
+            "write": {"cmd": 1350, "subCmd": 1670, "params": {"value": "$v:int"}},
+            "control": "switch",
+        },
+        "radio": {
+            "kind": "enum",
+            "access": "rw",
+            "values": [0, 1],
+            "labels": {"0": "EU", "1": "US"},
+            "note": "round trip does not return the written value",
+        },
+        "radio_text": {"kind": "string", "access": "ro"},
+        "siren": {"kind": "enum", "access": "rw", "values": [0, 3]},
+        "siren__v1": {"kind": "enum", "access": "rw", "values": [0]},
+        "notify": {"kind": "flags", "flags": {"0": 64, "1": 16, "7": 512}, "labels": {"7": "Fob"}},
+    }
+
+
+HAND = {
+    "defaults": {"assist": {"value": True, "models": [PN]}},
+    "read_only": {"pin_set": {}},
+    "labels": {"radio": {"labels": {"0": "Standard", "1": "Performance (beta)"}}},
+    "advanced": {"radio": {"note": "Standard reduces the range", "kind": "enum"}},
+    "excluded": {"siren": {}},
+    "held_members": {"notify": {"4": "another parameter", "7": "bit unknown"}},
+}
+
+
+def test_hand_default_applies_on_its_listed_models_only() -> None:
+    settings = _station()
+    counts = join.join(PN, settings, _td(), None, None, titles=_titles(**HAND))
+    assert settings["assist"]["default"] is True
+    assert counts["default:app"] == 1
+    other = _station()
+    join.join("T0002", other, _td(), None, None, titles=_titles(**HAND))
+    assert other["assist"]["default"] is False
+
+
+@pytest.mark.parametrize("value", [1, "on", None])
+def test_hand_default_outside_the_domain_raises(value: object) -> None:
+    titles = _titles(defaults={"assist": {"value": value, "models": [PN]}})
+    with pytest.raises(join.GeneratorError, match=f"{PN}: assist default"):
+        join.join(PN, _station(), _td(), None, None, titles=titles)
+
+
+def test_read_only_setting_keeps_its_read_and_drops_its_write() -> None:
+    settings = _station()
+    join.join(PN, settings, _td(), None, None, titles=_titles(**HAND))
+    assert settings["pin_set"] == {
+        "kind": "bool",
+        "access": "ro",
+        "read": {"param": 1670, "map": None},
+        "note": join.STATUS_NOTE,
+    }
+
+
+def test_advanced_setting_takes_hand_labels_and_the_warning_after_its_note() -> None:
+    settings = _station()
+    counts = join.join(PN, settings, _td(), None, None, titles=_titles(**HAND))
+    radio = settings["radio"]
+    assert radio["labels"] == {"0": "Standard", "1": "Performance (beta)"}
+    assert radio["advanced"] is True
+    assert radio["note"] == "round trip does not return the written value; " + (
+        "Standard reduces the range"
+    )
+    assert "advanced" not in settings["radio_text"]
+    assert (counts["labels:hand"], counts["advanced"]) == (2, 1)
+
+
+def test_hand_labels_for_a_value_the_setting_lacks_raise() -> None:
+    titles = _titles(labels={"radio": {"labels": {"2": "Ghost"}}})
+    with pytest.raises(join.GeneratorError, match=f"{PN}: radio hand labels"):
+        join.join(PN, _station(), _td(), None, None, titles=titles)
+
+
+def test_excluded_identifier_and_its_versions_are_dropped() -> None:
+    settings = _station()
+    counts = join.join(PN, settings, _td(), None, None, titles=_titles(**HAND))
+    assert not {"siren", "siren__v1"} & set(settings)
+    assert counts["excluded"] == 2
+
+
+def test_a_gate_on_an_excluded_identifier_raises() -> None:
+    settings = _station()
+    settings["assist"]["applies_when"] = ["siren", 3]
+    with pytest.raises(join.GeneratorError, match=f"{PN}: assist applies when excluded siren"):
+        join.join(PN, settings, _td(), None, None, titles=_titles(**HAND))
+
+
+def test_held_members_leave_the_flags_and_their_labels() -> None:
+    settings = _station()
+    counts: dict[str, int] = {}
+    join.hold_members(PN, settings, _titles(**HAND), counts)
+    assert settings["notify"] == {"kind": "flags", "flags": {"0": 64, "1": 16}, "labels": {}}
+    assert counts == {"flags:member held": 1}
+    join.hold_members(PN, settings, None, counts)
+    assert counts == {"flags:member held": 1}
+
+
+def test_holding_every_member_raises() -> None:
+    settings = _station()
+    titles = _titles(held_members={"notify": {"0": "x", "1": "x", "7": "x"}})
+    with pytest.raises(join.GeneratorError, match=f"{PN}: notify would keep no flags member"):
+        join.hold_members(PN, settings, titles, {})
+
+
 def test_source_block_from_td_and_app_version() -> None:
     assert join.source_block(_td(), "6.1.10") == {
         "td_version": 7,
@@ -350,7 +469,7 @@ def test_join_does_not_touch_its_inputs() -> None:
     app = {"mode": [{"ui": "3", "wire": "2", "td": "CUSTOM", "app": "Custom"}]}
     gate = {"when": {"mode": "CUSTOM"}, "shows": ["clip"], "page": "Custom"}
     tree = _tree(gates=[gate], **RN_TREE)
-    titles = _titles()
+    titles = _titles(**HAND)
     before = copy.deepcopy((app, tree, titles))
     join.join(PN, _settings(), _td(MODE), app, tree, titles=titles)
     assert (app, tree, titles) == before

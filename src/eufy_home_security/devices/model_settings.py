@@ -202,6 +202,8 @@ class Setting:
     one's place on the same model (``record_resolution`` for ``record_resolution__v1``),
     or None: a variant reads the same parameter in another form or applies only under
     conditions the library does not evaluate. Offer a variant disabled by default.
+    ``advanced`` marks a setting the eufy app puts behind a warning (``note`` gives it):
+    offer it hidden by default.
 
     ``domain`` names a library table a ``STRING`` setting's values come from
     (:data:`~.timezones.TIMEZONE_DOMAIN`: the app's device time zones). Such a setting is
@@ -229,6 +231,7 @@ class Setting:
     applies_when: tuple[str, Value] | None = None
     note: str | None = None
     variant_of: str | None = None
+    advanced: bool = False
     control: SettingControl | None = None
     flags: Mapping[str, int] = field(default_factory=lambda: MappingProxyType({}))
     bit: int | None = None
@@ -1179,6 +1182,9 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     variant_of = _optional_str(entry, "variant_of")
     if variant_of is not None and (variant_of == key or not IDENTIFIER.fullmatch(variant_of)):
         raise ValueError(f"variant_of {variant_of!r}")
+    advanced = entry.get("advanced", False)
+    if not isinstance(advanced, bool):
+        raise TypeError("advanced is not a bool")
     write = _recipe(entry, "write")
     table = _table(entry, "write_table")
     writable = access == "rw"
@@ -1221,6 +1227,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         applies_when=applies_when,
         note=note,
         variant_of=variant_of,
+        advanced=advanced,
         control=control if writable else None,
         flags=flags,
         bit=bit,

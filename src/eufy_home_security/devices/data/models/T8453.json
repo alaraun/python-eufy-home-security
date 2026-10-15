@@ -1143,28 +1143,6 @@
    "kind": "bool",
    "read": null
   },
-  "set_alarm_type": {
-   "access": "rw",
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only"
-   },
-   "read": null,
-   "values": [
-    0
-   ],
-   "write": {
-    "cmd": 1201,
-    "params": {
-     "channel": 0,
-     "type": 0,
-     "time_out": 0,
-     "user_name": ""
-    }
-   }
-  },
   "solar_intensity": {
    "access": "ro",
    "kind": "other",

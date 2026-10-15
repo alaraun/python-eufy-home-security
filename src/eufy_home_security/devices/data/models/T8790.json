@@ -627,45 +627,6 @@
     11
    ]
   },
-  "set_alarm_type": {
-   "access": "rw",
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only"
-   },
-   "read": null,
-   "values": [
-    0
-   ],
-   "write": {
-    "cmd": 1350,
-    "subCmd": 1201,
-    "params": {
-     "channel": 0,
-     "type": 4,
-     "time_out": 0,
-     "user_name": ""
-    }
-   }
-  },
-  "set_alarm_type__v1": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "3": "HomeBase alarm"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    3
-   ],
-   "variant_of": "set_alarm_type"
-  },
   "smart_lock_onoff_status": {
    "access": "ro",
    "kind": "string",

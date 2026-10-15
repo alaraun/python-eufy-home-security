@@ -11,7 +11,8 @@ English is shown as ``"Value <code>"``, never guessed.
 :func:`setting_name` gives a vendor identifier a short title; curated where the
 identifier is misleading (``disable_ptz_turn_switch`` is bound to
 ``APP_CMD_PRIVACY_ZONES_STATUS`` and sends ``PrivacyZoneSwitch``, so it is named after
-its binding), mechanical otherwise.
+its binding), mechanical otherwise. :func:`sentence_case` turns the eufy app's Title
+Case titles into the sentence case setting names use.
 
 Pure data and string functions.
 """
@@ -55,6 +56,7 @@ SETTING_NAMES: Final[Mapping[str, str]] = MappingProxyType(
         "spotlight_switch": "Spotlight",
         "time_format_set": "Clock format",
         "watermark_set": "Watermark",
+        "working_mode_value": "Working mode",
     }
 )
 
@@ -66,6 +68,60 @@ def setting_name(identifier: str) -> str:
     """A short display title for a vendor identifier (never empty)."""
     base = _VERSION_SUFFIX.sub("", identifier)
     return SETTING_NAMES.get(base) or SETTING_NAMES.get(identifier) or _mechanical_name(base)
+
+
+#: Capitalised words a name keeps as they are: proper nouns and unit symbols.
+_KEEP_CASE: Final = frozenset(
+    {
+        "Alexa",
+        "Amazon",
+        "Apple",
+        "Bluetooth",
+        "Echo",
+        "Google",
+        "Homebase",
+        "Hz",
+        "Siri",
+        "Wi-Fi",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    }
+)
+_CAPITALISED: Final = re.compile(r"[A-Z][a-z]+")
+
+
+def sentence_case(title: str) -> str:
+    """``title`` in sentence case: every capitalised word after the first lower-cased.
+
+    A word is lower-cased only when it is capitalised (one capital, then lower-case
+    letters) and neither a proper noun nor a unit (``Hz``); acronyms, mixed case
+    (``HomeBase``, ``2K``) and single letters stay. Hyphenated parts count as words
+    (``Cross-Camera`` -> ``Cross-camera``), surrounding punctuation is kept (``(Beta)`` ->
+    ``(beta)``).
+    """
+    words = title.split(" ")
+    return " ".join(_lower_word(w, first=i == 0) for i, w in enumerate(words))
+
+
+def _lower_word(word: str, *, first: bool) -> str:
+    start, end = 0, len(word)
+    while start < end and not word[start].isalnum():
+        start += 1
+    while end > start and not word[end - 1].isalnum():
+        end -= 1
+    core = word[start:end]
+    if core in _KEEP_CASE:
+        return word
+    parts = [
+        p.lower() if _CAPITALISED.fullmatch(p) and not (first and i == 0) else p
+        for i, p in enumerate(core.split("-"))
+    ]
+    return word[:start] + "-".join(parts) + word[end:]
 
 
 def _mechanical_name(identifier: str) -> str:

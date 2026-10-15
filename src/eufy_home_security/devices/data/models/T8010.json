@@ -432,21 +432,6 @@
    "kind": "bool",
    "read": null
   },
-  "set_alarm_type": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "3": "HomeBase alarm"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    3
-   ]
-  },
   "setting_current_connection_type": {
    "access": "ro",
    "default": "1",
@@ -460,16 +445,14 @@
     "0": 64,
     "1": 16,
     "2": 32,
-    "3": 128,
-    "7": 512
+    "3": 128
    },
    "kind": "flags",
    "labels": {
     "0": "Switch modes by schedule",
     "1": "Switch modes from app",
     "2": "Switch modes by Geofencing",
-    "3": "Switch modes from Keypad",
-    "7": "Keyfob"
+    "3": "Switch modes from Keypad"
    },
    "read": {
     "map": null,
@@ -539,13 +522,15 @@
   },
   "working_mode_value": {
    "access": "rw",
+   "advanced": true,
    "control": "select",
    "default": 0,
    "kind": "enum",
    "labels": {
-    "0": "EU",
-    "1": "US"
+    "0": "Standard",
+    "1": "Performance (beta)"
    },
+   "note": "switching to Standard reduces the HomeBase's Wi-Fi range",
    "read": {
     "map": {
      "": 1,

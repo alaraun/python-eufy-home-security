@@ -165,7 +165,7 @@
   "arming_get_alarm_away_mode": {
    "access": "ro",
    "kind": "string",
-   "name": "Away Mode",
+   "name": "Away mode",
    "read": null
   },
   "arming_get_alarm_custom1_mode": {
@@ -186,13 +186,13 @@
   "arming_get_alarm_disarm_mode": {
    "access": "ro",
    "kind": "string",
-   "name": "Disarm Mode",
+   "name": "Disarm mode",
    "read": null
   },
   "arming_get_alarm_home_mode": {
    "access": "ro",
    "kind": "string",
-   "name": "Home Mode",
+   "name": "Home mode",
    "read": null
   },
   "arming_jump_to_platform_setting_page": {
@@ -789,7 +789,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "name": "IP Address",
+   "name": "IP address",
    "read": null
   },
   "is_connect_webrtc": {
@@ -850,7 +850,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "name": "MAC Address",
+   "name": "MAC address",
    "read": null
   },
   "model_config": {
@@ -872,7 +872,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "Ignore Notifications",
+   "name": "Ignore notifications",
    "read": {
     "map": null,
     "param": 1283
@@ -1120,13 +1120,15 @@
   },
   "working_mode_value": {
    "access": "rw",
+   "advanced": true,
    "control": "select",
    "default": 0,
    "kind": "enum",
    "labels": {
-    "0": "EU",
-    "1": "US"
+    "0": "Standard",
+    "1": "Performance (beta)"
    },
+   "note": "switching to Standard reduces the HomeBase's Wi-Fi range",
    "read": {
     "map": {
      "": 1,

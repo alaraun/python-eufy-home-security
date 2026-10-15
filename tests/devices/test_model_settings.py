@@ -405,6 +405,35 @@ def test_no_two_controls_of_a_model_share_a_name(code: str) -> None:
     assert {name: keys for name, keys in by_name.items() if len(keys) > 1} == {}
 
 
+def test_working_mode_is_an_advanced_select_with_the_app_s_labels() -> None:
+    setting = _setting("T8030", "working_mode_value")
+    assert (setting.name, setting.advanced, setting.writable) == ("Working mode", True, True)
+    assert dict(setting.labels) == {0: "Standard", 1: "Performance (beta)"}
+    assert setting.note == "switching to Standard reduces the HomeBase's Wi-Fi range"
+
+
+def test_keypad_passcode_set_is_a_readable_status() -> None:
+    setting = _setting("T8030", "hb_keypad_is_password_set")
+    assert (setting.writable, setting.readable, setting.control) == (False, True, None)
+    assert setting.decode("1") is True
+
+
+def test_tracking_assistance_defaults_to_on_as_in_the_app() -> None:
+    assert _setting("T8030", "device_cross_cam_assistance_switch").default is True
+
+
+@pytest.mark.parametrize("code", bundled_codes())
+def test_sounding_the_alarm_is_no_setting(code: str) -> None:
+    assert [k for k in settings_of(code) if k.startswith("set_alarm_type")] == []
+
+
+@pytest.mark.parametrize("code", bundled_codes())
+def test_switching_notification_has_no_keyfob_or_alarm_delay_member(code: str) -> None:
+    setting = settings_of(code).get("switching_notification")
+    if setting is not None:
+        assert not {"4", "7"} & set(setting.flags)
+
+
 # ── malformed files ─────────────────────────────────────────────────────────
 
 
@@ -480,6 +509,19 @@ def test_name_and_variant_of_come_from_the_file(data_root: Path) -> None:
     loaded = settings_of("T0001")
     assert (loaded["mode__v1"].name, loaded["mode__v1"].variant_of) == ("App Title", "mode")
     assert (loaded["mode"].name, loaded["mode"].variant_of) == ("Mode", None)
+
+
+def test_advanced_comes_from_the_file_and_defaults_to_false(data_root: Path) -> None:
+    _write_model(data_root, {"mode": GOOD_ENTRY, "radio": {**GOOD_ENTRY, "advanced": True}})
+    loaded = settings_of("T0001")
+    assert (loaded["radio"].advanced, loaded["mode"].advanced) == (True, False)
+
+
+@pytest.mark.parametrize("value", ["yes", 1, None])
+def test_advanced_must_be_a_bool(data_root: Path, value: object) -> None:
+    _write_model(data_root, {"mode": {**GOOD_ENTRY, "advanced": value}})
+    with pytest.raises(ModelDataError, match=r"T0001\.json.*advanced"):
+        settings_of("T0001")
 
 
 @pytest.mark.parametrize("target", ["gone", "mode", "Bad-Key"])

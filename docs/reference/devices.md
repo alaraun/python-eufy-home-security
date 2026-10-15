@@ -188,7 +188,7 @@ Models without a profile below offer no capability (all *unknown*).
 | event_history | verified | live CMD_DATABASE 1306 query 10000 on history_record_info, T8030 HomeBase 3 fw 3.8.7.4 (a firmware update clears the history; query 10017 answers ERROR_NO_SUPPORT) |
 | settings_write | verified | live write+read-back of time_system, T8030 HomeBase 3 fw 3.8.7.4 (the write+read-back proves the value persists; its meaning is confirmed by the eufy app showing the 24-hour clock while the station reported 1253 = 1 (seen in the eufy app)) |
 
-Settings: rw 13 / ro 62, see [Settings of T8030 HomeBase 3 (S380)](#settings-of-t8030-homebase-3-s380)
+Settings: rw 12 / ro 62, see [Settings of T8030 HomeBase 3 (S380)](#settings-of-t8030-homebase-3-s380)
 
 | parameter | id |
 |---|---|
@@ -213,7 +213,7 @@ Settings: rw 13 / ro 62, see [Settings of T8030 HomeBase 3 (S380)](#settings-of-
 | battery | verified | live parameter dump (param 1101), T8160 eufyCam 3 fw 3.4.3.0 |
 | rssi | verified | live parameter dump (param 1142), T8160 eufyCam 3 fw 3.4.3.0 |
 
-Settings: rw 31 / ro 72, see [Settings of T8160 eufyCam 3 (S330)](#settings-of-t8160-eufycam-3-s330)
+Settings: rw 31 / ro 70, see [Settings of T8160 eufyCam 3 (S330)](#settings-of-t8160-eufycam-3-s330)
 
 Kind markers (a block without a known serial): 1400, 1401
 
@@ -238,7 +238,7 @@ Kind markers (a block without a known serial): 1400, 1401
 | battery | declared | T8161 handler battery_value reads param 1101 |
 | rssi | declared | T8161 handler device_wifi_signal_strength reads param 1142 |
 
-Settings: rw 29 / ro 65, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-eufycam-3c)
+Settings: rw 29 / ro 63, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-eufycam-3c)
 
 | parameter | id |
 |---|---|
@@ -261,7 +261,7 @@ Settings: rw 29 / ro 65, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-e
 | ptz_control | verified | live one-step pan/tilt (6030) and store/delete a slot (6032/6033), T8170 Battery SoloCam, standalone, fw 3.3.5.4 (at most 5 slots are stored; a store while full is receipted but does nothing) |
 | ptz_zoom | verified | live picture zoom 1-12 (6203) with its echo, measured in the stream, T8170 Battery SoloCam, standalone, fw 3.3.5.4; 4x and 8x also paired to a HomeBase 3 fw 3.8.7.4 (the library accepts 1-12; the camera caps near 14x; single view only; a go-to, the idle return or a reopened view resets it to 1x) |
 
-Settings: rw 40 / ro 107, see [Settings of T8170 Battery SoloCam (T8170)](#settings-of-t8170-battery-solocam-t8170)
+Settings: rw 40 / ro 105, see [Settings of T8170 Battery SoloCam (T8170)](#settings-of-t8170-battery-solocam-t8170)
 
 | parameter | id |
 |---|---|
@@ -274,7 +274,7 @@ Settings: rw 40 / ro 107, see [Settings of T8170 Battery SoloCam (T8170)](#setti
 | live_stream | declared | T8410 handler open_live_stream: the 1700/1000 open without extValue, and a bare 1004 stop (reached over the RSA session variant, CONN_INIT version 1; not verified on hardware) |
 | ptz_control | declared | T8410 handler ptz_action_control: 1700/6030 with cmd_type and rotate_type only (no zoom, no ivalue) (one pan/tilt step only: the handler has no preset or picture-zoom actions; reached over the RSA session variant, CONN_INIT version 1; not verified on hardware) |
 
-Settings: rw 43 / ro 86, see [Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)](#settings-of-t8410-indoor-cam-2k-pan--tilt-solo-indoorcam-p24)
+Settings: rw 42 / ro 85, see [Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)](#settings-of-t8410-indoor-cam-2k-pan--tilt-solo-indoorcam-p24)
 
 | parameter | id |
 |---|---|
@@ -462,7 +462,7 @@ rw 0 / ro 40
 
 ### Settings of T8001 Station
 
-rw 6 / ro 41
+rw 6 / ro 40
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -508,7 +508,6 @@ rw 6 / ro 41
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
-| `set_alarm_type` | string | - | - | no | - | - |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad |
 | `time_format_set` | string | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
@@ -516,7 +515,7 @@ rw 6 / ro 41
 
 ### Settings of T8002 HomeBase 1
 
-rw 6 / ro 41
+rw 6 / ro 40
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -562,7 +561,6 @@ rw 6 / ro 41
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
-| `set_alarm_type` | string | - | - | no | - | - |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad |
 | `time_format_set` | string | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
@@ -570,7 +568,7 @@ rw 6 / ro 41
 
 ### Settings of T8010 HomeBase 2
 
-rw 10 / ro 41
+rw 10 / ro 40
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -619,16 +617,15 @@ rw 10 / ro 41
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `setting_current_connection_type` | other | - | - | no | - | - |
-| `switching_notification` | flags | any of 0, 1, 2, 3, 7 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad, 7=Keyfob |
+| `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=EU, 1=US |
+| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
 ### Settings of T8020 Station S
 
-rw 6 / ro 33
+rw 5 / ro 33
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -667,14 +664,13 @@ rw 6 / ro 33
 | `mac_address` | string | - | - | no | - | - |
 | `notification_alarm_delay_value` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad |
 | `time_format_set` | other | - | - | yes | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
 ### Settings of T8023 Station 8023
 
-rw 7 / ro 35
+rw 6 / ro 35
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -716,7 +712,6 @@ rw 7 / ro 35
 | `mac_address` | string | - | - | no | - | - |
 | `notification_alarm_delay_value` | string | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad |
 | `time_format_set` | string | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
@@ -776,7 +771,7 @@ rw 7 / ro 39
 
 ### Settings of T8025 Station 8025
 
-rw 13 / ro 60
+rw 12 / ro 60
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -828,7 +823,7 @@ rw 13 / ro 60
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `firmware_sub_version` | string | - | - | no | - | - |
 | `get_device_old_p2p_did` | bool | - | - | no | - | - |
-| `hb_keypad_is_password_set` | bool | - | - | yes | switch | - |
+| `hb_keypad_is_password_set` | bool | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
 | `ip_address` | string | - | - | no | - | - |
 | `is_connect_webrtc` | bool | - | - | no | - | - |
@@ -846,13 +841,12 @@ rw 13 / ro 60
 | `query_event_list_cmd` | other | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `setting_current_connection_type` | other | - | - | no | - | - |
 | `setting_model_config` | string | - | - | no | - | - |
-| `switching_notification` | flags | any of 0, 1, 2, 3, 7 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad, 7=Keyfob |
+| `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=EU, 1=US |
+| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
 ### Settings of T8026 Station 8026
 
@@ -907,7 +901,7 @@ rw 7 / ro 37
 
 ### Settings of T8030 HomeBase 3 (S380)
 
-rw 13 / ro 62
+rw 12 / ro 62
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -960,7 +954,7 @@ rw 13 / ro 62
 | `firmware_sub_version` | string | - | - | no | - | - |
 | `get_device_old_p2p_did` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
-| `hb_keypad_is_password_set` | bool | - | - | yes | switch | - |
+| `hb_keypad_is_password_set` | bool | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | string | - | - | no | - | - |
 | `ip_address` | string | - | - | no | - | - |
 | `is_connect_webrtc` | other | - | - | no | - | - |
@@ -980,16 +974,15 @@ rw 13 / ro 62
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `query_event_list_cmd` | other | - | - | no | - | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `setting_current_connection_type` | other | - | - | no | - | - |
-| `switching_notification` | flags | any of 0, 1, 2, 3, 7 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad, 7=Keyfob |
+| `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad |
 | `time_format_set` | other | - | - | yes | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
-| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=EU, 1=US |
+| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
 ### Settings of T8110 Battery Solo Cam 8110
 
-rw 37 / ro 87
+rw 37 / ro 85
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1095,8 +1088,6 @@ rw 37 / ro 87
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `sound_detection_round_look_switch` | bool | - | - | yes | switch | - |
@@ -1120,7 +1111,7 @@ rw 37 / ro 87
 
 ### Settings of T8111 Camera
 
-rw 25 / ro 60
+rw 24 / ro 59
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1199,8 +1190,6 @@ rw 25 / ro 60
 | `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 6, 7 | - | no | - | 0=Not charging, 1=USB charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 6=External solar panel, 7=External and built-in solar charging |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
-| `set_alarm_type__v1` | enum | 0 | - | yes | select | 0=Sound only |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
 | `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
@@ -1212,7 +1201,7 @@ rw 25 / ro 60
 
 ### Settings of T8113 Camera 2C
 
-rw 27 / ro 69
+rw 26 / ro 68
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1295,8 +1284,6 @@ rw 27 / ro 69
 | `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 3 | - | no | - | 0=Sound alarm, 3=HomeBase alarm |
-| `set_alarm_type__v1` | enum | 0 | - | yes | select | 0=Sound only |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=1080, zoneWidth=1920 |
 | `set_privacy_zone__v1` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
@@ -1315,7 +1302,7 @@ rw 27 / ro 69
 
 ### Settings of T8114 Camera 2
 
-rw 26 / ro 62
+rw 25 / ro 61
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1395,8 +1382,6 @@ rw 26 / ro 62
 | `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
-| `set_alarm_type__v1` | enum | 0 | - | yes | select | 0=Sound only |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=1080, zoneWidth=1920 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 0, 1, 2 | - | yes | select | 0=Low, 1=Medium, 2=High |
@@ -1410,7 +1395,7 @@ rw 26 / ro 62
 
 ### Settings of T8115 Battery Solo Cam 8115
 
-rw 38 / ro 85
+rw 38 / ro 83
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1517,8 +1502,6 @@ rw 38 / ro 85
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
@@ -1540,7 +1523,7 @@ rw 38 / ro 85
 
 ### Settings of T8122 Battery Solo Cam Spotlight 1080
 
-rw 30 / ro 65
+rw 30 / ro 63
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1621,8 +1604,6 @@ rw 30 / ro 65
 | `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
 | `power_source_mode` | enum | default:0 | - | no | - | default:0=default:0 |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=1080, zoneWidth=1920 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 2, 1, 0 | - | yes | select | 0=High, 1=Medium, 2=Low |
@@ -1642,7 +1623,7 @@ rw 30 / ro 65
 
 ### Settings of T8123 Battery Solo Cam Spotlight 2K
 
-rw 32 / ro 64
+rw 32 / ro 62
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1724,8 +1705,6 @@ rw 32 / ro 64
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `record_resolution__v1` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=1296, zoneWidth=2304 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 2, 1, 0 | - | yes | select | 0=High, 1=Medium, 2=Low |
@@ -1745,7 +1724,7 @@ rw 32 / ro 64
 
 ### Settings of T8124 Battery Solo Cam Spotlight Solar 8124
 
-rw 30 / ro 67
+rw 30 / ro 65
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1828,8 +1807,6 @@ rw 30 / ro 67
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `record_resolution__v1` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=1296, zoneWidth=2304 |
 | `solar_intensity` | enum | 0, 1, 2, 3 | - | no | - | 0=None, 1=Weak, 2=Good, 3=Excellent |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
@@ -1849,7 +1826,7 @@ rw 30 / ro 67
 
 ### Settings of T8124R
 
-rw 32 / ro 67
+rw 32 / ro 65
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1933,8 +1910,6 @@ rw 32 / ro 67
 | `record_resolution__v1` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | range | 10..120 step 1 | d | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=1298, zoneWidth=2304 |
 | `solar_intensity` | enum | 0, 1, 2, 3 | - | no | - | 0=None, 1=Weak, 2=Good, 3=Excellent |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
@@ -1955,7 +1930,7 @@ rw 32 / ro 67
 
 ### Settings of T8130 Battery Solo Cam 8130
 
-rw 27 / ro 62
+rw 26 / ro 61
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2035,8 +2010,6 @@ rw 27 / ro 62
 | `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
 | `power_source_mode` | enum | default:0 | - | no | - | default:0=default:0 |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 2, 1, 0 | - | yes | select | 0=High, 1=Medium, 2=Low |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
@@ -2051,7 +2024,7 @@ rw 27 / ro 62
 
 ### Settings of T8131 Battery Solo Cam Pro
 
-rw 28 / ro 66
+rw 27 / ro 65
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2135,8 +2108,6 @@ rw 28 / ro 66
 | `record_resolution__v1` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | range | 10..120 step 1 | d | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 2, 1, 0 | - | yes | select | 0=High, 1=Medium, 2=Low |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
@@ -2152,7 +2123,7 @@ rw 28 / ro 66
 
 ### Settings of T8134 Battery Solo Cam 8134
 
-rw 31 / ro 79
+rw 30 / ro 78
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2249,8 +2220,6 @@ rw 31 / ro 79
 | `record_resolution__v1` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `solar_intensity` | enum | 0, 1, 2, 3 | - | no | - | 0=None, 1=Weak, 2=Good, 3=Excellent |
@@ -2269,7 +2238,7 @@ rw 31 / ro 79
 
 ### Settings of T8140 Camera 2 Pro
 
-rw 29 / ro 67
+rw 28 / ro 66
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2355,8 +2324,6 @@ rw 29 / ro 67
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
-| `set_alarm_type__v1` | enum | 0 | - | yes | select | 0=Sound only |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=1296, zoneWidth=2304 |
 | `set_privacy_zone__v1` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
@@ -2372,7 +2339,7 @@ rw 29 / ro 67
 
 ### Settings of T8142 Camera 2C Pro
 
-rw 30 / ro 66
+rw 29 / ro 65
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2455,8 +2422,6 @@ rw 30 / ro 66
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
-| `set_alarm_type__v1` | enum | 0 | - | yes | select | 0=Sound only |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=1296, zoneWidth=2304 |
 | `set_privacy_zone__v1` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
@@ -2475,7 +2440,7 @@ rw 30 / ro 66
 
 ### Settings of T8144
 
-rw 35 / ro 83
+rw 35 / ro 81
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2581,8 +2546,6 @@ rw 35 / ro 83
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 3 | - | no | - | 0=Sound only, 1=Light only, 3=HomeBase alarm |
-| `set_alarm_type__v1` | enum | 0, 1 | - | no | - | 0=Sound only, 1=Light only |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `solar_intensity` | other | - | - | no | - | - |
@@ -2600,7 +2563,7 @@ rw 35 / ro 83
 
 ### Settings of T8160 eufyCam 3 (S330)
 
-rw 31 / ro 72
+rw 31 / ro 70
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2692,8 +2655,6 @@ rw 31 / ro 72
 | `record_resolution` | enum | 4, 5, 2 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 2, 3 | - | no | - | 0=Sound only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `solar_intensity` | other | - | - | no | - | - |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
@@ -2710,7 +2671,7 @@ rw 31 / ro 72
 
 ### Settings of T8160C
 
-rw 32 / ro 73
+rw 32 / ro 71
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2804,8 +2765,6 @@ rw 32 / ro 73
 | `record_resolution` | enum | 4, 5, 2 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `solar_intensity` | other | - | - | no | - | - |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
@@ -2822,7 +2781,7 @@ rw 32 / ro 73
 
 ### Settings of T8161 eufyCam 3C
 
-rw 29 / ro 65
+rw 29 / ro 63
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2907,8 +2866,6 @@ rw 29 / ro 65
 | `record_resolution` | enum | 4, 5, 2 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 2, 3 | - | no | - | 0=Sound only, 2=Sound and light, 3=HomeBase alarm |
-| `set_alarm_type__v1` | enum | 0, 2 | - | no | - | 0=Sound only, 2=Sound and light |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 0, 1, 2 | - | yes | select | 0=Low, 1=Medium, 2=High |
@@ -2923,7 +2880,7 @@ rw 29 / ro 65
 
 ### Settings of T8162
 
-rw 39 / ro 90
+rw 39 / ro 88
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3039,8 +2996,6 @@ rw 39 / ro 90
 | `record_resolution__v1` | enum | 0, 4, 5, 2 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 3 | - | no | - | 0=Sound only, 1=Light only, 3=HomeBase alarm |
-| `set_alarm_type__v1` | enum | 0, 1 | - | no | - | 0=Sound only, 1=Light only |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `solar_intensity` | other | - | - | no | - | - |
@@ -3059,7 +3014,7 @@ rw 39 / ro 90
 
 ### Settings of T8170 Battery SoloCam (T8170)
 
-rw 40 / ro 107
+rw 40 / ro 105
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3188,8 +3143,6 @@ rw 40 / ro 107
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `solar_panel_connected_status` | bool | - | - | no | - | - |
@@ -3213,7 +3166,7 @@ rw 40 / ro 107
 
 ### Settings of T8171 Battery Solo Cam 8171
 
-rw 36 / ro 104
+rw 35 / ro 103
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3339,8 +3292,6 @@ rw 36 / ro 104
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `solar_panel_connected_status` | bool | - | - | no | - | - |
@@ -3360,7 +3311,7 @@ rw 36 / ro 104
 
 ### Settings of T8172 Battery Solo Cam 8172
 
-rw 50 / ro 119
+rw 50 / ro 117
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3505,8 +3456,6 @@ rw 50 / ro 119
 | `recording_number` | range | 10..120 step 1 | d | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=4, positionNum=2, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `smart_lock_night_vision_optimization` | bool | - | - | yes | switch | - |
@@ -3536,7 +3485,7 @@ rw 50 / ro 119
 
 ### Settings of T8173 Battery Solo Cam 8173
 
-rw 37 / ro 101
+rw 37 / ro 99
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3658,8 +3607,6 @@ rw 37 / ro 101
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound+light, 3=HomeBase |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `solar_intensity` | enum | 0, 1, 2, 3 | - | no | - | 0=None, 1=Weak, 2=Good, 3=Excellent |
@@ -3681,7 +3628,7 @@ rw 37 / ro 101
 
 ### Settings of T817L Battery Solo Cam 817L
 
-rw 51 / ro 98
+rw 51 / ro 96
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3810,8 +3757,6 @@ rw 51 / ro 98
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `sound_detection_round_look_switch` | bool | - | - | yes | switch | - |
@@ -3837,7 +3782,7 @@ rw 51 / ro 98
 
 ### Settings of T81A0 Walllight T81A0
 
-rw 15 / ro 85
+rw 15 / ro 83
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3923,8 +3868,6 @@ rw 15 / ro 85
 | `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
 | `power_source_mode` | other | - | - | no | - | - |
 | `record_resolution` | enum | 5, 2 | - | no | - | 2=Full HD(1080P), 5=2K HD |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound & light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
 | `solar_intensity` | other | - | - | no | - | - |
 | `solar_panel_connected_status` | bool | - | - | no | - | - |
@@ -4792,7 +4735,7 @@ rw 49 / ro 110
 
 ### Settings of T8215
 
-rw 54 / ro 126
+rw 53 / ro 125
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4956,8 +4899,6 @@ rw 54 / ro 126
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 2 | - | yes | select | 2=Sound and light |
-| `set_alarm_type__v1` | enum | 2, 3 | - | no | - | 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=4, positionNum=4, sideNum=6, zoneHeight=1, zoneWidth=1 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `smart_lock_enable_voip_switch` | bool | - | - | yes | switch | - |
@@ -5474,7 +5415,7 @@ rw 31 / ro 87
 
 ### Settings of T8400 Indoor Camera
 
-rw 39 / ro 80
+rw 38 / ro 79
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5581,8 +5522,6 @@ rw 39 / ro 80
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `setting_model_config` | string | - | - | no | - | - |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `sound_detection_status` | bool | - | - | yes | switch | - |
@@ -5600,7 +5539,7 @@ rw 39 / ro 80
 
 ### Settings of T8401 Indoor Camera 1080
 
-rw 39 / ro 80
+rw 38 / ro 79
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5708,8 +5647,6 @@ rw 39 / ro 80
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `sound_detection_status` | bool | - | - | yes | switch | - |
 | `sound_detection_type` | enum | 0, 1 | - | yes | select | 0=All sound, 1=Crying |
@@ -5726,7 +5663,7 @@ rw 39 / ro 80
 
 ### Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)
 
-rw 43 / ro 86
+rw 42 / ro 85
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5843,8 +5780,6 @@ rw 43 / ro 86
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `setting_model_config` | string | - | - | no | - | - |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `sound_detection_status` | bool | - | - | yes | switch | - |
@@ -5862,7 +5797,7 @@ rw 43 / ro 86
 
 ### Settings of T8410C
 
-rw 46 / ro 86
+rw 45 / ro 85
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5981,8 +5916,6 @@ rw 46 / ro 86
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `setting_model_config` | string | - | - | no | - | - |
 | `sound_detection_round_look_switch` | bool | - | - | yes | switch | - |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
@@ -6001,7 +5934,7 @@ rw 46 / ro 86
 
 ### Settings of T8411 Indoor Camera PT 1080
 
-rw 39 / ro 79
+rw 38 / ro 78
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6108,8 +6041,6 @@ rw 39 / ro 79
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `sound_detection_status` | bool | - | - | yes | switch | - |
 | `sound_detection_type` | enum | 0, 1 | - | yes | select | 0=All sound, 1=Crying |
@@ -6126,7 +6057,7 @@ rw 39 / ro 79
 
 ### Settings of T8414 Indoor Camera Costdown T8414
 
-rw 38 / ro 74
+rw 37 / ro 73
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6227,8 +6158,6 @@ rw 38 / ro 74
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `sound_detection_round_look_switch` | bool | - | - | yes | switch | - |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `sound_detection_status` | bool | - | - | yes | switch | - |
@@ -6245,7 +6174,7 @@ rw 38 / ro 74
 
 ### Settings of T8416 Indoor Camera 8416
 
-rw 48 / ro 93
+rw 47 / ro 92
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6369,8 +6298,6 @@ rw 48 / ro 93
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `sound_detection_round_look_switch` | bool | - | - | yes | switch | - |
@@ -6393,7 +6320,7 @@ rw 48 / ro 93
 
 ### Settings of T8417 Indoor Camera 8417
 
-rw 47 / ro 88
+rw 47 / ro 86
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6510,8 +6437,6 @@ rw 47 / ro 88
 | `record_resolution__v1` | enum | 4, 5, 2, 6 | - | no | - | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 3, 2, 1 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `sound_detection_round_look_switch` | bool | - | - | yes | switch | - |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
@@ -6535,7 +6460,7 @@ rw 47 / ro 88
 
 ### Settings of T8419 Indoor Camera T8419
 
-rw 39 / ro 79
+rw 38 / ro 78
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6638,8 +6563,6 @@ rw 39 / ro 79
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `sound_detection_status` | bool | - | - | yes | switch | - |
@@ -6660,7 +6583,7 @@ rw 39 / ro 79
 
 ### Settings of T8420 Floodlight
 
-rw 20 / ro 55
+rw 19 / ro 55
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6723,7 +6646,6 @@ rw 20 / ro 55
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `nightvision_type` | bool | - | - | yes | switch | - |
 | `notification_motion_alert` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8 | - | no | - | 0=Default, 1=Silent, 2=Bell, 3=Change, 4=Ding, 5=Notify, 6=Security, 7=Success, 8=Type |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
 | `spotlight_brightness_level` | range | 22..100 step 1 | - | yes | slider | - |
@@ -6742,7 +6664,7 @@ rw 20 / ro 55
 
 ### Settings of T8420X
 
-rw 25 / ro 49
+rw 24 / ro 49
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6806,7 +6728,6 @@ rw 25 / ro 49
 | `nightvision_type` | bool | - | - | yes | switch | - |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
 | `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
@@ -6823,7 +6744,7 @@ rw 25 / ro 49
 
 ### Settings of T8422 Floodlight E 2K
 
-rw 26 / ro 53
+rw 25 / ro 52
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6890,8 +6811,6 @@ rw 26 / ro 53
 | `nightvision_type` | bool | - | - | yes | switch | - |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
 | `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
@@ -6909,7 +6828,7 @@ rw 26 / ro 53
 
 ### Settings of T8423 Floodlight 2
 
-rw 30 / ro 65
+rw 30 / ro 64
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6994,7 +6913,6 @@ rw 30 / ro 65
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
 | `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
@@ -7011,7 +6929,7 @@ rw 30 / ro 65
 
 ### Settings of T8424 Floodlight Cam 2K
 
-rw 27 / ro 52
+rw 26 / ro 51
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7077,8 +6995,6 @@ rw 27 / ro 52
 | `nightvision_type` | bool | - | - | yes | switch | - |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
 | `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
@@ -7097,7 +7013,7 @@ rw 27 / ro 52
 
 ### Settings of T8425 Floodlight 8425
 
-rw 42 / ro 82
+rw 42 / ro 80
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7206,8 +7122,6 @@ rw 42 / ro 82
 | `record_resolution` | enum | 1, 2, 6 | - | no | - | 1=3K HD, 2=Full HD(1080P), 6=HD (720P) |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 3, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
@@ -7228,7 +7142,7 @@ rw 42 / ro 82
 
 ### Settings of T8426 Floodlight 8426
 
-rw 40 / ro 79
+rw 40 / ro 77
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7333,8 +7247,6 @@ rw 40 / ro 79
 | `record_resolution` | enum | 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 5=2K HD, 6=HD (720P) |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 3, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
@@ -7354,7 +7266,7 @@ rw 40 / ro 79
 
 ### Settings of T8440 Indoor Outdoor Camera 1080P No Light
 
-rw 37 / ro 71
+rw 36 / ro 70
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7451,8 +7363,6 @@ rw 37 / ro 71
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `sound_detection_status` | bool | - | - | yes | switch | - |
 | `sound_detection_type` | enum | 0, 1 | - | yes | select | 0=All sound, 1=Crying |
@@ -7532,7 +7442,7 @@ rw 12 / ro 44
 
 ### Settings of T8442 Indoor Outdoor Camera 1080P
 
-rw 41 / ro 78
+rw 40 / ro 77
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7634,8 +7544,6 @@ rw 41 / ro 78
 | `record_resolution` | enum | 2, 11 | - | yes | select | 11=Storage Saver(1080P), 2=Full HD(1080P) |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `sound_detection_status` | bool | - | - | yes | switch | - |
 | `sound_detection_type` | enum | 0, 1 | - | yes | select | 0=All sound, 1=Crying |
@@ -7658,7 +7566,7 @@ rw 41 / ro 78
 
 ### Settings of T8452
 
-rw 20 / ro 64
+rw 19 / ro 64
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7735,7 +7643,6 @@ rw 20 / ro 64
 | `power_charge_history` | string | - | - | no | - | - |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
 | `solar_intensity` | other | - | - | no | - | - |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 2, 1, 0 | - | yes | select | 0=High, 1=Medium, 2=Low |
@@ -7749,7 +7656,7 @@ rw 20 / ro 64
 
 ### Settings of T8453
 
-rw 20 / ro 65
+rw 19 / ro 65
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7827,7 +7734,6 @@ rw 20 / ro 65
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
 | `solar_intensity` | other | - | - | no | - | - |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 2, 1, 0 | - | yes | select | 0=High, 1=Medium, 2=Low |
@@ -7841,7 +7747,7 @@ rw 20 / ro 65
 
 ### Settings of T84A1 Walllight T84A1
 
-rw 13 / ro 74
+rw 13 / ro 73
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7917,7 +7823,6 @@ rw 13 / ro 74
 | `notification_person_alert` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8 | - | no | - | 0=Default, 1=Silent, 2=Bell, 3=Change, 4=Ding, 5=Notify, 6=Security, 7=Success, 8=Type |
 | `notification_type` | enum | 0, 2 | - | no | - | 0=Most Efficient, 2=Include Thumbnail |
 | `record_resolution` | enum | 5, 2 | - | no | - | 2=Full HD(1080P), 5=2K HD |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound & light |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 2, 1, 0 | - | no | - | 0=High, 1=Medium, 2=Low |
@@ -8131,7 +8036,7 @@ rw 20 / ro 74
 
 ### Settings of T8532
 
-rw 33 / ro 131
+rw 32 / ro 130
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8262,8 +8167,6 @@ rw 33 / ro 131
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | range | 10..120 step 1 | d | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `smart_lock_auto_lock_type` | other | - | - | no | - | - |
@@ -8302,7 +8205,7 @@ rw 33 / ro 131
 
 ### Settings of T85M0
 
-rw 31 / ro 130
+rw 30 / ro 129
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8432,8 +8335,6 @@ rw 31 / ro 130
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | range | 10..120 step 1 | d | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `setting_model_config` | string | - | - | no | - | - |
 | `smart_lock_auto_lock_type` | other | - | - | no | - | - |
 | `smart_lock_calibrate_status` | range | 0..2 step 1 | - | no | - | - |
@@ -8470,7 +8371,7 @@ rw 31 / ro 130
 
 ### Settings of T85M1
 
-rw 32 / ro 136
+rw 31 / ro 135
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8605,8 +8506,6 @@ rw 32 / ro 136
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | range | 10..120 step 1 | d | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `smart_lock_auto_lock_type` | other | - | - | no | - | - |
@@ -8787,7 +8686,7 @@ rw 24 / ro 111
 
 ### Settings of T8600 Camera 8600
 
-rw 36 / ro 74
+rw 36 / ro 72
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8882,8 +8781,6 @@ rw 36 / ro 74
 | `recording_number` | other | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Camera Sound Only, 1=Light only, 2=Sound & Light |
-| `set_alarm_type__v1` | enum | 0, 2, 3 | - | no | - | 0=Camera Sound only, 2=Camera sound & spotlight, 3=HomeBase Sound |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=0, zoneWidth=0 |
 | `solar_intensity` | other | - | - | no | - | - |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
@@ -8904,7 +8801,7 @@ rw 36 / ro 74
 
 ### Settings of T86P2 Cam 4G PT
 
-rw 30 / ro 63
+rw 30 / ro 61
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8982,8 +8879,6 @@ rw 30 / ro 63
 | `power_source_mode` | enum | default:0 | - | no | - | default:0=default:0 |
 | `record_resolution` | enum | 4, 2 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K |
 | `recording_number` | other | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
-| `set_alarm_type__v1` | enum | 0, 1, 2, 3 | - | no | - | 0=Camera Sound Only, 1=Light Only, 2=Sound & Light, 3=HomeBase Sound |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
 | `setting_current_connection_type` | other | - | - | no | - | - |
 | `sim_card_info` | string | - | - | no | - | - |
@@ -9004,7 +8899,7 @@ rw 30 / ro 63
 
 ### Settings of T8790 Box SPB
 
-rw 4 / ro 59
+rw 3 / ro 58
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9057,8 +8952,6 @@ rw 4 / ro 59
 | `power_manager_mode` | enum | 0, 1, 2, 3 | - | no | - | 0=Optimal battery life, 1=Optimal surveillance, 2=Balanced surveillance, 3=Custom recording |
 | `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
 | `record_resolution` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | - | no | - | 0=Auto, 1=3K HD, 10=High, 11=Storage Saver(1080P), 2=Full HD(1080P), 3=HD, 4=4K Ultra, 5=2K HD, 6=720P, 7=360P, 8=Low, 9=Middle |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `smart_lock_onoff_status` | string | - | - | no | - | - |
 | `speaker_on_off` | bool | - | - | no | - | - |
 | `speaker_volume` | enum | 2, 1, 0 | - | no | - | 0=High, 1=Medium, 2=Low |
@@ -9123,7 +9016,7 @@ rw 2 / ro 9
 
 ### Settings of T8920 Water Sensor
 
-rw 1 / ro 12
+rw 1 / ro 11
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9139,7 +9032,6 @@ rw 1 / ro 12
 | `sensor_not_disturb_switch` | bool | - | - | yes | switch | - |
 | `sensor_temperature_low_status` | bool | - | - | no | - | - |
 | `sensor_water_status` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 
 ### Settings of T8960 Keypad
 
@@ -9162,7 +9054,7 @@ rw 1 / ro 11
 
 ### Settings of T8970 Siren Sensor
 
-rw 1 / ro 10
+rw 1 / ro 9
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9176,11 +9068,10 @@ rw 1 / ro 10
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
-| `set_alarm_type` | string | - | - | no | - | - |
 
 ### Settings of T8B00 Battery Solo Cam 8B00
 
-rw 29 / ro 68
+rw 28 / ro 67
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9266,8 +9157,6 @@ rw 29 / ro 68
 | `record_resolution__v1` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 2, 1, 0 | - | yes | select | 0=High, 1=Medium, 2=Low |
@@ -9284,7 +9173,7 @@ rw 29 / ro 68
 
 ### Settings of T8E00 Camera T8E00
 
-rw 34 / ro 72
+rw 34 / ro 71
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9374,7 +9263,6 @@ rw 34 / ro 72
 | `ptz_turn_speed` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=11, 1=2, 2=3, 3=4, 4=5 |
 | `record_resolution` | string | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=4, positionNum=2, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
@@ -9510,11 +9398,11 @@ rw 17 / ro 93
 | `system_switching_notification` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Emerg, 1=Update, 2=Admin, 3=Device, 4=User |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=EU, 1=US |
+| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
 ### Settings of T8P00 Camera T8P00
 
-rw 29 / ro 62
+rw 29 / ro 61
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9591,7 +9479,6 @@ rw 29 / ro 62
 | `record_resolution` | string | - | - | no | - | - |
 | `record_sub_device_resolution` | string | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=4, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 0..100 step 1 | - | yes | slider | - |
@@ -9612,7 +9499,7 @@ rw 29 / ro 62
 
 ### Settings of T8P10 Camera T8P10
 
-rw 29 / ro 65
+rw 29 / ro 64
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9691,7 +9578,6 @@ rw 29 / ro 65
 | `record_resolution` | string | - | - | no | - | - |
 | `record_sub_device_resolution` | string | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=4, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | range | 0..100 step 1 | - | yes | slider | - |
@@ -9713,7 +9599,7 @@ rw 29 / ro 65
 
 ### Settings of T8W11 Indoor Camera 8W11
 
-rw 31 / ro 58
+rw 30 / ro 57
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9790,8 +9676,6 @@ rw 31 / ro 58
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `sound_detection_status` | bool | - | - | yes | switch | - |
 | `sound_detection_type` | enum | 2 | - | yes | select | 2=Loud Sound |
@@ -9809,7 +9693,7 @@ rw 31 / ro 58
 
 ### Settings of T8W11C
 
-rw 34 / ro 85
+rw 33 / ro 84
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9915,8 +9799,6 @@ rw 34 / ro 85
 | `ptz_turn_speed` | range | 1..5 step 1 | - | no | - | - |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `recording_number` | other | - | - | no | - | - |
-| `set_alarm_type` | enum | 0 | - | yes | select | 0=Sound only |
-| `set_alarm_type__v1` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 | `set_privacy_zone` | enum | sideNum, Normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | Normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
 | `solar_intensity` | other | - | - | no | - | - |
 | `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
@@ -9935,7 +9817,7 @@ rw 34 / ro 85
 
 ### Settings of T9000 Station T9000
 
-rw 15 / ro 90
+rw 14 / ro 90
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10009,7 +9891,7 @@ rw 15 / ro 90
 | `firmware_sub_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_aic_feature_available` | bool | - | - | no | - | - |
-| `hb_keypad_is_password_set` | bool | - | - | yes | switch | - |
+| `hb_keypad_is_password_set` | bool | - | - | no | - | - |
 | `hb_keypad_switch_mode_with_access_code_switch` | bool | - | - | yes | switch | - |
 | `hb_set_alarm_params` | string | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | string | - | - | no | - | - |
@@ -10033,17 +9915,16 @@ rw 15 / ro 90
 | `query_event_list_cmd` | other | - | - | no | - | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `setting_current_connection_type` | other | - | - | no | - | - |
 | `setting_model_config` | string | - | - | no | - | - |
 | `sim_card_apns_info` | string | - | - | no | - | - |
 | `sim_card_info` | string | - | - | no | - | - |
 | `subnet_mask` | string | - | - | no | - | - |
 | `support_multiple_live_stream` | bool | - | - | no | - | - |
-| `switching_notification` | flags | any of 0, 1, 2, 3, 5, 6, 7 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad, 5=Power outage, 6=Enable 4G, 7=Keyfob |
+| `switching_notification` | flags | any of 0, 1, 2, 3, 5, 6 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad, 5=Power outage, 6=Enable 4G |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=EU, 1=US |
+| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
 ### Settings of T90C0 Smoke Sensor T90C0
 
@@ -10086,7 +9967,7 @@ rw 2 / ro 19
 
 ### Settings of T90F0 Water Sensor T90F0
 
-rw 2 / ro 19
+rw 2 / ro 18
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10110,11 +9991,10 @@ rw 2 / ro 19
 | `sensor_not_disturb_switch` | bool | - | - | yes | switch | - |
 | `sensor_temperature_low_status` | bool | - | - | no | - | - |
 | `sensor_water_status` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 3 | - | no | - | 0=Sound only, 3=HomeBase alarm |
 
 ### Settings of T90G0 Glass Break Sensor
 
-rw 1 / ro 20
+rw 1 / ro 19
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10138,7 +10018,6 @@ rw 1 / ro 20
 | `sensor_grass_last_break_time` | string | - | - | no | - | - |
 | `sensor_grass_testing_break_event` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 
 ### Settings of T90K0 Keyfor Sensor T90K0
 
@@ -10215,7 +10094,7 @@ rw 2 / ro 15
 
 ### Settings of T90R0 Siren Sensor T90R0
 
-rw 2 / ro 16
+rw 2 / ro 15
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10236,11 +10115,10 @@ rw 2 / ro 16
 | `sensor_alarm_timeout` | enum | 0, 1, 2, 3 | - | yes | select | 0=1 min, 1=5 min, 2=10 min, 3=15 min |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 | `sensor_siren_ring_status` | bool | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 
 ### Settings of T90R1 Outdoor Siren Sensor
 
-rw 0 / ro 16
+rw 0 / ro 15
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10259,11 +10137,10 @@ rw 0 / ro 16
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 | `sensor_siren_ring_status` | bool | - | - | no | - | - |
 | `sensor_siren_ring_time` | other | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 
 ### Settings of T90S0 Smoke Sensor T90S0
 
-rw 1 / ro 17
+rw 1 / ro 16
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10284,4 +10161,3 @@ rw 1 / ro 17
 | `sensor_alarm_timeout` | enum | 0, 1, 2, 3 | - | yes | select | 0=1 min, 1=5 min, 2=10 min, 3=15 min |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 | `sensor_smoke_status` | string | - | - | no | - | - |
-| `set_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |

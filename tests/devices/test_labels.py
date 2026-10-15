@@ -7,6 +7,7 @@ import pytest
 from eufy_home_security.devices.labels import (
     SETTING_NAMES,
     choice_label,
+    sentence_case,
     setting_name,
 )
 
@@ -65,3 +66,34 @@ def test_setting_name(identifier: str, name: str) -> None:
 
 def test_curated_names_are_short_titles() -> None:
     assert all(0 < len(n) <= 32 and n[0].isupper() for n in SETTING_NAMES.values())
+
+
+@pytest.mark.parametrize(
+    ("title", "name"),
+    [
+        ("Enable Floodlights", "Enable floodlights"),
+        ("Recording Quality", "Recording quality"),
+        ("Night Vision", "Night vision"),
+        ("Status LED", "Status LED"),
+        ("AI tracking", "AI tracking"),
+        ("Sunset to Sunrise", "Sunset to sunrise"),
+        ("Continuous Tracking Time", "Continuous tracking time"),
+        ("Performance (Beta)", "Performance (beta)"),
+        ("Cross-Camera Tracking", "Cross-camera tracking"),
+        ("HomeBase Alarm Volume", "HomeBase alarm volume"),
+        ("Connect To Wi-Fi", "Connect to Wi-Fi"),
+        ("Works With Alexa", "Works with Alexa"),
+        ("Record 2K Video On NAS", "Record 2K video on NAS"),
+        ("Zone A", "Zone A"),
+        ("Every Monday", "Every Monday"),
+        ("Anti-Flicker 50 Hz", "Anti-flicker 50 Hz"),
+    ],
+)
+def test_sentence_case(title: str, name: str) -> None:
+    assert sentence_case(title) == name
+
+
+def test_names_are_sentence_case() -> None:
+    curated = list(SETTING_NAMES.values())
+    mechanical = [setting_name(i) for i in ("video_quality_hdr_switch", "hb_connect_nas_status")]
+    assert [n for n in curated + mechanical if sentence_case(n) != n] == []

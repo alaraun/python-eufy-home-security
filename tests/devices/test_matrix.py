@@ -97,7 +97,7 @@ def test_every_bundled_model_has_a_section_with_the_files_counts() -> None:
 def test_a_profile_links_its_models_settings_section() -> None:
     text = render_support_matrix()
     profile = text.split("\n## T8160 ", 1)[1].split("\n## ", 1)[0]
-    assert "Settings: rw 31 / ro 72, see [Settings of T8160 " in profile
+    assert "Settings: rw 31 / ro 70, see [Settings of T8160 " in profile
     assert "(#settings-of-t8160-eufycam-3-s330)" in profile
 
 

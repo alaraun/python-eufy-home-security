@@ -981,9 +981,9 @@ per-mode settings; a paired camera or sensor adds 15 per-mode delays and actions
 
 | model | settings | writable | read-only |
 |---|---|---|---|
-| T8030 | 75 | 13 | 62 |
-| T8160 | 103 | 31 | 72 |
-| T8170 | 147 | 40 | 107 |
+| T8030 | 74 | 12 | 62 |
+| T8160 | 101 | 31 | 70 |
+| T8170 | 145 | 40 | 105 |
 | T8910 | 11 | 2 | 9 |
 
 Every model's keys, values, units and labels are listed in
@@ -1002,7 +1002,8 @@ For the integration this means:
   `eufy_home_security.devices`.
 
 `setting.name` is the eufy app's own title where the app has one (`Clip length`,
-`Intervals between triggers`, `Working Mode` on a T8160), else a title made from the key.
+`Intervals between triggers`, `Working mode` on a T8160), else a title made from the key;
+both in sentence case, as HA names entities.
 `setting.unit` is the TD's unit, or the unit the app's control shows (seconds for
 `video_clip_length` and `trigger_interval_time` on the custom-recording page); use it as
 the entity's unit of measurement. `setting.variant_of` is the key of the setting the app
@@ -1011,7 +1012,11 @@ uses in this one's place on the same model (`record_resolution__v1` →
 a variant disabled by default instead of matching key suffixes. A variant identical to its
 primary in codec, domain, labels and control is not in the file at all
 (`detection_sensitivity_test_mode`): an entity registered under such a key has no
-setting; remove it.
+setting; remove it. `setting.advanced` marks a setting the app puts behind a warning
+(`working_mode_value`: switching to Standard reduces the HomeBase's Wi-Fi range); register
+it disabled by default and show `setting.note`, the warning, where the user enables it.
+A readable setting that is not writable and has no control (`hb_keypad_is_password_set`,
+a status the app only reads) is a sensor, not a switch.
 
 #### One entity per writable setting: `setting.control`
 

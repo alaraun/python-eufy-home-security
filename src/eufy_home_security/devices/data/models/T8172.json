@@ -322,7 +322,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Audio Recording",
+   "name": "Audio recording",
    "page": "SettingsHome",
    "read": {
     "map": {
@@ -582,7 +582,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "Continuous Recording",
+   "name": "Continuous recording",
    "read": {
     "map": {
      "": false,
@@ -1114,7 +1114,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Quick Focus Tap",
+   "name": "Quick focus tap",
    "read": null,
    "write": {
     "storeToLocal": true,
@@ -1128,7 +1128,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Swipe to Control",
+   "name": "Swipe to control",
    "read": null,
    "write": {
     "storeToLocal": true,
@@ -1171,7 +1171,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "name": "IP Address",
+   "name": "IP address",
    "read": null
   },
   "is_connect_webrtc": {
@@ -1387,7 +1387,7 @@
     "5": "2K HD",
     "6": "HD (720P)"
    },
-   "name": "Streaming Quality",
+   "name": "Streaming quality",
    "read": {
     "map": {},
     "param": 2730,
@@ -1451,7 +1451,7 @@
     "5": "2K HD",
     "6": "HD (720P)"
    },
-   "name": "Streaming Quality",
+   "name": "Streaming quality",
    "note": "no handler write path",
    "read": null,
    "values": [
@@ -1499,7 +1499,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "name": "MAC Address",
+   "name": "MAC address",
    "read": null
   },
   "microphone_on_off": {
@@ -1537,7 +1537,7 @@
   "motion_activated_light_setting": {
    "access": "ro",
    "kind": "string",
-   "name": "Motion-Activated Light",
+   "name": "Motion-activated light",
    "note": "handler ignores the value",
    "read": null
   },
@@ -1546,7 +1546,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Motion Detection",
+   "name": "Motion detection",
    "read": {
     "map": {
      "": false,
@@ -1734,7 +1734,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "Image Enhancement",
+   "name": "Image enhancement",
    "read": {
     "map": {
      "": false,
@@ -1812,7 +1812,7 @@
     "10": "Infrared",
     "7": "Spotlights"
    },
-   "name": "Night Vision",
+   "name": "Night vision",
    "read": {
     "map": {
      "": 7,
@@ -1864,7 +1864,7 @@
     "102": "Infrared",
     "103": "Spotlights"
    },
-   "name": "Night Vision",
+   "name": "Night vision",
    "read": {
     "map": {
      "": 100,
@@ -1933,7 +1933,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "All Other Motion",
+   "name": "All other motion",
    "read": {
     "map": {
      "": false,
@@ -2233,7 +2233,7 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
-   "name": "Working Mode",
+   "name": "Working mode",
    "page": "MotionDetection",
    "read": {
     "map": {
@@ -2282,7 +2282,7 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
-   "name": "Working Mode",
+   "name": "Working mode",
    "read": {
     "map": {
      "": 1,
@@ -2395,7 +2395,7 @@
     "5": "2K HD",
     "6": "HD (720P)"
    },
-   "name": "Recording Quality",
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 2,
@@ -2462,7 +2462,7 @@
     "5": "2K HD",
     "6": "720P"
    },
-   "name": "Recording Quality",
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 2,
@@ -2543,43 +2543,6 @@
    "default": "{\"jsTdList\":[\"activityzone_config\",\"set_privacy_zone\",\"set_ignore_zone\",\"porch_set_ignore_zone\",\"set_ignore_object\",\"porch_activityzone_config\",\"aic_activityzone_config\"],\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"}},\"extraJsData\":{\"parent\":{\"property\":[\"firmware_main_version\"]}}}",
    "kind": "string",
    "read": null
-  },
-  "set_alarm_type": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "1": "Light only",
-    "2": "Sound and light"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    1,
-    2
-   ]
-  },
-  "set_alarm_type__v1": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "1": "Light only",
-    "2": "Sound and light",
-    "3": "HomeBase alarm"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    1,
-    2,
-    3
-   ],
-   "variant_of": "set_alarm_type"
   },
   "set_privacy_zone": {
    "access": "ro",

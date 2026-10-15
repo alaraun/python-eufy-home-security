@@ -263,7 +263,7 @@ def test_v1_reference_rows_encode_identically() -> None:
         for r in REFERENCE["rows"]
         if (r["product_code"], r["identifier"]) not in gen_models.RELEASE_ACCEPTED
     ]
-    assert len(rows) == 136
+    assert len(rows) == 133  # three rows write a status the app only reads
     for row in rows:
         alone = row["context"] == codec.STANDALONE.name
         context = "standalone" if alone else None

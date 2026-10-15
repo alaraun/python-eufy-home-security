@@ -1023,58 +1023,6 @@
     }
    }
   },
-  "set_alarm_type": {
-   "access": "rw",
-   "contexts": [
-    {
-     "entry": {
-      "write": {
-       "cmd": 1350,
-       "params": {
-        "channel": "$channel",
-        "type": 10,
-        "time_out": 0,
-        "user_name": ""
-       },
-       "subCmd": 1202
-      }
-     },
-     "names": [
-      "HB1",
-      "HB2",
-      "HB3",
-      "HB4",
-      "M8020",
-      "M8021",
-      "M8022",
-      "M8023",
-      "M8024",
-      "M8025",
-      "NVR",
-      "T7000",
-      "T9000"
-     ]
-    }
-   ],
-   "control": "select",
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only"
-   },
-   "read": null,
-   "values": [
-    0
-   ],
-   "write": {
-    "cmd": 1201,
-    "params": {
-     "channel": "$channel",
-     "type": 10,
-     "time_out": 0,
-     "user_name": ""
-    }
-   }
-  },
   "speaker_on_off": {
    "access": "rw",
    "control": "switch",

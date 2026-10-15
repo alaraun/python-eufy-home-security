@@ -23,7 +23,7 @@ All inputs are private and stay out of the repository:
 | thing-model cache: `<cache>/<PN>/td.json` and `<PN>Handle.mix.js` | `.work/cache/things_all` | `scripts/thing_models.py fetch` (below) |
 | app labels | `.work/tools/data/app_choice_labels.json` (`--labels`) | the app's choice titles, extracted from the app build named by `--app-version` |
 | app settings layout | `.work/tools/data/settings_trees.json` (`--trees`) | the app's settings pages, groups and order, from the same build |
-| app setting titles | `.work/tools/data/app_setting_titles.json` (`--titles`) | the app's setting titles (per identifier, per model where the app branches), control units and legacy identifier pairs, from the same build |
+| app setting titles | `.work/tools/data/app_setting_titles.json` (`--titles`) | the app's setting titles (per identifier, per model where the app branches), control units and legacy identifier pairs, plus app behaviour read by hand: defaults the app shows, read-only statuses, option titles, settings behind a warning, held flags members and excluded actions; from the same build |
 
 Node is needed for generating and for `--check`, and nowhere else: the handler runs in
 a `vm` sandbox (`scripts/gen_models_driver.js`).

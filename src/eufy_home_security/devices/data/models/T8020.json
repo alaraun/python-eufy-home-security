@@ -266,26 +266,6 @@
    "kind": "bool",
    "read": null
   },
-  "set_alarm_type": {
-   "access": "rw",
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only"
-   },
-   "read": null,
-   "values": [
-    0
-   ],
-   "write": {
-    "cmd": 1350,
-    "subCmd": 1201,
-    "params": {
-     "time_out": 0
-    }
-   }
-  },
   "switching_notification": {
    "access": "rw",
    "control": "toggles",

@@ -174,7 +174,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Audio Recording",
+   "name": "Audio recording",
    "page": "SettingsHome",
    "read": {
     "map": {
@@ -480,7 +480,7 @@
    "kind": "range",
    "max": 26,
    "min": 0,
-   "name": "Ringtone Volume",
+   "name": "Ringtone volume",
    "page": "RingtoneSettings",
    "read": {
     "map": null,
@@ -1048,7 +1048,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "name": "IP Address",
+   "name": "IP address",
    "read": null
   },
   "is_connect_webrtc": {
@@ -1221,7 +1221,7 @@
     "8": "Low",
     "9": "Medium"
    },
-   "name": "Streaming Quality",
+   "name": "Streaming quality",
    "note": "round trip does not return the written value",
    "read": null,
    "values": [
@@ -1317,7 +1317,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "name": "MAC Address",
+   "name": "MAC address",
    "read": null
   },
   "microphone_on_off": {
@@ -1410,7 +1410,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Motion Detection",
+   "name": "Motion detection",
    "read": {
     "map": {
      "": false,
@@ -1609,7 +1609,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "All Other Motion",
+   "name": "All other motion",
    "read": {
     "map": {
      "": false,
@@ -1710,7 +1710,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "name": "Motion Detect",
+   "name": "Motion detect",
    "note": "handler rejects the probed values",
    "page": "SettingsHome",
    "read": null
@@ -1749,7 +1749,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "name": "Doorbell Ring",
+   "name": "Doorbell ring",
    "note": "handler rejects the probed values",
    "page": "SettingsHome",
    "read": null
@@ -1854,7 +1854,7 @@
     "2": "Optimal surveillance",
     "3": "Custom recording"
    },
-   "name": "Working Mode",
+   "name": "Working mode",
    "page": "MotionDetection",
    "read": {
     "map": {
@@ -1950,7 +1950,7 @@
     "2": "Full HD(1080P)",
     "5": "2K HD"
    },
-   "name": "Recording Quality",
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 2
@@ -1999,76 +1999,6 @@
    "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"read\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"service\":\"8c850001-0302-41c5-b46e-cf057c562025\", \"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"syncHeartBeat\":true}}",
    "kind": "string",
    "read": null
-  },
-  "set_alarm_type": {
-   "access": "rw",
-   "contexts": [
-    {
-     "entry": {
-      "write": {
-       "cmd": 1350,
-       "params": {
-        "channel": "$channel",
-        "type": 10,
-        "time_out": 0,
-        "user_name": ""
-       },
-       "subCmd": 1202
-      }
-     },
-     "names": [
-      "HB1",
-      "HB2",
-      "HB3",
-      "HB4",
-      "M8020",
-      "M8021",
-      "M8022",
-      "M8023",
-      "M8024",
-      "M8025",
-      "NVR",
-      "T7000",
-      "T9000"
-     ]
-    }
-   ],
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only"
-   },
-   "read": null,
-   "values": [
-    0
-   ],
-   "write": {
-    "cmd": 1350,
-    "params": {
-     "channel": "$channel",
-     "type": 10,
-     "time_out": 0,
-     "user_name": ""
-    },
-    "subCmd": 1201
-   }
-  },
-  "set_alarm_type__v1": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "3": "HomeBase alarm"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    3
-   ],
-   "variant_of": "set_alarm_type"
   },
   "set_privacy_zone": {
    "access": "ro",
@@ -2260,7 +2190,7 @@
    ],
    "default": false,
    "kind": "bool",
-   "name": "Door Locked",
+   "name": "Door locked",
    "note": "no handler write path",
    "read": null
   },
@@ -2319,7 +2249,7 @@
    ],
    "default": true,
    "kind": "bool",
-   "name": "Door Unlocked",
+   "name": "Door unlocked",
    "note": "no handler write path",
    "read": null
   },

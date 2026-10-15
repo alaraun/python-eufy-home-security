@@ -116,12 +116,6 @@
    "default": false,
    "kind": "bool",
    "read": null
-  },
-  "set_alarm_type": {
-   "access": "ro",
-   "kind": "string",
-   "note": "handler ignores the value",
-   "read": null
   }
  },
  "source": {

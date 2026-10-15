@@ -1651,41 +1651,6 @@
    "kind": "string",
    "read": null
   },
-  "set_alarm_type": {
-   "access": "ro",
-   "default": 2,
-   "kind": "enum",
-   "labels": {
-    "0": "Camera Sound Only",
-    "1": "Light only",
-    "2": "Sound & Light"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    1,
-    2
-   ]
-  },
-  "set_alarm_type__v1": {
-   "access": "ro",
-   "default": 2,
-   "kind": "enum",
-   "labels": {
-    "0": "Camera Sound only",
-    "2": "Camera sound & spotlight",
-    "3": "HomeBase Sound"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    2,
-    3
-   ],
-   "variant_of": "set_alarm_type"
-  },
   "set_privacy_zone": {
    "access": "ro",
    "kind": "enum",
@@ -1798,7 +1763,7 @@
     "1": "Medium",
     "2": "High"
    },
-   "name": "Spotlight Brightness",
+   "name": "Spotlight brightness",
    "read": {
     "map": {
      "": 1,
@@ -1842,7 +1807,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Enable Lights",
+   "name": "Enable lights",
    "read": {
     "map": {
      "": false,

@@ -199,7 +199,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Audio Recording",
+   "name": "Audio recording",
    "page": "SettingsHome",
    "read": {
     "map": {
@@ -746,7 +746,7 @@
    "kind": "range",
    "max": 26,
    "min": 0,
-   "name": "Ringtone Volume",
+   "name": "Ringtone volume",
    "page": "RingtoneSettings",
    "read": {
     "map": null,
@@ -1232,7 +1232,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "Auto-Response",
+   "name": "Auto-response",
    "page": "ResponseSettingScreen",
    "read": {
     "map": {
@@ -1441,7 +1441,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "name": "IP Address",
+   "name": "IP address",
    "read": null
   },
   "is_device_upgrade": {
@@ -1616,7 +1616,7 @@
     "8": "Low",
     "9": "Medium"
    },
-   "name": "Streaming Quality",
+   "name": "Streaming quality",
    "read": {
     "map": {
      "": 0,
@@ -1726,7 +1726,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "name": "MAC Address",
+   "name": "MAC address",
    "read": null
   },
   "microphone_on_off": {
@@ -1847,7 +1847,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "name": "Motion Detection",
+   "name": "Motion detection",
    "read": {
     "map": {
      "": false,
@@ -1919,7 +1919,7 @@
     "2": "Color",
     "6": "Infrared Night Vision"
    },
-   "name": "Night Vision",
+   "name": "Night vision",
    "note": "round trip does not return the written value",
    "read": null,
    "values": [
@@ -2007,7 +2007,7 @@
     "102": "Night vision infrared",
     "103": "Night vision spotlight"
    },
-   "name": "Night Vision",
+   "name": "Night vision",
    "note": "round trip does not return the written value",
    "read": null,
    "values": [
@@ -2116,7 +2116,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "name": "All Other Motion",
+   "name": "All other motion",
    "note": "handler rejects the probed values",
    "read": null
   },
@@ -2167,7 +2167,7 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "name": "Motion Detect",
+   "name": "Motion detect",
    "note": "handler rejects the probed values",
    "page": "SettingsHome",
    "read": null
@@ -2205,7 +2205,7 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "name": "Doorbell Ring",
+   "name": "Doorbell ring",
    "note": "handler rejects the probed values",
    "page": "SettingsHome",
    "read": null
@@ -2329,7 +2329,7 @@
     "2": "Balanced surveillance",
     "3": "Custom recording"
    },
-   "name": "Working Mode",
+   "name": "Working mode",
    "page": "MotionDetection",
    "read": {
     "map": {
@@ -2411,7 +2411,7 @@
     "3": "Custom recording",
     "4": "Doorbell press only"
    },
-   "name": "Working Mode",
+   "name": "Working mode",
    "read": {
     "map": {
      "": 1,
@@ -2500,7 +2500,7 @@
     "2": "Full HD(1080P)",
     "5": "2K HD"
    },
-   "name": "Recording Quality",
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 2,
@@ -2556,7 +2556,7 @@
     "2": "Full HD(1080P)",
     "5": "2K HD"
    },
-   "name": "Recording Quality",
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 2,
@@ -3146,7 +3146,7 @@
     "0": "Smartphone first",
     "1": "Smart display first"
    },
-   "name": "Streaming to Alexa/Google Smart Displays",
+   "name": "Streaming to Alexa/Google smart displays",
    "read": {
     "map": {
      "": 0,

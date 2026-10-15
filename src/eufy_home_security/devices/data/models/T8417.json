@@ -2073,43 +2073,6 @@
     }
    }
   },
-  "set_alarm_type": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "1": "Light only",
-    "2": "Sound and light"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    1,
-    2
-   ]
-  },
-  "set_alarm_type__v1": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "1": "Light only",
-    "2": "Sound and light",
-    "3": "HomeBase alarm"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    3,
-    2,
-    1
-   ],
-   "variant_of": "set_alarm_type"
-  },
   "set_privacy_zone": {
    "access": "ro",
    "kind": "enum",
@@ -2349,7 +2312,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "name": "Enable Light",
+   "name": "Enable light",
    "read": {
     "map": {
      "": false,

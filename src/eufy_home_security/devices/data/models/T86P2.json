@@ -1500,43 +1500,6 @@
    "kind": "other",
    "read": null
   },
-  "set_alarm_type": {
-   "access": "ro",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Sound only",
-    "1": "Light only",
-    "2": "Sound and light"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    1,
-    2
-   ]
-  },
-  "set_alarm_type__v1": {
-   "access": "ro",
-   "default": 2,
-   "kind": "enum",
-   "labels": {
-    "0": "Camera Sound Only",
-    "1": "Light Only",
-    "2": "Sound & Light",
-    "3": "HomeBase Sound"
-   },
-   "note": "handler ignores the value",
-   "read": null,
-   "values": [
-    0,
-    1,
-    2,
-    3
-   ],
-   "variant_of": "set_alarm_type"
-  },
   "set_privacy_zone": {
    "access": "ro",
    "kind": "enum",

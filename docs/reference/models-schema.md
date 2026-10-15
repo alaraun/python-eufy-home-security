@@ -27,27 +27,28 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 |---|---|
 | `kind` | `enum`, `bool`, `range`, `string`, `other` or `flags` (an int bitmask of named members, several may be on) |
 | `values` | The enum's values (TD values, the public values the handler takes) |
-| `min`, `max`, `step`, `default` | From the TD where it gives them |
+| `min`, `max`, `step`, `default` | From the TD where it gives them; `default` is the eufy app's own where the app shows another value while the device reports none (`device_cross_cam_assistance_switch` on a T8030: on) |
 | `unit` | The TD unit normalised to `s`, `ms`, `d` or `%`, else the unit the app's control shows on the page the setting is on (the custom-recording sliders: `s`); absent otherwise |
-| `access` | `rw`: the handler has a value-dependent write. `ro`: it has none |
+| `access` | `rw`: the handler has a value-dependent write. `ro`: it has none, or the setting is a status the eufy app only reads (`hb_keypad_is_password_set`) |
 | `write` | Recipe template (base context, below) |
 | `write_table` | `{"<value>": recipe}` when the recipe's shape depends on the value. It replaces `write` |
 | `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. Either may carry `view` (below). `null`: not readable |
 | `contexts` | What other contexts change (below); absent when every context sees the base entry |
-| `labels` | `{"<value>": "<title>"}` from the app's titles, else the cleaned TD description |
+| `labels` | `{"<value>": "<title>"}` from the app's titles, else the cleaned TD description. The app's option titles of `working_mode_value`: `Standard` (EU), `Performance (beta)` (US) |
 | `group`, `order` | Section and position on the app's settings page. Always present together |
 | `page` | The app page the setting lives on |
 | `applies_when` | `[<enum setting>, <value>]`: the app shows the setting only while that setting has that value |
-| `note` | Why a setting is `ro`, or what is limited on an `rw` one |
-| `name` | The app's title for the setting (the model's own branch title where the app has one). Models whose settings the app shows on its React Native screens take the RN titles; models on the native settings screens only the titles read from that model's own native screens |
+| `note` | Why a setting is `ro`, or what is limited on an `rw` one; on an `advanced` setting it ends with the app's warning |
+| `name` | The app's title for the setting (the model's own branch title where the app has one), in sentence case: a capitalised word after the first is lower-cased unless it is a proper noun (`Wi-Fi`, `Alexa`, weekdays); acronyms and mixed case (`LED`, `HomeBase`, `2K`) stay. Models whose settings the app shows on its React Native screens take the RN titles; models on the native settings screens only the titles read from that model's own native screens |
 | `control` | On every `rw` setting except `other`: the control a UI offers. `switch` (bool), `select` (enum, or a string with a `domain`), `slider` (range of at most 200 steps), `box` (larger range), `toggles` (flags, one on/off per member), `text` (string) |
 | `domain` | `string` only: the library table its values come from. `timezone`: the app's device time zones (`devices/data/timezones.json`, from `scripts/gen_timezones.py`); the value is an IANA id, written as `<POSIX rule>\|1.<row>` in the app's string frame, read back to the id. Set on an `rw` string whose write is command 1215 |
 | `flags` | `flags` only: `{"<member>": <bits>}`, one or more bits per member; `labels` titles the members |
 | `bit` | A `bool` that is one bit of a parameter other settings share: the value is `raw & bit`, and a write sends the whole current mask with this bit set or cleared (`$v:int` is the mask) |
+| `advanced` | `true` on a setting the eufy app puts behind a warning (`working_mode_value`: switching to Standard reduces the HomeBase's Wi-Fi range). A UI offers it hidden by default; absent otherwise |
 | `variant_of` | The identifier of the setting the app uses in this one's place on the same model, absent on the primary. Set for `<base>__v<n>` when `<base>` exists (the app resolves a versioned identifier to its base and picks one by the TD's read conditions) and for listed legacy pairs (`nightvision_type` → `nightvision_type_new`, enum form only) |
 
 An `rw` setting has exactly one of `write` and `write_table`. An `ro` setting has no
-write key and `read: null`. A `flags` setting and a `bit` setting read the raw mask
+write key and `read: null`, except a status the app only reads, which keeps its read. A `flags` setting and a `bit` setting read the raw mask
 (`read.map` null).
 
 ### Contexts
@@ -89,7 +90,10 @@ own recipes prove the new form sends the same bytes:
   handler read-modifies-writes (probed with other bits set in the parameter).
 - **flags**: an enum whose comma-joined payload (the app's multi-choice form) renders the
   OR of its members' values; a member that sets no bit is dropped. Never an enum other
-  settings' `applies_when` names.
+  settings' `applies_when` names. A member whose bit the eufy app and the handler
+  disagree on is left out (`switching_notification` keyfob), and so is one that belongs
+  to another parameter (`switching_notification` "Start Alarm Delay", 1282); its bit
+  stays in the mask, unnamed.
 - **scale**: an enum whose labels are `1..N` (or `0..N`) in value order becomes a `range`
   of the shown numbers, its codecs restated as a slot or `$affine`.
 - **variant**: a setting whose write equals that of a shorter key it extends
@@ -144,8 +148,11 @@ Recipe templates are the handler's recipe with the value positions replaced:
 | `non-linear range` | A range whose leaf is not `a * value + b` |
 | `serial embedded in a string` | A serial appears inside a longer string and cannot be slotted |
 | `round trip does not return the written value` | `rw` with `read: null`: getProperty does not decode the written value back |
+| `status the eufy app only reads` | `ro` with its read: the app shows the value and offers no control for it |
 
-A TD property that is not writable is `ro` without a note.
+A TD property that is not writable is `ro` without a note. `set_alarm_type` (and its
+`__v<n>` forms) is not in the files: it sounds the HomeBase, an action rather than a
+setting.
 
 ## Example
 
@@ -183,7 +190,7 @@ product code and turns each entry into a `Setting`:
 | `Setting` field | From |
 |---|---|
 | `key` | the settings key (the TD identifier) |
-| `name` | `name`, else a short English title for the key (`devices/labels.py`) |
+| `name` | `name`, else a short sentence-case title for the key (`devices/labels.py`) |
 | `kind` (`SettingKind`) | `kind` |
 | `values`, `minimum`, `maximum`, `step`, `default` | `values`, `min`, `max`, `step`, `default` |
 | `unit` (`SettingUnit` or None) | `unit` |
@@ -192,6 +199,7 @@ product code and turns each entry into a `Setting`:
 | `readable` | `read` is not null |
 | `group`, `order`, `page`, `applies_when` | the same keys; `applies_when` as a `(key, value)` tuple |
 | `note` | `note`, plus the reason when the library refuses the write |
+| `advanced` | `advanced` (False when absent) |
 | `variant_of` | `variant_of` |
 | `control` (`SettingControl` or None) | `control`; None when the library does not write the setting |
 | `flags`, `bit` | `flags` (member → bits), `bit` |

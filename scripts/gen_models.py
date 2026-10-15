@@ -80,7 +80,9 @@ RECIPE_FIELDS = ("cmd", "subCmd", "params")
 type LeafPath = tuple[str | int, ...]
 
 # v1 reference rows whose render may differ, keyed (PN, identifier), with the reason.
-RELEASE_ACCEPTED: dict[tuple[str, str], str] = {}
+RELEASE_ACCEPTED: dict[tuple[str, str], str] = {
+    ("T8030", "hb_keypad_is_password_set"): "a status the eufy app only reads: read-only",
+}
 
 
 class CheckError(GeneratorError):
@@ -770,6 +772,7 @@ def build_context(
     if reference:
         _count(counts, "reference_rows", len(reference))
     shape_controls(product_code, handler, settings, counts, context)
+    joiner.hold_members(product_code, settings, titles, counts)
     view_reads(product_code, handler, settings, context, counts)
     drop_absent_prior_updates(settings, counts)
     empty_value_reads(product_code, handler, settings, context, counts)

@@ -2,9 +2,11 @@
 
 Adds to each setting dict of a model: ``labels`` (enum titles keyed by public value),
 ``applies_when`` (the app's value gate), ``group``/``order``/``page`` (the app's settings
-layout), ``name`` (the app's title), ``unit`` (the app control's unit where the TD gives
-none), ``variant_of`` (the identifier the app uses instead), and builds the file's
-``source`` block. Stdlib plus the TD readers of ``eufy_home_security.devices.td``; no
+layout), ``name`` (the app's title, in sentence case), ``unit`` (the app control's unit
+where the TD gives none), ``variant_of`` (the identifier the app uses instead), the
+hand-read app facts of the title file (``default``, read-only status, option labels,
+``advanced``, excluded actions, held flags members), and builds the file's ``source``
+block. Stdlib plus the TD readers of ``eufy_home_security.devices.td``; no
 I/O. See docs/reference/models-schema.md.
 """
 
@@ -16,16 +18,24 @@ from typing import Any
 
 from gen_models_codec import GeneratorError, public_value, specs_of, value_key
 
-from eufy_home_security.devices.labels import setting_name
+from eufy_home_security.devices.labels import sentence_case, setting_name
 from eufy_home_security.devices.td import enum_label
 from eufy_home_security.devices.td import normalise_unit as _td_unit
 
-__all__ = ["GeneratorError", "join", "normalise_unit", "source_block"]
+__all__ = [
+    "STATUS_NOTE",
+    "GeneratorError",
+    "hold_members",
+    "join",
+    "normalise_unit",
+    "source_block",
+]
 
 PRESENT = "present"  # a gate on the property's existence, not on a value
 _DATE_SEGMENT = re.compile(r"/(\d{4})/(\d{2})/(\d{2})/")
 _VERSIONED = re.compile(r"(.+)__v\d+")  # the app's versioned identifier form
 RN_SETTINGS = "rn"  # tree settings_ui of a model whose settings the RN bundle renders
+STATUS_NOTE = "status the eufy app only reads"  # the note of a listed read-only setting
 
 type Settings = dict[str, dict[str, Any]]
 
@@ -186,7 +196,8 @@ def _names(
     common: Mapping[str, Any],
     counts: dict[str, int],
 ) -> None:
-    """Set ``name``: the model's own app title, else the identifier's, if its kind matches.
+    """Set ``name``: the model's own app title, else the identifier's, if its kind matches,
+    in sentence case.
 
     A ``<base>__v<n>`` identifier takes its base's title: the app shows it in that place.
     A title that another setting of the model (not a variant of the same primary) would
@@ -202,7 +213,7 @@ def _names(
         title = row.get("title")
         if not isinstance(title, str) or not title.strip():
             raise GeneratorError(f"{pn}: {ident} has an empty app title")
-        app[ident] = title.strip()
+        app[ident] = sentence_case(title.strip())
 
     def primary(ident: str) -> str:
         return str(settings[ident].get("variant_of", ident))
@@ -273,6 +284,111 @@ def _variants(
         _count(counts, "variant_of")
 
 
+def _excluded(
+    pn: str, settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]
+) -> None:
+    """Drop the listed identifiers (and their ``__v<n>`` forms): actions, not settings."""
+    listed = titles.get("excluded") or {}
+    for ident in list(settings):
+        m = _VERSIONED.fullmatch(ident)
+        if ident in listed or (m is not None and m.group(1) in listed):
+            del settings[ident]
+            _count(counts, "excluded")
+    for ident, entry in settings.items():
+        gate = (entry.get("applies_when") or [None])[0]
+        if gate is not None and gate not in settings:
+            raise GeneratorError(f"{pn}: {ident} applies when excluded {gate} has a value")
+
+
+def _defaults(
+    pn: str, settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]
+) -> None:
+    """Set ``default`` to the value the app shows while the device reports none."""
+    for ident, rule in (titles.get("defaults") or {}).items():
+        entry = settings.get(ident)
+        if entry is None or pn not in rule["models"]:
+            continue
+        value = rule["value"]
+        if not _in_domain(entry, value):
+            raise GeneratorError(f"{pn}: {ident} default {value!r} is outside its domain")
+        entry["default"] = value
+        _count(counts, "default:app")
+
+
+def _in_domain(entry: Mapping[str, Any], value: Any) -> bool:
+    kind = entry["kind"]
+    if kind == "bool":
+        return isinstance(value, bool)
+    if kind == "enum":
+        return not isinstance(value, bool) and value in entry.get("values", ())
+    if kind == "range":
+        return bool(entry.get("min", value) <= value <= entry.get("max", value))
+    return False
+
+
+def _read_only(settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]) -> None:
+    """Make a listed setting a status: ``ro`` with its read kept and STATUS_NOTE."""
+    for ident in titles.get("read_only") or {}:
+        entry = settings.get(ident)
+        if entry is None:
+            continue
+        for key in ("write", "write_table", "control"):
+            entry.pop(key, None)
+        entry["access"] = "ro"
+        entry["note"] = STATUS_NOTE
+        _count(counts, "ro:app reads only")
+
+
+def _hand_labels(
+    pn: str, settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]
+) -> None:
+    """Replace enum labels with the app's option titles read by hand."""
+    for ident, rule in (titles.get("labels") or {}).items():
+        entry = settings.get(ident)
+        if entry is None or entry["kind"] != "enum":
+            continue
+        keys = {value_key(v) for v in entry.get("values", ())}
+        if not set(rule["labels"]) <= keys:
+            raise GeneratorError(f"{pn}: {ident} hand labels name values it lacks")
+        entry["labels"] = {**entry.get("labels", {}), **rule["labels"]}
+        _count(counts, "labels:hand", len(rule["labels"]))
+
+
+def _advanced(settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]) -> None:
+    """Mark the settings the app puts behind a warning ``advanced``; the warning is the note."""
+    for ident, rule in (titles.get("advanced") or {}).items():
+        entry = settings.get(ident)
+        if entry is None or entry["kind"] != rule.get("kind", entry["kind"]):
+            continue
+        entry["advanced"] = True
+        note = entry.get("note")
+        entry["note"] = rule["note"] if not note else f"{note}; {rule['note']}"
+        _count(counts, "advanced")
+
+
+def hold_members(
+    pn: str, settings: Settings, titles: Mapping[str, Any] | None, counts: dict[str, int]
+) -> None:
+    """Leave the listed members out of a ``flags`` setting: their bit is not established.
+
+    Runs after the shaping (``gen_models_controls.apply_flags``); the bit stays in the
+    mask, unnamed. Raises GeneratorError when no member would remain.
+    """
+    for ident, members in ((titles or {}).get("held_members") or {}).items():
+        entry = settings.get(ident)
+        if entry is None or entry["kind"] != "flags":
+            continue
+        held = set(members) & set(entry["flags"])
+        if not held:
+            continue
+        if held == set(entry["flags"]):
+            raise GeneratorError(f"{pn}: {ident} would keep no flags member")
+        for key in held:
+            del entry["flags"][key]
+            entry.get("labels", {}).pop(key, None)
+            _count(counts, "flags:member held")
+
+
 def join(
     product_code: str,
     settings: Settings,
@@ -287,11 +403,17 @@ def join(
 
     ``app_labels`` is the model's ``{identifier: [{ui, app, ...}]}`` (None: TD labels
     only); ``tree`` its settings tree (None: no placement); ``titles`` the app's setting
-    titles, units and variant pairs (None: none). A model whose tree says the app shows
-    its settings on the RN screens takes the RN titles and units (``models``, ``titles``,
-    ``units``); a model on the native screens only its own native titles
-    (``native_models``). Raises GeneratorError on a gate whose desc does not map to one TD
-    value, an identifier shown by two gates, an empty title or a variant cycle.
+    titles, units, variant pairs and hand-read facts (None: none). A model whose tree says
+    the app shows its settings on the RN screens takes the RN titles and units
+    (``models``, ``titles``, ``units``); a model on the native screens only its own native
+    titles (``native_models``). The hand-read facts apply to every model: ``excluded``
+    identifiers are dropped, ``defaults`` set ``default`` on their listed models,
+    ``read_only`` ones become ``ro`` with their read kept, ``labels`` replace option
+    titles and ``advanced`` ones are marked with the app's warning as ``note``
+    (``held_members`` apply after shaping: :func:`hold_members`). Raises GeneratorError on
+    a gate whose desc does not map to one TD value, an identifier shown by two gates, an
+    empty title, a variant cycle, a gate on an excluded identifier, a default outside the
+    domain or hand labels for values the setting lacks.
     """
     counts: dict[str, int] = {}
     _labels(product_code, settings, td, app_labels, counts)
@@ -299,6 +421,11 @@ def join(
         gate_pages = _gates(product_code, settings, tree, counts)
         _placement(settings, tree, gate_pages, counts)
     if titles is not None:
+        _excluded(product_code, settings, titles, counts)
+        _defaults(product_code, settings, titles, counts)
+        _read_only(settings, titles, counts)
+        _hand_labels(product_code, settings, titles, counts)
+        _advanced(settings, titles, counts)
         _variants(product_code, settings, titles, counts)
         if tree is not None and tree.get("settings_ui") == RN_SETTINGS:
             own = (titles.get("models") or {}).get(product_code) or {}
