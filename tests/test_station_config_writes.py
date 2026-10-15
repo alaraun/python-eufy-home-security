@@ -507,6 +507,48 @@ async def test_a_custom_mode_the_known_list_lacks_is_not_set(
     assert await station.async_set_guard_mode("custom_1") is GuardMode.CUSTOM_1
 
 
+async def _station_of(fake: FakeStation, pn: str) -> Station:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(ACCOUNT, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    return Station(dataclasses.replace(STATION, raw={"device_new_pn": pn}), session)
+
+
+@pytest.mark.parametrize(
+    ("pn", "reason"),
+    [("T8N00", "WebRTC"), ("T9000", "WebRTC"), ("T7000", "no thing description")],
+)
+async def test_guard_mode_of_a_model_graded_unknown_is_refused_before_sending(
+    fake: FakeStation, pn: str, reason: str
+) -> None:
+    st = await _station_of(fake, pn)
+    try:
+        with pytest.raises(UnsupportedError, match=reason) as err:
+            await st.async_set_guard_mode("away")
+    finally:
+        await st.async_close()
+    assert err.value.device_sn == st.serial
+    assert fake.received == []
+    assert fake.param_queries == 0
+
+
+@pytest.mark.parametrize("pn", ["T8030", "T8024", "T9999", "T8170"])
+async def test_guard_mode_of_a_declared_or_unlisted_model_is_sent(
+    fake: FakeStation, pn: str
+) -> None:
+    """A model graded verified or declared, or one the station table does not list (an
+    unknown code, a standalone camera), is written as before."""
+    st = await _station_of(fake, pn)
+    try:
+        assert await st.async_set_guard_mode("home") is GuardMode.HOME
+    finally:
+        await st.async_close()
+    assert [c["cmd"] for c in fake.received] == [1224]
+
+
 async def test_bulk_mode_table_writes_need_known_support(
     station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:

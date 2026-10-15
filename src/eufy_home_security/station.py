@@ -81,6 +81,7 @@ from .devices.station_config_support import (
     StationFeature,
     mode_table_storage,
     restart_command,
+    station_config_models,
 )
 from .devices.station_config_support import config_support as station_config_support
 from .devices.support import Evidence, Support
@@ -1646,12 +1647,29 @@ class Station:
     async def async_set_guard_mode(self, mode: GuardMode | str | int) -> GuardMode | int:
         """Arm/disarm; returns the mode the station reports it applied.
 
-        Raises ``UnsupportedError`` before anything is sent for a custom mode the
-        station does not have while its mode list is known (:meth:`target_mode_name`).
+        Raises ``UnsupportedError`` before anything is sent for a station model on
+        record whose guard mode is *unknown* (:meth:`config_support`: T8N00, T9000 and
+        the models without data), and for a custom mode the station does not have while
+        its mode list is known (:meth:`target_mode_name`).
         """
         guard = GuardMode.parse(mode)
+        self._require_guard_mode()
         self.target_mode_name(guard)
         return await self.session.async_set_guard_mode(guard)
+
+    def _require_guard_mode(self) -> None:
+        """``UnsupportedError`` (nothing sent) where the station's model is a station
+        model on record whose guard mode :meth:`config_support` grades ``UNKNOWN`` (the
+        eufy app reaches it over WebRTC, or no data for the model). A station whose
+        model is not on record (no product code, a standalone camera) is not refused."""
+        code = self._product_code(self.serial)
+        if code is None or code.upper() not in station_config_models():
+            return
+        evidence = self.config_support(StationFeature.GUARD_MODE)
+        if evidence.support is Support.UNKNOWN:
+            raise UnsupportedError(
+                f"guard_mode is not supported here: {evidence.source}", device_sn=self.serial
+            )
 
     async def async_set_setting(
         self,
