@@ -2385,7 +2385,9 @@ class Station:
                         f"channel {target}"
                     )
             if expect_revision is not None:
-                check_revision(build_station_config(state), expect_revision)
+                # The merged state after this dump, as `config` shows it: the dump alone
+                # lacks the receipt-confirmed writes the revision covers.
+                check_revision(build_station_config(self.state or state), expect_revision)
             table = mode_table_from_params(dump.devices, mode)
             stored_param: int | None = None
             if not table.actions:
