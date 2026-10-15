@@ -39,7 +39,7 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `page` | The app page the setting lives on |
 | `applies_when` | `[<enum setting>, <value>]`: the app shows the setting only while that setting has that value |
 | `note` | Why a setting is `ro`, or what is limited on an `rw` one |
-| `name` | The app's title for the setting (the model's own branch title where the app has one); only for models whose settings the app shows on its React Native screens |
+| `name` | The app's title for the setting (the model's own branch title where the app has one). Models whose settings the app shows on its React Native screens take the RN titles; models on the native settings screens only the titles read from that model's own native screens |
 | `control` | On every `rw` setting except `other`: the control a UI offers. `switch` (bool), `select` (enum, or a string with a `domain`), `slider` (range of at most 200 steps), `box` (larger range), `toggles` (flags, one on/off per member), `text` (string) |
 | `domain` | `string` only: the library table its values come from. `timezone`: the app's device time zones (`devices/data/timezones.json`, from `scripts/gen_timezones.py`); the value is an IANA id, written as `<POSIX rule>\|1.<row>` in the app's string frame, read back to the id. Set on an `rw` string whose write is command 1215 |
 | `flags` | `flags` only: `{"<member>": <bits>}`, one or more bits per member; `labels` titles the members |

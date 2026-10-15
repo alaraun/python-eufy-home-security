@@ -393,6 +393,18 @@ def test_spotlight_switches_are_not_variants() -> None:
     assert _setting("T8170", "spotlight_switch").variant_of is None
 
 
+@pytest.mark.parametrize("code", bundled_codes())
+def test_no_two_controls_of_a_model_share_a_name(code: str) -> None:
+    """Settings a UI offers as controls have distinct names, variants of one primary aside."""
+    by_name: dict[str, set[str]] = {}
+    for setting in settings_of(code).values():
+        if setting.writable and setting.control is not None:
+            by_name.setdefault(setting.name.casefold(), set()).add(
+                setting.variant_of or setting.key
+            )
+    assert {name: keys for name, keys in by_name.items() if len(keys) > 1} == {}
+
+
 # ── malformed files ─────────────────────────────────────────────────────────
 
 

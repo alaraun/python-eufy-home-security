@@ -1798,6 +1798,7 @@
     "1": "Medium",
     "2": "High"
    },
+   "name": "Spotlight Brightness",
    "read": {
     "map": {
      "": 1,
@@ -1841,6 +1842,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Enable Lights",
    "read": {
     "map": {
      "": false,
@@ -1901,6 +1903,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,

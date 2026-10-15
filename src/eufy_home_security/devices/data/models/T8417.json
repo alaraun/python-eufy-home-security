@@ -2326,6 +2326,7 @@
    "kind": "range",
    "max": 100,
    "min": 1,
+   "name": "Brightness",
    "read": {
     "map": null,
     "param": 1401
@@ -2348,6 +2349,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Enable Light",
    "read": {
     "map": {
      "": false,
@@ -2374,6 +2376,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,

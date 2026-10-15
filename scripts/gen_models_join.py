@@ -179,15 +179,19 @@ def _placement(
             _count(counts, "page")
 
 
-def _names(pn: str, settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]) -> None:
+def _names(
+    pn: str,
+    settings: Settings,
+    own: Mapping[str, Any],
+    common: Mapping[str, Any],
+    counts: dict[str, int],
+) -> None:
     """Set ``name``: the model's own app title, else the identifier's, if its kind matches.
 
     A ``<base>__v<n>`` identifier takes its base's title: the app shows it in that place.
     A title that another setting of the model (not a variant of the same primary) would
     also be named is not applied, so two entities never share a name.
     """
-    own = (titles.get("models") or {}).get(pn) or {}
-    common = titles.get("titles") or {}
     app: dict[str, str] = {}
     for ident, entry in settings.items():
         m = _VERSIONED.fullmatch(ident)
@@ -283,10 +287,11 @@ def join(
 
     ``app_labels`` is the model's ``{identifier: [{ui, app, ...}]}`` (None: TD labels
     only); ``tree`` its settings tree (None: no placement); ``titles`` the app's setting
-    titles, units and variant pairs (None: none). Names and units apply only to a model
-    whose tree says the app shows its settings on the RN screens. Raises
-    GeneratorError on a gate whose desc does not map to one TD value, an identifier shown
-    by two gates, an empty title or a variant cycle.
+    titles, units and variant pairs (None: none). A model whose tree says the app shows
+    its settings on the RN screens takes the RN titles and units (``models``, ``titles``,
+    ``units``); a model on the native screens only its own native titles
+    (``native_models``). Raises GeneratorError on a gate whose desc does not map to one TD
+    value, an identifier shown by two gates, an empty title or a variant cycle.
     """
     counts: dict[str, int] = {}
     _labels(product_code, settings, td, app_labels, counts)
@@ -295,10 +300,13 @@ def join(
         _placement(settings, tree, gate_pages, counts)
     if titles is not None:
         _variants(product_code, settings, titles, counts)
-        # titles and units are read from the app's RN settings screens
         if tree is not None and tree.get("settings_ui") == RN_SETTINGS:
-            _names(product_code, settings, titles, counts)
+            own = (titles.get("models") or {}).get(product_code) or {}
+            _names(product_code, settings, own, titles.get("titles") or {}, counts)
             _units(product_code, settings, titles, counts)
+        elif tree is not None:
+            own = (titles.get("native_models") or {}).get(product_code) or {}
+            _names(product_code, settings, own, {}, counts)
     return counts
 
 

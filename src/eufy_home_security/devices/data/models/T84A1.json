@@ -497,7 +497,8 @@
    "access": "ro",
    "kind": "bool",
    "note": "no handler write path",
-   "read": null
+   "read": null,
+   "variant_of": "spotlight_status"
   },
   "firmware_main_version": {
    "access": "ro",

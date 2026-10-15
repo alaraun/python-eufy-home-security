@@ -1435,6 +1435,7 @@
    "kind": "range",
    "max": 100,
    "min": 10,
+   "name": "Brightness",
    "read": {
     "map": null,
     "param": 1401
@@ -1457,6 +1458,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Wall Light",
    "read": {
     "map": {
      "": false,

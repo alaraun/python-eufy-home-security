@@ -266,6 +266,28 @@ def test_names_and_units_need_a_model_on_the_rn_settings_screens() -> None:
     assert not any({"name", "unit"} & set(v) for v in settings.values())
 
 
+def test_a_native_screen_model_takes_only_its_own_native_titles() -> None:
+    titles = _titles(native_models={PN: {"clip": {"title": "Native clip"}}})
+    native = _settings()
+    join.join(PN, native, _td(MODE), None, _tree(settings_ui="native"), titles=titles)
+    assert {k: v.get("name") for k, v in native.items() if "name" in v} == {"clip": "Native clip"}
+    assert not any("unit" in v for v in native.values())
+    rn = _settings()
+    join.join(PN, rn, _td(MODE), None, _tree(**RN_TREE), titles=titles)
+    assert rn["clip"]["name"] == "Clip length"
+    untreed = _settings()
+    join.join(PN, untreed, _td(MODE), None, None, titles=titles)
+    assert not any("name" in v for v in untreed.values())
+
+
+def test_a_native_title_another_setting_is_named_is_not_applied() -> None:
+    settings = _settings()
+    titles = _titles(native_models={PN: {"clip": {"title": "Flag"}}})
+    counts = join.join(PN, settings, _td(MODE), None, _tree(settings_ui="native"), titles=titles)
+    assert "name" not in settings["clip"]
+    assert counts["name:app title shared with another setting"] == 1
+
+
 def test_variant_of_marks_versioned_and_listed_identifiers() -> None:
     settings = _settings()
     settings.update(

@@ -889,6 +889,7 @@
    "kind": "bool",
    "note": "round trip does not return the written value",
    "read": null,
+   "variant_of": "spotlight_status",
    "write": {
     "cmd": 1403,
     "params": {
@@ -2008,6 +2009,7 @@
    "kind": "range",
    "max": 100,
    "min": 0,
+   "name": "Brightness",
    "read": {
     "map": null,
     "param": 1401
@@ -2056,6 +2058,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Enable Floodlights",
    "read": {
     "map": {
      "": false,
@@ -2082,6 +2085,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,

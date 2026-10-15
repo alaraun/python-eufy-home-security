@@ -185,6 +185,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Auto Spotlight",
    "read": {
     "map": {
      "": false,
@@ -1728,6 +1729,7 @@
     "3": "Level 4",
     "4": "Level 5"
    },
+   "name": "Brightness",
    "read": {
     "map": {
      "": 0,
@@ -1787,6 +1789,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Spotlight Schedule",
    "page": "SpotlightSettings",
    "read": {
     "map": {
@@ -1814,6 +1817,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Enable Spotlight",
    "read": {
     "map": {
      "": false,

@@ -1200,6 +1200,7 @@
    "kind": "range",
    "max": 100,
    "min": 1,
+   "name": "Brightness",
    "read": {
     "map": null,
     "param": 1401
@@ -1222,6 +1223,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Sunset to Sunrise",
    "page": "SpotlightSettings",
    "read": {
     "map": {
@@ -1248,6 +1250,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Enable Floodlights",
    "read": {
     "map": {
      "": false,

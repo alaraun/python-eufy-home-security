@@ -1722,6 +1722,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
