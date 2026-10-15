@@ -20,6 +20,7 @@ from eufy_home_security.p2p.station_config_codecs import (
     MAX_DETAIL_LENGTH,
     MAX_TITLE_LENGTH,
     MODE_ICONS,
+    PRO_ALARM_MODE_TABLE_PARAMS,
     SCHEDULE_MODES,
     STORED_MODE_TABLE_PARAMS,
     CustomModes,
@@ -31,6 +32,7 @@ from eufy_home_security.p2p.station_config_codecs import (
     Weekday,
     add_custom_mode,
     decode_custom_modes,
+    decode_pro_alarm_mode_table,
     decode_schedule,
     decode_schedule_default,
     decode_stored_mode_table,
@@ -38,6 +40,7 @@ from eufy_home_security.p2p.station_config_codecs import (
     decode_tracking_groups,
     delete_custom_mode,
     encode_schedule_default,
+    encode_stored_mode_table,
     encode_tracking_cameras,
     encode_tracking_groups,
     modify_custom_mode,
@@ -554,6 +557,131 @@ def test_stored_table_without_account_or_siren_list() -> None:
 def test_stored_table_rejects(raw: str) -> None:
     with pytest.raises(ProtocolError):
         decode_stored_mode_table(raw, GuardMode.HOME)
+
+
+# --- 61300-61309: pro-alarm stored mode tables --------------------------------
+
+HANDLER_BODY: dict[str, Any] = {
+    "account_id": ACCOUNT,
+    "devices": [{"device_channel": 1, "action": 9}, {"device_channel": 0, "action": 143}],
+    "count_down_alarm": {"channel_list": [0], "delay_time": 30},
+    "count_down_arm": {"channel_list": [1, 0], "delay_time": 60},
+    "siren_sensor_action": [
+        {"device_channel": 1, "action": 0},
+        {"device_channel": 0, "action": 0},
+    ],
+}
+"""The ``arming_config`` payload sent to the handler; ``mode_id`` is added per mode."""
+
+# The 61300-61309 values a T8024 handler files after an `arming_config` write of
+# HANDLER_BODY (mode_id set per mode), for each mode.
+HANDLER_STORED: dict[int, str] = {
+    61301: (
+        "eyJhY2NvdW50X2lkIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2NyIs"
+        "Im1vZGVfaWQiOjAsImRldmljZXMiOlt7ImRldmljZV9jaGFubmVsIjoxLCJhY3Rpb24iOjl9LHsi"
+        "ZGV2aWNlX2NoYW5uZWwiOjAsImFjdGlvbiI6MTQzfV0sImNvdW50X2Rvd25fYWxhcm0iOnsiY2hh"
+        "bm5lbF9saXN0IjpbMF0sImRlbGF5X3RpbWUiOjMwfSwiY291bnRfZG93bl9hcm0iOnsiY2hhbm5l"
+        "bF9saXN0IjpbMSwwXSwiZGVsYXlfdGltZSI6NjB9LCJzaXJlbl9zZW5zb3JfYWN0aW9uIjpbeyJk"
+        "ZXZpY2VfY2hhbm5lbCI6MSwiYWN0aW9uIjowfSx7ImRldmljZV9jaGFubmVsIjowLCJhY3Rpb24i"
+        "OjB9XX0="
+    ),
+    61300: (
+        "eyJhY2NvdW50X2lkIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2NyIs"
+        "Im1vZGVfaWQiOjEsImRldmljZXMiOlt7ImRldmljZV9jaGFubmVsIjoxLCJhY3Rpb24iOjl9LHsi"
+        "ZGV2aWNlX2NoYW5uZWwiOjAsImFjdGlvbiI6MTQzfV0sImNvdW50X2Rvd25fYWxhcm0iOnsiY2hh"
+        "bm5lbF9saXN0IjpbMF0sImRlbGF5X3RpbWUiOjMwfSwiY291bnRfZG93bl9hcm0iOnsiY2hhbm5l"
+        "bF9saXN0IjpbMSwwXSwiZGVsYXlfdGltZSI6NjB9LCJzaXJlbl9zZW5zb3JfYWN0aW9uIjpbeyJk"
+        "ZXZpY2VfY2hhbm5lbCI6MSwiYWN0aW9uIjowfSx7ImRldmljZV9jaGFubmVsIjowLCJhY3Rpb24i"
+        "OjB9XX0="
+    ),
+    61307: (
+        "eyJhY2NvdW50X2lkIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2NyIs"
+        "Im1vZGVfaWQiOjMsImRldmljZXMiOlt7ImRldmljZV9jaGFubmVsIjoxLCJhY3Rpb24iOjl9LHsi"
+        "ZGV2aWNlX2NoYW5uZWwiOjAsImFjdGlvbiI6MTQzfV0sImNvdW50X2Rvd25fYWxhcm0iOnsiY2hh"
+        "bm5lbF9saXN0IjpbMF0sImRlbGF5X3RpbWUiOjMwfSwiY291bnRfZG93bl9hcm0iOnsiY2hhbm5l"
+        "bF9saXN0IjpbMSwwXSwiZGVsYXlfdGltZSI6NjB9LCJzaXJlbl9zZW5zb3JfYWN0aW9uIjpbeyJk"
+        "ZXZpY2VfY2hhbm5lbCI6MSwiYWN0aW9uIjowfSx7ImRldmljZV9jaGFubmVsIjowLCJhY3Rpb24i"
+        "OjB9XX0="
+    ),
+    61308: (
+        "eyJhY2NvdW50X2lkIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2NyIs"
+        "Im1vZGVfaWQiOjQsImRldmljZXMiOlt7ImRldmljZV9jaGFubmVsIjoxLCJhY3Rpb24iOjl9LHsi"
+        "ZGV2aWNlX2NoYW5uZWwiOjAsImFjdGlvbiI6MTQzfV0sImNvdW50X2Rvd25fYWxhcm0iOnsiY2hh"
+        "bm5lbF9saXN0IjpbMF0sImRlbGF5X3RpbWUiOjMwfSwiY291bnRfZG93bl9hcm0iOnsiY2hhbm5l"
+        "bF9saXN0IjpbMSwwXSwiZGVsYXlfdGltZSI6NjB9LCJzaXJlbl9zZW5zb3JfYWN0aW9uIjpbeyJk"
+        "ZXZpY2VfY2hhbm5lbCI6MSwiYWN0aW9uIjowfSx7ImRldmljZV9jaGFubmVsIjowLCJhY3Rpb24i"
+        "OjB9XX0="
+    ),
+    61309: (
+        "eyJhY2NvdW50X2lkIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2NyIs"
+        "Im1vZGVfaWQiOjUsImRldmljZXMiOlt7ImRldmljZV9jaGFubmVsIjoxLCJhY3Rpb24iOjl9LHsi"
+        "ZGV2aWNlX2NoYW5uZWwiOjAsImFjdGlvbiI6MTQzfV0sImNvdW50X2Rvd25fYWxhcm0iOnsiY2hh"
+        "bm5lbF9saXN0IjpbMF0sImRlbGF5X3RpbWUiOjMwfSwiY291bnRfZG93bl9hcm0iOnsiY2hhbm5l"
+        "bF9saXN0IjpbMSwwXSwiZGVsYXlfdGltZSI6NjB9LCJzaXJlbl9zZW5zb3JfYWN0aW9uIjpbeyJk"
+        "ZXZpY2VfY2hhbm5lbCI6MSwiYWN0aW9uIjowfSx7ImRldmljZV9jaGFubmVsIjowLCJhY3Rpb24i"
+        "OjB9XX0="
+    ),
+    61306: (
+        "eyJhY2NvdW50X2lkIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2NyIs"
+        "Im1vZGVfaWQiOjYzLCJkZXZpY2VzIjpbeyJkZXZpY2VfY2hhbm5lbCI6MSwiYWN0aW9uIjo5fSx7"
+        "ImRldmljZV9jaGFubmVsIjowLCJhY3Rpb24iOjE0M31dLCJjb3VudF9kb3duX2FsYXJtIjp7ImNo"
+        "YW5uZWxfbGlzdCI6WzBdLCJkZWxheV90aW1lIjozMH0sImNvdW50X2Rvd25fYXJtIjp7ImNoYW5u"
+        "ZWxfbGlzdCI6WzEsMF0sImRlbGF5X3RpbWUiOjYwfSwic2lyZW5fc2Vuc29yX2FjdGlvbiI6W3si"
+        "ZGV2aWNlX2NoYW5uZWwiOjEsImFjdGlvbiI6MH0seyJkZXZpY2VfY2hhbm5lbCI6MCwiYWN0aW9u"
+        "IjowfV19"
+    ),
+}
+
+
+def test_pro_alarm_params_cover_every_writable_mode_and_disarmed() -> None:
+    assert set(PRO_ALARM_MODE_TABLE_PARAMS) == set(STORED_MODE_TABLE_PARAMS)
+    assert sorted(PRO_ALARM_MODE_TABLE_PARAMS.values()) == sorted(HANDLER_STORED)
+    assert not set(PRO_ALARM_MODE_TABLE_PARAMS.values()) & set(STORED_MODE_TABLE_PARAMS.values())
+
+
+@pytest.mark.parametrize("mode", list(PRO_ALARM_MODE_TABLE_PARAMS))
+def test_pro_alarm_table_decodes_the_handlers_value(mode: GuardMode) -> None:
+    """Each value the app files is the base64 of the compact 1255 body; it decodes to the
+    table, re-encodes byte for byte and is what the library's own write of it stores."""
+    param = PRO_ALARM_MODE_TABLE_PARAMS[mode]
+    raw = HANDLER_STORED[param]
+    table = decode_pro_alarm_mode_table(raw, mode)
+    assert table is not None
+    assert (table.param, table.account_id, dict(table.actions)) == (param, ACCOUNT, {1: 9, 0: 143})
+    assert table.alarm_delays() == {1: 0, 0: 30}
+    assert table.leaving_delays() == {1: 60, 0: 60}
+    assert table.param_value() == raw
+    body = {"account_id": ACCOUNT, "mode_id": int(mode), **HANDLER_BODY}
+    assert encode_stored_mode_table(json.dumps(body, separators=(",", ":")).encode()) == raw
+    if mode in MODE_TABLE_MODES:
+        assert encode_stored_mode_table(table.to_mode_table().encode(ACCOUNT)) == raw
+
+
+def test_pro_alarm_table_ignores_the_apps_extra_keys() -> None:
+    doc = {
+        **HANDLER_BODY,
+        "mode_id": 0,
+        "auto_camera_action": [],
+        "count_down_pro_alarm": {"channel_list": [], "delay_time": 0},
+        "method": 0,
+    }
+    table = decode_pro_alarm_mode_table(_value(doc), GuardMode.AWAY)
+    assert table is not None
+    assert (table.param, dict(table.actions)) == (61301, {1: 9, 0: 143})
+
+
+@pytest.mark.parametrize(
+    ("raw", "mode"),
+    [
+        (_value({**HANDLER_BODY, "mode_id": 1}), GuardMode.AWAY),
+        (_value({**HANDLER_BODY, "mode_id": 6}), None),
+        (_value({**HANDLER_BODY, "mode_id": 1, "count_down_arm": None}), None),
+        (_b64("[]"), None),
+    ],
+)
+def test_pro_alarm_table_rejects(raw: str, mode: GuardMode | None) -> None:
+    with pytest.raises(ProtocolError):
+        decode_pro_alarm_mode_table(raw, mode)
 
 
 # --- 1072 / 1073 -------------------------------------------------------------

@@ -9,8 +9,9 @@ raises :class:`ValueError` before anything is built.
   bodies of a 1256 write (:func:`add_custom_mode`, :func:`modify_custom_mode`,
   :func:`delete_custom_mode`);
 - 1254 the weekly schedule (:class:`Schedule`) and 1257 the mode outside every slot;
-- 1157-1161, 1177 the whole action table of each mode as a HomeBase 3 stores it
-  (:class:`StoredModeTable`, same keys as the 1255 body of :mod:`.mode_actions`);
+- 1157-1161, 1177 the whole action table of each mode as a HomeBase 3 stores it, and
+  61300-61309 as a pro-alarm station stores it (:class:`StoredModeTable`, same keys as
+  the 1255 body of :mod:`.mode_actions`);
 - 1072 the cameras chosen for cross-camera tracking, 1073 the tracking groups.
 
 **JSON style.** Every encoder emits compact JSON (``","`` and ``":"``, no spaces),
@@ -66,6 +67,20 @@ STORED_MODE_TABLE_PARAMS: Final[Mapping[GuardMode, int]] = MappingProxyType(
     }
 )
 """The param that holds each mode's whole table on a HomeBase 3 (absent = never set)."""
+
+PRO_ALARM_MODE_TABLE_PARAMS: Final[Mapping[GuardMode, int]] = MappingProxyType(
+    {
+        GuardMode.HOME: 61300,
+        GuardMode.AWAY: 61301,
+        GuardMode.CUSTOM_1: 61307,
+        GuardMode.CUSTOM_2: 61308,
+        GuardMode.CUSTOM_3: 61309,
+        GuardMode.DISARMED: 61306,
+    }
+)
+"""The param that holds each mode's whole table on a pro-alarm station (T8020, T8023,
+T8024, T8026; also T8N00, T9000): the base64 of the 1255 body last written for the
+mode, as the eufy app stores it (absent = never set)."""
 
 CUSTOM_MODES: Final[tuple[GuardMode, ...]] = (
     GuardMode.CUSTOM_1,
@@ -650,16 +665,18 @@ def encode_schedule_default(mode: GuardMode | int) -> int:
     return int(guard_mode)
 
 
-# --- 1157-1161, 1177: stored mode tables -------------------------------------
+# --- 1157-1161, 1177 / 61300-61309: stored mode tables -----------------------
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class StoredModeTable:
-    """One mode's table as a HomeBase 3 stores it (the keys of the 1255 body).
+    """One mode's table as a station stores it (the keys of the 1255 body).
 
     ``actions`` and ``siren_actions`` map channel → value in their stored order;
     ``alarm`` / ``arm`` are ``count_down_alarm`` / ``count_down_arm``. A read view:
     :meth:`to_mode_table` gives the :class:`~.mode_actions.ModeTable` to edit and write.
+    ``table_params`` is the layout the table was read from (:data:`STORED_MODE_TABLE_PARAMS`
+    on a HomeBase 3, :data:`PRO_ALARM_MODE_TABLE_PARAMS` on a pro-alarm station).
     """
 
     account_id: str | None
@@ -668,11 +685,14 @@ class StoredModeTable:
     alarm: CountDown
     arm: CountDown
     siren_actions: Mapping[int, int]
+    table_params: Mapping[GuardMode, int] = field(
+        default=STORED_MODE_TABLE_PARAMS, compare=False, repr=False
+    )
 
     @property
     def param(self) -> int:
         """The param that holds this mode's table."""
-        return STORED_MODE_TABLE_PARAMS[self.mode]
+        return self.table_params[self.mode]
 
     def _delays(self, count_down: CountDown) -> dict[int, int]:
         listed = set(count_down.channels)
@@ -745,10 +765,14 @@ def _count_down(value: object, what: str) -> CountDown:
 
 
 def decode_stored_mode_table(
-    raw: str | None, mode: GuardMode | int | None = None
+    raw: str | None,
+    mode: GuardMode | int | None = None,
+    *,
+    params: Mapping[GuardMode, int] = STORED_MODE_TABLE_PARAMS,
 ) -> StoredModeTable | None:
-    """A mode-table param (:data:`STORED_MODE_TABLE_PARAMS`) → :class:`StoredModeTable`;
-    ``None`` when absent or blank.
+    """A mode-table param of the layout ``params`` (:data:`STORED_MODE_TABLE_PARAMS`, the
+    default, or :data:`PRO_ALARM_MODE_TABLE_PARAMS`) → :class:`StoredModeTable`; ``None``
+    when absent or blank. Keys outside the 1255 body are ignored.
 
     With ``mode`` given, the table's ``mode_id`` must be that mode. Raises
     ``ProtocolError`` for input that is not a table, a ``mode_id`` without a stored
@@ -758,7 +782,7 @@ def decode_stored_mode_table(
         return None
     what = "mode table"
     body = _obj(_b64_json(raw, what), what)
-    table_mode = _guard_mode(_int(body, "mode_id", what), what, STORED_MODE_TABLE_PARAMS)
+    table_mode = _guard_mode(_int(body, "mode_id", what), what, params)
     if mode is not None and table_mode != _to_mode(mode, "mode"):
         raise ProtocolError(
             f"{what}: holds {table_mode.name.lower()}, expected {GuardMode(mode).name.lower()}"
@@ -772,7 +796,22 @@ def decode_stored_mode_table(
         siren_actions=_channel_actions(
             body.get("siren_sensor_action", []), f"{what} siren_sensor_action"
         ),
+        table_params=params,
     )
+
+
+def decode_pro_alarm_mode_table(
+    raw: str | None, mode: GuardMode | int | None = None
+) -> StoredModeTable | None:
+    """A pro-alarm station's mode-table param (:data:`PRO_ALARM_MODE_TABLE_PARAMS`) →
+    :class:`StoredModeTable`; as :func:`decode_stored_mode_table`."""
+    return decode_stored_mode_table(raw, mode, params=PRO_ALARM_MODE_TABLE_PARAMS)
+
+
+def encode_stored_mode_table(body: bytes) -> str:
+    """The value a station stores for the 1255 ``body`` it was sent: its base64, as the
+    eufy app files it."""
+    return base64.b64encode(body).decode("ascii")
 
 
 # --- 1072 / 1073: cross-camera tracking --------------------------------------
