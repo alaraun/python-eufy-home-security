@@ -2245,6 +2245,13 @@ station.config  # the same, built from the current state, no I/O
   the copy the station stores per mode (on a HomeBase 3, 1157-1161 and 1177, usually from
   the cloud list, which lags a write until the next list fetch). None when no source
   carries the table (a mode never configured); a table is never invented.
+- **Delay choices.** An entry (`alarm_delay`) or exit (`leaving_delay`) delay takes one of
+  `MODE_DELAY_CHOICES` (`from eufy_home_security import MODE_DELAY_CHOICES`: 0, 15, 30,
+  45, 60, 180, 300 s; 0 is off), the list the eufy app offers on every station. No model
+  has a list of its own; a station whose `config_support(StationFeature.MODE_DELAYS)` is
+  `UNKNOWN` (the app offers no delays there, or the library cannot send them) gets no
+  delay control at all. The per-mode delay settings carry the same list as
+  `setting.values`.
 - **Missing and unreadable values.** A value no source carries is None and has no
   `sources` entry. A value a source carries but that does not decode is named in
   `config.unreadable` with the reason; the field falls back to the next source, else None.

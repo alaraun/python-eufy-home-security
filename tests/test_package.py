@@ -64,6 +64,12 @@ def test_redaction_helpers_are_exported() -> None:
     assert redact is eufy_home_security._logging.redact
 
 
+def test_the_card_constants_are_exported_from_the_root() -> None:
+    from eufy_home_security.p2p import mode_actions  # noqa: PLC0415
+
+    assert eufy_home_security.MODE_DELAY_CHOICES is mode_actions.MODE_DELAY_CHOICES
+
+
 def test_every_cloud_public_name_resolves() -> None:
     for name in eufy_home_security.cloud.__all__:
         assert getattr(eufy_home_security.cloud, name) is not None
