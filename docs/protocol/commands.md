@@ -162,6 +162,12 @@ that serves reads, and do not resend into a stall — each resend queues again.
 - GET commands do **not** read guard mode on this firmware: `1107`, `1108` and
   `1151` are rejected with receipt −108
   ([GET commands](#get-commands-not-served-verified)).
+- **Per model [app].** The library sends this request to every station model graded
+  *declared* or *verified* for `GUARD_MODE` (verified on a T8030 and a standalone T8170)
+  and to stations whose model is not a station on record. The eufy app arms a T8N00 and
+  a T9000 over WebRTC: the library refuses the write there before sending, as on every
+  station model graded *unknown*
+  ([devices.md § Station configuration](../reference/devices.md#station-configuration)).
 - **`0x0473` (1139).** The eufy app sends an empty `0x0473` about every 20 s and the
   station answers each with a GCM body of 8 zero bytes **[verified]** — a keepalive,
   not a status read. The library sends it only to a standalone device while it streams
@@ -648,6 +654,18 @@ by a receipt (code 0) and no `0x0547`.
   siren accessory, else 0. All 0 on a station without one.
 - 1157–1161 (`ARM_DELAY_*`, not in the parameter dump) are, to the app, a base64 JSON
   copy of each mode's table, not a number.
+- **The body is the same on every model [app]**; models differ in where the station's
+  copy of the table lives after the write (`mode_table_storage`):
+
+  | layout | models | the mode's table after a 1255 |
+  |---|---|---|
+  | `ACTION_PARAMS` | T8001, T8002, T8010, T8025 | each device's per-mode params (actions 1239/1225/1148–1150, delays 1166–1175) |
+  | `HB3_TABLES` | T8030 | the devices' params, and the whole table in 1158 Away, 1157 Home, 1159–1161 Custom 1–3, 1177 Disarmed |
+  | `PRO_ALARM` | T8020, T8023, T8024, T8026 (and the T8N00/T9000, not supported) | the devices' params, and the whole table in 61301 Away, 61300 Home, 61307–61309 Custom 1–3, 61306 Disarmed |
+
+  The eufy app reads the `PRO_ALARM` models' tables from the devices' params; the
+  library does the same and falls back to the stored copy where no device reports the
+  mode (see [Station configuration params](#station-configuration-params-app)).
 - 1177 (`GET_OFF_ACTION`) is the Off mode's action param; the Off mode has no delay ids
   and the library writes no table for it.
 
@@ -660,7 +678,9 @@ by a receipt (code 0) and no `0x0547`.
    missing from it refuses the write (a table without it would drop it).
 2. Build the mode's table from it (`p2p.mode_actions.mode_table_from_params`): every
    sub-device block that reports the mode's action param is a device of the table;
-   an unreported delay counts as 0.
+   an unreported delay counts as 0. On a `PRO_ALARM` model whose devices report none,
+   the table is the station's stored copy (61300–61309: the dump, else the library's own
+   last write, else the cloud list); with neither, the write is refused.
 3. Apply the one change. An action replaces that device's mask (named flags only
    change their bit). A delay follows the one-value-per-mode rule: **non-zero** sets the
    value on the target **and on every device whose delay for that mode is already on**
@@ -676,7 +696,11 @@ by a receipt (code 0) and no `0x0547`.
 5. Send it (`StationSession.async_set_mode_table`, frame type 1255, no resend). A
    non-zero receipt raises `CommandRejectedError`; a zero receipt is not success: every
    action and every listed or turned-off delay is read back, and a value that does not
-   hold after three reads raises `CommandNotAppliedError`.
+   hold after three reads raises `CommandNotAppliedError`. A table built from a stored
+   copy is confirmed against that param instead: a fresh dump carrying it must hold the
+   table; where the dump lacks it, the zero receipt confirms the write and the sent body
+   (base64) is filed as the param's value until the cloud's copy changes. A stored copy
+   that names a siren-accessory trigger (`siren_sensor_action` 1) refuses the write.
 
 The library's 1255 write is proven on a HomeBase 3 with two eufyCam 3 and a motion
 sensor: every delay of Home, Away and Custom 1 on a camera and the Home delays on the
@@ -741,6 +765,7 @@ Codec: `p2p/station_config_codecs.py` (pure); absent or blank means "not set".
 | 1254 `SET_JSON_SCHEDULE` | the weekly schedule | `{"account_id", "schedules": [{"end_h", "end_m", "mode_id", "start_h", "start_m", "week"}]}` |
 | 1257 `SET_SCHEDULE_DEFAULT` | the mode outside every slot | a plain integer, not base64 |
 | 1157 Home, 1158 Away, 1159–1161 Custom 1–3, 1177 Disarmed | a mode's whole action table (HomeBase 3) | the 1255 body above |
+| 61300 Home, 61301 Away, 61307–61309 Custom 1–3, 61306 Disarmed | a mode's whole action table (pro-alarm models: T8020, T8023, T8024, T8026, T8N00, T9000) | the 1255 body above, as sent |
 | 1072 | cameras chosen for cross-camera tracking | `["<serial>", ...]`; absent = every camera of the station |
 | 1073 | cross-camera tracking groups | `[{"value": ["<serial>", ...]}, ...]` |
 
@@ -764,7 +789,19 @@ and a slot mode (and the 1257 default) among Away, Home, Custom 1–3 and Disarm
 **Stored mode tables.** The same keys and key order as the 1255 body. The codec reads
 a count-down as the app does (each listed device of the table at `delay_time`, the
 others at 0) and turns a table into the `mode_actions.ModeTable` a 1255 write
-starts from; Disarmed has no 1255 table.
+starts from; Disarmed has no 1255 table. A pro-alarm model's 613xx value is the base64
+of the compact 1255 body exactly as sent (`decode_pro_alarm_mode_table`,
+`encode_stored_mode_table`); a table written from the app's newer settings pages may
+also carry `auto_camera_action`, `count_down_pro_alarm` and `method`, which the codec
+ignores. Example (Home, 61300, decoded):
+
+```json
+{"account_id": "<owner>", "mode_id": 1,
+ "devices": [{"device_channel": 1, "action": 9}, {"device_channel": 0, "action": 143}],
+ "count_down_alarm": {"channel_list": [0], "delay_time": 30},
+ "count_down_arm": {"channel_list": [1, 0], "delay_time": 60},
+ "siren_sensor_action": [{"device_channel": 1, "action": 0}, {"device_channel": 0, "action": 0}]}
+```
 
 **Cross-camera tracking (1072, 1073).** A write is a 1350 `DeviceMsgBean` on channel
 255 whose `cmd` is the param and whose `payload` is the whole list (the serials, or the
