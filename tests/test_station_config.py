@@ -441,12 +441,18 @@ def test_a_pro_alarm_station_whose_devices_report_their_params_reads_those() -> 
 
 
 def test_a_homebase_3_does_not_read_the_pro_alarm_params() -> None:
+    """Its own stored copy (1158) gives the configuration's table, as before, but never
+    the per-mode settings; 61301 is not its layout."""
     state = state_of(
         {1224: "0", 61301: pro_alarm_table(0, {0: 9}, alarm=([0], 30))},
+        cloud={1158: stored_table(0, {0: 1}, alarm=([], 0))},
         blocks={0: {1101: "87"}},
     )
-    assert build_station_config(state).mode_tables[GuardMode.AWAY] is None
+    away = build_station_config(state).mode_tables[GuardMode.AWAY]
+    assert away is not None
+    assert [d.action for d in away.devices] == [1]
     assert state.devices[0].stored_mode_params == {}
+    assert state.setting("camera_action_away", device_sn=SYNTHETIC.camera_sn) is None
 
 
 def test_an_undecodable_pro_alarm_table_is_none_and_says_why() -> None:

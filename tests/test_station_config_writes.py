@@ -690,6 +690,19 @@ async def test_pro_alarm_writes_without_a_usable_table_send_nothing(
     assert fake.mode_tables_received == []
 
 
+async def test_a_homebase_3_never_writes_from_a_stored_copy(
+    station: Station, fake: FakeStation
+) -> None:
+    """The HomeBase 3 path is unchanged: without the devices' params its stored copy
+    (1158) does not stand in for the table."""
+    away = b64({**_body(0, 9, ([], 0)), "account_id": ACCOUNT})
+    station.apply_cloud_device(_cloud_entry({1256: LISTED, 1158: away}))
+    fake.params[255][61301] = AWAY_TABLE
+    with pytest.raises(UnsupportedError, match=r"\(no device reports param 1239\)$"):
+        await station.async_set_mode_actions("away", {CAMERA.device_sn: {"record": True}})
+    assert fake.mode_tables_received == []
+
+
 async def test_a_pro_alarm_station_whose_devices_report_their_params_writes_as_before(
     pro_alarm: Station, fake: FakeStation
 ) -> None:
