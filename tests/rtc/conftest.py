@@ -14,7 +14,5 @@ from .fakes import SERVERS
 async def _close_servers() -> AsyncIterator[None]:
     yield
     while SERVERS:
-        server = SERVERS.pop()
-        if server.transport is not None:
-            server.transport.close()
+        SERVERS.pop().close()
     await asyncio.sleep(0)

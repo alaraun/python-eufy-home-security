@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import itertools
 import json
+import random
 from typing import Any
 
 import pytest
@@ -32,6 +34,7 @@ from .fakes import (
     USER_ID,
     FakeCrypto,
     FakeServer,
+    Received,
     config,
     start_server,
     unseal,
@@ -41,17 +44,28 @@ NOW = 1_789_000_000.0
 
 
 async def _client(
-    server_kwargs: dict[str, Any] | None = None, **cfg: Any
+    server_kwargs: dict[str, Any] | None = None,
+    client_kwargs: dict[str, Any] | None = None,
+    **cfg: Any,
 ) -> tuple[FakeServer, SignalingClient, FakeCrypto]:
     server, port = await start_server(**(server_kwargs or {}))
     crypto = FakeCrypto()
-    client = SignalingClient(config(**cfg), crypto, port=port, clock=lambda: NOW)
+    client = SignalingClient(
+        config(**cfg),
+        crypto,
+        port=port,
+        tcp_ports=(server.tcp_port,),
+        clock=lambda: NOW,
+        **(client_kwargs or {}),
+    )
     await client.open()
     return server, client, crypto
 
 
-async def _logged_in(**server_kwargs: object) -> tuple[FakeServer, SignalingClient, FakeCrypto]:
-    server, client, crypto = await _client(server_kwargs)
+async def _logged_in(
+    client_kwargs: dict[str, Any] | None = None, **server_kwargs: object
+) -> tuple[FakeServer, SignalingClient, FakeCrypto]:
+    server, client, crypto = await _client(server_kwargs, client_kwargs)
     await client.discover()
     await client.login()
     return server, client, crypto
@@ -393,3 +407,190 @@ def test_private_call_uuid_is_36_characters() -> None:
 
 def test_license_stays_out_of_the_config_repr() -> None:
     assert LICENSE not in repr(config())
+
+
+# ── LOGIN retries ────────────────────────────────────────────────────────────
+
+
+def test_login_waits_grow_threefold_up_to_270_s() -> None:
+    for seed in range(20):
+        delays = signaling.login_retry_delays(random.Random(seed))
+        assert len(delays) == signaling.LOGIN_ATTEMPTS
+        assert 11 <= delays[0] <= 20
+        for before, after in itertools.pairwise(delays):
+            assert after == min(before * 3, 270)
+    assert signaling.login_retry_delays(random.Random(0))[-1] <= 270
+
+
+@pytest.fixture
+def short_login_waits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(signaling, "login_retry_delays", lambda rng: [0.05] * 3)
+
+
+@pytest.mark.usefixtures("short_login_waits")
+async def test_an_unanswered_login_is_sent_again() -> None:
+    server, client, _ = await _client({"drop_logins": 2})
+    try:
+        await client.discover()
+        assert (await client.login()).contact_id == CONTACT
+        regs = [r for r in server.received if r.header.message_type == MessageType.LOGIN]
+        assert [r.header.body_type for r in regs] == [BodyType.NONE] * 3 + [BodyType.KEY_EXCHANGE]
+        assert len({r.header.counter for r in regs}) == 4
+    finally:
+        await client.close()
+
+
+@pytest.mark.usefixtures("short_login_waits")
+async def test_a_lost_key_exchange_answer_resends_it_with_the_challenge_id() -> None:
+    server, client, _ = await _client()
+    seen: list[int] = []
+
+    def drop_first_exchange(item: Received) -> None:
+        if item.header.body_type == BodyType.KEY_EXCHANGE and not seen:
+            seen.append(1)
+            server.drop_logins = 1
+
+    server.on_packet = drop_first_exchange
+    try:
+        await client.discover()
+        await client.login()
+        exchanges = [r for r in server.received if r.header.body_type == BodyType.KEY_EXCHANGE]
+        assert len(exchanges) == 2
+        assert exchanges[0].header.packet_id == exchanges[1].header.packet_id
+    finally:
+        await client.close()
+
+
+@pytest.mark.usefixtures("short_login_waits")
+async def test_a_login_unanswered_every_time_times_out() -> None:
+    server, client, _ = await _client({"drop_logins": 99})
+    try:
+        with pytest.raises(DeviceTimeoutError):
+            await client.login()
+        assert server.kinds().count(MessageType.LOGIN) == 3
+        assert not client.logged_in
+    finally:
+        await client.close()
+
+
+# ── re-discover flag ─────────────────────────────────────────────────────────
+
+
+async def test_the_rediscover_flag_runs_discover_and_a_quick_relogin() -> None:
+    records: list[QuickLogin] = []
+    server, client, _ = await _logged_in({"on_login": records.append})
+    try:
+        assert len(records) == 1
+        before = len(server.received)
+        server.device_message(server.received[-1].addr, flags=codec.FLAG_REDISCOVER)
+        await _until(lambda: len(records) == 2)
+        later = [r.header for r in server.received[before:] if not r.header.is_response]
+        assert [h.message_type for h in later] == [MessageType.DISCOVER, MessageType.LOGIN]
+        assert later[1].body_type == BodyType.CONTACT
+        assert records[1].contact_id == CONTACT
+        assert records[1].logged_in_at == records[0].logged_in_at == NOW
+    finally:
+        await client.close()
+
+
+async def test_the_rediscover_flag_before_login_is_ignored() -> None:
+    server, client, _ = await _client()
+    try:
+        await client.discover()
+        server.device_message(server.received[-1].addr, flags=codec.FLAG_REDISCOVER)
+        await asyncio.sleep(0.05)
+        assert server.kinds() == [MessageType.DISCOVER]
+    finally:
+        await client.close()
+
+
+# ── CALL wake over TCP ───────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def short_call_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(signaling, "CALL_REPLY_TIMEOUT", 0.05)
+
+
+@pytest.mark.usefixtures("short_call_reply")
+async def test_an_unanswered_call_is_sent_plain_over_tcp_and_answered_there() -> None:
+    server, client, _ = await _logged_in(udp_calls=False)
+    try:
+        call = await client.call(CallKind.CHANNEL_P2P, channel=2)
+        offer = await call.wait_offer(2)
+        assert offer["request_id"] == "r1"
+        calls = [r for r in server.received if r.header.message_type == MessageType.CALL]
+        assert [r.via for r in calls] == ["udp", "tcp"]
+        assert calls[1].header.transport_flag == 0
+        assert calls[1].header.request_id == calls[0].header.request_id
+        assert calls[1].body == calls[0].body
+        await _until(lambda: MessageType.ACK in server.kinds())
+        ack = next(r for r in server.received if r.header.message_type == MessageType.ACK)
+        assert ack.via == "udp"
+    finally:
+        await client.close()
+
+
+@pytest.mark.usefixtures("short_call_reply")
+async def test_an_answered_call_is_not_sent_over_tcp() -> None:
+    server, client, _ = await _logged_in(call_reply="trying")
+    try:
+        call = await client.call(CallKind.CHANNEL_P2P)
+        await _until(call.answered.is_set)
+        await asyncio.sleep(0.2)
+        assert all(r.via == "udp" for r in server.received)
+    finally:
+        await client.close()
+
+
+@pytest.mark.usefixtures("short_call_reply")
+async def test_the_tcp_wake_gives_up_after_its_attempts() -> None:
+    server, client, _ = await _logged_in(call_reply="silent")
+    try:
+        await client.call(CallKind.CHANNEL_P2P)
+        await _until(lambda: not client._wake_tasks)
+        tcp = [r for r in server.received if r.via == "tcp"]
+        assert len(tcp) == signaling.WAKE_ATTEMPTS
+    finally:
+        await client.close()
+
+
+@pytest.mark.usefixtures("short_call_reply")
+async def test_no_tcp_wake_when_disabled_or_hung_up() -> None:
+    server, client, _ = await _logged_in(call_reply="silent")
+    try:
+        await client.call(CallKind.CHANNEL_P2P, wake=False)
+        client.hangup(await client.call(CallKind.CHANNEL_P2P))
+        await asyncio.sleep(0.2)
+        assert all(r.via == "udp" for r in server.received)
+    finally:
+        await client.close()
+
+
+@pytest.mark.usefixtures("short_call_reply")
+async def test_a_refused_tcp_connection_is_survived() -> None:
+    server, client, _ = await _logged_in(call_reply="silent")
+    assert server.tcp is not None
+    server.tcp.close()
+    await server.tcp.wait_closed()
+    try:
+        call = await client.call(CallKind.CHANNEL_P2P)
+        await _until(lambda: not client._wake_tasks)
+        assert not call.answered.is_set()
+    finally:
+        await client.close()
+
+
+async def test_the_quick_login_record_keeps_the_login_time() -> None:
+    _, port = await start_server()
+    now = [NOW]
+    client = SignalingClient(config(), FakeCrypto(), port=port, clock=lambda: now[0])
+    await client.open()
+    try:
+        await client.login()
+        now[0] += 600
+        record = client.quick_login()
+        assert record is not None
+        assert record.logged_in_at == NOW
+    finally:
+        await client.close()

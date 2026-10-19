@@ -203,3 +203,31 @@ def test_json_text_refuses_non_objects() -> None:
         codec.json_text(b"[1]")
     with pytest.raises(ProtocolError):
         codec.json_text(b"{bad")
+
+
+def test_the_stream_decoder_splits_back_to_back_packets() -> None:
+    first = codec.encode_packet(
+        Header(message_type=2, packet_id=1, serial=SYNTHETIC.station_sn), b"abc", obfuscated=False
+    )
+    second = codec.encode_packet(
+        Header(message_type=4, packet_id=2, serial=SYNTHETIC.station_sn), obfuscated=False
+    )
+    stream = first + second
+    decoder = codec.StreamDecoder()
+    out: list[bytes] = []
+    for i in range(0, len(stream), 7):
+        out += decoder.feed(stream[i : i + 7])
+    assert out == [first, second]
+    assert codec.decode_packet(out[0])[1] == b"abc"
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        (b"\x08\x00" + bytes(0x27), "tag"),
+        (b"\x03\x00" + bytes(4) + b"\x01\x10" + bytes(0x21), "exceeds"),
+    ],
+)
+def test_the_stream_decoder_refuses_a_stream_out_of_step(data: bytes, message: str) -> None:
+    with pytest.raises(ProtocolError, match=message):
+        codec.StreamDecoder().feed(data)

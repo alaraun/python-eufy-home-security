@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -87,6 +88,10 @@ class Received:
     header: Header
     body: bytes
     addr: tuple[str, int]
+    via: str = "udp"
+
+
+Reply = Callable[[Header, bytes], None]
 
 
 @dataclass
@@ -97,7 +102,13 @@ class FakeServer(asyncio.DatagramProtocol):
     call_reply: str = "offer"
     """``offer`` (100 then 200), ``trying`` (100 only), ``busy`` (486), ``silent``."""
     refuse_login: bool = False
+    udp_calls: bool = True
+    """False: a CALL over UDP goes unanswered (a sleeping device), only TCP answers."""
+    drop_logins: int = 0
+    """How many LOGIN requests go unanswered first."""
     transport: asyncio.DatagramTransport | None = None
+    tcp: asyncio.Server | None = None
+    tcp_port: int = 0
     on_packet: Callable[[Received], None] | None = None
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
@@ -111,9 +122,32 @@ class FakeServer(asyncio.DatagramProtocol):
         assert self.transport is not None
         self.transport.sendto(codec.obfuscate(codec.encode_packet(header, body)), addr)
 
+    def close(self) -> None:
+        if self.transport is not None:
+            self.transport.close()
+        if self.tcp is not None:
+            self.tcp.close()
+
     def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
         header, body = codec.decode_packet(codec.deobfuscate(data))
-        item = Received(header, body, addr)
+        self._handle(Received(header, body, addr), lambda h, b: self.send(h, b, addr))
+
+    async def _tcp_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        addr = writer.get_extra_info("peername")
+        decoder = codec.StreamDecoder()
+
+        def reply(header: Header, body: bytes) -> None:
+            writer.write(codec.encode_packet(header, body, obfuscated=False))
+
+        with contextlib.suppress(OSError):
+            while data := await reader.read(4096):
+                for packet in decoder.feed(data):
+                    header, body = codec.decode_packet(packet)
+                    self._handle(Received(header, body, addr, "tcp"), reply)
+        writer.close()
+
+    def _handle(self, item: Received, reply: Reply) -> None:
+        header, body = item.header, item.body
         self.received.append(item)
         if self.on_packet is not None:
             self.on_packet(item)
@@ -122,71 +156,62 @@ class FakeServer(asyncio.DatagramProtocol):
         mtype = header.message_type
         if mtype == MessageType.DISCOVER:
             answer = {"server_addr": "self", "timestamp": 1, "saddrs": []}
-            self.send(
-                header.response(200, body_type=BodyType.JSON), json.dumps(answer).encode(), addr
-            )
+            reply(header.response(200, body_type=BodyType.JSON), json.dumps(answer).encode())
         elif mtype == MessageType.LOGIN:
-            self._login(header, body, addr)
-        elif mtype == MessageType.CALL:
-            self._call(header, body, addr)
+            if self.drop_logins > 0:
+                self.drop_logins -= 1
+                return
+            self._login(header, body, reply)
+        elif mtype == MessageType.CALL and (self.udp_calls or item.via == "tcp"):
+            self._call(header, body, reply)
 
-    def _login(self, header: Header, body: bytes, addr: tuple[str, int]) -> None:
+    def _login(self, header: Header, body: bytes, reply: Reply) -> None:
         if header.body_type == BodyType.KEY_EXCHANGE:
             exchange = KeyExchangeBody.decode(body)
             assert exchange.sealed_key.rstrip(b"\0") == f"K:{PUBLIC_KEY}:{SESSION_KEY}".encode()
             identity = FakeCrypto().open(SESSION_KEY, 0, exchange.sealed_identity)
             if self.refuse_login or identity != f"{SYNTHETIC.did}:{LICENSE}".encode():
-                self.send(
-                    header.response(401, body_type=BodyType.DEFAULT_KEY_BLOB),
-                    PUBLIC_KEY.encode(),
-                    addr,
+                reply(
+                    header.response(401, body_type=BodyType.DEFAULT_KEY_BLOB), PUBLIC_KEY.encode()
                 )
                 return
-            reply = header.response(200, body_type=BodyType.CONTACT)
-            self.send(
-                Header(**{**_fields(reply), "sub_id": 9}), ContactBody(CONTACT).encode(), addr
-            )
+            ok = header.response(200, body_type=BodyType.CONTACT)
+            reply(Header(**{**_fields(ok), "sub_id": 9}), ContactBody(CONTACT).encode())
             return
         if header.body_type == BodyType.CONTACT:
             contact = ContactBody.decode(body)
             if contact.contact_id == CONTACT:
-                self.send(
-                    header.response(200, body_type=BodyType.CONTACT),
-                    ContactBody(CONTACT).encode(),
-                    addr,
+                reply(
+                    header.response(200, body_type=BodyType.CONTACT), ContactBody(CONTACT).encode()
                 )
                 return
-        self.send(
-            header.response(401, body_type=BodyType.DEFAULT_KEY_BLOB), PUBLIC_KEY.encode(), addr
-        )
+        reply(header.response(401, body_type=BodyType.DEFAULT_KEY_BLOB), PUBLIC_KEY.encode())
 
-    def _call(self, header: Header, body: bytes, addr: tuple[str, int]) -> None:
+    def _call(self, header: Header, body: bytes, reply: Reply) -> None:
         call = CallBody.decode(body)
         if self.call_reply == "silent":
             return
         if self.call_reply == "busy":
-            self.send(header.response(486), call.without_attachment().encode(), addr)
+            reply(header.response(486), call.without_attachment().encode())
             return
         turn = {"turn": {"addr": "198.51.100.9", "port": 3478, "user": "u", "password": "p"}}
-        self.send(
+        reply(
             Header(**{**_fields(header.response(100)), "encrypted": True}),
             CallBody(call.channel, call.uuid, CONTACT, seal(json.dumps(turn).encode())).encode(),
-            addr,
         )
         if self.call_reply == "offer":
             offer = {
                 "sdp": {"ice-u": "dev", "ice-p": "pwd", "asc": 1, "vsc": "2"},
                 "request_id": "r1",
             }
-            self.send(
+            reply(
                 Header(**{**_fields(header.response(200)), "encrypted": True}),
                 CallBody(
                     call.channel, call.uuid, CONTACT, seal(json.dumps(offer).encode())
                 ).encode(),
-                addr,
             )
 
-    def device_message(self, addr: tuple[str, int], packet_id: int = 77) -> None:
+    def device_message(self, addr: tuple[str, int], packet_id: int = 77, flags: int = 0) -> None:
         header = Header(
             message_type=MessageType.MESSAGE,
             packet_id=packet_id,
@@ -196,6 +221,7 @@ class FakeServer(asyncio.DatagramProtocol):
             counter=4,
             route=1,
             sender=0,
+            flags=flags,
         )
         self.send(header, MessageBody(0, 2, 0x66, CONTACT, seal(b'{"to": "app"}')).encode(), addr)
 
@@ -232,6 +258,8 @@ async def start_server(**kwargs: Any) -> tuple[FakeServer, int]:
     loop = asyncio.get_running_loop()
     server = FakeServer(**kwargs)
     transport, _ = await loop.create_datagram_endpoint(lambda: server, local_addr=("127.0.0.1", 0))
+    server.tcp = await asyncio.start_server(server._tcp_client, "127.0.0.1", 0)
+    server.tcp_port = server.tcp.sockets[0].getsockname()[1]
     SERVERS.append(server)
     return server, transport.get_extra_info("sockname")[1]
 
