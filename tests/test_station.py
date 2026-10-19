@@ -35,7 +35,7 @@ from eufy_home_security.devices.recipes import (
 from eufy_home_security.devices.sections import MODES_SECTION
 from eufy_home_security.devices.settings import Scope
 from eufy_home_security.devices.station_config_support import StationFeature
-from eufy_home_security.devices.support import Support
+from eufy_home_security.devices.support import Evidence, Support
 from eufy_home_security.devices.timezones import encode_zone, zone_ids
 from eufy_home_security.devices.types import DeviceKind
 from eufy_home_security.events import (
@@ -2657,6 +2657,37 @@ def test_live_support_of_a_standalone_camera_follows_its_handler() -> None:
     evidence = station.live_support(t8400.device_sn)
     assert evidence.support is Support.DECLARED
     assert "single_no_ext" in evidence.source
+
+
+def _station_of(serial: str, device_type: int) -> Station:
+    device = CloudDevice(
+        device_sn=serial, device_type=device_type, name="HB", p2p_did=SYNTHETIC.did
+    )
+    return Station(device, _unconnected_station(host=None, local_ip=None, local_port=0).session)
+
+
+def test_local_events_of_a_homebase_3_is_verified() -> None:
+    hub = _hub_with(CAMERA)
+    assert hub.local_events.support is Support.VERIFIED
+    assert "2037" in hub.local_events.source
+
+
+def test_local_events_of_a_homebase_2_needs_cloud_push() -> None:
+    evidence = _station_of("T8010" + SYNTHETIC.station_sn[5:], 0).local_events
+    assert evidence.support is Support.UNKNOWN
+    assert "no detection push over P2P observed" in evidence.source
+    assert "cloud push" in evidence.note
+
+
+def test_local_events_of_a_standalone_camera_is_its_own_models_entry() -> None:
+    evidence = _standalone_t8170().local_events
+    assert evidence == Evidence(Support.UNKNOWN, "no local event push recorded for T8170")
+
+
+def test_local_events_of_a_model_without_a_profile_is_unknown() -> None:
+    evidence = _station_of("T8002" + SYNTHETIC.station_sn[5:], 0).local_events
+    assert evidence.support is Support.UNKNOWN
+    assert evidence.source == "no profile for this model"
 
 
 async def test_a_t8410_refuses_every_slot_call_before_sending(

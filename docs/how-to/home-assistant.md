@@ -458,7 +458,7 @@ What each reach gives:
 | state, guard mode | read at start and kept current | only from a push after it changes |
 | arm / disarm, settings | yes | **no** |
 | live view, snapshots, recordings | yes | **no** |
-| detections and other events | yes (station and push) | yes (push) |
+| detections and other events | yes (station and push; camera detections from the station only where `station.local_events` is verified) | yes (push) |
 
 The library has no cloud command path, so a remote station is monitor-only. Say so in
 the flow before the user enables one.
@@ -621,6 +621,11 @@ A `DataUpdateCoordinator[StationState]` per station:
 - Push (FCM) is opt-in and needs the cloud; its start can take its whole deadline. If
   the user enabled it, start it after the platforms are forwarded, as a background task:
   `entry.async_create_background_task(hass, eufy.async_start(p2p=False, push=True), …)`.
+- **Which stations need push for detections:** `station.local_events` (an `Evidence`)
+  says whether the station pushes its cameras' detections over P2P; its paired devices
+  follow it. Only `Support.VERIFIED` (a HomeBase 3) delivers them locally; for any other
+  grade (a HomeBase 2, an uncatalogued station) the detections arrive by cloud push only,
+  so offer or require push for that station and show `local_events.source` as the reason.
 - **Push status:** `PushChanged(running, error)` arrives on every change, and
   `eufy.push_running` / `eufy.push_error` give it on demand; `async_start` never raises for
   push. While push is enabled but not running, raise a "push is not running" repair
@@ -2677,6 +2682,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
             "connected": s.connected,
             "last_error": type(s.last_error).__name__ if s.last_error else None,
             "lan_path_warnings": [w.value for w in s.lan_path.warnings],
+            "local_events": s.local_events.support.value,
             "sub_devices": [d.as_redacted_dict() for d in s.sub_devices],
             "cloud_params": list(s.state.cloud_param_ids) if s.state else None,
         }

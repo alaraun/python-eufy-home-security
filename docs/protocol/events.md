@@ -7,7 +7,7 @@ A station reports what happens at the house on two independent channels:
 | transport | the PPPP session already held | Firebase Cloud Messaging from the eufy backend |
 | needs internet | no | yes |
 | latency | about 1 s **ahead** of the cloud, about 3 s behind the trigger **[verified]** | about 1 s behind local **[verified]** |
-| camera detections | yes, with on-disk video, thumbnail and crop paths | yes (same inner JSON), with `pic_url` |
+| camera detections | HomeBase 3 **[verified]**, with on-disk video, thumbnail and crop paths; none seen from a HomeBase 2 (`Station.local_events`) | yes (same inner JSON), with `pic_url` |
 | guard-mode changes | changes over P2P, from the app and from a schedule announced by `0x047F` **[verified, fw 3.8.7.4]**; keypad changes **[open]** (poll the parameter dump); no arming push (msg_type 9) over P2P | **pushed**, decoded within about 1 s **[verified]** |
 | parameter changes (battery, settings) | pushed as dumps, plus polling | no |
 | stills | 640×360 thumbnail, crop, 4K from the recording ([media.md](media.md)) | encrypted `pic_url` thumbnail **[app]** |
@@ -483,7 +483,8 @@ before anything reaches the deduplicator.
 
 | need | use |
 |---|---|
-| camera detections on the LAN | local push: sooner, richer paths, no internet |
+| camera detections on the LAN | local push where `Station.local_events` is verified: sooner, richer paths, no internet |
+| camera detections of any other station (a HomeBase 2) | cloud push |
 | guard mode, within seconds | cloud push (`arming`) |
 | guard mode, authoritative | parameter dump (station 1224) |
 | batteries, RSSI, storage, settings | parameter dump + local change pushes |

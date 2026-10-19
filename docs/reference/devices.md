@@ -176,6 +176,17 @@ Support legend (models, capabilities and guard modes):
 
 Models without a profile below offer no capability (all *unknown*).
 
+## T8010 HomeBase 2
+
+| capability | support | source |
+|---|---|---|
+| local_events | unknown | no detection push over P2P observed from a T8010 HomeBase 2 (its cameras' detections arrive through cloud push) |
+
+Settings: rw 10 / ro 40, see [Settings of T8010 HomeBase 2](#settings-of-t8010-homebase-2)
+
+| parameter | id |
+|---|---|
+
 ## T8030 HomeBase 3 (S380)
 
 | capability | support | source |

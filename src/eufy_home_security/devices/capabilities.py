@@ -151,6 +151,20 @@ _T8030 = DeviceProfile(
     ),
 )
 
+_T8010 = DeviceProfile(
+    model="T8010",
+    capabilities=MappingProxyType(
+        {
+            Capability.LOCAL_EVENTS: Evidence(
+                Support.UNKNOWN,
+                "no detection push over P2P observed from a T8010 HomeBase 2",
+                "its cameras' detections arrive through cloud push",
+            ),
+        }
+    ),
+    params=MappingProxyType({}),
+)
+
 _T8160 = DeviceProfile(
     model="T8160",
     capabilities=MappingProxyType(
@@ -406,7 +420,7 @@ def _register(registry: dict[str, DeviceProfile], *profiles: DeviceProfile) -> N
 
 
 _profiles: dict[str, DeviceProfile] = {}
-_register(_profiles, _T8030, _T8160, _T8910, _T8170, _T8161, _T8410)
+_register(_profiles, _T8030, _T8010, _T8160, _T8910, _T8170, _T8161, _T8410)
 
 PROFILES: Final[Mapping[str, DeviceProfile]] = MappingProxyType(_profiles)
 

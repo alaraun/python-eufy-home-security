@@ -2889,6 +2889,24 @@ class Station:
             self._product_code(self.serial), feature, firmware=self.device.main_sw_version
         )
 
+    @property
+    def local_events(self) -> Evidence:
+        """Whether this station pushes its cameras' detections over the P2P session:
+        the :attr:`~.devices.capabilities.Capability.LOCAL_EVENTS` entry of the
+        station's own model, else ``UNKNOWN`` with the reason.
+
+        The push is the station's, so every paired device follows it; a standalone
+        camera's is its own model's entry. Only ``VERIFIED`` means detections arrive
+        over the LAN; for any other grade a consumer needs cloud push
+        (``EufySecurity.async_start(push=True)``) to receive them.
+        """
+        profile = own_profile(self.serial)
+        listed = None if profile is None else profile.capabilities.get(Capability.LOCAL_EVENTS)
+        return listed or Evidence(
+            Support.UNKNOWN,
+            f"no local event push recorded for {self._product_code(self.serial) or 'this model'}",
+        )
+
     def _ptz_unsupported_reason(self, device_sn: str, actions: Sequence[str]) -> str:
         code = self._product_code(device_sn)
         connect = self._connect_type_of(device_sn)
