@@ -274,6 +274,39 @@ def decode_packet(data: bytes, *, check_crc: bool = True) -> tuple[Header, bytes
     return header, body
 
 
+#: Bytes a stream receiver reads before it knows a packet's length: up to the
+#: extension length byte at 0x28.
+STREAM_PREFIX_LEN: Final = 0x29
+
+
+class StreamDecoder:
+    """Splits the TCP byte stream into plain packets: the stream carries packets back
+    to back, without obfuscation or a length prefix; a packet's length follows from its
+    extension length (0x28) and body length (0x06)."""
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+
+    def feed(self, data: bytes) -> list[bytes]:
+        """The complete packets after ``data``. Raises
+        :class:`~.exceptions.ProtocolError` for a wrong tag or an over-long body: the
+        stream is out of step and must be closed."""
+        self._buffer += data
+        packets: list[bytes] = []
+        while len(self._buffer) >= STREAM_PREFIX_LEN:
+            tag, _, _, blen = struct.unpack_from("<HHHH", self._buffer, 0)
+            if tag != TAG:
+                raise ProtocolError(f"signaling stream tag {tag}, expected {TAG}")
+            if blen > MAX_BODY_LEN:
+                raise ProtocolError(f"signaling stream body of {blen} bytes exceeds {MAX_BODY_LEN}")
+            size = 0x28 + self._buffer[0x28] + blen
+            if len(self._buffer) < size:
+                break
+            packets.append(bytes(self._buffer[:size]))
+            del self._buffer[:size]
+        return packets
+
+
 def obfuscate(packet: bytes, *, rng: random.Random | None = None) -> bytes:
     """Wrap a plain packet for UDP: ``u16 8 | u16 len+pad | key[16] | u8 pad |
     u8 random | packet XOR key | pad random bytes``."""

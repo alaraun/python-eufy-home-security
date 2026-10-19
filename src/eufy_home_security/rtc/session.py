@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -100,12 +100,15 @@ class RtcSession:
         media_factory: type[MediaPlane] | None = None,
         data_channel: DataChannel | None = None,
         signaling: SignalingClient | None = None,
+        on_login: Callable[[QuickLogin], None] | None = None,
     ) -> None:
+        """``on_login`` receives every login record, re-logins included (unused with
+        an own ``signaling``, which takes it itself)."""
         self._config = config
         self._crypto = crypto
         self._media_factory = media_factory or UnavailableMediaPlane
         self._data_channel = data_channel
-        self.signaling = signaling or SignalingClient(config, crypto)
+        self.signaling = signaling or SignalingClient(config, crypto, on_login=on_login)
         self._live: dict[int, LiveCall] = {}
         self._log_name = redact_serial(config.station_sn)
 

@@ -14,6 +14,11 @@ Runs the signaling half of a WebRTC session the way the eufy app does:
 4. While logged in, a MESSAGE ping every 3 s keeps the session alive, and every
    MESSAGE request from the server or device is answered 200.
 
+A LOGIN request without an answer is sent again after 11-20 s, then at three times
+the previous wait, up to 270 s. A packet with the re-discover flag starts DISCOVER and
+a re-login. A CALL without an answer is sent again, plain, over TCP (5061 or 15061),
+as the app does for a sleeping device.
+
 Every attachment and message is sealed with the session key through an
 :class:`~.crypto.RtcCrypto`. See ``docs/protocol/rtc-signaling.md``.
 """
@@ -27,7 +32,7 @@ import hashlib
 import logging
 import random
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Final
@@ -56,12 +61,30 @@ _WIRE = wire_logger("rtc")
 
 DISCOVER_TIMEOUT: Final = 4.0
 DISCOVER_ATTEMPTS: Final = 3
-LOGIN_TIMEOUT: Final = 6.0
+LOGIN_ATTEMPTS: Final = 4
+LOGIN_RETRY_BASE: Final = 10.0
+LOGIN_RETRY_FACTOR: Final = 3
+LOGIN_RETRY_MAX: Final = 270.0
 PING_INTERVAL: Final = 3.0
 OFFER_TIMEOUT: Final = 60.0
 """How long a CALL waits for the device's offer: a battery device wakes first."""
+CALL_REPLY_TIMEOUT: Final = 5.0
+"""How long a CALL waits for any answer before it is sent again over TCP."""
+WAKE_ATTEMPTS: Final = 3
+TCP_CONNECT_TIMEOUT: Final = 5.0
 CALL_FTV: Final = 20
 NETWORK_UDP: Final = 1
+
+
+def login_retry_delays(rng: random.Random) -> list[float]:
+    """How long each LOGIN attempt waits for its answer: 10 s plus 1-10 s, then three
+    times the previous wait, at most 270 s; :data:`LOGIN_ATTEMPTS` waits."""
+    delay = LOGIN_RETRY_BASE + rng.randint(1, 10)
+    delays = []
+    for _ in range(LOGIN_ATTEMPTS):
+        delays.append(min(delay, LOGIN_RETRY_MAX))
+        delay *= LOGIN_RETRY_FACTOR
+    return delays
 
 
 def md5_hex(text: str) -> str:
@@ -116,6 +139,8 @@ class Call:
     device_request_id: Any = None
     offer: Mapping[str, Any] | None = None
     ended: bool = False
+    answered: asyncio.Event = field(default_factory=asyncio.Event)
+    """Set by the first answer to the CALL (100, 200 or an error code)."""
 
     async def wait_offer(self, timeout: float = OFFER_TIMEOUT) -> Mapping[str, Any]:
         """The device's offer (the CALL 200 payload). Raises
@@ -163,12 +188,18 @@ class SignalingClient:
         crypto: RtcCrypto,
         *,
         port: int = codec.UDP_PORT,
+        tcp_ports: Sequence[int] = codec.TCP_PORTS,
         clock: Callable[[], float] = time.time,
         rng: random.Random | None = None,
+        on_login: Callable[[QuickLogin], None] | None = None,
     ) -> None:
+        """``on_login`` receives the record of every login, the re-logins after a
+        re-discover flag included; a consumer stores it for the next quick login."""
         self._config = config
         self._crypto = crypto
         self._port = port
+        self._tcp_ports = tuple(tcp_ports)
+        self._on_login = on_login
         self._clock = clock
         self._rng = rng or random.SystemRandom()
         self._route = self._rng.getrandbits(8)
@@ -182,8 +213,12 @@ class SignalingClient:
         self._calls: list[Call] = []
         self._session_key: str | None = None
         self._contact_id: str | None = None
+        self._issued_at = 0.0
         self._login_sub = 0
         self._ping_task: asyncio.Task[None] | None = None
+        self._rediscover_task: asyncio.Task[None] | None = None
+        self._wake_tasks: set[asyncio.Task[None]] = set()
+        self._tcp: tuple[asyncio.StreamWriter, asyncio.Task[None]] | None = None
         self._log_name = redact_serial(config.station_sn)
 
     # ── state ────────────────────────────────────────────────────────────────
@@ -210,7 +245,7 @@ class SignalingClient:
         """The record a later client can log in with in one request."""
         if self._session_key is None or self._contact_id is None:
             return None
-        return QuickLogin(self._session_key, self._contact_id, self._server, self._clock())
+        return QuickLogin(self._session_key, self._contact_id, self._server, self._issued_at)
 
     # ── lifecycle ────────────────────────────────────────────────────────────
 
@@ -220,12 +255,18 @@ class SignalingClient:
             self._main = await self._open_endpoint("main")
 
     async def close(self) -> None:
-        """Stop the ping, hang up open calls, close every socket."""
-        if self._ping_task is not None:
-            self._ping_task.cancel()
+        """Stop the ping, re-login and wake tasks, hang up open calls, close every
+        socket."""
+        tasks = [t for t in (self._ping_task, self._rediscover_task) if t is not None]
+        tasks += self._wake_tasks
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
-                await self._ping_task
-            self._ping_task = None
+                await task
+        self._ping_task = self._rediscover_task = None
+        self._wake_tasks.clear()
+        self._close_tcp()
         for call in list(self._calls):
             if not call.ended:
                 with contextlib.suppress(OSError, ProtocolError, SignalingError):
@@ -321,6 +362,8 @@ class SignalingClient:
             addr[0],
             HexDump(body),
         )
+        if header.flags & codec.FLAG_REDISCOVER:
+            self._schedule_rediscover()
         if header.is_response:
             future = self._pending.get((header.message_type, header.request_id))
             if future is not None and not future.done():
@@ -385,37 +428,52 @@ class SignalingClient:
             return self._server
         raise AssertionError("unreachable")  # pragma: no cover
 
-    async def login(self) -> QuickLogin:
-        """Log in (quick login with a usable stored record, else the key exchange);
-        returns the record a later client can quick-login with. Raises
-        :class:`~.exceptions.SignalingError` when the server refuses the login."""
-        stored = self._config.quick_login
+    async def login(self, record: QuickLogin | None = None) -> QuickLogin:
+        """Log in: a quick login with a usable ``record`` (default: the config's),
+        else the key exchange; returns the record a later client can quick-login with.
+        Raises :class:`~.exceptions.SignalingError` when the server refuses the login,
+        :class:`~.exceptions.DeviceTimeoutError` when every attempt goes unanswered."""
+        stored = record or self._config.quick_login
         if stored is not None and stored.usable(self._clock()):
             self._server = stored.server or self._server
-            header, body = await self._request(
-                self._header(
+            body = ContactBody(
+                stored.contact_id,
+                self._crypto.seal(stored.session_key, int(self._clock()), self._config.identity),
+            ).encode()
+            header, answer = await self._login_request(
+                lambda: self._header(
                     MessageType.LOGIN, mode=0, sub_id=self._login_sub, body_type=BodyType.CONTACT
                 ),
-                ContactBody(
-                    stored.contact_id,
-                    self._crypto.seal(
-                        stored.session_key, int(self._clock()), self._config.identity
-                    ),
-                ).encode(),
-                timeout=LOGIN_TIMEOUT,
+                body,
             )
             if header.code == ResponseCode.OK:
-                return self._logged_in(header, body, stored.session_key)
+                return self._logged_in(header, answer, stored.session_key)
             if header.code != ResponseCode.UNAUTHORIZED:
                 raise SignalingError(f"quick LOGIN answered {header.code}", code=header.code)
-            return await self._key_exchange(header, body)
-        header, body = await self._request(
-            self._header(MessageType.LOGIN, mode=codec.WORK_PROTOCOL, sub_id=self._login_sub),
-            timeout=LOGIN_TIMEOUT,
+            return await self._key_exchange(header, answer)
+        header, answer = await self._login_request(
+            lambda: self._header(
+                MessageType.LOGIN, mode=codec.WORK_PROTOCOL, sub_id=self._login_sub
+            ),
         )
         if header.code != ResponseCode.UNAUTHORIZED:
             raise SignalingError(f"LOGIN answered {header.code}, expected 401", code=header.code)
-        return await self._key_exchange(header, body)
+        return await self._key_exchange(header, answer)
+
+    async def _login_request(
+        self, build: Callable[[], Header], body: bytes = b""
+    ) -> tuple[Header, bytes]:
+        delays = login_retry_delays(self._rng)
+        for attempt, delay in enumerate(delays, 1):
+            try:
+                return await self._request(build(), body, timeout=delay)
+            except DeviceTimeoutError:
+                if attempt == len(delays):
+                    raise
+                _LOGGER.debug(
+                    "%s: RTC LOGIN unanswered after %.0f s, sending again", self._log_name, delay
+                )
+        raise AssertionError("unreachable")  # pragma: no cover
 
     async def _key_exchange(self, challenge: Header, body: bytes) -> QuickLogin:
         public_key = self._crypto.open_challenge(body, challenge.packet_id)
@@ -424,8 +482,8 @@ class SignalingClient:
             self._crypto.seal_session_key(public_key, session_key),
             self._crypto.seal(session_key, challenge.packet_id, self._config.identity),
         )
-        header, answer = await self._request(
-            self._header(
+        header, answer = await self._login_request(
+            lambda: self._header(
                 MessageType.LOGIN,
                 packet_id=challenge.packet_id,
                 mode=challenge.mode,
@@ -433,7 +491,6 @@ class SignalingClient:
                 body_type=BodyType.KEY_EXCHANGE,
             ),
             exchange.encode(),
-            timeout=LOGIN_TIMEOUT,
         )
         if header.code != ResponseCode.OK:
             raise SignalingError(f"LOGIN key exchange answered {header.code}", code=header.code)
@@ -446,8 +503,28 @@ class SignalingClient:
         self._session_key = session_key
         self._contact_id = contact
         self._login_sub = header.sub_id
+        self._issued_at = self._clock()
         _LOGGER.debug("%s: RTC signaling logged in, contact %s", self._log_name, redact(contact))
-        return QuickLogin(session_key, contact, self._server, self._clock())
+        record = QuickLogin(session_key, contact, self._server, self._issued_at)
+        if self._on_login is not None:
+            self._on_login(record)
+        return record
+
+    def _schedule_rediscover(self) -> None:
+        if not self.logged_in or self._rediscover_task is not None:
+            return
+        self._rediscover_task = asyncio.get_running_loop().create_task(self._rediscover())
+
+    async def _rediscover(self) -> None:
+        """DISCOVER and a re-login with the current session, on the server's request."""
+        try:
+            _LOGGER.debug("%s: RTC signaling server asks for a new DISCOVER", self._log_name)
+            await self.discover()
+            await self.login(self.quick_login())
+        except (DeviceTimeoutError, ProtocolError, SignalingError, OSError) as exc:
+            _LOGGER.debug("%s: RTC re-login failed: %s", self._log_name, exc)
+        finally:
+            self._rediscover_task = None
 
     # ── ping and messages ────────────────────────────────────────────────────
 
@@ -525,12 +602,15 @@ class SignalingClient:
         video_format: int = 0,
         sdp_info: SdpInfo | None = None,
         boot_action: int | None = None,
+        wake: bool = True,
     ) -> Call:
         """Send a CALL of ``kind`` and return it; its events arrive on
         :attr:`Call.events` (:meth:`Call.wait_offer` waits for the device's offer).
 
         A private kind (:data:`~.codec.PRIVATE_CALL_KINDS`) needs ``sdp_info`` and
         travels on a socket of its own; it carries a token sealed with the session key.
+        With ``wake``, a CALL unanswered after :data:`CALL_REPLY_TIMEOUT` is sent
+        again over TCP, up to :data:`WAKE_ATTEMPTS` times.
         """
         if self._contact_id is None or self._session_key is None:
             raise SignalingError("RTC signaling is not logged in")
@@ -584,12 +664,74 @@ class SignalingClient:
             endpoint = self._private.get(call.uuid) or await self._open_endpoint("private")
             self._private[call.uuid] = endpoint
         self._calls.append(call)
-        self._send(
-            header,
-            CallBody(channel, uuid, self._contact_id, self._seal(now, attachment)).encode(),
-            endpoint=endpoint,
-        )
+        body = CallBody(channel, uuid, self._contact_id, self._seal(now, attachment)).encode()
+        self._send(header, body, endpoint=endpoint)
+        if wake:
+            task = asyncio.get_running_loop().create_task(
+                self._wake(call, codec.encode_packet(header, body, obfuscated=False), endpoint)
+            )
+            self._wake_tasks.add(task)
+            task.add_done_callback(self._wake_tasks.discard)
         return call
+
+    async def _wake(self, call: Call, packet: bytes, endpoint: _Endpoint | None) -> None:
+        """Send ``packet`` (the plain CALL) over TCP while the CALL stays unanswered."""
+        for attempt in range(1, WAKE_ATTEMPTS + 1):
+            try:
+                async with asyncio.timeout(CALL_REPLY_TIMEOUT):
+                    await call.answered.wait()
+                return
+            except TimeoutError:
+                pass
+            if call.ended:
+                return
+            _LOGGER.debug(
+                "%s: RTC CALL unanswered, sending it over TCP (%d/%d)",
+                self._log_name,
+                attempt,
+                WAKE_ATTEMPTS,
+            )
+            try:
+                await self._send_tcp(packet, endpoint or self._main)
+            except (OSError, TimeoutError) as exc:
+                _LOGGER.debug("%s: RTC TCP send failed: %s", self._log_name, exc)
+
+    async def _send_tcp(self, packet: bytes, endpoint: _Endpoint | None) -> None:
+        """A fresh TCP connection to the server on a random TCP port, ``packet`` on
+        it; its answers are handled like datagrams, replies to them go out on
+        ``endpoint``."""
+        self._close_tcp()
+        port = self._rng.choice(self._tcp_ports)
+        async with asyncio.timeout(TCP_CONNECT_TIMEOUT):
+            reader, writer = await asyncio.open_connection(self._server, port)
+        _WIRE.debug(
+            "%s: rtc tcp tx to %s:%d\n%s", self._log_name, self._server, port, HexDump(packet)
+        )
+        writer.write(packet)
+        await writer.drain()
+        task = asyncio.get_running_loop().create_task(
+            self._read_tcp(reader, endpoint, (self._server, port))
+        )
+        self._tcp = (writer, task)
+
+    async def _read_tcp(
+        self, reader: asyncio.StreamReader, endpoint: _Endpoint | None, addr: tuple[str, int]
+    ) -> None:
+        decoder = codec.StreamDecoder()
+        try:
+            while data := await reader.read(4096):
+                for packet in decoder.feed(data):
+                    if endpoint is not None:
+                        self._received(endpoint, packet, addr)
+        except (OSError, ProtocolError) as exc:
+            _LOGGER.debug("%s: RTC TCP stream closed: %s", self._log_name, exc)
+
+    def _close_tcp(self) -> None:
+        if self._tcp is not None:
+            writer, task = self._tcp
+            task.cancel()
+            writer.close()
+            self._tcp = None
 
     def _find_call(self, header: Header, body: CallBody) -> Call | None:
         for call in self._calls:
@@ -608,6 +750,8 @@ class SignalingClient:
             return
         payload = self._open_attachment(header, body.attachment)
         mtype = header.message_type
+        if mtype == MessageType.CALL and header.is_response:
+            call.answered.set()
         if mtype == MessageType.HANGUP:
             call.ended = True
             event = CallEventKind.HANGUP

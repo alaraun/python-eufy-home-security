@@ -24,9 +24,14 @@ config; an entry without a serial, DID, license or IPv4 host has none.
 UDP to port 5062 on the signaling host **[verified]**. Every datagram is
 obfuscated: `u16 8 | u16 len+pad | key[16] | u8 pad | u8 random | packet XOR key |
 pad random bytes`, the key fresh per datagram, `pad` random below `0x3d3 - len`. A
-receiver also takes a plain packet. A TCP fallback on 5061 or 15061 (plain packets)
-exists in the app for re-sending a CALL to a sleeping device **[app]**; the library
-does not implement it.
+receiver also takes a plain packet.
+
+TCP to 5061 or 15061 (picked at random) carries plain packets back to back, transport
+flag 0x3b = 0; a receiver reads 0x29 bytes, then the rest of the header (extension
+length at 0x28) and the body **[app]**. The app sends a CALL again over TCP when no
+session follows it **[app]**, presumably so the server wakes a sleeping device. The library sends an
+unanswered CALL (no 100, 200 or error code within 5 s) over a fresh TCP connection,
+at most three times; the 5 s and three tries are the library's choice.
 
 ## Packet
 
@@ -82,6 +87,12 @@ when the header's encrypted flag is set.
    **200** carries body type 6, whose `contact_id` (32 characters) names this client
    from then on **[verified]**. The session key and contact id allow a one-request
    login (body type 6, mode 0) for 23 h.
+
+   A LOGIN without an answer is sent again: the first wait is 10 s plus 1-10 s, each
+   further wait three times the previous one, at most 270 s **[app]**; the library
+   gives up after four waits. A packet with bit 0 of the flags byte (0x13) set asks
+   the client for a new DISCOVER; the library then logs in again with its current
+   session (the one-request login, the key exchange after a 401) **[app]**.
 3. **MESSAGE ping** every 3 s: channel 0, command type 2, sub type 0x66, JSON
    `{"to": "device", "account": md5("0" + user id + time), "eufy_client_dynamic_id": n,
    "content": base64({"eufy_contact_id", "eufy_network_type": 1, "eufy_app_id"})}`.

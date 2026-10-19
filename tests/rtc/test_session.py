@@ -199,3 +199,15 @@ async def test_the_unavailable_media_plane_closes_quietly() -> None:
         plane.add_remote_candidate("c")
     with pytest.raises(UnsupportedError):
         await plane.send_command(b"x")
+
+
+async def test_the_session_hands_every_login_record_on() -> None:
+    _, port = await start_server()
+    records: list[QuickLogin] = []
+    session = RtcSession(config(), FakeCrypto(), on_login=records.append)
+    session.signaling._port = port
+    try:
+        await session.start()
+        assert [r.contact_id for r in records] == [CONTACT]
+    finally:
+        await session.close()
