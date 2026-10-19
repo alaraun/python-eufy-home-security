@@ -25,7 +25,7 @@ from .codec import CallKind
 from .config import QuickLogin, RtcConfig
 from .crypto import RtcCrypto
 from .media import CommandRoute, DataChannel
-from .sdp import CompactOffer, SdpInfo
+from .sdp import CONTENT_IV_LEN, CONTENT_KEY_LEN, CompactOffer, SdpInfo
 from .signaling import OFFER_TIMEOUT, Call, CallEventKind, SignalingClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -129,7 +129,10 @@ class RtcSession:
         :class:`~.exceptions.UnsupportedError` while a part is not implemented."""
         if channel in self._live:
             return self._live[channel]
-        info = SdpInfo.generate(self._crypto.new_media_secret(), self._crypto.new_media_secret())
+        info = SdpInfo.generate(
+            content_key=self._crypto.new_media_secret(CONTENT_KEY_LEN),
+            content_iv=self._crypto.new_media_secret(CONTENT_IV_LEN),
+        )
         call = await self.signaling.call(CallKind.PRIV_MEDIA, channel=channel, sdp_info=info)
         media: MediaPlane = self._media_factory()
         try:

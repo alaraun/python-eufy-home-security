@@ -4,9 +4,9 @@ Some stations are reached by the eufy app only over its WebRTC path, never over
 PPPP: the T9000, the NVRs (T8N00, T7000) and the T8040. Their stations and every
 device paired to them stay skipped (`webrtc_only`) until the library can run that
 path. `eufy_home_security.rtc` holds the parts built so far: the signaling wire
-format, the signaling client and the session sequence, with the cryptography and the
-media plane behind interfaces that have no implementation yet. Nothing in `Station`
-uses it.
+format, the signaling client and the session sequence including its cryptography,
+with the media plane behind an interface that has no implementation yet. Nothing in
+`Station` uses it.
 
 Tags as in [README.md](README.md#verification-markers): **[verified]** for what ran
 against eufy's signaling server with a HomeBase 3 identity, **[app]** for the rest.
@@ -75,6 +75,19 @@ Bodies:
 A call attachment and a message's data are JSON text, sealed with the session key
 when the header's encrypted flag is set.
 
+## Cryptography
+
+`rtc/crypto.py` (`RtcSignalingCrypto`). Every sealed field is AES-128-ECB with zero
+padding. The key for a packet is the 16-byte secret with its tail overwritten by the
+decimal of the packet id taken as a signed 32-bit integer, then cut at the first NUL
+and padded back to 16 bytes. The LOGIN 401 blob uses the fixed secret
+`&#%@!_eufy_anker`; everything after login uses the session key. The session key is
+16 characters of `[0-9A-Za-z]`, made fresh per login and sealed for the server with
+RSA-1024, PKCS#1 v1.5, exponent 65537, the modulus a 256-character hex string the
+401 blob opens to. A private call's content key (16 of `[0-9A-Za-z]`) and IV (12),
+and its ICE username (5 ice-chars) and password (23), are random strings. The LOGIN
+key exchange is **[verified]** against eufy's server; the rest is **[app]**.
+
 ## Sequence
 
 1. **DISCOVER** to the signaling host, header only. The 200 carries JSON
@@ -120,8 +133,9 @@ when the header's encrypted flag is set.
 A private call (kind 5, 6) has a uuid `"FF00<kind>"` plus 31 hex digits, a `token`
 (the station identity sealed with the session key), an `sdp_info` and travels on a
 UDP socket of its own **[app]**. `sdp_info` packs both of the client's SSRCs, its ICE
-username and password, a content key and IV and a data-channel flag into 86 bytes;
-the layout is not known, so the library cannot send a private call yet.
+username (5 ice-chars) and password (23), a content key (16) and IV (12) and a
+data-channel flag into 86 bytes; the byte layout is not known, so the library cannot
+send a private call yet.
 
 ## Media plane
 
@@ -137,8 +151,7 @@ the in-frame decryption and the data channel are interfaces.
 
 ## Open
 
-- the cryptography of every sealed field (interface `RtcCrypto`);
-- the `sdp_info` layout and the offer template;
+- the `sdp_info` byte layout and the offer template;
 - the media plane implementation;
 - whether a device answers a kind-3 call with an offer: a HomeBase 3 the app reaches
   over PPPP answers 100, then hangs up after about 60 s.

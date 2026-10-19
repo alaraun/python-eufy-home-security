@@ -26,8 +26,16 @@ from ..exceptions import UnsupportedError
 SDP_INFO_LEN: Final = 86
 """Length of the packed ``sdp_info`` structure."""
 
-_ICE_ALPHABET: Final = string.ascii_letters + string.digits
-_ICE_FIELD_LEN: Final = 64
+#: ICE credential alphabet (RFC 5245 ice-char), the app's ``random_str64`` table.
+_ICE_ALPHABET: Final = string.ascii_uppercase + string.ascii_lowercase + string.digits + "+/"
+#: ICE username length (``random_str64(…, 5)`` in ``WebrtcApp_SetCallSdp`` @0x233ef4).
+ICE_UFRAG_LEN: Final = 5
+#: ICE password length (``random_str64(…, 23)``).
+ICE_PWD_LEN: Final = 23
+#: Content key length (``crypto_generate_str(…, 16)``).
+CONTENT_KEY_LEN: Final = 16
+#: Content IV length (``crypto_generate_str(…, 12)``).
+CONTENT_IV_LEN: Final = 12
 #: Answer lines the app keeps: its ICE credentials and its SSRC attributes.
 ANSWER_PREFIXES: Final = ("a=ice-ufrag:", "a=ice-pwd:", "a=ssrc:")
 
@@ -59,8 +67,8 @@ class SdpInfo:
         return cls(
             audio_ssrc=rand.getrandbits(32),
             video_ssrc=rand.getrandbits(32),
-            ice_ufrag="".join(rand.choice(_ICE_ALPHABET) for _ in range(_ICE_FIELD_LEN)),
-            ice_pwd="".join(rand.choice(_ICE_ALPHABET) for _ in range(_ICE_FIELD_LEN)),
+            ice_ufrag="".join(rand.choice(_ICE_ALPHABET) for _ in range(ICE_UFRAG_LEN)),
+            ice_pwd="".join(rand.choice(_ICE_ALPHABET) for _ in range(ICE_PWD_LEN)),
             content_key=content_key,
             content_iv=content_iv,
             data_channel=data_channel,
