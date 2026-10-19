@@ -296,7 +296,7 @@ def test_model_file_matches_the_schema(code: str) -> None:
 
 
 def test_models_holds_exactly_the_indexed_codes() -> None:
-    assert len(CODES) == 107
+    assert len(CODES) == 110
     assert sorted(set(CODES)) == CODES
     assert (INDEX["schema_version"], (MODELS / "INDEX.json").read_text("utf-8")) == (
         3,

@@ -51,10 +51,10 @@ def _wheel_members(tmp_path: Path) -> set[str]:
 
 
 def test_every_indexed_model_snapshot_ships_and_nothing_else(tmp_path: Path) -> None:
-    """The wheel holds exactly one ``models/<PN>.json`` per ``INDEX.json`` code (107), the
+    """The wheel holds exactly one ``models/<PN>.json`` per ``INDEX.json`` code (110), the
     index and the resource packages, and none of the removed v1 data or modules."""
     codes = json.loads((ROOT / "src" / MODELS / "INDEX.json").read_text("utf-8"))["codes"]
-    assert len(codes) == 107
+    assert len(codes) == 110
     members = _wheel_members(tmp_path)
     shipped = {
         member.removeprefix(MODELS).removesuffix(".json")

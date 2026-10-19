@@ -40,7 +40,6 @@ DRIVER: Final = Path(__file__).resolve().parent / "gen_models_driver.js"
 GOLDENS_DIR: Final = ROOT / "tests" / "fixtures" / "thing_models"
 DOC: Final = ROOT / "docs" / "reference" / "thing-models.md"
 
-THINGS_PATH: Final = "/app/things/get_things_list"
 TD_FILE: Final = "td.json"
 BEGIN_MARKER: Final = "<!-- BEGIN GENERATED: scripts/thing_models.py inventory -->"
 END_MARKER: Final = "<!-- END GENERATED: scripts/thing_models.py inventory -->"
@@ -525,23 +524,10 @@ def product_codes(devices: Iterable[Mapping[str, Any]]) -> list[str]:
     return sorted(codes)
 
 
-def things_body(codes: Sequence[str]) -> dict[str, Any]:
-    return {"product_codes": list(codes), "code_time_map": {}, "use_network_version": True}
-
-
-def things_list(data: Any) -> list[dict[str, Any]]:
-    """The ``things_list`` entries of a ``get_things_list`` reply."""
-    entries = data.get("things_list") if isinstance(data, Mapping) else None
-    if not isinstance(entries, list):
-        raise SystemExit("the get_things_list reply has no things_list")
-    return [entry for entry in entries if isinstance(entry, dict)]
-
-
 async def fetch(store_path: Path, out: Path, codes: Sequence[str]) -> None:
     import aiohttp  # noqa: PLC0415 - only this command needs the network
 
     from eufy_home_security import EufySecurity, LoginNeed  # noqa: PLC0415
-    from eufy_home_security.cloud import const  # noqa: PLC0415
     from eufy_home_security.storage import JsonFileStore, async_cached_account  # noqa: PLC0415
 
     store = JsonFileStore(store_path)
@@ -558,23 +544,21 @@ async def fetch(store_path: Path, out: Path, codes: Sequence[str]) -> None:
                 f"no usable cached session ({status.login_need.value}); this script never "
                 "logs in: refresh the session with eufy-security first"
             )
-        await eufy.async_login()
         api = eufy.cloud
         if not codes:
+            await eufy.async_login()
             devices = await api.async_get_devices()
             codes = product_codes(device.raw for device in devices)
             if not codes:
                 raise SystemExit("no product code in the device list: pass --product-code")
-        identity = api._identity
-        if identity is None:
-            raise SystemExit("no cloud session after login")
-        host = const.cluster_host("things", api._region, api._mega_domain)
-        _, _, data = await api._call(host, THINGS_PATH, things_body(codes), identity)
-        for thing in things_list(data):
+        things = await api.async_get_thing_descriptions(codes)
+        returned: set[str] = set()
+        for thing in things:
             profile = thing.get("profile") or {}
             product_code = str(profile.get("product_code") or "")
             if not product_code:
                 continue
+            returned.add(product_code)
             folder = out / product_code
             folder.mkdir(parents=True, exist_ok=True)
             (folder / TD_FILE).write_text(
@@ -588,6 +572,8 @@ async def fetch(store_path: Path, out: Path, codes: Sequence[str]) -> None:
                 response.raise_for_status()
                 handler_file(out, product_code).write_bytes(await response.read())
             print(f"{product_code}: TD {thing.get('large_version')} and handler written")
+        for product_code in sorted(set(codes) - returned):
+            print(f"{product_code}: not known to the cloud (no thing description)", file=sys.stderr)
 
 
 # ── command line ─────────────────────────────────────────────────────────────

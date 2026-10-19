@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from typing import Final
+
 import pytest
 
+from eufy_home_security.devices.model_settings import bundled_codes
 from eufy_home_security.devices.support import Support
 from eufy_home_security.devices.types import (
     MODELS,
     ON_DEMAND_EVIDENCE,
+    SERIAL_PRODUCT_CODES,
     DeviceKind,
     connects_on_demand,
     model_for_serial,
@@ -133,3 +137,17 @@ def test_the_t8410_is_the_apps_pan_tilt_indoor_cam_of_type_31() -> None:
     assert found.evidence.support is Support.DECLARED
     assert "INDOOR_CAMERA_PT" in found.evidence.source
     assert not connects_on_demand("T8410P0000000000")
+
+
+NO_BUNDLED_SETTINGS: Final[dict[str, str]] = {}
+"""Product codes a serial rule gives that ship no settings file, each with the reason."""
+
+
+def test_every_product_code_a_serial_rule_gives_has_a_bundled_settings_file() -> None:
+    codes = {code for _start, _sixth, code in SERIAL_PRODUCT_CODES}
+    assert codes - set(bundled_codes()) - NO_BUNDLED_SETTINGS.keys() == set()
+
+
+def test_no_exception_for_a_bundled_or_ruleless_product_code() -> None:
+    codes = {code for _start, _sixth, code in SERIAL_PRODUCT_CODES}
+    assert NO_BUNDLED_SETTINGS.keys() <= codes - set(bundled_codes())

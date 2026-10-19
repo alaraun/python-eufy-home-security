@@ -4760,6 +4760,89 @@ rw 27 / ro 57
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
+### Settings of T8210C
+
+rw 27 / ro 49
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `battery_temperature_value` | string | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `detected_events` | other | - | - | no | - | - |
+| `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
+| `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
+| `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_audio_ringtone_volume` | range | 0..100 step 1 | - | yes | slider | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_chime_hb_alert_switch` | bool | - | - | yes | switch | - |
+| `device_chime_hb_alert_tones` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 | - | yes | select | 0=Default, 1=Silent, 2=Beacon, 3=Chord, 4=Christmas, 5=Circuit, 6=Clock, 7=Ding, 8=Hillside, 9=Presto |
+| `device_chime_hb_ring_volume` | range | 1..26 step 1 | - | yes | slider | - |
+| `device_existing_chime_time` | range | 0..20 step 1 | - | yes | slider | - |
+| `device_indoor_chime_switch` | bool | - | - | yes | switch | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | -1, 0, 1, 2, 3, 4,  | - | yes | select | =, -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours |
+| `device_snooze_time_extra_type` | other | - | - | no | - | - |
+| `device_snooze_time_extra_type__v1` | enum | 0, 2 | - | no | - | 0=Motion notify onoff, 2=HomeBase onoff |
+| `device_snooze_time_extra_type__v2` | enum | 0, 1 | - | no | - | 0=Motion notify onoff, 1=Chime onoff |
+| `device_status` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 1, 2, 15, 4 | - | no | - | 0=Record, 1=Screenshot, 15=Reply, 2=Speaker, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 1, 2, 15, 4 | - | no | - | 0=Record, 1=Screenshot, 15=Reply, 2=Speaker, 4=Sound |
+| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Middle |
+| `live_support_full` | bool | - | - | no | - | - |
+| `live_support_mute` | bool | - | - | no | - | - |
+| `live_support_record` | bool | - | - | no | - | - |
+| `live_support_screenshot` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 1 | - | no | - | 1=Setting |
+| `live_top_toolbar_list` | enum | 1 | - | no | - | 1=Setting |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `need_merge_quickresponse_list` | bool | - | - | no | - | - |
+| `nightvision_type` | bool | - | - | yes | switch | - |
+| `notification_jump_to` | enum | 0, 1 | - | no | - | 0=History event, 1=Live view |
+| `notification_motion_alert` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8 | - | no | - | 0=Default, 1=Silent, 2=Bell, 3=Change, 4=Ding, 5=Notify, 6=Security, 7=Success, 8=Type |
+| `notification_motion_onoff` | bool | - | - | no | - | - |
+| `notification_ring_alert` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 | - | no | - | 0=Default, 1=Silent, 2=Beacon, 3=Chord, 4=Christmas, 5=Circuit, 6=Clock, 7=Ding, 8=Hillside, 9=Presto |
+| `notification_ring_onoff` | bool | - | - | no | - | - |
+| `notification_type` | enum | 0, 1, 2 | - | no | - | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `power_manager_mode` | enum | 0, 1, 2, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 2=Balanced surveillance, 3=Custom recording |
+| `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
+| `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
+| `recording_number` | other | - | - | no | - | - |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 0..100 step 1 | - | yes | slider | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `trigger_interval_time` | range | 2..60 step 1 | s | yes | slider | - |
+| `video_camera_count` | other | - | - | no | - | - |
+| `video_clip_length` | range | 5..120 step 1 | s | yes | slider | - |
+| `video_intercom_audio_type` | other | - | - | no | - | - |
+| `video_intercom_duplex` | other | - | - | no | - | - |
+| `video_quality_streaming_smart_displays` | enum | 0, 1 | - | yes | select | 0=Smartphone first, 1=Smart display first |
+| `video_quality_wdr_switch` | bool | - | - | yes | switch | - |
+| `watermark_set` | bool | - | - | yes | switch | - |
+| `working_days` | other | - | - | no | - | - |
+
 ### Settings of T8213 Battery Doorbell 8213
 
 rw 34 / ro 64
@@ -8135,6 +8218,78 @@ rw 13 / ro 73
 | `video_intercom_audio_type` | string | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
+
+### Settings of T8510P
+
+rw 3 / ro 25
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | yes | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | other | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+| `timezone_set` | string | - | - | yes | select | - |
+
+### Settings of T8520P
+
+rw 3 / ro 27
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `device_wifi_switch` | bool | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | yes | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | other | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+| `timezone_set` | string | - | - | yes | select | - |
 
 ### Settings of T8530 Lock 8530
 

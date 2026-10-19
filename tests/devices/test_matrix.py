@@ -83,7 +83,7 @@ def test_a_models_settings_table_names_each_control() -> None:
 def test_every_bundled_model_has_a_section_with_the_files_counts() -> None:
     text = render_support_matrix()
     codes = bundled_codes()
-    assert len(codes) == 107
+    assert len(codes) == 110
     assert text.count("\n### Settings of ") == len(codes)
     for code in codes:
         settings = settings_of(code)
