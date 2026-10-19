@@ -176,6 +176,41 @@ async def test_incoming_message_becomes_an_event() -> None:
     assert events[0].guard_mode == 1
 
 
+async def test_the_push_line_names_the_classifying_fields_without_the_face_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.push")
+    events: list[SecurityEvent] = []
+    listener = PushListener(
+        cast(EufyCloudApi, FakeCloud()),
+        _throwaway_cache(),
+        events.append,
+        session=cast(aiohttp.ClientSession, object()),
+    )
+    inner = {
+        "a": 1,
+        "event_type": 3101,
+        "i": "1a2b3c4d",
+        "f": "Alice",
+        "s": SYNTHETIC.camera_sn,
+        "pic_url": "https://example.invalid/p.jpg",
+        "session_id": "s-1",
+        "push_count": 2,
+    }
+    payload = base64.b64encode(json.dumps(inner).encode()).decode()
+    listener._on_message({"type": "63", "span_id": "s1", "payload": payload}, "pid-1", None)
+    assert events[0].fetch_id == "1a2b3c4d"
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("push event"))
+    assert "detection IDENTITY_PERSON" in line
+    assert "fetch_id face id (8 hex digits)" in line
+    assert "person_name set" in line
+    assert "pic_url https" in line
+    assert "session_id set" in line
+    assert "push_count 2" in line
+    for private in ("1a2b3c4d", "Alice", "example.invalid", "s-1"):
+        assert private not in line
+
+
 async def test_span_id_dedupe() -> None:
     events: list[SecurityEvent] = []
     listener = PushListener(

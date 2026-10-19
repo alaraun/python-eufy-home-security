@@ -147,6 +147,24 @@ _DETECTION_EVIDENCE: Final[Mapping[DetectionType, Evidence]] = MappingProxyType(
 )
 
 
+PUSH_KIND_EVIDENCE: Final = Evidence(
+    Support.DECLARED,
+    "eufy app notification text of a msg_type 1 push",
+    "a named person, a fetch id or 3106/3107 decide the kind; not seen on hardware",
+)
+"""How :attr:`SecurityEvent.detection` is known when ``fetch_id`` or ``person_name`` decide it."""
+
+#: ``fetch_id`` values that name a kind rather than a face (the app's vehicle and pet).
+FETCH_ID_VEHICLE: Final = "3107"
+FETCH_ID_PET: Final = "3106"
+_FETCH_ID: Final = re.compile(r"[0-9A-Fa-f]{1,16}")
+_FACE_ID_MAX: Final = 2**63 - 1  # the app parses the id as a signed 64-bit long
+
+
+#: The kinds that name a person.
+PERSON_KINDS: Final = frozenset(
+    {DetectionType.PERSON, DetectionType.IDENTITY_PERSON, DetectionType.STRANGER_PERSON}
+)
 _ARMING_USER_EVIDENCE: Final = Evidence(
     Support.DECLARED, "eufy app CusPushMode", "every FCM arming push captured carried user 2"
 )
@@ -312,6 +330,18 @@ def is_station_media_path(value: object, suffix: str) -> TypeGuard[str]:
     )
 
 
+def pic_url_kind(value: str | None) -> str | None:
+    """Where a push's ``pic_url`` points: ``https`` (a cloud URL), ``station`` (a still
+    on the station's disk, fetched like ``thumb_path``), ``other``; None when empty."""
+    if not value:
+        return None
+    if value.startswith("https://"):
+        return "https"
+    if is_station_media_path(value, STILL_SUFFIX):
+        return "station"
+    return "other"
+
+
 def camera_dir(path: str | None) -> str | None:
     """The ``CameraNN`` directory of a station media path, or None."""
     if path is None:
@@ -384,6 +414,27 @@ class PushFieldReader:
         self.rejected.add("unique_id")
         return None
 
+    def fetch_id(self, value: object) -> str | None:
+        """The short-key ``i``: 1-16 hex digits (a face id, or 3106/3107); None when absent
+        or empty, rejected otherwise."""
+        text = coerce_str(value)
+        if text is None:
+            return None
+        if _FETCH_ID.fullmatch(text):
+            return text
+        self.rejected.add("fetch_id")
+        return None
+
+    def session_id(self, value: object) -> str | None:
+        """The detection's ``session_id``, checked like :meth:`unique_id`."""
+        text = coerce_str(value)
+        if text is None:
+            return None
+        if _UNIQUE_ID.fullmatch(text):
+            return text
+        self.rejected.add("session_id")
+        return None
+
     def record_id(self, value: object) -> int | None:
         """The occurrence's event-database ``record_id``: a positive int. ``0`` (no
         record) and absence are None; anything else is rejected."""
@@ -443,7 +494,9 @@ class PushFieldReader:
             "arming_user": coerce_int(inner.get("user")),
             "user_name": payload_text(inner.get("user_name")),
             "unique_id": self.unique_id(inner.get("unique_id")),
+            "session_id": self.session_id(inner.get("session_id")),
             "record_id": self.record_id(inner.get("record_id")),
+            "fetch_id": self.fetch_id(inner.get("fetch_id")),
         }
 
 
@@ -533,11 +586,16 @@ class SecurityEvent:
     ``push_id`` is the cloud's ``span_id`` (None over P2P); the push listener
     de-duplicates redeliveries on it. ``unique_id`` (the station's per-occurrence id)
     and ``record_id`` (its event-database row) come from the inner payload, which is
-    identical on both channels. :attr:`dedupe_key` names the occurrence across
+    identical on both channels; ``session_id`` is the detection's session, the same on
+    every push of one detection. :attr:`dedupe_key` names the occurrence across
     both channels. ``enriches`` is True on a later copy of an occurrence already
     delivered, admitted only because it carries media paths the earlier copies lacked
     (see :class:`EventDeduplicator`): update the existing occurrence with its paths,
     do not count a new detection.
+
+    ``fetch_id`` is a short-key push's ``i``: the hex id of the face the station's AI
+    matched, or ``3106`` / ``3107`` for a pet / vehicle. With ``person_name`` it decides
+    :attr:`detection`.
     """
 
     source: EventSource
@@ -556,7 +614,9 @@ class SecurityEvent:
     pic_url: str | None = None
     push_id: str | None = None
     unique_id: str | None = None
+    session_id: str | None = None
     record_id: int | None = None
+    fetch_id: str | None = None
     frame_cipher: FrameCipher | None = None
     session_ecb: bool = False
     push_count: int | None = None
@@ -620,8 +680,50 @@ class SecurityEvent:
 
     @property
     def detection(self) -> DetectionType | None:
-        """``event_type`` as an enum, or None when unknown."""
-        return _enum_or_none(DetectionType, self.event_type)
+        """What the camera detected, as the eufy app names it; None when unknown.
+
+        ``event_type`` as an enum, except on a ``msg_type`` 1 (SECURITY) push, whose
+        kind the app takes from ``person_name`` and ``fetch_id`` first, in order:
+        ``person_name`` → IDENTITY_PERSON; ``fetch_id`` ``3107`` or ``event_type``
+        3107 → VEHICLE; ``fetch_id`` ``3106`` or 3106 → PET; any other ``fetch_id``
+        (a face) → PERSON, or the ``event_type`` when that already names a person
+        (3102, 3111, 3112). Without either the ``event_type`` stands: a 3102 push without
+        a face id stays PERSON. Graded :data:`PUSH_KIND_EVIDENCE`; see
+        :attr:`detection_evidence`.
+        """
+        wire = _enum_or_none(DetectionType, self.event_type)
+        if self.msg_type != PushMessageType.SECURITY:
+            return wire
+        if self.person_name is not None:
+            return DetectionType.IDENTITY_PERSON
+        if self.fetch_id is None:
+            return wire
+        if FETCH_ID_VEHICLE in (self.fetch_id, str(self.event_type)):
+            return DetectionType.VEHICLE
+        if FETCH_ID_PET in (self.fetch_id, str(self.event_type)):
+            return DetectionType.PET
+        return wire if wire in PERSON_KINDS else DetectionType.PERSON
+
+    @property
+    def detection_evidence(self) -> Evidence | None:
+        """How :attr:`detection` is known: :data:`PUSH_KIND_EVIDENCE` when ``fetch_id`` or
+        ``person_name`` changed it from the ``event_type``, else the value's own
+        :attr:`DetectionType.evidence`; None without a detection."""
+        detection = self.detection
+        if detection is None:
+            return None
+        if detection is not _enum_or_none(DetectionType, self.event_type):
+            return PUSH_KIND_EVIDENCE
+        return detection.evidence
+
+    @property
+    def face_id(self) -> int | None:
+        """``fetch_id`` as the face id the cloud's face lookup takes, or None when it names
+        no face (absent, ``3106``, ``3107``, or zero)."""
+        if self.fetch_id is None or self.fetch_id in (FETCH_ID_VEHICLE, FETCH_ID_PET):
+            return None
+        face = int(self.fetch_id, 16)
+        return face if 0 < face <= _FACE_ID_MAX else None
 
     @property
     def scope(self) -> EventScope:

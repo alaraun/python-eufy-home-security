@@ -12,6 +12,7 @@ import pytest
 from eufy_home_security.events import (
     AlarmPhase,
     ArmingSource,
+    DetectionType,
     EventDeduplicator,
     EventScope,
     EventSource,
@@ -94,6 +95,35 @@ def test_short_keys_decode_to_the_same_event() -> None:
     assert event.person_name == "Alice"
     # `t` is SECONDS on the short form — normalised to ms on the way in.
     assert event.event_time_ms == 1789130460000
+
+
+@pytest.mark.parametrize(
+    ("inner", "detection"),
+    [
+        ({"a": 1, "event_type": 3101, "i": "1a2b3c"}, DetectionType.PERSON),
+        ({"a": 1, "event_type": 3101, "i": "3107"}, DetectionType.VEHICLE),
+        ({"a": 1, "event_type": 3101, "i": "3106"}, DetectionType.PET),
+        ({"a": 1, "event_type": 3101, "f": "Alice", "i": "1a2b3c"}, DetectionType.IDENTITY_PERSON),
+        ({"a": 1, "event_type": 3101, "i": ""}, DetectionType.MOTION),
+        ({"a": 1, "event_type": 3102}, DetectionType.PERSON),  # a pushed 3102 without a face
+    ],
+)
+def test_a_short_key_security_push_lifts_its_face_id_and_kind(
+    inner: dict[str, Any], detection: DetectionType
+) -> None:
+    event = decode_push(_message({"s": SYNTHETIC.camera_sn, "t": 1789130460, **inner}))
+    assert event.fetch_id == (inner.get("i") or None)
+    assert event.detection is detection
+    assert event.event_type == inner["event_type"]
+
+
+def test_a_malformed_fetch_id_or_session_id_is_rejected() -> None:
+    event = decode_push(
+        _message({"a": 1, "event_type": 3101, "i": "not hex", "session_id": "has space"})
+    )
+    assert (event.fetch_id, event.session_id) == (None, None)
+    assert {"fetch_id", "session_id"} <= event.rejected_fields
+    assert event.detection is DetectionType.MOTION
 
 
 def test_url_safe_alphabet_and_trailing_nul_tolerated() -> None:

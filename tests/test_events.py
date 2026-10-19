@@ -11,6 +11,7 @@ from eufy_home_security.events import (
     ALARM_PUSH_MAX_AGE_SECONDS,
     GUARD_PUSH_MAX_AGE_SECONDS,
     GUARD_REPORT_SLACK_SECONDS,
+    PUSH_KIND_EVIDENCE,
     AlarmChanged,
     AlarmStopSource,
     AlarmTracker,
@@ -484,6 +485,72 @@ def test_two_detection_types_in_one_second_are_both_delivered() -> None:
     motion = dataclasses.replace(_P2P, event_type=DetectionType.MOTION)
     assert dedupe.admit(motion) is motion
     assert dedupe.admit(_P2P) is _P2P
+
+
+def _short(event_type: int | None = DetectionType.MOTION, **fields: Any) -> SecurityEvent:
+    """A short-key (``a`` 1) cloud push of camera-a."""
+    return SecurityEvent(
+        source=EventSource.CLOUD,
+        device_sn="camera-a",
+        msg_type=PushMessageType.SECURITY,
+        event_type=event_type,
+        event_time_ms=1_700_000_000_000,
+        **fields,
+    )
+
+
+@pytest.mark.parametrize(
+    ("event_type", "fetch_id", "person_name", "detection"),
+    [
+        (3101, None, None, DetectionType.MOTION),
+        (3102, None, None, DetectionType.PERSON),  # no face id: the station's verdict
+        (3101, "1a2b3c", None, DetectionType.PERSON),
+        (None, "1a2b3c", None, DetectionType.PERSON),
+        (3101, "3107", None, DetectionType.VEHICLE),
+        (3107, "1a2b3c", None, DetectionType.VEHICLE),
+        (3101, "3106", None, DetectionType.PET),
+        (3106, "1a2b3c", None, DetectionType.PET),
+        (3112, "1a2b3c", None, DetectionType.STRANGER_PERSON),
+        (3101, "1a2b3c", "Alice", DetectionType.IDENTITY_PERSON),
+        (3101, None, "Alice", DetectionType.IDENTITY_PERSON),
+        (None, None, None, None),
+    ],
+)
+def test_a_security_push_is_classified_as_the_eufy_app_names_it(
+    event_type: int | None,
+    fetch_id: str | None,
+    person_name: str | None,
+    detection: DetectionType | None,
+) -> None:
+    event = _short(event_type, fetch_id=fetch_id, person_name=person_name)
+    assert event.detection is detection
+    assert event.event_type == event_type  # the wire value stays
+    changed = detection is not None and detection != event_type
+    expected = PUSH_KIND_EVIDENCE if changed else (detection.evidence if detection else None)
+    assert event.detection_evidence == expected
+
+
+def test_fetch_id_and_person_name_classify_only_a_security_push() -> None:
+    indoor = dataclasses.replace(_CLOUD, event_type=3101, fetch_id="1a2b3c", person_name="Al")
+    assert indoor.detection is DetectionType.MOTION
+
+
+@pytest.mark.parametrize(
+    ("fetch_id", "face_id"),
+    [
+        ("1a2b3c", 0x1A2B3C),
+        ("3107", None),
+        ("3106", None),
+        ("0", None),
+        ("ffffffffffffffff", None),  # past a signed 64-bit long
+        (None, None),
+    ],
+)
+def test_the_face_id_is_the_hex_fetch_id_unless_it_names_a_kind(
+    fetch_id: str | None, face_id: int | None
+) -> None:
+    event = _short(fetch_id=fetch_id)
+    assert event.face_id == face_id
 
 
 # ── guard-mode ordering ──────────────────────────────────────────────────────

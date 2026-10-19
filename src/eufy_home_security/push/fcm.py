@@ -54,7 +54,7 @@ from google.protobuf.json_format import MessageToDict  # type: ignore[import-unt
 from google.protobuf.message import DecodeError  # type: ignore[import-untyped]
 
 from .._logging import Identifier, Payload, Secret, redact_serial
-from ..events import SecurityEvent
+from ..events import FETCH_ID_PET, FETCH_ID_VEHICLE, SecurityEvent, pic_url_kind
 from ..exceptions import (
     CloudApiError,
     CloudError,
@@ -74,6 +74,14 @@ _HTTP_TIMEOUT = aiohttp.ClientTimeout(total=const.HTTP_TIMEOUT_SECONDS)
 
 # Indirection so tests can drive retries, backoff and supervision without waiting.
 _sleep = asyncio.sleep
+
+
+def _fetch_id_shape(fetch_id: str | None) -> str:
+    """A push's ``fetch_id`` for a log line: the kind markers as they are, a face id
+    only by its length (it names a person's face record)."""
+    if fetch_id is None or fetch_id in (FETCH_ID_VEHICLE, FETCH_ID_PET):
+        return str(fetch_id or "none")
+    return f"face id ({len(fetch_id)} hex digits)"
 
 
 def _transient(status: int) -> bool:
@@ -740,13 +748,20 @@ class PushListener:
             return
         self._remember(span)
         _LOGGER.debug(
-            "push event: station %s device %s ch %s msg_type %s event_type %s guard_mode %s",
+            "push event: station %s device %s ch %s msg_type %s event_type %s detection %s "
+            "guard_mode %s fetch_id %s person_name %s pic_url %s session_id %s push_count %s",
             redact_serial(event.station_sn),
             redact_serial(event.device_sn),
             event.channel,
             event.msg_type,
             event.event_type,
+            event.detection.name if event.detection is not None else None,
             event.guard_mode,
+            _fetch_id_shape(event.fetch_id),
+            "set" if event.person_name else "none",
+            pic_url_kind(event.pic_url) or "none",
+            "set" if event.session_id else "none",
+            event.push_count,
         )
         try:
             self._callback(event)

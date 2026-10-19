@@ -140,6 +140,23 @@ An attached record that is merely unbound is not a rejection: its fields are Non
 3104 crying, 3105 sound, 3106 pet, **3107 vehicle** `*`, 3108–3110 dog / lick / poop,
 **3111 identified person** `*`, 3112 stranger.
 
+**Detection kind** (`SecurityEvent.detection`). The `event_type` as an enum, except on a
+`msg_type` 1 (SECURITY_EVT) push, whose kind the eufy app takes from two side fields
+first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on hardware):
+
+| condition, in order | kind |
+|---|---|
+| `person_name` (short key `f`) set | identified person (3111) |
+| `fetch_id` (short key `i`) empty | the `event_type` |
+| `fetch_id` `3107`, or `event_type` 3107 | vehicle |
+| `fetch_id` `3106`, or `event_type` 3106 | pet |
+| any other `fetch_id` (a face id) | person, or the `event_type` when it already names a person (3102, 3111, 3112) |
+
+`event_type` stays the wire value. The app shows motion for any `msg_type` 1 push without
+a `fetch_id`; the library keeps the `event_type` there, so a pushed 3102 stays a person.
+A camera paired to a HomeBase 2 is reported this way: a 3101 push with a face id is a
+person. `SecurityEvent.detection_evidence` names the grade of the kind an event reports.
+
 **`notification_style`**: 1 text, 2 thumbnail, 3 both.
 
 ### Station pushes: arming and alarm
@@ -422,7 +439,13 @@ short keys onto long ones instead of choosing a dialect:
 | `c` | channel | `e` | sensor open "1" |
 | `n` | name | `k` | cipher id (thumbnail key) |
 | `p` | clip file | `f` | person name |
-| `i` | fetch/face id (hex) | `j` | sense id (hex) |
+| `i` | fetch/face id (hex), `SecurityEvent.fetch_id` | `j` | sense id (hex) |
+
+`fetch_id` must be 1-16 hex digits, and `session_id` printable ASCII without spaces (at
+most 64 characters); anything else is listed in `rejected_fields`. The push listener's
+debug line (`push event: …`) names the kind and whether the push carries a face id (by its
+length only), a person name, a `pic_url` (`https`, `station` or `other`) and a
+`session_id`, with the `push_count`.
 
 **Redelivery.** Because the token is re-registered on every start, old messages
 come back after a restart. The listener persists its dedupe ring (span ids with
