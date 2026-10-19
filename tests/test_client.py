@@ -934,7 +934,7 @@ async def test_both_channels_deliver_each_occurrence_once_across_reconnects(rig:
         camera_push(rig.fake)  # the P2P copy adds the thumbnail: an enrichment
         camera_push(rig.fake)  # a duplicate
         camera_push(rig.fake, push_count=2)  # a re-announcement
-        camera_push(rig.fake, event_type=3107)  # news (and a sentinel)
+        camera_push(rig.fake, event_type=3107)  # a new kind: an enrichment (and a sentinel)
         await wait_for(lambda: len(detections()) == 3)
         rig.fake.send_close()
         await wait_for(lambda: not session.connected)
@@ -947,7 +947,7 @@ async def test_both_channels_deliver_each_occurrence_once_across_reconnects(rig:
     assert [(e.source, e.event_type, e.enriches) for e in detections()] == [
         (EventSource.CLOUD, 3102, False),
         (EventSource.P2P, 3102, True),
-        (EventSource.P2P, 3107, False),
+        (EventSource.P2P, 3107, True),
         (EventSource.P2P, 3108, False),
     ]
     assert detections()[1].thumb_path == "/zx/Camera00/thumb.jpg"

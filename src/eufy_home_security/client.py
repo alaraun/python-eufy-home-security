@@ -256,8 +256,9 @@ class EufySecurity:
         ``deduplicate`` (default) passes every :class:`SecurityEvent` from both channels
         through one :class:`~.events.EventDeduplicator` (:attr:`deduplicator`) before
         it is emitted, so an occurrence that arrives over P2P and over the cloud, or
-        is re-announced, is emitted once (plus at most one enrichment copy, see
-        :attr:`SecurityEvent.enriches`). False emits every decoded copy.
+        is re-announced, is emitted once (plus enrichment copies that add media paths, a
+        picture or a more specific kind, see :attr:`SecurityEvent.enriches`). False
+        emits every decoded copy.
 
         Guard mode, whatever ``deduplicate`` says, passes one account-wide
         :class:`~.events.GuardModeTracker` for both channels: a guard-mode push (cloud,

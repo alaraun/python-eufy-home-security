@@ -98,7 +98,7 @@ def test_stamped_accounts_are_the_record_stamps_lowercased() -> None:
 
 def test_decode_camera_push_reads_a_person_event() -> None:
     ev = _decode(_payload())
-    assert ev.dedupe_key == f"{SYNTHETIC.camera_sn}:{EVENT_MS // 1000}:3102"  # seconds
+    assert ev.dedupe_key == f"{SYNTHETIC.camera_sn}:{EVENT_MS // 1000}:detection"  # seconds
     assert ev.source is EventSource.P2P
     assert ev.message_type is PushMessageType.INDOOR
     assert ev.detection is DetectionType.PERSON

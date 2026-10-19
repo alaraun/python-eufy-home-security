@@ -492,10 +492,21 @@ channels through one `EventDeduplicator` per account before emitting it
 reconnects. It holds at most 256 keys, each for one hour.
 
 **Key.** `SecurityEvent.dedupe_key` = `unique:<unique_id>` when the payload carries a
-`unique_id`, else `device_sn:event second:event_type`. The fallback compares the event
-time in **seconds**, because a cloud time without an inner time is whole seconds while
-P2P `trigger_time` is milliseconds; `event_type` stays in it, so at worst two detections
-of one second are both delivered.
+`unique_id`; else `session:<device_sn>:<session_id>` when it carries a `session_id`;
+else `device_sn:event second:kind`. The last compares the event time in **seconds**,
+because a cloud time without an inner time is whole seconds while P2P `trigger_time` is
+milliseconds. `kind` is `detection` for a camera detection (motion, person, pet,
+vehicle, identified person, stranger) and the `event_type` for anything else, so pushes
+that classify one detection differently (a motion push, then the same detection with a
+face id or as 3102) are one occurrence, while a doorbell press in the same second is
+another.
+
+**Several pushes per detection [app].** The eufy app treats the pushes of one session
+(`session_id`), or with one `event_time`, as one notification and lets the later one
+replace it: its text, so its kind, and its picture. A second push for the same clip
+(`file_path`) with a `pic_url` is dropped, and a `push_count` > 1 push is shown silently.
+The library keeps one occurrence and admits a later copy as an enrichment when it adds a
+kind (below); it does not reproduce the app's "latest wins" for a less specific kind.
 
 **Which time [verified].** For a detection the FCM *outer* `event_time` runs about 3 s
 later than the inner payload's `create_time`, so a key built from the outer time lands
@@ -515,6 +526,8 @@ byte-identical and carries
 | no device or no event time | always delivered |
 | key not seen, or forgotten | delivered, a `push_count` > 1 repeat too (its first copy may have been lost while a channel was down) |
 | key seen, and the copy carries a media path (`thumb_path`, `crop_path`, `video_path`) no earlier copy had | delivered as an **enrichment**: `SecurityEvent.enriches` is True. Typically the P2P copy, with the thumbnail and crop, after the cloud copy. Update the occurrence already shown; do not count a new detection. |
+| key seen, and the copy names a picture source (`SecurityEvent.picture_sources`) no earlier copy named | delivered as an enrichment: fetch the push picture again ([Push pictures](#push-pictures)) |
+| key seen, and the copy's `detection` was not delivered yet and is at least as specific as the most specific so far (motion < person, pet, vehicle < stranger < identified person) | delivered as an enrichment: update the occurrence's kind (motion becomes person), do not count a new detection |
 | key seen, nothing new | dropped; counted in `dropped_repeats` when `push_count` > 1, else `dropped_duplicates` |
 
 The push listener also drops FCM redeliveries by `span_id` (`SecurityEvent.push_id`)

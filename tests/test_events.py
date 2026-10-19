@@ -419,8 +419,12 @@ class _Clock:
         return self.now
 
 
-def test_the_dedupe_key_is_second_granular_and_names_the_event_type() -> None:
-    assert _P2P.dedupe_key == _CLOUD.dedupe_key == "camera-a:1700000000:3102"
+def test_the_dedupe_key_is_second_granular_and_names_a_detection_not_its_kind() -> None:
+    assert _P2P.dedupe_key == _CLOUD.dedupe_key == "camera-a:1700000000:detection"
+    motion = dataclasses.replace(_P2P, event_type=DetectionType.MOTION)
+    assert motion.dedupe_key == _P2P.dedupe_key
+    doorbell = dataclasses.replace(_P2P, event_type=DetectionType.DOORBELL_PRESS)
+    assert doorbell.dedupe_key == "camera-a:1700000000:3103"
     assert dataclasses.replace(_P2P, event_type=None).dedupe_key == "camera-a:1700000000:"
     assert dataclasses.replace(_P2P, device_sn=None).dedupe_key is None
     assert dataclasses.replace(_P2P, event_time_ms=None).dedupe_key is None
@@ -481,11 +485,12 @@ def test_station_events_and_events_without_a_key_are_always_admitted() -> None:
     assert (dedupe.dropped_duplicates, dedupe.dropped_repeats) == (0, 0)
 
 
-def test_two_detection_types_in_one_second_are_both_delivered() -> None:
-    dedupe = EventDeduplicator()
-    motion = dataclasses.replace(_P2P, event_type=DetectionType.MOTION)
-    assert dedupe.admit(motion) is motion
-    assert dedupe.admit(_P2P) is _P2P
+def test_the_dedupe_key_is_the_session_without_a_unique_id() -> None:
+    first = dataclasses.replace(_CLOUD, session_id="s-1")
+    later = dataclasses.replace(first, event_time_ms=1_700_000_004_000, fetch_id="1a2b")
+    assert first.dedupe_key == later.dedupe_key == "session:camera-a:s-1"
+    assert dataclasses.replace(first, unique_id="u-1").dedupe_key == "unique:u-1"
+    assert dataclasses.replace(first, event_time_ms=None).dedupe_key == first.dedupe_key
 
 
 def _short(event_type: int | None = DetectionType.MOTION, **fields: Any) -> SecurityEvent:
@@ -552,6 +557,52 @@ def test_the_face_id_is_the_hex_fetch_id_unless_it_names_a_kind(
 ) -> None:
     event = _short(fetch_id=fetch_id)
     assert event.face_id == face_id
+
+
+def test_a_later_push_that_names_a_face_enriches_the_motion_it_upgrades() -> None:
+    dedupe = EventDeduplicator()
+    motion = _short()
+    assert dedupe.admit(motion) is motion
+    person = dataclasses.replace(motion, fetch_id="1a2b3c")
+    upgraded = dedupe.admit(person)
+    assert upgraded is not None
+    assert upgraded.enriches
+    assert upgraded.detection is DetectionType.PERSON
+    assert dedupe.admit(person) is None  # nothing new
+    assert dedupe.admit(motion) is None  # less specific: adds nothing
+    named = dataclasses.replace(person, person_name="Alice")
+    identified = dedupe.admit(named)
+    assert identified is not None
+    assert identified.enriches
+    assert dedupe.dropped_duplicates == 2
+
+
+def test_a_kind_change_in_one_second_is_one_detection_enriched() -> None:
+    dedupe = EventDeduplicator()
+    motion = dataclasses.replace(_P2P, event_type=DetectionType.MOTION)
+    assert dedupe.admit(motion) is motion
+    person = dedupe.admit(_P2P)
+    assert person is not None
+    assert person.enriches
+    vehicle = dedupe.admit(dataclasses.replace(_P2P, event_type=DetectionType.VEHICLE))
+    assert vehicle is not None
+    assert vehicle.enriches  # another kind as specific as the person
+    assert dedupe.admit(motion) is None
+
+
+def test_pushes_of_one_session_are_one_detection() -> None:
+    dedupe = EventDeduplicator()
+    first = _short(session_id="s-1")
+    assert dedupe.admit(first) is first
+    later = dataclasses.replace(
+        first, event_time_ms=1_700_000_005_000, pic_url="https://example.invalid/p.jpg"
+    )
+    pictured = dedupe.admit(later)
+    assert pictured is not None
+    assert pictured.enriches  # a picture source the first push lacked
+    assert dedupe.admit(later) is None
+    other = dataclasses.replace(first, session_id="s-2")
+    assert dedupe.admit(other) is other
 
 
 @pytest.mark.parametrize(

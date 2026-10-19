@@ -148,7 +148,7 @@ def test_push_id_is_the_span_id_and_the_dedupe_key_is_second_granular() -> None:
         _message({"s": SYNTHETIC.camera_sn, "event_type": 3102}, event_time="1700000000")
     )
     assert detection.event_time_ms == 1_700_000_000_000
-    assert detection.dedupe_key == f"{SYNTHETIC.camera_sn}:1700000000:3102"
+    assert detection.dedupe_key == f"{SYNTHETIC.camera_sn}:1700000000:detection"
 
 
 def test_the_event_time_is_the_inner_time_the_p2p_copy_carries() -> None:
@@ -177,7 +177,7 @@ def test_the_event_time_is_the_inner_time_the_p2p_copy_carries() -> None:
     assert cloud.record_id == 2026091600049
     del inner["unique_id"]
     without_id = decode_push(_message(inner, event_time=outer), now_ms=lambda: NOW_MS)
-    assert without_id.dedupe_key == f"{SYNTHETIC.camera_sn}:{created_ms // 1000}:3102"
+    assert without_id.dedupe_key == f"{SYNTHETIC.camera_sn}:{created_ms // 1000}:detection"
     no_inner_time = decode_push(_message({"msg_type": 18}, event_time=outer))
     assert no_inner_time.event_time_ms == created_ms + 3_000
 

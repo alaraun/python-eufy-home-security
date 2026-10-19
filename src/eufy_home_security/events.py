@@ -8,8 +8,9 @@ detections and works without internet; only the cloud reaches a station off the 
 and carries arming pushes (see ``docs/protocol/events.md``). The station's own
 guard-mode reports over P2P become :class:`GuardModeChanged`, not a
 :class:`SecurityEvent`. :class:`~.client.EufySecurity` de-duplicates across both
-channels (:class:`EventDeduplicator`): each real occurrence is emitted once, plus at
-most one enrichment copy that adds media paths (:attr:`SecurityEvent.enriches`).
+channels (:class:`EventDeduplicator`): each real occurrence is emitted once, plus
+enrichment copies that add media paths, a picture or a more specific kind
+(:attr:`SecurityEvent.enriches`).
 
 Subscribers receive the :data:`Event` union and return nothing; subscribing
 returns a callable that unsubscribes (the Home Assistant convention).
@@ -170,10 +171,49 @@ class PushPictureSource(StrEnum):
     """The push's ``pic_url``: an https URL, or a still on the station's disk."""
 
 
+#: The kinds one camera detection can be classified as; pushes of one detection that
+#: name different ones are the same occurrence (see :attr:`SecurityEvent.dedupe_key`).
+DETECTION_KINDS: Final = frozenset(
+    {
+        DetectionType.MOTION,
+        DetectionType.PERSON,
+        DetectionType.PET,
+        DetectionType.VEHICLE,
+        DetectionType.IDENTITY_PERSON,
+        DetectionType.STRANGER_PERSON,
+    }
+)
 #: The kinds that name a person.
 PERSON_KINDS: Final = frozenset(
     {DetectionType.PERSON, DetectionType.IDENTITY_PERSON, DetectionType.STRANGER_PERSON}
 )
+# How specific a kind is: a later copy with a higher rank enriches the occurrence.
+_KIND_RANK: Final[Mapping[DetectionType, int]] = MappingProxyType(
+    {
+        DetectionType.MOTION: 0,
+        DetectionType.PERSON: 1,
+        DetectionType.PET: 1,
+        DetectionType.VEHICLE: 1,
+        DetectionType.STRANGER_PERSON: 2,
+        DetectionType.IDENTITY_PERSON: 3,
+    }
+)
+
+
+def _kind_rank(event: SecurityEvent) -> int:
+    """How specific ``event``'s detection is (-1 for none or a kind outside the ranking:
+    those are never an upgrade)."""
+    detection = event.detection
+    return -1 if detection is None else _KIND_RANK.get(detection, -1)
+
+
+def _kind_token(event: SecurityEvent) -> str:
+    """``detection`` for a camera detection, else the ``event_type`` (empty when None)."""
+    if event.detection in DETECTION_KINDS:
+        return "detection"
+    return "" if event.event_type is None else str(event.event_type)
+
+
 _ARMING_USER_EVIDENCE: Final = Evidence(
     Support.DECLARED, "eufy app CusPushMode", "every FCM arming push captured carried user 2"
 )
@@ -598,9 +638,10 @@ class SecurityEvent:
     identical on both channels; ``session_id`` is the detection's session, the same on
     every push of one detection. :attr:`dedupe_key` names the occurrence across
     both channels. ``enriches`` is True on a later copy of an occurrence already
-    delivered, admitted only because it carries media paths the earlier copies lacked
-    (see :class:`EventDeduplicator`): update the existing occurrence with its paths,
-    do not count a new detection.
+    delivered, admitted only because it adds something the earlier copies lacked (a
+    media path, a more specific :attr:`detection`, a picture source; see
+    :class:`EventDeduplicator`): update the existing occurrence, do not count a new
+    detection.
 
     ``fetch_id`` is a short-key push's ``i``: the hex id of the face the station's AI
     matched (its picture: :meth:`~.client.EufySecurity.async_push_image`), or ``3106`` /
@@ -645,20 +686,25 @@ class SecurityEvent:
 
     @property
     def dedupe_key(self) -> str | None:
-        """The occurrence's key, the same on both channels.
+        """The occurrence's key, the same on both channels and on every push of it.
 
         ``unique:<unique_id>`` when the payload carries a ``unique_id`` (both copies of a
-        detection do). Otherwise ``device_sn:event second:event_type``, None without a
-        device or a time: seconds, because an FCM time without an inner time is whole
-        seconds while P2P ``trigger_time`` is milliseconds, and ``event_type`` stays in
-        the key, so at worst two detections of one second are both delivered.
+        detection do); else ``session:<device_sn>:<session_id>`` when it carries a
+        ``session_id``. Otherwise ``device_sn:event second:kind``, None without a device
+        or a time: seconds, because an FCM time without an inner time is whole seconds
+        while P2P ``trigger_time`` is milliseconds. ``kind`` is ``detection`` for a
+        camera detection (:data:`DETECTION_KINDS`), so a later push that classifies
+        the same detection differently is the same occurrence, else the ``event_type``.
         """
         if self.unique_id is not None:
             return f"unique:{self.unique_id}"
-        if self.device_sn is None or self.event_time_ms is None:
+        if self.device_sn is None:
             return None
-        event_type = "" if self.event_type is None else self.event_type
-        return f"{self.device_sn}:{self.event_time_ms // 1000}:{event_type}"
+        if self.session_id is not None:
+            return f"session:{self.device_sn}:{self.session_id}"
+        if self.event_time_ms is None:
+            return None
+        return f"{self.device_sn}:{self.event_time_ms // 1000}:{_kind_token(self)}"
 
     @property
     def media_paths(self) -> frozenset[str]:
@@ -1433,22 +1479,25 @@ class AlarmTracker:
 class _Occurrence:
     first_seen: float
     media: frozenset[str]
+    pictures: frozenset[PushPictureSource]
+    kinds: frozenset[DetectionType]
+    rank: int
 
 
 def _moment_key(event: SecurityEvent) -> str | None:
-    """Device, event time in ms and event type: what the copies of one detection share
-    when their ``unique_id`` differs. None without a device or a time."""
+    """Device, event time in ms and kind (see :func:`_kind_token`): what the copies of
+    one detection share when their ``unique_id`` differs. None without a device or a
+    time."""
     if event.device_sn is None or event.event_time_ms is None:
         return None
-    event_type = "" if event.event_type is None else event.event_type
-    return f"moment:{event.device_sn}:{event.event_time_ms}:{event_type}"
+    return f"moment:{event.device_sn}:{event.event_time_ms}:{_kind_token(event)}"
 
 
 class EventDeduplicator:
     """Admits each real :class:`SecurityEvent` occurrence once, across channels.
 
-    The key is :attr:`SecurityEvent.dedupe_key` (the payload's ``unique_id``, else
-    device, event second and event type).
+    The key is :attr:`SecurityEvent.dedupe_key` (the payload's ``unique_id``, else its
+    ``session_id``, else device, event second and kind).
     A bounded ring remembers keys for ``max_age`` seconds of ``clock``, at most
     ``max_entries`` of them (oldest forgotten first); it lives as long as this object,
     so it survives session reconnects. Rules, in order:
@@ -1456,15 +1505,19 @@ class EventDeduplicator:
     * a station-scope event (arming, alarm, alarm delay: a stop may reuse its alarm's
       time) or one without a key is always admitted and not remembered;
     * a ``push_count > 1`` copy whose key is new but whose device, event time (ms) and
-      event type match a remembered occurrence is that occurrence: a standalone T8170
+      kind match a remembered occurrence is that occurrence: a standalone T8170
       sends a second push per detection with its own ``unique_id`` and the recording
       path, at the first push's ``trigger_time``;
     * a key not seen (or forgotten) is admitted — a ``push_count > 1`` repeat too, as
       its first copy may have been lost while a channel was down;
-    * a seen key whose copy carries media paths (:data:`MEDIA_PATH_FIELDS`) none of the
-      earlier copies had is admitted as an **enrichment**, with
-      :attr:`SecurityEvent.enriches` True: the typical case is the P2P copy, with
-      ``thumb_path`` / ``crop_path``, arriving after the cloud copy;
+    * a seen key whose copy adds something none of the earlier copies had is admitted
+      as an **enrichment**, with :attr:`SecurityEvent.enriches` True: media paths
+      (:data:`MEDIA_PATH_FIELDS`; the typical case is the P2P copy, with
+      ``thumb_path`` / ``crop_path``, arriving after the cloud copy), a picture source
+      (:attr:`SecurityEvent.picture_sources`), or a :attr:`SecurityEvent.detection`
+      not delivered yet that is at least as specific as the most specific one so far
+      (motion < person, pet, vehicle < stranger < identified person). A less specific
+      kind adds nothing;
     * anything else is dropped, counted in :attr:`dropped_repeats` when
       ``push_count > 1`` and in :attr:`dropped_duplicates` otherwise.
     """
@@ -1507,6 +1560,9 @@ class EventDeduplicator:
                 break
             self._seen.popitem(last=False)
         media = event.media_paths
+        pictures = frozenset(event.picture_sources)
+        rank = _kind_rank(event)
+        kinds = frozenset() if event.detection is None else frozenset({event.detection})
         seen = self._seen.get(key)
         moment = _moment_key(event)
         if seen is None and moment is not None and (event.push_count or 0) > 1:
@@ -1514,16 +1570,30 @@ class EventDeduplicator:
             if seen is not None:
                 self._seen[key] = seen  # later copies under this key are the same occurrence
         if seen is None:
-            occurrence = _Occurrence(now, media)
+            occurrence = _Occurrence(now, media, pictures, kinds, rank)
             self._seen[key] = occurrence
             if moment is not None and moment != key:
                 self._seen[moment] = occurrence
             while len(self._seen) > self._max_entries:
                 self._seen.popitem(last=False)
             return event
-        if not media <= seen.media:
+        news = [
+            reason
+            for reason, new in (
+                ("media path", not media <= seen.media),
+                ("picture", not pictures <= seen.pictures),
+                ("kind", not kinds <= seen.kinds and rank >= seen.rank),
+            )
+            if new
+        ]
+        if news:
             seen.media |= media
-            _LOGGER.debug("admitting a %s copy as an enrichment (new media path)", event.source)
+            seen.pictures |= pictures
+            seen.kinds |= kinds
+            seen.rank = max(seen.rank, rank)
+            _LOGGER.debug(
+                "admitting a %s copy as an enrichment (new %s)", event.source, ", ".join(news)
+            )
             return replace(event, enriches=True)
         if event.push_count is not None and event.push_count > 1:
             self._dropped_repeats += 1

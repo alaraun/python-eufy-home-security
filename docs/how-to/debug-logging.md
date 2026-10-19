@@ -125,7 +125,7 @@ the full payloads are on the wire logger only. In order:
 |---|---|---|
 | `camera push 18:3102 under gcm from T8160***7890 ch0` | `p2p.session` | `msg_type:event_type`, the frame cipher (`gcm` authenticated, `ecb` forgeable on the LAN), device, channel, `push_count` when present |
 | `push binding: record_id present, attached 1 record(s) / 1 crop(s); bound thumb False, video True, crop False; rejected none` | `p2p.session` | whether the push's attached records were its own (usually not on fw 3.8.7.4), and which fields failed validation (names only) |
-| `dropping a p2p copy of 18:3102 from T8160***7890: duplicate, seen 1.2s ago` / `admitting a cloud copy as an enrichment` | `events` | the de-duplication decision (`duplicate`, or `repeat` for `push_count > 1`) |
+| `dropping a p2p copy of 18:3102 from T8160***7890: duplicate, seen 1.2s ago` / `admitting a cloud copy as an enrichment (new kind)` | `events` | the de-duplication decision (`duplicate`, or `repeat` for `push_count > 1`; an enrichment names what is new: `media path`, `picture`, `kind`) |
 | `event thumbnail: history record found in 0.41s` | `station` | the history lookup: `found`, `none`, `another camera's`, `no thumbnail yet`; or `from the push's bound path` |
 | `image fetch sent` / `image fetch bound: jpeg, 34012 bytes in 0.38s` / `image fetch: no reply within 12s` / `discarded a late image reply, 13.1s after its request` | `p2p.session` | the 1308 still fetch |
 | `trigger frame on channel 1: short-lived session open in 0.62s` / `… closed after 1.40s, 221961 bytes` | `p2p.session` | the trigger frame's second session |

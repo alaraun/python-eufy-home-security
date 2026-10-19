@@ -699,14 +699,20 @@ push and across reconnects, so the integration never de-duplicates:
 - Count a detection once per `SecurityEvent` whose `enriches` is False, and turn the
   motion/person binary sensor on for it; there is no "cleared" edge, so turn it off on a
   timer.
-- An event with `enriches=True` is the same occurrence arriving again with media paths
-  the first copy lacked (typically the local copy after the cloud one): update that
-  occurrence's snapshot, do not count a new detection.
+- An event with `enriches=True` is the same occurrence arriving again with something the
+  first copy lacked: media paths (typically the local copy after the cloud one), a
+  picture source (`picture_sources`: fetch `async_push_image` again), or a more specific
+  `detection` (a motion push followed by the same detection as a person, pet, vehicle or
+  identified person). Update that occurrence's snapshot and kind (turn the person
+  sensor on for an upgraded kind), do not count a new detection.
 - A standalone T8170 sends two cloud pushes per detection, the second (`push_count` 2)
   with its own `unique_id` and the recording path in `file_path`, at the first one's
   `trigger_time`. The library matches them by device, event time (ms) and event type:
   the second arrives as an enrichment when its `video_path` is new, else it is dropped
   as a repeat. One detection, one event.
+- A push without a `unique_id` (a HomeBase 2's) is keyed by its `session_id`, else by
+  device and second regardless of its kind, so a later push that classifies the same
+  detection differently is an enrichment, not a second detection.
 - Station pushes (arming, alarm) are never merged away; a stale guard-mode push is
   dropped (see live guard mode above).
 - For diagnostics, `eufy.deduplicator.dropped_duplicates` and `dropped_repeats`.
