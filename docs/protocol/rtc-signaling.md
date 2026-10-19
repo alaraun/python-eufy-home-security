@@ -132,17 +132,21 @@ key exchange is **[verified]** against eufy's server; the rest is **[app]**.
 
 A private call (kind 5, 6) has a uuid `"FF00<kind>"` plus 31 hex digits, a `token`
 (the station identity sealed with the session key), an `sdp_info` and travels on a
-UDP socket of its own **[app]**. `sdp_info` packs both of the client's SSRCs, its ICE
-username (5 ice-chars) and password (23), a content key (16) and IV (12) and a
-data-channel flag into 86 bytes; the byte layout is not known, so the library cannot
-send a private call yet.
+UDP socket of its own **[app]**. `sdp_info` is an 86-byte little-endian struct
+(`rtc/sdp.py` `SdpInfo.encode`): 2 reserved, a data-channel flag, two bytes the app
+sets to 1, a device-config byte, the client's ICE username (an 8-byte field) and
+password (24), a content key (20) and IV (20), then the audio and video SSRCs as
+u32; base64 in the encrypted attachment **[app]**.
 
 ## Media plane
 
 The device's offer for a private call is compact (`ice-u`, `ice-p`, `asc`, `vsc`,
-`sg`, `sgc`); the app expands it into a full SRTP offer from a template (not known).
-Media runs on one ICE connection with the CALL's TURN relay: SRTP keyed through the
-SDP, RTP H.265 (payload type 97) or H.264 (99), FlexFEC (125), audio on 111 (AAC),
+`sg`, `sgc`); the app expands it into a full SDP from a fixed template
+(`rtc/sdp.py` `expand_offer`), filling in the device's ICE credentials and SSRCs.
+The template is **SDES, no DTLS**: `a=setup:actpass` and one constant
+`a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:<constant>` line both directions (no
+`a=fingerprint`). Media runs on one ICE connection with the CALL's TURN relay: RTP
+H.265 (payload type 97) or H.264 (99), FlexFEC (125), audio on 111 (AAC), with the
 parameter sets, IDR slices and audio additionally encrypted inside the frames.
 Commands travel as RTCP APP packets on that connection (a handler's `rtcSendRoute`
 1) or over a separate data channel (0) **[app]**. `rtc/media.py` parses RTP, builds
@@ -151,7 +155,7 @@ the in-frame decryption and the data channel are interfaces.
 
 ## Open
 
-- the `sdp_info` byte layout and the offer template;
-- the media plane implementation;
+- the media plane implementation (ICE, SRTP, in-frame decryption, the data channel
+  with KCP);
 - whether a device answers a kind-3 call with an offer: a HomeBase 3 the app reaches
   over PPPP answers 100, then hangs up after about 60 s.

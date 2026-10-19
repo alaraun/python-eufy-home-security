@@ -7,7 +7,7 @@ import string
 
 import pytest
 
-from eufy_home_security.exceptions import UnsupportedError
+from eufy_home_security.exceptions import SignalingError
 from eufy_home_security.rtc.config import (
     RtcConfig,
     firmware_number,
@@ -19,6 +19,7 @@ from eufy_home_security.rtc.sdp import (
     CONTENT_KEY_LEN,
     ICE_PWD_LEN,
     ICE_UFRAG_LEN,
+    SDES_INLINE_KEY,
     CompactOffer,
     SdpInfo,
     answer_attributes,
@@ -89,10 +90,65 @@ def test_sdp_info_field_lengths_match_the_app() -> None:
     assert (ICE_UFRAG_LEN, ICE_PWD_LEN, CONTENT_KEY_LEN, CONTENT_IV_LEN) == (5, 23, 16, 12)
 
 
-def test_sdp_info_layout_and_offer_template_are_not_known() -> None:
-    with pytest.raises(UnsupportedError):
-        SdpInfo.generate("k", "i").encode()
-    with pytest.raises(UnsupportedError):
+def test_sdp_info_encodes_the_86_byte_layout() -> None:
+    info = SdpInfo(
+        audio_ssrc=0x11223344,
+        video_ssrc=0x55667788,
+        ice_ufrag="AbCdE",
+        ice_pwd="p" * 23,
+        content_key="k" * 16,
+        content_iv="i" * 12,
+        data_channel=True,
+    )
+    # reserved(2), data-channel flag + two 1s, device byte, ufrag[8], pwd[24],
+    # content key[20], content IV[20], audio SSRC and video SSRC (little-endian u32).
+    assert info.encode().hex() == (
+        "00000101010041624364450000007070707070707070707070707070707070"
+        "707070707070006b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b00000000"
+        "69696969696969696969696900000000000000004433221188776655"
+    )
+
+
+def test_sdp_info_flags_and_ssrcs() -> None:
+    plain = SdpInfo(
+        audio_ssrc=1, video_ssrc=2, ice_ufrag="a", ice_pwd="b", content_key="c", content_iv="d"
+    ).encode()
+    assert plain[0x02] == 0  # data channel off
+    assert (plain[0x03], plain[0x04]) == (1, 1)
+    assert plain[0x4E:0x56] == bytes.fromhex("0100000002000000")
+
+
+def test_sdp_info_rejects_an_oversized_field() -> None:
+    bad = SdpInfo(
+        audio_ssrc=0,
+        video_ssrc=0,
+        ice_ufrag="x" * 8,  # 8 leaves no room for the NUL in the 8-byte slot
+        ice_pwd="p",
+        content_key="k",
+        content_iv="i",
+    )
+    with pytest.raises(SignalingError, match="does not fit"):
+        bad.encode()
+
+
+def test_expand_offer_fills_the_template_and_keeps_the_sdes_key() -> None:
+    offer = CompactOffer.from_json(
+        {"ice-u": "DEVUF", "ice-p": "DEVPWD", "asc": 111, "vsc": 222, "sgc": 333}
+    )
+    sdp = expand_offer(offer)
+    assert sdp.endswith("\r\n")
+    assert "\n" not in sdp.replace("\r\n", "")  # CRLF only
+    assert "a=ice-ufrag:DEVUF\r\n" in sdp
+    assert "a=ice-pwd:DEVPWD\r\n" in sdp
+    assert f"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:{SDES_INLINE_KEY}\r\n" in sdp
+    assert "a=setup:actpass\r\n" in sdp  # SDES, not DTLS
+    assert "a=ssrc:111 cname:uIGCl7ux\r\n" in sdp  # audio
+    assert "a=ssrc:222 cname:u21w8kF2\r\n" in sdp  # video
+    assert "a=ssrc-group:FEC-FR 222 333\r\n" in sdp  # FEC group
+
+
+def test_expand_offer_refuses_without_ice_credentials() -> None:
+    with pytest.raises(SignalingError, match="no ICE credentials"):
         expand_offer(CompactOffer.from_json({}))
 
 

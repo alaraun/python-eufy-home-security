@@ -7,21 +7,22 @@ answers with a compact offer (``ice-u``, ``ice-p``, ``asc``, ``vsc``, ``sg``,
 ``sgc``) that the app expands into a full SRTP offer from a template; the app's
 answer keeps only its ICE credentials and SSRC lines.
 
-The byte layout of ``sdp_info`` and the offer template are not known yet:
-:meth:`SdpInfo.encode` and :func:`expand_offer` raise
-:class:`~.exceptions.UnsupportedError`.
+The byte layout of ``sdp_info`` and the SDP template are recovered from the app's
+native SDK (``WebrtcApp_SetCallSdp`` @0x233ef4, ``WebrtcApp_SetEventDeviceSDP``
+@0x234fd0); they are not verified on hardware (our HomeBase 3 serves P2P).
 """
 
 from __future__ import annotations
 
 import random
 import string
+import struct
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Final
 
 from .._logging import redact
-from ..exceptions import UnsupportedError
+from ..exceptions import SignalingError
 
 SDP_INFO_LEN: Final = 86
 """Length of the packed ``sdp_info`` structure."""
@@ -38,6 +39,80 @@ CONTENT_KEY_LEN: Final = 16
 CONTENT_IV_LEN: Final = 12
 #: Answer lines the app keeps: its ICE credentials and its SSRC attributes.
 ANSWER_PREFIXES: Final = ("a=ice-ufrag:", "a=ice-pwd:", "a=ssrc:")
+
+#: The constant SDES master key the app's SDP template carries, base64 of a 30-byte
+#: AES_CM_128_HMAC_SHA1_80 key+salt; the same key both directions, DTLS off
+#: (mega.so string @0xe78ab).
+SDES_INLINE_KEY: Final = "FvLcvU2P3ZWmQxgPAgcDu7Zl9vftYElFOjEzhWs5"
+
+_CRYPTO_LINE: Final = f"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:{SDES_INLINE_KEY}"
+# The media SDP template the app renders from a device's compact offer (strings
+# @0xe7794; `v=extmap:3` is the app's own literal, kept verbatim). `{...}` fields are
+# filled from the offer; everything else, including the cnames, is constant.
+_SDP_TEMPLATE: Final = (
+    "v=0",
+    "o=- 1751872 1751872 IN IP4 127.0.0.1",
+    "s=Anker Webrtc Stream",
+    "t=0 0",
+    "a=group:BUNDLE 0 1",
+    "a=msid-semantic: WMS b350J",
+    "m=audio 1 RTP/SAVPF 111",
+    "c=IN IP4 127.0.0.1",
+    "a=mid:0",
+    "a=extmap:9 anker-qos-feedback:transport-sequence",
+    "a=sendrecv",
+    "a=rtcp-mux",
+    "a=ice-ufrag:{ufrag}",
+    "a=ice-pwd:{pwd}",
+    _CRYPTO_LINE,
+    "a=setup:actpass",
+    "a=rtpmap:111 opus/48000/2",
+    "a=fmtp:111 maxplaybackrate=48000;stereo=1;minptime=10;maxptime=80;useinbandfec=1",
+    "a=ssrc:{audio_ssrc} cname:uIGCl7ux",
+    "m=video 1 RTP/SAVPF 97 99 125",
+    "c=IN IP4 0.0.0.0",
+    "a=mid:1",
+    "a=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+    "v=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+    "a=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay",
+    "a=extmap:6 http://www.webrtc.org/experiments/rtp-hdrext/abs-capture-time",
+    "a=extmap:9 anker-qos-feedback:transport-sequence",
+    "a=sendonly",
+    "a=rtcp-mux",
+    "a=ice-ufrag:{ufrag}",
+    "a=ice-pwd:{pwd}",
+    _CRYPTO_LINE,
+    "a=setup:actpass",
+    "a=rtpmap:97 H265/90000",
+    "a=rtcp-fb:97 rrtr",
+    "a=rtcp-fb:97 goog-remb",
+    "a=rtcp-fb:97 transport-cc",
+    "a=rtcp-fb:97 nack",
+    "a=rtcp-fb:97 nack pli",
+    "a=fmtp:97 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
+    "a=rtcp-fb:97 ccm fir",
+    "a=rtpmap:99 H264/90000",
+    "a=rtcp-fb:99 rrtr",
+    "a=rtcp-fb:99 goog-remb",
+    "a=rtcp-fb:99 transport-cc",
+    "a=rtcp-fb:99 nack",
+    "a=rtcp-fb:99 nack pli",
+    "a=fmtp:99 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
+    "a=rtcp-fb:99 ccm fir",
+    "a=ssrc:{video_ssrc} cname:u21w8kF2",
+    "a=rtpmap:125 flexfec-03/90000",
+    "a=fmtp:125 repair-window=10000000",
+    "a=ssrc-group:FEC-FR {video_ssrc} {fec_ssrc}",
+    "a=ssrc:{fec_ssrc} cname:u21w8kF2",
+)
+
+
+def _slot(value: str, size: int) -> bytes:
+    """``value`` as a NUL-terminated field of ``size`` bytes (it must leave room)."""
+    raw = value.encode("ascii")
+    if len(raw) >= size:
+        raise SignalingError(f"RTC sdp_info field {value!r} does not fit {size} bytes")
+    return raw.ljust(size, b"\0")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -75,8 +150,26 @@ class SdpInfo:
         )
 
     def encode(self) -> bytes:
-        """The packed structure (:data:`SDP_INFO_LEN` bytes). Not known yet."""
-        raise UnsupportedError("the layout of a private call's sdp_info is not known")
+        """The packed 86-byte structure the app sends in a private CALL
+        (``WebrtcApp_SetCallSdp`` @0x233ef4, base64 of ``session[0x77c8:0x781e]``).
+
+        Layout: 2 reserved, a data-channel flag, two bytes the app sets to 1, a
+        device-config byte (app-copied, left 0), ICE ufrag[8], ICE pwd[24], content
+        key[20], content IV[20], then the audio and video SSRCs as little-endian
+        u32.
+        """
+        buf = bytearray(SDP_INFO_LEN)
+        buf[0x02] = 1 if self.data_channel else 0
+        buf[0x03] = 1
+        buf[0x04] = 1
+        buf[0x06:0x0E] = _slot(self.ice_ufrag, 8)
+        buf[0x0E:0x26] = _slot(self.ice_pwd, 24)
+        buf[0x26:0x3A] = _slot(self.content_key, 20)
+        buf[0x3A:0x4E] = _slot(self.content_iv, 20)
+        struct.pack_into(
+            "<II", buf, 0x4E, self.audio_ssrc & 0xFFFFFFFF, self.video_ssrc & 0xFFFFFFFF
+        )
+        return bytes(buf)
 
     def __repr__(self) -> str:
         return (
@@ -115,8 +208,29 @@ class CompactOffer:
 
 
 def expand_offer(offer: CompactOffer) -> str:
-    """The full SDP offer the app builds from a compact offer. Not known yet."""
-    raise UnsupportedError("the SDP template of a private media call is not known")
+    """The full SDP the app builds from a device's compact offer
+    (``WebrtcApp_SetEventDeviceSDP`` @0x234fd0 via the formatter @0x2352bc,
+    template @0xe7794): the device's ICE credentials and SSRCs fill
+    :data:`_SDP_TEMPLATE`, everything else (the SDES key, codecs, FEC) is constant.
+    CRLF-terminated.
+
+    Raises :class:`~.exceptions.SignalingError` when the offer carries no ICE
+    credentials (the app refuses such a remote SDP).
+    """
+    if offer.ice_ufrag is None or offer.ice_pwd is None:
+        raise SignalingError("RTC compact offer has no ICE credentials")
+    fec = offer.fields.get("sgc")
+    fec_ssrc = (
+        fec if isinstance(fec, int) else (int(fec) if isinstance(fec, str) and fec.isdigit() else 0)
+    )
+    fields = {
+        "ufrag": offer.ice_ufrag,
+        "pwd": offer.ice_pwd,
+        "audio_ssrc": offer.audio_ssrc or 0,
+        "video_ssrc": offer.video_ssrc or 0,
+        "fec_ssrc": fec_ssrc,
+    }
+    return "".join(f"{line.format(**fields)}\r\n" for line in _SDP_TEMPLATE)
 
 
 def answer_attributes(sdp: str) -> str:

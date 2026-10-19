@@ -327,8 +327,6 @@ async def test_a_private_call_needs_sdp_info() -> None:
     try:
         with pytest.raises(ValueError, match="sdp_info"):
             await client.call(CallKind.PRIV_MEDIA)
-        with pytest.raises(UnsupportedError):
-            await client.call(CallKind.PRIV_MEDIA, sdp_info=SdpInfo.generate("k", "i"))
     finally:
         await client.close()
 
