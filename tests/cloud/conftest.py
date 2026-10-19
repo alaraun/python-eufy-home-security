@@ -281,6 +281,14 @@ class FakeMega:
                 ),
                 repeat=True,
             )
+        # get_faces_by_ids: a security-realm call answered from ``arming_data["faces"]``.
+        mock.post(
+            _url(sec, const.FACES_BY_IDS_PATH),
+            callback=self._delayed(
+                "faces", functools.partial(self._arming, endpoint="faces"), region
+            ),
+            repeat=True,
+        )
         mock.post(
             _url(const.cluster_host("devicerelation", region), const.DSK_KEYS_PATH),
             callback=self._delayed("dsk", self._get_dsk, region),

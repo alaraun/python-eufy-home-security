@@ -42,6 +42,7 @@ from eufy_home_security.events import (
     EventSource,
     GuardModeChanged,
     PushChanged,
+    PushPictureSource,
     SecurityEvent,
     StationsChanged,
 )
@@ -50,6 +51,7 @@ from eufy_home_security.exceptions import (
     CipherUnavailableError,
     CloudError,
     CommunicationError,
+    EmptyResponseError,
     EufySecurityError,
     KeyExchangeRefusedError,
     KeyRejectedError,
@@ -62,6 +64,7 @@ from eufy_home_security.exceptions import (
     UnsupportedError,
 )
 from eufy_home_security.identity import StationClaims
+from eufy_home_security.images import JPEG_CONTENT_TYPE, PushImage
 from eufy_home_security.inclusion import Reach
 from eufy_home_security.install import InstallState
 from eufy_home_security.models import GuardMode
@@ -70,10 +73,12 @@ from eufy_home_security.p2p import discovery as discovery_module
 from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p.did import Did
 from eufy_home_security.p2p.discovery import DiscoveredStation
+from eufy_home_security.p2p.media import Still, StillFormat
 from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN
 from eufy_home_security.p2p.pppp import BROADCAST
 from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.push import fcm as fcm_module
+from eufy_home_security.station import Station
 from eufy_home_security.storage import CACHE_SECTIONS, CACHE_VERSION, MemoryStore
 from eufy_home_security.testing import (
     SYNTHETIC,
@@ -2387,3 +2392,104 @@ async def test_pending_invitations_raise_when_no_region_answers() -> None:
         await eufy.async_pending_invites()
     assert not isinstance(caught.value, AuthenticationError)
     assert "login" not in cloud.calls
+
+
+# ── push pictures ────────────────────────────────────────────────────────────
+
+_JPEG = b"\xff\xd8\xff\xe0synthetic"
+_FACE_URL = "https://faces.example.invalid/f.jpg?sig=x"
+_PIC_URL = "https://pictures.example.invalid/p.jpg"
+
+
+def _face_push(**fields: Any) -> SecurityEvent:
+    """A HomeBase 2 style short-key detection push naming a face."""
+    return SecurityEvent(
+        source=EventSource.CLOUD,
+        station_sn=SYNTHETIC.station_sn,
+        device_sn=SYNTHETIC.camera_sn,
+        msg_type=1,
+        event_type=3101,
+        event_time_ms=1_700_000_000_000,
+        **({"fetch_id": "1a2b3c"} | fields),
+    )
+
+
+def _picture_client(cloud: FakeCloud) -> EufySecurity:
+    return build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+
+
+async def test_the_face_picture_of_a_push_comes_from_the_cloud() -> None:
+    cloud = FakeCloud(
+        faces={0x1A2B3C: {"ai_face_id": 0x1A2B3C, "face_url": _FACE_URL}},
+        pictures={_FACE_URL: _JPEG},
+    )
+    image = await _picture_client(cloud).async_push_image(_face_push())
+    assert image == PushImage(
+        source=PushPictureSource.FACE,
+        device_sn=SYNTHETIC.camera_sn,
+        data=_JPEG,
+        content_type=JPEG_CONTENT_TYPE,
+        face_id=0x1A2B3C,
+    )
+    assert cloud.face_requests == [{"ai_face_ids": [0x1A2B3C], "station_sn": SYNTHETIC.camera_sn}]
+    assert "login" not in cloud.calls
+
+
+async def test_a_push_picture_falls_back_to_pic_url_when_the_cloud_keeps_no_face() -> None:
+    cloud = FakeCloud(pictures={_PIC_URL: _JPEG})
+    eufy = _picture_client(cloud)
+    push = _face_push(pic_url=_PIC_URL)
+    image = await eufy.async_push_image(push)
+    assert (image.source, image.face_id, image.data) == (PushPictureSource.PIC_URL, None, _JPEG)
+    with pytest.raises(EmptyResponseError):
+        await eufy.async_push_image(push, PushPictureSource.FACE)
+
+
+async def test_a_station_path_pic_url_is_fetched_from_the_served_station() -> None:
+    eufy = _picture_client(FakeCloud())
+    path = "/zx/hdd_data0/Camera00/snapshort.jpg"
+    stills: list[str] = []
+
+    async def fetch_still(still_path: str) -> Still:
+        stills.append(still_path)
+        return Still(path=still_path, data=_JPEG, format=StillFormat.JPEG)
+
+    eufy.stations[SYNTHETIC.station_sn] = cast(
+        Station, SimpleNamespace(async_fetch_still=fetch_still)
+    )
+    push = _face_push(fetch_id=None, pic_url=path)
+    image = await eufy.async_push_image(push)
+    assert (image.source, image.data, stills) == (PushPictureSource.PIC_URL, _JPEG, [path])
+    other = _face_push(fetch_id=None, pic_url="relative/p.jpg")  # neither https nor /zx/
+    with pytest.raises(UnsupportedError):
+        await eufy.async_push_image(other, PushPictureSource.PIC_URL)
+    assert stills == [path]  # never sent to the station
+    del eufy.stations[SYNTHETIC.station_sn]
+    with pytest.raises(UnsupportedError):
+        await eufy.async_push_image(push)
+
+
+@pytest.mark.parametrize(
+    ("push", "source"),
+    [
+        (_face_push(fetch_id=None), None),  # names no picture
+        (_face_push(fetch_id="3107"), None),  # a vehicle marker, not a face
+        (_face_push(), PushPictureSource.PIC_URL),
+        (_face_push(fetch_id=None, pic_url="ftp://x/p.jpg"), None),
+    ],
+)
+async def test_a_push_without_that_picture_raises_unsupported_before_sending(
+    push: SecurityEvent, source: PushPictureSource | None
+) -> None:
+    cloud = FakeCloud()
+    with pytest.raises(UnsupportedError):
+        await _picture_client(cloud).async_push_image(push, source)
+    assert cloud.calls == []
+
+
+async def test_a_pushed_picture_that_is_no_image_raises() -> None:
+    cloud = FakeCloud(pictures={_PIC_URL: b"v8_eufysecurity:encrypted"})
+    with pytest.raises(UnsupportedError):
+        await _picture_client(cloud).async_push_image(_face_push(fetch_id=None, pic_url=_PIC_URL))

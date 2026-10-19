@@ -20,7 +20,7 @@ if TYPE_CHECKING:
         ArmingMemberResult,
         ArmingOutcome,
     )
-    from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
+    from .cloud.models import CloudDevice, CloudFace, CloudInvite, FirmwareUpdate
     from .cloud.status import (
         CloudStatus,
         DeviceListSource,
@@ -64,6 +64,7 @@ if TYPE_CHECKING:
         PresetsChanged,
         PushChanged,
         PushMessageType,
+        PushPictureSource,
         SecurityEvent,
         StationConfigChanged,
         StationsChanged,
@@ -119,6 +120,7 @@ if TYPE_CHECKING:
         CameraImage,
         ImageSource,
         ImageSourceInfo,
+        PushImage,
     )
     from .inclusion import Reach, StationChoice
     from .install import InstallState
@@ -181,7 +183,7 @@ _EXPORTS: dict[str, str] = {
         "cloud.arming",
     ),
     "AccountReport": "diagnostics",
-    **dict.fromkeys(("CloudDevice", "CloudInvite", "FirmwareUpdate"), "cloud.models"),
+    **dict.fromkeys(("CloudDevice", "CloudFace", "CloudInvite", "FirmwareUpdate"), "cloud.models"),
     **dict.fromkeys(
         (
             "CloudStatus",
@@ -244,6 +246,7 @@ _EXPORTS: dict[str, str] = {
             "PresetsChanged",
             "PushChanged",
             "PushMessageType",
+            "PushPictureSource",
             "SecurityEvent",
             "StationConfigChanged",
             "StationStateChanged",
@@ -304,6 +307,7 @@ _EXPORTS: dict[str, str] = {
             "CameraImage",
             "ImageSource",
             "ImageSourceInfo",
+            "PushImage",
         ),
         "images",
     ),
@@ -404,6 +408,7 @@ __all__ = [
     "CloudApiError",
     "CloudDevice",
     "CloudError",
+    "CloudFace",
     "CloudInvite",
     "CloudProblem",
     "CloudStatus",
@@ -471,7 +476,9 @@ __all__ = [
     "PresetsChanged",
     "ProtocolError",
     "PushChanged",
+    "PushImage",
     "PushMessageType",
+    "PushPictureSource",
     "RateLimitOrigin",
     "RateLimitedError",
     "Reach",

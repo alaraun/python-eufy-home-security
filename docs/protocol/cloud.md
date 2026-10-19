@@ -286,6 +286,27 @@ with four paired cameras) **[verified, one account]**.
   `security_device_entry` maps an entry to the house list's shape, tagged
   `cloud_source: "security"` (`CloudDevice.source`).
 
+## Face records
+
+`EufyCloudApi.async_get_faces(face_ids, station_sn)` asks the cloud's record of faces the
+stations' AI matched, by AI face id **[declared: app]**:
+`POST <security host>/v3/aiassis/get_faces_by_ids` on the security realm (the same
+identity as `get_ciphers`, `category: eufy_security`), body
+`{"ai_face_ids": [<int>…], "station_sn": "<serial>"}`. The app sends the detection push's
+short-key `s` as `station_sn` (the camera's serial on a HomeBase 2 push) and one id: the
+push's `i` read as hex. `data` is a list of records: `ai_face_id`, `face_url` (where the
+face crop is fetched), `face_path`, `is_stranger` (0/1), `create_time` (epoch seconds),
+`status`, `owner_id`, `Identifier` and `feature` (a face feature vector). The library
+lifts `ai_face_id`, `face_url`, `is_stranger`, `create_time` and `status`
+(`CloudFace`), never the feature vector, and never logs `face_url`. An id without a
+record is left out. Not yet seen live: no captured push has carried a face id.
+
+`EufyCloudApi.async_fetch_picture(url)` downloads such a picture (and a push's https
+`pic_url`): one GET with `app-name` and `model-type`; on eufy's own hosts
+(`*.eufylife.com`, `*.eufy.com`) also the session's `x-auth-token` and `gtoken`, as the
+app's image loader sends on every picture request; elsewhere no credential. https only,
+at most 8 MiB.
+
 ## Arming groups
 
 The eufy app's Group Control: house-level groups of (station or standalone device,

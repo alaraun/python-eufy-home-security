@@ -7,15 +7,16 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 import pytest
-from aioresponses import aioresponses
+from aioresponses import CallbackResult, aioresponses
 
 from eufy_home_security._logging import set_secret_logging
 from eufy_home_security.cloud import const, crypto
 from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, _check_owner_id, _Identity
+from eufy_home_security.cloud.models import CloudFace
 from eufy_home_security.cloud.status import LoginNeed, SessionState
 from eufy_home_security.exceptions import (
     AuthenticationError,
@@ -32,6 +33,7 @@ from eufy_home_security.exceptions import (
     RefreshCooldownError,
     SessionRejectedError,
     SessionReplacedError,
+    UnsupportedError,
 )
 from eufy_home_security.install import InstallState
 from eufy_home_security.storage import MemoryStore, SessionCache
@@ -1842,3 +1844,146 @@ async def test_check_firmware_without_full_package_is_none(
                 SYNTHETIC.station_sn, ota_type="T8030_Kit", current_version_name="3.8.7.4"
             )
     assert update is None
+
+
+# ── push pictures ────────────────────────────────────────────────────────────
+
+_FACE_ID = 0x1A2B3C
+_FACE_URL = "https://faces.example.invalid/face.jpg?sig=x"
+
+
+async def test_get_faces_sends_the_apps_body_on_the_security_realm(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.arming_data["faces"] = [
+        {"ai_face_id": _FACE_ID, "face_url": _FACE_URL, "is_stranger": 1, "create_time": 7,
+         "status": 1, "feature": "vector", "face_path": "p"},
+        {"ai_face_id": 0, "face_url": _FACE_URL},  # no face id: skipped
+    ]  # fmt: skip
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            faces = await api.async_get_faces([_FACE_ID], SYNTHETIC.camera_sn)
+    assert [body for name, body in fake_mega.calls if name == "faces"] == [
+        {"ai_face_ids": [_FACE_ID], "station_sn": SYNTHETIC.camera_sn}
+    ]
+    assert fake_mega.refused == []  # a security-realm identity with token and gtoken
+    assert fake_mega.headers["faces"][0]["category"] == const.CATEGORY
+    assert faces == [
+        CloudFace(face_id=_FACE_ID, face_url=_FACE_URL, stranger=True, created_at=7, status=1)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("setup", "error"),
+    [
+        (lambda f: f.code_once.update(faces=10000), CloudApiError),
+        (lambda f: f.arming_data.update(faces={"ai_face_id": 1}), ProtocolError),
+    ],
+)
+async def test_get_faces_raises_typed_errors(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    setup: Callable[[FakeMega], None],
+    error: type[EufySecurityError],
+) -> None:
+    setup(fake_mega)
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(error):
+                await api.async_get_faces([1], SYNTHETIC.camera_sn)
+
+
+async def test_get_faces_with_no_record_is_an_empty_list(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            assert await api.async_get_faces([1], SYNTHETIC.camera_sn) == []
+
+
+@pytest.mark.parametrize(
+    ("url", "credentials"),
+    [
+        ("https://pictures.eufylife.com/p.jpg", True),
+        ("https://eufy.com/p.jpg", True),
+        ("https://faces.example.invalid/f.jpg?sig=x", False),
+        ("https://noteufy.com/p.jpg", False),
+    ],
+)
+async def test_a_picture_url_gets_the_session_token_only_on_eufy_hosts(
+    fake_mega: FakeMega, cache: SessionCache, url: str, credentials: bool
+) -> None:
+    sent: list[dict[str, str]] = []
+
+    def answer(_url: object, **kwargs: Any) -> CallbackResult:
+        sent.append(dict(kwargs["headers"]))
+        return CallbackResult(status=200, body=b"\xff\xd8jpeg")
+
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        mock.get(url, callback=answer)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            assert await api.async_fetch_picture(url) == b"\xff\xd8jpeg"
+    headers = sent[0]
+    assert headers["app-name"] == const.APP_NAME
+    assert ("x-auth-token" in headers) is credentials
+    assert ("gtoken" in headers) is credentials
+    if credentials:
+        assert headers["x-auth-token"] == FAKE_AUTH_TOKEN
+        assert headers["gtoken"] == crypto.gtoken(SYNTHETIC.account_id)
+
+
+async def test_a_picture_url_without_a_session_gets_no_token_and_no_login(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    url = "https://pictures.eufylife.com/p.jpg"
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        mock.get(url, body=b"\xff\xd8")
+        async with aiohttp.ClientSession() as session:
+            assert await _api(session, cache).async_fetch_picture(url) == b"\xff\xd8"
+    assert fake_mega.login_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("answer", "error"),
+    [
+        ({"status": 404}, CloudApiError),
+        ({"exception": aiohttp.ClientConnectionError("down")}, CommunicationError),
+        ({"body": b"x" * 65}, ProtocolError),
+    ],
+)
+async def test_a_picture_download_raises_typed_errors(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    monkeypatch: pytest.MonkeyPatch,
+    answer: dict[str, Any],
+    error: type[EufySecurityError],
+) -> None:
+    monkeypatch.setattr(const, "PICTURE_MAX_BYTES", 64)
+    url = "https://faces.example.invalid/f.jpg"
+    with aioresponses() as mock:
+        mock.get(url, **answer)
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(error) as raised:
+                await _api(session, cache).async_fetch_picture(url)
+    if error is CloudApiError:
+        assert cast(CloudApiError, raised.value).code == 404
+
+
+@pytest.mark.parametrize("url", ["http://pictures.eufylife.com/p.jpg", "/zx/Camera00/p.jpg"])
+async def test_a_picture_url_must_be_https(cache: SessionCache, url: str) -> None:
+    async with aiohttp.ClientSession() as session:
+        with pytest.raises(UnsupportedError):
+            await _api(session, cache).async_fetch_picture(url)

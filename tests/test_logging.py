@@ -167,6 +167,22 @@ def test_payload_masks_identifying_keys(key: str, value: str, expected: str) -> 
 
 
 @pytest.mark.usefixtures("_secrets_restored")
+def test_payload_masks_face_records_and_their_ids() -> None:
+    body = {
+        "ai_face_ids": [1715004, 1715005],
+        "station_sn": "T8134P2000012345",
+        "data": [{"ai_face_id": 1715004, "face_url": "https://h.example/f.jpg?sig=abcdef"}],
+        "push": {"i": "1a2b3c4d", "f": "Alice", "pic_url": "https://h.example/p.jpg?sig=1"},
+    }
+    result = str(Payload(body))
+    for shown in ("1715004", "1715005", "sig=abcdef", "1a2b3c4d", "Alice", "sig=1"):
+        assert shown not in result
+
+    set_secret_logging(True)
+    assert "1715005" in str(Payload(body))
+
+
+@pytest.mark.usefixtures("_secrets_restored")
 def test_payload_masks_a_numeric_location() -> None:
     body = {"latitude": 59.4372, "longitude": 24.7536, "lat": 1.5, "lng": -2.25, "member_type": 1}
     result = str(Payload(body))

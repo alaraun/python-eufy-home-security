@@ -161,6 +161,15 @@ _FETCH_ID: Final = re.compile(r"[0-9A-Fa-f]{1,16}")
 _FACE_ID_MAX: Final = 2**63 - 1  # the app parses the id as a signed 64-bit long
 
 
+class PushPictureSource(StrEnum):
+    """A picture a push names, fetched from the cloud or the station, never the camera."""
+
+    FACE = "face"
+    """The face crop of the push's face id (:attr:`SecurityEvent.face_id`), from the cloud."""
+    PIC_URL = "pic_url"
+    """The push's ``pic_url``: an https URL, or a still on the station's disk."""
+
+
 #: The kinds that name a person.
 PERSON_KINDS: Final = frozenset(
     {DetectionType.PERSON, DetectionType.IDENTITY_PERSON, DetectionType.STRANGER_PERSON}
@@ -594,8 +603,8 @@ class SecurityEvent:
     do not count a new detection.
 
     ``fetch_id`` is a short-key push's ``i``: the hex id of the face the station's AI
-    matched, or ``3106`` / ``3107`` for a pet / vehicle. With ``person_name`` it decides
-    :attr:`detection`.
+    matched (its picture: :meth:`~.client.EufySecurity.async_push_image`), or ``3106`` /
+    ``3107`` for a pet / vehicle. With ``person_name`` it decides :attr:`detection`.
     """
 
     source: EventSource
@@ -724,6 +733,17 @@ class SecurityEvent:
             return None
         face = int(self.fetch_id, 16)
         return face if 0 < face <= _FACE_ID_MAX else None
+
+    @property
+    def picture_sources(self) -> tuple[PushPictureSource, ...]:
+        """The pictures this push names, in the eufy app's order (see
+        :meth:`~.client.EufySecurity.async_push_image`)."""
+        sources = []
+        if self.face_id is not None:
+            sources.append(PushPictureSource.FACE)
+        if pic_url_kind(self.pic_url) in ("https", "station"):
+            sources.append(PushPictureSource.PIC_URL)
+        return tuple(sources)
 
     @property
     def scope(self) -> EventScope:

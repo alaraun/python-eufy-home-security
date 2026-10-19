@@ -159,6 +159,24 @@ person. `SecurityEvent.detection_evidence` names the grade of the kind an event 
 
 **`notification_style`**: 1 text, 2 thumbnail, 3 both.
 
+### Push pictures
+
+A cloud detection push carries no picture bytes. It can name two pictures
+(`SecurityEvent.picture_sources`, `PushPictureSource`), both fetched without waking a
+camera, the face first as the eufy app does **[app]**:
+
+| source | named by | fetched by |
+|---|---|---|
+| `FACE` | a `msg_type` 1 push's face id: `fetch_id` (`i`) other than `3106`/`3107`, read as hex (`SecurityEvent.face_id`) | the cloud's face record ([cloud.md](cloud.md#face-records)), then its `face_url`: a small crop of the face |
+| `PIC_URL` | `pic_url`, https | a GET of the URL (the app's large notification picture) |
+| `PIC_URL` | `pic_url`, a station path (`/zx/….jpg`) | a still fetch on the station's session ([media.md](media.md#stills-1308-verified)); only for a station served locally |
+
+`EufySecurity.async_push_image(event, source=None)` returns a `PushImage` (`data`,
+`content_type`: JPEG, PNG or WebP, `face_id` of a face image). Without `source` it tries
+the named sources in that order and returns the first that works. A push that names
+neither (a HomeBase 2 motion push without a face id, an empty `pic_url`) has no picture
+of its own: the app shows text only. A header-encrypted still is refused, not returned.
+
 ### Station pushes: arming and alarm
 
 `msg_type` 9 (ARMING), 10 (ALARM) and 16 (ALARM_DELAY) describe the station, not a

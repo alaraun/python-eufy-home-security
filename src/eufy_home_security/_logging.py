@@ -143,6 +143,8 @@ IDENTIFYING_KEYS: Final = frozenset(
         "memberuserid", "actionuserid", "ownerid", "owneruserid", "mvaluestrsub",
         "username", "nickname", "nick", "actionusernick", "actionusername", "personname",
         "mobile", "openudid",
+        # faces the station's AI matched (a push's short keys f and i)
+        "f", "i", "fetchid", "aifaceid", "aifaceids", "faceurl", "facepath", "feature",
         # devices and the house
         "sn", "s", "serial", "serialnumber", "devicesn", "stationsn", "parentsn", "did",
         "p2pdid", "hddlabel", "curstoragelabel", "oldstoragelabel",
@@ -154,6 +156,7 @@ IDENTIFYING_KEYS: Final = frozenset(
         # media on the station's disk
         "file", "filepath", "path", "thumbpath", "storagepath", "croppath", "videopath",
         "coverpath", "cloudpath", "crophb3path", "cropcloudpath", "snapshotcloud", "mp4cloud",
+        "picurl",
     }
 )  # fmt: skip
 
@@ -241,6 +244,8 @@ def _masked(data: object, clear: bool) -> object:
                 and (_identifying(key) or (named_param and key == "param_value"))
             ):
                 out[key] = str(v) if clear else _hidden_identifier(v)
+            elif isinstance(v, list | tuple) and _identifying(key):
+                out[key] = [_masked_item(item, clear) for item in v]
             else:
                 out[key] = _masked(v, clear)
         return out
@@ -259,6 +264,13 @@ def _masked(data: object, clear: bool) -> object:
                 return _masked(decoded, clear)  # a JSON body inside a string
         return data if clear else _hidden_text(data)
     return data
+
+
+def _masked_item(item: object, clear: bool) -> object:
+    """One entry of a list under an identifying key: a scalar redacted, a container masked."""
+    if isinstance(item, str | int | float) and not isinstance(item, bool):
+        return str(item) if clear else _hidden_identifier(item)
+    return _masked(item, clear)
 
 
 def _sensitive(key: str) -> bool:

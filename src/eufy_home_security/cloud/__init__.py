@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from .models import (
         CipherRecord,
         CloudDevice,
+        CloudFace,
         CloudHouse,
         CloudInvite,
         LoginCountry,
@@ -24,6 +25,7 @@ __all__ = [
     "CipherRecord",
     "CloudCode",
     "CloudDevice",
+    "CloudFace",
     "CloudHouse",
     "CloudInvite",
     "EufyCloudApi",
@@ -42,6 +44,7 @@ __getattr__, __dir__ = lazy_exports(
             (
                 "CipherRecord",
                 "CloudDevice",
+                "CloudFace",
                 "CloudHouse",
                 "CloudInvite",
                 "LoginCountry",

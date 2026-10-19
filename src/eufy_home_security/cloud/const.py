@@ -155,6 +155,14 @@ ARMING_GROUP_UPDATE_PATH: Final = "/v3/house/update_guard"
 ARMING_GROUP_DELETE_PATH: Final = "/v3/house/delete_guard"
 ARMING_GROUP_ACTIVATE_PATH: Final = "/v3/house/setup_guard"
 ARMING_GROUP_LOGS_PATH: Final = "/v3/house/get_guard_logs"
+# The cloud's face records by AI face id, security realm (see docs/protocol/events.md
+# § Push pictures).
+FACES_BY_IDS_PATH: Final = "/v3/aiassis/get_faces_by_ids"
+#: Hosts whose picture URLs get the session's token and ``gtoken``, as the eufy app's
+#: image loader sends them; any other host (a signed storage URL) gets no credential.
+PICTURE_AUTH_DOMAINS: Final = ("eufylife.com", "eufy.com")
+#: The largest picture a URL fetch reads; a longer body is refused.
+PICTURE_MAX_BYTES: Final = 8 * 1024 * 1024
 
 # The only hosts a thing description's ``profile.plugin_path`` (the handler bundle) is
 # downloaded from: the vendor CDN hosts every fetched description names (eufy's own CDN

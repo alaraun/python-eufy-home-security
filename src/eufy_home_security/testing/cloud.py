@@ -419,6 +419,13 @@ class FakeCloud:
     arming_errors: dict[str, EufySecurityError] = field(default_factory=dict)
     """Path tail (``"setup_guard"``) -> the refusal its next request meets, consumed
     once and served as a ``call_errors`` entry is."""
+    faces: dict[int, dict[str, Any]] = field(default_factory=dict)
+    """Raw ``get_faces_by_ids`` records by AI face id; a request (recorded as
+    ``"faces"``, its body in ``face_requests``) is answered with those it names."""
+    face_requests: list[dict[str, Any]] = field(default_factory=list)
+    pictures: dict[str, bytes] = field(default_factory=dict)
+    """Picture URL -> its bytes, served by ``async_fetch_picture`` (recorded as
+    ``"picture"``); another https URL is refused with HTTP 404."""
 
     @staticmethod
     def refusal(
@@ -593,6 +600,12 @@ class FakeCloud:
             if self.things_error is not None:
                 raise _Refusal(self.things_error)
             return {"things_list": [self.things[c] for c in codes if c in self.things]}
+        if path == const.FACES_BY_IDS_PATH:
+            note("faces")
+            self.face_requests.append(dict(payload))
+            self._raise_call_error()
+            ids = [int(face_id) for face_id in payload["ai_face_ids"]]
+            return [dict(self.faces[i]) for i in ids if i in self.faces] or None
         if path in _ARMING_PATHS:
             tail = path.rsplit("/", 1)[-1]
             note(f"arming:{tail}")
@@ -722,6 +735,17 @@ class _FakeCloudApi(EufyCloudApi):
         return _Identity(
             key_ident=f"{_KEY_IDENT}-{next(_IDENTS)}", shared_key=_SHARED_KEY, region=region
         )
+
+    async def async_fetch_picture(self, url: str, *, region: str | None = None) -> bytes:
+        """Answered from ``pictures``; a URL that is not https is refused as the real
+        client refuses it, any other unknown one with HTTP 404."""
+        if not url.startswith("https://"):
+            return await super().async_fetch_picture(url, region=region)
+        self._fake.calls.append("picture")
+        data = self._fake.pictures.get(url)
+        if data is None:
+            raise CloudApiError(404, "picture download refused (HTTP 404)", endpoint="picture")
+        return data
 
     async def _lookup_client_country(self) -> str | None:
         """Answered from ``client_country``; no key exchange, nothing recorded in ``calls``."""

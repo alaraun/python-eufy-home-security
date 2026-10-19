@@ -19,12 +19,12 @@ import math
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from types import MappingProxyType, TracebackType
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self, cast
 
 from ._logging import Identifier, LogThrottle, Secret, redact_serial
 from .cloud import arming
 from .cloud.api import CipherKeys, EufyCloudApi, HttpSession, PasswordSource
-from .cloud.const import CLOUD_STATE_REFRESH, firmware_ota_type
+from .cloud.const import CLOUD_STATE_REFRESH, FACES_BY_IDS_PATH, firmware_ota_type
 from .cloud.models import CloudDevice, CloudInvite, FirmwareUpdate
 from .cloud.status import CloudStatus, DeviceListSource
 from .devices.model_settings import (
@@ -51,14 +51,17 @@ from .events import (
     GuardModeChanged,
     GuardModeTracker,
     PushChanged,
+    PushPictureSource,
     SecurityEvent,
     StationsChanged,
     Unsubscribe,
     as_guard_mode,
+    pic_url_kind,
 )
 from .exceptions import (
     CloudError,
     CommunicationError,
+    EmptyResponseError,
     EufySecurityError,
     ModelDataError,
     NoCachedSessionError,
@@ -67,6 +70,7 @@ from .exceptions import (
     UnsupportedError,
 )
 from .identity import StationClaims, is_device_serial
+from .images import PushImage, picture_content_type
 from .inclusion import Reach, StationChoice
 from .models import GuardMode
 from .network import LanPath, check_local_ports, lan_address, lan_path_for, with_discovery
@@ -1294,6 +1298,81 @@ class EufySecurity:
         if (station := self.stations.get(alarm.station_sn)) is not None:
             station.note_alarm(alarm)
         self._bus.emit(alarm)
+
+    # ── push pictures ────────────────────────────────────────────────────────
+
+    async def async_push_image(
+        self, event: SecurityEvent, source: PushPictureSource | None = None
+    ) -> PushImage:
+        """A picture the detection push ``event`` names, fetched as the eufy app does.
+
+        * ``FACE``: the cloud's crop of the face the station matched
+          (:attr:`SecurityEvent.face_id`): ``get_faces_by_ids``
+          (:meth:`~.cloud.api.EufyCloudApi.async_get_faces`), then its ``face_url``.
+        * ``PIC_URL``: the push's ``pic_url``, an https URL fetched from the cloud, or a
+          still on the station's disk fetched over the station's session (a locally
+          served station only).
+
+        ``source`` None tries :attr:`SecurityEvent.picture_sources` in order (the app's:
+        the face first) and returns the first that succeeds, raising the last failure.
+        Never wakes a camera and never logs in. Raises
+        :class:`~.exceptions.UnsupportedError` when the push names no such picture (or a
+        station path of a station not served here, or bytes that are no displayable
+        picture), :class:`~.exceptions.EmptyResponseError` when the cloud keeps no
+        picture of the face, and the typed errors of the cloud or station call.
+        """
+        sources = event.picture_sources
+        if source is not None:
+            if source not in sources:
+                raise UnsupportedError(f"the push names no {source} picture")
+            sources = (source,)
+        if not sources:
+            raise UnsupportedError("the push names no picture (no face id, no pic_url)")
+        await self._ensure_cache_loaded()
+        failure: EufySecurityError | None = None
+        for candidate in sources:
+            try:
+                return await self._push_image(event, candidate)
+            except EufySecurityError as err:
+                _LOGGER.debug("push picture from %s failed: %s", candidate, err)
+                failure = err
+        raise cast(EufySecurityError, failure)
+
+    async def _push_image(self, event: SecurityEvent, source: PushPictureSource) -> PushImage:
+        serial = event.device_sn or event.station_sn
+        region = self.cloud.device_region(serial) if serial else None
+        face_id = event.face_id
+        if source is PushPictureSource.FACE and face_id is not None and serial is not None:
+            faces = await self.cloud.async_get_faces([face_id], serial, region=region, login=False)
+            url = next((f.face_url for f in faces if f.face_id == face_id and f.face_url), None)
+            if url is None:
+                raise EmptyResponseError(
+                    0, "the cloud keeps no picture of the push's face", endpoint=FACES_BY_IDS_PATH
+                )
+            data = await self.cloud.async_fetch_picture(url, region=region)
+        elif source is PushPictureSource.PIC_URL and event.pic_url is not None:
+            face_id = None
+            if pic_url_kind(event.pic_url) == "https":
+                data = await self.cloud.async_fetch_picture(event.pic_url, region=region)
+            else:
+                station = self.stations.get(event.station_sn or "")
+                if station is None:
+                    raise UnsupportedError(
+                        "the push's picture is on a station not served locally here"
+                    )
+                data = (await station.async_fetch_still(event.pic_url)).data
+        else:
+            raise UnsupportedError(f"the push names no {source} picture")
+        content_type = picture_content_type(data)
+        if content_type is None:
+            raise UnsupportedError(f"the push's {source} picture is not a displayable image")
+        return PushImage(
+            source=source,
+            device_sn=event.device_sn,
+            data=data,
+            content_type=content_type,
+            face_id=face_id,
+        )
 
     # ── arming groups ────────────────────────────────────────────────────────
 

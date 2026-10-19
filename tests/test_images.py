@@ -7,8 +7,11 @@ from eufy_home_security.images import (
     HEVC_CONTENT_TYPE,
     IMAGE_SOURCES,
     JPEG_CONTENT_TYPE,
+    PNG_CONTENT_TYPE,
+    WEBP_CONTENT_TYPE,
     CameraImage,
     ImageSource,
+    picture_content_type,
 )
 from eufy_home_security.p2p.media import VideoCodec
 from eufy_home_security.testing import SYNTHETIC
@@ -85,3 +88,18 @@ def test_a_keyframe_image_names_the_codec_of_its_picture(
 def test_codec_content_types_and_mp4_tags() -> None:
     assert (VideoCodec.HEVC.content_type, VideoCodec.HEVC.mp4_tag) == (HEVC_CONTENT_TYPE, "hvc1")
     assert (VideoCodec.H264.content_type, VideoCodec.H264.mp4_tag) == (H264_CONTENT_TYPE, None)
+
+
+@pytest.mark.parametrize(
+    ("data", "content_type"),
+    [
+        (b"\xff\xd8\xff\xe0rest", JPEG_CONTENT_TYPE),
+        (b"\x89PNG\r\n\x1a\nrest", PNG_CONTENT_TYPE),
+        (b"RIFF\x00\x00\x00\x00WEBPVP8 ", WEBP_CONTENT_TYPE),
+        (b"eufysecurity:header", None),
+        (b"v8_eufysecurity:header", None),
+        (b"", None),
+    ],
+)
+def test_a_pushed_picture_is_typed_by_its_magic(data: bytes, content_type: str | None) -> None:
+    assert picture_content_type(data) == content_type

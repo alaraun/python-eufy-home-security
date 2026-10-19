@@ -1320,6 +1320,12 @@ record_id, recorded_at, preset, width, height, codec)`, with `is_jpeg` and `high
   without spending battery. `record_id` and `recorded_at` say which event it shows;
   `RecordNotFoundError` when there is none in the window (for example after a format).
   `LIVE` takes a live keyframe.
+- **For a cloud push that names a picture of its own:** `await
+  eufy.async_push_image(event)` when `event.picture_sources` is not empty, returning a
+  `PushImage(source, device_sn, data, content_type, face_id)` (`PushPictureSource.FACE`:
+  the cloud's face crop of a person push, `PIC_URL`: the push's own picture). This is
+  the only picture a HomeBase 2 person push has: its station path is not on the push,
+  and the camera stays asleep. See [events.md](../protocol/events.md#push-pictures).
 - **`LIVE` shows the camera asked for** on a station with several cameras (the live
   open names the channel in its subheader). A live stream
   whose frames come from another camera raises `ProtocolError` rather than returning

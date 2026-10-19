@@ -11,14 +11,16 @@ from eufy_home_security.cloud.models import (
     CACHED_MEMBER_FIELDS,
     CipherRecord,
     CloudDevice,
+    CloudFace,
     CloudHouse,
     CloudParam,
     FirmwareUpdate,
     RsaKeyCheck,
     device_cache_entry,
+    parse_faces,
     security_device_entry,
 )
-from eufy_home_security.exceptions import CloudApiError, EmptyResponseError
+from eufy_home_security.exceptions import CloudApiError, EmptyResponseError, ProtocolError
 from eufy_home_security.testing import SYNTHETIC, FakeStation, security_device, security_station
 
 
@@ -475,3 +477,33 @@ def test_cipher_record_rejects_malformed_entries() -> None:
     assert short.ecc_state == "unusable"
     assert short.check_rsa().state == "absent"
     assert CipherRecord(cipher_id=2, ecc_private_key="zz" * 32).ecc_state == "unusable"
+
+
+@pytest.mark.parametrize(
+    ("item", "face"),
+    [
+        (
+            {"ai_face_id": "17", "face_url": " https://h.example/f.jpg ", "is_stranger": 0},
+            CloudFace(face_id=17, face_url="https://h.example/f.jpg", stranger=False),
+        ),
+        ({"ai_face_id": 17}, CloudFace(face_id=17)),
+        ({"ai_face_id": 0, "face_url": "https://h.example/f.jpg"}, None),
+        ({"face_url": "https://h.example/f.jpg"}, None),
+        ("not a record", None),
+    ],
+)
+def test_a_face_record_needs_a_positive_face_id(item: object, face: CloudFace | None) -> None:
+    assert CloudFace.from_api(item) == face
+
+
+def test_a_face_record_never_shows_its_url() -> None:
+    face = CloudFace(face_id=17, face_url="https://h.example/f.jpg?sig=secret")
+    assert "sig=secret" not in repr(face)
+    assert "has_url=True" in repr(face)
+
+
+def test_face_records_are_a_list_or_nothing() -> None:
+    assert parse_faces(None, "p") == []
+    assert parse_faces([{"ai_face_id": 3}, {}], "p") == [CloudFace(face_id=3)]
+    with pytest.raises(ProtocolError):
+        parse_faces({"ai_face_id": 3}, "p")

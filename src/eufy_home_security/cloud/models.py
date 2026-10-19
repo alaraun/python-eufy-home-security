@@ -135,6 +135,65 @@ class FirmwareUpdate:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True, repr=False)
+class CloudFace:
+    """One face record of ``aiassis/get_faces_by_ids``: the cloud's crop of a face the
+    station's AI matched, by its AI face id.
+
+    ``face_url`` is where the picture is fetched
+    (:meth:`~.api.EufyCloudApi.async_fetch_picture`); it is a link to a person's face,
+    so it is never logged or shown by ``repr``. The record's face feature vector is not
+    lifted.
+    """
+
+    face_id: int
+    """``ai_face_id``: the id a push names in hex (``SecurityEvent.face_id``)."""
+    face_url: str | None = None
+    stranger: bool | None = None
+    """``is_stranger``: the face matched no familiar person."""
+    created_at: int | None = None
+    """``create_time``, epoch seconds."""
+    status: int | None = None
+
+    def __repr__(self) -> str:
+        return (
+            f"CloudFace(has_url={self.face_url is not None}, stranger={self.stranger}, "
+            f"created_at={self.created_at}, status={self.status})"
+        )
+
+    @classmethod
+    def from_api(cls, item: object) -> CloudFace | None:
+        """One ``data`` entry, or None when it is no object or names no positive
+        ``ai_face_id``."""
+        if not isinstance(item, Mapping):
+            return None
+        face_id = _int_or_none(item.get("ai_face_id"))
+        if face_id is None or face_id <= 0:
+            return None
+        stranger = _int_or_none(item.get("is_stranger"))
+        return cls(
+            face_id=face_id,
+            face_url=_str_or_none(item.get("face_url")),
+            stranger=None if stranger is None else bool(stranger),
+            created_at=_int_or_none(item.get("create_time")),
+            status=_int_or_none(item.get("status")),
+        )
+
+
+def parse_faces(data: object, path: str) -> list[CloudFace]:
+    """``get_faces_by_ids``' ``data`` as face records, in the cloud's order; an absent
+    ``data`` is no record. Entries that are no face record are skipped.
+
+    Raises :class:`~.exceptions.ProtocolError` when ``data`` is not a list.
+    """
+    if data is None:
+        return []
+    if not isinstance(data, list):
+        raise ProtocolError(f"cloud response to {path} is not a list of faces")
+    faces = (CloudFace.from_api(item) for item in data)
+    return [face for face in faces if face is not None]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True, repr=False)
 class CloudDevice:
     """One entry of ``app/house/get_devs_list``.
 

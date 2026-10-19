@@ -28,6 +28,7 @@ from eufy_home_security.events import (
     HistoryRecord,
     PushChanged,
     PushMessageType,
+    PushPictureSource,
     SecurityEvent,
     coerce_int,
     coerce_str,
@@ -551,6 +552,22 @@ def test_the_face_id_is_the_hex_fetch_id_unless_it_names_a_kind(
 ) -> None:
     event = _short(fetch_id=fetch_id)
     assert event.face_id == face_id
+
+
+@pytest.mark.parametrize(
+    ("fields", "sources"),
+    [
+        ({"fetch_id": "1a2b3c", "pic_url": "https://example.invalid/p.jpg"},
+         (PushPictureSource.FACE, PushPictureSource.PIC_URL)),
+        ({"pic_url": "/zx/hdd_data0/Camera00/snapshort.jpg"}, (PushPictureSource.PIC_URL,)),
+        ({"fetch_id": "3106", "pic_url": "ftp://example.invalid/p.jpg"}, ()),
+        ({}, ()),
+    ],
+)  # fmt: skip
+def test_a_push_names_its_fetchable_pictures_face_first(
+    fields: dict[str, Any], sources: tuple[PushPictureSource, ...]
+) -> None:
+    assert _short(**fields).picture_sources == sources
 
 
 # ── guard-mode ordering ──────────────────────────────────────────────────────

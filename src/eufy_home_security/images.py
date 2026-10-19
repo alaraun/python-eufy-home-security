@@ -14,7 +14,10 @@ A camera behind a station has three image sources (``docs/protocol/media.md``):
 and their descriptions from it. :class:`CameraImage` is what
 :meth:`~eufy_home_security.station.Station.async_event_image` and
 :meth:`~eufy_home_security.station.Station.async_camera_image` return; a keyframe image
-names its :attr:`CameraImage.codec`. Turning a keyframe into JPEG is left to the consumer (Home Assistant has ffmpeg); the library has no native
+names its :attr:`CameraImage.codec`. A detection push can also name pictures of its own
+(:class:`~.events.PushPictureSource`: the cloud's face crop, the push's ``pic_url``);
+:class:`PushImage` is what
+:meth:`~eufy_home_security.client.EufySecurity.async_push_image` returns. Turning a keyframe into JPEG is left to the consumer (Home Assistant has ffmpeg); the library has no native
 dependencies.
 """
 
@@ -25,6 +28,7 @@ from enum import StrEnum
 from typing import Final
 
 from .devices.support import Support
+from .events import PushPictureSource
 from .p2p.media import VideoCodec, picture_codec
 
 #: The MIME type of a JPEG image.
@@ -33,6 +37,10 @@ JPEG_CONTENT_TYPE: Final = "image/jpeg"
 HEVC_CONTENT_TYPE: Final = "video/hevc"
 #: The MIME type of an Annex-B H.264 keyframe.
 H264_CONTENT_TYPE: Final = "video/h264"
+#: The MIME type of a PNG image.
+PNG_CONTENT_TYPE: Final = "image/png"
+#: The MIME type of a WebP image.
+WEBP_CONTENT_TYPE: Final = "image/webp"
 
 
 class ImageSource(StrEnum):
@@ -159,3 +167,37 @@ class CameraImage:
     @property
     def high_resolution(self) -> bool:
         return IMAGE_SOURCES[self.source].high_resolution
+
+
+def picture_content_type(data: bytes) -> str | None:
+    """The MIME type of a displayable picture by its magic (JPEG, PNG, WebP); None for
+    anything else, a header-encrypted eufy still included."""
+    if data.startswith(b"\xff\xd8"):
+        return JPEG_CONTENT_TYPE
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return PNG_CONTENT_TYPE
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return WEBP_CONTENT_TYPE
+    return None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PushImage:
+    """A picture a detection push names, and where it came from.
+
+    ``data`` is a displayable picture of :attr:`content_type` (a pushed picture that is
+    not one, such as a header-encrypted still, is never returned: it raises instead).
+    A ``FACE`` image is the cloud's crop of the matched face, small; a ``PIC_URL`` image
+    the push's event picture.
+    """
+
+    source: PushPictureSource
+    device_sn: str | None
+    data: bytes
+    content_type: str
+    face_id: int | None = None
+    """The face id of a ``FACE`` image; None for the other source."""
+
+    @property
+    def is_jpeg(self) -> bool:
+        return self.content_type == JPEG_CONTENT_TYPE

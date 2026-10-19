@@ -30,6 +30,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, NoReturn
+from urllib.parse import urlsplit
 
 from .._logging import (
     Credential,
@@ -56,6 +57,7 @@ from ..exceptions import (
     RefreshCooldownError,
     SessionRejectedError,
     SessionReplacedError,
+    UnsupportedError,
 )
 from ..storage import INSTALL_IDS_KEY, SessionCache
 from . import arming, const, crypto
@@ -65,10 +67,12 @@ from .models import (
     REGION_KEY,
     CipherRecord,
     CloudDevice,
+    CloudFace,
     CloudHouse,
     CloudInvite,
     FirmwareUpdate,
     LoginCountry,
+    parse_faces,
     security_device_entry,
 )
 from .status import (
@@ -3085,6 +3089,83 @@ class EufyCloudApi:
             path, arming.logs_body(house_id, group_id), region=region, login=login
         )
         return arming.parse_logs(data, path)
+
+    # ── push pictures ────────────────────────────────────────────────────────
+
+    async def async_get_faces(
+        self,
+        face_ids: Sequence[int],
+        station_sn: str,
+        *,
+        region: str | None = None,
+        login: bool = True,
+    ) -> list[CloudFace]:
+        """The cloud's face records of ``face_ids`` (``aiassis/get_faces_by_ids`` on the
+        security realm), in the cloud's order; not cached.
+
+        ``face_ids`` are AI face ids (a push's ``SecurityEvent.face_id``); ``station_sn``
+        is the serial the push names (the eufy app sends the push's ``s``, the camera's
+        serial on a HomeBase 2 push). ``region`` defaults to that serial's
+        (:meth:`device_region`). An id the cloud has no record of is left out, so the
+        list may be shorter or empty. Raises the cloud call's typed errors, and
+        :class:`~.exceptions.ProtocolError` when the answer is not a list.
+        """
+        path = const.FACES_BY_IDS_PATH
+        body = {"ai_face_ids": list(face_ids), "station_sn": station_sn}
+        data = await self._security_call(
+            path, body, region=region or self.device_region(station_sn), login=login
+        )
+        return parse_faces(data, path)
+
+    async def async_fetch_picture(self, url: str, *, region: str | None = None) -> bytes:
+        """The bytes of a picture URL the cloud named: a face record's ``face_url``, a
+        push's https ``pic_url``. One GET, at most :data:`~.const.PICTURE_MAX_BYTES`.
+
+        To eufy's own hosts (:data:`~.const.PICTURE_AUTH_DOMAINS`) the request carries
+        ``region``'s session token and ``gtoken``, as the eufy app's image loader does,
+        when a session is held or cached (never a login); any other host gets no
+        credential. ``region`` defaults to :attr:`region`. The URL is never logged.
+
+        Raises :class:`~.exceptions.UnsupportedError` for a URL that is not https,
+        :class:`~.exceptions.CloudApiError` (code = the HTTP status) for a refusal,
+        :class:`~.exceptions.CommunicationError` for a transport failure and
+        :class:`~.exceptions.ProtocolError` for a body over the limit.
+        """
+        import aiohttp  # noqa: PLC0415 - deferred so a cache-only run never imports it
+
+        parsed = urlsplit(url)
+        host = parsed.hostname or ""
+        if parsed.scheme != "https" or not host:
+            raise UnsupportedError("a picture URL must be https")
+        headers = {"app-name": const.APP_NAME, "model-type": const.MODEL_TYPE}
+        if any(host == d or host.endswith(f".{d}") for d in const.PICTURE_AUTH_DOMAINS):
+            try:
+                identity = await self._ensure_session(region or self.region, login=False)
+            except NoCachedSessionError:
+                identity = None
+            if identity is not None and identity.auth_token:
+                headers["x-auth-token"] = identity.auth_token
+                if identity.user_id:
+                    headers["gtoken"] = crypto.gtoken(identity.user_id)
+        timeout = aiohttp.ClientTimeout(total=const.HTTP_TIMEOUT_SECONDS)
+        limit = const.PICTURE_MAX_BYTES
+        try:
+            async with self._http().get(url, headers=headers, timeout=timeout) as resp:
+                status = resp.status
+                body = bytearray()
+                if status == 200:
+                    async for chunk in resp.content.iter_chunked(64 * 1024):
+                        body += chunk
+                        if len(body) > limit:
+                            break
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            raise CommunicationError(f"picture download from {host} failed: {exc}") from exc
+        _LOGGER.debug("picture GET on %s: HTTP %s, %d bytes", host, status, len(body))
+        if status != 200:
+            raise CloudApiError(status, f"picture download refused (HTTP {status})", endpoint=host)
+        if len(body) > limit:
+            raise ProtocolError(f"picture from {host} is larger than {limit} bytes")
+        return bytes(body)
 
 
 def _check_owner_id(owner: str, station_sn: str) -> None:
