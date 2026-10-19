@@ -239,7 +239,7 @@ Kind markers (a block without a known serial): 1400, 1401
 
 | capability | support | source |
 |---|---|---|
-| local_events | declared | the HomeBase's own P2P push (cmd 2037), a station command, not per model |
+| local_events | unknown | no detection push over P2P observed from a T8161 (the push is the station's: Station.local_events grades it) |
 | cloud_events | declared | app code relays detections over FCM |
 | snapshot_fetch | declared | the HomeBase's IMAGE_NOTIFY 1308 fetch, a station command, not per model |
 | live_keyframe | declared | T8161 handler open/close recipes equal the T8160's (1350/1003, 1350/1004); the live open is the HomeBase's 1003 (wakes a battery camera) |

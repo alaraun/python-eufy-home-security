@@ -334,8 +334,9 @@ _T8161 = DeviceProfile(
     capabilities=MappingProxyType(
         {
             Capability.LOCAL_EVENTS: Evidence(
-                Support.DECLARED,
-                "the HomeBase's own P2P push (cmd 2037), a station command, not per model",
+                Support.UNKNOWN,
+                "no detection push over P2P observed from a T8161",
+                "the push is the station's: Station.local_events grades it",
             ),
             Capability.CLOUD_EVENTS: Evidence(
                 Support.DECLARED, "app code relays detections over FCM"

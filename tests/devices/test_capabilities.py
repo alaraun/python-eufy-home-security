@@ -108,7 +108,10 @@ def test_the_t8161_profile_mirrors_the_t8160s_declared() -> None:
     assert profile is PROFILES["T8161"]
     assert set(profile.capabilities) == set(PROFILES["T8160"].capabilities)
     assert profile.params == PROFILES["T8160"].params
-    assert {e.support for e in profile.capabilities.values()} == {Support.DECLARED}
+    assert {
+        cap for cap, e in profile.capabilities.items() if e.support is not Support.DECLARED
+    } == {Capability.LOCAL_EVENTS}
+    assert profile.support(Capability.LOCAL_EVENTS) is Support.UNKNOWN
     assert "T8161 handler" in profile.capabilities[Capability.LIVE_STREAM].source
     assert not profile.kind_markers
 
