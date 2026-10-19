@@ -303,6 +303,24 @@ class DeviceTimeoutError(CommunicationError, TimeoutError):
     """A request was sent but no application-level answer arrived in time."""
 
 
+class SignalingError(CommunicationError):
+    """The RTC signaling server refused a request or ended a session.
+
+    ``code`` is the signaling response code (401 twice in a row for a refused login;
+    480 or 486 for a refused call), None when the session ended without one.
+    """
+
+    def __init__(
+        self, message: str, *, code: int | None = None, device_sn: str | None = None
+    ) -> None:
+        super().__init__(message, device_sn=device_sn)
+        self.code = code
+
+
+class CallRefusedError(SignalingError):
+    """A CALL was answered with an error code (480, 486) or hung up before its offer."""
+
+
 class DeviceBusyError(CommunicationError):
     """The camera is busy with another capture; nothing was sent.
 

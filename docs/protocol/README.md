@@ -15,6 +15,7 @@ how-to and reference docs.
 | [commands.md](commands.md) | the DeviceMsgBean envelope, arming and how to confirm it, writing settings, the parameter dump, the event database, image fetch, result codes |
 | [events.md](events.md) | local P2P pushes, parameter-change pushes, guard-mode announcements and ordering, liveness, cloud FCM push, P2P vs cloud |
 | [media.md](media.md) | still images, live stream open, video/audio frame headers, keyframe decryption, recording download, what is proven |
+| [rtc-signaling.md](rtc-signaling.md) | the WebRTC path of the stations the app reaches only over it: signaling packets, DISCOVER, LOGIN, CALL, INFO, the media plane, what is built |
 
 ## The layers
 
@@ -123,5 +124,6 @@ Untagged statements in a section inherit that section's tag.
 | command builders and decoders | `src/eufy_home_security/p2p/messages.py`, `p2p/params.py`, `p2p/notify.py`, `p2p/alarm.py`, `p2p/mode_actions.py`, `p2p/storage_info.py` |
 | media | `src/eufy_home_security/p2p/media.py` |
 | session orchestration | `src/eufy_home_security/p2p/session.py` |
+| RTC signaling and media plane (not wired in) | `src/eufy_home_security/rtc/` |
 | cloud push registration and decoding | `src/eufy_home_security/push/fcm.py`, `push/decode.py`, `push/const.py` |
 | command names and the per-model settings | `src/eufy_home_security/devices/` (see `docs/reference/devices.md`, `docs/reference/models-schema.md`) |
