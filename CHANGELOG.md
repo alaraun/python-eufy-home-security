@@ -4,6 +4,19 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.2](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.1...v0.4.2) (2026-10-19)
+
+
+### Features
+
+* **cloud:** face picture of a detection push ([2b94775](https://github.com/alaraun/python-eufy-home-security/commit/2b9477500b9b5750d5c2a37a3916eca41dfde229))
+
+
+### Bug Fixes
+
+* **events:** merge the pushes of one detection and admit an upgraded kind ([2b94775](https://github.com/alaraun/python-eufy-home-security/commit/2b9477500b9b5750d5c2a37a3916eca41dfde229))
+* **push:** classify a detection push as the eufy app does ([2b94775](https://github.com/alaraun/python-eufy-home-security/commit/2b9477500b9b5750d5c2a37a3916eca41dfde229))
+
 ## [0.4.1](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.0...v0.4.1) (2026-10-19)
 
 
