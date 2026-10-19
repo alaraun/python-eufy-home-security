@@ -59,8 +59,9 @@ class FakeCrypto:
             raise ValueError("not sealed with this key")
         return data[len(prefix) :]
 
-    def new_media_secret(self) -> str:
-        return "m" * 16
+    def new_media_secret(self, length: int) -> str:
+        self.calls.append(("new_media_secret", length))
+        return "m" * length
 
 
 def seal(data: bytes) -> bytes:

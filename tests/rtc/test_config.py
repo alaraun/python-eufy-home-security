@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import string
 
 import pytest
 
@@ -14,6 +15,10 @@ from eufy_home_security.rtc.config import (
     signaling_ipv4,
 )
 from eufy_home_security.rtc.sdp import (
+    CONTENT_IV_LEN,
+    CONTENT_KEY_LEN,
+    ICE_PWD_LEN,
+    ICE_UFRAG_LEN,
     CompactOffer,
     SdpInfo,
     answer_attributes,
@@ -66,11 +71,22 @@ def test_firmware_number() -> None:
 
 
 def test_sdp_info_generates_ice_credentials_and_keeps_the_secrets() -> None:
-    info = SdpInfo.generate("k" * 16, "i" * 16, data_channel=True, rng=random.Random(1))
-    assert len(info.ice_ufrag) == len(info.ice_pwd) == 64
-    assert info.ice_ufrag.isalnum()
-    assert (info.content_key, info.data_channel) == ("k" * 16, True)
+    info = SdpInfo.generate(
+        content_key="k" * 16, content_iv="i" * 12, data_channel=True, rng=random.Random(1)
+    )
+    # The app's WebrtcApp_SetCallSdp: ufrag 5 chars, pwd 23, from the ice-char set.
+    assert len(info.ice_ufrag) == ICE_UFRAG_LEN
+    assert len(info.ice_pwd) == ICE_PWD_LEN
+    ice_chars = set(string.ascii_letters + string.digits + "+/")
+    assert set(info.ice_ufrag) <= ice_chars
+    assert set(info.ice_pwd) <= ice_chars
+    assert (info.content_key, info.content_iv, info.data_channel) == ("k" * 16, "i" * 12, True)
     assert "k" * 16 not in repr(info)
+
+
+def test_sdp_info_field_lengths_match_the_app() -> None:
+    # WebrtcApp_SetCallSdp @0x233ef4: ufrag 5, pwd 23, content key 16, iv 12.
+    assert (ICE_UFRAG_LEN, ICE_PWD_LEN, CONTENT_KEY_LEN, CONTENT_IV_LEN) == (5, 23, 16, 12)
 
 
 def test_sdp_info_layout_and_offer_template_are_not_known() -> None:
