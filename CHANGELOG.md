@@ -4,6 +4,22 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.1](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.0...v0.4.1) (2026-10-19)
+
+
+### Features
+
+* **p2p:** open a 1700 live stream behind a HomeBase 2 or 3 (T8600, T84xx and other Wi-Fi cameras whose handler sends it there) ([a19438a](https://github.com/alaraun/python-eufy-home-security/commit/a19438a3f93cf42004f10f11af594fad7b447b27))
+* **station:** `Station.local_events` says whether a station pushes its cameras' detections over the LAN; a HomeBase 2 is graded unknown, its detections need cloud push ([47f74e2](https://github.com/alaraun/python-eufy-home-security/commit/47f74e2d8f8d9bb989f5442e2cc78c4b9f0c1f04))
+
+
+### Bug Fixes
+
+* **devices:** bundle the T8210C, T8510P and T8520P settings and live opens ([#112](https://github.com/alaraun/python-eufy-home-security/issues/112)) ([6a0f6b5](https://github.com/alaraun/python-eufy-home-security/commit/6a0f6b5e36e0873ff5116875dc1a3b0e2b0408ec))
+* **devices:** the T8161's local event push is graded unknown, not declared ([47f74e2](https://github.com/alaraun/python-eufy-home-security/commit/47f74e2d8f8d9bb989f5442e2cc78c4b9f0c1f04))
+* **p2p:** a live open on an extra session sends the open it was asked for ([a19438a](https://github.com/alaraun/python-eufy-home-security/commit/a19438a3f93cf42004f10f11af594fad7b447b27))
+* **p2p:** a refused 1700 live open fails at once instead of waiting for the first frame ([a19438a](https://github.com/alaraun/python-eufy-home-security/commit/a19438a3f93cf42004f10f11af594fad7b447b27))
+
 ## [0.4.0](https://github.com/alaraun/python-eufy-home-security/compare/v0.3.17...v0.4.0) (2026-10-15)
 
 
