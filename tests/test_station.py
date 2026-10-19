@@ -2626,21 +2626,57 @@ async def test_a_camera_whose_handler_open_is_not_implemented_is_refused_before_
 
 
 @pytest.mark.parametrize(
-    ("serial", "support"),
+    ("serial", "bare_stop"), [("T8600P2000067890", False), ("T8442P2000067890", True)]
+)
+async def test_a_wifi_camera_behind_a_homebase_3_gets_its_handlers_1700_open_and_stop(
+    station: Station, fake: FakeStation, serial: str, bare_stop: bool
+) -> None:
+    camera = dataclasses.replace(CAMERA, device_sn=serial, channel=3)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    async with await hub.async_open_live(camera.device_sn) as stream:
+        await anext(aiter(stream))
+    (body,) = fake.doorbell_payloads
+    assert body["data"]["mChannel"] == 3
+    assert "extValue" not in body["data"]
+    assert fake.doorbell_subheaders[0][2] == 3
+    assert fake.live_open_payloads == []
+    async with asyncio.timeout(3):
+        while not fake.bare_stops and 1004 not in [o.get("cmd") for o in fake.received]:
+            await asyncio.sleep(0.02)
+    assert fake.bare_stop_frames == ([(3, (3).to_bytes(4, "little"))] if bare_stop else [])
+
+
+async def test_a_t8224_behind_a_homebase_3_is_refused_as_the_app_streams_it_over_webrtc(
+    station: Station, fake: FakeStation
+) -> None:
+    t8224 = dataclasses.replace(CAMERA, device_sn="T8224P2000067890", channel=3)
+    hub = Station(station.device, station.session, sub_devices=[t8224])
+    with pytest.raises(UnsupportedError, match="T8224 behind a HB3 station over WebRTC"):
+        await hub.async_open_live(t8224.device_sn)
+    assert fake.doorbell_payloads == []
+    assert fake.live_opens == []
+    evidence = hub.live_support(t8224.device_sn)
+    assert evidence.support is Support.UNKNOWN
+    assert "WebRTC" in evidence.source
+
+
+@pytest.mark.parametrize(
+    ("serial", "support", "mode"),
     [
-        (SYNTHETIC.camera_sn, Support.VERIFIED),
-        ("T8113P2000067890", Support.DECLARED),
-        ("T8400P2000067890", Support.UNKNOWN),
-        ("T9999P2000067890", Support.UNKNOWN),
+        (SYNTHETIC.camera_sn, Support.VERIFIED, None),
+        ("T8113P2000067890", Support.DECLARED, "station"),
+        ("T8400P2000067890", Support.DECLARED, "single_no_ext"),
+        ("T8600P2000067890", Support.DECLARED, "single_no_ext"),
+        ("T9999P2000067890", Support.UNKNOWN, None),
     ],
 )
-def test_live_support_behind_a_homebase_3(serial: str, support: Support) -> None:
+def test_live_support_behind_a_homebase_3(serial: str, support: Support, mode: str | None) -> None:
     camera = dataclasses.replace(CAMERA, device_sn=serial)
     hub = _hub_with(camera)
     evidence = hub.live_support(serial)
     assert evidence.support is support
-    if support is Support.DECLARED:
-        assert "station open" in evidence.source
+    if mode is not None:
+        assert f"library's {mode} open" in evidence.source
 
 
 def test_live_support_of_a_standalone_camera_follows_its_handler() -> None:

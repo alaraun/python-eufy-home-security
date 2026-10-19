@@ -24,7 +24,13 @@ from .devices.capabilities import (
     own_profile,
     profile_for_serial,
 )
-from .devices.live_open import LiveOpen, has_live_open, library_live_open
+from .devices.live_open import (
+    LiveOpen,
+    app_uses_webrtc,
+    has_live_open,
+    library_live_open,
+    live_stop,
+)
 from .devices.live_open import app_version as live_open_app_version
 from .devices.model_settings import (
     BATTERY_PROPERTY,
@@ -2776,13 +2782,16 @@ class Station:
         A device whose handler's open the library does not implement raises
         :class:`~.exceptions.UnsupportedError` before anything is sent."""
         device = self._device_on_channel(channel)
-        mode = None
+        mode = stop = None
         if device is not None:
             mode = self._live_open_of(device.device_sn)
             if mode is None and has_live_open(self._product_code(device.device_sn)):
                 raise UnsupportedError(self._live_unsupported_reason(device.device_sn))
+            stop = live_stop(
+                self._product_code(device.device_sn), self._connect_type_of(device.device_sn)
+            )
         kwargs.setdefault("media_key", self.media_key_type(channel))
-        return await self.session.async_open_live(channel, live_open=mode, **kwargs)
+        return await self.session.async_open_live(channel, live_open=mode, live_stop=stop, **kwargs)
 
     def _device_on_channel(self, channel: int) -> CloudDevice | None:
         """The device addressed on ``channel`` (the station itself when standalone)."""
@@ -2809,6 +2818,11 @@ class Station:
     def _live_unsupported_reason(self, device_sn: str) -> str:
         code = self._product_code(device_sn)
         connect = self._connect_type_of(device_sn)
+        if app_uses_webrtc(code, connect):
+            return (
+                f"the eufy app streams a {code} behind a {connect.value} station over "
+                "WebRTC, which this library does not implement"
+            )
         return (
             f"the eufy app opens a {code} live stream "
             f"{'on its own' if connect is ConnectType.SINGLE else f'behind a {connect.value} station'} "

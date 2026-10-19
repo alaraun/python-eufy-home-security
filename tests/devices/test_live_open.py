@@ -10,7 +10,14 @@ from pathlib import Path
 import pytest
 
 from eufy_home_security.devices import live_open
-from eufy_home_security.devices.live_open import LiveOpen, has_live_open, library_live_open
+from eufy_home_security.devices.live_open import (
+    LiveOpen,
+    LiveStop,
+    app_uses_webrtc,
+    has_live_open,
+    library_live_open,
+    live_stop,
+)
 from eufy_home_security.devices.recipes import PARENT_CONNECT_TYPES, ConnectType
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -49,11 +56,60 @@ def test_the_handlers_open(code: str, connect: ConnectType, mode: LiveOpen | Non
     assert live_open.live_open(code.lower(), connect) is mode
 
 
-def test_the_library_sends_a_1700_open_only_on_the_devices_own_session() -> None:
+def test_the_library_sends_a_1700_open_on_its_own_session_and_behind_a_homebase() -> None:
     assert library_live_open("T8400", ConnectType.SINGLE) is LiveOpen.SINGLE_NO_EXT
-    assert library_live_open("T8400", ConnectType.HB3) is None
+    assert library_live_open("T8400", ConnectType.HB3) is LiveOpen.SINGLE_NO_EXT
+    assert library_live_open("T8400", ConnectType.HB2) is LiveOpen.SINGLE_NO_EXT
+    assert library_live_open("T8600", ConnectType.HB3) is LiveOpen.SINGLE_NO_EXT
     assert library_live_open("T8113", ConnectType.HB2) is LiveOpen.STATION
     assert library_live_open("T8213", ConnectType.SINGLE) is LiveOpen.STATION
+
+
+def test_no_1700_open_behind_a_station_without_the_handlers_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(live_open, "_STOPS", {"T8600": {ConnectType.HB3: None}})
+    assert library_live_open("T8600", ConnectType.HB3) is None
+
+
+def test_no_1700_open_behind_another_station_kind() -> None:
+    assert live_open.live_open("T8400", ConnectType.M8025) is LiveOpen.SINGLE_NO_EXT
+    assert library_live_open("T8400", ConnectType.M8025) is None
+
+
+def test_no_open_where_the_app_streams_over_webrtc() -> None:
+    assert live_open.live_open("T8224", ConnectType.HB3) is LiveOpen.SINGLE
+    assert app_uses_webrtc("t8224", ConnectType.HB3)
+    assert library_live_open("T8224", ConnectType.HB3) is None
+    assert not app_uses_webrtc("T8224", ConnectType.HB2)
+    assert library_live_open("T8224", ConnectType.HB2) is LiveOpen.STATION
+    assert not app_uses_webrtc(None, ConnectType.HB3)
+
+
+@pytest.mark.parametrize(
+    ("code", "connect", "stop"),
+    [
+        ("T8600", ConnectType.HB3, LiveStop.STATION),
+        ("T8400", ConnectType.HB3, LiveStop.STATION),
+        ("T8200X", ConnectType.HB3, LiveStop.BARE),
+        ("T8400", ConnectType.HB2, LiveStop.BARE),
+        ("T8160", ConnectType.HB3, None),  # the station open: no 1700 stop recorded
+        ("T8400", ConnectType.SINGLE, None),
+        (None, ConnectType.HB3, None),
+    ],
+)
+def test_the_handlers_stop_after_a_1700_open_behind_a_station(
+    code: str | None, connect: ConnectType, stop: LiveStop | None
+) -> None:
+    assert live_stop(code, connect) is stop
+
+
+def test_a_stop_is_recorded_only_for_a_1700_open_behind_a_station() -> None:
+    assert live_open._STOPS
+    for code, stops in live_open._STOPS.items():
+        for connect in stops:
+            assert connect is not ConnectType.SINGLE, code
+            assert live_open.live_open(code, connect) in (LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT)
 
 
 def test_an_unlisted_product_has_no_recorded_open() -> None:

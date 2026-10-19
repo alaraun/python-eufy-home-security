@@ -61,7 +61,7 @@ from .._logging import (
     wire_logger,
 )
 from ..cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
-from ..devices.live_open import LiveOpen
+from ..devices.live_open import LiveOpen, LiveStop
 from ..devices.param_info import ParamInfo, param_info
 from ..devices.recipes import (
     ConnectType,
@@ -782,6 +782,8 @@ class MediaStream:
         """Keyframes dropped before the first one because they did not decode for this
         stream's key."""
         self._open_index: int | None = None
+        self._open_frame_type: int | None = None
+        """The frame type the open went out as (its receipt comes back as that type)."""
         self._throttle = LogThrottle()
         self._shapes: list[MediaRecordShape] = []
         """The first :data:`MEDIA_SHAPE_RECORDS` video records' shapes (diagnostics)."""
@@ -3312,6 +3314,7 @@ class StationSession:
         idle_timeout: float | None = None,
         wait: bool = False,
         live_open: LiveOpen | None = None,
+        live_stop: LiveStop | None = None,
         media_key: MediaKeyType = MediaKeyType.RSA,
     ) -> MediaStream:
         """Open a camera's live video and audio. This wakes a battery camera.
@@ -3338,21 +3341,34 @@ class StationSession:
         1004 ``DeviceMsgBean`` naming the channel; a camera behind any other station
         (a HomeBase 2) the camera handlers' 1003 without the T8030 fields
         (:func:`~..devices.recipes.open_live_stream_station`) and a bare 1004 carrying
-        the channel. A 1700 ``live_open`` behind a station raises :class:`UnsupportedError`.
+        the channel. A 1700 ``live_open`` behind a station goes on this session with the
+        camera's channel in the frame header (subheader byte 4 is 0 without
+        ``extValue``) and gets no 1139 ping; its stop is ``live_stop``
+        (:func:`~..devices.live_open.live_stop`), else the station's stop above. A
+        non-zero receipt to a 1700 open fails the stream at once
+        (:class:`CommandRejectedError`, :class:`CameraWakeError` for a wake failure).
 
         ``media_key`` is the key pair the open offers (its ``key`` field): RSA, or ECC,
         which the app offers a device whose param 1103 is 128 or more
         (:func:`~.media.media_key_type_for`; :meth:`~..station.Station.async_open_live`
         picks it so). The station protects the stream for the key it is offered.
         """
-        single = live_open in (None, LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT)
-        if not self.standalone and live_open not in (None, LiveOpen.STATION):
-            raise UnsupportedError(
-                f"the {live_open.value} live open behind a station is not implemented"
-            )
-        if self.standalone and single:
+        standalone = self.standalone
+        if standalone:
+            single = live_open in (None, LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT)
+        else:
+            single = live_open in (LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT)
+        homebase3 = self.homebase3
+        bare_stop = standalone or not homebase3
+        flag = LIVE_OPEN_SUBHEADER_FLAG
+        if single and not standalone:
+            if live_stop is not None:
+                bare_stop = live_stop is LiveStop.BARE
+            if live_open is LiveOpen.SINGLE_NO_EXT:
+                flag = 0  # subheader byte 4 (the stream id) is 0 without extValue
+        if single:
 
-            def open_standalone(account_id: str, key_hex: str) -> tuple[int, bytes]:
+            def open_frame(account_id: str, key_hex: str) -> tuple[int, bytes]:
                 recipe = open_live_stream_single(
                     channel=channel,
                     account_id=account_id,
@@ -3361,31 +3377,26 @@ class StationSession:
                 )
                 return recipe.cmd, recipe.plaintext()
 
-            def stop_standalone(account_id: str) -> tuple[int, bytes]:
-                del account_id  # the bare stop names no account
-                recipe = close_live_stream()
-                return recipe.cmd, recipe.plaintext()
-
-            open_frame, stop_frame = open_standalone, stop_standalone
         else:
-            homebase3 = self.homebase3
 
-            def open_station(account_id: str, key_hex: str) -> tuple[int, bytes]:
+            def open_frame(account_id: str, key_hex: str) -> tuple[int, bytes]:
                 payload = start_realtime_media_payload(
                     account_id, channel, key_hex, homebase3=homebase3
                 )
                 body = self._media_msg(account_id, CMD_START_REALTIME_MEDIA, channel, payload)
                 return FrameType.CMD_TRANSFER, body
 
-            def stop_station(account_id: str) -> tuple[int, bytes]:
-                if not homebase3:
-                    recipe = close_live_stream()
-                    return recipe.cmd, recipe.plaintext(channel)
-                payload = stop_realtime_media_payload(account_id, channel)
-                body = self._media_msg(account_id, CMD_STOP_REALTIME_MEDIA, channel, payload)
-                return FrameType.CMD_TRANSFER, body
+        def stop_frame(account_id: str) -> tuple[int, bytes]:
+            if bare_stop:
+                recipe = close_live_stream()
+                # A standalone device's own 1700 stream stops with four zero bytes.
+                body_channel = 0 if standalone and single else channel
+                return recipe.cmd, recipe.plaintext(body_channel)
+            payload = stop_realtime_media_payload(account_id, channel)
+            body = self._media_msg(account_id, CMD_STOP_REALTIME_MEDIA, channel, payload)
+            return FrameType.CMD_TRANSFER, body
 
-            open_frame, stop_frame = open_station, stop_station
+        if not (standalone and single):
             left = self.wake_backoff_left(channel)
             if left > 0:
                 raise CameraWakeError(
@@ -3395,10 +3406,19 @@ class StationSession:
                     f"not retried for another {left:.0f}s",
                     retry_after=left,
                 )
+        _LOGGER.debug(
+            "%s: live open %s (%s) on channel %d, subheader flag 0x%02x, %s stop",
+            self._log_name,
+            (live_open or (LiveOpen.SINGLE if single else LiveOpen.STATION)).value,
+            "1700/1000" if single else "1350/1003",
+            channel,
+            flag,
+            "bare 1004" if bare_stop else "1350/1004",
+        )
 
         first = _or(first_frame_timeout, MEDIA_LIVE_FIRST_FRAME_TIMEOUT)
         idle = _or(idle_timeout, MEDIA_IDLE_TIMEOUT)
-        if self.standalone or self._live_owner is not None:
+        if standalone or self._live_owner is not None:
             return await self._open_media(
                 CMD_START_REALTIME_MEDIA,
                 channel,
@@ -3408,10 +3428,19 @@ class StationSession:
                 idle_timeout=idle,
                 wait=wait,
                 media_key=media_key,
+                flag=flag,
             )
         extra = await self._live_route(first, wait)
         if extra is not None:
-            return await self._open_extra_live(extra, channel, first, idle, media_key)
+            return await self._open_extra_live(
+                extra,
+                channel,
+                first,
+                idle,
+                media_key,
+                live_open=live_open,
+                live_stop=live_stop,
+            )
         try:
             return await self._open_media(
                 CMD_START_REALTIME_MEDIA,
@@ -3422,6 +3451,7 @@ class StationSession:
                 idle_timeout=idle,
                 wait=wait,
                 media_key=media_key,
+                flag=flag,
             )
         finally:
             self._slot_claimed = False
@@ -3537,8 +3567,12 @@ class StationSession:
         first: float,
         idle: float,
         media_key: MediaKeyType = MediaKeyType.RSA,
+        *,
+        live_open: LiveOpen | None = None,
+        live_stop: LiveStop | None = None,
     ) -> MediaStream:
-        """Open live on ``extra``; the stream's end closes the session (PPPP CLOSE)."""
+        """Open live on ``extra`` (the same open as this session's); the stream's end
+        closes the session (PPPP CLOSE)."""
         started = time.monotonic()
         try:
             await extra.async_connect()
@@ -3551,7 +3585,12 @@ class StationSession:
                 time.monotonic() - started,
             )
             return await extra.async_open_live(
-                channel, first_frame_timeout=first, idle_timeout=idle, media_key=media_key
+                channel,
+                first_frame_timeout=first,
+                idle_timeout=idle,
+                media_key=media_key,
+                live_open=live_open,
+                live_stop=live_stop,
             )
         except BaseException:
             extra._end_extra_live()
@@ -3627,6 +3666,7 @@ class StationSession:
         idle_timeout: float,
         wait: bool,
         media_key: MediaKeyType = MediaKeyType.RSA,
+        flag: int = LIVE_OPEN_SUBHEADER_FLAG,
     ) -> MediaStream:
         await self.async_connect()
         creds = self._require_creds()
@@ -3678,15 +3718,13 @@ class StationSession:
                     channel,
                     media_key,
                 )
+                stream._open_frame_type = frame_type
                 self._set_media(stream)
                 try:
                     if command == CMD_START_REALTIME_MEDIA:
                         # The station picks the live camera from the subheader, not the JSON.
                         stream._open_index = self._send_secure(
-                            body,
-                            frame_type=frame_type,
-                            dev_type=channel,
-                            flag=LIVE_OPEN_SUBHEADER_FLAG,
+                            body, frame_type=frame_type, dev_type=channel, flag=flag
                         )
                     else:
                         stream._open_index = self._send_secure(body, frame_type=frame_type)
@@ -3800,18 +3838,43 @@ class StationSession:
             )
         return True
 
+    def _answers_live_open(self, stream: MediaStream, inbound: Inbound) -> bool:
+        """Whether the receipt ``inbound`` can answer ``stream``'s live open: the stream
+        has not started and the receipt has the open's frame type. Receipts carry no
+        command id, so a 1700 receipt is the open's only while no 1700 recipe waits."""
+        if (
+            stream._started
+            or stream.command != CMD_START_REALTIME_MEDIA
+            or inbound.type != stream._open_frame_type
+        ):
+            return False
+        return inbound.type != RecipeCommand.DOORBELL_PAYLOAD or not self._recipe_lock.locked()
+
+    def _take_open_refusal(self, stream: MediaStream | None, inbound: Inbound, code: int) -> bool:
+        """Fail a 1700 live open that has not started on its non-zero receipt."""
+        if (
+            stream is None
+            or inbound.type != RecipeCommand.DOORBELL_PAYLOAD
+            or not self._answers_live_open(stream, inbound)
+        ):
+            return False
+        _LOGGER.debug(
+            "%s: live open on channel %d refused: receipt %d %s",
+            self._log_name,
+            stream.channel,
+            code,
+            RECEIPT_CODES.get(code, ""),
+        )
+        self._fail_media(_receipt_error(RecipeCommand.DOORBELL_PAYLOAD, code))
+        return True
+
     def _take_wake_failure(self, stream: MediaStream | None, inbound: Inbound, code: int) -> bool:
         """Fail a HomeBase live open that has not started on a wake-failure receipt.
 
         Receipts carry no command id; a wake failure can only answer a command that
         wakes a camera, and the live open is the only one of those.
         """
-        if (
-            stream is None
-            or stream._started
-            or stream.command != CMD_START_REALTIME_MEDIA
-            or inbound.type != FrameType.CMD_TRANSFER
-        ):
+        if stream is None or not self._answers_live_open(stream, inbound):
             return False
         failures = self._wake_failures.get(stream.channel, (0, 0.0, code))[0] + 1
         backoff = WAKE_BACKOFF[min(failures, len(WAKE_BACKOFF)) - 1]
@@ -4401,6 +4464,8 @@ class StationSession:
                 RECEIPT_CODES.get(receipt, ""),
             )
             if receipt in CAMERA_WAKE_CODES and self._take_wake_failure(stream, inbound, receipt):
+                return
+            if receipt != RECEIPT_TAKEN and self._take_open_refusal(stream, inbound, receipt):
                 return
         elif inbound.type == FrameType.RECORD_PLAY_CTRL:
             self._on_play_ctrl(stream, inbound.frame)

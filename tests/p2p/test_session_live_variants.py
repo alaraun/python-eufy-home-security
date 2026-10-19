@@ -1,4 +1,5 @@
-"""Live video from a station other than a HomeBase 3, and media records in every protection.
+"""Live video from a station other than a HomeBase 3, a 1700 open on a HomeBase's session,
+and media records in every protection.
 
 The app reads each media record's protection from its XZYH subheader (byte 0 the media
 version, byte 3 the encrypted flag); a HomeBase 2 gets the camera handlers' plain 1003
@@ -13,7 +14,12 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from eufy_home_security.exceptions import UnsupportedError
+from eufy_home_security.devices.live_open import LiveOpen, LiveStop
+from eufy_home_security.exceptions import (
+    CommandNotAppliedError,
+    CommandRejectedError,
+    UnsupportedError,
+)
 from eufy_home_security.p2p.media import MediaFrame, MediaKeyType, MediaKind, VideoVariant
 from eufy_home_security.p2p.session import MediaStream, P2PCredentials, StationSession
 from eufy_home_security.testing import SYNTHETIC
@@ -116,6 +122,93 @@ async def test_a_homebase3_keeps_its_t8030_open_and_1004_message(hb3: FakeStatio
         await stream.aclose()
         await _until(lambda: 1004 in [obj.get("cmd") for obj in hb3.received])
         assert hb3.bare_stops == 0
+    finally:
+        await session.async_close()
+
+
+@pytest.mark.parametrize(
+    ("mode", "flag", "ext_value"),
+    [(LiveOpen.SINGLE_NO_EXT, 0x00, None), (LiveOpen.SINGLE, 0x0A, 1000)],
+)
+async def test_a_1700_open_behind_a_homebase3_goes_on_its_session_with_the_cameras_channel(
+    hb3: FakeStation, mode: LiveOpen, flag: int, ext_value: int | None
+) -> None:
+    session = _session(hb3)
+    try:
+        stream = await session.async_open_live(CAMERA, live_open=mode, live_stop=LiveStop.STATION)
+        await _frames(stream, 1)
+        (body,) = hb3.doorbell_payloads
+        assert body["commandType"] == 1000
+        assert body["data"]["mChannel"] == CAMERA
+        assert body["data"].get("extValue") == ext_value
+        (subheader,) = hb3.doorbell_subheaders
+        assert (subheader[2], subheader[4]) == (CAMERA, flag)
+        assert hb3.live_open_payloads == []
+        await stream.aclose()
+        await _until(lambda: 1004 in [obj.get("cmd") for obj in hb3.received])
+        stop = hb3.received.index(next(o for o in hb3.received if o.get("cmd") == 1004))
+        assert hb3.received_header_channels[stop] == CAMERA
+        assert hb3.bare_stops == 0
+        assert hb3.pings == 0  # no 1139 ping on a HomeBase's session
+    finally:
+        await session.async_close()
+
+
+@pytest.mark.parametrize("serial", [HB2_SN, SYNTHETIC.station_sn])
+async def test_a_1700_open_behind_a_homebase_stops_with_a_bare_1004_when_its_handler_does(
+    serial: str,
+) -> None:
+    fake = FakeStation(serial=serial)
+    await fake.start()
+    session = _session(fake)
+    try:
+        stream = await session.async_open_live(
+            CAMERA, live_open=LiveOpen.SINGLE_NO_EXT, live_stop=LiveStop.BARE
+        )
+        await _frames(stream, 1)
+        assert [b["data"]["mChannel"] for b in fake.doorbell_payloads] == [CAMERA]
+        await stream.aclose()
+        await _until(lambda: fake.bare_stops == 1)
+        assert fake.bare_stop_frames == [(CAMERA, struct.pack("<I", CAMERA))]
+        assert 1004 not in [obj.get("cmd") for obj in fake.received]
+        assert fake.pings == 0
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+async def test_a_refused_1700_open_fails_at_once(
+    hb3: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(hb3, "doorbell_receipt_code", lambda: -1)
+    session = _session(hb3)
+    try:
+        stream = await session.async_open_live(
+            CAMERA, live_open=LiveOpen.SINGLE_NO_EXT, first_frame_timeout=30
+        )
+        with pytest.raises(CommandRejectedError) as caught:
+            async with asyncio.timeout(3):  # well before the first-frame timeout
+                await _frames(stream, 1)
+        assert (caught.value.command, caught.value.code) == (1700, -1)
+        assert session.stats().media_failures_by_type == {"CommandRejectedError": 1}
+    finally:
+        await session.async_close()
+
+
+async def test_a_1700_receipt_while_a_1700_command_waits_is_not_taken_as_the_opens(
+    hb3: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(hb3, "doorbell_receipt_code", lambda: -1)
+    session = _session(hb3)
+    try:
+        async with session._recipe_lock:  # a 1700 recipe waiting for its own receipt
+            stream = await session.async_open_live(
+                CAMERA, live_open=LiveOpen.SINGLE_NO_EXT, first_frame_timeout=0.5
+            )
+            await _until(lambda: len(hb3.doorbell_payloads) == 1)
+            await asyncio.sleep(0.1)  # the receipt is in
+        with pytest.raises(CommandNotAppliedError):  # the first-frame timeout
+            await _frames(stream, 1)
     finally:
         await session.async_close()
 

@@ -341,10 +341,41 @@ opens over P2P only and does not read the property. A HomeBase 3 at 3.8.7.4 answ
 open for a T8170, a model its declared sub-device list names (verified); P2P on a HomeBase 3
 at 4.2.0.0 or later, a NVR or a T9000 is not observed.
 The library sends the recorded open: on the device's own session every one of the three;
-behind a station only `station` (a 1700 open behind a station needs the route the app
-takes to the device, not implemented). Any other open raises `UnsupportedError` before
-anything is sent, and `Station.live_support` grades it `UNKNOWN`. A product the table does
-not list gets the defaults: `single` standalone, `station` behind a station.
+behind a station `station`, and a 1700 open behind a HomeBase 2 or 3 as described
+[below](#wi-fi-camera-behind-a-homebase-open-17001000-on-the-homebases-session) where the
+handler's stop is one the library sends. A T8223 or T8224 behind a HomeBase 3 gets none:
+the app streams those over WebRTC there (the T8030's `is_connect_webrtc`, firmware
+3.7.4.3-4.1.9.999). Any other open raises `UnsupportedError` before anything is sent, and
+`Station.live_support` grades it `UNKNOWN`. A product the table does not list gets the
+defaults: `single` standalone, `station` behind a station.
+
+### Wi-Fi camera behind a HomeBase: open 1700/1000 on the HomeBase's session
+
+Where a product's handler keeps its 1700/1000 open behind a HomeBase 2 or 3 (T8400,
+T8410, T8600 behind a HomeBase 3, …; `devices/_live_open_data.py`), the open is the
+standalone frame below, sent on the **HomeBase's** session:
+
+- XZYH `0x06A4`, subheader `08 <ctr> <channel> 08 <id> 00` with the camera's HomeBase
+  channel in byte 2; the body is the standalone JSON with `mChannel` = that channel.
+  Byte 4 is 0 for the open without `extValue` (`single_no_ext`) and `0x0a` with it.
+- The receipt is a `0x06A4` frame on DRW channel 0; a non-zero code fails the open at
+  once (`CommandRejectedError`, `CameraWakeError` for a wake failure). Receipts name no
+  command, so the library takes a `0x06A4` receipt as the open's only while no other 1700
+  command is waiting for one.
+- Media arrives on the HomeBase's DRW channel 1, tagged with the camera's channel in
+  subheader byte 2, keyed as for any HomeBase child; no 1139 ping is sent.
+- **Stop** is the handler's `close_live_stream` under that station kind, recorded next to
+  the open (`LIVE_STOP`): a 1350 `DeviceMsgBean` of cmd 1004 naming the channel (the
+  library sends its HomeBase 3 stop above), or a bare 1004 whose body is the channel.
+  Behind a HomeBase 2 every handler sends the bare 1004; behind a HomeBase 3 it depends
+  on the product.
+
+**[verified]** for the relay itself: a HomeBase 3 at 3.8.7.4 took this open (without
+`extValue`) for a paired T8170 on channel 2 — receipt 0 once the camera had woken
+(2.7 s), video tagged 2 from 3.3 s with media byte 4 = 0 (a 1003 open's media carries
+`0x0a`), the usual 1280×720 → 1920×1080 → 2880×1616 ramp — and stopped it on the
+1350/1004 stop with no record after. **[declared]** for each product whose handler sends
+it: none of them has been tested; a HomeBase 2 has not been tested.
 
 ### Standalone device: open 1700/1000, stop bare 1004, ping 1139 **[verified]**
 

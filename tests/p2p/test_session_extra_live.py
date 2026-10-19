@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 import pytest
 
 import eufy_home_security.p2p.session as session_module
+from eufy_home_security.devices.live_open import LiveOpen, LiveStop
 from eufy_home_security.exceptions import (
     CameraWakeError,
     CommunicationError,
@@ -73,6 +74,24 @@ async def test_a_second_camera_streams_on_an_extra_session_closed_with_it(
         assert stats.media_video_codecs["hevc"] > 0
         assert "keyframe" in [s.outcome for s in stats.media_first_records]
         await first.aclose()
+    finally:
+        await session.async_close()
+
+
+async def test_an_extra_session_sends_the_open_it_was_asked_for(station: FakeStation) -> None:
+    session = _session(station)
+    try:
+        async with await session.async_open_live(0) as first:
+            await _first_keyframe(first)
+            second = await session.async_open_live(
+                1, live_open=LiveOpen.SINGLE_NO_EXT, live_stop=LiveStop.STATION
+            )
+            await _first_keyframe(second)
+            assert session.stats().extra_live_sessions_open == 1
+            assert len(station.live_open_payloads) == 1  # the first open's 1003 only
+            assert [b["data"]["mChannel"] for b in station.doorbell_payloads] == [1]
+            await second.aclose()
+            await _until(lambda: 1004 in [o.get("cmd") for o in station.received])
     finally:
         await session.async_close()
 

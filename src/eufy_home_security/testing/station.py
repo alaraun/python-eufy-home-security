@@ -572,6 +572,8 @@ class FakeStation:
         """ECB writes taken under :attr:`ecb_apply_late`, applied at the next dump."""
         self.doorbell_payloads: list[dict[str, Any]] = []
         """Every 1700 body received (``{"commandType", "data"}``), in arrival order."""
+        self.doorbell_subheaders: list[bytes] = []
+        """The subheader of each 1700 frame in :attr:`doorbell_payloads`, in step."""
         self.preset_gotos: list[int] = []
         """The slot of every go-to-preset (1700 / 6035) received."""
         self.gotos_while_streaming: list[bool] = []
@@ -839,6 +841,7 @@ class FakeStation:
             if obj is None:
                 return
             self.doorbell_payloads.append(obj)
+            self.doorbell_subheaders.append(bytes(subheader))
             code = self.doorbell_receipt_code()
             self.send_receipt(FrameType.DOORBELL_PAYLOAD, code)
             if code == RECEIPT_TAKEN:
