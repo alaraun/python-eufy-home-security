@@ -2,9 +2,9 @@
 it reaches over WebRTC instead of P2P.
 
 The signaling layer is complete, including its cryptography
-(:class:`.crypto.RtcSignalingCrypto`). Not wired into
-:class:`~.station.Station`: the media plane (:mod:`.media`,
-:class:`.session.MediaPlane`) is an interface without an implementation, and the
-private-call ``sdp_info`` layout and SDP offer template are not known, so stations
-the app reaches only over RTC stay skipped.
+(:class:`.crypto.RtcSignalingCrypto`), the private-call ``sdp_info`` structure and
+the SDP offer template (:mod:`.sdp`). Not wired into :class:`~.station.Station`: the
+media plane (:mod:`.media`, :class:`.session.MediaPlane`) — ICE, SRTP, the in-frame
+decryption and the KCP data channel — is an interface without an implementation, so
+stations the app reaches only over RTC stay skipped.
 """
