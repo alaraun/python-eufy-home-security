@@ -1,8 +1,8 @@
 """SDP pieces of an RTC media call that the signaling carries.
 
 A private media CALL (:attr:`~.codec.CallKind.PRIV_MEDIA`) carries an ``sdp_info``
-the app generates: both its SSRCs, the ICE username and password the app side will
-use, a content key and IV, and whether a data channel is wanted. Verified on a
+the client generates: both its SSRCs, its ICE username and password, a content key
+and IV, and whether a data channel is wanted. Verified on a
 HomeBase 3 (T8030P): the device answers the CALL 200 with its own ``sdp_info`` of
 the same 86-byte shape (its ICE credentials, content key, content IV and SSRCs) —
 not an SDP text offer — alongside the TURN relay, its ``srflx`` and ``port``, and
@@ -10,12 +10,11 @@ then trickles its ICE candidates as INFO frames. Use :meth:`SdpInfo.decode` on t
 answer.
 
 :class:`CompactOffer` / :func:`expand_offer` are the *event* device-SDP path
-(``WebrtcApp_SetEventDeviceSDP`` @0x234fd0, compact JSON ``ice-u``/``asc``/… expanded
-from a template); they are not the live CALL answer and are not verified.
+(compact JSON ``ice-u``/``asc``/… expanded from a template); they are not the live
+CALL answer and are not verified.
 
-The byte layout of ``sdp_info`` and the SDP template are recovered from the app's
-native SDK (``WebrtcApp_SetCallSdp`` @0x233ef4, ``WebrtcApp_SetEventDeviceSDP``
-@0x234fd0); the ``sdp_info`` layout is now hardware-verified (the SDP template is not).
+The ``sdp_info`` layout is verified on hardware; the SDP template is declared (eufy
+app), not verified.
 """
 
 from __future__ import annotations
@@ -33,28 +32,27 @@ from ..exceptions import SignalingError
 SDP_INFO_LEN: Final = 86
 """Length of the packed ``sdp_info`` structure."""
 
-#: ICE credential alphabet (RFC 5245 ice-char), the app's ``random_str64`` table.
+#: ICE credential alphabet (RFC 5245 ice-char).
 _ICE_ALPHABET: Final = string.ascii_uppercase + string.ascii_lowercase + string.digits + "+/"
-#: ICE username length (``random_str64(…, 5)`` in ``WebrtcApp_SetCallSdp`` @0x233ef4).
+#: ICE username length, in characters.
 ICE_UFRAG_LEN: Final = 5
-#: ICE password length (``random_str64(…, 23)``).
+#: ICE password length, in characters.
 ICE_PWD_LEN: Final = 23
-#: Content key length (``crypto_generate_str(…, 16)``).
+#: Content key length, in characters.
 CONTENT_KEY_LEN: Final = 16
-#: Content IV length (``crypto_generate_str(…, 12)``).
+#: Content IV length, in characters.
 CONTENT_IV_LEN: Final = 12
-#: Answer lines the app keeps: its ICE credentials and its SSRC attributes.
+#: Answer lines kept: the ICE credentials and the SSRC attributes.
 ANSWER_PREFIXES: Final = ("a=ice-ufrag:", "a=ice-pwd:", "a=ssrc:")
 
-#: The constant SDES master key the app's SDP template carries, base64 of a 30-byte
-#: AES_CM_128_HMAC_SHA1_80 key+salt; the same key both directions, DTLS off
-#: (mega.so string @0xe78ab).
+#: The constant SDES master key of the SDP template, base64 of a 30-byte
+#: AES_CM_128_HMAC_SHA1_80 key+salt; the same key both directions, DTLS off.
 SDES_INLINE_KEY: Final = "FvLcvU2P3ZWmQxgPAgcDu7Zl9vftYElFOjEzhWs5"
 
 _CRYPTO_LINE: Final = f"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:{SDES_INLINE_KEY}"
-# The media SDP template the app renders from a device's compact offer (strings
-# @0xe7794; `v=extmap:3` is the app's own literal, kept verbatim). `{...}` fields are
-# filled from the offer; everything else, including the cnames, is constant.
+# The media SDP template rendered from a device's compact offer (the `v=extmap:3`
+# line is kept verbatim). `{...}` fields are filled from the offer; everything else,
+# including the cnames, is constant.
 _SDP_TEMPLATE: Final = (
     "v=0",
     "o=- 1751872 1751872 IN IP4 127.0.0.1",
@@ -123,7 +121,7 @@ def _slot(value: str, size: int) -> bytes:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SdpInfo:
-    """What a private media CALL tells the device about the app side."""
+    """What a private media CALL tells the device about the client side."""
 
     audio_ssrc: int
     video_ssrc: int
@@ -156,13 +154,11 @@ class SdpInfo:
         )
 
     def encode(self) -> bytes:
-        """The packed 86-byte structure the app sends in a private CALL
-        (``WebrtcApp_SetCallSdp`` @0x233ef4, base64 of ``session[0x77c8:0x781e]``).
+        """The packed 86-byte structure a private CALL carries (base64).
 
-        Layout: 2 reserved, a data-channel flag, two bytes the app sets to 1, a
-        device-config byte (app-copied, left 0), ICE ufrag[8], ICE pwd[24], content
-        key[20], content IV[20], then the audio and video SSRCs as little-endian
-        u32.
+        Layout: 2 reserved, a data-channel flag, two bytes set to 1, a device-config
+        byte (left 0), ICE ufrag[8], ICE pwd[24], content key[20], content IV[20],
+        then the audio and video SSRCs as little-endian u32.
 
         The layout is verified on hardware: a HomeBase 3 (T8030P) answers a kind-6
         CALL with its own ``sdp_info`` of this exact shape (content key 16 bytes,
@@ -244,14 +240,12 @@ class CompactOffer:
 
 
 def expand_offer(offer: CompactOffer) -> str:
-    """The full SDP the app builds from a device's compact offer
-    (``WebrtcApp_SetEventDeviceSDP`` @0x234fd0 via the formatter @0x2352bc,
-    template @0xe7794): the device's ICE credentials and SSRCs fill
-    :data:`_SDP_TEMPLATE`, everything else (the SDES key, codecs, FEC) is constant.
-    CRLF-terminated.
+    """The full SDP built from a device's compact offer: the device's ICE
+    credentials and SSRCs fill :data:`_SDP_TEMPLATE`, everything else (the SDES key,
+    codecs, FEC) is constant. CRLF-terminated.
 
     Raises :class:`~.exceptions.SignalingError` when the offer carries no ICE
-    credentials (the app refuses such a remote SDP).
+    credentials (such a remote SDP is refused).
     """
     if offer.ice_ufrag is None or offer.ice_pwd is None:
         raise SignalingError("RTC compact offer has no ICE credentials")
@@ -270,7 +264,7 @@ def expand_offer(offer: CompactOffer) -> str:
 
 
 def answer_attributes(sdp: str) -> str:
-    """The lines of an SDP answer the app sends back: its ICE credentials and its
-    SSRC attributes, CRLF-separated."""
+    """The lines of an SDP answer sent back: the ICE credentials and the SSRC
+    attributes, CRLF-separated."""
     lines = [line for line in sdp.splitlines() if line.startswith(ANSWER_PREFIXES)]
     return "".join(f"{line}\r\n" for line in lines)

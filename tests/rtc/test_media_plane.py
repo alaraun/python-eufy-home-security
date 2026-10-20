@@ -384,7 +384,7 @@ def _anke_app(frame: bytes) -> bytes:
 
 
 async def test_an_rtcp_app_with_a_different_name_is_dropped() -> None:
-    # The command channel is name "AZWC" subtype 0; the native "ANKE"/subtype-30
+    # The command channel is name "AZWC" subtype 0; the "ANKE"/subtype-30
     # keepalive and any other RTCP APP name are not this channel and are dropped.
     ice = FakeIce()
     plane, _ = await _started(ice)

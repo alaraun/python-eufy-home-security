@@ -75,7 +75,7 @@ def test_sdp_info_generates_ice_credentials_and_keeps_the_secrets() -> None:
     info = SdpInfo.generate(
         content_key="k" * 16, content_iv="i" * 12, data_channel=True, rng=random.Random(1)
     )
-    # The app's WebrtcApp_SetCallSdp: ufrag 5 chars, pwd 23, from the ice-char set.
+    # ufrag 5 chars, pwd 23, from the ice-char set.
     assert len(info.ice_ufrag) == ICE_UFRAG_LEN
     assert len(info.ice_pwd) == ICE_PWD_LEN
     ice_chars = set(string.ascii_letters + string.digits + "+/")
@@ -86,7 +86,7 @@ def test_sdp_info_generates_ice_credentials_and_keeps_the_secrets() -> None:
 
 
 def test_sdp_info_field_lengths_match_the_app() -> None:
-    # WebrtcApp_SetCallSdp @0x233ef4: ufrag 5, pwd 23, content key 16, iv 12.
+    # ufrag 5, pwd 23, content key 16, iv 12.
     assert (ICE_UFRAG_LEN, ICE_PWD_LEN, CONTENT_KEY_LEN, CONTENT_IV_LEN) == (5, 23, 16, 12)
 
 

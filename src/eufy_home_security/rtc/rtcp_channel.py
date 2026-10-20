@@ -1,18 +1,15 @@
 """The reliable channel carried inside RTCP APP packets on the media plane.
 
-The eufy command/data channel runs a small reliable protocol inside RTCP APP
-packets. The command channel's RTCP APP carries ``name = b"AZWC"`` and subtype 0:
-the app sends it through ``PeerConnection.SendRtcpAppPacket(l_audio_ssrc, 0,
-0x415a5743, data)`` (``RTCPlayerPreImp.setCmd2Rtcp``), and the HomeBase 3 emits the
-same name and subtype. (A separate native RTCP APP sender uses name "ANKE" and
-subtype 30 for a different purpose — the ICE keepalive — and is not this channel.)
-With SDES (DTLS inactive) these go out raw over ICE, not SRTCP, so inbound packets
+The command channel runs a small reliable protocol inside RTCP APP packets with
+``name = b"AZWC"`` and subtype 0, sent with the client's audio SSRC (verified on a
+HomeBase 3). Other RTCP APP packets (e.g. name ANKE, subtype 30) are not this
+channel. With SDES (DTLS inactive) these go out raw over ICE, not SRTCP, so inbound packets
 must be caught before any SRTCP unprotect. This module is the pure codec plus the
 reliable channel; wrapping a frame in an RTCP APP packet and moving it over the ICE
 connection is the caller's job (:mod:`.media_plane`).
 
-Wire frame (little-endian, 20-byte header + body), from the app's native SDK
-(jingle ``rtcp_packet_sdk``, ``.work/notes/s1/B2_TRANSPORT_MEDIA.md``)::
+Wire frame (little-endian, 20-byte header + body; see
+``docs/protocol/rtc-signaling.md`` § Command channel)::
 
     0x00  u32 magic = 0x12345678
     0x04  u32 seq
@@ -51,14 +48,13 @@ _LOGGER = logging.getLogger(__name__)
 ANKE_MAGIC: Final = 0x12345678
 #: Length of the ANKE header before the body.
 ANKE_HEADER_LEN: Final = 20
-#: RTCP APP name and subtype of the command channel (``SendRtcpAppPacket(ssrc, 0,
-#: 0x415a5743, ...)``); the HomeBase 3 uses the same.
+#: RTCP APP name (0x415a5743) and subtype of the command channel.
 APP_NAME: Final = b"AZWC"
 APP_SUBTYPE: Final = 0
 
 #: Retransmission backoff (seconds) of an unacked DATA packet; five attempts.
 RETRANSMIT_DELAYS: Final = (0.1, 0.2, 0.5, 0.5, 0.5)
-#: How often a heartbeat (type 4) goes out; the app's RTCP ping is one second.
+#: How often a heartbeat (type 4) goes out, in seconds.
 HEARTBEAT_INTERVAL: Final = 1.0
 #: How many recently seen inbound seqs to keep for deduplication.
 _DEDUP_RING: Final = 1000

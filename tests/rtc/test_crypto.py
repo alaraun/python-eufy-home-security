@@ -1,8 +1,7 @@
 """``rtc/crypto.py``: the signaling crypto, against known answers.
 
-The known answers come from the wire algorithm the eufy app's native SDK uses
-(``.work/notes/s1/A_SIGNALING.md`` §4), the same one the live-verified login probe
-runs against eufy's production signaling server. All inputs are synthetic.
+Known answers for the wire algorithm, the one a login against eufy's signaling
+server verifies. All inputs are synthetic.
 """
 
 from __future__ import annotations
@@ -28,7 +27,7 @@ from eufy_home_security.rtc.crypto import (
 SESSION = "Ab3xYz90mN12pQrS"
 
 
-# ── key derivation (get_aes_key_info_by_packetid @0x214578) ──────────────────
+# ── key derivation ───────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(
@@ -54,7 +53,7 @@ def test_derive_key_is_always_sixteen_bytes() -> None:
         assert len(derive_key(DEFAULT_SECRET, salt)) == 16
 
 
-# ── AES-128-ECB, zero padding (aesEncryptByKey @0x214398) ────────────────────
+# ── AES-128-ECB, zero padding ────────────────────────────────────────────────
 
 
 def test_seal_is_aes_128_ecb_with_zero_padding() -> None:
@@ -100,7 +99,7 @@ def test_open_challenge_strips_padding_and_whitespace() -> None:
     assert crypto.open_challenge(body, 1697123456) == "DEADBEEF"
 
 
-# ── key exchange (rsaEncryptByPubkey @0x21484c) ──────────────────────────────
+# ── key exchange ─────────────────────────────────────────────────────────────
 
 
 def test_seal_session_key_is_pkcs1v15_with_exponent_65537() -> None:
@@ -139,7 +138,7 @@ def test_a_full_challenge_round_trip() -> None:
     assert private.decrypt(sealed, padding.PKCS1v15()).decode() == session_key
 
 
-# ── random material (generate_aes_key @0x2272b0, crypto_generate_str @0x230738) ─
+# ── random material ──────────────────────────────────────────────────────────
 
 
 def test_new_session_key_is_sixteen_chars_from_the_alphabet() -> None:

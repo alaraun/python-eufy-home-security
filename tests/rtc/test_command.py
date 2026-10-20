@@ -1,7 +1,6 @@
 """``rtc/command.py``: command and notification AES-128-GCM, against known answers.
 
-The known answers come from the app's native wire scheme
-(``.work/notes/s1/B1_KEYS_CRYPTO.md`` §§2-3). Inputs are synthetic.
+Known answers for the wire scheme; inputs are synthetic.
 """
 
 from __future__ import annotations

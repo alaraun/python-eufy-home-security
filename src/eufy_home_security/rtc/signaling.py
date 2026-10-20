@@ -1,6 +1,6 @@
 """eufy RTC signaling client (asyncio, UDP).
 
-Runs the signaling half of a WebRTC session the way the eufy app does:
+Runs the signaling half of a WebRTC session:
 
 1. DISCOVER to the station's signaling host (UDP 5062): the answer names the server
    to log in to.
@@ -17,7 +17,7 @@ Runs the signaling half of a WebRTC session the way the eufy app does:
 A LOGIN request without an answer is sent again after 11-20 s, then at three times
 the previous wait, up to 270 s. A packet with the re-discover flag starts DISCOVER and
 a re-login. A CALL without an answer is sent again, plain, over TCP (5061 or 15061),
-as the app does for a sleeping device.
+for a sleeping device.
 
 Every attachment and message is sealed with the session key through an
 :class:`~.crypto.RtcCrypto`. See ``docs/protocol/rtc-signaling.md``.

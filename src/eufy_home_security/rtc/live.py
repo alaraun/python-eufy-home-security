@@ -1,6 +1,6 @@
 """The live open of a kind-6 call: command 1350 sub-id 1003 on the RTCP APP channel.
 
-The app opens the stream with a GCM-sealed XZYH ``CMD_TRANSFER`` frame (1350) whose
+The client opens the stream with a GCM-sealed XZYH ``CMD_TRANSFER`` frame (1350) whose
 JSON asks for sub-id 1003 on a channel (:func:`live_open_frame`). Subheader byte 2
 is not the channel but a per-session stream id, 200 on the first open and counting
 up modulo 50 (:func:`stream_id`); the station echoes it in a plaintext 1350 reply
@@ -27,7 +27,7 @@ LIVE_OPEN_FRAME: Final = FrameType.CMD_TRANSFER
 #: First stream id of a session and the span the id counts through (200..249).
 STREAM_ID_BASE: Final = 200
 STREAM_ID_SPAN: Final = 50
-#: The app's ``msg_id`` counts 1..255 per station, then wraps to 1.
+#: ``msg_id`` counts 1..255 per station, then wraps to 1.
 MSG_ID_MAX: Final = 255
 #: How long an open may take before it counts as unanswered (the app waits 10 s).
 LIVE_OPEN_TIMEOUT: Final = 10.0

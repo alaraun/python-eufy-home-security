@@ -1,8 +1,7 @@
 """The cryptographic operations eufy's RTC signaling needs.
 
 The signaling client (:mod:`.signaling`) calls these at fixed points of the flow.
-:class:`RtcSignalingCrypto` implements them as the eufy Android app's native SDK
-does; :class:`UnavailableCrypto` refuses every operation with
+:class:`RtcSignalingCrypto` implements them; :class:`UnavailableCrypto` refuses every operation with
 :class:`~.exceptions.UnsupportedError` for a client built without one.
 
 Where each operation runs:
@@ -18,20 +17,16 @@ Where each operation runs:
 - A private CALL's ``sdp_info``: :meth:`RtcCrypto.new_media_secret` for the content
   key and IV.
 
-The wire crypto, from the app's ``libmega_media_sdk.so`` (see
-``docs/protocol/rtc-signaling.md`` and ``.work/notes/s1/A_SIGNALING.md`` §4):
+The wire crypto (see ``docs/protocol/rtc-signaling.md`` § Cryptography):
 
 - AES-128-ECB with zero padding; the key for a packet is the secret's first 16
   bytes with its tail overwritten by the decimal of the packet id (a signed 32-bit
-  value), truncated at the first NUL and zero-padded back to 16
-  (``get_aes_key_info_by_packetid``\\ @0x214578, ``aesEncryptByKey``\\ @0x214398).
+  value), truncated at the first NUL and zero-padded back to 16.
 - The LOGIN 401 blob uses the fixed default secret; everything after login uses the
   client-made 16-character session key.
 - The session key is sealed with RSA-1024, PKCS#1 v1.5, public exponent 65537, the
-  modulus a 256-character hex string from the 401 body (``rsaEncryptByPubkey``
-  @0x21484c).
-- Random key material is drawn from ``[0-9A-Za-z]`` (``generate_aes_key``\\ @0x2272b0,
-  ``crypto_generate_str``\\ @0x230738).
+  modulus a 256-character hex string from the 401 body.
+- Random key material is drawn from ``[0-9A-Za-z]``.
 """
 
 from __future__ import annotations
@@ -45,32 +40,30 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from ..exceptions import SignalingError, UnsupportedError
 
-#: The fixed secret that encrypts the LOGIN 401 challenge blob (``NewRTCCryptoByString``
-#: @0x214200, printed from ``"&#%%@!_eufy_anker"``).
+#: The fixed secret that encrypts the LOGIN 401 challenge blob.
 DEFAULT_SECRET: Final = "&#%@!_eufy_anker"  # noqa: S105 (protocol constant, not a secret)
 
-#: Public exponent of the server's RSA key (``rsaEncryptByPubkey`` reads ``"10001"``).
+#: Public exponent of the server's RSA key.
 RSA_EXPONENT: Final = 0x10001
 
-#: Hex length of the 1024-bit RSA modulus (the app requires ``strlen == 0x100``).
+#: Hex length of the 1024-bit RSA modulus; any other length is refused.
 RSA_MODULUS_HEX_LEN: Final = 256
 
-#: Length of a session key (``generate_aes_key`` makes 16 characters).
+#: Length of a session key, in characters.
 SESSION_KEY_LEN: Final = 16
 
-#: The alphabet of every random key the SDK generates: digits, then lower, then upper.
+#: The alphabet of every random key: digits, then lower, then upper case.
 KEY_ALPHABET: Final = string.digits + string.ascii_lowercase + string.ascii_uppercase
 
 
 def _as_int32(value: int) -> int:
-    """``value`` as a signed 32-bit integer, as the native ``"%d"`` of the packet id."""
+    """``value`` as a signed 32-bit integer (the key carries the packet id's signed decimal)."""
     low = value & 0xFFFFFFFF
     return low - 0x100000000 if low >= 0x80000000 else low
 
 
 def derive_key(secret: str, salt: int) -> bytes:
-    """The 16-byte AES key for ``salt`` (``get_aes_key_info_by_packetid`` @0x214578):
-    ``secret`` padded to 16 bytes, its tail overwritten by the decimal of the signed
+    """The 16-byte AES key for ``salt``: ``secret`` padded to 16 bytes, its tail overwritten by the decimal of the signed
     32-bit ``salt``, then cut at the first NUL and zero-padded back to 16."""
     key = bytearray(secret.encode()[:16].ljust(16, b"\0"))
     decimal = str(_as_int32(salt)).encode()
@@ -126,7 +119,7 @@ class RtcCrypto(Protocol):
 
 
 class RtcSignalingCrypto:
-    """The RTC signaling crypto as the eufy app's native SDK implements it.
+    """The RTC signaling crypto (the wire scheme of the module docstring).
 
     ``rng`` defaults to :class:`random.SystemRandom`; pass a seeded
     :class:`random.Random` only in tests.
@@ -158,7 +151,7 @@ class RtcSignalingCrypto:
 
 
 def _modulus(public_key: str) -> int:
-    """The RSA modulus from a 401 challenge; the app requires exactly 256 hex chars."""
+    """The RSA modulus from a 401 challenge; it must be exactly 256 hex chars."""
     if len(public_key) != RSA_MODULUS_HEX_LEN:
         raise SignalingError(
             f"RTC LOGIN challenge is not a {RSA_MODULUS_HEX_LEN}-character RSA modulus"

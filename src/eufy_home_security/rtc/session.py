@@ -1,16 +1,16 @@
 """An RTC session with one station: signaling, then a live media call.
 
-:class:`RtcSession` runs the app's sequence: DISCOVER, LOGIN, the ping, then per live
+:class:`RtcSession` runs the sequence: DISCOVER, LOGIN, the ping, then per live
 view a private media CALL (kind 6) carrying a generated :class:`~.sdp.SdpInfo`. The
 device answers the CALL 200 with its own ``sdp_info`` (its ICE credentials, content
 key and IV, SSRCs) and the TURN relay, then trickles its ICE candidates in INFO. The
-app sends no SDP answer (its credentials travelled in the CALL), only its own
+client sends no SDP answer (its credentials travelled in the CALL), only its own
 candidates in INFO; a :class:`MediaPlane` runs ICE and the media. Once ICE is up the
 session sends the live open (:mod:`.live`) and waits for the station's status reply or
 the first video frame. Commands go over the media connection (RTCP APP) or the data
 channel, as the device's handler routes them (:class:`~.media.CommandRoute`).
 
-Nothing here is wired into :class:`~.station.Station` yet.
+Not wired into :class:`~.station.Station`.
 """
 
 from __future__ import annotations
@@ -153,7 +153,7 @@ class LiveCall:
     call: Call
     media: MediaPlane
     info: SdpInfo
-    """The app's ``sdp_info``, sent in the CALL."""
+    """The client's ``sdp_info``, sent in the CALL."""
     remote: SdpInfo | None = None
     """The device's answer ``sdp_info``."""
     cipher: CommandCipher | None = None

@@ -45,7 +45,7 @@ def test_encode_matches_the_device_wire_layout() -> None:
     assert seq == 0x11223344
     assert ptype == AnkeType.DATA
     assert length == 2
-    # byte sum of header[0:16] + body (checksum function @0x5f5104)
+    # byte sum of header[0:16] + body
     assert checksum == (sum(packet[:16]) + sum(packet[0x14:])) & 0xFFFFFFFF
 
 

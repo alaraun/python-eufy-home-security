@@ -1,15 +1,13 @@
 """Command and notification encryption on the RTC media plane.
 
-Commands the app sends the station (over an RTCP APP packet or the KCP data
+Commands the client sends the station (over an RTCP APP packet or the KCP data
 channel) and the notifications the station sends back are AES-128-GCM with the
 fixed AAD ``b"eufy security"`` under the per-call media key (the ``crypto_key`` from
 the device's CALL/INFO attach). The command path is an XZYH frame whose body is
 replaced by the GCM wrapper; a notification is the same wrapper after its frame
 header.
 
-From the app's native SDK (``.work/notes/s1/B1_KEYS_CRYPTO.md`` §§2-3):
-``rtc_crypto_encrypt_cmd_data`` @0x20c6f4, ``rtc_crypto_decrypt_notify_data_gcm``
-@0x20bd44, ``aes_gcm128_encrypt`` @0x1dc9bc. Not verified on hardware.
+Declared (eufy app); not verified on hardware.
 """
 
 from __future__ import annotations
@@ -29,7 +27,7 @@ from ..p2p.xzyh import HEADER_LEN as FRAME_HEADER_LEN
 MEDIA_KEY_LEN: Final = 16
 _GCM_IV_LEN: Final = 12
 _GCM_TAG_LEN: Final = 16
-#: XZYH subheader byte the app sets to 10 to mark a GCM-encrypted command/notification.
+#: XZYH subheader version byte of a GCM-encrypted command or notification.
 _VERSION_GCM: Final = 10
 #: The wrapper that precedes the ciphertext: GCM tag, IV and the command counter.
 _WRAPPER_LEN: Final = _GCM_TAG_LEN + _GCM_IV_LEN + 4

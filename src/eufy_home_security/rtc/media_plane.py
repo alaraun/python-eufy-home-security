@@ -1,10 +1,10 @@
 """Concrete media-plane transports for the RTC path, on the optional ``rtc`` extra.
 
-These implement the interfaces of :mod:`.media` with the WebRTC building blocks the
-eufy app uses, and assemble them into the live-view media plane:
+These implement the interfaces of :mod:`.media` with WebRTC building blocks and
+assemble them into the live-view media plane:
 
 - :class:`AioiceTransport` — one ICE connection via :mod:`aioice`, with the local
-  credentials of the app's ``sdp_info``, the CALL's TURN relay, ICE-controlled.
+  credentials of the client's ``sdp_info``, the CALL's TURN relay, ICE-controlled.
 - :class:`SdesSrtp` — SRTP/SRTCP with the fixed SDES key from the SDP template
   (``AES_CM_128_HMAC_SHA1_80``, the same master key both directions), via
   :mod:`pylibsrtp`.
@@ -153,7 +153,7 @@ class SdesSrtp:
 
     The eufy SDP template carries a single constant ``a=crypto`` line
     (:data:`~.sdp.SDES_INLINE_KEY`) and no DTLS, so the same 30-byte master key
-    protects the station's media to the app and the app's RTCP back.
+    protects the station's media to the client and the client's RTCP back.
     """
 
     def __init__(self, master_key: bytes) -> None:
@@ -196,8 +196,8 @@ class PacketTransport(Protocol):
 class KcpDataChannel:
     """The station's KCP data channel over a packet ``transport``.
 
-    KCP (``conv_id``) frames reliable, ordered messages the app would otherwise lose
-    on the UDP connection. Segments the codec emits go out on ``transport``; incoming
+    KCP (``conv_id``) carries reliable, ordered messages over the UDP connection.
+    Segments the codec emits go out on ``transport``; incoming
     segments are fed back in, and whole messages surface from :meth:`recv`. An update
     task drives KCP's timers.
     """
@@ -261,7 +261,7 @@ class KcpDataChannel:
 class RtcMediaPlane:
     """The media plane of one kind-6 live call (:class:`~.session.MediaPlane`).
 
-    :meth:`start` gathers ICE candidates under the app's ``sdp_info`` credentials,
+    :meth:`start` gathers ICE candidates under the client's ``sdp_info`` credentials,
     hands each to ``send_candidate`` (the session sends it in an INFO), then connects
     with the credentials of the device's answer ``sdp_info``. Every packet after
     that is SRTP-unprotected; H.265 RTP (payload type 97) is depacketized and its
@@ -387,11 +387,9 @@ class RtcMediaPlane:
     def _handle_rtcp(self, data: bytes) -> None:
         """Route the command channel's RTCP APP packet to the channel; drop other RTCP.
 
-        The command channel is RTCP APP name "AZWC" subtype 0 (``setCmd2Rtcp`` ->
-        ``SendRtcpAppPacket(ssrc, 0, 0x415a5743, ...)``); the HomeBase 3 sends the
-        same. These are raw (SDES, no DTLS), so they are parsed here before any
-        SRTCP unprotect. SR/RR, the "ANKE"/subtype-30 keepalive, and any other RTCP
-        are dropped.
+        The command channel is RTCP APP name "AZWC" subtype 0. These are raw (SDES,
+        no DTLS), so they are parsed here before any SRTCP unprotect. SR/RR, other
+        RTCP APP packets (e.g. "ANKE"/subtype 30) and any other RTCP are dropped.
         """
         if self._channel is None:
             return
