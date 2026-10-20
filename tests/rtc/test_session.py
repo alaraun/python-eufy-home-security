@@ -26,6 +26,7 @@ from eufy_home_security.p2p.crypto import GCM_AAD
 from eufy_home_security.p2p.xzyh import FrameType, encode_frame
 from eufy_home_security.rtc.codec import CallBody, MessageType
 from eufy_home_security.rtc.config import QuickLogin
+from eufy_home_security.rtc.data_channel import DataMsgType, KcpDataChannel
 from eufy_home_security.rtc.media import AccessUnit, CommandRoute, TurnServer
 from eufy_home_security.rtc.sdp import SdpInfo
 from eufy_home_security.rtc.session import (
@@ -402,5 +403,105 @@ async def test_the_session_hands_every_login_record_on() -> None:
     try:
         await session.start()
         assert [r.contact_id for r in records] == [CONTACT]
+    finally:
+        await session.close()
+
+
+class _FakeIce:
+    """An in-memory ICE transport: records candidates, pipes bytes over two queues."""
+
+    def __init__(
+        self, *, send_q: asyncio.Queue[bytes], recv_q: asyncio.Queue[bytes], local: list[str]
+    ) -> None:
+        self._send_q = send_q
+        self._recv_q = recv_q
+        self._local = local
+        self.remote: list[str] = []
+        self.connected: tuple[str, str] | None = None
+        self.closed = False
+
+    async def gather(
+        self, *, local_ufrag: str, local_pwd: str, turn: TurnServer | None
+    ) -> list[str]:
+        return list(self._local)
+
+    def add_remote_candidate(self, candidate: str) -> None:
+        self.remote.append(candidate)
+
+    async def connect(self, *, remote_ufrag: str, remote_pwd: str) -> None:
+        self.connected = (remote_ufrag, remote_pwd)
+
+    async def recv(self) -> bytes:
+        return await self._recv_q.get()
+
+    async def send(self, data: bytes) -> None:
+        self._send_q.put_nowait(data)
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+def _client_infos(server: Any) -> list[dict[str, Any]]:
+    return [
+        unseal(CallBody.decode(r.body).attachment)
+        for r in server.received
+        if r.header.message_type == MessageType.INFO and not r.header.is_response
+    ]
+
+
+async def test_open_data_channel_relays_candidates_and_round_trips_commands() -> None:
+    c2d: asyncio.Queue[bytes] = asyncio.Queue()
+    d2c: asyncio.Queue[bytes] = asyncio.Queue()
+    local = ["candidate:1 1 udp 2130706431 192.0.2.7 50000 typ host"]
+    client_ice = _FakeIce(send_q=c2d, recv_q=d2c, local=local)
+    device = KcpDataChannel(_FakeIce(send_q=d2c, recv_q=c2d, local=[]), conv=1)
+    server, session = await _session(server={"request_id": None})
+    try:
+        await session.start()
+        dc = await session.open_data_channel(2, timeout=2, ice=client_ice)
+        assert dc.remote == DEVICE_INFO
+        assert client_ice.connected == (DEVICE_INFO.ice_ufrag, DEVICE_INFO.ice_pwd)
+        # The client advertised its own candidate as a file_candidate INFO.
+        await _infos(server, 1)
+        assert {
+            "file_candidate": "a=candidate:1 1 udp 2130706431 192.0.2.7 50000 typ host",
+            "file_candidate_num": 0,
+        } in _client_infos(server)
+        # The device offers a candidate; the client acks it and feeds it to ICE.
+        caller = next(r for r in server.received if r.header.message_type == MessageType.INFO).addr
+        device_line = "a=candidate:9 1 UDP 1 192.0.2.8 4000 typ host"
+        server.device_packet(
+            MessageType.INFO,
+            CallBody(2, dc.call.uuid, CONTACT),
+            {"file_candidate": device_line, "file_candidate_num": 3},
+            caller,
+        )
+        async with asyncio.timeout(2):
+            while {"file_candidate_ack": 3} not in _client_infos(server):
+                await asyncio.sleep(0.01)
+        assert client_ice.remote == [device_line]
+        # A command round-trips over KCP; a reply surfaces from recv().
+        await dc.send_command(b"\x01\x02command-bytes")
+        got = await asyncio.wait_for(device.recv_message(), 2)
+        assert (got.msg_type, got.payload) == (DataMsgType.COMMAND, b"\x01\x02command-bytes")
+        await device.send_message(b"reply-bytes", msg_type=DataMsgType.COMMAND)
+        reply = await asyncio.wait_for(dc.recv(), 2)
+        assert reply.payload == b"reply-bytes"
+        assert await session.open_data_channel(2) is dc  # a live channel is reused
+        await session.close_data_channel(2)
+        assert dc.call.ended
+    finally:
+        await device.close()
+        await session.close()
+
+
+async def test_open_data_channel_hangs_up_when_the_device_refuses() -> None:
+    client_ice = _FakeIce(send_q=asyncio.Queue(), recv_q=asyncio.Queue(), local=[])
+    _server, session = await _session(server={"call_reply": "busy"})
+    try:
+        await session.start()
+        with pytest.raises(CallRefusedError):
+            await session.open_data_channel(1, timeout=2, ice=client_ice)
+        assert client_ice.closed  # the ICE transport is torn down on refusal
     finally:
         await session.close()
