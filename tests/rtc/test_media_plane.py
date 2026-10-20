@@ -25,7 +25,6 @@ from eufy_home_security.exceptions import (
     CommunicationError,
     DeviceTimeoutError,
     ProtocolError,
-    UnsupportedError,
 )
 from eufy_home_security.rtc import media_plane
 from eufy_home_security.rtc.media import (
@@ -33,6 +32,7 @@ from eufy_home_security.rtc.media import (
     AccessUnit,
     IceTransport,
     PayloadType,
+    RtcpApp,
     TurnServer,
 )
 from eufy_home_security.rtc.media_plane import (
@@ -41,6 +41,13 @@ from eufy_home_security.rtc.media_plane import (
     KcpDataChannel,
     RtcMediaPlane,
     SdesSrtp,
+)
+from eufy_home_security.rtc.rtcp_channel import (
+    APP_NAME,
+    APP_SUBTYPE,
+    AnkeType,
+    decode_anke,
+    encode_anke,
 )
 from eufy_home_security.rtc.sdp import SDES_INLINE_KEY, SdpInfo
 
@@ -226,6 +233,7 @@ class FakeIce:
         self.gathered: dict[str, object] = {}
         self.connected: dict[str, str] = {}
         self.remote: list[str] = []
+        self.sent: list[bytes] = []
         self.closed = False
         self._hang = hang
 
@@ -253,7 +261,7 @@ class FakeIce:
         return data
 
     async def send(self, data: bytes) -> None:
-        return None
+        self.sent.append(data)
 
     async def close(self) -> None:
         self.closed = True
@@ -370,8 +378,59 @@ async def test_a_full_frame_queue_drops_the_oldest(monkeypatch: pytest.MonkeyPat
     await plane.close()
 
 
-async def test_commands_over_rtcp_are_not_implemented() -> None:
+def _anke_app(frame: bytes) -> bytes:
+    """Wrap an ANKE frame in an RTCP APP packet as the device sends it."""
+    return RtcpApp(APP_SUBTYPE, 0xB8A23CFA, APP_NAME, frame).encode()
+
+
+async def test_send_command_before_start_is_refused() -> None:
     plane = RtcMediaPlane(FakeIce())
-    with pytest.raises(UnsupportedError):
+    with pytest.raises(CommunicationError):
         await plane.send_command(b"x")
     await plane.close()
+
+
+async def test_send_command_sends_an_anke_data_packet_over_rtcp() -> None:
+    ice = FakeIce()
+    plane, _ = await _started(ice)
+    try:
+        await plane.send_command(b'{"cmd":1003}')
+    finally:
+        await plane.close()
+    apps = [RtcpApp.parse(p) for p in ice.sent if p[1] == 204]
+    anke = [a for a in apps if a.name == APP_NAME and a.subtype == APP_SUBTYPE]
+    assert anke, "no ANKE packet went out"
+    assert anke[0].ssrc == LOCAL.audio_ssrc
+    frame = decode_anke(anke[0].data)
+    assert frame.type == AnkeType.DATA
+    assert frame.body == b'{"cmd":1003}'
+
+
+async def test_an_inbound_anke_data_packet_is_acked_and_delivered() -> None:
+    ice = FakeIce()
+    plane, _ = await _started(ice)
+    try:
+        ice.inbound.put_nowait(_anke_app(encode_anke(AnkeType.DATA, 42, b"reply")))
+        assert plane._channel is not None
+        assert await asyncio.wait_for(plane._channel.recv_data(), 2) == b"reply"
+        await asyncio.sleep(0)  # let the ACK task run
+        acks = [
+            decode_anke(RtcpApp.parse(p).data)
+            for p in ice.sent
+            if p[1] == 204 and RtcpApp.parse(p).name == APP_NAME
+        ]
+        assert any(a.type == AnkeType.ACK and a.seq == 42 for a in acks)
+    finally:
+        await plane.close()
+
+
+async def test_a_non_anke_rtcp_packet_is_dropped() -> None:
+    ice = FakeIce()
+    plane, _ = await _started(ice)
+    try:
+        ice.inbound.put_nowait(struct.pack("!BBHI", 0x80, 201, 1, 1))  # a receiver report
+        ice.inbound.put_nowait(_anke_app(encode_anke(AnkeType.DATA, 1, b"ok")))
+        assert plane._channel is not None
+        assert await asyncio.wait_for(plane._channel.recv_data(), 2) == b"ok"
+    finally:
+        await plane.close()

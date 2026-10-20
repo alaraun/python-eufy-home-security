@@ -41,7 +41,6 @@ from ..exceptions import (
     CommunicationError,
     DeviceTimeoutError,
     ProtocolError,
-    UnsupportedError,
 )
 from .frame_crypto import EufyFrameDecryptor
 from .media import (
@@ -50,12 +49,14 @@ from .media import (
     H265Depacketizer,
     IceTransport,
     PayloadType,
+    RtcpApp,
     RtpPacket,
     SrtpContext,
     TurnServer,
     candidate_body,
     is_rtcp,
 )
+from .rtcp_channel import APP_NAME, APP_SUBTYPE, RtcpChannel
 from .sdp import SDES_INLINE_KEY, SdpInfo
 
 _LOGGER = logging.getLogger(__name__)
@@ -282,6 +283,8 @@ class RtcMediaPlane:
         self._depacketizer = H265Depacketizer()
         self._frames: asyncio.Queue[AccessUnit | None] = asyncio.Queue(FRAME_QUEUE + 1)
         self._reader: asyncio.Task[None] | None = None
+        self._channel: RtcpChannel | None = None
+        self._local_ssrc = 0
         self._throttle = LogThrottle(60.0)
         self._ended = False
 
@@ -305,7 +308,14 @@ class RtcMediaPlane:
                 await self._ice.connect(remote_ufrag=remote.ice_ufrag, remote_pwd=remote.ice_pwd)
         except TimeoutError as exc:
             raise DeviceTimeoutError("RTC ICE did not connect in time") from exc
+        self._local_ssrc = local.audio_ssrc
+        self._channel = RtcpChannel(self._send_app)
+        self._channel.start()
         self._reader = asyncio.get_running_loop().create_task(self._read_loop(decryptor))
+
+    async def _send_app(self, frame: bytes) -> None:
+        """Put one ANKE frame on the wire, wrapped in a raw RTCP APP packet."""
+        await self._ice.send(RtcpApp(APP_SUBTYPE, self._local_ssrc, APP_NAME, frame).encode())
 
     def add_remote_candidate(self, candidate: str) -> None:
         self._ice.add_remote_candidate(candidate)
@@ -316,13 +326,18 @@ class RtcMediaPlane:
             yield frame
 
     async def send_command(self, data: bytes) -> None:
-        raise UnsupportedError("RTC commands over RTCP APP are not implemented in this version")
+        """Send a command body to the device as a reliable ANKE DATA packet."""
+        if self._channel is None:
+            raise CommunicationError("RTC media plane has not started")
+        await self._channel.send_data(data)
 
     async def close(self) -> None:
         if self._reader is not None:
             self._reader.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._reader
+        if self._channel is not None:
+            await self._channel.close()
         await self._ice.close()
         self._end()
 
@@ -337,6 +352,7 @@ class RtcMediaPlane:
 
     def _handle(self, data: bytes, decryptor: EufyFrameDecryptor) -> None:
         if is_rtcp(data):
+            self._handle_rtcp(data)
             return
         try:
             packet = RtpPacket.parse(self._srtp.unprotect_rtp(data))
@@ -356,6 +372,21 @@ class RtcMediaPlane:
                     _LOGGER.warning("RTC video frame dropped: %s", exc)
                 continue
             self._push(AccessUnit(data, unit.timestamp, unit.keyframe))
+
+    def _handle_rtcp(self, data: bytes) -> None:
+        """Route a raw RTCP APP "ANKE" packet to the channel; drop other RTCP.
+
+        ANKE packets are sent raw (SDES, no DTLS), so they are parsed here before
+        any SRTCP unprotect; SR/RR and anything else is dropped as before.
+        """
+        if self._channel is None:
+            return
+        try:
+            app = RtcpApp.parse(data)
+        except ProtocolError:
+            return
+        if app.name == APP_NAME and app.subtype == APP_SUBTYPE:
+            self._channel.feed(app.data)
 
     def _push(self, frame: AccessUnit) -> None:
         if self._ended:
