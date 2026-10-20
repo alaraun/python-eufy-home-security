@@ -6,18 +6,21 @@ data channel, so they pin the field offsets against a real capture.
 
 from __future__ import annotations
 
+import asyncio
 import struct
 import zlib
 
 import pytest
 
 from eufy_home_security.exceptions import ProtocolError
+from eufy_home_security.rtc import _ikcp
 from eufy_home_security.rtc.data_channel import (
     FILE_HEAD_MAGIC,
     KCP_DOWNLOAD_CONV,
     WRTC_HEADER_NEW,
     WRTC_HEADER_OLD,
     DataMsgType,
+    KcpDataChannel,
     decode_wrtc_link,
     encode_kcp_prefix,
     encode_wrtc_link,
@@ -135,3 +138,66 @@ def test_kcp_strip_short_datagram_is_bare() -> None:
     conv, out = strip_kcp_prefix(b"short-bare")
     assert conv == 0
     assert out == b"short-bare"
+
+
+class _Pipe:
+    """One end of an in-memory packet link (a :class:`PacketTransport`)."""
+
+    def __init__(self, outbound: asyncio.Queue[bytes], inbound: asyncio.Queue[bytes]) -> None:
+        self._out = outbound
+        self._in = inbound
+
+    async def send(self, data: bytes) -> None:
+        self._out.put_nowait(data)
+
+    async def recv(self) -> bytes:
+        return await self._in.get()
+
+    async def close(self) -> None:
+        return None
+
+
+async def test_kcp_data_channel_round_trips_messages_both_ways() -> None:
+    a2b: asyncio.Queue[bytes] = asyncio.Queue()
+    b2a: asyncio.Queue[bytes] = asyncio.Queue()
+    left = KcpDataChannel(_Pipe(a2b, b2a), conv=1)
+    right = KcpDataChannel(_Pipe(b2a, a2b), conv=1)
+    try:
+        await left.send_message(b'{"cmd":1307}', msg_type=DataMsgType.COMMAND)
+        msg = await asyncio.wait_for(right.recv_message(), 2)
+        assert (msg.msg_type, msg.payload) == (DataMsgType.COMMAND, b'{"cmd":1307}')
+        await right.send_message(b"\x00" * 16, msg_type=DataMsgType.HEARTBEAT)
+        back = await asyncio.wait_for(left.recv_message(), 2)
+        assert (back.msg_type, back.payload) == (DataMsgType.HEARTBEAT, b"\x00" * 16)
+    finally:
+        await left.close()
+        await right.close()
+
+
+async def test_kcp_data_channel_strips_an_inbound_file_head() -> None:
+    chan_in: asyncio.Queue[bytes] = asyncio.Queue()
+    chan_out: asyncio.Queue[bytes] = asyncio.Queue()
+    chan = KcpDataChannel(_Pipe(chan_out, chan_in), conv=1)
+    # A raw ikcp peer sends a file_head-wrapped WrtcLinkProtocol reply (as the device does).
+    peer = _ikcp.KCP(1)
+    peer.set_performance_options(True, 2, 2, True)
+    peer.set_window_size(512, 512)
+    peer.set_maximum_transmission(1200)
+    segments: list[bytes] = []
+    peer.include_outbound_handler(
+        lambda _k, d: segments.append(encode_kcp_prefix(bytes(d), conv=1))
+    )
+    inner = encode_wrtc_link(b'{"reply":1}', msg_type=DataMsgType.COMMAND, seq=0, now=0)
+    head = struct.pack(
+        "<IIIII", FILE_HEAD_MAGIC, 0x01000001, len(inner), zlib.crc32(inner) & 0xFFFFFFFF, 0
+    )
+    peer.enqueue(head + inner)
+    peer.flush(0)
+    try:
+        for seg in segments:
+            chan_in.put_nowait(seg)
+        msg = await asyncio.wait_for(chan.recv_message(), 2)
+        assert msg.payload == b'{"reply":1}'
+        assert msg.msg_type == DataMsgType.COMMAND
+    finally:
+        await chan.close()

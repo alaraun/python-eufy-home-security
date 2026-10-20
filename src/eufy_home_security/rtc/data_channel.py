@@ -21,14 +21,21 @@ pure: the KCP transport and the signaling live elsewhere.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
 import struct
 import time
 import zlib
+from collections import deque
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Final
+from typing import Final, Protocol, runtime_checkable
 
 from ..exceptions import ProtocolError
+from . import _ikcp
+
+_LOGGER = logging.getLogger(__name__)
 
 #: WrtcLinkProtocol version, in the first two header bytes of every frame.
 WRTC_VERSION: Final = 9
@@ -168,3 +175,111 @@ def strip_kcp_prefix(datagram: bytes) -> tuple[int, bytes]:
     if len(datagram) > KCP_PREFIX_LEN:
         return struct.unpack_from("<I", datagram, 0)[0], datagram[KCP_PREFIX_LEN:]
     return 0, datagram
+
+
+@runtime_checkable
+class PacketTransport(Protocol):
+    """A datagram pipe the KCP channel runs over (an ICE connection)."""
+
+    async def recv(self) -> bytes: ...
+
+    async def send(self, data: bytes) -> None: ...
+
+    async def close(self) -> None: ...
+
+
+#: KCP parameters the app configures for the command data channel (kcp_type 2): conv 1,
+#: nodelay(1, interval 2 ms, fast-resend 2, no congestion control), window 512, mtu 1200.
+KCP_CONV_COMMAND: Final = 1
+_KCP_INTERVAL_MS: Final = 2
+_KCP_RESEND: Final = 2
+_KCP_WINDOW: Final = 512
+_KCP_MTU: Final = 1200
+_KCP_TICK_S: Final = 0.01
+
+
+class KcpDataChannel:
+    """The station's KCP data channel over a :class:`PacketTransport`.
+
+    Outbound application messages are framed with a WrtcLinkProtocol header
+    (:func:`encode_wrtc_link`) and carried as reliable KCP segments, each with the
+    kcp_type-2 datagram prefix. Inbound datagrams have their prefix and any file_head
+    stripped and are decoded to :class:`WrtcLinkMessage`; whole messages surface from
+    :meth:`recv_message`. An update task drives KCP's timers.
+    """
+
+    def __init__(
+        self,
+        transport: PacketTransport,
+        *,
+        conv: int = KCP_CONV_COMMAND,
+        old_protocol: bool = False,
+    ) -> None:
+        self._transport = transport
+        self._conv = conv
+        self._old = old_protocol
+        self._kcp = _ikcp.KCP(conv)
+        self._kcp.set_performance_options(True, _KCP_INTERVAL_MS, _KCP_RESEND, True)
+        self._kcp.set_window_size(_KCP_WINDOW, _KCP_WINDOW)
+        self._kcp.set_maximum_transmission(_KCP_MTU)
+        self._kcp.include_outbound_handler(self._on_segment)
+        self._outbound: deque[bytes] = deque()
+        self._received: asyncio.Queue[WrtcLinkMessage] = asyncio.Queue()
+        self._seq = 0
+        self._closed = False
+        self._tasks = [
+            asyncio.ensure_future(self._read_loop()),
+            asyncio.ensure_future(self._tick()),
+        ]
+
+    def _on_segment(self, _kcp: _ikcp.KCP, data: bytes) -> None:
+        self._outbound.append(encode_kcp_prefix(bytes(data), conv=self._conv))
+
+    async def _drain(self) -> None:
+        while self._outbound:
+            await self._transport.send(self._outbound.popleft())
+
+    async def send_message(self, payload: bytes, *, msg_type: int = DataMsgType.COMMAND) -> None:
+        """Frame and send one application ``payload`` as a reliable KCP message."""
+        frame = encode_wrtc_link(payload, msg_type=msg_type, seq=self._seq, old=self._old)
+        self._seq = (self._seq + 1) & 0xFFFFFFFF
+        self._kcp.enqueue(frame)
+        self._kcp.flush()
+        await self._drain()
+
+    async def recv_message(self) -> WrtcLinkMessage:
+        """The next decoded message the device sent on the channel."""
+        return await self._received.get()
+
+    async def _read_loop(self) -> None:
+        while not self._closed:
+            try:
+                datagram = await self._transport.recv()
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # any transport error ends the channel
+                return
+            _conv, segment = strip_kcp_prefix(datagram)
+            self._kcp.receive(segment)
+            while self._kcp.next_packet_available:
+                raw = bytes(self._kcp.get_received())
+                try:
+                    self._received.put_nowait(decode_wrtc_link(strip_file_head(raw)))
+                except ProtocolError as exc:
+                    _LOGGER.debug("RTC data-channel message dropped: %s", exc)
+            await self._drain()  # KCP may owe an ack
+
+    async def _tick(self) -> None:
+        while not self._closed:
+            self._kcp.update()
+            await self._drain()
+            await asyncio.sleep(_KCP_TICK_S)
+
+    async def close(self) -> None:
+        self._closed = True
+        for task in self._tasks:
+            task.cancel()
+        for task in self._tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        await self._transport.close()
