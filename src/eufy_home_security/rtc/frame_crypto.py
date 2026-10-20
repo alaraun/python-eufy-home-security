@@ -28,6 +28,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from ..exceptions import ProtocolError
 from .media import START_CODE
+from .sdp import SdpInfo
 
 #: HEVC NAL unit types the device encrypts: SPS, PPS and the IDR_W_RADL slice.
 _ENCRYPTED_HEVC_TYPES: Final = frozenset({19, 33, 34})
@@ -53,6 +54,17 @@ class EufyFrameDecryptor:
         if len(self._iv) != 12:
             raise ProtocolError(f"RTC content IV is {len(self._iv)} bytes, need 12")
         self._gcm = AESGCM(key)
+
+    @classmethod
+    def from_answer(cls, answer: SdpInfo) -> EufyFrameDecryptor:
+        """Key the decryptor from the device's CALL-200 answer ``sdp_info``.
+
+        The app decrypts incoming device media with the content key/IV of the
+        **device's** answer (its remote SDP), not the app's own — confirmed from
+        the native path ``WebrtcApp_Event_NewSetRemoteSDP_Info`` →
+        ``handle_media_channel_connect_event`` → ``setMediaChannelKey``.
+        """
+        return cls(answer.content_key, answer.content_iv)
 
     def video(self, frame: bytes, *, keyframe: bool) -> bytes:
         """Return ``frame`` (an Annex B access unit) with its encrypted HEVC NAL
