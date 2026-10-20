@@ -23,8 +23,9 @@ from eufy_home_security.exceptions import (
     UnsupportedError,
 )
 from eufy_home_security.p2p.crypto import GCM_AAD
-from eufy_home_security.p2p.xzyh import FrameType, encode_frame
+from eufy_home_security.p2p.xzyh import HEADER_LEN, FrameType, encode_frame
 from eufy_home_security.rtc.codec import CallBody, MessageType
+from eufy_home_security.rtc.command import decrypt_command_reply, encrypt_command
 from eufy_home_security.rtc.config import QuickLogin
 from eufy_home_security.rtc.data_channel import DataMsgType, KcpDataChannel
 from eufy_home_security.rtc.media import AccessUnit, CommandRoute, TurnServer
@@ -504,4 +505,40 @@ async def test_open_data_channel_hangs_up_when_the_device_refuses() -> None:
             await session.open_data_channel(1, timeout=2, ice=client_ice)
         assert client_ice.closed  # the ICE transport is torn down on refusal
     finally:
+        await session.close()
+
+
+async def test_data_channel_command_encrypts_and_decrypts_the_reply() -> None:
+    c2d: asyncio.Queue[bytes] = asyncio.Queue()
+    d2c: asyncio.Queue[bytes] = asyncio.Queue()
+    client_ice = _FakeIce(
+        send_q=c2d, recv_q=d2c, local=["candidate:1 1 udp 1 192.0.2.7 5 typ host"]
+    )
+    device = KcpDataChannel(_FakeIce(send_q=d2c, recv_q=c2d, local=[]), conv=1)
+    _server, session = await _session(server={"request_id": None})
+    try:
+        await session.start()
+        dc = await session.open_data_channel(2, timeout=2, ice=client_ice)
+        device_key = DEVICE_INFO.content_key.encode()[:16]
+        reply_frame = encode_frame(0x546, b'{"storage":"ok"}', bytes(6))
+        heartbeat_echo = encode_frame(0x473, b"", bytes(6))  # bare 16-byte XZYH, no body
+        assert len(heartbeat_echo) == HEADER_LEN
+
+        async def respond() -> None:
+            cmd = await device.recv_message()
+            assert cmd.msg_type == DataMsgType.COMMAND
+            # the command must arrive sealed (the client encrypted it with the media key)
+            assert decrypt_command_reply(device_key, cmd.payload[HEADER_LEN:]) == b'{"cmd":1307}'
+            await device.send_message(heartbeat_echo, msg_type=DataMsgType.COMMAND)  # skipped
+            await device.send_message(
+                encrypt_command(device_key, reply_frame, 0), msg_type=DataMsgType.COMMAND
+            )
+
+        responder = asyncio.ensure_future(respond())
+        plain = await dc.command(encode_frame(0x546, b'{"cmd":1307}', bytes(6)), timeout=3)
+        assert plain == b'{"storage":"ok"}'
+        await responder
+        await session.close_data_channel(2)
+    finally:
+        await device.close()
         await session.close()
