@@ -34,6 +34,7 @@ from ..exceptions import (
     UnsupportedError,
 )
 from ..p2p.messages import P2P_ERROR_CODES
+from ..p2p.xzyh import HEADER_LEN
 from .codec import CallKind
 from .command import CommandCipher
 from .config import QuickLogin, RtcConfig
@@ -166,6 +167,8 @@ class LiveCall:
 
 #: How long the data-channel ICE may take to connect once candidates are out.
 DATA_ICE_TIMEOUT: Final = 20.0
+#: How long :meth:`DataChannelCall.command` waits for the station's reply.
+COMMAND_REPLY_TIMEOUT: Final = 10.0
 #: How often an unacknowledged local candidate is re-sent as a ``file_candidate`` INFO.
 DATA_CANDIDATE_RESEND: Final = 0.5
 
@@ -210,6 +213,24 @@ class DataChannelCall:
         if self.kcp is None:
             raise CommunicationError("RTC data channel has not connected")
         return await self.kcp.recv_message()
+
+    async def command(self, frame: bytes, *, timeout: float = COMMAND_REPLY_TIMEOUT) -> bytes:
+        """Send a plaintext XZYH command ``frame`` and return the station's decrypted reply.
+
+        Seals ``frame`` with the call's :class:`~.command.CommandCipher` (advancing its
+        counter), sends it as a COMMAND message, and opens the next COMMAND reply that
+        carries a body — skipping the bare heartbeat echo — with
+        :meth:`~.command.CommandCipher.decrypt_reply`. Assumes one command in flight. The
+        reply's format and key are declared from the app, not yet hardware-verified.
+        """
+        if self.kcp is None or self.cipher is None:
+            raise CommunicationError("RTC data channel has not connected")
+        await self.send_command(self.cipher.encrypt(frame))
+        async with asyncio.timeout(timeout):
+            while True:
+                msg = await self.kcp.recv_message()
+                if msg.msg_type == DataMsgType.COMMAND and len(msg.payload) > HEADER_LEN:
+                    return self.cipher.decrypt_reply(msg.payload[HEADER_LEN:])
 
 
 class RtcSession:

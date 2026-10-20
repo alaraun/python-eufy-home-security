@@ -27,6 +27,8 @@ from eufy_home_security.exceptions import (
     ProtocolError,
 )
 from eufy_home_security.rtc import media_plane
+from eufy_home_security.rtc.data_channel import DataMsgType
+from eufy_home_security.rtc.data_channel import KcpDataChannel as DataChannelKcp
 from eufy_home_security.rtc.media import (
     START_CODE,
     AccessUnit,
@@ -148,6 +150,47 @@ async def test_aioice_transport_connects_controlled_with_dictated_credentials() 
     finally:
         await ours.close()
         await device.close()
+
+
+async def test_data_channel_kcp_round_trips_over_real_aioice() -> None:
+    """The command data channel (data_channel.KcpDataChannel = _ikcp + WrtcLinkProtocol
+    framing + kcp_type-2 prefix) over a real aioice-connected UDP path, not an in-memory
+    pipe: a controlled client against a controlling device, a command and a reply."""
+    ours = AioiceTransport()
+    device = Connection(ice_controlling=True, components=1, use_ipv6=False)
+    client_kcp: DataChannelKcp | None = None
+    device_kcp: DataChannelKcp | None = None
+    try:
+        await device.gather_candidates()
+        for c in device.local_candidates:
+            ours.add_remote_candidate(f"a=candidate:{c.to_sdp()}")
+        lines = await ours.gather(local_ufrag="abcde", local_pwd="p" * 23, turn=None)
+        device.remote_username, device.remote_password = "abcde", "p" * 23
+        for line in lines:
+            await device.add_remote_candidate(Candidate.from_sdp(line[len("candidate:") :]))
+        await device.add_remote_candidate(None)
+        async with asyncio.timeout(10):
+            await asyncio.gather(
+                ours.connect(remote_ufrag=device.local_username, remote_pwd=device.local_password),
+                device.connect(),
+            )
+        client_kcp = DataChannelKcp(ours, conv=1)
+        device_kcp = DataChannelKcp(device, conv=1)
+        await client_kcp.send_message(b'{"cmd":1307}', msg_type=DataMsgType.COMMAND)
+        got = await asyncio.wait_for(device_kcp.recv_message(), 5)
+        assert (got.msg_type, got.payload) == (DataMsgType.COMMAND, b'{"cmd":1307}')
+        await device_kcp.send_message(b"reply-body", msg_type=DataMsgType.COMMAND)
+        back = await asyncio.wait_for(client_kcp.recv_message(), 5)
+        assert back.payload == b"reply-body"
+    finally:
+        if client_kcp is not None:
+            await client_kcp.close()  # closes `ours`
+        else:
+            await ours.close()
+        if device_kcp is not None:
+            await device_kcp.close()  # closes `device`
+        else:
+            await device.close()
 
 
 async def test_aioice_transport_refuses_before_gathering_and_bad_candidates() -> None:
