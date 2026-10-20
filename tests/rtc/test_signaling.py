@@ -189,7 +189,7 @@ async def test_a_call_gets_trying_with_turn_then_the_offer_and_is_acknowledged()
         assert offer["request_id"] == "r1"
         assert call.device_request_id == "r1"
         assert call.turn is not None
-        assert call.turn["port"] == 3478
+        assert call.turn["turn_port"] == 3478
         sent = next(r for r in server.received if r.header.message_type == MessageType.CALL)
         body = CallBody.decode(sent.body)
         assert (body.channel, body.uuid, body.contact_id) == (2, "", CONTACT)

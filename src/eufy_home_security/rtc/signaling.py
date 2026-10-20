@@ -9,8 +9,8 @@ Runs the signaling half of a WebRTC session the way the eufy app does:
    station identity; the 200 carries the client's contact id. A stored
    :class:`~.config.QuickLogin` younger than 23 h logs in with one request.
 3. CALL per channel kind (:class:`~.codec.CallKind`): the server answers 100 (with a
-   TURN relay), the device 200 with its offer; the client acknowledges with ACK and
-   exchanges its answer and candidates in INFO. HANGUP ends a call.
+   TURN relay), the device 200 with its answer; the client acknowledges with ACK and
+   both sides send their ICE candidates in INFO. HANGUP ends a call.
 4. While logged in, a MESSAGE ping every 3 s keeps the session alive, and every
    MESSAGE request from the server or device is answered 200.
 
@@ -791,12 +791,13 @@ class SignalingClient:
         )
 
     def send_info(self, call: Call, payload: Mapping[str, Any]) -> None:
-        """INFO on ``call``: the answer (``{"sdp": ...}``) or a candidate
-        (``{"candidate": ...}``); the device's request id is added."""
+        """INFO on ``call``: a candidate (``{"candidate": ...}``) or an SDP
+        (``{"sdp": ...}``); the device's request id is added when it sent one."""
         if self._contact_id is None:
             raise SignalingError("RTC signaling is not logged in")
         now = int(self._clock())
-        value = {"request_id": call.device_request_id, **payload}
+        rid = call.device_request_id
+        value = {"request_id": rid, **payload} if rid not in (None, "") else dict(payload)
         self._send(
             self._header(
                 MessageType.INFO,

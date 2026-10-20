@@ -9,21 +9,22 @@ RTCP APP packets on the same connection, or over a KCP data channel on a second 
 connection.
 
 Implemented here (pure): RTP header parsing, RTCP APP build/parse, the H.264
-(RFC 6184) and H.265 (RFC 7798) depacketizers. The command and notification
-AES-128-GCM is in :mod:`.command`; the in-frame AES-128-GCM
-(:class:`FrameDecryptor`, video) in :mod:`.frame_crypto`. Behind interfaces with no
-implementation yet: ICE (:class:`IceTransport`), SRTP (:class:`SrtpContext`), the
-KCP data channel (:class:`DataChannel`).
+(RFC 6184) and H.265 (RFC 7798) depacketizers, the CALL's TURN relay and ICE
+candidate lines. The command and notification AES-128-GCM is in :mod:`.command`;
+the in-frame AES-128-GCM (:class:`FrameDecryptor`, video) in :mod:`.frame_crypto`.
+The interfaces :class:`IceTransport`, :class:`SrtpContext` and :class:`DataChannel`
+are implemented on the ``rtc`` extra in :mod:`.media_plane`.
 """
 
 from __future__ import annotations
 
 import struct
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Final, Protocol, runtime_checkable
+from typing import Any, Final, Protocol, runtime_checkable
 
+from .._logging import redact
 from ..exceptions import ProtocolError
 
 RTP_VERSION: Final = 2
@@ -52,26 +53,71 @@ class CommandRoute(IntEnum):
     """An RTCP APP packet on the media connection."""
 
 
+@dataclass(frozen=True, slots=True)
+class TurnServer:
+    """The TURN relay the signaling server allocates for a call (CALL 100/200 ``turn``)."""
+
+    host: str
+    port: int
+    username: str
+    password: str
+
+    @classmethod
+    def from_json(cls, turn: Mapping[str, Any] | None) -> TurnServer | None:
+        """The primary relay of a ``turn`` object (``turn_addr``, ``turn_port``,
+        ``turn_user``, ``turn_password``), or ``None`` when one is missing. The app
+        configures only this one; ``alt_turn_addr``/``alt_turn_port`` are unused."""
+        if turn is None:
+            return None
+        host, port = turn.get("turn_addr"), turn.get("turn_port")
+        user, password = turn.get("turn_user"), turn.get("turn_password")
+        if not (isinstance(host, str) and host and isinstance(user, str) and user):
+            return None
+        if not isinstance(password, str) or not isinstance(port, int | str):
+            return None
+        try:
+            return cls(host, int(port), user, password)
+        except ValueError:
+            return None
+
+    def __repr__(self) -> str:
+        return (
+            f"TurnServer(host={self.host!r}, port={self.port}, username={redact(self.username)!r})"
+        )
+
+
+CANDIDATE_PREFIX: Final = "candidate:"
+
+
+def candidate_body(line: str) -> str:
+    """An ICE candidate line without its ``a=`` and ``candidate:`` prefixes (the
+    device sends ``a=candidate:…``, the app ``candidate:…``)."""
+    text = line.strip()
+    text = text.removeprefix("a=")
+    return text.removeprefix(CANDIDATE_PREFIX)
+
+
 # ── interfaces ───────────────────────────────────────────────────────────────
 
 
 @runtime_checkable
 class IceTransport(Protocol):
-    """One ICE connection with the local credentials the app chooses."""
+    """One ICE connection (one component: BUNDLE and rtcp-mux) with local
+    credentials the caller dictates; the app side is ICE-controlled."""
 
-    async def connect(
-        self,
-        *,
-        local_ufrag: str,
-        local_pwd: str,
-        remote_ufrag: str,
-        remote_pwd: str,
-        turn: tuple[str, int, str, str] | None,
-    ) -> None:
-        """Gather, exchange candidates (through the caller) and connect."""
+    async def gather(
+        self, *, local_ufrag: str, local_pwd: str, turn: TurnServer | None
+    ) -> list[str]:
+        """Gather the local candidates; returns them as ``candidate:…`` lines."""
         ...
 
-    def add_remote_candidate(self, candidate: str) -> None: ...
+    def add_remote_candidate(self, candidate: str) -> None:
+        """Add one remote candidate line, before or during :meth:`connect`."""
+        ...
+
+    async def connect(self, *, remote_ufrag: str, remote_pwd: str) -> None:
+        """Run the connectivity checks until the remote side nominates a pair."""
+        ...
 
     async def recv(self) -> bytes: ...
 

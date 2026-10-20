@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import json
 from collections.abc import Callable
@@ -21,6 +22,7 @@ from eufy_home_security.rtc.codec import (
     ResponseCode,
 )
 from eufy_home_security.rtc.config import RtcConfig
+from eufy_home_security.rtc.sdp import SdpInfo
 from eufy_home_security.testing import SYNTHETIC
 
 PUBLIC_KEY = "fake-public-key"
@@ -29,6 +31,16 @@ CONTACT = "c" * 32
 LICENSE = "ABCDEF"
 USER_ID = "u" * 40
 APP_ID = "0123456789abcdef"
+#: The device's answer sdp_info the fake CALL 200 carries.
+DEVICE_INFO = SdpInfo(
+    audio_ssrc=0x01020304,
+    video_ssrc=0x05060708,
+    ice_ufrag="dev01",
+    ice_pwd="p" * 23,
+    content_key="k" * 16,
+    content_iv="i" * 12,
+)
+TURN = {"turn_addr": "198.51.100.9", "turn_port": 3478, "turn_user": "u", "turn_password": "p"}
 
 
 class FakeCrypto:
@@ -107,6 +119,8 @@ class FakeServer(asyncio.DatagramProtocol):
     """False: a CALL over UDP goes unanswered (a sleeping device), only TCP answers."""
     drop_logins: int = 0
     """How many LOGIN requests go unanswered first."""
+    request_id: str | None = "r1"
+    """The CALL 200's ``request_id``; ``None`` leaves it out (as a HomeBase 3 does)."""
     transport: asyncio.DatagramTransport | None = None
     tcp: asyncio.Server | None = None
     tcp_port: int = 0
@@ -195,16 +209,21 @@ class FakeServer(asyncio.DatagramProtocol):
         if self.call_reply == "busy":
             reply(header.response(486), call.without_attachment().encode())
             return
-        turn = {"turn": {"addr": "198.51.100.9", "port": 3478, "user": "u", "password": "p"}}
         reply(
             Header(**{**_fields(header.response(100)), "encrypted": True}),
-            CallBody(call.channel, call.uuid, CONTACT, seal(json.dumps(turn).encode())).encode(),
+            CallBody(
+                call.channel, call.uuid, CONTACT, seal(json.dumps({"turn": TURN}).encode())
+            ).encode(),
         )
         if self.call_reply == "offer":
-            offer = {
-                "sdp": {"ice-u": "dev", "ice-p": "pwd", "asc": 1, "vsc": "2"},
-                "request_id": "r1",
+            offer: dict[str, Any] = {
+                "sdp_info": base64.b64encode(DEVICE_INFO.encode()).decode(),
+                "turn": TURN,
+                "srflx": "203.0.113.5:2813",
+                "port": 5062,
             }
+            if self.request_id is not None:
+                offer["request_id"] = self.request_id
             reply(
                 Header(**{**_fields(header.response(200)), "encrypted": True}),
                 CallBody(
