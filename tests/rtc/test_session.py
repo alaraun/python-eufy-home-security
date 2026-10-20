@@ -183,7 +183,7 @@ async def test_open_live_starts_the_media_with_both_sdp_infos_and_relays_candida
         assert media.ours == live.info
         assert media.theirs == live.remote == DEVICE_INFO
         assert media.turn == TurnServer("198.51.100.9", 3478, "u", "p")
-        # No SDP answer: the app's only INFO is its candidate, without a request id.
+        # No SDP answer: the client's only INFO is its candidate, without a request id.
         assert await _infos(server, 1) == [
             {"candidate": "candidate:1 1 udp 2130706431 192.0.2.7 50000 typ host"}
         ]

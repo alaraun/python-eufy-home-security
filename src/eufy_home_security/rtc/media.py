@@ -91,7 +91,7 @@ CANDIDATE_PREFIX: Final = "candidate:"
 
 def candidate_body(line: str) -> str:
     """An ICE candidate line without its ``a=`` and ``candidate:`` prefixes (the
-    device sends ``a=candidate:…``, the app ``candidate:…``)."""
+    device sends ``a=candidate:…``, the client ``candidate:…``)."""
     text = line.strip()
     text = text.removeprefix("a=")
     return text.removeprefix(CANDIDATE_PREFIX)
@@ -103,7 +103,7 @@ def candidate_body(line: str) -> str:
 @runtime_checkable
 class IceTransport(Protocol):
     """One ICE connection (one component: BUNDLE and rtcp-mux) with local
-    credentials the caller dictates; the app side is ICE-controlled."""
+    credentials the caller dictates; the client side is ICE-controlled."""
 
     async def gather(
         self, *, local_ufrag: str, local_pwd: str, turn: TurnServer | None

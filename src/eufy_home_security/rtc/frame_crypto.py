@@ -2,9 +2,7 @@
 
 The device encrypts only the HEVC parameter sets and the IDR slice inside the
 media frames; every other NAL unit (VPS, non-key slices) and every P-frame is in
-clear. This is read from the app's native depacketizer (``jingle.so``:
-``decryptIDRAesGcm``, ``DecryptSPSPPSAesGcm`` and their callers in the h264/h265
-depacketizer): each encrypted NAL unit is
+clear. Each encrypted NAL unit is
 
     ``[2-byte HEVC NAL header] [AES-128-GCM ciphertext] [16-byte tag]``
 
@@ -12,11 +10,10 @@ decrypted with the call's content key and IV used **as-is** (the key is the 16
 ASCII bytes of ``content_key``, the nonce the 12 ASCII bytes of ``content_iv``),
 **no additional authenticated data**, the tag the last 16 bytes of the unit. The
 decrypted payload replaces the ciphertext; the 2-byte NAL header stays. The IV is
-constant for the call, so it is reused across frames — the device's design.
+constant for the call, so it is reused across frames.
 
-This covers H.265 (the codec eufy stations stream). The same scheme in the app's
-H.264 path skips a 1-byte NAL header; it is not implemented here because it is not
-exercised by the verified hardware.
+Only H.265 (the codec eufy stations stream) is implemented; H.264 uses the same
+scheme after a 1-byte NAL header. Declared (eufy app); not verified on hardware.
 """
 
 from __future__ import annotations
@@ -57,13 +54,9 @@ class EufyFrameDecryptor:
 
     @classmethod
     def from_answer(cls, answer: SdpInfo) -> EufyFrameDecryptor:
-        """Key the decryptor from the device's CALL-200 answer ``sdp_info``.
-
-        The app decrypts incoming device media with the content key/IV of the
-        **device's** answer (its remote SDP), not the app's own — confirmed from
-        the native path ``WebrtcApp_Event_NewSetRemoteSDP_Info`` →
-        ``handle_media_channel_connect_event`` → ``setMediaChannelKey``.
-        """
+        """Key the decryptor from the device's CALL-200 answer ``sdp_info``: incoming
+        media is encrypted with the content key/IV of the **device's** answer, not
+        the client's own."""
         return cls(answer.content_key, answer.content_iv)
 
     def video(self, frame: bytes, *, keyframe: bool) -> bytes:

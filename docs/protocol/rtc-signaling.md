@@ -159,8 +159,8 @@ against the credentials of the device's `sdp_info`; candidates are host, server
 reflexive and the CALL's TURN relay. Against a HomeBase 3 this connects on the LAN
 host pair within about 2 s **[verified]**. Once connected the device sends RTP
 heartbeats: 20 bytes, marker and payload type 44, sequence, timestamp and SSRC 0,
-eight bytes of `0x02`, not SRTP-protected, about three a second; the app counts them
-as stream heartbeats, not media **[verified]**. Media then is RTP H.265 (payload type
+eight bytes of `0x02`, not SRTP-protected, about three a second: stream heartbeats,
+not media **[verified]**. Media then is RTP H.265 (payload type
 97) or H.264 (99), FlexFEC (125), audio on 111 (AAC), with the parameter sets, IDR
 slices and audio additionally encrypted inside the frames (`rtc/frame_crypto.py`,
 keyed with the content key and IV of the device's `sdp_info`). Commands travel as
