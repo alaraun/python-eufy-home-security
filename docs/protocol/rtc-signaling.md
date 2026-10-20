@@ -5,7 +5,7 @@ PPPP: the T9000, the NVRs (T8N00, T7000) and the T8040. Their stations and every
 device paired to them stay skipped (`webrtc_only`) until the library can run that
 path. `eufy_home_security.rtc` holds the parts built so far: the signaling wire
 format, the signaling client and the session sequence including its cryptography,
-with the media plane behind an interface that has no implementation yet. Nothing in
+and the media plane up to decrypted H.265 frames (on the `rtc` extra). Nothing in
 `Station` uses it.
 
 Tags as in [README.md](README.md#verification-markers): **[verified]** for what ran
@@ -114,13 +114,20 @@ key exchange is **[verified]** against eufy's server; the rest is **[app]**.
 4. **CALL** per channel kind, body type 7 with the call's channel, encrypted JSON
    `{"account": md5(channel + user id + time), "ftv": 20, "call_type",
    "eufy_p2p_type", "to": "device", "eufy_from_contact", "eufy_video_format",
-   "eufy_network_type": 1, "eufy_app_id"}`. A kind-3 call is answered **100** with a
-   TURN relay `{"addr", "port": 3478, "user", "password"}` **[verified]**; a device
-   that serves the call answers **200** with its offer and `request_id`, which the
-   client acknowledges with **ACK** (the call body without attachment) **[app]**.
-   480 and 486 refuse the call.
-5. **INFO** carries the client's answer `{"request_id", "sdp"}` and candidates
-   `{"request_id", "candidate"}`; the device's INFO is answered 200 **[app]**.
+   "eufy_network_type": 1, "eufy_app_id"}`. A call is answered **100** with a TURN
+   relay `{"turn_addr", "turn_port": 3478, "turn_user", "turn_password",
+   "alt_turn_addr", "alt_turn_port"}` **[verified]**; the app uses only the primary
+   relay **[app]**. A device that serves a kind-6 call answers **200** with its own
+   `sdp_info`, the relay again, `srflx` and `port` **[verified]**; the client
+   acknowledges with **ACK** (the call body without attachment) **[app]**. 480 and
+   486 refuse the call.
+5. **INFO** carries ICE candidates both ways: the device trickles
+   `{"candidate": "a=candidate:…"}` **[verified]**, the client sends
+   `{"candidate": "candidate:…"}`, UDP only, with `request_id` only when the device's
+   200 carried one; the device's INFO is answered 200 **[app]**. On a kind-6 call the
+   client sends **no SDP answer**: its credentials travelled in the CALL's
+   `sdp_info`, and the app drops its own SDP for such devices (all but T8223/T8224
+   below firmware 0xcf8/0xd5c) **[app]**.
 6. **HANGUP** ends a call.
 
 | kind | `call_type` | `eufy_p2p_type` | used for |
@@ -140,22 +147,36 @@ u32; base64 in the encrypted attachment **[app]**.
 
 ## Media plane
 
-The device's offer for a private call is compact (`ice-u`, `ice-p`, `asc`, `vsc`,
-`sg`, `sgc`); the app expands it into a full SDP from a fixed template
-(`rtc/sdp.py` `expand_offer`), filling in the device's ICE credentials and SSRCs.
-The template is **SDES, no DTLS**: `a=setup:actpass` and one constant
+The app builds the remote SDP from a fixed template (`rtc/sdp.py` `expand_offer`),
+filling in the device's ICE credentials and SSRCs. The template is **SDES, no
+DTLS**: `a=setup:actpass` and one constant
 `a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:<constant>` line both directions (no
-`a=fingerprint`). Media runs on one ICE connection with the CALL's TURN relay: RTP
-H.265 (payload type 97) or H.264 (99), FlexFEC (125), audio on 111 (AAC), with the
-parameter sets, IDR slices and audio additionally encrypted inside the frames.
-Commands travel as RTCP APP packets on that connection (a handler's `rtcSendRoute`
-1) or over a separate data channel (0) **[app]**. `rtc/media.py` parses RTP, builds
-RTCP APP packets and depacketizes H.264 (RFC 6184) and H.265 (RFC 7798); ICE, SRTP,
-the in-frame decryption and the data channel are interfaces.
+`a=fingerprint`), audio and video bundled with RTCP muxed **[app]**.
+
+Media runs on one ICE connection, one component, UDP. The client takes the
+controlled role with the ICE username and password of its own `sdp_info` and checks
+against the credentials of the device's `sdp_info`; candidates are host, server
+reflexive and the CALL's TURN relay. Against a HomeBase 3 this connects on the LAN
+host pair within about 2 s **[verified]**. Once connected the device sends RTP
+heartbeats: 20 bytes, marker and payload type 44, sequence, timestamp and SSRC 0,
+eight bytes of `0x02`, not SRTP-protected, about three a second; the app counts them
+as stream heartbeats, not media **[verified]**. Media then is RTP H.265 (payload type
+97) or H.264 (99), FlexFEC (125), audio on 111 (AAC), with the parameter sets, IDR
+slices and audio additionally encrypted inside the frames (`rtc/frame_crypto.py`,
+keyed with the content key and IV of the device's `sdp_info`). Commands travel as
+RTCP APP packets on that connection (a handler's `rtcSendRoute` 1) or over a
+separate data channel (0); for a `T8030` station the live open and close (command
+1350, sub-ids 1003/1004) always go RTCP **[app]**.
+
+`rtc/media_plane.py` (the `rtc` extra: aioice, pylibsrtp, kcp) implements ICE
+(`AioiceTransport`), SRTP (`SdesSrtp`), the KCP data channel and `RtcMediaPlane`,
+which yields decrypted H.265 access units; `RtcSession.open_live` runs the CALL, the
+candidate exchange and the media plane. Audio, H.264 and FlexFEC are not delivered,
+and commands over RTCP APP are not implemented, so a live view does not start yet.
 
 ## Open
 
-- the media plane implementation (ICE, SRTP, in-frame decryption, the data channel
-  with KCP);
+- the RTCP APP command channel (the live open, 1350/1003) and the app's RTCP ping;
+- the audio in-frame decryption;
 - whether a device answers a kind-3 call with an offer: a HomeBase 3 the app reaches
   over PPPP answers 100, then hangs up after about 60 s.

@@ -1,4 +1,5 @@
-"""``rtc/media_plane.py``: the SRTP context and the KCP data channel.
+"""``rtc/media_plane.py``: ICE, the SRTP context, the KCP data channel and the
+assembled media plane.
 
 Needs the ``rtc`` extra; skipped where it is not installed.
 """
@@ -8,18 +9,40 @@ from __future__ import annotations
 import asyncio
 import base64
 import struct
+from collections.abc import AsyncIterator
 
 import pytest
 
+pytest.importorskip("aioice")
 pytest.importorskip("pylibsrtp")
 pytest.importorskip("kcp")
 
+import aioice.ice
+from aioice import Candidate, Connection
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+from eufy_home_security.exceptions import (
+    CommunicationError,
+    DeviceTimeoutError,
+    ProtocolError,
+    UnsupportedError,
+)
+from eufy_home_security.rtc import media_plane
+from eufy_home_security.rtc.media import (
+    START_CODE,
+    AccessUnit,
+    IceTransport,
+    PayloadType,
+    TurnServer,
+)
 from eufy_home_security.rtc.media_plane import (
     SDES_KEY_LEN,
+    AioiceTransport,
     KcpDataChannel,
+    RtcMediaPlane,
     SdesSrtp,
 )
-from eufy_home_security.rtc.sdp import SDES_INLINE_KEY
+from eufy_home_security.rtc.sdp import SDES_INLINE_KEY, SdpInfo
 
 
 def _rtp(payload: bytes = b"frame") -> bytes:
@@ -79,3 +102,276 @@ async def test_kcp_data_channel_round_trips_between_two_ends() -> None:
     finally:
         await left.close()
         await right.close()
+
+
+# ── ICE over aioice ──────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _loopback_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """aioice gathers on the loopback only: tests reach no other address."""
+    monkeypatch.setattr(aioice.ice, "get_host_addresses", lambda **_: ["127.0.0.1"])
+
+
+async def test_aioice_transport_connects_controlled_with_dictated_credentials() -> None:
+    ours = AioiceTransport()
+    device = Connection(ice_controlling=True, components=1, use_ipv6=False)
+    try:
+        await device.gather_candidates()
+        # A device candidate that arrives before gathering is kept; TCP ones are skipped.
+        for c in device.local_candidates:
+            ours.add_remote_candidate(f"a=candidate:{c.to_sdp()}")
+        ours.add_remote_candidate("candidate:9 1 TCP 1 192.0.2.9 9 typ host tcptype active")
+        lines = await ours.gather(local_ufrag="abcde", local_pwd="p" * 23, turn=None)
+        assert lines
+        assert all(line.startswith("candidate:") for line in lines)
+        device.remote_username, device.remote_password = "abcde", "p" * 23
+        for line in lines:
+            await device.add_remote_candidate(Candidate.from_sdp(line[len("candidate:") :]))
+        await device.add_remote_candidate(None)
+        async with asyncio.timeout(10):
+            await asyncio.gather(
+                ours.connect(remote_ufrag=device.local_username, remote_pwd=device.local_password),
+                device.connect(),
+            )
+        await device.send(b"rtp")
+        assert await asyncio.wait_for(ours.recv(), 5) == b"rtp"
+        await ours.send(b"rtcp")
+        assert await asyncio.wait_for(device.recv(), 5) == b"rtcp"
+    finally:
+        await ours.close()
+        await device.close()
+
+
+async def test_aioice_transport_refuses_before_gathering_and_bad_candidates() -> None:
+    ice = AioiceTransport()
+    assert isinstance(ice, IceTransport)
+    with pytest.raises(ProtocolError):
+        ice.add_remote_candidate("a=candidate:1 1 UDP")
+    with pytest.raises(CommunicationError):
+        await ice.recv()
+    with pytest.raises(CommunicationError):
+        await ice.connect(remote_ufrag="u", remote_pwd="p")
+    await ice.close()
+
+
+async def test_aioice_transport_reports_a_failed_connection() -> None:
+    ice = AioiceTransport()
+    try:
+        await ice.gather(local_ufrag="abcde", local_pwd="p" * 23, turn=None)
+        conn = ice._require()
+        await conn.add_remote_candidate(None)  # no remote candidate at all
+        with pytest.raises(CommunicationError, match="did not connect"):
+            await ice.connect(remote_ufrag="dev01", remote_pwd="q" * 23)
+    finally:
+        await ice.close()
+    with pytest.raises(CommunicationError):
+        await ice.recv()
+    with pytest.raises(CommunicationError):
+        await ice.send(b"x")
+
+
+async def test_aioice_transport_hands_the_turn_relay_to_aioice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, object] = {}
+
+    class Recorder(Connection):
+        def __init__(self, **kwargs: object) -> None:
+            seen.update(kwargs)
+            super().__init__(**{**kwargs, "turn_server": None})  # type: ignore[arg-type]
+
+    monkeypatch.setattr(media_plane, "Connection", Recorder)
+    ice = AioiceTransport()
+    try:
+        await ice.gather(
+            local_ufrag="abcde",
+            local_pwd="p" * 23,
+            turn=TurnServer("198.51.100.9", 3478, "u", "pw"),
+        )
+    finally:
+        await ice.close()
+    assert seen["ice_controlling"] is False
+    assert seen["components"] == 1
+    assert seen["turn_server"] == ("198.51.100.9", 3478)
+    assert (seen["turn_username"], seen["turn_password"]) == ("u", "pw")
+    assert (seen["local_username"], seen["local_password"]) == ("abcde", "p" * 23)
+
+
+# ── the assembled media plane ────────────────────────────────────────────────
+
+LOCAL = SdpInfo(
+    audio_ssrc=1,
+    video_ssrc=2,
+    ice_ufrag="appuf",
+    ice_pwd="a" * 23,
+    content_key="A" * 16,
+    content_iv="B" * 12,
+)
+REMOTE = SdpInfo(
+    audio_ssrc=3,
+    video_ssrc=4,
+    ice_ufrag="devuf",
+    ice_pwd="d" * 23,
+    content_key="0123456789abcdef",
+    content_iv="nonce-12char",
+)
+
+
+class FakeIce:
+    """An IceTransport whose inbound packets the test feeds."""
+
+    def __init__(self, *, hang: bool = False) -> None:
+        self.inbound: asyncio.Queue[bytes | None] = asyncio.Queue()
+        self.gathered: dict[str, object] = {}
+        self.connected: dict[str, str] = {}
+        self.remote: list[str] = []
+        self.closed = False
+        self._hang = hang
+
+    async def gather(
+        self, *, local_ufrag: str, local_pwd: str, turn: TurnServer | None
+    ) -> list[str]:
+        self.gathered = {"ufrag": local_ufrag, "pwd": local_pwd, "turn": turn}
+        return [
+            "candidate:1 1 udp 1 192.0.2.1 1000 typ host",
+            "candidate:2 1 udp 1 192.0.2.2 1000 typ relay",
+        ]
+
+    def add_remote_candidate(self, candidate: str) -> None:
+        self.remote.append(candidate)
+
+    async def connect(self, *, remote_ufrag: str, remote_pwd: str) -> None:
+        self.connected = {"ufrag": remote_ufrag, "pwd": remote_pwd}
+        if self._hang:
+            await asyncio.Event().wait()
+
+    async def recv(self) -> bytes:
+        data = await self.inbound.get()
+        if data is None:
+            raise CommunicationError("closed")
+        return data
+
+    async def send(self, data: bytes) -> None:
+        return None
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+def _srtp_rtp(
+    payload: bytes, *, seq: int, pt: int = PayloadType.H265, marker: bool = True
+) -> bytes:
+    header = struct.pack("!BBHII", 0x80, (0x80 if marker else 0) | pt, seq, 9000 + seq, 0xB8A23CFA)
+    return SdesSrtp.from_inline()._outbound.protect(header + payload)
+
+
+def _hevc(nal_type: int, body: bytes) -> bytes:
+    return bytes([(nal_type << 1) & 0x7E, 0x01]) + body
+
+
+def _encrypted(nal_type: int, body: bytes, key: str = REMOTE.content_key) -> bytes:
+    sealed = AESGCM(key.encode()).encrypt(REMOTE.content_iv.encode(), body, None)
+    return _hevc(nal_type, sealed)
+
+
+async def _started(
+    ice: FakeIce, connect_timeout: float = media_plane.ICE_TIMEOUT
+) -> tuple[RtcMediaPlane, list[str]]:
+    sent: list[str] = []
+    plane = RtcMediaPlane(ice, connect_timeout=connect_timeout)
+    await plane.start(LOCAL, REMOTE, TurnServer("198.51.100.9", 3478, "u", "p"), sent.append)
+    return plane, sent
+
+
+async def _take(frames: AsyncIterator[AccessUnit], count: int) -> list[AccessUnit]:
+    out: list[AccessUnit] = []
+    async with asyncio.timeout(2):
+        async for frame in frames:
+            out.append(frame)
+            if len(out) == count:
+                break
+    return out
+
+
+async def test_start_sends_local_candidates_and_connects_with_the_answer_credentials() -> None:
+    ice = FakeIce()
+    plane, sent = await _started(ice)
+    try:
+        assert ice.gathered == {
+            "ufrag": "appuf",
+            "pwd": "a" * 23,
+            "turn": TurnServer("198.51.100.9", 3478, "u", "p"),
+        }
+        assert sent == [
+            "candidate:1 1 udp 1 192.0.2.1 1000 typ host",
+            "candidate:2 1 udp 1 192.0.2.2 1000 typ relay",
+        ]
+        assert ice.connected == {"ufrag": "devuf", "pwd": "d" * 23}
+        plane.add_remote_candidate("a=candidate:9")
+        assert ice.remote == ["a=candidate:9"]
+    finally:
+        await plane.close()
+    assert ice.closed
+
+
+async def test_an_ice_timeout_is_a_device_timeout() -> None:
+    with pytest.raises(DeviceTimeoutError):
+        await _started(FakeIce(hang=True), connect_timeout=0.05)
+
+
+async def test_srtp_h265_is_depacketized_and_decrypted_others_are_dropped() -> None:
+    ice = FakeIce()
+    plane, _ = await _started(ice)
+    try:
+        idr = b"IDR-slice" * 8
+        vps = _hevc(32, b"VPS-clear")
+        ice.inbound.put_nowait(_srtp_rtp(b"audio", seq=1, pt=PayloadType.AUDIO))
+        ice.inbound.put_nowait(struct.pack("!BBHI", 0x80, 201, 1, 1))  # RTCP RR
+        ice.inbound.put_nowait(b"\x80\x61not-srtp-at-all")
+        # An AP with the clear VPS and the encrypted IDR: one keyframe.
+        ap = bytes([48 << 1, 1])
+        for nal in (vps, _encrypted(19, idr)):
+            ap += struct.pack("!H", len(nal)) + nal
+        ice.inbound.put_nowait(_srtp_rtp(ap, seq=2))
+        # A key frame under another key fails its tag and is dropped; the stream goes on.
+        ice.inbound.put_nowait(_srtp_rtp(_encrypted(19, idr, key="f" * 16), seq=3))
+        ice.inbound.put_nowait(_srtp_rtp(_hevc(1, b"P-slice"), seq=4))
+        frames = await _take(plane.frames(), 2)
+        assert frames[0].keyframe
+        assert frames[0].data == START_CODE + vps + START_CODE + _hevc(19, idr)
+        assert not frames[1].keyframe
+        assert frames[1].data == START_CODE + _hevc(1, b"P-slice")
+    finally:
+        await plane.close()
+
+
+async def test_frames_end_when_the_connection_closes() -> None:
+    ice = FakeIce()
+    plane, _ = await _started(ice)
+    ice.inbound.put_nowait(_srtp_rtp(_hevc(1, b"P"), seq=1))
+    ice.inbound.put_nowait(None)
+    async with asyncio.timeout(2):
+        frames = [f async for f in plane.frames()]
+    assert [f.data for f in frames] == [START_CODE + _hevc(1, b"P")]
+    await plane.close()
+
+
+async def test_a_full_frame_queue_drops_the_oldest(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(media_plane, "FRAME_QUEUE", 2)
+    ice = FakeIce()
+    plane, _ = await _started(ice)
+    for seq in range(1, 4):
+        ice.inbound.put_nowait(_srtp_rtp(_hevc(1, bytes([seq])), seq=seq))
+    ice.inbound.put_nowait(None)
+    async with asyncio.timeout(2):
+        frames = [f async for f in plane.frames()]
+    assert [f.data[-1] for f in frames] == [2, 3]
+    await plane.close()
+
+
+async def test_commands_over_rtcp_are_not_implemented() -> None:
+    plane = RtcMediaPlane(FakeIce())
+    with pytest.raises(UnsupportedError):
+        await plane.send_command(b"x")
+    await plane.close()

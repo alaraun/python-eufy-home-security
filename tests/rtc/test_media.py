@@ -1,8 +1,10 @@
-"""``rtc/media.py``: RTP parsing, RTCP APP, H.264 and H.265 depacketizing."""
+"""``rtc/media.py``: RTP parsing, RTCP APP, H.264 and H.265 depacketizing, the TURN
+relay and candidate lines."""
 
 from __future__ import annotations
 
 import struct
+from typing import Any
 
 import pytest
 
@@ -14,6 +16,8 @@ from eufy_home_security.rtc.media import (
     PayloadType,
     RtcpApp,
     RtpPacket,
+    TurnServer,
+    candidate_body,
     is_rtcp,
 )
 
@@ -190,3 +194,46 @@ def test_a_sequence_wrap_is_not_a_loss() -> None:
     out = dep.push(RtpPacket.parse(rtp(fragments[1], pt=PayloadType.H265, seq=0, marker=True)))
     assert len(out) == 1
     assert out[0].keyframe
+
+
+def test_turn_server_reads_the_primary_relay() -> None:
+    turn = {
+        "turn_addr": "198.51.100.9",
+        "turn_port": "3478",
+        "turn_user": "turnlogin",
+        "turn_password": "secret",
+        "alt_turn_addr": "198.51.100.10",
+        "alt_turn_port": 3479,
+    }
+    server = TurnServer.from_json(turn)
+    assert server == TurnServer("198.51.100.9", 3478, "turnlogin", "secret")
+    assert "secret" not in repr(server)
+    assert "turnlogin" not in repr(server)
+
+
+@pytest.mark.parametrize(
+    "turn",
+    [
+        None,
+        {},
+        {"turn_addr": "", "turn_port": 3478, "turn_user": "u", "turn_password": "p"},
+        {"turn_addr": "h", "turn_port": 3478, "turn_user": "", "turn_password": "p"},
+        {"turn_addr": "h", "turn_port": 3478, "turn_user": "u"},
+        {"turn_addr": "h", "turn_port": None, "turn_user": "u", "turn_password": "p"},
+        {"turn_addr": "h", "turn_port": "x", "turn_user": "u", "turn_password": "p"},
+    ],
+)
+def test_turn_server_is_none_when_a_field_is_missing(turn: dict[str, Any] | None) -> None:
+    assert TurnServer.from_json(turn) is None
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "a=candidate:1 1 UDP 2122317823 192.0.2.5 46963 typ host",
+        "candidate:1 1 UDP 2122317823 192.0.2.5 46963 typ host",
+        " 1 1 UDP 2122317823 192.0.2.5 46963 typ host\r\n",
+    ],
+)
+def test_candidate_body_strips_both_prefixes(line: str) -> None:
+    assert candidate_body(line) == "1 1 UDP 2122317823 192.0.2.5 46963 typ host"
