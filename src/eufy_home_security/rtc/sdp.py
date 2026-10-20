@@ -2,14 +2,20 @@
 
 A private media CALL (:attr:`~.codec.CallKind.PRIV_MEDIA`) carries an ``sdp_info``
 the app generates: both its SSRCs, the ICE username and password the app side will
-use, a content key and IV, and whether a data channel is wanted. The device
-answers with a compact offer (``ice-u``, ``ice-p``, ``asc``, ``vsc``, ``sg``,
-``sgc``) that the app expands into a full SRTP offer from a template; the app's
-answer keeps only its ICE credentials and SSRC lines.
+use, a content key and IV, and whether a data channel is wanted. Verified on a
+HomeBase 3 (T8030P): the device answers the CALL 200 with its own ``sdp_info`` of
+the same 86-byte shape (its ICE credentials, content key, content IV and SSRCs) —
+not an SDP text offer — alongside the TURN relay, its ``srflx`` and ``port``, and
+then trickles its ICE candidates as INFO frames. Use :meth:`SdpInfo.decode` on the
+answer.
+
+:class:`CompactOffer` / :func:`expand_offer` are the *event* device-SDP path
+(``WebrtcApp_SetEventDeviceSDP`` @0x234fd0, compact JSON ``ice-u``/``asc``/… expanded
+from a template); they are not the live CALL answer and are not verified.
 
 The byte layout of ``sdp_info`` and the SDP template are recovered from the app's
 native SDK (``WebrtcApp_SetCallSdp`` @0x233ef4, ``WebrtcApp_SetEventDeviceSDP``
-@0x234fd0); they are not verified on hardware (our HomeBase 3 serves P2P).
+@0x234fd0); the ``sdp_info`` layout is now hardware-verified (the SDP template is not).
 """
 
 from __future__ import annotations
@@ -157,6 +163,10 @@ class SdpInfo:
         device-config byte (app-copied, left 0), ICE ufrag[8], ICE pwd[24], content
         key[20], content IV[20], then the audio and video SSRCs as little-endian
         u32.
+
+        The layout is verified on hardware: a HomeBase 3 (T8030P) answers a kind-6
+        CALL with its own ``sdp_info`` of this exact shape (content key 16 bytes,
+        content IV 12 bytes).
         """
         buf = bytearray(SDP_INFO_LEN)
         buf[0x02] = 1 if self.data_channel else 0
@@ -170,6 +180,32 @@ class SdpInfo:
             "<II", buf, 0x4E, self.audio_ssrc & 0xFFFFFFFF, self.video_ssrc & 0xFFFFFFFF
         )
         return bytes(buf)
+
+    @classmethod
+    def decode(cls, raw: bytes) -> SdpInfo:
+        """Parse the device's answer ``sdp_info`` (the live CALL 200 carries this
+        same 86-byte structure, not an SDP text offer; verified on a HomeBase 3).
+
+        The device's ICE credentials, content key and IV, and both SSRCs come back;
+        the data-channel flag is read from byte 2. Raises
+        :class:`~.exceptions.SignalingError` on a buffer that is too short.
+        """
+        if len(raw) < SDP_INFO_LEN:
+            raise SignalingError(f"RTC sdp_info is {len(raw)} bytes, need {SDP_INFO_LEN}")
+
+        def field(start: int, size: int) -> str:
+            return raw[start : start + size].split(b"\0", 1)[0].decode("ascii", "replace")
+
+        audio_ssrc, video_ssrc = struct.unpack_from("<II", raw, 0x4E)
+        return cls(
+            audio_ssrc=audio_ssrc,
+            video_ssrc=video_ssrc,
+            ice_ufrag=field(0x06, 8),
+            ice_pwd=field(0x0E, 24),
+            content_key=field(0x26, 20),
+            content_iv=field(0x3A, 20),
+            data_channel=bool(raw[0x02]),
+        )
 
     def __repr__(self) -> str:
         return (

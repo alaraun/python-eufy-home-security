@@ -107,7 +107,9 @@ class CallEventKind(StrEnum):
     TRYING = "trying"
     """CALL 100 from the server; ``payload`` may carry ``turn``."""
     OFFER = "offer"
-    """CALL 200 from the device; ``payload`` carries ``sdp`` and ``request_id``."""
+    """CALL 200 from the device; ``payload`` carries the device's ``sdp_info``
+    (base64 of the 86-byte structure, decode with :meth:`~.sdp.SdpInfo.decode`),
+    plus ``turn``, ``srflx``, ``port`` and ``addr``."""
     INFO = "info"
     """INFO from the device: a candidate, an SDP or ``content``."""
     HANGUP = "hangup"

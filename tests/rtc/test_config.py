@@ -131,6 +131,43 @@ def test_sdp_info_rejects_an_oversized_field() -> None:
         bad.encode()
 
 
+def test_sdp_info_round_trips_through_encode_decode() -> None:
+    info = SdpInfo(
+        audio_ssrc=0x11223344,
+        video_ssrc=0x55667788,
+        ice_ufrag="AbCdE",
+        ice_pwd="p" * 23,
+        content_key="k" * 16,
+        content_iv="i" * 12,
+        data_channel=True,
+    )
+    assert SdpInfo.decode(info.encode()) == info
+
+
+def test_sdp_info_decode_reads_the_device_answer() -> None:
+    # A HomeBase 3 answers the CALL 200 with sdp_info of this same shape (verified):
+    # ICE ufrag 5, pwd 23, content key 16, content IV 12, then audio and video SSRC.
+    info = SdpInfo.decode(
+        SdpInfo(
+            audio_ssrc=0xF22E039E,
+            video_ssrc=0xB8A23CFA,
+            ice_ufrag="dev01",
+            ice_pwd="d" * 23,
+            content_key="K" * 16,
+            content_iv="V" * 12,
+        ).encode()
+    )
+    assert (len(info.content_key), len(info.content_iv)) == (CONTENT_KEY_LEN, CONTENT_IV_LEN)
+    assert (info.audio_ssrc, info.video_ssrc) == (0xF22E039E, 0xB8A23CFA)
+    assert info.ice_ufrag == "dev01"
+    assert info.data_channel is False
+
+
+def test_sdp_info_decode_rejects_a_short_buffer() -> None:
+    with pytest.raises(SignalingError, match="need 86"):
+        SdpInfo.decode(bytes(80))
+
+
 def test_expand_offer_fills_the_template_and_keeps_the_sdes_key() -> None:
     offer = CompactOffer.from_json(
         {"ice-u": "DEVUF", "ice-p": "DEVPWD", "asc": 111, "vsc": 222, "sgc": 333}
