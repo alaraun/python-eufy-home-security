@@ -100,8 +100,8 @@ def _channel(send: _Recorder, **kwargs: object) -> RtcpChannel:
 
 
 async def test_app_name_and_subtype_are_the_eufy_values() -> None:
-    assert APP_NAME == b"ANKE"
-    assert APP_SUBTYPE == 30
+    assert APP_NAME == b"AZWC"
+    assert APP_SUBTYPE == 0
 
 
 async def test_send_data_emits_type1_frames_with_incrementing_seq() -> None:

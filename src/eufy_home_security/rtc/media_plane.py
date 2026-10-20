@@ -374,10 +374,13 @@ class RtcMediaPlane:
             self._push(AccessUnit(data, unit.timestamp, unit.keyframe))
 
     def _handle_rtcp(self, data: bytes) -> None:
-        """Route a raw RTCP APP "ANKE" packet to the channel; drop other RTCP.
+        """Route the command channel's RTCP APP packet to the channel; drop other RTCP.
 
-        ANKE packets are sent raw (SDES, no DTLS), so they are parsed here before
-        any SRTCP unprotect; SR/RR and anything else is dropped as before.
+        The command channel is RTCP APP name "AZWC" subtype 0 (``setCmd2Rtcp`` ->
+        ``SendRtcpAppPacket(ssrc, 0, 0x415a5743, ...)``); the HomeBase 3 sends the
+        same. These are raw (SDES, no DTLS), so they are parsed here before any
+        SRTCP unprotect. SR/RR, the "ANKE"/subtype-30 keepalive, and any other RTCP
+        are dropped.
         """
         if self._channel is None:
             return
