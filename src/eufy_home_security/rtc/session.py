@@ -22,7 +22,7 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Final, Protocol, runtime_checkable
 
 from .._logging import redact_serial
 from ..exceptions import (
@@ -38,6 +38,7 @@ from .codec import CallKind
 from .command import CommandCipher
 from .config import QuickLogin, RtcConfig
 from .crypto import RtcCrypto
+from .data_channel import DataMsgType, KcpDataChannel, WrtcLinkMessage
 from .live import (
     LIVE_OPEN_FRAME,
     LIVE_OPEN_TIMEOUT,
@@ -46,7 +47,7 @@ from .live import (
     parse_reply,
     stream_id,
 )
-from .media import AccessUnit, CommandRoute, DataChannel, TurnServer
+from .media import AccessUnit, CommandRoute, DataChannel, IceTransport, TurnServer
 from .sdp import CONTENT_IV_LEN, CONTENT_KEY_LEN, SdpInfo
 from .signaling import OFFER_TIMEOUT, Call, CallEventKind, SignalingClient
 
@@ -163,6 +164,54 @@ class LiveCall:
     _waiters: dict[tuple[int, int], asyncio.Future[int]] = field(default_factory=dict, repr=False)
 
 
+#: How long the data-channel ICE may take to connect once candidates are out.
+DATA_ICE_TIMEOUT: Final = 20.0
+#: How often an unacknowledged local candidate is re-sent as a ``file_candidate`` INFO.
+DATA_CANDIDATE_RESEND: Final = 0.5
+
+
+def default_ice_factory() -> IceTransport:
+    """An :class:`~.media.IceTransport` over aioice with the ``rtc`` extra, else raise."""
+    from .media_plane import AioiceTransport  # noqa: PLC0415 - optional extra
+
+    return AioiceTransport()
+
+
+@dataclass(slots=True, eq=False)
+class DataChannelCall:
+    """A kind-5 ("priv1") WebRTC data channel: its CALL, ICE and KCP channel.
+
+    Commands are sent with :meth:`send_command` (an already-encrypted XZYH frame) and
+    the station's replies arrive as :class:`~.data_channel.WrtcLinkMessage` from
+    :meth:`recv`; :attr:`cipher` opens a reply (:meth:`~.command.CommandCipher.decrypt_reply`).
+    """
+
+    channel: int
+    call: Call
+    ice: IceTransport
+    info: SdpInfo
+    """The client's ``sdp_info``, sent in the CALL."""
+    remote: SdpInfo | None = None
+    """The device's answer ``sdp_info`` (its ICE credentials and media key)."""
+    kcp: KcpDataChannel | None = None
+    cipher: CommandCipher | None = None
+    _local: list[str] = field(default_factory=list, repr=False)
+    _acked: set[int] = field(default_factory=set, repr=False)
+    _relay: asyncio.Task[None] | None = field(default=None, repr=False)
+
+    async def send_command(self, frame: bytes) -> None:
+        """Send an encrypted XZYH command ``frame`` as a reliable data-channel message."""
+        if self.kcp is None:
+            raise CommunicationError("RTC data channel has not connected")
+        await self.kcp.send_message(frame, msg_type=DataMsgType.COMMAND)
+
+    async def recv(self) -> WrtcLinkMessage:
+        """The station's next data-channel message (command reply or notification)."""
+        if self.kcp is None:
+            raise CommunicationError("RTC data channel has not connected")
+        return await self.kcp.recv_message()
+
+
 class RtcSession:
     """One station's RTC session."""
 
@@ -184,6 +233,7 @@ class RtcSession:
         self._data_channel = data_channel
         self.signaling = signaling or SignalingClient(config, crypto, on_login=on_login)
         self._live: dict[int, LiveCall] = {}
+        self._data_calls: dict[int, DataChannelCall] = {}
         self._opens = 0
         self._log_name = redact_serial(config.station_sn)
 
@@ -329,10 +379,119 @@ class RtcSession:
         await live.media.close()
         self.signaling.hangup(live.call)
 
+    async def open_data_channel(
+        self,
+        channel: int,
+        *,
+        timeout: float = OFFER_TIMEOUT,
+        connect_timeout: float = DATA_ICE_TIMEOUT,
+        ice: IceTransport | None = None,
+        old_protocol: bool = False,
+    ) -> DataChannelCall:
+        """Open the kind-5 ("priv1") data channel to ``channel``.
+
+        Sends the CALL, relays ICE candidates both ways in the data channel's
+        ``file_candidate``/``file_candidate_num`` INFO form (acked with
+        ``file_candidate_ack``), connects ICE as the controlled agent and brings up KCP.
+        Returns a :class:`DataChannelCall` for commands and replies. Raises
+        :class:`~.exceptions.CallRefusedError` when the device refuses the CALL,
+        :class:`~.exceptions.DeviceTimeoutError` when it does not answer in ``timeout``
+        or ICE does not connect in ``connect_timeout``, and
+        :class:`~.exceptions.UnsupportedError` without the ``rtc`` extra; hung up on any
+        failure.
+        """
+        if channel in self._data_calls:
+            return self._data_calls[channel]
+        info = SdpInfo.generate(
+            content_key=self._crypto.new_media_secret(CONTENT_KEY_LEN),
+            content_iv=self._crypto.new_media_secret(CONTENT_IV_LEN),
+            data_channel=True,
+        )
+        call = await self.signaling.call(CallKind.PRIV1, channel=channel, sdp_info=info)
+        dc = DataChannelCall(channel, call, ice or default_ice_factory(), info)
+        try:
+            dc.remote = answer_sdp_info(await call.wait_offer(timeout))
+            dc._relay = asyncio.get_running_loop().create_task(self._relay_data_candidates(dc))
+            dc._local = await dc.ice.gather(
+                local_ufrag=info.ice_ufrag,
+                local_pwd=info.ice_pwd,
+                turn=TurnServer.from_json(call.turn),
+            )
+            for index in range(len(dc._local)):
+                self._send_data_candidate(dc, index)
+            async with asyncio.timeout(connect_timeout):
+                await dc.ice.connect(remote_ufrag=dc.remote.ice_ufrag, remote_pwd=dc.remote.ice_pwd)
+            dc.kcp = KcpDataChannel(dc.ice, old_protocol=old_protocol)
+            dc.cipher = CommandCipher(dc.remote.content_key)
+        except TimeoutError as exc:
+            await self._stop_data(dc)
+            raise DeviceTimeoutError(
+                "the device did not answer the RTC data CALL or ICE did not connect in time"
+            ) from exc
+        except BaseException:
+            await self._stop_data(dc)
+            raise
+        self._data_calls[channel] = dc
+        return dc
+
+    def _send_data_candidate(self, dc: DataChannelCall, index: int) -> None:
+        self.signaling.send_info(
+            dc.call, {"file_candidate": f"a={dc._local[index]}", "file_candidate_num": index}
+        )
+
+    async def _relay_data_candidates(self, dc: DataChannelCall) -> None:
+        """Feed the device's candidates to ICE (acking each) and re-send our own
+        ``file_candidate`` INFOs until the device acknowledges them."""
+        while not dc.call.ended:
+            try:
+                event = await asyncio.wait_for(dc.call.events.get(), DATA_CANDIDATE_RESEND)
+            except TimeoutError:
+                for index in range(len(dc._local)):
+                    if index not in dc._acked:
+                        self._send_data_candidate(dc, index)
+                continue
+            if event.kind is CallEventKind.HANGUP:
+                _LOGGER.debug("%s: RTC data call hung up", self._log_name)
+                return
+            if event.kind is not CallEventKind.INFO:
+                continue
+            ack = event.payload.get("file_candidate_ack")
+            if isinstance(ack, int):
+                dc._acked.add(ack)
+                continue
+            candidate = event.payload.get("file_candidate")
+            number = event.payload.get("file_candidate_num")
+            if isinstance(candidate, str) and candidate:
+                if isinstance(number, int):
+                    self.signaling.send_info(dc.call, {"file_candidate_ack": number})
+                try:
+                    dc.ice.add_remote_candidate(candidate)
+                except ProtocolError as exc:
+                    _LOGGER.debug("%s: RTC data candidate ignored: %s", self._log_name, exc)
+
+    async def close_data_channel(self, channel: int) -> None:
+        """Hang up the data channel to ``channel``."""
+        dc = self._data_calls.pop(channel, None)
+        if dc is not None:
+            await self._stop_data(dc)
+
+    async def _stop_data(self, dc: DataChannelCall) -> None:
+        if dc._relay is not None:
+            dc._relay.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await dc._relay
+        if dc.kcp is not None:
+            await dc.kcp.close()  # closes the ICE transport too
+        else:
+            await dc.ice.close()
+        self.signaling.hangup(dc.call)
+
     async def close(self) -> None:
         """Hang up every call and close the signaling client."""
         for channel in list(self._live):
             await self.close_live(channel)
+        for channel in list(self._data_calls):
+            await self.close_data_channel(channel)
         if self._data_channel is not None:
             await self._data_channel.close()
         await self.signaling.close()

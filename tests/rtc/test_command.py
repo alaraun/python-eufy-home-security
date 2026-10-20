@@ -15,6 +15,7 @@ from eufy_home_security.p2p.crypto import GCM_AAD
 from eufy_home_security.p2p.xzyh import HEADER_LEN, encode_frame
 from eufy_home_security.rtc.command import (
     CommandCipher,
+    decrypt_command_reply,
     decrypt_notification,
     encrypt_command,
 )
@@ -100,3 +101,27 @@ def test_command_cipher_rotate_keeps_the_previous_key() -> None:
 def test_a_short_media_key_is_refused() -> None:
     with pytest.raises(SignalingError, match="shorter than 16"):
         CommandCipher("tooshort")
+
+
+def test_decrypt_command_reply_opens_the_command_wrapper() -> None:
+    body = FRAME[HEADER_LEN:]
+    wrapper = encrypt_command(KEY, FRAME, 9, iv=IV)[HEADER_LEN:]  # tag | iv | counter | ct
+    assert decrypt_command_reply(KEY, wrapper) == body
+    assert CommandCipher(KEY).decrypt_reply(wrapper) == body
+
+
+def test_decrypt_command_reply_falls_back_to_the_previous_key() -> None:
+    wrapper = encrypt_command(KEY, FRAME, 0, iv=IV)[HEADER_LEN:]
+    assert decrypt_command_reply(b"x" * 16, wrapper, previous_key=KEY) == FRAME[HEADER_LEN:]
+
+
+def test_decrypt_command_reply_rejects_a_short_payload() -> None:
+    with pytest.raises(SignalingError, match="too short"):
+        decrypt_command_reply(KEY, b"\x00" * 20)
+
+
+def test_decrypt_command_reply_rejects_a_bad_tag() -> None:
+    wrapper = bytearray(encrypt_command(KEY, FRAME, 0, iv=IV)[HEADER_LEN:])
+    wrapper[0] ^= 1
+    with pytest.raises(SignalingError, match="did not authenticate"):
+        decrypt_command_reply(KEY, bytes(wrapper))

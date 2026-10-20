@@ -86,6 +86,34 @@ def decrypt_notification(key: bytes, payload: bytes, *, previous_key: bytes | No
     raise SignalingError("RTC notification did not authenticate")
 
 
+def decrypt_command_reply(
+    key: bytes, payload: bytes, *, previous_key: bytes | None = None
+) -> bytes:
+    """A station command reply's payload, opened with the media key.
+
+    The reply's GCM body (after its XZYH frame header, as :func:`decrypt_notification`
+    takes it) is ``tag | iv | counter | ciphertext`` — the 4-byte per-command counter
+    precedes the AES-128-GCM ciphertext (which carries the tag), AAD
+    :data:`~.p2p.crypto.GCM_AAD`; this is the command wrapper, not the notification's
+    ``tag | iv | ciphertext``. Tries ``key`` then ``previous_key``. Declared from the
+    app and the device's observed reply shape; not yet hardware-confirmed, since the
+    station's reply is intermittent.
+    """
+    if len(payload) < _GCM_TAG_LEN + _GCM_IV_LEN + 4:
+        raise SignalingError("RTC command reply payload is too short")
+    tag = payload[:_GCM_TAG_LEN]
+    nonce = payload[_GCM_TAG_LEN : _GCM_TAG_LEN + _GCM_IV_LEN]
+    ciphertext = payload[_GCM_TAG_LEN + _GCM_IV_LEN + 4 :]
+    for candidate in (key, previous_key):
+        if candidate is None:
+            continue
+        try:
+            return AESGCM(candidate).decrypt(nonce, ciphertext + tag, GCM_AAD)
+        except InvalidTag:
+            continue
+    raise SignalingError("RTC command reply did not authenticate")
+
+
 class CommandCipher:
     """The per-call media key for commands and notifications; tracks the command
     counter and keeps the previous key usable across a :meth:`rotate`."""
@@ -104,6 +132,10 @@ class CommandCipher:
     def decrypt_notification(self, payload: bytes) -> bytes:
         """Open a station notification payload (current key, then the previous)."""
         return decrypt_notification(self._key, payload, previous_key=self._previous)
+
+    def decrypt_reply(self, payload: bytes) -> bytes:
+        """Open a station command reply (current key, then the previous)."""
+        return decrypt_command_reply(self._key, payload, previous_key=self._previous)
 
     def rotate(self, crypto_key: str | bytes) -> None:
         """Adopt a new media key, keeping the current one as the fallback."""
