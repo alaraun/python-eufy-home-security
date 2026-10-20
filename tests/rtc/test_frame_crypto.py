@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from eufy_home_security.exceptions import ProtocolError
 from eufy_home_security.rtc.frame_crypto import EufyFrameDecryptor
 from eufy_home_security.rtc.media import START_CODE, FrameDecryptor
+from eufy_home_security.rtc.sdp import SdpInfo
 
 KEY = "0123456789abcdef"  # 16 ASCII bytes
 IV = "nonce--12char"[:12]  # 12 ASCII bytes
@@ -83,6 +84,17 @@ def test_key_and_iv_lengths_are_checked() -> None:
 def test_audio_is_not_implemented() -> None:
     with pytest.raises(NotImplementedError):
         EufyFrameDecryptor(KEY, IV).audio(b"\x00")
+
+
+def test_from_answer_keys_the_decryptor_from_the_device_sdp_info() -> None:
+    answer = SdpInfo(
+        audio_ssrc=1, video_ssrc=2, ice_ufrag="u", ice_pwd="p", content_key=KEY, content_iv=IV
+    )
+    sps = b"param-set-data"
+    frame = _annex_b(_encrypted_nal(33, sps))
+    assert EufyFrameDecryptor.from_answer(answer).video(frame, keyframe=True) == _annex_b(
+        _clear_nal(33, sps)
+    )
 
 
 def test_it_satisfies_the_frame_decryptor_protocol() -> None:
