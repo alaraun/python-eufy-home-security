@@ -383,6 +383,21 @@ def _anke_app(frame: bytes) -> bytes:
     return RtcpApp(APP_SUBTYPE, 0xB8A23CFA, APP_NAME, frame).encode()
 
 
+async def test_an_rtcp_app_with_a_different_name_is_dropped() -> None:
+    # The command channel is name "AZWC" subtype 0; the native "ANKE"/subtype-30
+    # keepalive and any other RTCP APP name are not this channel and are dropped.
+    ice = FakeIce()
+    plane, _ = await _started(ice)
+    try:
+        other = RtcpApp(30, 0xB8A23CFA, b"ANKE", encode_anke(AnkeType.DATA, 0, b"x"))
+        ice.inbound.put_nowait(other.encode())
+        ice.inbound.put_nowait(_anke_app(encode_anke(AnkeType.DATA, 0, b"ok")))
+        assert plane._channel is not None
+        assert await asyncio.wait_for(plane._channel.recv_data(), 2) == b"ok"
+    finally:
+        await plane.close()
+
+
 async def test_send_command_before_start_is_refused() -> None:
     plane = RtcMediaPlane(FakeIce())
     with pytest.raises(CommunicationError):

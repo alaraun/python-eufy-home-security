@@ -1,11 +1,15 @@
-"""The ANKE reliable channel carried inside RTCP APP packets on the media plane.
+"""The reliable channel carried inside RTCP APP packets on the media plane.
 
 The eufy command/data channel runs a small reliable protocol inside RTCP APP
-packets (``name = b"ANKE"``, subtype 30). With SDES (DTLS inactive) these go out
-raw over ICE, not SRTCP, so inbound ANKE must be caught before any SRTCP
-unprotect. This module is the pure codec plus the reliable channel; wrapping an
-ANKE frame in an RTCP APP packet and moving it over the ICE connection is the
-caller's job (:mod:`.media_plane`).
+packets. The command channel's RTCP APP carries ``name = b"AZWC"`` and subtype 0:
+the app sends it through ``PeerConnection.SendRtcpAppPacket(l_audio_ssrc, 0,
+0x415a5743, data)`` (``RTCPlayerPreImp.setCmd2Rtcp``), and the HomeBase 3 emits the
+same name and subtype. (A separate native RTCP APP sender uses name "ANKE" and
+subtype 30 for a different purpose — the ICE keepalive — and is not this channel.)
+With SDES (DTLS inactive) these go out raw over ICE, not SRTCP, so inbound packets
+must be caught before any SRTCP unprotect. This module is the pure codec plus the
+reliable channel; wrapping a frame in an RTCP APP packet and moving it over the ICE
+connection is the caller's job (:mod:`.media_plane`).
 
 Wire frame (little-endian, 20-byte header + body), from the app's native SDK
 (jingle ``rtcp_packet_sdk``, ``.work/notes/s1/B2_TRANSPORT_MEDIA.md``)::
@@ -47,9 +51,10 @@ _LOGGER = logging.getLogger(__name__)
 ANKE_MAGIC: Final = 0x12345678
 #: Length of the ANKE header before the body.
 ANKE_HEADER_LEN: Final = 20
-#: RTCP APP name and subtype the device uses for this channel.
-APP_NAME: Final = b"ANKE"
-APP_SUBTYPE: Final = 30
+#: RTCP APP name and subtype of the command channel (``SendRtcpAppPacket(ssrc, 0,
+#: 0x415a5743, ...)``); the HomeBase 3 uses the same.
+APP_NAME: Final = b"AZWC"
+APP_SUBTYPE: Final = 0
 
 #: Retransmission backoff (seconds) of an unacked DATA packet; five attempts.
 RETRANSMIT_DELAYS: Final = (0.1, 0.2, 0.5, 0.5, 0.5)
