@@ -10,9 +10,10 @@ connection.
 
 Implemented here (pure): RTP header parsing, RTCP APP build/parse, the H.264
 (RFC 6184) and H.265 (RFC 7798) depacketizers. The command and notification
-AES-128-GCM is in :mod:`.command`. Behind interfaces with no implementation yet:
-ICE (:class:`IceTransport`), SRTP (:class:`SrtpContext`), the in-frame decryption
-(:class:`FrameDecryptor`), the KCP data channel (:class:`DataChannel`).
+AES-128-GCM is in :mod:`.command`; the in-frame AES-128-GCM
+(:class:`FrameDecryptor`, video) in :mod:`.frame_crypto`. Behind interfaces with no
+implementation yet: ICE (:class:`IceTransport`), SRTP (:class:`SrtpContext`), the
+KCP data channel (:class:`DataChannel`).
 """
 
 from __future__ import annotations
