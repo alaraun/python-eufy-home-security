@@ -398,11 +398,26 @@ async def test_an_rtcp_app_with_a_different_name_is_dropped() -> None:
         await plane.close()
 
 
-async def test_send_command_before_start_is_refused() -> None:
+async def test_commands_before_start_are_refused() -> None:
     plane = RtcMediaPlane(FakeIce())
     with pytest.raises(CommunicationError):
         await plane.send_command(b"x")
+    with pytest.raises(CommunicationError):
+        await plane.recv_command()
     await plane.close()
+
+
+async def test_wait_media_returns_on_the_first_frame() -> None:
+    ice = FakeIce()
+    plane, _ = await _started(ice)
+    try:
+        waiting = asyncio.ensure_future(plane.wait_media())
+        await asyncio.sleep(0.01)
+        assert not waiting.done()
+        ice.inbound.put_nowait(_srtp_rtp(_hevc(1, b"P"), seq=1))
+        await asyncio.wait_for(waiting, 2)
+    finally:
+        await plane.close()
 
 
 async def test_send_command_sends_an_anke_data_packet_over_rtcp() -> None:
@@ -426,8 +441,7 @@ async def test_an_inbound_anke_data_packet_is_acked_and_delivered() -> None:
     plane, _ = await _started(ice)
     try:
         ice.inbound.put_nowait(_anke_app(encode_anke(AnkeType.DATA, 42, b"reply")))
-        assert plane._channel is not None
-        assert await asyncio.wait_for(plane._channel.recv_data(), 2) == b"reply"
+        assert await asyncio.wait_for(plane.recv_command(), 2) == b"reply"
         await asyncio.sleep(0)  # let the ACK task run
         acks = [
             decode_anke(RtcpApp.parse(p).data)

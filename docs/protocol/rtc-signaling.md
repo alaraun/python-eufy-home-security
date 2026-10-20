@@ -171,12 +171,56 @@ separate data channel (0); for a `T8030` station the live open and close (comman
 `rtc/media_plane.py` (the `rtc` extra: aioice, pylibsrtp, kcp) implements ICE
 (`AioiceTransport`), SRTP (`SdesSrtp`), the KCP data channel and `RtcMediaPlane`,
 which yields decrypted H.265 access units; `RtcSession.open_live` runs the CALL, the
-candidate exchange and the media plane. Audio, H.264 and FlexFEC are not delivered,
-and commands over RTCP APP are not implemented, so a live view does not start yet.
+candidate exchange, the media plane and the live open. Audio, H.264 and FlexFEC are
+not delivered.
+
+## Command channel
+
+Commands ride RTCP APP packets with name `AZWC` and subtype 0, sent raw over ICE
+(not SRTCP, as there is no DTLS); the SSRC is the client's audio SSRC. Inside each
+packet is a frame of a small reliable protocol (`rtc/rtcp_channel.py`), all fields
+little-endian:
+
+| offset | size | field |
+|---|---|---|
+| 0 | 4 | magic `0x12345678` |
+| 4 | 4 | sequence number |
+| 8 | 1 | type: 1 DATA, 2 ACK, 4 heartbeat, 8 MTU request, 9 MTU response |
+| 12 | 4 | body length |
+| 16 | 4 | checksum: byte sum of bytes 0-15 and the body (not checked for 8 and 9) |
+| 20 | n | body |
+
+A DATA frame is acknowledged with an ACK of its sequence number and delivered once;
+an unacknowledged DATA is resent after 100, 200 and 500 ms, five attempts in all;
+an MTU request is answered with an MTU response; a heartbeat goes out every second
+**[app]**. A HomeBase 3 acknowledges the client's DATA and sends its own replies as
+DATA **[verified]**.
+
+## Live open
+
+The client opens the stream with a `CMD_TRANSFER` (1350) XZYH frame, sealed with the
+command cipher (`rtc/command.py`, keyed with the content key of the device's
+`sdp_info`), as the body of one DATA frame (`rtc/live.py`):
+
+- subheader `[1, 0, stream id, 0, 0, 0]` before sealing; the stream id is 200 on a
+  session's first open and counts up modulo 50; the channel is not in the header;
+- JSON `{"cmd": 1003, "mChannel": <channel>, "account_id": <owner id>, "mValue3":
+  1003, "mValue5": 0, "msg_id": <n>, "payload": {...}}`, the payload without a `key`,
+  with `streamtype` 2, `extValue` 1000 and `chn_list` naming the channel; `msg_id`
+  counts 1..255 per station **[app]**.
+
+The station answers with a plaintext 1350 frame that echoes the stream id in
+subheader byte 2; its body starts with an int32 status, 0 or a P2P error code
+**[verified]** (-106 `NOT_FIND_DEV` for cameras the station does not serve over
+WebRTC). `open_live` returns on status 0 or the first video frame, raises
+`CommandRejectedError` for any other status and `DeviceTimeoutError` when neither
+comes within 10 s. A successful open has not been observed.
 
 ## Open
 
-- the RTCP APP command channel (the live open, 1350/1003) and the app's RTCP ping;
+- a successful live open and its media (needs a camera the station serves over
+  WebRTC);
+- the app's RTCP ping;
 - the audio in-frame decryption;
 - whether a device answers a kind-3 call with an offer: a HomeBase 3 the app reaches
   over PPPP answers 100, then hangs up after about 60 s.

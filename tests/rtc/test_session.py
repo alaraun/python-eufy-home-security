@@ -4,19 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
+import struct
 import sys
 from collections.abc import AsyncIterator, Callable
 from typing import Any, ClassVar
 
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from eufy_home_security.exceptions import (
     CallRefusedError,
+    CommandRejectedError,
+    CommunicationError,
     DeviceTimeoutError,
     ProtocolError,
     SignalingError,
     UnsupportedError,
 )
+from eufy_home_security.p2p.crypto import GCM_AAD
+from eufy_home_security.p2p.xzyh import FrameType, encode_frame
 from eufy_home_security.rtc.codec import CallBody, MessageType
 from eufy_home_security.rtc.config import QuickLogin
 from eufy_home_security.rtc.media import AccessUnit, CommandRoute, TurnServer
@@ -32,8 +39,26 @@ from eufy_home_security.rtc.signaling import SignalingClient
 from .fakes import CONTACT, DEVICE_INFO, SESSION_KEY, FakeCrypto, config, start_server, unseal
 
 
+def status_reply(stream: int, status: int) -> bytes:
+    """The station's plaintext 1350 reply: the stream id echoed, an int32 status."""
+    body = struct.pack("<i", status) + bytes(128)
+    return encode_frame(FrameType.CMD_TRANSFER, body, bytes([1, 0, stream, 0, 1, 0]))
+
+
+def open_command(packet: bytes) -> tuple[int, dict[str, Any]]:
+    """The stream id and JSON of a sealed live open (key: DEVICE_INFO's content key)."""
+    tag, iv, ciphertext = packet[16:32], packet[32:44], packet[48:]
+    plain = AESGCM(DEVICE_INFO.content_key.encode()).decrypt(iv, ciphertext + tag, GCM_AAD)
+    return packet[12], json.loads(plain)
+
+
 class FakeMedia:
+    """A media plane whose station answers each live open with ``status`` (None: no
+    reply) and whose video starts when ``video`` is set."""
+
     instances: ClassVar[list[FakeMedia]] = []
+    status: ClassVar[int | None] = 0
+    video: ClassVar[bool] = False
 
     def __init__(self) -> None:
         self.ours: SdpInfo | None = None
@@ -41,6 +66,7 @@ class FakeMedia:
         self.turn: TurnServer | None = None
         self.candidates: list[str] = []
         self.commands: list[bytes] = []
+        self.inbound: asyncio.Queue[bytes] = asyncio.Queue()
         self.closed = False
         self.fail: BaseException | None = None
         FakeMedia.instances.append(self)
@@ -67,9 +93,26 @@ class FakeMedia:
 
     async def send_command(self, data: bytes) -> None:
         self.commands.append(data)
+        if len(self.commands) == 1 and self.status is not None:
+            self.inbound.put_nowait(b"noise")
+            self.inbound.put_nowait(status_reply(data[12] + 1, -1))  # another stream's
+            self.inbound.put_nowait(status_reply(data[12], self.status))
+
+    async def recv_command(self) -> bytes:
+        return await self.inbound.get()
+
+    async def wait_media(self) -> None:
+        if not self.video:
+            await asyncio.Event().wait()
 
     async def close(self) -> None:
         self.closed = True
+
+
+@pytest.fixture(autouse=True)
+def _fake_media_defaults() -> None:
+    FakeMedia.instances.clear()
+    FakeMedia.status, FakeMedia.video = 0, False
 
 
 class FakeDataChannel:
@@ -221,11 +264,86 @@ async def test_commands_follow_their_route() -> None:
         await session.open_live(2, timeout=2)
         await session.send_command(2, CommandRoute.RTCP, b"open")
         await session.send_command(2, CommandRoute.DATA_CHANNEL, b"guard")
-        assert FakeMedia.instances[-1].commands == [b"open"]
+        assert FakeMedia.instances[-1].commands[1:] == [b"open"]  # after the live open
         assert channel.sent == [b"guard"]
     finally:
         await session.close()
     assert channel.closed
+
+
+async def test_open_live_sends_the_sealed_live_open_with_a_stream_id_per_open() -> None:
+    _, session = await _session(media_factory=FakeMedia)
+    try:
+        await session.start()
+        first = await session.open_live(2, timeout=2)
+        await session.open_live(0, timeout=2, account_id="owner")
+        (stream, body), (stream2, body2) = (
+            open_command(m.commands[0]) for m in FakeMedia.instances
+        )
+        assert (stream, stream2) == (200, 201)
+        assert (body["cmd"], body["mChannel"], body["msg_id"]) == (1003, 2, 1)
+        assert (body2["mChannel"], body2["msg_id"], body2["account_id"]) == (0, 2, "owner")
+        assert body["account_id"] == config().user_id
+        assert first.cipher is not None
+    finally:
+        await session.close()
+
+
+async def test_an_error_status_rejects_the_open_and_hangs_up() -> None:
+    FakeMedia.status = -106
+    server, session = await _session(media_factory=FakeMedia)
+    try:
+        await session.start()
+        with pytest.raises(CommandRejectedError, match="NOT_FIND_DEV") as err:
+            await session.open_live(2, timeout=2)
+        assert (err.value.command, err.value.code) == (FrameType.CMD_TRANSFER, -106)
+        assert FakeMedia.instances[-1].closed
+        async with asyncio.timeout(2):
+            while MessageType.HANGUP not in server.kinds():
+                await asyncio.sleep(0.01)
+    finally:
+        await session.close()
+
+
+async def test_video_without_a_reply_completes_the_open() -> None:
+    FakeMedia.status, FakeMedia.video = None, True
+    _, session = await _session(media_factory=FakeMedia)
+    try:
+        await session.start()
+        live = await session.open_live(2, timeout=2, open_timeout=2)
+        assert not FakeMedia.instances[-1].closed
+        assert await session.open_live(2) is live
+    finally:
+        await session.close()
+
+
+async def test_neither_a_reply_nor_video_times_the_open_out() -> None:
+    FakeMedia.status = None
+    _, session = await _session(media_factory=FakeMedia)
+    try:
+        await session.start()
+        with pytest.raises(DeviceTimeoutError):
+            await session.open_live(2, timeout=2, open_timeout=0.05)
+        assert FakeMedia.instances[-1].closed
+    finally:
+        await session.close()
+
+
+async def test_a_closed_command_channel_ends_the_reply_reader() -> None:
+    class Ending(FakeMedia):
+        async def recv_command(self) -> bytes:
+            raise CommunicationError("closed")
+
+    FakeMedia.video = True
+    _, session = await _session(media_factory=Ending)
+    try:
+        await session.start()
+        live = await session.open_live(2, timeout=2, open_timeout=2)
+        assert live._replies is not None
+        async with asyncio.timeout(2):
+            await live._replies
+    finally:
+        await session.close()
 
 
 async def test_without_a_data_channel_a_data_command_is_unsupported() -> None:
@@ -256,6 +374,10 @@ async def test_the_unavailable_media_plane_closes_quietly() -> None:
         plane.frames()
     with pytest.raises(UnsupportedError):
         await plane.send_command(b"x")
+    with pytest.raises(UnsupportedError):
+        await plane.recv_command()
+    with pytest.raises(UnsupportedError):
+        await plane.wait_media()
 
 
 def test_the_default_media_plane_is_the_rtc_one_with_the_extra() -> None:

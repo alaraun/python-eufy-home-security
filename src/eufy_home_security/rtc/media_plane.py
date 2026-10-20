@@ -287,6 +287,7 @@ class RtcMediaPlane:
         self._local_ssrc = 0
         self._throttle = LogThrottle(60.0)
         self._ended = False
+        self._media = asyncio.Event()
 
     async def start(
         self,
@@ -330,6 +331,16 @@ class RtcMediaPlane:
         if self._channel is None:
             raise CommunicationError("RTC media plane has not started")
         await self._channel.send_data(data)
+
+    async def recv_command(self) -> bytes:
+        """The body of the device's next DATA packet on the command channel."""
+        if self._channel is None:
+            raise CommunicationError("RTC media plane has not started")
+        return await self._channel.recv_data()
+
+    async def wait_media(self) -> None:
+        """Return once the first video frame is decoded."""
+        await self._media.wait()
 
     async def close(self) -> None:
         if self._reader is not None:
@@ -397,6 +408,7 @@ class RtcMediaPlane:
         if self._frames.qsize() >= FRAME_QUEUE:
             self._frames.get_nowait()
         self._frames.put_nowait(frame)
+        self._media.set()
 
     def _end(self) -> None:
         if not self._ended:
