@@ -34,6 +34,16 @@ dependencies = [
   "protobuf>=5",
 ]
 
+# The WebRTC media plane (stations the app reaches only over RTC: T9000, the NVRs,
+# the HomeBase 4). Optional so consumers that never touch that path — most do not —
+# do not carry a C-extension SRTP build. Lower bounds only (see above).
+[project.optional-dependencies]
+rtc = [
+  "aioice>=0.10",
+  "pylibsrtp>=1",
+  "kcp>=0.1.6",
+]
+
 [project.scripts]
 eufy-security = "eufy_home_security.cli:main"
 
