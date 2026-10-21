@@ -82,6 +82,26 @@ class AioiceTransport:
         self._pending: list[Candidate] = []
         self._tasks: set[asyncio.Task[None]] = set()
 
+    def diagnostics(self) -> dict[str, object]:
+        """Safe descriptors of the ICE state for a diagnostics report: the role and the
+        counts of local/remote candidates by type (host/srflx/relay). No addresses."""
+        connection = self._connection
+        if connection is None:
+            return {"gathered": False}
+
+        def by_type(candidates: list[Candidate]) -> dict[str, int]:
+            counts: dict[str, int] = {}
+            for candidate in candidates:
+                counts[candidate.type] = counts.get(candidate.type, 0) + 1
+            return counts
+
+        return {
+            "gathered": True,
+            "controlling": connection.ice_controlling,
+            "local_candidate_types": by_type(connection.local_candidates),
+            "remote_candidate_types": by_type(connection.remote_candidates),
+        }
+
     async def gather(
         self, *, local_ufrag: str, local_pwd: str, turn: TurnServer | None
     ) -> list[str]:
