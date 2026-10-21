@@ -20,6 +20,7 @@ import asyncio
 import base64
 import contextlib
 import logging
+import time
 from collections.abc import AsyncIterator, Callable
 from typing import Final
 
@@ -43,6 +44,7 @@ from .media import (
     CANDIDATE_PREFIX,
     START_CODE,
     AccessUnit,
+    H264Depacketizer,
     H265Depacketizer,
     IceTransport,
     PayloadType,
@@ -53,6 +55,7 @@ from .media import (
     candidate_body,
     is_rtcp,
 )
+from .media_stats import MediaStats
 from .rtcp_channel import APP_NAME, APP_SUBTYPE, RtcpChannel
 from .sdp import SDES_INLINE_KEY, SdpInfo
 
@@ -80,13 +83,23 @@ class AioiceTransport:
         self._connection: Connection | None = None
         self._pending: list[Candidate] = []
         self._tasks: set[asyncio.Task[None]] = set()
+        self._turn = False
 
     def diagnostics(self) -> dict[str, object]:
-        """Safe descriptors of the ICE state for a diagnostics report: the role and the
-        counts of local/remote candidates by type (host/srflx/relay). No addresses."""
+        """Safe descriptors of the ICE state for a diagnostics report: the role, whether
+        a TURN relay was configured, the counts of local/remote candidates by type
+        (host/srflx/relay) and the types of the selected pair. No addresses."""
         connection = self._connection
         if connection is None:
             return {"gathered": False}
+        # aioice keeps the nominated pair per component only in a private attribute.
+        nominated = getattr(connection, "_nominated", None)
+        pair = next(iter(nominated.values()), None) if isinstance(nominated, dict) else None
+        selected = (
+            {"local": pair.local_candidate.type, "remote": pair.remote_candidate.type}
+            if pair is not None
+            else None
+        )
 
         def by_type(candidates: list[Candidate]) -> dict[str, int]:
             counts: dict[str, int] = {}
@@ -99,6 +112,8 @@ class AioiceTransport:
             "controlling": connection.ice_controlling,
             "local_candidate_types": by_type(connection.local_candidates),
             "remote_candidate_types": by_type(connection.remote_candidates),
+            "turn_configured": self._turn,
+            "selected_pair_types": selected,
         }
 
     async def gather(
@@ -114,6 +129,7 @@ class AioiceTransport:
             local_password=local_pwd,
         )
         self._connection = connection
+        self._turn = turn is not None
         pending, self._pending = self._pending, []
         for candidate in pending:
             await connection.add_remote_candidate(candidate)
@@ -210,7 +226,8 @@ class RtcMediaPlane:
     that is SRTP-unprotected; H.265 RTP (payload type 97) is depacketized and its
     in-frame encryption removed with the answer's content key and IV
     (:meth:`~.frame_crypto.EufyFrameDecryptor.from_answer`); :meth:`frames` yields
-    the Annex B access units. Audio, H.264, FlexFEC and RTCP are not delivered.
+    the Annex B access units. Audio, H.264, FlexFEC and RTCP are not delivered; every
+    RTP packet and every H.264/H.265 frame is counted in :meth:`stats`.
     """
 
     def __init__(
@@ -236,6 +253,10 @@ class RtcMediaPlane:
         )
         self._payload_types: dict[int, int] = {}
         self._nal_types: list[int] = []
+        self._media_stats = MediaStats()
+        self._h264 = H264Depacketizer()
+        self._packets = asyncio.Event()
+        self._timings: dict[str, int] = {}
 
     async def start(
         self,
@@ -248,15 +269,18 @@ class RtcMediaPlane:
         when ICE fails and :class:`~.exceptions.DeviceTimeoutError` after
         ``connect_timeout``."""
         decryptor = EufyFrameDecryptor.from_answer(remote)
+        begun = time.monotonic()
         for line in await self._ice.gather(
             local_ufrag=local.ice_ufrag, local_pwd=local.ice_pwd, turn=turn
         ):
             send_candidate(line)
+        self._timings["gathered_ms"] = int((time.monotonic() - begun) * 1000)
         try:
             async with asyncio.timeout(self._connect_timeout):
                 await self._ice.connect(remote_ufrag=remote.ice_ufrag, remote_pwd=remote.ice_pwd)
         except TimeoutError as exc:
             raise DeviceTimeoutError("RTC ICE did not connect in time") from exc
+        self._timings["connected_ms"] = int((time.monotonic() - begun) * 1000)
         self._local_ssrc = local.audio_ssrc
         self._channel = RtcpChannel(self._send_app)
         self._channel.start()
@@ -290,15 +314,25 @@ class RtcMediaPlane:
         """Return once the first video frame is decoded."""
         await self._media.wait()
 
+    async def wait_packets(self) -> None:
+        """Return once the first RTP packet (any payload type) is unprotected."""
+        await self._packets.wait()
+
     def stats(self) -> dict[str, object]:
         """Packet and frame counters (no payload): RTCP packets, RTP packets per payload
         type, SRTP failures, decrypted frames and keyframes, frames whose in-frame
-        decryption failed, and the H.265 type of the first NAL unit of the first
-        :data:`STATS_NAL_TYPES` frames."""
+        decryption failed, the H.265 type of the first NAL unit of the first
+        :data:`STATS_NAL_TYPES` frames, the stream descriptors of
+        :class:`~.media_stats.MediaStats` (``streams``), the ICE timings from
+        :meth:`start` and the ICE transport's own descriptors when it has any."""
+        diagnostics = getattr(self._ice, "diagnostics", None)
         return {
             **self._stats,
             "rtp_by_payload_type": dict(self._payload_types),
             "first_nal_types": list(self._nal_types),
+            "streams": self._media_stats.as_dict(),
+            "timings": dict(self._timings),
+            "ice": diagnostics() if callable(diagnostics) else None,
         }
 
     async def close(self) -> None:
@@ -334,18 +368,32 @@ class RtcMediaPlane:
             return
         pt = packet.payload_type
         self._payload_types[pt] = self._payload_types.get(pt, 0) + 1
-        if packet.payload_type != PayloadType.H265:
-            if self._throttle.should_log(packet.payload_type):
-                _LOGGER.debug("RTC payload type %d is not delivered", packet.payload_type)
+        self._media_stats.packet(packet)
+        self._packets.set()
+        if pt == PayloadType.H264:
+            # Counted only: the in-frame encryption of H.264 is not implemented.
+            for unit in self._h264.push(packet):
+                self._media_stats.frame(
+                    "h264", unit.data, unit.timestamp, keyframe=unit.keyframe, decrypted=False
+                )
+        if pt != PayloadType.H265:
+            if self._throttle.should_log(pt):
+                _LOGGER.debug("RTC payload type %d is not delivered", pt)
             return
         for unit in self._depacketizer.push(packet):
             try:
                 data = decryptor.video(unit.data, keyframe=unit.keyframe)
             except ProtocolError as exc:
                 self._stats["frame_failures"] += 1
+                self._media_stats.frame(
+                    "h265", unit.data, unit.timestamp, keyframe=unit.keyframe, decrypted=False
+                )
                 if self._throttle.should_log("frame"):
                     _LOGGER.warning("RTC video frame dropped: %s", exc)
                 continue
+            self._media_stats.frame(
+                "h265", data, unit.timestamp, keyframe=unit.keyframe, decrypted=True
+            )
             self._stats["frames"] += 1
             self._stats["keyframes"] += unit.keyframe
             if len(self._nal_types) < STATS_NAL_TYPES and len(data) > len(START_CODE):
