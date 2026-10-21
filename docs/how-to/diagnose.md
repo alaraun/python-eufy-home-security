@@ -1,6 +1,7 @@
 # Diagnostics report
 
-`eufy-security diagnose` writes one read-only report of the whole account: every device
+`eufy-security diagnose` writes one report of the whole account (read-only unless the
+opt-in below is given): every device
 the eufy cloud lists, the health of each station the library serves over local P2P,
 and a WebRTC probe of the stations the app reaches only over WebRTC (`T9000`, the NVR
 `T8N00`), which the library cannot serve yet. The report is safe to share: it is built
@@ -8,8 +9,13 @@ from descriptors and redacted views only.
 
 ## What it does
 
-Nothing is armed, disarmed, changed or triggered. It wakes sleeping stations and
-battery cameras to reach them.
+Nothing is armed, disarmed, changed or triggered unless `--rewrite-guard-mode` is given
+(see below). It wakes sleeping stations and battery cameras to reach them. Every wait
+has a time limit (a WebRTC station's signaling 45 s, its whole run 300 s plus the watch
+and listen windows), one failing step is recorded and the run goes on, and the report
+file is rewritten after every step and on any exit: `complete` is true only for a run
+that got to its end, `aborted` names what cut it short (`interrupted` for Ctrl+C, else
+an exception type).
 
 1. Log in to the account **on the machine running it** (a 2FA code or captcha is asked
    for when eufy sends one) and list the devices.
@@ -23,25 +29,60 @@ battery cameras to reach them.
    warnings, local-event support, paired devices, session counters, storage figures.
    A failed read is recorded by exception type under `read_errors`.
 4. **WebRTC-only stations:**
-   - the station's cloud record (firmware, WebRTC SDK version, which signaling fields
-     are present) and its paired devices (model, channel, firmware), and what the app
-     derives from them: the data channel's KCP framing (`kcp_type`) and whether
-     commands are AES-GCM-sealed;
-   - signaling, the data-channel CALL (kind 5), ICE, KCP and the heartbeat echo;
+   - the station's cloud record (firmware, WebRTC SDK version, product code, which
+     signaling fields are present, the record's key names, its cloud parameter ids and
+     the cloud's guard mode) and its paired devices (model, product code, channel,
+     firmware, battery or mains from the model's settings file, the cloud's online
+     flag), and what the app derives from them: the data channel's KCP framing
+     (`kcp_type`) and whether commands are AES-GCM-sealed;
+   - signaling, step by step (`open`, `discover`, `login`, with durations; a failure
+     names its step, e.g. `signaling.login: SignalingError` with the server's code),
+     the data-channel CALL (kind 5: the answer's key names, the flag bytes of its
+     `sdp_info`, the time to the answer, to the gathered and the first remote
+     candidate, to ICE connected and the first datagram), ICE (role, candidate-type
+     counts, the types of the selected pair: `relay` is TURN), KCP and the heartbeat
+     echo;
    - two read-only queries over the data channel: storage info (1350/1307) and the
      station's paired-device list (1350/9100), on the station channel 255 with the
      owner's id (skip with `--no-commands`);
    - with `--watch SECONDS`, every notification the station sends meanwhile, e.g. while
      the user switches the guard mode in the eufy app: the guard-mode notification
-     without the tool sending a mode change;
+     without the tool sending a mode change. The cloud push listener runs during the
+     WebRTC part of such a run (`--no-push` leaves it out), and every event of the
+     library's bus (cloud push, P2P stations) is recorded under `events`: its class,
+     source, models, small-integer fields (`msg_type`, `event_type`, `guard_mode`,
+     `mode` ...) and the key names of its raw payload; `watch_windows_ms` says when
+     each watch window ran;
    - a live call (kind 6) to one camera (the lowest paired channel, or
      `--camera-channel`): the live open over the data channel (the route the station's
-     handler declares), the RTCP route when no frame arrives, then packet and frame
-     counts for `--listen` seconds (skip with `--no-live`).
+     handler declares), the RTCP route when no RTP packet arrives, then `--listen`
+     seconds of stream descriptors (skip with `--no-live`): per RTP payload type the
+     packets, bytes, SSRC count, sequence gaps, timestamp steps and clock-rate estimate;
+     for video (H.265 payload type 97, H.264 99) the packetization (single NAL unit,
+     aggregation, fragmentation), NAL unit types, frames, keyframes and how many were
+     decrypted, frame rate, keyframe interval, the parameter sets seen and what the
+     SPS declares (profile, level, chroma format, width, height); for audio (payload
+     type 111) the first four bytes of the first four packets (a format header such as
+     ADTS); the time to the first packet and the first decrypted frame; the media
+     plane's ICE timings and selected pair.
 
    Every inbound data-channel message is described: its 16-byte XZYH header, whether it
    is sealed, which key and wrapper open it (command reply `tag|iv|counter|ct` or
-   notification `tag|iv|ct`), and its JSON key names.
+   notification `tag|iv|ct`), and its JSON key names; a payload that is not XZYH is read
+   as JSON, else only its first four bytes are kept. `message_counts` counts every
+   message by phase and type, past the 200 the listing keeps. Each command records the
+   key names of the request it sent.
+
+### Opt-in: re-send the current guard mode
+
+`--rewrite-guard-mode` is a **write**. For each WebRTC-only station whose cloud guard
+mode (parameter 1224) is Away, Home or Disarmed, it asks on the terminal (showing the
+mode it read) and, on `yes`, sends that same mode once as the station's 1350/1224
+command at channel 255, after the read-only queries, to record the station's reply. A
+schedule, custom or geofence mode is never re-sent; no terminal or any other answer is
+a no. The station may log the command or announce the mode as if it had been set. The
+station's entry records `guard_rewrite` (`confirmed: <mode>`, `declined`,
+`skipped: ...`) and the reply under `commands`.
 
 ## What the report contains — and never
 
@@ -50,8 +91,8 @@ battery cameras to reach them.
   session, error and media counters, timings, ICE candidate-type counts and role,
   protocol-header bytes, JSON key names (a name that looks like a serial becomes `?`),
   the values of a fixed list of integer fields (status codes, modes, channels, counts),
-  RTP packet counts per payload type, frame counts and the type of the first NAL unit
-  of the first frames.
+  stream descriptors (codec, profile, level, resolution, packet and frame counts), the
+  first four bytes of the first audio packets, and the run's options.
 - **Never collected:** the account password or tokens, the account or owner id, the
   e-mail, full serials, device names, the DID or license, IP addresses, encryption
   keys, disk serials and labels, string values of replies, or any audio/video payload
@@ -86,4 +127,5 @@ part; `--no-webrtc` needs no `rtc` extra), `--output PATH` (default
 `eufy-diagnostics-<ts>.json`). WebRTC part: `--webrtc-all` (also probe the other
 stations over WebRTC, e.g. a HomeBase 3 for comparison), `--channel N` (the
 data-channel call, default 0), `--camera-channel N`, `--listen SECONDS` (default 8),
-`--watch SECONDS`, `--no-commands`, `--no-live`. A summary is printed at the end.
+`--watch SECONDS`, `--no-push`, `--no-commands`, `--no-live`, `--rewrite-guard-mode`
+(the opt-in write above). A summary is printed at the end.

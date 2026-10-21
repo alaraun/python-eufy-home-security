@@ -345,6 +345,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     webrtc.add_argument("--no-commands", action="store_true", help="skip the read-only queries")
     webrtc.add_argument("--no-live", action="store_true", help="skip the live view")
+    webrtc.add_argument(
+        "--no-push", action="store_true", help="do not record cloud push during --watch"
+    )
+    webrtc.add_argument(
+        "--rewrite-guard-mode",
+        action="store_true",
+        help="opt-in WRITE: re-send each station's current guard mode unchanged, after "
+        "asking, to record the station's acknowledgement (see --explain)",
+    )
     diagnose.add_argument(
         "--output",
         type=Path,
