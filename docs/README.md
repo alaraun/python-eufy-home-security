@@ -9,6 +9,7 @@
 | [how-to/add-a-device.md](how-to/add-a-device.md) | Add a model or a capability, and verify a device on hardware |
 | [how-to/regenerate-models.md](how-to/regenerate-models.md) | Regenerate the per-model settings files from the vendor's thing models, check them, and when to do it |
 | [how-to/debug-logging.md](how-to/debug-logging.md) | Loggers, wire dumps, redaction, Home Assistant |
+| [how-to/diagnose.md](how-to/diagnose.md) | Read-only WebRTC data-channel diagnostics for a webrtc_only station (T9000/T8N00), as a shareable redacted report |
 | **Reference** | |
 | [reference/devices.md](reference/devices.md) | Support matrix and per-model settings (generated) |
 | [reference/cli.md](reference/cli.md) | The `eufy-security` command line |
