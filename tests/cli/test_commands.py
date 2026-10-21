@@ -797,3 +797,109 @@ async def test_diagnose_explain_prints_scope_and_exits(capsys: pytest.CaptureFix
     out = capsys.readouterr().out
     assert "read-only" in out
     assert "Never:" in out  # the privacy note names what is never collected
+
+
+class WebRtcCloud(StubCloud):
+    """An account with a T9000 (two cameras), a T9000 lacking its license, and a
+    HomeBase 3; the user is a shared member of the first."""
+
+    user_id = SYNTHETIC.account_id
+    region = "eu"
+
+    async def async_get_devices(
+        self, *, refresh: bool = False, rescan_regions: bool = False
+    ) -> list[CloudDevice]:
+        base = "T9000" + SYNTHETIC.station_sn[5:]
+        signaling = {
+            "device_sn": base,
+            "p2p_did": SYNTHETIC.did,
+            "p2p_license": "ABCDEF",
+            "signaling_servers": ["https://198.51.100.1"],
+        }
+        return [
+            CloudDevice(
+                device_sn=base,
+                device_type=91,
+                name="Pro",
+                p2p_did=SYNTHETIC.did,
+                owner_user_id="o" * 40,
+                raw=signaling,
+            ),
+            CloudDevice(
+                device_sn="T8160" + SYNTHETIC.camera_sn[5:],
+                device_type=19,
+                name="Cam 4",
+                station_sn=base,
+                channel=4,
+            ),
+            CloudDevice(
+                device_sn="T8410" + SYNTHETIC.camera_sn[5:],
+                device_type=104,
+                name="Cam 2",
+                station_sn=base,
+                channel=2,
+            ),
+            CloudDevice(
+                device_sn="T9000" + SYNTHETIC.station_sn[5:-1] + "9",
+                device_type=91,
+                name="Bare",
+                raw={"p2p_did": SYNTHETIC.did},
+            ),
+            CloudDevice(device_sn=SYNTHETIC.station_sn, device_type=18, name="HB3", p2p_did="x"),
+        ]
+
+
+async def test_diagnose_probes_the_webrtc_only_stations_with_the_owner_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    calls: list[dict[str, Any]] = []
+
+    async def collect(session: Any, **kwargs: Any) -> diagnostics.StationReport:
+        calls.append(kwargs)
+        return diagnostics.StationReport(
+            station=kwargs["station"],
+            children=list(kwargs["children"]),
+            channel=kwargs["channel"],
+            phase_reached="done",
+        )
+
+    monkeypatch.setattr(diagnostics, "collect_station", collect)
+    out = tmp_path / "report.json"
+    assert await run(["diagnose", "--watch", "5", "--output", str(out)], tmp_path) == 0
+    assert len(calls) == 1  # the T9000 lacking its license is not probed, the HB3 not picked
+    call = calls[0]
+    assert call["account_id"] == "o" * 40
+    assert call["camera"].channel == 2  # the lowest paired channel
+    assert (call["watch_s"], call["do_live"], call["do_commands"]) == (5.0, True, True)
+    report = json.loads(out.read_text())
+    assert [s["phase_reached"] for s in report["stations"]] == ["done", "config"]
+    assert report["auth"]["webrtc_only_count"] == 2
+    assert [c["channel"] for c in report["stations"][0]["children"]] == [2, 4]
+    text = out.read_text()
+    for private in (SYNTHETIC.did, "198.51.100.1", "o" * 40, SYNTHETIC.account_id, "ABCDEF"):
+        assert private not in text
+    assert "Review it before sharing" in capsys.readouterr().out
+
+
+async def test_diagnose_picks_a_station_by_name_and_a_camera_by_channel(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    calls: list[dict[str, Any]] = []
+
+    async def collect(session: Any, **kwargs: Any) -> diagnostics.StationReport:
+        calls.append(kwargs)
+        return diagnostics.StationReport(
+            station=kwargs["station"], children=[], channel=0, phase_reached="done"
+        )
+
+    monkeypatch.setattr(diagnostics, "collect_station", collect)
+    argv = ["--station", "Pro", "diagnose", "--camera-channel", "4", "--no-live"]
+    assert await run([*argv, "--output", str(tmp_path / "r.json")], tmp_path) == 0
+    assert [c["camera"].model for c in calls] == ["T8160"]
+    assert calls[0]["do_live"] is False

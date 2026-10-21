@@ -253,22 +253,10 @@ async def cmd_settings(ctx: Context) -> int:
 
 async def cmd_login(ctx: Context) -> int:
     async with await open_account(ctx) as eufy:
-        answer: dict[str, str] = {}
         # Running `login` is the user's decision to take the session back.
         if not eufy.cache.loaded:
             await eufy.cache.async_load()
-        force = eufy.session_replaced
-        for attempt in range(1, LOGIN_CHALLENGE_ROUNDS + 1):
-            try:
-                await eufy.async_login(**answer, force=force)
-                break
-            except LoginChallengeError as challenge:
-                if attempt == LOGIN_CHALLENGE_ROUNDS:
-                    # no attempt left to use an answer: do not ask for one
-                    raise UsageError(
-                        f"gave up after {LOGIN_CHALLENGE_ROUNDS} login challenges"
-                    ) from None
-                answer = await _answer_challenge(ctx, challenge)
+        await _login_answering_challenges(ctx, eufy, force=eufy.session_replaced)
         await eufy.async_discover()
         # Setup time is when the user can still fix the network: say what it needs.
         paths = await eufy.async_probe_lan()
@@ -277,6 +265,22 @@ async def cmd_login(ctx: Context) -> int:
         print()
         print(render.render_network(paths, show_serials=ctx.show_serials))
     return 0
+
+
+async def _login_answering_challenges(ctx: Context, eufy: EufySecurity, *, force: bool) -> None:
+    """Log in, prompting for each 2FA code or captcha the cloud asks for."""
+    answer: dict[str, str] = {}
+    for attempt in range(1, LOGIN_CHALLENGE_ROUNDS + 1):
+        try:
+            await eufy.async_login(**answer, force=force)
+            return
+        except LoginChallengeError as challenge:
+            if attempt == LOGIN_CHALLENGE_ROUNDS:
+                # no attempt left to use an answer: do not ask for one
+                raise UsageError(
+                    f"gave up after {LOGIN_CHALLENGE_ROUNDS} login challenges"
+                ) from None
+            answer = await _answer_challenge(ctx, challenge)
 
 
 async def _answer_challenge(ctx: Context, challenge: LoginChallengeError) -> dict[str, str]:
@@ -716,22 +720,31 @@ async def cmd_monitor(ctx: Context) -> int:
 
 
 _DIAGNOSE_EXPLAIN = """\
-eufy-security diagnose — read-only WebRTC data-channel diagnostics
+eufy-security diagnose — read-only WebRTC diagnostics (stations T9000 and T8N00)
 
-What it does (all read-only; nothing is written, armed, or triggered):
-  1. Log in to your account on THIS machine (credentials never leave it, never written).
+What it does (nothing is armed, disarmed, changed or triggered):
+  1. Log in to your account on THIS machine (asks for a 2FA code if eufy sends one;
+     credentials never leave the machine and are never written to the report).
   2. List your devices; pick the webrtc_only stations (or --station / --all-stations).
-  3. For each: place a kind-5 CALL, connect ICE, bring up the KCP channel, send a keep-alive.
-  4. Send read-only queries (storage/device info) unless --no-commands.
-  5. Briefly listen for live packets unless --no-av (metadata only; never any media payload).
-  (It wakes a sleeping station to reach it; that is unavoidable.)
+  3. Per station: connect to eufy's signaling server, place the data-channel call,
+     connect ICE, bring up the KCP channel, check its keep-alive.
+  4. Send two read-only queries: storage info and the list of paired devices
+     (skip with --no-commands).
+  5. With --watch N: keep the channel open N seconds and record the notifications the
+     station sends, e.g. while you switch the guard mode in the eufy app.
+  6. Open a live view of one camera for a few seconds and count packets and frames
+     (skip with --no-live; pick the camera with --camera-channel).
+  It wakes a sleeping station to reach it; a battery camera spends some charge on the
+  live view.
 
 What the report contains — and never:
-  Collected: field lengths, counts, timings, protocol-header types, candidate-type counts,
-  the label of the key that opens a reply, and a reply's top-level JSON key NAMES.
-  Never: your password/tokens, account id/email, full serials, IP addresses, encryption
-  keys, or any audio/video content. The report is written to a JSON file for you to review
-  before sharing — nothing is uploaded.
+  Collected: model codes, firmware/SDK versions, channels, which cloud fields are
+  present, timings, ICE candidate-type counts, protocol-header bytes, which key opens a
+  reply, reply/notification JSON key NAMES and a few status/mode integers, and packet
+  and frame counts.
+  Never: your password/tokens, account id/email, serial numbers, IP addresses,
+  encryption keys, or any audio/video content. The report is a JSON file for you to
+  review before sharing; nothing is uploaded.
 """
 
 
@@ -742,6 +755,14 @@ def _library_version() -> str:
         return version("eufy-home-security")
     except PackageNotFoundError:
         return "unknown"
+
+
+def _announce_watch(seconds: float) -> None:
+    print(
+        f"Recording notifications for {seconds:.0f} s: switch the guard mode in the eufy "
+        "app now (for example Home, then back to what it was).",
+        flush=True,
+    )
 
 
 async def cmd_diagnose(ctx: Context) -> int:
@@ -758,6 +779,7 @@ async def cmd_diagnose(ctx: Context) -> int:
         return 0
     try:
         import aioice  # noqa: F401, PLC0415 - the rtc extra
+        import pylibsrtp  # noqa: F401, PLC0415
     except ImportError as exc:
         raise UsageError(
             "diagnose needs the rtc extra: pip install 'eufy-home-security[rtc]'"
@@ -766,45 +788,59 @@ async def cmd_diagnose(ctx: Context) -> int:
     app_id = secrets.token_hex(8)
     reports: list[diag.StationReport] = []
     async with await open_account(ctx) as eufy:
-        await eufy.async_login()
+        await _login_answering_challenges(ctx, eufy, force=False)
         devices = await eufy.cloud.async_get_devices(refresh=True)
         user_id = eufy.cloud.user_id
         if not user_id:
             raise UsageError("logged in but the account has no user id")
-        webrtc_only_total = sum(
-            1 for d in devices if d.is_station and d.device_sn[:5] in WEBRTC_ONLY_STATIONS
-        )
-        targets = [d for d in devices if d.is_station]
+        # A WebRTC station may lack the P2P fields `is_station` asks for: pick by parent.
+        own_parent = [d for d in devices if d.station_sn in (None, d.device_sn)]
+        webrtc_only = [d for d in own_parent if d.device_sn[:5] in WEBRTC_ONLY_STATIONS]
         if ctx.args.station:
-            targets = [d for d in targets if d.device_sn == ctx.args.station]
-        elif not ctx.args.all_stations:
-            targets = [d for d in targets if d.device_sn[:5] in WEBRTC_ONLY_STATIONS]
+            targets = [d for d in own_parent if ctx.args.station in (d.device_sn, d.name)]
+        elif ctx.args.all_stations:
+            targets = [d for d in own_parent if d.is_station or d in webrtc_only]
+        else:
+            targets = webrtc_only
+        if not targets:
+            print("No matching station on this account (see --all-stations / --station).")
         for device in targets:
-            model = device.device_sn[:5]
-            is_webrtc_only = model in WEBRTC_ONLY_STATIONS
+            record = diag.describe_station(device)
+            children = diag.describe_children(device.device_sn, devices)
+            camera = diag.first_camera_channel(children)
+            if ctx.args.camera_channel is not None:
+                camera = next(
+                    (c for c in children if c.channel == ctx.args.camera_channel),
+                    diag.ChildRecord("?", ctx.args.camera_channel, None, has_signaling=False),
+                )
             config = RtcConfig.from_device(device.raw, user_id=user_id, app_id=app_id)
             if config is None:
                 reports.append(
                     diag.StationReport(
-                        model=model,
-                        is_webrtc_only=is_webrtc_only,
+                        station=record,
+                        children=children,
                         channel=ctx.args.channel,
-                        error="no_signaling_config",
+                        phase_reached="config",
+                        error="config: the cloud record lacks a DID, license or IPv4 server",
                     )
                 )
                 continue
+            print(f"Probing {record.model} ...", flush=True)
             session = RtcSession(config, RtcSignalingCrypto())
             try:
-                await session.start()
                 reports.append(
                     await diag.collect_station(
                         session,
-                        model=model,
+                        station=record,
+                        children=children,
+                        account_id=device.owner_user_id or user_id,
                         channel=ctx.args.channel,
-                        account_id=user_id,
+                        camera=camera,
                         do_commands=not ctx.args.no_commands,
-                        do_av=not ctx.args.no_av,
+                        do_live=not ctx.args.no_live,
                         listen_s=ctx.args.listen,
+                        watch_s=ctx.args.watch,
+                        on_watch=_announce_watch,
                     )
                 )
             finally:
@@ -816,9 +852,8 @@ async def cmd_diagnose(ctx: Context) -> int:
             auth=diag.AuthReport(
                 logged_in=True,
                 region=region if isinstance(region, str) else None,
-                user_id_present=bool(user_id),
                 device_count=len(devices),
-                webrtc_only_count=webrtc_only_total,
+                webrtc_only_count=len(webrtc_only),
             ),
             stations=reports,
         )

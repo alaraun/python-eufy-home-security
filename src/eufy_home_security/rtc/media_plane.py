@@ -8,8 +8,6 @@ assemble them into the live-view media plane:
 - :class:`SdesSrtp` — SRTP/SRTCP with the fixed SDES key from the SDP template
   (``AES_CM_128_HMAC_SHA1_80``, the same master key both directions), via
   :mod:`pylibsrtp`.
-- :class:`KcpDataChannel` — the station's KCP data channel (commands, notifications,
-  files) as a codec over a packet transport, via :mod:`kcp`.
 - :class:`RtcMediaPlane` — ICE, then SRTP, the H.265 depacketizer and the in-frame
   decryption of a kind-6 live call (:class:`~.session.MediaPlane`).
 
@@ -22,13 +20,11 @@ import asyncio
 import base64
 import contextlib
 import logging
-from collections import deque
 from collections.abc import AsyncIterator, Callable
-from typing import Final, Protocol, runtime_checkable
+from typing import Final
 
 try:
     from aioice import Candidate, Connection
-    from kcp import KCP  # type: ignore[attr-defined]
     from pylibsrtp import Error as SrtpError
     from pylibsrtp import Policy, Session
 except ModuleNotFoundError as exc:  # pragma: no cover - exercised only without the extra
@@ -45,6 +41,7 @@ from ..exceptions import (
 from .frame_crypto import EufyFrameDecryptor
 from .media import (
     CANDIDATE_PREFIX,
+    START_CODE,
     AccessUnit,
     H265Depacketizer,
     IceTransport,
@@ -67,6 +64,8 @@ SDES_KEY_LEN = 30
 ICE_TIMEOUT: Final = 20.0
 #: Bound of the decoded-frame queue; the oldest frame is dropped when it is full.
 FRAME_QUEUE: Final = 64
+#: How many frames :meth:`RtcMediaPlane.stats` records the first NAL type of.
+STATS_NAL_TYPES: Final = 8
 
 
 class AioiceTransport:
@@ -202,82 +201,6 @@ class SdesSrtp:
         return self._outbound.protect_rtcp(packet)
 
 
-@runtime_checkable
-class PacketTransport(Protocol):
-    """What :class:`KcpDataChannel` moves its segments over (an ICE connection)."""
-
-    async def recv(self) -> bytes: ...
-
-    async def send(self, data: bytes) -> None: ...
-
-    async def close(self) -> None: ...
-
-
-class KcpDataChannel:
-    """The station's KCP data channel over a packet ``transport``.
-
-    KCP (``conv_id``) carries reliable, ordered messages over the UDP connection.
-    Segments the codec emits go out on ``transport``; incoming
-    segments are fed back in, and whole messages surface from :meth:`recv`. An update
-    task drives KCP's timers.
-    """
-
-    def __init__(self, transport: PacketTransport, *, conv_id: int = 0) -> None:
-        self._transport = transport
-        self._kcp = KCP(conv_id=conv_id)
-        self._kcp.include_outbound_handler(self._queue_outbound)
-        self._outbound: deque[bytes] = deque()
-        self._received: asyncio.Queue[bytes] = asyncio.Queue()
-        self._closed = False
-        self._tasks = [
-            asyncio.ensure_future(self._read_loop()),
-            asyncio.ensure_future(self._tick()),
-        ]
-
-    def _queue_outbound(self, _kcp: object, data: bytes) -> None:
-        self._outbound.append(bytes(data))
-
-    async def _drain(self) -> None:
-        while self._outbound:
-            await self._transport.send(self._outbound.popleft())
-
-    async def send(self, data: bytes) -> None:
-        self._kcp.enqueue(data)
-        self._kcp.flush()
-        await self._drain()
-
-    async def recv(self) -> bytes:
-        return await self._received.get()
-
-    async def _read_loop(self) -> None:
-        while not self._closed:
-            try:
-                segment = await self._transport.recv()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                return
-            self._kcp.receive(segment)
-            while self._kcp.next_packet_available:
-                self._received.put_nowait(bytes(self._kcp.get_received()))
-            await self._drain()  # KCP may owe an ack
-
-    async def _tick(self) -> None:
-        while not self._closed:
-            self._kcp.update()
-            await self._drain()
-            await asyncio.sleep(0.01)
-
-    async def close(self) -> None:
-        self._closed = True
-        for task in self._tasks:
-            task.cancel()
-        for task in self._tasks:
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-        await self._transport.close()
-
-
 class RtcMediaPlane:
     """The media plane of one kind-6 live call (:class:`~.session.MediaPlane`).
 
@@ -308,6 +231,11 @@ class RtcMediaPlane:
         self._throttle = LogThrottle(60.0)
         self._ended = False
         self._media = asyncio.Event()
+        self._stats: dict[str, int] = dict.fromkeys(
+            ("rtcp", "srtp_failures", "frames", "keyframes", "frame_failures"), 0
+        )
+        self._payload_types: dict[int, int] = {}
+        self._nal_types: list[int] = []
 
     async def start(
         self,
@@ -362,6 +290,17 @@ class RtcMediaPlane:
         """Return once the first video frame is decoded."""
         await self._media.wait()
 
+    def stats(self) -> dict[str, object]:
+        """Packet and frame counters (no payload): RTCP packets, RTP packets per payload
+        type, SRTP failures, decrypted frames and keyframes, frames whose in-frame
+        decryption failed, and the H.265 type of the first NAL unit of the first
+        :data:`STATS_NAL_TYPES` frames."""
+        return {
+            **self._stats,
+            "rtp_by_payload_type": dict(self._payload_types),
+            "first_nal_types": list(self._nal_types),
+        }
+
     async def close(self) -> None:
         if self._reader is not None:
             self._reader.cancel()
@@ -383,14 +322,18 @@ class RtcMediaPlane:
 
     def _handle(self, data: bytes, decryptor: EufyFrameDecryptor) -> None:
         if is_rtcp(data):
+            self._stats["rtcp"] += 1
             self._handle_rtcp(data)
             return
         try:
             packet = RtpPacket.parse(self._srtp.unprotect_rtp(data))
         except (SrtpError, ProtocolError) as exc:
+            self._stats["srtp_failures"] += 1
             if self._throttle.should_log("rtp"):
                 _LOGGER.debug("RTC packet dropped: %s", exc)
             return
+        pt = packet.payload_type
+        self._payload_types[pt] = self._payload_types.get(pt, 0) + 1
         if packet.payload_type != PayloadType.H265:
             if self._throttle.should_log(packet.payload_type):
                 _LOGGER.debug("RTC payload type %d is not delivered", packet.payload_type)
@@ -399,9 +342,14 @@ class RtcMediaPlane:
             try:
                 data = decryptor.video(unit.data, keyframe=unit.keyframe)
             except ProtocolError as exc:
+                self._stats["frame_failures"] += 1
                 if self._throttle.should_log("frame"):
                     _LOGGER.warning("RTC video frame dropped: %s", exc)
                 continue
+            self._stats["frames"] += 1
+            self._stats["keyframes"] += unit.keyframe
+            if len(self._nal_types) < STATS_NAL_TYPES and len(data) > len(START_CODE):
+                self._nal_types.append((data[len(START_CODE)] >> 1) & 0x3F)
             self._push(AccessUnit(data, unit.timestamp, unit.keyframe))
 
     def _handle_rtcp(self, data: bytes) -> None:

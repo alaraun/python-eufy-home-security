@@ -168,8 +168,8 @@ RTCP APP packets on that connection (a handler's `rtcSendRoute` 1) or over a
 separate data channel (0); for a `T8030` station the live open and close (command
 1350, sub-ids 1003/1004) always go RTCP **[app]**.
 
-`rtc/media_plane.py` (the `rtc` extra: aioice, pylibsrtp, kcp) implements ICE
-(`AioiceTransport`), SRTP (`SdesSrtp`), the KCP data channel and `RtcMediaPlane`,
+`rtc/media_plane.py` (the `rtc` extra: aioice, pylibsrtp) implements ICE
+(`AioiceTransport`), SRTP (`SdesSrtp`) and `RtcMediaPlane`,
 which yields decrypted H.265 access units; `RtcSession.open_live` runs the CALL, the
 candidate exchange, the media plane and the live open. Audio, H.264 and FlexFEC are
 not delivered.

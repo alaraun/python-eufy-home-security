@@ -36,8 +36,14 @@ from ..exceptions import (
 from ..p2p.messages import P2P_ERROR_CODES
 from ..p2p.xzyh import HEADER_LEN
 from .codec import CallKind
-from .command import CommandCipher
-from .config import QuickLogin, RtcConfig
+from .command import CommandCipher, is_sealed
+from .config import (
+    KCP_TYPE_MULTI,
+    QuickLogin,
+    RtcConfig,
+    commands_encrypted,
+    data_channel_kcp_type,
+)
 from .crypto import RtcCrypto
 from .data_channel import DataMsgType, KcpDataChannel, WrtcLinkMessage
 from .live import (
@@ -184,9 +190,10 @@ def default_ice_factory() -> IceTransport:
 class DataChannelCall:
     """A kind-5 ("priv1") WebRTC data channel: its CALL, ICE and KCP channel.
 
-    Commands are sent with :meth:`send_command` (an already-encrypted XZYH frame) and
-    the station's replies arrive as :class:`~.data_channel.WrtcLinkMessage` from
-    :meth:`recv`; :attr:`cipher` opens a reply (:meth:`~.command.CommandCipher.decrypt_reply`).
+    Commands are sent with :meth:`send_command` (a frame already passed through
+    :meth:`seal`) and the station's replies arrive as
+    :class:`~.data_channel.WrtcLinkMessage` from :meth:`recv`; :attr:`cipher` opens a
+    sealed reply (:meth:`~.command.CommandCipher.decrypt_reply`).
     """
 
     channel: int
@@ -196,14 +203,27 @@ class DataChannelCall:
     """The client's ``sdp_info``, sent in the CALL."""
     remote: SdpInfo | None = None
     """The device's answer ``sdp_info`` (its ICE credentials and media key)."""
+    kcp_type: int = KCP_TYPE_MULTI
+    """The datagram framing the station's model and SDK version call for."""
+    encrypted: bool = True
+    """Whether the station's model and firmware take AES-GCM commands."""
     kcp: KcpDataChannel | None = None
     cipher: CommandCipher | None = None
     _local: list[str] = field(default_factory=list, repr=False)
     _acked: set[int] = field(default_factory=set, repr=False)
     _relay: asyncio.Task[None] | None = field(default=None, repr=False)
 
+    def seal(self, frame: bytes) -> bytes:
+        """A plaintext XZYH command ``frame`` as the station takes it: GCM-sealed
+        (advancing the counter) when :attr:`encrypted`, else unchanged."""
+        if not self.encrypted:
+            return frame
+        if self.cipher is None:
+            raise CommunicationError("RTC data channel has not connected")
+        return self.cipher.encrypt(frame)
+
     async def send_command(self, frame: bytes) -> None:
-        """Send an encrypted XZYH command ``frame`` as a reliable data-channel message."""
+        """Send a :meth:`seal`-ed XZYH command ``frame`` as a reliable data-channel message."""
         if self.kcp is None:
             raise CommunicationError("RTC data channel has not connected")
         await self.kcp.send_message(frame, msg_type=DataMsgType.COMMAND)
@@ -215,22 +235,23 @@ class DataChannelCall:
         return await self.kcp.recv_message()
 
     async def command(self, frame: bytes, *, timeout: float = COMMAND_REPLY_TIMEOUT) -> bytes:
-        """Send a plaintext XZYH command ``frame`` and return the station's decrypted reply.
+        """Send a plaintext XZYH command ``frame`` and return the station's reply body.
 
-        Seals ``frame`` with the call's :class:`~.command.CommandCipher` (advancing its
-        counter), sends it as a COMMAND message, and opens the next COMMAND reply that
-        carries a body — skipping the bare heartbeat echo — with
-        :meth:`~.command.CommandCipher.decrypt_reply`. Assumes one command in flight. The
-        reply's format and key are declared from the app, not yet hardware-verified.
+        :meth:`seal`-s ``frame``, sends it as a COMMAND message, and returns the body of
+        the next COMMAND reply that carries one — skipping the bare heartbeat echo —
+        opened with :meth:`~.command.CommandCipher.decrypt_reply` when its header marks
+        it GCM-sealed. Assumes one command in flight. The reply's format and key are
+        declared from the app, not yet hardware-verified.
         """
         if self.kcp is None or self.cipher is None:
             raise CommunicationError("RTC data channel has not connected")
-        await self.send_command(self.cipher.encrypt(frame))
+        await self.send_command(self.seal(frame))
         async with asyncio.timeout(timeout):
             while True:
                 msg = await self.kcp.recv_message()
                 if msg.msg_type == DataMsgType.COMMAND and len(msg.payload) > HEADER_LEN:
-                    return self.cipher.decrypt_reply(msg.payload[HEADER_LEN:])
+                    body = msg.payload[HEADER_LEN:]
+                    return self.cipher.decrypt_reply(body) if is_sealed(msg.payload) else body
 
 
 class RtcSession:
@@ -275,9 +296,13 @@ class RtcSession:
         timeout: float = OFFER_TIMEOUT,
         account_id: str | None = None,
         open_timeout: float = LIVE_OPEN_TIMEOUT,
+        send_open: bool = True,
     ) -> LiveCall:
         """Open a live media call to ``channel``: CALL, wait for the device's answer,
         relay candidates both ways, connect the media plane, send the live open.
+
+        ``send_open`` False returns once the media plane is connected, leaving the open
+        to the caller (a station whose handler routes it over the data channel).
 
         ``account_id`` is the station owner's user id the open carries (default the
         config's ``user_id``). Raises :class:`~.exceptions.CallRefusedError` when the
@@ -306,9 +331,10 @@ class RtcSession:
             )
             live.cipher = cipher = CommandCipher(live.remote.content_key)
             live._replies = asyncio.get_running_loop().create_task(self._read_replies(live))
-            await self._send_live_open(
-                live, cipher, account_id or self._config.user_id, open_timeout
-            )
+            if send_open:
+                await self._send_live_open(
+                    live, cipher, account_id or self._config.user_id, open_timeout
+                )
         except BaseException:
             await self._stop(live)
             raise
@@ -414,6 +440,9 @@ class RtcSession:
         Sends the CALL, relays ICE candidates both ways in the data channel's
         ``file_candidate``/``file_candidate_num`` INFO form (acked with
         ``file_candidate_ack``), connects ICE as the controlled agent and brings up KCP.
+        The kcp_type and whether commands are sealed follow the station's model,
+        ``webrtc_sdk_version`` and firmware (:func:`~.config.data_channel_kcp_type`,
+        :func:`~.config.commands_encrypted`).
         Returns a :class:`DataChannelCall` for commands and replies. Raises
         :class:`~.exceptions.CallRefusedError` when the device refuses the CALL,
         :class:`~.exceptions.DeviceTimeoutError` when it does not answer in ``timeout``
@@ -423,13 +452,22 @@ class RtcSession:
         """
         if channel in self._data_calls:
             return self._data_calls[channel]
+        model = self._config.station_sn[:5]
+        kcp_type = data_channel_kcp_type(model, self._config.sdk_version)
         info = SdpInfo.generate(
             content_key=self._crypto.new_media_secret(CONTENT_KEY_LEN),
             content_iv=self._crypto.new_media_secret(CONTENT_IV_LEN),
-            data_channel=True,
+            data_channel=kcp_type == KCP_TYPE_MULTI,
         )
         call = await self.signaling.call(CallKind.PRIV1, channel=channel, sdp_info=info)
-        dc = DataChannelCall(channel, call, ice or default_ice_factory(), info)
+        dc = DataChannelCall(
+            channel,
+            call,
+            ice or default_ice_factory(),
+            info,
+            kcp_type=kcp_type,
+            encrypted=commands_encrypted(model, self._config.firmware),
+        )
         try:
             dc.remote = answer_sdp_info(await call.wait_offer(timeout))
             dc._relay = asyncio.get_running_loop().create_task(self._relay_data_candidates(dc))
@@ -442,7 +480,9 @@ class RtcSession:
                 self._send_data_candidate(dc, index)
             async with asyncio.timeout(connect_timeout):
                 await dc.ice.connect(remote_ufrag=dc.remote.ice_ufrag, remote_pwd=dc.remote.ice_pwd)
-            dc.kcp = KcpDataChannel(dc.ice, old_protocol=old_protocol)
+            dc.kcp = KcpDataChannel(
+                dc.ice, old_protocol=old_protocol, prefixed=kcp_type == KCP_TYPE_MULTI
+            )
             dc.cipher = CommandCipher(dc.remote.content_key)
         except TimeoutError as exc:
             await self._stop_data(dc)
