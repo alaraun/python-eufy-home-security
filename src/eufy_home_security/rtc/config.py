@@ -64,6 +64,60 @@ def firmware_number(version: str | None) -> int | None:
     return int(digits) if digits.isdigit() else None
 
 
+#: Data-channel framing: kcp_type 2 puts a 32-byte prefix before every KCP datagram,
+#: kcp_type 1 sends bare KCP segments.
+KCP_TYPE_SINGLE: Final = 1
+KCP_TYPE_MULTI: Final = 2
+#: The ``webrtc_sdk_version`` (second and third component; the first is ignored) from
+#: which a station prefix uses kcp_type 2; any other prefix always does **[declared: app]**.
+_KCP_MULTI_SINCE: Final = {
+    "T8223": (1, 3),
+    "T8224": (1, 3),
+    "T8030": (1, 3),
+    "T8025": (1, 3),
+    "T8N00": (1, 2),
+    "T9000": (1, 2),
+}
+#: Prefixes whose unreadable ``webrtc_sdk_version`` means kcp_type 1 (else 2).
+_KCP_SINGLE_ON_BAD_VERSION: Final = frozenset({"T8030", "T8025"})
+
+
+def data_channel_kcp_type(model: str, sdk_version: str | None) -> int:
+    """The data channel's kcp_type for station prefix ``model`` at ``sdk_version``
+    (:data:`KCP_TYPE_MULTI` when the version is absent) **[declared: app]**."""
+    since = _KCP_MULTI_SINCE.get(model)
+    if since is None or not sdk_version:
+        return KCP_TYPE_MULTI
+    parts = sdk_version.split(".")
+    try:
+        found = tuple(int(parts[i]) if len(parts) > i else 0 for i in (1, 2))
+    except ValueError:
+        return KCP_TYPE_SINGLE if model in _KCP_SINGLE_ON_BAD_VERSION else KCP_TYPE_MULTI
+    return KCP_TYPE_MULTI if found >= since else KCP_TYPE_SINGLE
+
+
+def commands_encrypted(model: str, firmware: int | None) -> bool:
+    """Whether station prefix ``model`` at ``firmware`` (:func:`firmware_number`; None
+    counts as 0) takes AES-GCM commands; otherwise they go in the clear **[declared: app]**."""
+    fw = firmware or 0
+    match model:
+        case "T9000":
+            return fw >= 4100
+        case "T8N00":
+            return 1089 <= fw <= 1199 or fw >= 1209
+        case "T8030":
+            return fw >= 3743
+        case "T8223":
+            return fw >= 3376
+        case "T8224":
+            return fw >= 3476
+        case "T8172":
+            return fw >= 1021
+        case "T8025":
+            return False
+    return True
+
+
 @dataclass(frozen=True, slots=True)
 class QuickLogin:
     """What a LOGIN 200 leaves for the next start: the session key, the contact id,

@@ -203,7 +203,8 @@ class KcpDataChannel:
 
     Outbound application messages are framed with a WrtcLinkProtocol header
     (:func:`encode_wrtc_link`) and carried as reliable KCP segments, each with the
-    kcp_type-2 datagram prefix. Inbound datagrams have their prefix and any file_head
+    kcp_type-2 datagram prefix unless ``prefixed`` is False (kcp_type 1: bare
+    segments both ways). Inbound datagrams have their prefix and any file_head
     stripped and are decoded to :class:`WrtcLinkMessage`; whole messages surface from
     :meth:`recv_message`. An update task drives KCP's timers.
     """
@@ -214,10 +215,12 @@ class KcpDataChannel:
         *,
         conv: int = KCP_CONV_COMMAND,
         old_protocol: bool = False,
+        prefixed: bool = True,
     ) -> None:
         self._transport = transport
         self._conv = conv
         self._old = old_protocol
+        self._prefixed = prefixed
         self._kcp = _ikcp.KCP(conv)
         self._kcp.set_performance_options(True, _KCP_INTERVAL_MS, _KCP_RESEND, True)
         self._kcp.set_window_size(_KCP_WINDOW, _KCP_WINDOW)
@@ -233,7 +236,10 @@ class KcpDataChannel:
         ]
 
     def _on_segment(self, _kcp: _ikcp.KCP, data: bytes) -> None:
-        self._outbound.append(encode_kcp_prefix(bytes(data), conv=self._conv))
+        segment = bytes(data)
+        self._outbound.append(
+            encode_kcp_prefix(segment, conv=self._conv) if self._prefixed else segment
+        )
 
     async def _drain(self) -> None:
         while self._outbound:
@@ -259,7 +265,7 @@ class KcpDataChannel:
                 raise
             except Exception:  # any transport error ends the channel
                 return
-            _conv, segment = strip_kcp_prefix(datagram)
+            segment = strip_kcp_prefix(datagram)[1] if self._prefixed else datagram
             self._kcp.receive(segment)
             while self._kcp.next_packet_available:
                 raw = bytes(self._kcp.get_received())

@@ -9,7 +9,11 @@ import pytest
 
 from eufy_home_security.exceptions import SignalingError
 from eufy_home_security.rtc.config import (
+    KCP_TYPE_MULTI,
+    KCP_TYPE_SINGLE,
     RtcConfig,
+    commands_encrypted,
+    data_channel_kcp_type,
     firmware_number,
     signaling_domain,
     signaling_ipv4,
@@ -199,3 +203,56 @@ def test_compact_offer_fields() -> None:
 def test_the_answer_keeps_ice_credentials_and_ssrc_lines() -> None:
     sdp = "v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 97\r\na=ice-ufrag:abc\r\na=ice-pwd:def\r\na=ssrc:1 cname:x\r\na=rtcp-mux\r\n"
     assert answer_attributes(sdp) == "a=ice-ufrag:abc\r\na=ice-pwd:def\r\na=ssrc:1 cname:x\r\n"
+
+
+@pytest.mark.parametrize(
+    ("model", "sdk", "kcp_type"),
+    [
+        ("T9000", "7.1.2", KCP_TYPE_MULTI),
+        ("T9000", "1.1.2", KCP_TYPE_MULTI),  # the first component is not compared
+        ("T9000", "7.1.1", KCP_TYPE_SINGLE),
+        ("T9000", "7.2", KCP_TYPE_MULTI),
+        ("T8N00", "7.0.9", KCP_TYPE_SINGLE),
+        ("T8030", "6.1.3", KCP_TYPE_MULTI),
+        ("T8030", "6.1.2", KCP_TYPE_SINGLE),
+        ("T8224", "6.1.3", KCP_TYPE_MULTI),
+        ("T9000", None, KCP_TYPE_MULTI),
+        ("T9000", "x.y", KCP_TYPE_MULTI),
+        ("T8030", "x.y", KCP_TYPE_SINGLE),
+        ("T8410", "1.0.0", KCP_TYPE_MULTI),
+    ],
+)
+def test_data_channel_kcp_type_follows_model_and_sdk(
+    model: str, sdk: str | None, kcp_type: int
+) -> None:
+    assert data_channel_kcp_type(model, sdk) == kcp_type
+
+
+@pytest.mark.parametrize(
+    ("model", "firmware", "encrypted"),
+    [
+        ("T9000", 4100, True),
+        ("T9000", 4099, False),
+        ("T9000", None, False),
+        ("T8N00", 1088, False),
+        ("T8N00", 1089, True),
+        ("T8N00", 1199, True),
+        ("T8N00", 1200, False),
+        ("T8N00", 1208, False),
+        ("T8N00", 1209, True),
+        ("T8030", 3743, True),
+        ("T8030", 3742, False),
+        ("T8223", 3376, True),
+        ("T8223", 3375, False),
+        ("T8224", 3476, True),
+        ("T8224", 3475, False),
+        ("T8172", 1021, True),
+        ("T8172", 1020, False),
+        ("T8025", 9999, False),
+        ("T8410", None, True),
+    ],
+)
+def test_commands_are_encrypted_per_model_and_firmware(
+    model: str, firmware: int | None, encrypted: bool
+) -> None:
+    assert commands_encrypted(model, firmware) is encrypted

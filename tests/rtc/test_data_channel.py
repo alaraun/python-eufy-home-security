@@ -201,3 +201,28 @@ async def test_kcp_data_channel_strips_an_inbound_file_head() -> None:
         assert msg.msg_type == DataMsgType.COMMAND
     finally:
         await chan.close()
+
+
+async def test_an_unprefixed_kcp_data_channel_sends_and_reads_bare_segments() -> None:
+    a2b: asyncio.Queue[bytes] = asyncio.Queue()
+    b2a: asyncio.Queue[bytes] = asyncio.Queue()
+    sent: list[bytes] = []
+
+    class Recording(_Pipe):
+        async def send(self, data: bytes) -> None:
+            sent.append(data)
+            await super().send(data)
+
+    left = KcpDataChannel(Recording(a2b, b2a), conv=1, prefixed=False)
+    right = KcpDataChannel(_Pipe(b2a, a2b), conv=1, prefixed=False)
+    try:
+        payload = b"x" * 64  # longer than the prefix, so a stray strip would corrupt it
+        await left.send_message(payload)
+        datagram = sent[0]
+        assert struct.unpack_from("<I", datagram, 0)[0] == 1  # the KCP conv, no prefix
+        assert len(datagram) == 24 + 24 + len(payload)  # KCP header + WrtcLink + payload
+        msg = await asyncio.wait_for(right.recv_message(), 2)
+        assert msg.payload == payload
+    finally:
+        await left.close()
+        await right.close()

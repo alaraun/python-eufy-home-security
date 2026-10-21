@@ -40,7 +40,6 @@ from eufy_home_security.rtc.media import (
 from eufy_home_security.rtc.media_plane import (
     SDES_KEY_LEN,
     AioiceTransport,
-    KcpDataChannel,
     RtcMediaPlane,
     SdesSrtp,
 )
@@ -96,21 +95,6 @@ class _Pipe:
 
     async def close(self) -> None:
         return None
-
-
-async def test_kcp_data_channel_round_trips_between_two_ends() -> None:
-    a_to_b: asyncio.Queue[bytes] = asyncio.Queue()
-    b_to_a: asyncio.Queue[bytes] = asyncio.Queue()
-    left = KcpDataChannel(_Pipe(a_to_b, b_to_a), conv_id=1)
-    right = KcpDataChannel(_Pipe(b_to_a, a_to_b), conv_id=1)
-    try:
-        await left.send(b'{"cmd":1350}')
-        assert await asyncio.wait_for(right.recv(), 2) == b'{"cmd":1350}'
-        await right.send(b"ack")
-        assert await asyncio.wait_for(left.recv(), 2) == b"ack"
-    finally:
-        await left.close()
-        await right.close()
 
 
 # ── ICE over aioice ──────────────────────────────────────────────────────────
@@ -393,6 +377,15 @@ async def test_srtp_h265_is_depacketized_and_decrypted_others_are_dropped() -> N
         assert frames[0].data == START_CODE + vps + START_CODE + _hevc(19, idr)
         assert not frames[1].keyframe
         assert frames[1].data == START_CODE + _hevc(1, b"P-slice")
+        assert plane.stats() == {
+            "rtcp": 1,
+            "srtp_failures": 1,
+            "frames": 2,
+            "keyframes": 1,
+            "frame_failures": 1,
+            "rtp_by_payload_type": {PayloadType.AUDIO: 1, PayloadType.H265: 3},
+            "first_nal_types": [32, 1],
+        }
     finally:
         await plane.close()
 

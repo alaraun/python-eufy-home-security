@@ -33,6 +33,11 @@ _VERSION_GCM: Final = 10
 _WRAPPER_LEN: Final = _GCM_TAG_LEN + _GCM_IV_LEN + 4
 
 
+def is_sealed(frame: bytes) -> bool:
+    """Whether an XZYH ``frame``'s header marks its body GCM-sealed (version byte 10)."""
+    return len(frame) >= FRAME_HEADER_LEN and frame[0x0A] == _VERSION_GCM
+
+
 def _key16(key: str | bytes) -> bytes:
     raw = key.encode() if isinstance(key, str) else bytes(key)
     if len(raw) < MEDIA_KEY_LEN:

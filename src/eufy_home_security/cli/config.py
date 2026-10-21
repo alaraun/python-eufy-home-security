@@ -310,23 +310,32 @@ def build_parser() -> argparse.ArgumentParser:
     monitor.add_argument("--no-p2p", action="store_true", help="skip local station sessions")
     monitor.add_argument("--json", action="store_true", help="one JSON object per line")
 
-    diagnose = command(
-        "diagnose", "read-only WebRTC data-channel diagnostics (for webrtc_only stations)"
-    )
+    diagnose = command("diagnose", "read-only WebRTC diagnostics (for webrtc_only stations)")
     diagnose.add_argument(
         "--explain", action="store_true", help="print what it collects and exit, without logging in"
     )
     diagnose.add_argument(
         "--all-stations", action="store_true", help="probe every station, not only webrtc_only ones"
     )
-    diagnose.add_argument("--channel", type=int, default=0, help="channel to probe (default 0)")
     diagnose.add_argument(
-        "--listen", type=float, default=6.0, help="seconds to listen in the A/V probe (default 6)"
+        "--channel", type=int, default=0, help="channel of the data-channel call (default 0)"
     )
     diagnose.add_argument(
-        "--no-commands", action="store_true", help="skip the read-only command probe"
+        "--camera-channel",
+        type=int,
+        help="channel of the camera for the live view (default: the lowest paired channel)",
     )
-    diagnose.add_argument("--no-av", action="store_true", help="skip the live A/V probe")
+    diagnose.add_argument(
+        "--listen", type=float, default=8.0, help="seconds of live view to count (default 8)"
+    )
+    diagnose.add_argument(
+        "--watch",
+        type=float,
+        default=0.0,
+        help="seconds to record notifications, e.g. while switching the guard mode in the app",
+    )
+    diagnose.add_argument("--no-commands", action="store_true", help="skip the read-only queries")
+    diagnose.add_argument("--no-live", action="store_true", help="skip the live view")
     diagnose.add_argument(
         "--output",
         type=Path,

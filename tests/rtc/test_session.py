@@ -515,7 +515,7 @@ async def test_data_channel_command_encrypts_and_decrypts_the_reply() -> None:
         send_q=c2d, recv_q=d2c, local=["candidate:1 1 udp 1 192.0.2.7 5 typ host"]
     )
     device = KcpDataChannel(_FakeIce(send_q=d2c, recv_q=c2d, local=[]), conv=1)
-    _server, session = await _session(server={"request_id": None})
+    _server, session = await _session(server={"request_id": None}, cfg={"firmware": 3874})
     try:
         await session.start()
         dc = await session.open_data_channel(2, timeout=2, ice=client_ice)
@@ -541,4 +541,47 @@ async def test_data_channel_command_encrypts_and_decrypts_the_reply() -> None:
         await session.close_data_channel(2)
     finally:
         await device.close()
+        await session.close()
+
+
+async def test_an_old_station_gets_bare_segments_and_plaintext_commands() -> None:
+    """Below its SDK and firmware thresholds a station takes kcp_type 1 (no datagram
+    prefix, data_channel flag 0) and commands in the clear; a clear reply is returned
+    as is."""
+    c2d: asyncio.Queue[bytes] = asyncio.Queue()
+    d2c: asyncio.Queue[bytes] = asyncio.Queue()
+    client_ice = _FakeIce(send_q=c2d, recv_q=d2c, local=[])
+    device = KcpDataChannel(_FakeIce(send_q=d2c, recv_q=c2d, local=[]), conv=1, prefixed=False)
+    server, session = await _session(
+        server={"request_id": None}, cfg={"sdk_version": "6.1.2", "firmware": 3742}
+    )
+    try:
+        await session.start()
+        dc = await session.open_data_channel(2, timeout=2, ice=client_ice)
+        assert (dc.kcp_type, dc.encrypted, dc.info.data_channel) == (1, False, False)
+        frame = encode_frame(0x546, b'{"cmd":1307}', bytes(6))
+        assert dc.seal(frame) == frame
+
+        async def respond() -> None:
+            cmd = await device.recv_message()
+            assert cmd.payload == frame
+            await device.send_message(encode_frame(0x546, b'{"ok":1}', bytes(6)))
+
+        responder = asyncio.ensure_future(respond())
+        assert await dc.command(frame, timeout=3) == b'{"ok":1}'
+        await responder
+    finally:
+        await device.close()
+        await session.close()
+        server.close()
+
+
+async def test_open_live_without_the_open_sends_no_command() -> None:
+    _, session = await _session(media_factory=FakeMedia)
+    try:
+        await session.start()
+        live = await session.open_live(2, timeout=2, send_open=False)
+        assert live.cipher is not None
+        assert FakeMedia.instances[-1].commands == []
+    finally:
         await session.close()

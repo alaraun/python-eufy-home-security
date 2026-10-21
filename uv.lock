@@ -502,7 +502,6 @@ dependencies = [
 [package.optional-dependencies]
 rtc = [
     { name = "aioice" },
-    { name = "kcp" },
     { name = "pylibsrtp" },
 ]
 
@@ -526,7 +525,6 @@ requires-dist = [
     { name = "aioice", marker = "extra == 'rtc'", specifier = ">=0.10" },
     { name = "cryptography", specifier = ">=44" },
     { name = "firebase-messaging", specifier = ">=0.4" },
-    { name = "kcp", marker = "extra == 'rtc'", specifier = ">=0.1.6" },
     { name = "protobuf", specifier = ">=5" },
     { name = "pylibsrtp", marker = "extra == 'rtc'", specifier = ">=1" },
     { name = "tzdata", specifier = ">=2025.2" },
@@ -747,17 +745,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
-]
-
-[[package]]
-name = "kcp"
-version = "0.1.6"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3c/82/18cff233d7a848788450ae2a4341d5f54bb19afb0d5dd3a06be76ebca953/kcp-0.1.6.tar.gz", hash = "sha256:1e3632509119bd6a24599ee043e21ef6842675413a41720c526d14896357afc4", size = 22488, upload-time = "2024-12-17T18:12:32.806Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/ef/b7f1663992ea73a92c67099c6d61bbfd72bcaee1499b80bb06dfa756a513/kcp-0.1.6-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:c2327d597628c4d654ff7d7663701f0de7587f4c840796eaff096fd31ae004e9", size = 133826, upload-time = "2024-12-17T18:12:45.56Z" },
-    { url = "https://files.pythonhosted.org/packages/eb/5a/0c06c2c7a4cdafe32ffa7bd7820959e30b1d8c5055f3dcf049118c693180/kcp-0.1.6-cp313-cp313-manylinux_2_39_x86_64.whl", hash = "sha256:ee78627a02e908c225c669b7cc8654b825296fb8133f2a1556f633b72e9dad3e", size = 333034, upload-time = "2024-12-17T18:12:49.055Z" },
-    { url = "https://files.pythonhosted.org/packages/24/bd/17c07c4b142ad3a6c8d236ef5ff23951516ff766ee524ec675b5b5c34202/kcp-0.1.6-cp313-cp313-win_amd64.whl", hash = "sha256:3c1b2f90f15e55ec76b929dd8d29bed4b4eadc234addefd2b8be5f0f3acf822d", size = 74464, upload-time = "2024-12-17T18:14:46.818Z" },
 ]
 
 [[package]]
