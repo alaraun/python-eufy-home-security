@@ -1,4 +1,4 @@
-"""Read-only WebRTC diagnostics for a station, as a report safe to share.
+"""Read-only WebRTC diagnostics for a webrtc_only station, as a report safe to share.
 
 Built to run on a volunteer's own hardware (the webrtc_only models, T9000/T8N00, this
 library otherwise skips). The report dataclasses hold only *descriptors*: model codes,
@@ -23,7 +23,7 @@ import re
 import struct
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from ..devices.recipes import WEBRTC_ONLY_STATIONS
@@ -236,27 +236,6 @@ class StationReport:
     error: str | None = None
     """``<phase>: <exception type>`` (never the message, which may carry an address)."""
     error_code: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class AuthReport:
-    """The account side, by presence and count — no email, user id, token or serial."""
-
-    logged_in: bool
-    region: str | None
-    device_count: int
-    webrtc_only_count: int
-
-
-@dataclass(frozen=True, slots=True)
-class DiagnosticsReport:
-    library_version: str
-    created_utc: str
-    auth: AuthReport
-    stations: list[StationReport]
-
-    def to_json(self) -> str:
-        return json.dumps(asdict(self), indent=2, sort_keys=True)
 
 
 # ── cloud records ────────────────────────────────────────────────────────────
@@ -686,56 +665,44 @@ async def collect_station(
 # ── summary ──────────────────────────────────────────────────────────────────
 
 
-def render(report: DiagnosticsReport) -> str:
-    """A short human-readable summary of ``report`` (the JSON is the full payload)."""
+def render_station(st: StationReport) -> list[str]:
+    """A short human-readable summary of one station's report (the JSON is the full one)."""
+    s = st.station
     lines = [
-        f"eufy-home-security diagnostics (library {report.library_version}, {report.created_utc})",
-        f"account: logged_in={report.auth.logged_in} region={report.auth.region} "
-        f"devices={report.auth.device_count} webrtc_only={report.auth.webrtc_only_count}",
-        "",
+        f"WebRTC station {s.model} fw {s.main_sw_version} sdk {s.webrtc_sdk_version} "
+        f"(kcp_type={s.kcp_type}, encrypted={s.commands_encrypted}) reached {st.phase_reached}"
     ]
-    for st in report.stations:
-        s = st.station
+    lines.extend(f"  child {c.model} ch {c.channel} fw {c.main_sw_version}" for c in st.children)
+    if st.error is not None:
+        lines.append(f"  error: {st.error} code={st.error_code}")
+    if st.call is not None:
+        lines.append(f"  CALL: answered turn={st.call.turn_present} in {st.call.elapsed_ms} ms")
+    if st.ice is not None:
+        i = st.ice
         lines.append(
-            f"station {s.model} fw {s.main_sw_version} sdk {s.webrtc_sdk_version} "
-            f"(webrtc_only={s.is_webrtc_only}, kcp_type={s.kcp_type}, "
-            f"encrypted={s.commands_encrypted}) reached {st.phase_reached}"
+            f"  ICE: connected={i.connected} controlling={i.controlling} "
+            f"local={i.local_candidate_types} remote={i.remote_candidate_types}"
         )
-        lines.extend(
-            f"  child {c.model} ch {c.channel} fw {c.main_sw_version}" for c in st.children
+    if st.call is not None:
+        lines.append(f"  heartbeat echo: {st.heartbeat_ms} ms")
+    for cmd in st.commands:
+        reply = st.messages[cmd.reply_index] if cmd.reply_index is not None else None
+        if reply is None:
+            lines.append(f"  cmd {cmd.name}: no reply")
+        else:
+            lines.append(
+                f"  cmd {cmd.name}: reply in {cmd.reply_ms} ms opened={reply.opened} "
+                f"key={reply.key} keys={reply.json_keys[:8]}"
+            )
+    notes = [m for m in st.messages if m.msg_type == DataMsgType.NOTIFY]
+    lines.append(f"  notifications: {len(notes)}, messages: {len(st.messages)}")
+    if st.live is not None:
+        lv = st.live
+        tried = ", ".join(
+            f"{a.route} status={a.status} first_frame={a.first_frame_ms} ms" for a in lv.attempts
         )
-        if st.error is not None:
-            lines.append(f"  error: {st.error} code={st.error_code}")
-        if st.call is not None:
-            lines.append(f"  CALL: answered turn={st.call.turn_present} in {st.call.elapsed_ms} ms")
-        if st.ice is not None:
-            i = st.ice
-            lines.append(
-                f"  ICE: connected={i.connected} controlling={i.controlling} "
-                f"local={i.local_candidate_types} remote={i.remote_candidate_types}"
-            )
-        if st.call is not None:
-            lines.append(f"  heartbeat echo: {st.heartbeat_ms} ms")
-        for cmd in st.commands:
-            reply = st.messages[cmd.reply_index] if cmd.reply_index is not None else None
-            if reply is None:
-                lines.append(f"  cmd {cmd.name}: no reply")
-            else:
-                lines.append(
-                    f"  cmd {cmd.name}: reply in {cmd.reply_ms} ms opened={reply.opened} "
-                    f"key={reply.key} keys={reply.json_keys[:8]}"
-                )
-        notes = [m for m in st.messages if m.msg_type == DataMsgType.NOTIFY]
-        lines.append(f"  notifications: {len(notes)}, messages: {len(st.messages)}")
-        if st.live is not None:
-            lv = st.live
-            tried = ", ".join(
-                f"{a.route} status={a.status} first_frame={a.first_frame_ms} ms"
-                for a in lv.attempts
-            )
-            lines.append(
-                f"  live ch {lv.channel} ({lv.camera_model}): {tried or 'not opened'} "
-                f"error={lv.error} media={lv.media}"
-            )
-        lines.append("")
-    return "\n".join(lines)
+        lines.append(
+            f"  live ch {lv.channel} ({lv.camera_model}): {tried or 'not opened'} "
+            f"error={lv.error} media={lv.media}"
+        )
+    return lines

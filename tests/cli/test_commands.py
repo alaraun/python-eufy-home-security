@@ -802,11 +802,10 @@ async def test_diagnose_explain_prints_scope_and_exits(capsys: pytest.CaptureFix
 
 
 class WebRtcCloud(StubCloud):
-    """An account with a T9000 (two cameras), a T9000 lacking its license, and a
-    HomeBase 3; the user is a shared member of the first."""
+    """The stub cloud's HomeBase 3 and camera, plus a T9000 (two cameras, the user a
+    shared member) and a T9000 lacking its license."""
 
     user_id = SYNTHETIC.account_id
-    region = "eu"
 
     async def async_get_devices(
         self, *, refresh: bool = False, rescan_regions: bool = False
@@ -818,7 +817,9 @@ class WebRtcCloud(StubCloud):
             "p2p_license": "ABCDEF",
             "signaling_servers": ["https://198.51.100.1"],
         }
+        own = await super().async_get_devices(refresh=refresh, rescan_regions=rescan_regions)
         return [
+            *own,
             CloudDevice(
                 device_sn=base,
                 device_type=91,
@@ -828,7 +829,7 @@ class WebRtcCloud(StubCloud):
                 raw=signaling,
             ),
             CloudDevice(
-                device_sn="T8160" + SYNTHETIC.camera_sn[5:],
+                device_sn="T8160" + SYNTHETIC.camera_sn[5:-1] + "1",
                 device_type=19,
                 name="Cam 4",
                 station_sn=base,
@@ -847,17 +848,26 @@ class WebRtcCloud(StubCloud):
                 name="Bare",
                 raw={"p2p_did": SYNTHETIC.did},
             ),
-            CloudDevice(device_sn=SYNTHETIC.station_sn, device_type=18, name="HB3", p2p_did="x"),
         ]
 
 
-async def test_diagnose_probes_the_webrtc_only_stations_with_the_owner_id(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+@pytest.fixture
+def account_views(fake: FakeStation, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cache summary and account report, which the stub cloud cannot serve (each is
+    tested with the library); here the command only has to include them."""
 
-    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
-    calls: list[dict[str, Any]] = []
+    async def summary(self: Any) -> dict[str, Any]:
+        return {"version": 1}
+
+    async def account(self: Any, *, ciphers: bool = True) -> Any:
+        return Mock(as_dict=Mock(return_value={"devices": []}))
+
+    monkeypatch.setattr(client_module.EufySecurity, "async_cache_summary", summary)
+    monkeypatch.setattr(client_module.EufySecurity, "async_account_report", account)
+
+
+def _fake_collect(calls: list[dict[str, Any]]) -> Callable[..., Any]:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
 
     async def collect(session: Any, **kwargs: Any) -> diagnostics.StationReport:
         calls.append(kwargs)
@@ -868,24 +878,62 @@ async def test_diagnose_probes_the_webrtc_only_stations_with_the_owner_id(
             phase_reached="done",
         )
 
-    monkeypatch.setattr(diagnostics, "collect_station", collect)
+    return collect
+
+
+@pytest.mark.usefixtures("account_views")
+async def test_diagnose_reports_the_p2p_stations_and_probes_the_webrtc_ones(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(diagnostics, "collect_station", _fake_collect(calls))
     out = tmp_path / "report.json"
-    assert await run(["diagnose", "--watch", "5", "--output", str(out)], tmp_path) == 0
-    assert len(calls) == 1  # the T9000 lacking its license is not probed, the HB3 not picked
+    argv = ["--host", "127.0.0.1", "diagnose", "--watch", "5", "--output", str(out)]
+    assert await run(argv, tmp_path) == 0
+    report = json.loads(out.read_text())
+    # The HomeBase 3 over P2P: read once, its session counters recorded.
+    (label, block), *_ = report["stations"].items()
+    assert label.startswith("T8030")
+    assert block["read_errors"] == {}
+    assert block["session"]["connects"] >= 1
+    assert all("name" not in d for d in block["devices"])
+    assert block["storage"]["storage_days"] == 30  # read, without the disk's serial/label
+    # The T9000 over WebRTC, with the owner's id and the lowest-channel camera; the one
+    # lacking its license is reported, not probed.
+    assert len(calls) == 1
     call = calls[0]
     assert call["account_id"] == "o" * 40
-    assert call["camera"].channel == 2  # the lowest paired channel
+    assert call["camera"].channel == 2
     assert (call["watch_s"], call["do_live"], call["do_commands"]) == (5.0, True, True)
-    report = json.loads(out.read_text())
-    assert [s["phase_reached"] for s in report["stations"]] == ["done", "config"]
-    assert report["auth"]["webrtc_only_count"] == 2
-    assert [c["channel"] for c in report["stations"][0]["children"]] == [2, 4]
+    assert [s["phase_reached"] for s in report["webrtc_stations"]] == ["done", "config"]
+    assert [c["channel"] for c in report["webrtc_stations"][0]["children"]] == [2, 4]
+    assert "webrtc_only" in {d["reason"] for d in report["skipped_devices"]}
+    assert (report["account"], report["cache"]) == ({"devices": []}, {"version": 1})
+    assert "models" in report
+    assert "stations_served_elsewhere" in report
     text = out.read_text()
-    for private in (SYNTHETIC.did, "198.51.100.1", "o" * 40, SYNTHETIC.account_id, "ABCDEF"):
+    for private in (
+        SYNTHETIC.did,
+        SYNTHETIC.station_sn,
+        SYNTHETIC.camera_sn,
+        "198.51.100.1",
+        "o" * 40,
+        SYNTHETIC.account_id,
+        "ABCDEF",
+        "Home Base",
+        SYNTHETIC.disk_serial,
+        SYNTHETIC.disk_label,
+    ):
         assert private not in text
     assert "Review it before sharing" in capsys.readouterr().out
 
 
+@pytest.mark.usefixtures("account_views")
 async def test_diagnose_picks_a_station_by_name_and_a_camera_by_channel(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -893,15 +941,52 @@ async def test_diagnose_picks_a_station_by_name_and_a_camera_by_channel(
 
     monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
     calls: list[dict[str, Any]] = []
-
-    async def collect(session: Any, **kwargs: Any) -> diagnostics.StationReport:
-        calls.append(kwargs)
-        return diagnostics.StationReport(
-            station=kwargs["station"], children=[], channel=0, phase_reached="done"
-        )
-
-    monkeypatch.setattr(diagnostics, "collect_station", collect)
+    monkeypatch.setattr(diagnostics, "collect_station", _fake_collect(calls))
+    out = tmp_path / "r.json"
     argv = ["--station", "Pro", "diagnose", "--camera-channel", "4", "--no-live"]
-    assert await run([*argv, "--output", str(tmp_path / "r.json")], tmp_path) == 0
+    assert await run([*argv, "--output", str(out)], tmp_path) == 0
     assert [c["camera"].model for c in calls] == ["T8160"]
     assert calls[0]["do_live"] is False
+    assert json.loads(out.read_text())["stations"] == {}  # the HomeBase 3 is not "Pro"
+
+
+@pytest.mark.usefixtures("account_views")
+async def test_diagnose_without_webrtc_reads_only_the_p2p_stations(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(diagnostics, "collect_station", _fake_collect(calls))
+    out = tmp_path / "r.json"
+    argv = ["--host", "127.0.0.1", "diagnose", "--no-webrtc", "--output", str(out)]
+    assert await run(argv, tmp_path) == 0
+    assert calls == []
+    report = json.loads(out.read_text())
+    assert report["webrtc_stations"] == []
+    assert len(report["stations"]) == 1
+
+
+def test_a_device_view_for_the_report_drops_the_name() -> None:
+    view = CloudDevice(device_sn=SYNTHETIC.station_sn, device_type=18, name="Home Base")
+    out = commands.nameless(view.as_redacted_dict())
+    assert "name" not in out
+    assert out["device_type"] == 18
+
+
+@pytest.mark.usefixtures("account_views")
+async def test_diagnose_without_p2p_probes_only_the_webrtc_stations(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(diagnostics, "collect_station", _fake_collect(calls))
+    out = tmp_path / "r.json"
+    argv = ["--host", "127.0.0.1", "diagnose", "--no-p2p", "--output", str(out)]
+    assert await run(argv, tmp_path) == 0
+    report = json.loads(out.read_text())
+    assert report["stations"] == {}
+    assert len(calls) == 1

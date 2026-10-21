@@ -310,32 +310,43 @@ def build_parser() -> argparse.ArgumentParser:
     monitor.add_argument("--no-p2p", action="store_true", help="skip local station sessions")
     monitor.add_argument("--json", action="store_true", help="one JSON object per line")
 
-    diagnose = command("diagnose", "read-only WebRTC diagnostics (for webrtc_only stations)")
+    diagnose = command(
+        "diagnose", "read-only diagnostics report of every station and camera on the account"
+    )
     diagnose.add_argument(
         "--explain", action="store_true", help="print what it collects and exit, without logging in"
     )
     diagnose.add_argument(
-        "--all-stations", action="store_true", help="probe every station, not only webrtc_only ones"
+        "--no-p2p", action="store_true", help="skip the stations served over local P2P"
     )
     diagnose.add_argument(
+        "--no-webrtc", action="store_true", help="skip the WebRTC-only stations (T9000, T8N00)"
+    )
+    webrtc = diagnose.add_argument_group("WebRTC-only stations")
+    webrtc.add_argument(
+        "--webrtc-all",
+        action="store_true",
+        help="also probe the other stations over WebRTC (a maintainer's comparison)",
+    )
+    webrtc.add_argument(
         "--channel", type=int, default=0, help="channel of the data-channel call (default 0)"
     )
-    diagnose.add_argument(
+    webrtc.add_argument(
         "--camera-channel",
         type=int,
         help="channel of the camera for the live view (default: the lowest paired channel)",
     )
-    diagnose.add_argument(
+    webrtc.add_argument(
         "--listen", type=float, default=8.0, help="seconds of live view to count (default 8)"
     )
-    diagnose.add_argument(
+    webrtc.add_argument(
         "--watch",
         type=float,
         default=0.0,
         help="seconds to record notifications, e.g. while switching the guard mode in the app",
     )
-    diagnose.add_argument("--no-commands", action="store_true", help="skip the read-only queries")
-    diagnose.add_argument("--no-live", action="store_true", help="skip the live view")
+    webrtc.add_argument("--no-commands", action="store_true", help="skip the read-only queries")
+    webrtc.add_argument("--no-live", action="store_true", help="skip the live view")
     diagnose.add_argument(
         "--output",
         type=Path,

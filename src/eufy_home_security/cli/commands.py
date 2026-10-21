@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import dataclasses
 import getpass
 import json
 import secrets
@@ -18,11 +19,12 @@ from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self
 
+from .._logging import redact_serial
 from ..devices import model_settings
 from ..devices.settings import Scope, scope_for_kind
 from ..devices.types import MODELS, DeviceKind
 from ..events import Event
-from ..exceptions import LoginChallengeError, UnsupportedError
+from ..exceptions import EufySecurityError, LoginChallengeError, UnsupportedError
 from ..models import STATION_CHANNEL, GuardMode
 from ..p2p.discovery import discover_stations
 from ..storage import JsonFileStore, async_cached_account
@@ -40,6 +42,7 @@ if TYPE_CHECKING:
     import aiohttp
 
     from ..client import EufySecurity
+    from ..cloud.models import CloudDevice
     from ..devices.model_settings import Setting, Value
     from ..p2p.session.media_stream import MediaStream
     from ..station import Station
@@ -723,31 +726,30 @@ async def cmd_monitor(ctx: Context) -> int:
 
 
 _DIAGNOSE_EXPLAIN = """\
-eufy-security diagnose — read-only WebRTC diagnostics (stations T9000 and T8N00)
+eufy-security diagnose — a read-only diagnostics report of the whole account
 
 What it does (nothing is armed, disarmed, changed or triggered):
   1. Log in to your account on THIS machine (asks for a 2FA code if eufy sends one;
      credentials never leave the machine and are never written to the report).
-  2. List your devices; pick the webrtc_only stations (or --station / --all-stations).
-  3. Per station: connect to eufy's signaling server, place the data-channel call,
-     connect ICE, bring up the KCP channel, check its keep-alive.
-  4. Send two read-only queries: storage info and the list of paired devices
-     (skip with --no-commands).
-  5. With --watch N: keep the channel open N seconds and record the notifications the
-     station sends, e.g. while you switch the guard mode in the eufy app.
-  6. Open a live view of one camera for a few seconds and count packets and frames
-     (skip with --no-live; pick the camera with --camera-channel).
-  It wakes a sleeping station to reach it; a battery camera spends some charge on the
-  live view.
+  2. Account: every device each eufy list names (model, firmware, which station it is
+     paired to), the account's cipher state and region/session status.
+  3. Each station served over local P2P (HomeBases, standalone cameras): connect,
+     read its state and storage once, and record its session counters.
+  4. Each WebRTC-only station (T9000, T8N00): place the data-channel call, check its
+     keep-alive, send two read-only queries (storage, paired devices), and open a live
+     view of one camera for a few seconds to count packets and frames.
+     With --watch N it also records the station's notifications for N seconds, e.g.
+     while you switch the guard mode in the eufy app.
+  It wakes sleeping stations and battery cameras to reach them.
 
 What the report contains — and never:
-  Collected: model codes, firmware/SDK versions, channels, which cloud fields are
-  present, timings, ICE candidate-type counts, protocol-header bytes, which key opens a
-  reply, reply/notification JSON key NAMES and a few status/mode integers, and packet
-  and frame counts.
-  Never: your password/tokens, account id/email, serial numbers, IP addresses,
-  encryption keys, or any audio/video content. The report is a JSON file for you to
-  review before sharing; nothing is uploaded.
+  Collected: model codes, firmware/SDK versions, channels, serials shortened to the
+  model and last four characters, which cloud fields are present, session and error
+  counters, timings, protocol-header bytes, reply JSON key NAMES and a few
+  status/mode integers, and packet and frame counts.
+  Never: your password/tokens, account id/email, full serial numbers, device names,
+  IP addresses, encryption keys, or any audio/video content. The report is a JSON file
+  for you to review before sharing; nothing is uploaded.
 """
 
 
@@ -768,101 +770,174 @@ def _announce_watch(seconds: float) -> None:
     )
 
 
-async def cmd_diagnose(ctx: Context) -> int:
-    from datetime import UTC  # noqa: PLC0415
+#: How long the read of one P2P station may take before it is recorded as timed out.
+DIAGNOSE_STATION_TIMEOUT = 90.0
 
+
+def nameless(view: Mapping[str, Any]) -> dict[str, Any]:
+    """A redacted device view without its user-given ``name``."""
+    return {k: v for k, v in view.items() if k != "name"}
+
+
+def _unique_label(serial: str, taken: set[str]) -> str:
+    """``serial`` redacted, numbered ``#2``, ``#3`` … where two would collide."""
+    label, n = redact_serial(serial), 1
+    while label in taken:
+        n += 1
+        label = f"{redact_serial(serial)}#{n}"
+    taken.add(label)
+    return label
+
+
+async def _diagnose_p2p(station: Station) -> dict[str, Any]:
+    """Read ``station`` once (state, then storage unless it is reached on demand) and
+    return its :meth:`~.station.Station.diagnostics` with the read's errors."""
+    errors: dict[str, str] = {}
+    try:
+        async with asyncio.timeout(DIAGNOSE_STATION_TIMEOUT):
+            await station.async_update(wake=True)
+    except (EufySecurityError, TimeoutError) as exc:
+        errors["state"] = type(exc).__name__
+    if "state" not in errors and not station.connects_on_demand:
+        try:
+            async with asyncio.timeout(DIAGNOSE_STATION_TIMEOUT):
+                await station.async_get_storage()
+        except (EufySecurityError, TimeoutError) as exc:
+            errors["storage"] = type(exc).__name__
+    return {**station.diagnostics(), "read_errors": errors}
+
+
+async def _diagnose_webrtc(
+    ctx: Context, eufy: EufySecurity, devices: Sequence[CloudDevice]
+) -> list[dict[str, Any]]:
+    """Probe the account's webrtc_only stations (every station with ``--webrtc-all``)."""
     from ..devices.recipes import WEBRTC_ONLY_STATIONS  # noqa: PLC0415
     from ..rtc import diagnostics as diag  # noqa: PLC0415
     from ..rtc.config import RtcConfig  # noqa: PLC0415
     from ..rtc.crypto import RtcSignalingCrypto  # noqa: PLC0415
     from ..rtc.session import RtcSession  # noqa: PLC0415
 
+    user_id = eufy.cloud.user_id
+    if not user_id:
+        raise UsageError("logged in but the account has no user id")
+    # A WebRTC station may lack the P2P fields `is_station` asks for: pick by parent.
+    own_parent = [d for d in devices if d.station_sn in (None, d.device_sn)]
+    if ctx.args.webrtc_all:
+        targets = [d for d in own_parent if d.is_station or d.device_sn[:5] in WEBRTC_ONLY_STATIONS]
+    else:
+        targets = [d for d in own_parent if d.device_sn[:5] in WEBRTC_ONLY_STATIONS]
+    if ctx.args.station:
+        targets = [d for d in targets if ctx.args.station in (d.device_sn, d.name)]
+    app_id = secrets.token_hex(8)
+    reports: list[diag.StationReport] = []
+    for device in targets:
+        record = diag.describe_station(device)
+        children = diag.describe_children(device.device_sn, devices)
+        camera = diag.first_camera_channel(children)
+        if ctx.args.camera_channel is not None:
+            camera = next(
+                (c for c in children if c.channel == ctx.args.camera_channel),
+                diag.ChildRecord("?", ctx.args.camera_channel, None, has_signaling=False),
+            )
+        config = RtcConfig.from_device(device.raw, user_id=user_id, app_id=app_id)
+        if config is None:
+            reports.append(
+                diag.StationReport(
+                    station=record,
+                    children=children,
+                    channel=ctx.args.channel,
+                    phase_reached="config",
+                    error="config: the cloud record lacks a DID, license or IPv4 server",
+                )
+            )
+            continue
+        print(f"Probing WebRTC station {record.model} ...", flush=True)
+        session = RtcSession(config, RtcSignalingCrypto())
+        try:
+            reports.append(
+                await diag.collect_station(
+                    session,
+                    station=record,
+                    children=children,
+                    account_id=device.owner_user_id or user_id,
+                    channel=ctx.args.channel,
+                    camera=camera,
+                    do_commands=not ctx.args.no_commands,
+                    do_live=not ctx.args.no_live,
+                    listen_s=ctx.args.listen,
+                    watch_s=ctx.args.watch,
+                    on_watch=_announce_watch,
+                )
+            )
+        finally:
+            await session.close()
+    for report in reports:
+        print("\n".join(diag.render_station(report)))
+    return [dataclasses.asdict(report) for report in reports]
+
+
+async def cmd_diagnose(ctx: Context) -> int:
+    """One read-only report of the account: every device, the P2P stations' health, and
+    the webrtc_only stations' WebRTC probe."""
+    from datetime import UTC  # noqa: PLC0415
+
     if ctx.args.explain:
         print(_DIAGNOSE_EXPLAIN)
         return 0
-    try:
-        import aioice  # noqa: F401, PLC0415 - the rtc extra
-        import pylibsrtp  # noqa: F401, PLC0415
-    except ImportError as exc:
-        raise UsageError(
-            "diagnose needs the rtc extra: pip install 'eufy-home-security[rtc]'"
-        ) from exc
+    webrtc = not ctx.args.no_webrtc
+    if webrtc:
+        try:
+            import aioice  # noqa: F401, PLC0415 - the rtc extra
+            import pylibsrtp  # noqa: F401, PLC0415
+        except ImportError as exc:
+            raise UsageError(
+                "diagnose needs the rtc extra for WebRTC stations: "
+                "pip install 'eufy-home-security[rtc]' (or pass --no-webrtc)"
+            ) from exc
 
-    app_id = secrets.token_hex(8)
-    reports: list[diag.StationReport] = []
+    report: dict[str, Any] = {
+        "library_version": _library_version(),
+        "created_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
     async with await open_account(ctx) as eufy:
         await _login_answering_challenges(ctx, eufy, force=False)
-        devices = await eufy.cloud.async_get_devices(refresh=True)
-        user_id = eufy.cloud.user_id
-        if not user_id:
-            raise UsageError("logged in but the account has no user id")
-        # A WebRTC station may lack the P2P fields `is_station` asks for: pick by parent.
-        own_parent = [d for d in devices if d.station_sn in (None, d.device_sn)]
-        webrtc_only = [d for d in own_parent if d.device_sn[:5] in WEBRTC_ONLY_STATIONS]
-        if ctx.args.station:
-            targets = [d for d in own_parent if ctx.args.station in (d.device_sn, d.name)]
-        elif ctx.args.all_stations:
-            targets = [d for d in own_parent if d.is_station or d in webrtc_only]
-        else:
-            targets = webrtc_only
-        if not targets:
-            print("No matching station on this account (see --all-stations / --station).")
-        for device in targets:
-            record = diag.describe_station(device)
-            children = diag.describe_children(device.device_sn, devices)
-            camera = diag.first_camera_channel(children)
-            if ctx.args.camera_channel is not None:
-                camera = next(
-                    (c for c in children if c.channel == ctx.args.camera_channel),
-                    diag.ChildRecord("?", ctx.args.camera_channel, None, has_signaling=False),
-                )
-            config = RtcConfig.from_device(device.raw, user_id=user_id, app_id=app_id)
-            if config is None:
-                reports.append(
-                    diag.StationReport(
-                        station=record,
-                        children=children,
-                        channel=ctx.args.channel,
-                        phase_reached="config",
-                        error="config: the cloud record lacks a DID, license or IPv4 server",
-                    )
-                )
-                continue
-            print(f"Probing {record.model} ...", flush=True)
-            session = RtcSession(config, RtcSignalingCrypto())
-            try:
-                reports.append(
-                    await diag.collect_station(
-                        session,
-                        station=record,
-                        children=children,
-                        account_id=device.owner_user_id or user_id,
-                        channel=ctx.args.channel,
-                        camera=camera,
-                        do_commands=not ctx.args.no_commands,
-                        do_live=not ctx.args.no_live,
-                        listen_s=ctx.args.listen,
-                        watch_s=ctx.args.watch,
-                        on_watch=_announce_watch,
-                    )
-                )
-            finally:
-                await session.close()
-        region = getattr(eufy.cloud, "region", None)
-        report = diag.DiagnosticsReport(
-            library_version=_library_version(),
-            created_utc=datetime.now(UTC).isoformat(timespec="seconds"),
-            auth=diag.AuthReport(
-                logged_in=True,
-                region=region if isinstance(region, str) else None,
-                device_count=len(devices),
-                webrtc_only_count=len(webrtc_only),
-            ),
-            stations=reports,
-        )
+        stations = await eufy.async_discover(refresh=True)
+        devices = await eufy.cloud.async_get_devices()
+        p2p: dict[str, Any] = {}
+        if not ctx.args.no_p2p:
+            taken: set[str] = set()
+            for station in stations:
+                if ctx.args.station and ctx.args.station not in (station.serial, station.name):
+                    continue
+                label = _unique_label(station.serial, taken)
+                print(f"Reading station {label} ...", flush=True)
+                p2p[label] = await _diagnose_p2p(station)
+                await station.async_close()
+        report["stations"] = p2p
+        report["webrtc_stations"] = await _diagnose_webrtc(ctx, eufy, devices) if webrtc else []
+        report["skipped_devices"] = [dataclasses.asdict(d) for d in eufy.skipped_devices]
+        report["stations_served_elsewhere"] = [
+            nameless(d.as_redacted_dict()) for d in eufy.stations_served_elsewhere
+        ]
+        report["models"] = [
+            {**dataclasses.asdict(status), "newer_vendor_data": status.newer_vendor_data}
+            for status in eufy.model_status()
+        ]
+        report["cache"] = await eufy.async_cache_summary()
+        try:
+            report["account"] = (await eufy.async_account_report()).as_dict()
+        except EufySecurityError as exc:
+            report["account"] = {"error": type(exc).__name__}
     out: Path = ctx.args.output or Path(f"eufy-diagnostics-{int(time.time())}.json")
-    await asyncio.to_thread(out.write_text, report.to_json())
-    print(diag.render(report))
+    text = json.dumps(report, indent=2, sort_keys=True, default=str)
+    await asyncio.to_thread(out.write_text, text)
+    for label, block in p2p.items():
+        session = block["session"]
+        print(
+            f"station {label} ({block['model']}): connected={block['connected']} "
+            f"last_error={block['last_error']} read_errors={block['read_errors']} "
+            f"connects={session.get('connects')}"
+        )
     print(f"\nFull report written to {out}")
     print("Review it before sharing; nothing was uploaded.")
     return 0

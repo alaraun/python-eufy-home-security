@@ -10,7 +10,7 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -538,6 +538,26 @@ class SettingsCoverage:
     def complete(self) -> bool:
         """Whether every readable setting of the model was actually reported."""
         return not self.unreported
+
+
+#: Storage fields that identify a medium or a request, left out of :meth:`Station.diagnostics`.
+_STORAGE_OMITTED: Final = ("format_transaction",)
+_MEDIUM_OMITTED: Final = ("serial", "label")
+
+
+def _storage_figures(storage: StorageInfo | None) -> dict[str, Any] | None:
+    """``storage`` as plain figures, without the fields that identify a medium."""
+    if storage is None:
+        return None
+    figures = asdict(storage)
+    for key in _STORAGE_OMITTED:
+        figures.pop(key, None)
+    for part in ("disk", "external", "emmc"):
+        medium = figures.get(part)
+        if medium is not None:
+            for key in _MEDIUM_OMITTED:
+                medium.pop(key, None)
+    return figures
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -1409,6 +1429,36 @@ class Station:
     def stats(self) -> SessionStats:
         """Health counters of this station's session, JSON-safe and identifier-free."""
         return self.session.stats()
+
+    def diagnostics(self) -> dict[str, Any]:
+        """This station's health for a diagnostics report: JSON-safe and identifier-free.
+
+        Model, connection state and the last error's type, LAN-path warnings, local-event
+        support, the paired devices (:meth:`~.cloud.models.CloudDevice.as_redacted_dict`
+        without names), the session counters (:meth:`stats`), the dump keys the library
+        reads nowhere, and the storage figures without a medium's serial or label or a
+        format request id. Reads nothing: call :meth:`async_update` first for fresh state.
+        """
+
+        def device(entry: CloudDevice) -> dict[str, Any]:
+            view = entry.as_redacted_dict()
+            view.pop("name", None)
+            return view
+
+        return {
+            "model": self.model.model if self.model is not None else None,
+            "connected": self.connected,
+            "last_error": type(self.last_error).__name__ if self.last_error is not None else None,
+            "lan_path_warnings": [warning.value for warning in self.lan_path.warnings],
+            "local_events": self.local_events.support.value,
+            "standalone": self.is_standalone,
+            "on_demand": self.connects_on_demand,
+            "devices": [device(entry) for entry in self.devices],
+            "max_sessions": self.max_sessions,
+            "session": asdict(self.stats()),
+            "unread_dump_keys": sorted(self.session.unread_dump_keys),
+            "storage": _storage_figures(self.storage),
+        }
 
     # ── reads ────────────────────────────────────────────────────────────────
 
