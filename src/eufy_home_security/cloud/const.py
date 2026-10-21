@@ -267,6 +267,9 @@ LOCKOUT_HOLD_OFF_SECONDS: Final = 24 * 3600.0
 # within a few hours; a challenge (code, then answer) takes two.
 LOGIN_BUDGET: Final = 3
 LOGIN_BUDGET_WINDOW_SECONDS: Final = 6 * 3600.0
+# How long a verify-code answer is sent inside the pending login (its token, key
+# identity and password wrap): the code's validity is not declared, so a short bound.
+PENDING_LOGIN_TTL_SECONDS: Final = 15 * 60.0
 
 
 # ── body codes ───────────────────────────────────────────────────────────────

@@ -28,6 +28,7 @@ from eufy_home_security.exceptions import (
     KeyExchangeRefusedError,
     LoginChallengeError,
     LoginLimitedError,
+    LoginVerificationError,
     ProtocolError,
     RateLimitedError,
     RefreshCooldownError,
@@ -257,6 +258,256 @@ async def test_a_pending_two_step_login_is_a_challenge_not_a_session(
     assert (answer["verify_code"], answer["login_id"]) == ("123456", "")
     assert cache.cloud_session("eu")["auth_token"] == FAKE_AUTH_TOKEN
     assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
+
+
+_APP_ANSWER_FIELDS = {"email", "password", "ab", "client_secret_info", "verify_code", "login_id"}
+
+
+def _logins(fake_mega: FakeMega) -> list[tuple[dict[str, Any], dict[str, str]]]:
+    """Each login's decrypted body with its request headers, in order."""
+    bodies = [payload for name, payload in fake_mega.calls if name == "login"]
+    return list(zip(bodies, fake_mega.headers.get("login", []), strict=True))
+
+
+def _pending_logins(cache: SessionCache) -> dict[str, Any]:
+    return dict(cache.section("cloud").get("pending_logins") or {})
+
+
+async def test_a_verify_code_answer_is_sent_inside_the_pending_login(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """The answer reuses the challenge's key identity, carries its pending token and
+    ``gtoken``, the same password wrap, and only the fields the app sends."""
+    fake_mega.two_step = {"eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            with pytest.raises(LoginChallengeError):
+                await api.async_login()
+            assert set(_pending_logins(cache)) == {"eu"}
+            exchanges = sum(1 for endpoint, _ in fake_mega.region_calls if endpoint == "exchange")
+            await api.async_login(verify_code="123456")
+    assert sum(1 for endpoint, _ in fake_mega.region_calls if endpoint == "exchange") == exchanges
+    (first, first_headers), (answer, headers) = _logins(fake_mega)
+    assert "x-auth-token" not in first_headers
+    assert headers["x-key-ident"] == first_headers["x-key-ident"]
+    assert headers["x-auth-token"] == headers["authorization"] == FAKE_PENDING_TOKEN
+    assert headers["gtoken"] == crypto.gtoken(SYNTHETIC.account_id)
+    assert set(answer) == _APP_ANSWER_FIELDS
+    assert answer["client_secret_info"] == first["client_secret_info"]
+    assert answer["password"] == first["password"]
+    assert (answer["ab"], answer["verify_code"], answer["login_id"]) == (first["ab"], "123456", "")
+    assert cache.cloud_session("eu")["auth_token"] == FAKE_AUTH_TOKEN
+    assert cache.cloud_session("eu")["key_ident"] == first_headers["x-key-ident"]
+    assert _pending_logins(cache) == {}
+
+
+async def test_a_pending_login_survives_a_new_instance(fake_mega: FakeMega) -> None:
+    """A config flow answers on a new instance: the pending login comes from the store."""
+    store = MemoryStore()
+    with aioresponses() as mock:
+        fake_mega.two_step = {"eu"}
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            cache = SessionCache(store, SYNTHETIC.email)
+            await cache.async_load()
+            with pytest.raises(LoginChallengeError):
+                await _api(session, cache).async_login()
+
+            reloaded = SessionCache(store, SYNTHETIC.email)
+            await reloaded.async_load()
+            await _api(session, reloaded).async_login(verify_code="123456")
+    (first, first_headers), (answer, headers) = _logins(fake_mega)
+    assert headers["x-key-ident"] == first_headers["x-key-ident"]
+    assert headers["x-auth-token"] == FAKE_PENDING_TOKEN
+    assert answer["client_secret_info"] == first["client_secret_info"]
+    assert set(answer) == _APP_ANSWER_FIELDS
+    assert reloaded.cloud_session("eu")["auth_token"] == FAKE_AUTH_TOKEN
+
+
+async def test_a_lapsed_pending_login_answers_with_a_new_login(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.two_step = {"eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            with pytest.raises(LoginChallengeError):
+                await api.async_login()
+            _pending_logins(cache)["eu"]["expires_at"] = time.time() - 1
+            await api.async_login(verify_code="123456")
+    (first, first_headers), (answer, headers) = _logins(fake_mega)
+    assert headers["x-key-ident"] != first_headers["x-key-ident"]
+    assert "x-auth-token" not in headers
+    assert answer["client_secret_info"] != first["client_secret_info"]
+    assert (answer["answer"], answer["captcha_id"], answer["verify_code"]) == ("", "", "123456")
+
+
+def test_a_pending_login_lapses_at_its_expiry(
+    cache: SessionCache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = 1_000_000.0
+    monkeypatch.setattr(time, "time", lambda: now)
+    entry = {
+        "key_ident": "kid",
+        "shared_key": "00" * 32,
+        "auth_token": FAKE_PENDING_TOKEN,
+        "user_id": SYNTHETIC.account_id,
+        "client_public_key": "04" + "11" * 64,
+        "secret": "22" * 32,
+        "ab": "eu",
+        "expires_at": now + 1,
+    }
+    cache.section("cloud")["pending_logins"] = {"eu": entry}
+    api = EufyCloudApi(cast(Any, None), cache, SYNTHETIC.email, SYNTHETIC.password)
+    pending = api._pending_login("eu")
+    assert pending is not None
+    assert (pending.identity.auth_token, pending.secret, pending.ab) == (
+        FAKE_PENDING_TOKEN,
+        bytes.fromhex("22" * 32),
+        "eu",
+    )
+    entry["expires_at"] = now
+    assert api._pending_login("eu") is None
+    entry["expires_at"] = now + 1
+    entry["secret"] = "not hex"
+    assert api._pending_login("eu") is None
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        (200, {"code": int(const.CloudCode.EMAIL_OR_PASSWORD_ERROR), "msg": "Failed to login."}),
+        (401, {"code": 401, "msg": "expired"}),
+        (463, {"code": int(const.CloudCode.NEED_NEGOTIATE_KEY), "msg": "get identity error"}),
+    ],
+)
+@pytest.mark.parametrize("kept", [True, False], ids=["pending", "new-login"])
+async def test_a_refused_verify_code_answer_keeps_the_password(
+    fake_mega: FakeMega,
+    cache: SessionCache,
+    refusal: tuple[int, dict[str, Any]],
+    kept: bool,
+) -> None:
+    """The challenge's login accepted the password: a refused answer raises
+    LoginVerificationError, keeps the cached password, drops the pending login and
+    logs in no more."""
+    cache.set_password(SYNTHETIC.password)
+    fake_mega.two_step = {"eu"}
+    fake_mega.answer_error = refusal
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = EufyCloudApi(session, cache, SYNTHETIC.email, None, region="eu")
+            with pytest.raises(LoginChallengeError):
+                await api.async_login()
+            if not kept:
+                cache.section("cloud")["pending_logins"].clear()
+            with pytest.raises(LoginVerificationError) as exc:
+                await api.async_login(verify_code="123456")
+    assert (exc.value.code, exc.value.region) == (refusal[1]["code"], "eu")
+    assert cache.password == SYNTHETIC.password
+    assert _pending_logins(cache) == {}
+    assert "eu" not in cache.section("cloud").get("challenges", {})
+    assert api._challenge_region is None
+    assert fake_mega.login_calls == 2
+
+
+async def test_a_verify_code_answer_sends_the_challenge_ab_once(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """The answer carries the challenge login's ``ab``; a plain body-code refusal is not
+    sent again with the region as ``ab``."""
+    fake_mega.two_step = {"eu"}
+    fake_mega.answer_error = (200, {"code": int(const.CloudCode.INPUT_PARAM_INVALID), "msg": "x"})
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            with pytest.raises(LoginChallengeError):
+                await api.async_login()
+            _pending_logins(cache)["eu"]["ab"] = "FR"
+            with pytest.raises(CloudApiError) as exc:
+                await api.async_login(verify_code="123456")
+    assert type(exc.value) is CloudApiError
+    assert [body["ab"] for body, _headers in _logins(fake_mega)][1:] == ["FR"]
+
+
+async def test_a_rekey_answer_to_a_login_keeps_the_cached_password(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    cache.set_password(SYNTHETIC.password)
+    rekey = int(const.CloudCode.NEED_NEGOTIATE_KEY)
+    fake_mega.error_bodies["login"] = [(463, {"code": rekey, "msg": "get identity error"})]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(CloudApiError):
+                await EufyCloudApi(session, cache, SYNTHETIC.email, None, region="eu").async_login()
+    assert cache.password == SYNTHETIC.password
+
+
+async def test_a_wrong_code_keeps_the_pending_login(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """A wrong code (26050) asks again; the next answer still goes inside the pending login."""
+    fake_mega.two_step = {"eu"}
+    fake_mega.answer_error = (200, {"code": int(const.CloudCode.VERIFY_CODE_ERROR), "msg": "x"})
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            with pytest.raises(LoginChallengeError):
+                await api.async_login()
+            with pytest.raises(LoginChallengeError) as exc:
+                await api.async_login(verify_code="000000")
+            fake_mega.answer_error = None
+            await api.async_login(verify_code="123456")
+    assert (exc.value.kind, exc.value.code) == ("verify_code", 26050)
+    first_ident = _logins(fake_mega)[0][1]["x-key-ident"]
+    assert [headers["x-key-ident"] for _body, headers in _logins(fake_mega)] == [first_ident] * 3
+    assert cache.cloud_session("eu")["auth_token"] == FAKE_AUTH_TOKEN
+
+
+async def test_a_challenge_without_a_pending_token_drops_the_pending_login(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.two_step = {"eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            with pytest.raises(LoginChallengeError):
+                await api.async_login()
+            assert set(_pending_logins(cache)) == {"eu"}
+            fake_mega.login_code = int(const.CloudCode.NEED_VERIFY_CODE)
+            with pytest.raises(LoginChallengeError):
+                await api.async_login()
+    assert _pending_logins(cache) == {}
+
+
+async def test_a_captcha_answer_is_a_new_login_whatever_is_pending(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.two_step = {"eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            with pytest.raises(LoginChallengeError):
+                await api.async_login()
+            fake_mega.two_step = set()
+            await api.async_login(captcha_id="cap-123", captcha_answer="WXYZ")
+    (_first, first_headers), (answer, headers) = _logins(fake_mega)
+    assert headers["x-key-ident"] != first_headers["x-key-ident"]
+    assert "x-auth-token" not in headers
+    assert (answer["captcha_id"], answer["answer"], answer["verify_code"]) == (
+        "cap-123",
+        "WXYZ",
+        "",
+    )
 
 
 @pytest.mark.parametrize(

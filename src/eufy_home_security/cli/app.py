@@ -22,6 +22,7 @@ from ..exceptions import (
     HandshakeError,
     LoginChallengeError,
     LoginLimitedError,
+    LoginVerificationError,
     ProtocolError,
     RateLimitedError,
     SessionRejectedError,
@@ -71,6 +72,11 @@ def describe_error(exc: EufySecurityError) -> str:
                 f"the eufy cloud ended this session: {exc}. `eufy-security login` logs in "
                 "again, which ends the other client's session — give each client its own "
                 "account shared from the owner"
+            )
+        case LoginVerificationError():
+            return (
+                f"the eufy cloud refused the verification code ({exc}); the password is kept. "
+                "Run `eufy-security login` again for a new code"
             )
         case SessionRejectedError():
             return (

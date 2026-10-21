@@ -240,8 +240,10 @@ class SessionRejectedError(AuthenticationError):
 class LoginChallengeError(AuthenticationError):
     """Login needs a human answer: an e-mailed verification code or a captcha.
 
-    Re-run the login with the answer; ``login_id`` must be carried across both
-    calls (it may be empty). ``captcha_image`` is a data URI when the challenge is a
+    Re-run the login with the answer. ``login_id`` is the account's quick-login
+    credential, not part of the challenge: the library fills it only from a login
+    answer that carries one (none is declared) and sends it only when the caller
+    passes it back. ``captcha_image`` is a data URI when the challenge is a
     captcha. For a verification code the library has asked the cloud to e-mail one
     (``code_requested``); False when the login answer gave it no session to ask with.
     ``region`` is the login scope whose login asked (a region, or an extra country's
@@ -268,6 +270,22 @@ class LoginChallengeError(AuthenticationError):
         self.captcha_image = captcha_image
         self.code = code
         super().__init__(f"login requires {kind}")
+
+
+class LoginVerificationError(AuthenticationError):
+    """The cloud refused the answer to an e-mailed verification code.
+
+    The password was accepted by the login that raised the challenge, so it stays
+    cached; the pending verification is dropped. Nothing logs in again by itself
+    (each failed login counts toward the account lock): start over with a plain login,
+    which raises a new challenge and e-mails a new code. ``code`` is the answer's body
+    code (or HTTP status); ``region`` the login scope that was answered.
+    """
+
+    def __init__(self, message: str, *, code: int = 0, region: str = "") -> None:
+        self.code = code
+        self.region = region
+        super().__init__(message)
 
 
 # ── transport ────────────────────────────────────────────────────────────────

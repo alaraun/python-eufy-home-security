@@ -179,9 +179,15 @@ def encrypt_login_password(
     """
     private_key = ec.generate_private_key(ec.SECP256R1())
     secret = private_key.exchange(ec.ECDH(), load_public_key(server_public_key_hex))
+    return rewrap_login_password(password, public_key_hex(private_key), secret)
+
+
+def rewrap_login_password(password: str, client_public_key: str, secret: bytes) -> LoginPassword:
+    """Wrap ``password`` under an earlier wrap's ECDH ``secret`` and client public key,
+    as :func:`encrypt_login_password` does: the same password gives the same ciphertext."""
     ciphertext = _aes_cbc_encrypt(password.encode(), secret, secret[:16], block_bits=256)
     return LoginPassword(
         encrypted=base64.b64encode(ciphertext).decode(),
-        client_public_key=public_key_hex(private_key),
+        client_public_key=client_public_key,
         secret=secret,
     )

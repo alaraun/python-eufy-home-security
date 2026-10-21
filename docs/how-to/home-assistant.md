@@ -166,7 +166,8 @@ provides where it lives.
 | `cloud.extra_countries` | each extra country's home region | when a login or a device list first needs an extra country not looked up |
 | `cloud.install_ids` | the install id (`openudid`) of each extra country's login scope | minted on that scope's first key exchange, then kept wherever `openudid` is |
 | `cloud.refused` | each extra country's scope whose login the cloud refused with a plain body code (the code, when, and the extra countries then) | on that refusal; cleared by a rescan, a later login there, or a change of the extra countries |
-| `cloud.challenges` | the `login_id` of each login scope's unanswered login challenge (no code, no captcha answer) | when a login raises a challenge; cleared by that scope's next successful login |
+| `cloud.challenges` | each login scope with an unanswered login challenge, and the `login_id` its answer carried, if any (no code, no captcha answer) | when a login raises a challenge; cleared by that scope's next successful login |
+| `cloud.pending_logins` | per login scope, the pending login a verification-code answer is sent inside: key ident, shared key, pending auth token and user id, the password wrap's client public key and ECDH secret, the `ab`, expiry (15 min) | when a login raises a verification-code challenge with a pending token; cleared by that scope's next successful login or a refused answer |
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
 | `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`) and its RSA private key when served (`rsa_ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), the key-refresh latch, a standalone camera's device session key (`dsk`, with its expiry) and each camera's preset slots (`presets`) | keys on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass. `dsk` when a wake needs it and less than 5 min of it remain; `presets` on each preset read that differs |
@@ -222,10 +223,13 @@ session means another login, and a lost hold-off means calling a throttled cloud
 
 - **Config flow, adding the account:** nothing else is running. Build an instance, log
   in, `await eufy.async_close()` (which saves), then create the entry.
-- **Login challenge:** carry `login_id` (and `captcha_id`) between flow steps, and close
-  the instance before the step shows the form. The next step builds a new instance on
-  the same store; it reloads the document and answers with that `login_id`, and the
-  answer goes to the login scope that asked (the store keeps it). With extra countries
+- **Login challenge:** carry `captcha_id` between flow steps, and close the instance
+  before the step shows the form. The next step builds a new instance on the same
+  store; it reloads the document, and the answer goes to the login scope that asked,
+  inside that scope's pending login (the store keeps both for 15 min). Pass `login_id`
+  only if you hold one; it is not part of the challenge. `LoginVerificationError` on
+  the answer: the code was refused and the pending login dropped; show the first step
+  again (a plain login e-mails a new code). The password stays cached. With extra countries
   each scope logs in on its own, so an account with two-step verification answers one
   challenge per scope: after an answer, `async_login` may raise the next scope's
   challenge; show the form again. Two logins per scope count in that cluster's budget
@@ -324,7 +328,7 @@ device, the *login scope* that listed it: the region (`eu`) for the login countr
   share its budget; a credential lock (too many wrong passwords) holds off every
   cluster. `async_login()` on a cold cache logs in to every scope the next device list
   asks, so a login challenge surfaces there; its `LoginChallengeError.region` names the
-  scope, and the answer (`async_login(verify_code=…, login_id=…)`) goes back to it, on
+  scope, and the answer (`async_login(verify_code=…)`) goes back to it, on
   this instance or a new one on the same store.
 - While no country is known (no `country`, and eufy names no IP country), both regions
   log in with the region as `ab`.
@@ -2478,7 +2482,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 
 | library error | HA response |
 |---|---|
-| `LoginChallengeError`, `AuthenticationError` | `raise ConfigEntryAuthFailed` — start the reauth flow. Answer a challenge with `async_login(verify_code=…, login_id=challenge.login_id)` (or `captcha_id`/`captcha_answer`). A `verify_code` challenge (`kind`) is also how an account with two-step verification answers a correct password; `code_requested` says the library has asked eufy to e-mail the code. `SessionRejectedError` (an `AuthenticationError`): the cloud refused the session again after one fresh login |
+| `LoginChallengeError`, `AuthenticationError` | `raise ConfigEntryAuthFailed` — start the reauth flow. Answer a challenge with `async_login(verify_code=…)` (or `captcha_id`/`captcha_answer`). `LoginVerificationError` (an `AuthenticationError`): the cloud refused a code answer; the password is kept, start over with a plain login for a new code. A `verify_code` challenge (`kind`) is also how an account with two-step verification answers a correct password; `code_requested` says the library has asked eufy to e-mail the code. `SessionRejectedError` (an `AuthenticationError`): the cloud refused the session again after one fresh login |
 | `SessionReplacedError` | not a reauth: another app or integration logged in with this account and the cloud ended the library's session. Raise a repair issue ("give Home Assistant its own eufy account, shared from the owner"). At setup, carry on from the cache: `async_discover()` and `async_start()` need no login when the cache is warm, so local control keeps working. `raise ConfigEntryNotReady` only if `async_discover()` fails too (a cold cache). Nothing logs in again by itself, restarts included (`EufySecurity.session_replaced`); when the user confirms in the repair flow, call `async_login(force=True)` and reload the entry |
 | `LoginLimitedError` (a `RateLimitedError`) | not a reauth: the credentials are fine. Raise a repair issue ("eufy is refusing logins, retrying in …"; with `origin == "budget"` it is the library's own limit for `scope`, see below the table) and carry on from the cache as above; `raise ConfigEntryNotReady` only on a cold cache. Clear the issue on the next successful login |
 | `RateLimitedError` | `raise ConfigEntryNotReady` / `UpdateFailed`; schedule the next attempt no sooner than `err.retry_after` seconds |

@@ -371,6 +371,7 @@ async def test_a_re_login_that_meets_a_challenge_asks_for_no_code(
         await _api(http, cache).async_login()
     assert _login_abs(fake_mega) == ["EE"]
     assert fake_mega.code_requests == []
+    assert not cache.section("cloud").get("pending_logins")  # nothing to answer
     assert cache.cloud_session("eu")["auth_token"] == token
     assert cache.cloud_session("eu")["ab_wanted"] == "EE"
 

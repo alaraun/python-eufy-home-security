@@ -100,6 +100,9 @@ class FakeMega:
         self.login_extra: dict[str, Any] = {}
         # Regions whose login without a verify_code answers code 0 with ``fa_info.step`` 26052.
         self.two_step: set[str] = set()
+        # (HTTP status, JSON body) a login carrying a ``verify_code`` answers with
+        # instead of success.
+        self.answer_error: tuple[int, dict[str, Any]] | None = None
         # The auth token of each ``sendmsg/verify_code`` request, with its body.
         self.code_requests: list[tuple[str, dict[str, Any]]] = []
         self.devices: list[dict[str, Any]] = []
@@ -418,6 +421,9 @@ class FakeMega:
         self.headers.setdefault("login", []).append(dict(kwargs["headers"]))
         if failure := self._failure_once("login", kwargs):
             return failure
+        if self.answer_error is not None and payload.get("verify_code"):
+            status, error_body = self.answer_error
+            return CallbackResult(status=status, body=json.dumps(error_body))
         if code := self.region_login_code.get(region, self.login_code):
             return CallbackResult(
                 status=200,
@@ -427,6 +433,7 @@ class FakeMega:
             pending = {
                 **self.login_data,
                 "auth_token": FAKE_PENDING_TOKEN,
+                "user_id": SYNTHETIC.account_id,
                 "fa_info": {"info": "use verify code for 2fa", "step": 26052},
             }
             return self._reply(shared, 0, pending)

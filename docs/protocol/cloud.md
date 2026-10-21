@@ -198,8 +198,8 @@ live account.
 
 | code(s) | challenge | re-submit with |
 |---|---|---|
-| 26052 `NEED_VERIFY_CODE` (26050 wrong, 26051/26167 expired, 26054 mismatch) | e-mailed code | `verify_code` and the `login_id` returned with the challenge (`LoginChallengeError.login_id`; pass it back as `async_login(login_id=…)`) |
-| code 0 with `fa_info.step` 26052 | two-step verification | as 26052: the answer's `auth_token` is not a session; it serves only to ask for the code (below) **[app; reported: the token's first request answers HTTP 401]** |
+| 26052 `NEED_VERIFY_CODE` (26050 wrong, 26051/26167 expired, 26054 mismatch) | e-mailed code | `verify_code` (see *Answering the code*) |
+| code 0 with `fa_info.step` 26052 | two-step verification | as 26052: the answer's `auth_token` is not a session; it asks for the code (below) and carries the answer **[app; reported: the token's first request answers HTTP 401]** |
 | 100032 `LOGIN_NEED_CAPTCHA` (100033 wrong answer) | captcha | first `POST /passport/generate/captcha` (passport host), which returns `{captcha_id, item}` with `item` a base64 image, then re-submit with `captcha_id` and `answer` |
 
 **Asking for the code [app].** For a 26052 answer that carries an `auth_token`, the
@@ -208,14 +208,38 @@ token, body `{transaction, message_type: 2 (e-mail; 1 SMS, 3 app push), biz_type
 (login), captcha_id: "", answer: ""}`, before raising `LoginChallengeError`
 (`code_requested`). When that request fails (an HTTP 401, a body code, the network),
 the challenge is raised all the same with `code_requested` false, so the login can still
-be answered. The token is never stored. The answer is a new login with
-`verify_code` and `login_id` (empty when the challenge carried none).
+be answered. The token is never stored as a session.
+
+**Answering the code [app; not verified on a live account].** The answer is a second
+`/passport/login` sent inside the pending login, not a fresh one:
+
+- the same key-exchange identity (`X-Key-Ident`, shared key), no new key exchange;
+- the pending `auth_token` as `x-auth-token` and `authorization`, and `gtoken` =
+  MD5 of the pending answer's `user_id`;
+- the same password wrap: the same `client_secret_info.public_key` and, for the same
+  password, the same ciphertext;
+- body exactly `{email, password, ab, client_secret_info, verify_code, login_id}`, with
+  no `answer` and no `captcha_id`.
+
+`login_id` is the account's quick-login (biometric) credential, not part of a challenge:
+the login answer declares none, and a password login sends `""`. The library sends the
+caller's `login_id` when one is passed, else `""`.
+
+The library keeps that context per login scope in the cache (`cloud.pending_logins`:
+key identity, pending token and user id, the wrap's client public key and ECDH secret,
+the `ab`), for 15 min, so an answer on a new instance (a config-flow step) goes inside it
+too. Without it (lapsed, or a challenge that carried no `auth_token`) the answer is a new
+login with a new key exchange and wrap. A captcha answer is always a new login. A wrong
+code (26050) raises the challenge again and keeps the context. A credential code (26006
+and the rest of *bad credentials*), HTTP 401 or a re-key answer to a code answer raises
+`LoginVerificationError`: the password stays cached, the context is dropped, and nothing
+logs in again until the caller starts over.
 
 **Which scope answers.** Each login scope logs in on its own, so each can raise its own
-challenge. The library keeps the scope of every unanswered challenge with its `login_id`
-in the cache (`cloud.challenges`; no code, no captcha answer) and sends an answer to the
-scope whose `login_id` it carries, else to the only one pending, else to the home
-region; that scope's successful login clears it. Two-step verification therefore costs
+challenge. The library keeps the scope of every unanswered challenge in the cache
+(`cloud.challenges`, with the `login_id` its answer carried, if any; no code, no captcha
+answer) and sends an answer to the scope whose `login_id` it carries, else to the only
+one pending, else to the home region; that scope's successful login clears it. Two-step verification therefore costs
 two logins per scope, which count in its cluster's login budget.
 
 ## Device list
@@ -463,7 +487,7 @@ Whether a guest (`member_type` 0) is served is untested **[open]**.
 | session replaced | 26084 `SESSION_REPLACED`, as body code or with HTTP 401 **[verified: HTTP 401 + 26084 after another client logged in]** | stop: never log in again automatically, or two clients on one account kick each other out into the login lock. The app logs out on it too. |
 | re-key | HTTP status 463, or body 463 `NEED_EXCHANGED_KEY` / 4404 `NEED_NEGOTIATE_KEY` under any status. Live: `HTTP 463 {"code":4404,"msg":"get identity error"}` on `get_devs_list`, starting 72 h after the session's key exchange on one account **[verified, one sample]** | a new key exchange on the login realm, then the same request with the **same auth token** under the new `key_ident` / shared key; no login. **[verified]**: this restored the device list on a session refused for 18 h. The app does the same (its HTTP-463 handler re-keys and retries). A second refusal is `KeyExchangeRefusedError`. On `get_ciphers` 463 also means a wrong-realm identity. |
 | signature / clock | 4416, 461 `TS_NOT_MATCH` | a client bug or clock skew, so do not retry blindly |
-| bad credentials | 22008, 26006, 26015, 26055, 26105, 26108 | stop and ask the user. Never log in again automatically: each failure counts toward the lock. |
+| bad credentials | 22008, 26006, 26015, 26055, 26105, 26108 | stop and ask the user. Never log in again automatically: each failure counts toward the lock. On a verification-code answer: `LoginVerificationError`, the password kept (see Login challenges). |
 | challenge | 26050–26054, 26167, 100032, 100033 | see Login challenges |
 | throttled (requests) | 26145 `API_REQUEST_LIMIT`, 250999 `REQUEST_TOO_FAST` **[reported]**, HTTP 429 | hold off every call (1 h, or a longer `Retry-After`) |
 | throttled / locked (logins) | **100028 `MAX_LOGIN_LIMIT`** (hold off logins 2 h); 10019, 100056, 26053 (24 h) | hold off logins; a valid session keeps working |

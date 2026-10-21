@@ -67,6 +67,15 @@ def test_load_public_key_rejects_non_points() -> None:
         crypto.load_public_key("00" * 10)
 
 
+def test_a_rewrapped_password_matches_the_first_wrap() -> None:
+    first = crypto.encrypt_login_password("hunter2hunter2")
+    again = crypto.rewrap_login_password("hunter2hunter2", first.client_public_key, first.secret)
+    assert (again.encrypted, again.client_public_key) == (first.encrypted, first.client_public_key)
+    other = crypto.rewrap_login_password("other", "04" + "ab" * 64, first.secret)
+    assert other.encrypted != first.encrypted
+    assert other.client_public_key == "04" + "ab" * 64
+
+
 def test_login_password_repr_hides_the_ciphertext() -> None:
     out = crypto.encrypt_login_password("hunter2hunter2")
     assert out.encrypted not in repr(out)

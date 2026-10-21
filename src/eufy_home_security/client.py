@@ -383,8 +383,8 @@ class EufySecurity:
     ) -> None:
         """Log in (reusing a cached session unless ``force``).
 
-        Raises ``LoginChallengeError`` for 2FA/captcha: call again with the answer
-        and the challenge's ``login_id``. After another client took over the session
+        Raises ``LoginChallengeError`` for 2FA/captcha: call again with the answer;
+        ``LoginVerificationError`` when the cloud refuses a code answer. After another client took over the session
         (``SessionReplacedError``) only ``force`` logs in again — a user's decision.
         """
         await self._ensure_cache_loaded()
