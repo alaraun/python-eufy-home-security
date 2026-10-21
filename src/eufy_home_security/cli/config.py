@@ -307,6 +307,29 @@ def build_parser() -> argparse.ArgumentParser:
     monitor.add_argument("--no-push", action="store_true", help="skip cloud push (FCM)")
     monitor.add_argument("--no-p2p", action="store_true", help="skip local station sessions")
     monitor.add_argument("--json", action="store_true", help="one JSON object per line")
+
+    diagnose = command(
+        "diagnose", "read-only WebRTC data-channel diagnostics (for webrtc_only stations)"
+    )
+    diagnose.add_argument(
+        "--explain", action="store_true", help="print what it collects and exit, without logging in"
+    )
+    diagnose.add_argument(
+        "--all-stations", action="store_true", help="probe every station, not only webrtc_only ones"
+    )
+    diagnose.add_argument("--channel", type=int, default=0, help="channel to probe (default 0)")
+    diagnose.add_argument(
+        "--listen", type=float, default=6.0, help="seconds to listen in the A/V probe (default 6)"
+    )
+    diagnose.add_argument(
+        "--no-commands", action="store_true", help="skip the read-only command probe"
+    )
+    diagnose.add_argument("--no-av", action="store_true", help="skip the live A/V probe")
+    diagnose.add_argument(
+        "--output",
+        type=Path,
+        help="write the JSON report here (default eufy-diagnostics-<ts>.json)",
+    )
     return parser
 
 

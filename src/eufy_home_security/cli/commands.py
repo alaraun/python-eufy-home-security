@@ -7,6 +7,7 @@ import asyncio
 import contextlib
 import getpass
 import json
+import secrets
 import sys
 import tempfile
 import time
@@ -714,6 +715,121 @@ async def cmd_monitor(ctx: Context) -> int:
     return 0  # pragma: no cover - only Ctrl+C ends the wait
 
 
+_DIAGNOSE_EXPLAIN = """\
+eufy-security diagnose — read-only WebRTC data-channel diagnostics
+
+What it does (all read-only; nothing is written, armed, or triggered):
+  1. Log in to your account on THIS machine (credentials never leave it, never written).
+  2. List your devices; pick the webrtc_only stations (or --station / --all-stations).
+  3. For each: place a kind-5 CALL, connect ICE, bring up the KCP channel, send a keep-alive.
+  4. Send read-only queries (storage/device info) unless --no-commands.
+  5. Briefly listen for live packets unless --no-av (metadata only; never any media payload).
+  (It wakes a sleeping station to reach it; that is unavoidable.)
+
+What the report contains — and never:
+  Collected: field lengths, counts, timings, protocol-header types, candidate-type counts,
+  the label of the key that opens a reply, and a reply's top-level JSON key NAMES.
+  Never: your password/tokens, account id/email, full serials, IP addresses, encryption
+  keys, or any audio/video content. The report is written to a JSON file for you to review
+  before sharing — nothing is uploaded.
+"""
+
+
+def _library_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
+
+    try:
+        return version("eufy-home-security")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+async def cmd_diagnose(ctx: Context) -> int:
+    from datetime import UTC  # noqa: PLC0415
+
+    from ..devices.recipes import WEBRTC_ONLY_STATIONS  # noqa: PLC0415
+    from ..rtc import diagnostics as diag  # noqa: PLC0415
+    from ..rtc.config import RtcConfig  # noqa: PLC0415
+    from ..rtc.crypto import RtcSignalingCrypto  # noqa: PLC0415
+    from ..rtc.session import RtcSession  # noqa: PLC0415
+
+    if ctx.args.explain:
+        print(_DIAGNOSE_EXPLAIN)
+        return 0
+    try:
+        import aioice  # noqa: F401, PLC0415 - the rtc extra
+    except ImportError as exc:
+        raise UsageError(
+            "diagnose needs the rtc extra: pip install 'eufy-home-security[rtc]'"
+        ) from exc
+
+    app_id = secrets.token_hex(8)
+    reports: list[diag.StationReport] = []
+    async with await open_account(ctx) as eufy:
+        await eufy.async_login()
+        devices = await eufy.cloud.async_get_devices(refresh=True)
+        user_id = eufy.cloud.user_id
+        if not user_id:
+            raise UsageError("logged in but the account has no user id")
+        webrtc_only_total = sum(
+            1 for d in devices if d.is_station and d.device_sn[:5] in WEBRTC_ONLY_STATIONS
+        )
+        targets = [d for d in devices if d.is_station]
+        if ctx.args.station:
+            targets = [d for d in targets if d.device_sn == ctx.args.station]
+        elif not ctx.args.all_stations:
+            targets = [d for d in targets if d.device_sn[:5] in WEBRTC_ONLY_STATIONS]
+        for device in targets:
+            model = device.device_sn[:5]
+            is_webrtc_only = model in WEBRTC_ONLY_STATIONS
+            config = RtcConfig.from_device(device.raw, user_id=user_id, app_id=app_id)
+            if config is None:
+                reports.append(
+                    diag.StationReport(
+                        model=model,
+                        is_webrtc_only=is_webrtc_only,
+                        channel=ctx.args.channel,
+                        error="no_signaling_config",
+                    )
+                )
+                continue
+            session = RtcSession(config, RtcSignalingCrypto())
+            try:
+                await session.start()
+                reports.append(
+                    await diag.collect_station(
+                        session,
+                        model=model,
+                        channel=ctx.args.channel,
+                        account_id=user_id,
+                        do_commands=not ctx.args.no_commands,
+                        do_av=not ctx.args.no_av,
+                        listen_s=ctx.args.listen,
+                    )
+                )
+            finally:
+                await session.close()
+        region = getattr(eufy.cloud, "region", None)
+        report = diag.DiagnosticsReport(
+            library_version=_library_version(),
+            created_utc=datetime.now(UTC).isoformat(timespec="seconds"),
+            auth=diag.AuthReport(
+                logged_in=True,
+                region=region if isinstance(region, str) else None,
+                user_id_present=bool(user_id),
+                device_count=len(devices),
+                webrtc_only_count=webrtc_only_total,
+            ),
+            stations=reports,
+        )
+    out: Path = ctx.args.output or Path(f"eufy-diagnostics-{int(time.time())}.json")
+    await asyncio.to_thread(out.write_text, report.to_json())
+    print(diag.render(report))
+    print(f"\nFull report written to {out}")
+    print("Review it before sharing; nothing was uploaded.")
+    return 0
+
+
 COMMANDS: dict[str, Callable[[Context], Coroutine[Any, Any, int]]] = {
     "discover": cmd_discover,
     "login": cmd_login,
@@ -734,4 +850,5 @@ COMMANDS: dict[str, Callable[[Context], Coroutine[Any, Any, int]]] = {
     "recording": cmd_recording,
     "snapshot": cmd_snapshot,
     "monitor": cmd_monitor,
+    "diagnose": cmd_diagnose,
 }
