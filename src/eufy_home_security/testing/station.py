@@ -55,12 +55,14 @@ from ..p2p.media import (
     AUDIO_HEADER_LEN,
     PLAYBACK_ENDED,
     V1_ENCRYPTED_LEN,
+    V2_ENCRYPTED_LEN,
     VIDEO_CODEC_HEVC,
     VIDEO_HEADER_LEN,
     MediaKeyType,
     StillFormat,
     VideoVariant,
     pic_check_code,
+    v2_still_key,
 )
 from ..p2p.messages import (
     CMD_SET_TONE_FILE,
@@ -238,6 +240,27 @@ def v1_still(
     key = pic_check_code(serial, did, code)[:16].encode()
     header = f"{StillFormat.V1.value}:{serial}:{code}:".encode()
     return header + ecb_encrypt(key, image[:V1_ENCRYPTED_LEN]) + image[V1_ENCRYPTED_LEN:]
+
+
+def v2_still(
+    image: bytes,
+    serial: str = SYNTHETIC.camera_sn,
+    *,
+    did: str = SYNTHETIC.did,
+    code: str = "0123456789",
+) -> bytes:
+    """``image`` (at least 256 bytes) as a V2 ``v2_eufysecurity`` still of ``serial``
+    (16 characters), decodable with ``did``. The header's separators are ``:``; the
+    decoder does not read them."""
+    if len(image) < V2_ENCRYPTED_LEN or len(serial) != 16 or len(code) != 10:
+        raise ValueError("a V2 still needs a 256-byte image, a 16-char serial, a 10-char code")
+    nonce = os.urandom(12)
+    sealed = AESGCM(v2_still_key(serial, did, code)).encrypt(
+        nonce, image[:V2_ENCRYPTED_LEN], GCM_AAD
+    )
+    ciphertext, tag = sealed[:-16], sealed[-16:]
+    header = f"{StillFormat.V2.value}:{serial}:{code}:".encode() + nonce + b":" + tag + b":"
+    return header + ciphertext + image[V2_ENCRYPTED_LEN:]
 
 
 def synthetic_hub_storage() -> dict[str, Any]:

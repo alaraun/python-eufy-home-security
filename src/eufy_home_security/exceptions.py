@@ -441,6 +441,14 @@ class ModeInUseError(UnsupportedError):
         super().__init__(reason)
 
 
+class VideoEncryptedPictureError(UnsupportedError):
+    """A picture is protected by the account's Video Encryption (a ``v8_eufysecurity`` still).
+
+    Its key is wrapped to the Video Encryption key the eufy app keeps on the phone, which
+    the library does not have: the picture cannot be decoded here (declared, eufy app).
+    """
+
+
 class ConfigChangedError(EufySecurityError):
     """The station's configuration changed since the revision a write was based on.
 

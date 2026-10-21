@@ -6,7 +6,7 @@ Never imported by the package itself: import it from a test suite only.
   use; never a real identifier.
 - :class:`FakeStation`: a HomeBase speaking PPPP/XZYH on loopback, handshake to media.
 - :class:`FakeCloud`: the eufy cloud answered below the HTTP envelope.
-- :func:`v1_still`: a JPEG as a standalone camera's obfuscated V1 still.
+- :func:`v1_still`, :func:`v2_still`: a JPEG as an obfuscated V1 or V2 eufy still.
 - :func:`warm_store`: a cache document as after one login.
 - :func:`build_eufy_security`: a real :class:`~eufy_home_security.EufySecurity` wired
   to the fakes.
@@ -26,7 +26,7 @@ from .cloud import (
     station_device,
     warm_store,
 )
-from .station import FakeStation, v1_still
+from .station import FakeStation, v1_still, v2_still
 from .station_config import mode_list_params, schedule_params
 from .synthetic import SYNTHETIC, Synthetic
 from .timeouts import short_timeouts
@@ -45,5 +45,6 @@ __all__ = [
     "short_timeouts",
     "station_device",
     "v1_still",
+    "v2_still",
     "warm_store",
 ]

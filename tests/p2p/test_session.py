@@ -9,7 +9,7 @@ import os
 import socket
 import struct
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -102,6 +102,7 @@ from eufy_home_security.testing.station import (
     media_keyframe_parts,
     synthetic_hub_storage,
     v1_still,
+    v2_still,
     video_record,
 )
 
@@ -3544,10 +3545,13 @@ async def test_async_event_summary_and_fetch_still_accept_clear_replies(
         await session.async_close()
 
 
-async def test_async_fetch_still_decodes_v1(station: FakeStation) -> None:
+@pytest.mark.parametrize(("build", "fmt"), [(v1_still, StillFormat.V1), (v2_still, StillFormat.V2)])
+async def test_async_fetch_still_decodes_v1_and_v2(
+    station: FakeStation, build: Callable[..., bytes], fmt: StillFormat
+) -> None:
     path = "/media/mmcblk0p1/Camera00/event/202609/20260917/20260917223859_snapshot.jpg"
     image = b"\xff\xd8\xff\xe0" + bytes(400) + b"\xff\xd9"
-    wrapped = v1_still(image, SYNTHETIC.camera_sn, did=SYNTHETIC.did)
+    wrapped = build(image, SYNTHETIC.camera_sn, did=SYNTHETIC.did)
     station.images[path] = wrapped
     session = make_session(station, Provider(station))
     try:
@@ -3556,9 +3560,9 @@ async def test_async_fetch_still_decodes_v1(station: FakeStation) -> None:
         still = await session.async_fetch_still(path)
         assert still.path == path
         assert still.data == image
-        assert still.format == StillFormat.V1
+        assert still.format == fmt
         assert still.is_image is True
-        assert session.stats().stills_by_format["eufysecurity"] == 1
+        assert session.stats().stills_by_format[fmt.value] == 1
     finally:
         await session.async_close()
 

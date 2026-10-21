@@ -1335,7 +1335,10 @@ record_id, recorded_at, preset, width, height, codec)`, with `is_jpeg` and `high
   `PushImage(source, device_sn, data, content_type, face_id)` (`PushPictureSource.FACE`:
   the cloud's face crop of a person push, `PIC_URL`: the push's own picture). This is
   the only picture a HomeBase 2 person push has: its station path is not on the push,
-  and the camera stays asleep. See [events.md](../protocol/events.md#push-pictures).
+  and the camera stays asleep. The library decodes the eufy-obfuscated V1/V2 pictures
+  itself; `VideoEncryptedPictureError` (an `UnsupportedError`) means the account's
+  Video Encryption protects the picture, which no client but the eufy app can show:
+  keep the previous image. See [events.md](../protocol/events.md#push-pictures).
 - **`LIVE` shows the camera asked for** on a station with several cameras (the live
   open names the channel in its subheader). A live stream
   whose frames come from another camera raises `ProtocolError` rather than returning

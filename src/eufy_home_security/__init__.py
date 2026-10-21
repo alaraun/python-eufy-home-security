@@ -111,6 +111,7 @@ if TYPE_CHECKING:
         StationUnreachableError,
         StillNotWrittenError,
         UnsupportedError,
+        VideoEncryptedPictureError,
     )
     from .identity import StationClaims, entity_unique_id
     from .images import (
@@ -296,6 +297,7 @@ _EXPORTS: dict[str, str] = {
             "StationUnreachableError",
             "StillNotWrittenError",
             "UnsupportedError",
+            "VideoEncryptedPictureError",
         ),
         "exceptions",
     ),
@@ -528,6 +530,7 @@ __all__ = [
     "UnsupportedError",
     "ValueSource",
     "VideoCodec",
+    "VideoEncryptedPictureError",
     "Weekday",
     "ZoomChanged",
     "__version__",

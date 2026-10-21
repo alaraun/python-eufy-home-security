@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import Any, ClassVar, cast
 
 import aiohttp
@@ -62,6 +62,7 @@ from eufy_home_security.exceptions import (
     SessionReplacedError,
     StationUnreachableError,
     UnsupportedError,
+    VideoEncryptedPictureError,
 )
 from eufy_home_security.identity import StationClaims
 from eufy_home_security.images import JPEG_CONTENT_TYPE, PushImage
@@ -85,6 +86,8 @@ from eufy_home_security.testing import (
     FakeCloud,
     FakeStation,
     build_eufy_security,
+    v1_still,
+    v2_still,
     warm_store,
 )
 from eufy_home_security.testing.cloud import (
@@ -2489,7 +2492,80 @@ async def test_a_push_without_that_picture_raises_unsupported_before_sending(
     assert cloud.calls == []
 
 
-async def test_a_pushed_picture_that_is_no_image_raises() -> None:
-    cloud = FakeCloud(pictures={_PIC_URL: b"v8_eufysecurity:encrypted"})
-    with pytest.raises(UnsupportedError):
-        await _picture_client(cloud).async_push_image(_face_push(fetch_id=None, pic_url=_PIC_URL))
+_STILL_JPEG = b"\xff\xd8\xff\xe0" + bytes(400) + b"\xff\xd9"
+
+
+def _listing_client(cloud: FakeCloud, camera_did: str | None = None) -> EufySecurity:
+    """A client whose cached device list holds the station and its camera (``camera_did``
+    its own DID; None: none, as a HomeBase 2 child)."""
+    eufy = _picture_client(cloud)
+    camera = camera_device() | ({"p2p_did": camera_did} if camera_did else {})
+    listed = [CloudDevice.from_api(station_device()), CloudDevice.from_api(camera)]
+    eufy.listed_devices = MappingProxyType({d.device_sn: d for d in listed})
+    return eufy
+
+
+@pytest.mark.parametrize("build", [v1_still, v2_still])
+@pytest.mark.parametrize("camera_did", [None, OTHER_DID])
+async def test_an_obfuscated_pic_url_picture_is_decoded_with_the_cached_did(
+    build: Callable[..., bytes], camera_did: str | None
+) -> None:
+    """Keyed by the station's DID: found after the camera's own (none, or another)."""
+    wrapped = build(_STILL_JPEG, SYNTHETIC.camera_sn, did=SYNTHETIC.did)
+    cloud = FakeCloud(pictures={_PIC_URL: wrapped})
+    eufy = _listing_client(cloud, camera_did)
+    cloud.calls.clear()
+    image = await eufy.async_push_image(_face_push(fetch_id=None, pic_url=_PIC_URL))
+    assert (image.source, image.data, image.content_type) == (
+        PushPictureSource.PIC_URL,
+        _STILL_JPEG,
+        JPEG_CONTENT_TYPE,
+    )
+    assert "devices" not in cloud.calls
+
+
+async def test_an_obfuscated_face_picture_is_decoded() -> None:
+    cloud = FakeCloud(
+        faces={0x1A2B3C: {"ai_face_id": 0x1A2B3C, "face_url": _FACE_URL}},
+        pictures={_FACE_URL: v2_still(_STILL_JPEG, SYNTHETIC.camera_sn, did=SYNTHETIC.did)},
+    )
+    image = await _listing_client(cloud).async_push_image(_face_push(), PushPictureSource.FACE)
+    assert (image.data, image.face_id) == (_STILL_JPEG, 0x1A2B3C)
+
+
+@pytest.mark.parametrize(
+    ("data", "error", "logged"),
+    [
+        (
+            b"v8_eufysecurity:" + SYNTHETIC.camera_sn.encode() + bytes(400),
+            VideoEncryptedPictureError,
+            "format v8_eufysecurity, 432 bytes",
+        ),
+        (b"GIF89a-not-shown", UnsupportedError, "format unknown, 16 bytes, first bytes 47494638"),
+        (
+            v1_still(_STILL_JPEG, SYNTHETIC.camera_sn, did=OTHER_DID),
+            UnsupportedError,
+            "format eufysecurity, 447 bytes",
+        ),
+        (
+            v1_still(_STILL_JPEG, OTHER_STATION_SN, did=SYNTHETIC.did),
+            UnsupportedError,
+            "format eufysecurity, 447 bytes",
+        ),
+    ],
+    ids=["v8", "unknown", "v1-wrong-did", "v1-unlisted-device"],
+)
+async def test_a_pushed_picture_that_is_no_image_raises_and_logs_its_format(
+    data: bytes, error: type[UnsupportedError], logged: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """V8 (Video Encryption), an unknown format, a V1 still no cached DID decodes or of a
+    device the cached list does not hold."""
+    cloud = FakeCloud(pictures={_PIC_URL: data})
+    with (
+        caplog.at_level(logging.DEBUG, logger=client_module.__name__),
+        pytest.raises(UnsupportedError) as caught,
+    ):
+        await _listing_client(cloud).async_push_image(_face_push(fetch_id=None, pic_url=_PIC_URL))
+    assert type(caught.value) is error
+    assert logged in caplog.text
+    assert SYNTHETIC.camera_sn not in caplog.text

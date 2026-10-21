@@ -185,8 +185,9 @@ def picture_content_type(data: bytes) -> str | None:
 class PushImage:
     """A picture a detection push names, and where it came from.
 
-    ``data`` is a displayable picture of :attr:`content_type` (a pushed picture that is
-    not one, such as a header-encrypted still, is never returned: it raises instead).
+    ``data`` is a displayable picture of :attr:`content_type`: a V1 or V2 eufy still is
+    decoded first, and a pushed picture that is no displayable one is never returned (it
+    raises instead).
     A ``FACE`` image is the cloud's crop of the matched face, small; a ``PIC_URL`` image
     the push's event picture.
     """

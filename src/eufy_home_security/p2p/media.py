@@ -23,16 +23,17 @@ from __future__ import annotations
 import hashlib
 import re
 import struct
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Final
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from ..devices.recipes import station_live_payload
-from ..exceptions import ProtocolError, UnsupportedError
+from ..exceptions import ProtocolError, UnsupportedError, VideoEncryptedPictureError
 from .crypto import GCM_AAD, ecb_decrypt, ecies_decrypt, gcm_decrypt_broadcast
 from .xzyh import Frame, FrameCipher, FrameType
 
@@ -991,16 +992,20 @@ def decode_record_play_ctrl(frame: Frame, session_key: bytes | None) -> int | No
 
 
 class StillFormat(StrEnum):
-    """What a 1308 still's bytes are. The obfuscated variants' values are their magics."""
+    """What a still's or pushed picture's bytes are. The obfuscated variants' values are
+    their magics."""
 
     JPEG = "jpeg"
     V1 = "eufysecurity"
     """AES-128-ECB over the first 256 bytes, keyed by serial, DID and a header code
     (:func:`decode_v1_still`)."""
     V2 = "v2_eufysecurity"
-    """AES-256-GCM over the first 256 bytes; key derivation unknown, not decoded."""
+    """AES-256-GCM over the first 256 bytes, keyed by the full check code of serial, DID
+    and a header code (:func:`decode_v2_still`)."""
     V8 = "v8_eufysecurity"
-    """AES-256-GCM over the whole body, per-image key from the cloud."""
+    """AES-256-GCM over the whole body under a per-image key wrapped to the account's
+    Video Encryption key; not decodable by the library
+    (:class:`~..exceptions.VideoEncryptedPictureError`)."""
     UNKNOWN = "unknown"
 
 
@@ -1099,13 +1104,97 @@ def decode_v1_still(data: bytes, did: str) -> bytes:
     return image
 
 
+# ── V2 still decoding (declared, eufy app) ──────────────────────────────────────
+
+#: ``v2_eufysecurity`` + serial, code, GCM nonce and tag at fixed offsets, then the body.
+_V2_SN = slice(16, 32)
+_V2_CODE = slice(33, 43)
+_V2_NONCE = slice(44, 56)
+_V2_TAG = slice(57, 73)
+_V2_BODY = 74
+#: Bytes of the body under AES-256-GCM; the rest is clear.
+V2_ENCRYPTED_LEN = 256
+
+
+def v2_still_key(serial: str, did: str, code: str) -> bytes:
+    """A V2 still's AES-256 key: the 32-character :func:`pic_check_code` as ASCII."""
+    return pic_check_code(serial, did, code).encode()
+
+
+def decode_v2_still(data: bytes, did: str) -> bytes:
+    """The picture inside a V2 (``v2_eufysecurity``) still, with its device's P2P DID.
+
+    Raises :class:`ProtocolError` for a malformed header, a short body or a GCM tag that
+    does not verify (a wrong DID).
+    """
+    if classify_still(data) is not StillFormat.V2:
+        raise ProtocolError("not a V2 still")
+    body = data[_V2_BODY:]
+    if len(body) < V2_ENCRYPTED_LEN:
+        raise ProtocolError(f"V2 still body is {len(body)} bytes, under {V2_ENCRYPTED_LEN}")
+    try:
+        serial, code = data[_V2_SN].decode("ascii"), data[_V2_CODE].decode("ascii")
+        key = v2_still_key(serial, did, code)
+    except (UnicodeDecodeError, ValueError) as err:
+        raise ProtocolError("V2 still header is malformed") from err
+    try:
+        clear = _gcm_open(key, data[_V2_NONCE], body[:V2_ENCRYPTED_LEN], data[_V2_TAG])
+    except ProtocolError as err:
+        raise ProtocolError("V2 still failed its GCM tag") from err
+    return clear + body[V2_ENCRYPTED_LEN:]
+
+
+#: The decoder of each obfuscated still format the library can decode.
+_STILL_DECODERS: Final[Mapping[StillFormat, Callable[[bytes, str], bytes]]] = {
+    StillFormat.V1: decode_v1_still,
+    StillFormat.V2: decode_v2_still,
+}
+#: The still formats :func:`decode_still` decodes with a DID.
+DECODABLE_STILLS: Final = frozenset(_STILL_DECODERS)
+#: Where each obfuscated format's header holds its device's serial.
+_STILL_SERIALS: Final = {StillFormat.V1: _V1_SN, StillFormat.V2: _V2_SN}
+
+
+def decode_still(data: bytes, dids: Callable[[str], Iterable[str]]) -> bytes:
+    """The picture inside ``data``: a V1 or V2 still decoded, any other bytes as they are.
+
+    ``dids`` maps the serial in the still's header to the P2P DIDs that may key it, in
+    order; the first that decodes wins. Raises
+    :class:`~..exceptions.VideoEncryptedPictureError` for a V8 still and
+    :class:`ProtocolError` for a V1 or V2 still no DID decodes (none known, a malformed
+    header). JPEG and unrecognised bytes are returned unchanged: whether they are a
+    displayable picture is the caller's check.
+    """
+    fmt = classify_still(data)
+    if fmt is StillFormat.V8:
+        raise VideoEncryptedPictureError(
+            "the picture is protected by Video Encryption: its key is not available here"
+        )
+    decoder = _STILL_DECODERS.get(fmt)
+    if decoder is None:
+        return data
+    try:
+        serial = data[_STILL_SERIALS[fmt]].decode("ascii")
+    except UnicodeDecodeError as err:
+        raise ProtocolError(f"{fmt.name} still header is malformed") from err
+    failure: ProtocolError | None = None
+    for did in dids(serial):
+        try:
+            return decoder(data, did)
+        except ProtocolError as err:
+            failure = err
+    if failure is None:
+        raise ProtocolError(f"{fmt.name} still not decoded: no DID known for its device")
+    raise failure
+
+
 @dataclass(frozen=True, slots=True)
 class Still:
     """One still off the station's disk, labelled with the format it came in.
 
-    A V1 still whose key the session could derive holds the decoded JPEG in
-    ``data`` (``format`` stays ``V1``). Other obfuscated variants are returned as
-    they came: they are not images, and they cannot be decoded yet.
+    A V1 or V2 still whose key the session could derive holds the decoded picture in
+    ``data`` (``format`` stays as it came). Any other obfuscated still is returned as it
+    came: it is not an image.
     """
 
     path: str

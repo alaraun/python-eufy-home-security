@@ -68,6 +68,7 @@ from .exceptions import (
     ProtocolError,
     SessionReplacedError,
     UnsupportedError,
+    VideoEncryptedPictureError,
 )
 from .identity import StationClaims, is_device_serial
 from .images import PushImage, picture_content_type
@@ -76,6 +77,7 @@ from .models import GuardMode
 from .network import LanPath, check_local_ports, lan_address, lan_path_for, with_discovery
 from .p2p.crypto import CONN_INIT_NO_CIPHER
 from .p2p.did import Did
+from .p2p.media import StillFormat, classify_still, decode_still
 from .p2p.pppp import BROADCAST, DISCOVERY_PORT
 from .p2p.session import (
     DEFAULT_STATION_SESSIONS,
@@ -1316,11 +1318,16 @@ class EufySecurity:
 
         ``source`` None tries :attr:`SecurityEvent.picture_sources` in order (the app's:
         the face first) and returns the first that succeeds, raising the last failure.
+        A picture the cloud serves in the eufy-obfuscated V1 or V2 format is decoded
+        with its device's (else its station's) DID from the cached device list.
         Never wakes a camera and never logs in. Raises
         :class:`~.exceptions.UnsupportedError` when the push names no such picture (or a
         station path of a station not served here, or bytes that are no displayable
-        picture), :class:`~.exceptions.EmptyResponseError` when the cloud keeps no
-        picture of the face, and the typed errors of the cloud or station call.
+        picture and do not decode), its subclass
+        :class:`~.exceptions.VideoEncryptedPictureError` for a picture protected by
+        the account's Video Encryption, :class:`~.exceptions.EmptyResponseError` when
+        the cloud keeps no picture of the face, and the typed errors of the cloud or
+        station call.
         """
         sources = event.picture_sources
         if source is not None:
@@ -1351,10 +1358,12 @@ class EufySecurity:
                     0, "the cloud keeps no picture of the push's face", endpoint=FACES_BY_IDS_PATH
                 )
             data = await self.cloud.async_fetch_picture(url, region=region)
+            data = self._decode_push_picture(data, source)
         elif source is PushPictureSource.PIC_URL and event.pic_url is not None:
             face_id = None
             if pic_url_kind(event.pic_url) == "https":
                 data = await self.cloud.async_fetch_picture(event.pic_url, region=region)
+                data = self._decode_push_picture(data, source)
             else:
                 station = self.stations.get(event.station_sn or "")
                 if station is None:
@@ -1366,6 +1375,7 @@ class EufySecurity:
             raise UnsupportedError(f"the push names no {source} picture")
         content_type = picture_content_type(data)
         if content_type is None:
+            _log_undisplayable(source, data)
             raise UnsupportedError(f"the push's {source} picture is not a displayable image")
         return PushImage(
             source=source,
@@ -1374,6 +1384,33 @@ class EufySecurity:
             content_type=content_type,
             face_id=face_id,
         )
+
+    def _decode_push_picture(self, data: bytes, source: PushPictureSource) -> bytes:
+        """``data`` with a V1 or V2 still decoded (:func:`~.p2p.media.decode_still`).
+
+        The key's DID comes from the cached device list (:meth:`_picture_dids`); no
+        cloud call. A V8 still raises :class:`VideoEncryptedPictureError`, a V1 or V2
+        still that does not decode :class:`UnsupportedError`.
+        """
+        try:
+            return decode_still(data, self._picture_dids)
+        except VideoEncryptedPictureError:
+            _log_undisplayable(source, data)
+            raise
+        except ProtocolError as err:
+            _log_undisplayable(source, data)
+            raise UnsupportedError(
+                f"the push's {source} picture ({classify_still(data)}) did not decode: {err}"
+            ) from err
+
+    def _picture_dids(self, serial: str) -> list[str]:
+        """The P2P DIDs that may key a picture of ``serial``, from the cached device list:
+        the device's own, then its station's."""
+        device = self.listed_devices.get(serial)
+        if device is None:
+            return []
+        station = self.listed_devices.get(device.station_sn or "")
+        return [entry.p2p_did for entry in (device, station) if entry and entry.p2p_did]
 
     # ── arming groups ────────────────────────────────────────────────────────
 
@@ -1722,3 +1759,19 @@ async def _best_effort(what: str, stop: Callable[[], Awaitable[None]]) -> None:
         await stop()
     except Exception:
         _LOGGER.warning("could not %s", what, exc_info=True)
+
+
+def _log_undisplayable(source: PushPictureSource, data: bytes) -> None:
+    """Log a push picture's format and size (never its header past the magic: it holds
+    the device serial); an unknown format's first 4 bytes in hex."""
+    fmt = classify_still(data)
+    if fmt is StillFormat.UNKNOWN:
+        _LOGGER.debug(
+            "push %s picture not shown: format %s, %d bytes, first bytes %s",
+            source,
+            fmt,
+            len(data),
+            data[:4].hex(),
+        )
+    else:
+        _LOGGER.debug("push %s picture not shown: format %s, %d bytes", source, fmt, len(data))

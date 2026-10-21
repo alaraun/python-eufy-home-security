@@ -133,6 +133,7 @@ from .crypto import (
 from .did import Did, static_key
 from .media import (
     ANNEX_B_STARTS,
+    DECODABLE_STILLS,
     KEYFRAME_MIN,
     KEYFRAME_RSA_LEN,
     PLAYBACK_ENDED,
@@ -144,13 +145,12 @@ from .media import (
     MediaKind,
     MediaRecordShape,
     Still,
-    StillFormat,
     VideoCodec,
     VideoVariant,
     _ForeignKeyframeError,
     classify_still,
     decode_record_play_ctrl,
-    decode_v1_still,
+    decode_still,
     download_video_payload,
     drop_empty_nals,
     generate_media_ecc_key,
@@ -3064,9 +3064,9 @@ class StationSession:
     async def async_fetch_still(self, path: str, *, timeout: float | None = None) -> Still:
         """Download one still (``thumb_path`` / ``crop_path``) off the station's disk.
 
-        The result carries its :class:`~.media.StillFormat`. A V1 still is decoded with
-        the station's DID (``data`` is then the JPEG); another obfuscated still, or a V1
-        still that does not decode, is returned as it came, not raised, and
+        The result carries its :class:`~.media.StillFormat`. A V1 or V2 still is decoded
+        with the station's DID (``data`` is then the picture); another obfuscated still,
+        or one that does not decode, is returned as it came, not raised, and
         ``is_image`` is False for it. Content that is not
         strict URL-safe base64, is empty or exceeds 1 MiB raises
         :class:`ProtocolError`. A reply that arrives after its request timed out is
@@ -3107,8 +3107,8 @@ class StationSession:
                 raise
         data = cast(bytes, data)
         still = Still(path, data, classify_still(data))
-        if still.format is StillFormat.V1:
-            still = self._decode_v1(still)
+        if still.format in DECODABLE_STILLS:
+            still = self._decode_still(still)
         self._stills_by_format[still.format.value] += 1
         _LOGGER.debug(
             "%s: image fetch bound: %s, %d bytes in %.2fs",
@@ -3119,16 +3119,17 @@ class StationSession:
         )
         return still
 
-    def _decode_v1(self, still: Still) -> Still:
-        """``still`` with its V1 body decoded, or unchanged when it cannot be."""
+    def _decode_still(self, still: Still) -> Still:
+        """``still`` (V1 or V2) decoded with the station's DID, or unchanged when it
+        cannot be."""
         did = self._did or self._expected_did
         if did is None:
-            _LOGGER.debug("%s: V1 still not decoded: no DID known", self._log_name)
+            _LOGGER.debug("%s: %s still not decoded: no DID known", self._log_name, still.format)
             return still
         try:
-            return Still(still.path, decode_v1_still(still.data, str(did)), still.format)
+            return Still(still.path, decode_still(still.data, lambda _: (str(did),)), still.format)
         except ProtocolError as err:
-            _LOGGER.debug("%s: V1 still not decoded: %s", self._log_name, err)
+            _LOGGER.debug("%s: %s still not decoded: %s", self._log_name, still.format, err)
             return still
 
     def _param(self, param_id: int, channel: int) -> ParamInfo:

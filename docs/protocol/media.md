@@ -134,14 +134,19 @@ Request and reply shapes: [commands.md](commands.md). Paths come from an event p
 - A T8170 standalone camera (fw 3.3.5.4) answers in clear JSON under the ECB tag, and
   its stills are **V1** (below), 640×360 once decoded **[verified]**.
 - Check the magic before decoding anyway. The app's image loader recognises
-  header-encrypted variants, and cloud `pic_url` thumbnails use them **[app]**:
+  header-encrypted variants, for stills and for the pictures a detection push names
+  (an https `pic_url`, a face crop) alike **[app]**:
 
-| first bytes | variant | encryption | key |
-|---|---|---|---|
-| `ff d8` | plain JPEG | none | — |
-| `eufysecurity` | V1 | AES-128-ECB over the first 256 bytes | first 16 chars of the check code `p2p.media.pic_check_code(sn, p2p_did, code)` |
-| `v2_eufysecurity` | V2 | AES-256-GCM over the first 256 bytes | the full 32-char check code |
-| `v8_eufysecurity` | V8 | AES-256-GCM over the whole body | ECIES-wrapped per-image key under a cloud cipher (`k` in the push) |
+| first bytes | variant | encryption | key | library |
+|---|---|---|---|---|
+| `ff d8` | plain JPEG | none | — | as is |
+| `eufysecurity` | V1 | AES-128-ECB over the first 256 bytes | first 16 chars of the check code `p2p.media.pic_check_code(sn, p2p_did, code)` | decoded **[verified]** |
+| `v2_eufysecurity` | V2 | AES-256-GCM over the first 256 bytes, AAD `eufy security` | the full 32-char check code as ASCII | decoded **[declared]** |
+| `v8_eufysecurity` | V8 | AES-256-GCM over the whole body | a per-image key wrapped to the account's Video Encryption key, which only the eufy app holds | `VideoEncryptedPictureError` |
+
+`p2p.media.decode_still(data, dids)` is the one dispatch: V1 and V2 decoded, V8
+refused, any other bytes returned as they are. `dids` maps the serial in the header to
+the P2P DIDs to try, in order.
 
 **The V1 header** is `eufysecurity:<serial, 16>:<code, 10 digits>:<body>`: serial at
 bytes 13–28, code at 30–39, body from 41. The first 256 body bytes are AES-128-ECB
@@ -162,14 +167,17 @@ With the DID `PREFIX-NNNNNN-SUFFIX`:
 5. The code is `d[16:32]` as upper-case hex (32 characters); V1's key is its first 16
    characters as ASCII.
 
-V2 uses the full 32 characters under AES-256-GCM; the library does not decode V2:
-no station has been seen sending a V2 still **[open]**.
+**The V2 header** **[declared]** is `v2_eufysecurity`, then the serial at bytes 16–31,
+the code at 33–42, the GCM nonce at 44–55 and tag at 57–72, body from 74; the bytes
+between the fields are not read. The first 256 body bytes are AES-256-GCM (AAD `eufy
+security`) under the full 32-character check code as ASCII; the rest is clear. A wrong
+DID fails the tag. Not verified on hardware.
 
 In the library, `async_fetch_still(path)` returns a `Still(path, data, format)`.
 `format` is a `StillFormat` (`JPEG`, `V1`, `V2`, `V8`, `UNKNOWN`) read from the magic,
-with the `v8_`/`v2_` prefixes checked before the bare `eufysecurity`. A V1 still is
-decoded with the session's DID (`media.decode_v1_still`): `data` is then the JPEG
-and `format` stays `V1`. `is_image` is true when `data` is a JPEG; any other still is
+with the `v8_`/`v2_` prefixes checked before the bare `eufysecurity`. A V1 or V2 still
+is decoded with the session's DID (`media.decode_still`): `data` is then the picture
+and `format` stays as it came. `is_image` is true when `data` is a JPEG; any other still is
 returned, not raised, and is not a picture. `async_fetch_image(path)` returns the same
 bytes without the label.
 

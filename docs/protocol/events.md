@@ -175,7 +175,12 @@ camera, the face first as the eufy app does **[app]**:
 `content_type`: JPEG, PNG or WebP, `face_id` of a face image). Without `source` it tries
 the named sources in that order and returns the first that works. A push that names
 neither (a HomeBase 2 motion push without a face id, an empty `pic_url`) has no picture
-of its own: the app shows text only. A header-encrypted still is refused, not returned.
+of its own: the app shows text only. A cloud picture in the eufy V1 or V2 format
+([media.md](media.md#stills-1308-verified)) is decoded with a DID from the cached device
+list (the device in the picture's header, then its station; no cloud call). A V8 picture
+(the account uses Video Encryption) raises `VideoEncryptedPictureError`, an
+`UnsupportedError`; any other picture that is no JPEG, PNG or WebP raises
+`UnsupportedError`, with its format and size in the debug log.
 
 ### Station pushes: arming and alarm
 

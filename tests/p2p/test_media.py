@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import struct
+from typing import Any
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -13,7 +14,11 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from eufy_home_security.exceptions import ProtocolError, UnsupportedError
+from eufy_home_security.exceptions import (
+    ProtocolError,
+    UnsupportedError,
+    VideoEncryptedPictureError,
+)
 from eufy_home_security.p2p import crypto, media
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
 from eufy_home_security.testing import SYNTHETIC
@@ -662,6 +667,67 @@ def test_v1_still_validation_raises_value_error() -> None:
         testing_station.v1_still(image, "123456789012345", did=SYNTHETIC.did)
     with pytest.raises(ValueError, match="a 10-char code"):
         testing_station.v1_still(image, SYNTHETIC.camera_sn, did=SYNTHETIC.did, code="123456789")
+
+
+_STILL_IMAGE = b"\xff\xd8\xff\xe0" + bytes(400) + b"\xff\xd9"
+_OTHER_DID = "EUPRAMA-654321-ZZZZZ"
+
+
+def test_decode_v2_still_round_trip() -> None:
+    wrapped = testing_station.v2_still(_STILL_IMAGE, SYNTHETIC.camera_sn, did=SYNTHETIC.did)
+    assert media.classify_still(wrapped) is media.StillFormat.V2
+    assert media.decode_v2_still(wrapped, SYNTHETIC.did) == _STILL_IMAGE
+
+
+def test_decode_v2_still_raises_protocol_error_on_bad_input() -> None:
+    wrapped = testing_station.v2_still(_STILL_IMAGE, SYNTHETIC.camera_sn, did=SYNTHETIC.did)
+    with pytest.raises(ProtocolError, match=r"^V2 still failed its GCM tag$"):
+        media.decode_v2_still(wrapped, _OTHER_DID)
+    with pytest.raises(ProtocolError, match="not a V2 still"):
+        media.decode_v2_still(_STILL_IMAGE, SYNTHETIC.did)
+    with pytest.raises(ProtocolError, match="under 256"):
+        media.decode_v2_still(wrapped[: 74 + 255], SYNTHETIC.did)
+    bad_code = bytearray(wrapped)
+    bad_code[33] = 0xFF
+    with pytest.raises(ProtocolError, match="malformed"):
+        media.decode_v2_still(bytes(bad_code), SYNTHETIC.did)
+
+
+def test_v2_still_validation_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="needs a 256-byte image"):
+        testing_station.v2_still(_STILL_IMAGE[:255])
+
+
+@pytest.mark.parametrize("build", [testing_station.v1_still, testing_station.v2_still])
+def test_decode_still_tries_each_did_of_the_header_serial(build: Any) -> None:
+    wrapped = build(_STILL_IMAGE, SYNTHETIC.camera_sn, did=SYNTHETIC.did)
+    asked: list[str] = []
+
+    def dids(serial: str) -> list[str]:
+        asked.append(serial)
+        return [_OTHER_DID, SYNTHETIC.did]
+
+    assert media.decode_still(wrapped, dids) == _STILL_IMAGE
+    assert asked == [SYNTHETIC.camera_sn]
+    with pytest.raises(ProtocolError):
+        media.decode_still(wrapped, lambda _: [_OTHER_DID])
+    with pytest.raises(ProtocolError, match="no DID known"):
+        media.decode_still(wrapped, lambda _: [])
+    bad_serial = bytearray(wrapped)
+    bad_serial[20] = 0xFF
+    with pytest.raises(ProtocolError, match="header is malformed"):
+        media.decode_still(bytes(bad_serial), lambda _: [SYNTHETIC.did])
+
+
+@pytest.mark.parametrize("data", [_STILL_IMAGE, b"\x89PNG\r\n\x1a\n", b""])
+def test_decode_still_returns_other_bytes_unchanged(data: bytes) -> None:
+    assert media.decode_still(data, lambda _: pytest.fail("no DID needed")) is data
+
+
+def test_decode_still_refuses_a_video_encrypted_still() -> None:
+    v8 = b"v8_eufysecurity:" + SYNTHETIC.camera_sn.encode() + bytes(400)
+    with pytest.raises(VideoEncryptedPictureError, match="Video Encryption"):
+        media.decode_still(v8, lambda _: [SYNTHETIC.did])
 
 
 @pytest.mark.parametrize(
