@@ -517,7 +517,8 @@ class FakeStation:
     answer_conn_init: bool = True
     answer_params: bool = True
     params_cipher: int = FrameCipher.GCM
-    """The cipher the parameter dump answers under (ECB: the firmware the session refuses)."""
+    """The cipher the parameter dump answers under (ECB: under the static key, encryption
+    type 1 on an RSA session)."""
     state_cipher: int = FrameCipher.GCM
     """The cipher of the guard-mode report and alarm-tone frame a command makes the station
     send (ECB: under the static key, encryption type 1 on an RSA session)."""

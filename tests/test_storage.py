@@ -96,24 +96,22 @@ async def test_key_refresh_latch_is_per_station_and_persists() -> None:
     assert reloaded.key_refresh_outstanding("T8030P2000012345") is None
 
 
-async def test_session_key_state_latch_is_per_station_and_persists() -> None:
+async def test_a_station_entry_with_a_key_the_cache_does_not_read_still_loads() -> None:
+    """A per-station key no reader knows (``session_key_state``, written by an earlier
+    build) changes nothing: the entry loads and the summary does not name it."""
     store = MemoryStore()
     cache = SessionCache(store, "user@example.com")
     await cache.async_load()
-    assert not cache.session_key_state("T8030P2000012345")
-    assert cache.station_serials() == []  # a read creates no section
-    assert cache.set_session_key_state("T8030P2000012345")
-    assert not cache.set_session_key_state("T8030P2000012345")  # already set
-    cache.set_cipher_key("T8030P2000067890", 40, "ab" * 32)
+    cache.set_cipher_key("T8030P2000012345", 40, "ab" * 32)
+    cache.station("T8030P2000012345")["session_key_state"] = True
     await cache.async_save()
 
     reloaded = SessionCache(store, "user@example.com")
     await reloaded.async_load()
-    assert reloaded.session_key_state("T8030P2000012345")
-    assert not reloaded.session_key_state("T8030P2000067890")
-    summary = reloaded.redacted_summary()["stations"]
-    assert summary["T8030***2345"]["session_key_state"] is True
-    assert summary["T8030***7890"]["session_key_state"] is False
+    assert reloaded.cipher_key("T8030P2000012345", 40) == "ab" * 32
+    summary = reloaded.redacted_summary()["stations"]["T8030***2345"]
+    assert summary["cipher_cached"] is True
+    assert "session_key_state" not in summary
 
 
 async def test_key_refresh_slow_retry_window() -> None:

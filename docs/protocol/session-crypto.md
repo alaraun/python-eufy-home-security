@@ -227,54 +227,51 @@ schemes and evidently answers in the one it associates with the client's traffic
 the frame type. A client must therefore keep both keys and pick per frame. Assuming
 one cipher per session silently loses part of the traffic.
 
-### Trust policy for ECB state
+### Station state under any encryption **[declared, app]**
 
-Once a session key exists, the library **refuses** station state that arrives under
-ECB: parameter dumps (`0x044F`) and guard-mode reports (`0x047F`). They are not
-decoded for parameter reads, the arm read-back, change events or the arm result.
-Only their GCM copies count.
+The library takes station state as the eufy app does: parameter dumps (`0x044F`),
+guard-mode reports (`0x047F`) and alarm frames (`0x04B1`, `0x04B2`, `0x0578`) count under
+whatever encryption they arrive, on every session type. Each is decoded with the key its
+tag and encryption type name, then used like any other state: parameter reads, change
+events, the arm result and read-back, and the siren confirmation.
 
-**Evidence.** The static key is derived from the serial and DID alone (above), both
-of which are visible to anyone on the LAN. An ECB frame therefore proves nothing
-about its origin, and a forged one could fake a guard mode or an arm confirmation.
-GCM frames are sealed under the per-connection session key. They authenticate the
-origin but not freshness: station → client frames carry no seq, so a frame can be
-replayed within the same session.
+| session | frame | decoded with |
+|---|---|---|
+| ECIES (GCM) | GCM tag | the session key |
+| ECIES (GCM) | ECB tag | the static key |
+| RSA | ECB tag, encryption type 0 | nothing: the body is clear |
+| RSA | ECB tag, encryption type 1 | the static key |
+| RSA | ECB tag, encryption type 2 | the session key |
+| RSA | ECB tag, another type | the static key |
 
-- ECB frames that are not state still decode: image replies (`0x051C`), legacy
-  scalar results and camera pushes (cmd 2037).
-- On an RSA session ([RSA CONN_INIT](#rsa-conn_init-declared-app-legacy)) state under
-  its session key (tag `0x01`, encryption type 2) counts and is authenticated; state in
-  clear or under any other tag is refused and counted. A clear frame decodes only under
-  the ECB tag and is never authenticated. A [static-key RSA session](#static-key-rsa-sessions-declared-app)
-  takes state in clear and under types 1 and 2, all unauthenticated.
-- **Fixed-key state on an RSA session** **[declared: the eufy app takes state under any
-  encryption type]**. Some stations (a standalone T8414) send their state under the
-  static key (type 1) although the session has its own key. The library takes such
-  state, unauthenticated, until the station has once sent a parameter dump with
-  parameters under its session key; from then on its type-1 state is refused. That
-  latch is per station and kept in the session cache (`stations.<serial>.session_key_state`),
-  so a restart or a new client keeps it. A type-2 frame that random bytes could also
-  decrypt to (a guard-mode report, an alarm frame, a dump without parameters) does not
-  set it. Fixed-key state never confirms a write: a guard-mode report under it is not
-  an arm's result, an arm whose read-back took such state raises
-  `CommandNotAppliedError` (not confirmed) whatever mode it shows, and a siren write
-  that only such an alarm-tone frame reports stays `DELIVERED`.
+A frame that does not decode (a body that is not whole AES blocks, not a JSON object, a
+GCM tag that fails, a tag that names no key the session holds) is dropped and counted in
+`SessionStats.dropped_undecodable`.
+
+**Security.** The static key is derived from the serial and DID alone (above), both of
+which are visible to anyone on the LAN. State in clear or under the static key therefore
+proves nothing about its origin: anyone on the LAN who knows the serial and DID can forge
+a parameter dump, a guard mode, an arm or disarm confirmation or an alarm. GCM frames,
+and an RSA session's frames under its own key, are sealed under a key only the session
+holds. They authenticate the origin but not freshness: station → client frames carry no
+seq, so a frame can be replayed within the same session.
+
+- `SessionStats.state_frames_by_encryption` counts the state frames taken, by encryption:
+  on an RSA session `"clear"`, `"type1"`, `"type2"` or `"other"`; on a GCM session
+  `"gcm"` or `"ecb"`.
+- `SessionStats.state_authenticated` (information only) is True once state came under a
+  key only the session holds, False while it came only in clear or under the static key
+  (always on a [static-key RSA session](#static-key-rsa-sessions-declared-app)), None
+  before any state.
+- State in clear, or under the static key on a session that holds a key of its own, is
+  logged at INFO once per session, frame type and encryption, naming the station:
+  `station state 0x044f arrived under the fixed key (unauthenticated), taken as the eufy
+  app does`.
+- `SessionStats.ecb_state_refused` is kept for compatibility and is always 0.
 - A camera push records the cipher of its frame in `SecurityEvent.frame_cipher`.
   `SecurityEvent.authenticated` is False for a push under the static ECB key and True
   for a GCM push, a push under an RSA session's key (`SecurityEvent.session_ecb`) or a
   cloud push (`frame_cipher` None, TLS). It proves origin, not freshness.
-- Each refusal is logged at DEBUG (throttled), naming the frame type and its
-  encryption (clear, static-key, session-key), and counted in
-  `StationSession.ecb_state_refused`. `SessionStats.state_frames_by_encryption` counts
-  state frames by encryption and outcome (`"type1:accepted"`, `"type1:refused"`,
-  `"clear:refused"`, `"type2:accepted"`; `"gcm:…"`/`"ecb:…"` on a GCM session), and
-  `SessionStats.state_authenticated` is False while the station's state came only under
-  the fixed key, True once it came authenticated or the station is latched, None before
-  any. The first fixed-key state of a session is logged once at INFO, the latch too.
-- A parameter read that times out while ECB dumps were refused says so in its
-  `DeviceTimeoutError`. A firmware that answers the query under ECB only then does
-  not look like an outage.
 
 ## Legacy ECB scalar frames **[verified]**
 

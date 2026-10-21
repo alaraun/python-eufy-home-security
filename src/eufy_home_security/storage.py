@@ -94,8 +94,6 @@ INSTALL_IDS_KEY: Final = "install_ids"
 _MIGRATED_VERSIONS: Final = (1,)
 # Top-level section of the session-replaced latch.
 _REPLACED = "replaced"
-# Per-station key of the session-key state latch.
-_SESSION_KEY_STATE: Final = "session_key_state"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -211,7 +209,6 @@ class SessionCache:
                                    "rsa_ciphers": {"40": "…"},
                                    "refresh_attempts": {"cipher": <epoch s>},
                                    "key_refresh": <epoch s>,
-                                   "session_key_state": true,
                                    "dsk": {"key": "…", "expiration": <epoch s>},
                                    "presets": {"<camera serial>": [{...}, …]}}},
          "refresh_attempts": {"owner": <epoch s>},
@@ -339,9 +336,8 @@ class SessionCache:
         The stored version, the sections present, which fields the cloud session and
         the push registration hold (names, never values), the number of cached devices,
         and per station (keyed by :func:`redact_serial`) whether the owner account id
-        and the P2P cipher key are cached, whether the station named the cipher id
-        (``cipher_id_named``) and whether it latched its state to its session key
-        (``session_key_state``), merged with ``station_details[serial]``. A
+        and the P2P cipher key are cached and whether the station named the cipher id
+        (``cipher_id_named``), merged with ``station_details[serial]``. A
         section not in :data:`CACHE_SECTIONS` is listed by name only. Never a password,
         token, key, openudid, user id, push credential, full serial, DID or IP.
         """
@@ -361,7 +357,6 @@ class SessionCache:
                 "cipher_id": cipher_id,
                 "cipher_id_named": self.station_named_cipher_id(serial) is not None,
                 "cipher_cached": _present(ciphers.get(str(cipher_id))),
-                "session_key_state": self.session_key_state(serial),
                 **details.get(serial, {}),
             }
         return {
@@ -605,22 +600,6 @@ class SessionCache:
         stations = self._doc.get("stations")
         entry = stations.get(serial) if isinstance(stations, dict) else None
         return isinstance(entry, dict) and entry.pop("key_refresh", None) is not None
-
-    # ── session-key state latch (per station) ────────────────────────────────
-
-    def session_key_state(self, serial: str) -> bool:
-        """Whether ``serial`` has sent its state under its RSA session key: its state
-        under the fixed key is then refused (``StationSession.session_key_state_latched``)."""
-        stations = self._doc.get("stations")
-        entry = stations.get(serial) if isinstance(stations, dict) else None
-        return isinstance(entry, dict) and entry.get(_SESSION_KEY_STATE) is True
-
-    def set_session_key_state(self, serial: str) -> bool:
-        """Set the latch for ``serial`` (it is never cleared); whether it was unset."""
-        if self.session_key_state(serial):
-            return False
-        self.station(serial)[_SESSION_KEY_STATE] = True
-        return True
 
     # ── cloud throttle ───────────────────────────────────────────────────────
 

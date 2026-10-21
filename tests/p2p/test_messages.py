@@ -354,6 +354,14 @@ def test_decode_alarm_mode_notify_ecb_reads_the_first_u32_under_the_static_key()
     assert messages.decode_alarm_mode_notify(_alarm_frame(b"", FrameCipher.ECB)) is None
 
 
+def test_decode_alarm_mode_notify_clear_reads_the_first_u32_as_is() -> None:
+    """An RSA session's clear body (encryption type 0): the first LE u32, no key."""
+    frame = _alarm_frame(struct.pack("<I", int(GuardMode.HOME)), FrameCipher.ECB)
+    assert messages.decode_alarm_mode_notify(frame, clear=True) == int(GuardMode.HOME)
+    short = _alarm_frame(b"\x01\x00\x00", FrameCipher.ECB)
+    assert messages.decode_alarm_mode_notify(short, clear=True) is None
+
+
 def test_decode_database_rows_handles_the_empty_string_and_a_list() -> None:
     assert messages.decode_database_rows({"data": "[]"}) == []
     assert messages.decode_database_rows({"data": [{"x": 1}]}) == [{"x": 1}]

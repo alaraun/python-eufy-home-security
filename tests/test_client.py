@@ -51,7 +51,6 @@ from eufy_home_security.exceptions import (
     CipherUnavailableError,
     CloudError,
     CommunicationError,
-    DeviceTimeoutError,
     EmptyResponseError,
     EufySecurityError,
     KeyExchangeRefusedError,
@@ -78,7 +77,7 @@ from eufy_home_security.p2p.discovery import DiscoveredStation
 from eufy_home_security.p2p.media import Still, StillFormat
 from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN
 from eufy_home_security.p2p.pppp import BROADCAST
-from eufy_home_security.p2p.xzyh import FrameCipher, FrameType
+from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.push import fcm as fcm_module
 from eufy_home_security.station import Station
 from eufy_home_security.storage import CACHE_SECTIONS, CACHE_VERSION, MemoryStore
@@ -820,8 +819,7 @@ class KeyRig:
     """One fake station behind a stub cloud whose key the station accepts only when ``good``.
 
     ``fetches`` counts forced cipher fetches that returned a key; ``error`` is raised by a
-    forced fetch instead; ``rsa`` serves the station's RSA key too. Shared by every client
-    built in a test (a restart included).
+    forced fetch instead. Shared by every client built in a test (a restart included).
     The session cache runs on ``now``, a fake clock.
     """
 
@@ -831,7 +829,6 @@ class KeyRig:
     error: CloudError | None = None
     now: float = 1_800_000_000.0
     wrong_key: str = field(default_factory=lambda: FakeStation().ecc_private_key_hex)
-    rsa: bool = False
 
     def cloud(self) -> type[StubCloud]:
         rig = self
@@ -851,10 +848,7 @@ class KeyRig:
                     if rig.error is not None:
                         raise rig.error
                     rig.fetches += 1
-                rsa_key = rig.fake.rsa_private_key_pem if rig.rsa else None
-                return CipherKeys(
-                    rig.fake.ecc_private_key_hex if rig.good else rig.wrong_key, rsa_key
-                )
+                return CipherKeys(rig.fake.ecc_private_key_hex if rig.good else rig.wrong_key, None)
 
         return RigCloud
 
@@ -1050,39 +1044,6 @@ async def test_an_accepted_key_clears_the_latch(rig: KeyRig) -> None:
         rig.fake.send_close()
         await wait_for(lambda: rig.fetches == 2)
         await eufy.async_close()
-
-
-async def test_a_session_key_state_latch_outlives_the_client(rig: KeyRig) -> None:
-    """A station that sent its state under its RSA session key has its state under the
-    fixed key refused by a later client on the same store, from the first frame."""
-    rig.good = rig.rsa = True
-    rig.fake.conn_init_version = 1
-    store = MemoryStore()
-    async with aiohttp.ClientSession() as http:
-        eufy = rig.client(http, store)
-        await eufy.async_discover()
-        session = eufy.stations[SYNTHETIC.station_sn].session
-        assert not session.session_key_state_latched
-        await session.async_get_params()  # under the session key (type 2)
-        await wait_for(
-            lambda: (
-                ((store.data or {}).get("stations", {}).get(SYNTHETIC.station_sn, {})).get(
-                    "session_key_state"
-                )
-                is True
-            )
-        )
-        await eufy.async_close()
-
-        rig.fake.params_cipher = FrameCipher.ECB  # now under the fixed key (type 1)
-        eufy = rig.client(http, store)
-        await eufy.async_discover()
-        session = eufy.stations[SYNTHETIC.station_sn].session
-        assert session.session_key_state_latched
-        with pytest.raises(DeviceTimeoutError, match="refused"):
-            await session.async_get_params(timeout=1.0)
-        await eufy.async_close()
-    assert set(session.stats().state_frames_by_encryption) == {"type1:refused"}
 
 
 @pytest.mark.parametrize(

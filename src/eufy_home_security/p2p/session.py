@@ -381,22 +381,21 @@ _RECORDING_COMMANDS = frozenset({CMD_DOWNLOAD_VIDEO, CMD_RECORD_VIEW})
 _STATE_FRAME_TYPES = frozenset(
     {FrameType.PARAM_NOTIFY, FrameType.ALARM_MODE_NOTIFY, *ALARM_FRAME_VALUES}
 )
-"""Frames carrying station state: trusted only under GCM once a session key exists."""
+"""Frames carrying station state, taken under any encryption
+(:meth:`StationSession._take_state`)."""
 _RSA_STATE_ENCRYPTIONS: Mapping[int | None, str] = MappingProxyType(
     {FRAME_PLAIN: "clear", FRAME_STATIC_ECB: "type1", FRAME_SESSION_ECB: "type2"}
 )
 """An RSA session's state-frame label by encryption type (subheader byte 3)."""
-_STATE_ENCRYPTION_NAMES: Mapping[str, str] = MappingProxyType(
+_UNAUTHENTICATED_STATE: Mapping[str, str] = MappingProxyType(
     {
-        "clear": "clear",
-        "type1": "static-key",
-        "type2": "session-key",
-        "ecb": "static-key",
-        "gcm": "session-key GCM",
-        "other": "unknown",
+        "clear": "in clear",
+        "type1": "under the fixed key",
+        "ecb": "under the fixed key",
+        "other": "under an unknown encryption type",
     }
 )
-"""How a refusal's log line names each state-frame label."""
+"""How the log line on unauthenticated state names each state-frame label."""
 _CLEAR_REPLY_TYPES = frozenset({FrameType.DB_SYNC, FrameType.MEDIA_DOWNLOAD})
 """Reply frame types a standalone device may send as clear JSON under the ECB tag."""
 
@@ -473,33 +472,6 @@ class MemoryKeyRefreshLatch:
         self._at = None
 
 
-class SessionKeyStateLatch(Protocol):
-    """The per-station latch of an RSA session's state trust: set once the station sent
-    its state under its session key; from then on its state under the fixed key is
-    refused (see :meth:`StationSession._refuse_ecb_state`)."""
-
-    def latched(self) -> bool:
-        """Whether the station has sent state under its session key."""
-        ...
-
-    async def async_latch(self) -> None:
-        """Set the latch for good (a persistent latch also stores it)."""
-        ...
-
-
-class MemorySessionKeyStateLatch:
-    """A :class:`SessionKeyStateLatch` that lives as long as the session (the default)."""
-
-    def __init__(self) -> None:
-        self._latched = False
-
-    def latched(self) -> bool:
-        return self._latched
-
-    async def async_latch(self) -> None:
-        self._latched = True
-
-
 class CommandOutcome(StrEnum):
     """How far a command is known to have got."""
 
@@ -571,9 +543,8 @@ class SessionStats:
     frames_by_cipher: Mapping[str, int]
     """Decoded camera pushes by frame cipher, ``"gcm"`` / ``"ecb"``."""
     ecb_state_refused: int
-    """State frames (0x044F, 0x047F, the alarm frames) refused: ECB on a GCM session; on
-    an RSA session, state in clear or under another tag, and state under the fixed key
-    once the station latched (see :attr:`state_frames_by_encryption`)."""
+    """Always 0: state frames are taken under any encryption. Kept for compatibility; see
+    :attr:`state_frames_by_encryption`."""
     dropped_undecodable: int
     """Non-media frames dropped undecoded: GCM authentication failure, a malformed ECB
     body, a body that is not a JSON object, or a DRW stream reset. Command receipts
@@ -661,15 +632,15 @@ class SessionStats:
     The app's player appends such a record to the frame before it; the library delivers
     it as its own frame."""
     state_frames_by_encryption: Mapping[str, int] = field(default_factory=dict)
-    """State frames (0x044F, 0x047F, the alarm frames) by ``"<encryption>:<outcome>"``.
-    Encryption: an RSA session's type, ``"clear"``, ``"type1"`` (the fixed static key) or
-    ``"type2"`` (its session key); on a GCM session the tag, ``"gcm"`` or ``"ecb"``.
-    Outcome: ``"accepted"`` (decoded and taken) or ``"refused"``."""
+    """State frames (0x044F, 0x047F, the alarm frames) decoded and taken, by encryption: on
+    an RSA session its type, ``"clear"``, ``"type1"`` (the fixed static key), ``"type2"``
+    (its session key) or ``"other"``; on a GCM session the tag, ``"gcm"`` or ``"ecb"`` (the
+    static key)."""
     state_authenticated: bool | None = None
-    """Whether the station's state is authenticated: True once state came under a key only
-    the session holds (GCM, or an RSA session's own key, which latches), False while it
-    came only under a key anyone can derive (the fixed key, a static-key session), None
-    before any state."""
+    """Whether the station's state is authenticated, for information only: True once state
+    came under a key only the session holds (GCM, an RSA session's own key), False while
+    it came only in clear or under a key anyone can derive (the fixed key, a static-key
+    session), None before any state."""
 
 
 @dataclass(slots=True)
@@ -704,7 +675,7 @@ class Inbound:
         return decode_command_receipt(self.frame, clear=self._session.rsa_session)
 
     def alarm_mode(self) -> int | None:
-        """The guard mode of a trusted 0x047F report, decoded at most once."""
+        """The guard mode of a 0x047F report, decoded at most once."""
         if not self._mode_done:
             self._mode = self._session._decode_alarm_mode(self.frame)
             self._mode_done = True
@@ -1301,7 +1272,6 @@ class StationSession:
         idle_close: float = ON_DEMAND_IDLE_CLOSE,
         wake_provider: WakeProvider | None = None,
         key_refresh: KeyRefreshLatch | None = None,
-        session_key_state: SessionKeyStateLatch | None = None,
         cloud_problems_reported: bool = False,
         max_sessions: int = DEFAULT_STATION_SESSIONS,
     ) -> None:
@@ -1313,8 +1283,6 @@ class StationSession:
         # on_demand: never hold the session (a battery station): async_start connects
         # nothing, nothing reconnects, and a link idle for idle_close seconds is closed.
         # key_refresh: where the stale-key latch lives (in memory when None).
-        # session_key_state: where the station's session-key state latch lives (in
-        # memory when None; see _refuse_ecb_state).
         # cloud_problems_reported: the owner delivers cloud errors as CloudProblem, so
         # ConnectionChanged carries only their cause.
         self.serial = serial.strip()
@@ -1336,12 +1304,6 @@ class StationSession:
         """When an operation on this session last ended (an on-demand link closes after it)."""
         self._credentials = credentials
         self._key_refresh: KeyRefreshLatch = key_refresh or MemoryKeyRefreshLatch()
-        self._session_key_state: SessionKeyStateLatch = (
-            session_key_state or MemorySessionKeyStateLatch()
-        )
-        self._state_latched = False
-        """Set with the latch, before its store returns."""
-        self._latch_saves: set[asyncio.Task[None]] = set()
         self._cloud_problems_reported = cloud_problems_reported
         self._host = host
         self._search_host = host
@@ -1433,16 +1395,13 @@ class StationSession:
         """When this session's own parameter read last finished; stragglers right after
         it belong to that read."""
         self.ecb_state_refused = 0
-        """State frames refused (:attr:`SessionStats.ecb_state_refused`)."""
-        self._ecb_dumps_refused = 0
-        """The parameter dumps (0x044F) among :attr:`ecb_state_refused`."""
+        """Always 0 (:attr:`SessionStats.ecb_state_refused`)."""
         self._state_frames: Counter[str] = Counter()
-        """State frames by encryption and outcome (``state_frames_by_encryption``)."""
+        """State frames taken, by encryption (``state_frames_by_encryption``)."""
         self._state_authenticated: bool | None = None
         """Whether authenticated state was taken; False after unauthenticated state only."""
-        self._fixed_key_state_taken = 0
-        """State frames taken under the fixed key (:meth:`_fixed_key_state`)."""
-        self._fixed_key_state_logged = False
+        self._unauthenticated_logged: set[tuple[int, str]] = set()
+        """The (frame type, encryption) kinds of unauthenticated state already logged."""
         self.still_file_mismatches = 0
         """1308 replies whose ``file`` differed from the requested path."""
         self.still_late_replies = 0
@@ -1518,17 +1477,8 @@ class StationSession:
         return self._aes_key is not None and self._aes_key == self._static_key
 
     @property
-    def session_key_state_latched(self) -> bool:
-        """Whether the station has sent its state under its RSA session key, on this
-        session or before (:class:`SessionKeyStateLatch`): its state under the fixed key
-        is refused."""
-        return self._state_latched or self._session_key_state.latched()
-
-    @property
     def state_authenticated(self) -> bool | None:
         """See :attr:`SessionStats.state_authenticated`."""
-        if self._state_authenticated or self.session_key_state_latched:
-            return True
         return self._state_authenticated
 
     @property
@@ -1995,8 +1945,6 @@ class StationSession:
         """Stop supervising and close the session for good."""
         self._closed = True
         self._cancel_push_timer()
-        if self._latch_saves:
-            await asyncio.gather(*self._latch_saves, return_exceptions=True)
         if self._supervisor is not None:
             self._supervisor.cancel()
             # A supervisor that died on an unexpected error holds it here; closing must
@@ -2022,16 +1970,12 @@ class StationSession:
         follow. Pass the paired devices' channels (here or to the constructor, the
         default) to skip the settle wait: on a HomeBase 3 they all ride in the
         station's own frame. With no channels expected, the settle always runs.
-
-        ECB-ciphered dumps are refused (see :meth:`_decode_json`); a timeout while
-        such dumps arrived says so.
         """
         timeout = _or(timeout, PARAM_QUERY_TIMEOUT)
         await self.async_connect()
         dump = ParamDump()
         channels = self._expect_channels if expect_channels is None else expect_channels
         expected = {STATION_CHANNEL, *channels}
-        refused_before = self._ecb_dumps_refused
 
         def complete() -> bool:
             # Only the station itself expected: nothing tells the last block, so settle.
@@ -2053,22 +1997,13 @@ class StationSession:
         async with self._op("parameter read"):
             self._probing = True
             try:
-                try:
-                    await self._request(
-                        send,
-                        done,
-                        timeout=timeout,
-                        resend_after=PARAM_QUERY_RESEND_AFTER,
-                        label="parameter query",
-                    )
-                except DeviceTimeoutError as err:
-                    refused = self._ecb_dumps_refused - refused_before
-                    if not refused:
-                        raise
-                    raise DeviceTimeoutError(
-                        f"{err}; {refused} ECB-ciphered parameter dump(s) arrived and were refused "
-                        "(this firmware may answer the parameter query under ECB only)"
-                    ) from err
+                await self._request(
+                    send,
+                    done,
+                    timeout=timeout,
+                    resend_after=PARAM_QUERY_RESEND_AFTER,
+                    label="parameter query",
+                )
                 self._last_probe = time.monotonic()
                 self._last_error = None
                 self._announce_connected()
@@ -2097,10 +2032,8 @@ class StationSession:
         Only the frames that are this command's own answer count: the guard-mode
         report (0x047F), or a 0x0547 reply naming cmd 1224. A reply with a non-zero
         code raises :class:`CommandRejectedError`. A zero-code reply without a mode
-        report is confirmed by reading the mode back, never taken on trust. State under
-        the fixed key (:meth:`_fixed_key_state`) confirms nothing: such a mode report is
-        not the result, and a read-back that took such state raises
-        :class:`CommandNotAppliedError` (not confirmed), whatever mode it shows.
+        report is confirmed by reading the mode back, never taken on trust. A report
+        counts under any encryption, as the eufy app takes it (:meth:`_take_state`).
 
         Raises :class:`CommandNotAppliedError` when the station acknowledged the
         datagram, never acted, and the read-back shows another mode (the classic
@@ -2124,8 +2057,6 @@ class StationSession:
             nonlocal applied_at
             if inbound.type == FrameType.ALARM_MODE_NOTIFY:
                 value = inbound.alarm_mode()
-                if value is not None and self._fixed_key_state(inbound.frame):
-                    return None  # unauthenticated: never the arm's result
                 if value is not None:
                     reported.append(value)
                     if schedule:
@@ -2189,14 +2120,7 @@ class StationSession:
                 )
             return result
         error = self._unanswered_error(CMD_SET_ARMING, 0, indices)
-        fixed_key_before = self._fixed_key_state_taken
         current = (await self.async_get_params()).guard_mode
-        if self._fixed_key_state_taken != fixed_key_before:
-            raise CommandNotAppliedError(
-                CMD_SET_ARMING,
-                f"guard mode {mode.name} not confirmed: the station reports its state under "
-                "the fixed key, which authenticates nothing",
-            )
         if current == mode:
             _LOGGER.debug(
                 "%s: no mode report for the arm; the station reports %s", self._log_name, mode.name
@@ -3417,7 +3341,6 @@ class StationSession:
             local_port=0,
             did=self._did or self._expected_did,
             key_refresh=self._key_refresh,
-            session_key_state=self._session_key_state,
             cloud_problems_reported=self._cloud_problems_reported,
         )
 
@@ -4806,26 +4729,10 @@ class StationSession:
     def _handle_alarm(self, frame: Frame) -> None:
         """An alarm frame (tone, siren, light): cache its value per channel, emit
         :class:`ParamChanged` when it moved, and :class:`AlarmChanged` when a tone frame
-        starts or ends the alarm. Only GCM frames, and an RSA session's frames under its
-        key, count (:meth:`_refuse_ecb_state`); one under the fixed key never confirms
-        a siren write."""
-        if self._refuse_ecb_state(frame):
+        starts or ends the alarm. Taken under any encryption (:meth:`_take_state`)."""
+        plain = self._state_body(frame)
+        if plain is None:
             return
-        fixed_key = self._fixed_key_state(frame)
-        if self._session_key_frame(frame) or fixed_key:
-            ecb_key = self._ecb_key(frame)
-            if ecb_key is None or len(frame.payload) % 16:
-                self._dropped_undecodable += 1
-                return
-            plain = ecb_decrypt(ecb_key, frame.payload)
-        elif frame.cipher != FrameCipher.GCM or self._session_key is None:
-            return
-        else:
-            try:
-                plain = gcm_decrypt_broadcast(self._session_key, frame.payload)
-            except ProtocolError:
-                self._dropped_undecodable += 1
-                return
         alarm = decode_alarm_frame(frame, plain)
         if alarm is None:
             self._dropped_undecodable += 1
@@ -4854,7 +4761,7 @@ class StationSession:
                 )
             )
         change = alarm.alarm_change(self.serial, at=datetime.now(UTC))
-        if change is not None and not fixed_key:
+        if change is not None:
             for alarming, future in self._tone_waiters:
                 if alarming == change.alarming and not future.done():
                     future.set_result(change)
@@ -4970,117 +4877,77 @@ class StationSession:
             )
         )
 
-    def _refuse_ecb_state(self, frame: Frame) -> bool:
-        """Whether ``frame`` is state the session must not take; a refusal is counted.
-
-        The single choke point for that refusal: every reader of a parameter dump (0x044F),
-        a guard-mode report (0x047F) or an alarm frame (0x04B1, 0x04B2, 0x0578) gets its
-        value through :meth:`_decode_json`, :meth:`_decode_alarm_mode` or
-        :meth:`_handle_alarm`, which all ask here. The static ECB key is
-        derivable from the serial and DID alone, so once a session key exists, only
-        GCM state is authenticated. ECB image replies, scalar results and camera
-        pushes are not state and still decode. On an RSA session state under its
-        session key (ECB tag, encryption type 2) is the station's own. State under the
-        fixed key (type 1, :meth:`_fixed_key_state`) is taken unauthenticated, as the
-        eufy app takes it, until the station has sent state under its session key
-        (:attr:`session_key_state_latched`); then it is refused. Any other state frame
-        (clear, another tag) is refused. A static-key session takes clear and type 1
-        state too (:meth:`_station_frame`).
-        """
-        if frame.type not in _STATE_FRAME_TYPES:
-            return False
-        if self._aes_key is not None:
-            if self._station_frame(frame):
-                return False
-            if self._fixed_key_state(frame) and not self.session_key_state_latched:
-                return False
-        elif frame.cipher != FrameCipher.ECB or self._session_key is None:
-            return False
-        encryption = self._state_encryption(frame)
-        self._state_frames[f"{encryption}:refused"] += 1
-        self.ecb_state_refused += 1
-        if frame.type == FrameType.PARAM_NOTIFY:
-            self._ecb_dumps_refused += 1
-        if self._throttle.should_log(("ecb-state", frame.type, encryption)):
-            _LOGGER.debug(
-                "%s: refusing state frame 0x%04x under %s encryption, tag %s (%d refused)",
-                self._log_name,
-                frame.type,
-                _STATE_ENCRYPTION_NAMES[encryption],
-                frame.cipher,
-                self.ecb_state_refused,
-            )
-        return True
-
-    def _fixed_key_state(self, frame: Frame) -> bool:
-        """Whether state frame ``frame`` is under the fixed key (ECB tag, encryption type 1)
-        on an RSA session whose key is not the static key. Never authenticated: the
-        static key follows from the serial and DID."""
-        return (
-            self._aes_key is not None
-            and not self.static_key_session
-            and frame.cipher == FrameCipher.ECB
-            and frame_encryption(frame.subheader) == FRAME_STATIC_ECB
-        )
-
     def _state_encryption(self, frame: Frame) -> str:
         """A state frame's label in :attr:`SessionStats.state_frames_by_encryption`."""
         if self._aes_key is None:
             return "gcm" if frame.cipher == FrameCipher.GCM else "ecb"
         return _RSA_STATE_ENCRYPTIONS.get(frame_encryption(frame.subheader), "other")
 
-    def _take_state(self, frame: Frame, *, proves_key: bool = False) -> None:
-        """Count a decoded state frame as taken and note whether it is authenticated.
+    @property
+    def _holds_own_key(self) -> bool:
+        """Whether the session holds a key only it and the station know: a GCM session
+        key, or an RSA session key that is not the static key."""
+        if self._aes_key is not None:
+            return not self.static_key_session
+        return self._session_key is not None
 
-        ``proves_key``: its body could not have been made without the key it names (a
-        parameter dump that carries parameters); such a frame under an RSA session's own
-        key sets the station's latch (:class:`SessionKeyStateLatch`).
+    def _take_state(self, frame: Frame) -> None:
+        """Count a decoded state frame (0x044F, 0x047F, an alarm frame) as taken.
+
+        State is taken under any encryption, as the eufy app takes it: clear, the static
+        key, the session key (see docs/protocol/session-crypto.md). Only GCM and an RSA
+        session's own key authenticate it (:attr:`state_authenticated`, information
+        only). State in clear, or under the static key on a session that holds its own
+        key, is logged at INFO once per session, frame type and encryption.
         """
-        self._state_frames[f"{self._state_encryption(frame)}:accepted"] += 1
-        if self._fixed_key_state(frame):
-            self._fixed_key_state_taken += 1
-            if self._state_authenticated is None:
-                self._state_authenticated = False
-            if not self._fixed_key_state_logged:
-                self._fixed_key_state_logged = True
-                _LOGGER.info(
-                    "%s: the station sends its state under the fixed key; taken "
-                    "unauthenticated until it sends state under its session key",
-                    self._log_name,
-                )
-        elif frame.cipher == FrameCipher.GCM or self._session_ecb_frame(frame):
+        encryption = self._state_encryption(frame)
+        self._state_frames[encryption] += 1
+        if frame.cipher == FrameCipher.GCM or self._session_ecb_frame(frame):
             self._state_authenticated = True
-            if proves_key and self._session_ecb_frame(frame) and not self.session_key_state_latched:
-                self._latch_session_key_state()
-        elif self._state_authenticated is None:
+            return
+        if self._state_authenticated is None:
             self._state_authenticated = False
-
-    def _latch_session_key_state(self) -> None:
-        """Refuse the station's state under the fixed key from now on, and store that."""
-        self._state_latched = True
+        if encryption != "clear" and not self._holds_own_key:
+            return
+        kind = (frame.type, encryption)
+        if kind in self._unauthenticated_logged:
+            return
+        self._unauthenticated_logged.add(kind)
         _LOGGER.info(
-            "%s: the station sends its state under its session key; its state under the "
-            "fixed key is refused from now on",
+            "%s: station state 0x%04x arrived %s (unauthenticated), taken as the eufy app does",
             self._log_name,
+            frame.type,
+            _UNAUTHENTICATED_STATE[encryption],
         )
-        task = asyncio.get_running_loop().create_task(
-            self._store_latch(), name=f"eufy-p2p-latch-{self._log_name}"
-        )
-        self._latch_saves.add(task)
-        task.add_done_callback(self._latch_saves.discard)
 
-    async def _store_latch(self) -> None:
+    def _state_body(self, frame: Frame) -> bytes | None:
+        """The plaintext of a binary state frame: an RSA session's clear body as is, an
+        ECB body under the key its encryption type names (:meth:`_ecb_key`), a GCM body
+        under the session key. None when it has no key or does not decode (counted)."""
+        payload = frame.payload
+        if self._plain_rsa_frame(frame):
+            return payload
+        if frame.cipher == FrameCipher.ECB:
+            key = self._ecb_key(frame)
+            if key is None or len(payload) % 16:
+                self._dropped_undecodable += 1
+                return None
+            return ecb_decrypt(key, payload)
+        if frame.cipher != FrameCipher.GCM or self._session_key is None:
+            return None
         try:
-            await self._session_key_state.async_latch()
-        except Exception:
-            _LOGGER.warning("%s: session-key state latch not stored", self._log_name, exc_info=True)
+            return gcm_decrypt_broadcast(self._session_key, payload)
+        except ProtocolError:
+            self._dropped_undecodable += 1
+            return None
 
     def _decode_alarm_mode(self, frame: Frame) -> int | None:
-        if self._refuse_ecb_state(frame):
-            return None
-        mode = decode_alarm_mode_notify(
-            frame, static_key=self._ecb_key(frame), session_key=self._session_key
-        )
+        if self._plain_rsa_frame(frame):
+            mode = decode_alarm_mode_notify(frame, clear=True)
+        else:
+            mode = decode_alarm_mode_notify(
+                frame, static_key=self._ecb_key(frame), session_key=self._session_key
+            )
         if mode is not None:
             self._take_state(frame)
         return mode
@@ -5089,11 +4956,9 @@ class StationSession:
         plain_rsa = self._plain_rsa_frame(frame)
         if plain_rsa and decode_command_receipt(frame, clear=True) is not None:
             return None  # an RSA session's clear receipt: not state, not JSON
-        if self._refuse_ecb_state(frame):
-            return None
         obj = self._decode_json_body(frame, plain_rsa=plain_rsa)
         if obj is not None and frame.type in _STATE_FRAME_TYPES:
-            self._take_state(frame, proves_key=_carries_params(obj))
+            self._take_state(frame)
         return obj
 
     def _decode_json_body(self, frame: Frame, *, plain_rsa: bool) -> dict[str, Any] | None:
@@ -5613,13 +5478,6 @@ class _StallClock:
 
     def __init__(self) -> None:
         self.credited = 0.0
-
-
-def _carries_params(obj: Mapping[str, Any]) -> bool:
-    """Whether a decoded dump carries parameters: a body no one could make without the
-    key, unlike a short object that decrypted noise can start with."""
-    params = obj.get("params")
-    return isinstance(params, list) and bool(params)
 
 
 def _or(value: float | None, default: float) -> float:

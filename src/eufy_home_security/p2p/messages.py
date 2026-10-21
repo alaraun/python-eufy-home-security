@@ -660,7 +660,11 @@ def decode_ecb_scalar_result(payload: bytes) -> int:
 
 
 def decode_alarm_mode_notify(
-    frame: Frame, *, static_key: bytes | None = None, session_key: bytes | None = None
+    frame: Frame,
+    *,
+    static_key: bytes | None = None,
+    session_key: bytes | None = None,
+    clear: bool = False,
 ) -> int | None:
     """The guard-mode code from an ALARM_MODE (0x047F) notify.
 
@@ -672,10 +676,14 @@ def decode_alarm_mode_notify(
       same value space as the SET_ARMING command and the FCM ``arming`` field.
     * AES-128-ECB under the static serial key (0x01) — no IV, so a given mode
       always encrypts identically; the first LE u32 is the mode.
+    * ``clear``: an RSA session's unencrypted body (ECB tag, encryption type 0); the
+      first LE u32 is the mode.
 
     Returns None when the frame's cipher is unknown or its key was not supplied.
     """
     payload = frame.payload
+    if clear:
+        return int(struct.unpack_from("<I", payload, 0)[0]) if len(payload) >= 4 else None
     if frame.cipher == FrameCipher.GCM:
         if session_key is None or len(payload) < 28:
             return None
