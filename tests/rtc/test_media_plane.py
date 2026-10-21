@@ -15,7 +15,6 @@ import pytest
 
 pytest.importorskip("aioice")
 pytest.importorskip("pylibsrtp")
-pytest.importorskip("kcp")
 
 import aioice.ice
 from aioice import Candidate, Connection
@@ -108,6 +107,7 @@ def _loopback_only(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_aioice_transport_connects_controlled_with_dictated_credentials() -> None:
     ours = AioiceTransport()
+    assert ours.diagnostics() == {"gathered": False}
     device = Connection(ice_controlling=True, components=1, use_ipv6=False)
     try:
         await device.gather_candidates()
@@ -129,6 +129,10 @@ async def test_aioice_transport_connects_controlled_with_dictated_credentials() 
             )
         await device.send(b"rtp")
         assert await asyncio.wait_for(ours.recv(), 5) == b"rtp"
+        diagnostics = ours.diagnostics()
+        assert diagnostics["selected_pair_types"] == {"local": "host", "remote": "host"}
+        assert (diagnostics["controlling"], diagnostics["turn_configured"]) == (False, False)
+        assert "192.0.2.9" not in str(diagnostics)
         await ours.send(b"rtcp")
         assert await asyncio.wait_for(device.recv(), 5) == b"rtcp"
     finally:
@@ -223,8 +227,10 @@ async def test_aioice_transport_hands_the_turn_relay_to_aioice(
             local_pwd="p" * 23,
             turn=TurnServer("198.51.100.9", 3478, "u", "pw"),
         )
+        diagnostics = ice.diagnostics()
     finally:
         await ice.close()
+    assert (diagnostics["turn_configured"], diagnostics["selected_pair_types"]) == (True, None)
     assert seen["ice_controlling"] is False
     assert seen["components"] == 1
     assert seen["turn_server"] == ("198.51.100.9", 3478)
@@ -377,7 +383,8 @@ async def test_srtp_h265_is_depacketized_and_decrypted_others_are_dropped() -> N
         assert frames[0].data == START_CODE + vps + START_CODE + _hevc(19, idr)
         assert not frames[1].keyframe
         assert frames[1].data == START_CODE + _hevc(1, b"P-slice")
-        assert plane.stats() == {
+        stats = plane.stats()
+        assert {k: v for k, v in stats.items() if k not in {"streams", "timings", "ice"}} == {
             "rtcp": 1,
             "srtp_failures": 1,
             "frames": 2,
@@ -386,6 +393,51 @@ async def test_srtp_h265_is_depacketized_and_decrypted_others_are_dropped() -> N
             "rtp_by_payload_type": {PayloadType.AUDIO: 1, PayloadType.H265: 3},
             "first_nal_types": [32, 1],
         }
+        # The frame that failed its tag is still described, as not decrypted.
+        streams = stats["streams"]
+        assert isinstance(streams, dict)
+        assert streams["video"]["h265"]["frames"] == 3
+        assert streams["video"]["h265"]["decrypted"] == 2
+        assert streams["rtp"]["111"]["packets"] == 1
+        timings = stats["timings"]
+        assert isinstance(timings, dict)
+        assert set(timings) == {"gathered_ms", "connected_ms"}
+        assert stats["ice"] is None  # the fake transport has no diagnostics
+    finally:
+        await plane.close()
+
+
+async def test_stats_carry_the_ice_transports_own_descriptors() -> None:
+    class DescribedIce(FakeIce):
+        def diagnostics(self) -> dict[str, object]:
+            return {"selected_pair_types": {"local": "relay", "remote": "host"}}
+
+    plane, _ = await _started(DescribedIce())
+    try:
+        assert plane.stats()["ice"] == {"selected_pair_types": {"local": "relay", "remote": "host"}}
+    finally:
+        await plane.close()
+
+
+async def test_h264_is_counted_not_delivered_and_any_packet_ends_wait_packets() -> None:
+    ice = FakeIce()
+    plane, _ = await _started(ice)
+    try:
+        waiting = asyncio.ensure_future(plane.wait_packets())
+        await asyncio.sleep(0)
+        assert not waiting.done()
+        ice.inbound.put_nowait(_srtp_rtp(bytes([0x65]) + b"idr", seq=1, pt=PayloadType.H264))
+        ice.inbound.put_nowait(_srtp_rtp(bytes([0x41]) + b"p", seq=2, pt=PayloadType.H264))
+        async with asyncio.timeout(2):
+            await waiting
+        while plane.stats()["rtp_by_payload_type"] != {PayloadType.H264: 2}:
+            await asyncio.sleep(0.01)
+        streams = plane.stats()["streams"]
+        assert isinstance(streams, dict)
+        h264 = streams["video"]["h264"]
+        assert (h264["frames"], h264["keyframes"], h264["decrypted"]) == (2, 1, 0)
+        assert plane.stats()["frames"] == 0
+        assert plane._frames.empty()
     finally:
         await plane.close()
 
