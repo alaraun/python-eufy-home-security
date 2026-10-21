@@ -6,10 +6,11 @@ import asyncio
 import base64
 import contextlib
 import json
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from eufy_home_security.p2p.xzyh import HEADER_LEN, encode_frame
 from eufy_home_security.rtc import codec
 from eufy_home_security.rtc.codec import (
     BodyType,
@@ -21,7 +22,10 @@ from eufy_home_security.rtc.codec import (
     MessageType,
     ResponseCode,
 )
+from eufy_home_security.rtc.command import decrypt_command_reply, encrypt_command
 from eufy_home_security.rtc.config import RtcConfig
+from eufy_home_security.rtc.data_channel import DataMsgType, KcpDataChannel
+from eufy_home_security.rtc.media import AccessUnit, TurnServer
 from eufy_home_security.rtc.sdp import SdpInfo
 from eufy_home_security.testing import SYNTHETIC
 
@@ -282,6 +286,154 @@ async def start_server(**kwargs: Any) -> tuple[FakeServer, int]:
     server.tcp_port = server.tcp.sockets[0].getsockname()[1]
     SERVERS.append(server)
     return server, transport.get_extra_info("sockname")[1]
+
+
+# ── a station behind the data channel and the media plane ────────────────────
+
+#: The key the fake station seals with (the device answer's content key).
+STATION_KEY = DEVICE_INFO.content_key.encode()[:16]
+
+
+def sealed_notification(plain: bytes) -> bytes:
+    """A notification as the station sends it: header, then ``tag | iv | ct``."""
+    reply = encrypt_command(STATION_KEY, encode_frame(0x0546, plain, bytes(6)), 0)
+    return reply[:HEADER_LEN] + reply[HEADER_LEN : HEADER_LEN + 28] + reply[HEADER_LEN + 32 :]
+
+
+class PipeIce:
+    """In-memory ICE transport with a safe diagnostics() accessor (type counts only)."""
+
+    def __init__(self, *, send_q: asyncio.Queue[bytes], recv_q: asyncio.Queue[bytes]) -> None:
+        self._send_q = send_q
+        self._recv_q = recv_q
+        self.closed = False
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "gathered": True,
+            "controlling": False,
+            "local_candidate_types": {"host": 1},
+            "remote_candidate_types": {"host": 1, "srflx": 1},
+            "selected_pair_types": {"local": "host", "remote": "srflx"},
+            "turn_configured": True,
+        }
+
+    async def gather(self, *, local_ufrag: str, local_pwd: str, turn: Any) -> list[str]:
+        return ["candidate:1 1 udp 1 192.0.2.7 5 typ host"]
+
+    def add_remote_candidate(self, candidate: str) -> None:
+        return None
+
+    async def connect(self, *, remote_ufrag: str, remote_pwd: str) -> None:
+        return None
+
+    async def recv(self) -> bytes:
+        return await self._recv_q.get()
+
+    async def send(self, data: bytes) -> None:
+        self._send_q.put_nowait(data)
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class StationMedia:
+    """A media plane whose video starts once the station got a live open on the data
+    channel (``video_on_data``) or on RTCP. ``packets_only``: packets arrive, but no
+    frame is ever decoded."""
+
+    instance: StationMedia | None = None
+    video_on_data = True
+    packets_only = False
+
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.commands: list[bytes] = []
+        StationMedia.instance = self
+
+    async def start(
+        self,
+        local: SdpInfo,
+        remote: SdpInfo,
+        turn: TurnServer | None,
+        send_candidate: Callable[[str], None],
+    ) -> None:
+        return None
+
+    def add_remote_candidate(self, candidate: str) -> None:
+        return None
+
+    async def frames(self) -> AsyncIterator[AccessUnit]:
+        yield AccessUnit(b"", 0, False)
+
+    async def send_command(self, data: bytes) -> None:
+        self.commands.append(data)
+        self.started.set()
+
+    async def recv_command(self) -> bytes:
+        await asyncio.Event().wait()
+        return b""
+
+    async def wait_packets(self) -> None:
+        await self.started.wait()
+
+    async def wait_media(self) -> None:
+        if StationMedia.packets_only:
+            await asyncio.Event().wait()
+        await self.started.wait()
+
+    def stats(self) -> dict[str, object]:
+        return {"frames": 5, "rtp_by_payload_type": {97: 40}}
+
+    async def close(self) -> None:
+        return None
+
+
+#: The JSON of every command the fake station received.
+QUERIES: list[dict[str, Any]] = []
+
+
+async def station_responder(device: KcpDataChannel) -> None:
+    """The station: echo the heartbeat (and send one of its own), answer each 1350
+    command with a sealed reply and a notification, and start video on a live open over
+    the data channel."""
+    while True:
+        msg = await device.recv_message()
+        if len(msg.payload) <= HEADER_LEN:
+            await device.send_message(encode_frame(0x0473, b"", bytes(6)))
+            await device.send_message(bytes(16), msg_type=DataMsgType.HEARTBEAT)
+            continue
+        plain = decrypt_command_reply(STATION_KEY, msg.payload[HEADER_LEN:])
+        if b'"cmd":1003' in plain:
+            if StationMedia.video_on_data and StationMedia.instance is not None:
+                StationMedia.instance.started.set()
+            continue
+        QUERIES.append(json.loads(plain))
+        reply = encode_frame(0x0546, b'{"code":0,"payload":{"num":2}}', bytes(6))
+        await device.send_message(encrypt_command(STATION_KEY, reply, 0))
+        await device.send_message(sealed_notification(b'{"cmd":1224,"mode":1}'), msg_type=3)
+
+
+#: Responder tasks and their device channels; the package's conftest stops them.
+STATIONS: list[tuple[asyncio.Future[None], KcpDataChannel]] = []
+
+
+def station_ice() -> PipeIce:
+    """The client end of an in-memory data channel to a running :func:`station_responder`."""
+    c2d: asyncio.Queue[bytes] = asyncio.Queue()
+    d2c: asyncio.Queue[bytes] = asyncio.Queue()
+    device = KcpDataChannel(PipeIce(send_q=d2c, recv_q=c2d), conv=1)
+    STATIONS.append((asyncio.ensure_future(station_responder(device)), device))
+    return PipeIce(send_q=c2d, recv_q=d2c)
+
+
+async def stop_stations() -> None:
+    while STATIONS:
+        task, device = STATIONS.pop()
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        await device.close()
 
 
 __all__ = ["CONTACT", "ResponseCode"]
