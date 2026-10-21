@@ -8,6 +8,7 @@ descriptors (no key, serial, address or payload bytes).
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import struct
 from collections.abc import AsyncIterator, Callable
@@ -19,9 +20,7 @@ from eufy_home_security.rtc.command import decrypt_command_reply, encrypt_comman
 from eufy_home_security.rtc.config import KCP_TYPE_MULTI, KCP_TYPE_SINGLE
 from eufy_home_security.rtc.data_channel import DataMsgType, KcpDataChannel
 from eufy_home_security.rtc.diagnostics import (
-    AuthReport,
     ChildRecord,
-    DiagnosticsReport,
     StationRecord,
     StationReport,
     collect_station,
@@ -29,7 +28,7 @@ from eufy_home_security.rtc.diagnostics import (
     describe_message,
     describe_station,
     first_camera_channel,
-    render,
+    render_station,
 )
 from eufy_home_security.rtc.media import AccessUnit, TurnServer
 from eufy_home_security.rtc.sdp import SdpInfo
@@ -361,10 +360,10 @@ async def test_collect_station_runs_every_phase_and_describes_the_replies() -> N
     assert [a.route for a in report.live.attempts] == ["data_channel"]
     assert report.live.attempts[0].first_frame_ms is not None
     assert report.live.media == {"frames": 5, "rtp_by_payload_type": {97: 40}}
-    text = DiagnosticsReport("0", "t", AuthReport(True, "eu", 3, 1), [report]).to_json()
+    text = json.dumps(dataclasses.asdict(report))
     for secret in (DEVICE_INFO.content_key, STATION_SN, SYNTHETIC.did, ACCOUNT, "198.51.100"):
         assert secret not in text
-    assert "T9000" in render(DiagnosticsReport("0", "t", AuthReport(True, "eu", 3, 1), [report]))
+    assert "T9000" in render_station(report)[0]
 
 
 async def test_live_falls_back_to_rtcp_when_the_data_channel_open_brings_no_video(
@@ -393,14 +392,10 @@ async def test_a_refused_login_ends_the_station_in_the_signaling_phase() -> None
     assert report.messages == []
 
 
-def test_report_json_carries_only_descriptors() -> None:
+def test_a_config_report_serializes_to_json_without_secrets() -> None:
     record = describe_station(_devices()[0])
-    report = DiagnosticsReport(
-        library_version="0.0.0",
-        created_utc="2000-01-01T00:00:00Z",
-        auth=AuthReport(logged_in=True, region="eu", device_count=2, webrtc_only_count=1),
-        stations=[StationReport(station=record, children=[], channel=0, phase_reached="config")],
-    )
-    parsed = json.loads(report.to_json())
-    assert parsed["stations"][0]["station"]["model"] == "T9000"
-    assert "content_key" not in report.to_json().replace("content_key_len", "")
+    report = StationReport(station=record, children=[], channel=0, phase_reached="config")
+    text = json.dumps(dataclasses.asdict(report))
+    assert json.loads(text)["station"]["model"] == "T9000"
+    assert "content_key" not in text
+    assert render_station(report)[0].endswith("reached config")
