@@ -52,6 +52,7 @@ lock-out. A tiny wrapper that sets `os.environ` and `execv`s the CLI is safer.
 | `recording PATH --device SN\|--channel N [--download] --out PREFIX` | save a stored recording (a history row's `storage_path`) to `PREFIX.hevc` + `PREFIX.aac`, by playback (1025) or with `--download` the download command (1024) | cloud + LAN |
 | `snapshot --device SN\|--channel N [--recording PATH] --out FILE` | one full-resolution HEVC keyframe: the camera's next one, or the recording's first (its trigger moment) | cloud + LAN |
 | `monitor [--no-push] [--no-p2p] [--json]` | print events as they arrive until Ctrl+C: `--no-push` skips cloud push, `--no-p2p` the local sessions (not both), `--json` prints one object per line | cloud + LAN |
+| `diagnose [--explain] [--all-stations] [--channel N] [--listen S] [--no-commands] [--no-av] [--output PATH]` | read-only WebRTC data-channel diagnostics for the account's webrtc_only stations (`T9000`/`T8N00`), or `--station`/`--all-stations`; writes a redacted JSON report (descriptors only — no keys, serials, addresses, account id or A/V payload) and prints a summary. `--explain` prints what it collects and exits without logging in. Needs the `rtc` extra. See [how-to/diagnose.md](../how-to/diagnose.md) | cloud + WebRTC |
 
 Numeric options are range-checked: `--days` 1–36500, `--local-port` 0–65535,
 and `--count`, `--seconds` and `--timeout` must be greater than 0.
