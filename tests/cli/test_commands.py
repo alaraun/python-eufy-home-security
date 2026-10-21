@@ -13,7 +13,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar, cast
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -990,3 +990,321 @@ async def test_diagnose_without_p2p_probes_only_the_webrtc_stations(
     report = json.loads(out.read_text())
     assert report["stations"] == {}
     assert len(calls) == 1
+
+
+# ── diagnose: end to end, robustness, opt-in write ───────────────────────────
+
+
+@pytest.fixture
+async def webrtc_station(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
+    """The WebRTC path of diagnose against the fake signaling server, an in-memory
+    data channel to a fake station and a fake media plane (the real collector runs)."""
+    from eufy_home_security.rtc import session as rtc_session  # noqa: PLC0415
+    from eufy_home_security.rtc.signaling import SignalingClient  # noqa: PLC0415
+
+    from ..rtc.fakes import (  # noqa: PLC0415
+        QUERIES,
+        FakeCrypto,
+        StationMedia,
+        config,
+        start_server,
+        station_ice,
+        stop_stations,
+    )
+
+    QUERIES.clear()
+    server, port = await start_server(request_id=None)
+    real = rtc_session.RtcSession
+
+    def session(_config: Any, _crypto: Any) -> Any:
+        cfg = config(firmware=4200)
+        crypto = FakeCrypto()
+        return real(
+            cfg,
+            crypto,
+            signaling=SignalingClient(cfg, crypto, port=port),
+            media_factory=StationMedia,
+        )
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    monkeypatch.setattr(rtc_session, "RtcSession", session)
+    monkeypatch.setattr(rtc_session, "default_ice_factory", station_ice)
+    yield
+    await stop_stations()
+    server.close()
+
+
+def _fake_push(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A push listener that starts at once and delivers one guard-mode push."""
+    from eufy_home_security.events import EventSource, SecurityEvent  # noqa: PLC0415
+
+    async def start(self: Any, *, p2p: bool = True, push: bool = True) -> dict[str, Any]:
+        assert (p2p, push) == (False, True)
+        self._push_running = True
+        self._bus.emit(
+            SecurityEvent(
+                source=EventSource.CLOUD,
+                station_sn="T9000" + SYNTHETIC.station_sn[5:],
+                guard_mode=1,
+                device_name="Pro",
+                raw={"msg_type": 1240, "user_name": "Alice", "mode": 1},
+            )
+        )
+        return {}
+
+    monkeypatch.setattr(client_module.EufySecurity, "async_start", start)
+
+
+@pytest.mark.usefixtures("account_views", "webrtc_station")
+async def test_diagnose_end_to_end_writes_a_complete_report_without_private_data(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    from ..rtc.fakes import DEVICE_INFO, QUERIES  # noqa: PLC0415
+
+    _fake_push(monkeypatch)
+    monkeypatch.setattr(diagnostics, "_LIVE_OPEN_WAIT", 0.2)
+    out = tmp_path / "report.json"
+    argv = ["--host", "127.0.0.1", "diagnose", "--watch", "0.1", "--listen", "0.1"]
+    assert await run([*argv, "--output", str(out)], tmp_path) == 0
+    report = json.loads(out.read_text())
+    assert (report["complete"], report["aborted"]) == (True, None)
+    assert report["options"]["watch"] == 0.1
+    assert report["push"] == {"running": True, "error": None}
+    (event,) = report["events"]
+    assert (event["station_model"], event["ints"]) == ("T9000", {"guard_mode": 1})
+    assert event["raw_ints"] == {"mode": [1]}
+    (_start_ms, length_ms), *_ = report["watch_windows_ms"]
+    assert length_ms == 100
+    station, bare = report["webrtc_stations"]
+    assert (station["phase_reached"], station["error"]) == ("done", None)
+    assert station["guard_rewrite"] is None
+    assert [c["name"] for c in station["commands"]] == ["storage_1307", "bind_list_9100"]
+    assert station["live"]["channel"] == 2
+    assert bare["phase_reached"] == "config"
+    assert 1224 not in {q["cmd"] for q in QUERIES}  # read-only without the opt-in
+    text = out.read_text()
+    for private in (
+        SYNTHETIC.did,
+        SYNTHETIC.station_sn,
+        SYNTHETIC.station_sn[5:],
+        SYNTHETIC.camera_sn,
+        SYNTHETIC.account_id,
+        SYNTHETIC.email,
+        "o" * 40,
+        "u" * 40,
+        "ABCDEF",
+        "198.51.100",
+        "192.0.2",
+        "203.0.113",
+        DEVICE_INFO.content_key,
+        DEVICE_INFO.ice_pwd,
+        DEVICE_INFO.ice_ufrag,
+        "Home Base",
+        "Pro",
+        "Cam 2",
+        "Alice",
+    ):
+        assert private not in text, private
+
+
+@pytest.mark.usefixtures("account_views", "webrtc_station")
+@pytest.mark.parametrize(
+    ("answer", "mode", "note", "sent"),
+    [
+        ("yes", 1, "confirmed: 1", True),
+        ("no", 1, "declined", False),
+        ("yes", 2, "skipped: cloud guard mode 2 is not Away/Home/Disarmed", False),
+    ],
+)
+async def test_diagnose_re_sends_the_guard_mode_only_when_opted_in_and_confirmed(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    answer: str,
+    mode: int,
+    note: str,
+    sent: bool,
+) -> None:
+    from ..rtc.fakes import QUERIES  # noqa: PLC0415
+
+    real = WebRtcCloud.async_get_devices
+
+    async def with_mode(self: Any, **kwargs: Any) -> list[CloudDevice]:
+        devices = await real(self, **kwargs)
+        station = devices[2]
+        raw = {**station.raw, "params": [{"param_type": 1224, "param_value": str(mode)}]}
+        return [*devices[:2], replace(station, raw=raw), *devices[3:]]
+
+    monkeypatch.setattr(WebRtcCloud, "async_get_devices", with_mode)
+    asked: list[str] = []
+
+    def prompt(question: str) -> str:
+        asked.append(question)
+        return answer
+
+    out = tmp_path / "r.json"
+    argv = ["--station", "Pro", "diagnose", "--no-p2p", "--no-live", "--rewrite-guard-mode"]
+    assert await run([*argv, "--output", str(out)], tmp_path, prompt=prompt) == 0
+    (station,) = json.loads(out.read_text())["webrtc_stations"]
+    assert station["guard_rewrite"] == note
+    assert (1224 in {q["cmd"] for q in QUERIES}) is sent
+    assert ("guard_rewrite_1224" in [c["name"] for c in station["commands"]]) is sent
+    assert len(asked) == (0 if mode == 2 else 1)
+    if asked:
+        assert "Home (1)" in asked[0]
+
+
+async def test_a_confirmation_without_a_terminal_is_a_no(tmp_path: Path) -> None:
+    def no_terminal(_question: str) -> str:
+        raise EOFError
+
+    async with Context(parse_args(["diagnose"]), env={}, prompt=no_terminal) as ctx:
+        assert await commands._confirm(ctx, "?") is False
+    async with Context(parse_args(["diagnose"]), env={}, prompt=lambda _q: " ") as ctx:
+        assert await commands._confirm(ctx, "?") is False
+    async with Context(parse_args(["diagnose"]), env={}, prompt=lambda _q: "YES") as ctx:
+        assert await commands._confirm(ctx, "?") is True
+
+
+@pytest.mark.usefixtures("account_views")
+@pytest.mark.parametrize(
+    ("raised", "aborted"),
+    [
+        (KeyboardInterrupt(), "interrupted"),
+        (asyncio.CancelledError(), "interrupted"),
+        (RuntimeError("bug"), "RuntimeError"),
+    ],
+)
+async def test_diagnose_writes_a_partial_report_when_a_run_is_cut_short(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    raised: BaseException,
+    aborted: str,
+) -> None:
+    async def cut(*_args: Any) -> None:
+        raise raised
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    monkeypatch.setattr(commands, "_diagnose_webrtc", cut)
+    out = tmp_path / "r.json"
+    with pytest.raises(type(raised)):
+        await run(["--host", "127.0.0.1", "diagnose", "--output", str(out)], tmp_path)
+    report = json.loads(out.read_text())
+    assert (report["complete"], report["aborted"]) == (False, aborted)
+    assert len(report["stations"]) == 1  # the P2P read before the cut is kept
+    assert "Partial report written" in capsys.readouterr().err
+
+
+@pytest.mark.usefixtures("account_views")
+async def test_diagnose_writes_no_report_when_the_login_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from eufy_home_security.exceptions import LoginVerificationError  # noqa: PLC0415
+
+    async def refused(self: StubCloud, **kwargs: Any) -> None:
+        raise LoginVerificationError("26006", code=26006)
+
+    monkeypatch.setattr(StubCloud, "async_login", refused)
+    out = tmp_path / "r.json"
+    with pytest.raises(LoginVerificationError):
+        await run(["diagnose", "--no-webrtc", "--output", str(out)], tmp_path)
+    assert not out.exists()
+
+
+@pytest.mark.usefixtures("account_views")
+async def test_diagnose_answers_a_verification_code_in_the_same_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    logins: list[dict[str, Any]] = []
+
+    async def challenged_once(self: StubCloud, **kwargs: Any) -> None:
+        logins.append(kwargs)
+        if not kwargs.get("verify_code"):
+            raise LoginChallengeError("verify_code", login_id="")
+
+    monkeypatch.setattr(StubCloud, "async_login", challenged_once)
+    out = tmp_path / "r.json"
+    argv = ["--host", "127.0.0.1", "diagnose", "--no-webrtc", "--output", str(out)]
+    assert await run(argv, tmp_path, prompt=lambda _q: "123456") == 0
+    assert [entry.get("verify_code") for entry in logins] == [None, "123456"]
+    assert json.loads(out.read_text())["complete"] is True
+
+
+@pytest.mark.usefixtures("account_views")
+async def test_diagnose_goes_on_when_the_device_lists_fail(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from eufy_home_security.exceptions import CommunicationError  # noqa: PLC0415
+
+    async def down(self: Any, **kwargs: Any) -> Any:
+        raise CommunicationError("cloud down")
+
+    monkeypatch.setattr(client_module.EufySecurity, "async_discover", down)
+    monkeypatch.setattr(StubCloud, "async_get_devices", down)
+    out = tmp_path / "r.json"
+    assert await run(["diagnose", "--no-webrtc", "--output", str(out)], tmp_path) == 0
+    report = json.loads(out.read_text())
+    assert report["errors"] == {"discover": "CommunicationError", "devices": "CommunicationError"}
+    assert (report["complete"], report["stations"]) == (True, {})
+
+
+async def test_a_p2p_station_that_fails_in_any_way_is_recorded_not_raised() -> None:
+    station = Mock(connects_on_demand=False)
+    station.async_update = AsyncMock(side_effect=RuntimeError("bug"))
+    station.diagnostics = Mock(return_value={"model": "T8030"})
+    assert await commands._diagnose_p2p(station) == {
+        "model": "T8030",
+        "read_errors": {"state": "RuntimeError"},
+    }
+    station.async_update = AsyncMock()
+    station.async_get_storage = AsyncMock(side_effect=TimeoutError())
+    station.diagnostics = Mock(side_effect=KeyError("x"))
+    assert await commands._diagnose_p2p(station) == {
+        "read_errors": {"storage": "TimeoutError", "diagnostics": "KeyError"}
+    }
+
+
+@pytest.mark.usefixtures("account_views")
+async def test_diagnose_records_a_push_listener_that_does_not_start(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    async def slow(self: Any, **kwargs: Any) -> None:
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    monkeypatch.setattr(diagnostics, "collect_station", _fake_collect([]))
+    monkeypatch.setattr(client_module.EufySecurity, "async_start", slow)
+    monkeypatch.setattr(commands, "DIAGNOSE_PUSH_TIMEOUT", 0.05)
+    out = tmp_path / "r.json"
+    argv = ["diagnose", "--no-p2p", "--watch", "1", "--output", str(out)]
+    assert await run(argv, tmp_path) == 0
+    assert json.loads(out.read_text())["push"] == {"running": False, "error": "TimeoutError"}
+
+
+@pytest.mark.usefixtures("account_views")
+@pytest.mark.parametrize(
+    "argv", [["--watch", "1", "--no-push"], [], ["--watch", "1", "--no-webrtc"]]
+)
+async def test_diagnose_starts_push_only_for_a_webrtc_watch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, argv: list[str]
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    monkeypatch.setattr(diagnostics, "collect_station", _fake_collect([]))
+    started = AsyncMock()
+    monkeypatch.setattr(client_module.EufySecurity, "async_start", started)
+    out = tmp_path / "r.json"
+    assert await run(["diagnose", "--no-p2p", *argv, "--output", str(out)], tmp_path) == 0
+    started.assert_not_called()
+    assert "push" not in json.loads(out.read_text())
+
+
+def test_diagnose_explain_names_the_opt_in_write() -> None:
+    assert "--rewrite-guard-mode" in commands._DIAGNOSE_EXPLAIN
+    assert "a write" in commands._DIAGNOSE_EXPLAIN

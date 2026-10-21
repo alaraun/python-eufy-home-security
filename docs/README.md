@@ -9,7 +9,7 @@
 | [how-to/add-a-device.md](how-to/add-a-device.md) | Add a model or a capability, and verify a device on hardware |
 | [how-to/regenerate-models.md](how-to/regenerate-models.md) | Regenerate the per-model settings files from the vendor's thing models, check them, and when to do it |
 | [how-to/debug-logging.md](how-to/debug-logging.md) | Loggers, wire dumps, redaction, Home Assistant |
-| [how-to/diagnose.md](how-to/diagnose.md) | One read-only diagnostics report of the account: every device, the P2P stations' health, a WebRTC probe of the T9000/T8N00; shareable |
+| [how-to/diagnose.md](how-to/diagnose.md) | One diagnostics report of the account (read-only by default): every device, the P2P stations' health, a WebRTC probe of the T9000/T8N00 with stream descriptors; shareable |
 | **Reference** | |
 | [reference/devices.md](reference/devices.md) | Support matrix and per-model settings (generated) |
 | [reference/cli.md](reference/cli.md) | The `eufy-security` command line |
