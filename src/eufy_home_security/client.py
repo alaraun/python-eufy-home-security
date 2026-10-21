@@ -617,6 +617,7 @@ class EufySecurity:
                 on_demand=connects_on_demand(serial),
                 wake_provider=self._wake_provider(device) if connects_on_demand(serial) else None,
                 key_refresh=_CachedKeyRefreshLatch(self.cache, serial),
+                session_key_state=_CachedSessionKeyStateLatch(self.cache, serial),
                 cloud_problems_reported=True,
                 max_sessions=self._max_sessions,
             )
@@ -1671,6 +1672,21 @@ class _CachedKeyRefreshLatch:
             _LOGGER.debug(
                 "%s: key accepted; key-refresh latch cleared", redact_serial(self._serial)
             )
+            await self._cache.async_save()
+
+
+class _CachedSessionKeyStateLatch:
+    """The session-key state latch of one station, persisted in the session cache."""
+
+    def __init__(self, cache: SessionCache, serial: str) -> None:
+        self._cache = cache
+        self._serial = serial
+
+    def latched(self) -> bool:
+        return self._cache.session_key_state(self._serial)
+
+    async def async_latch(self) -> None:
+        if self._cache.set_session_key_state(self._serial):
             await self._cache.async_save()
 
 

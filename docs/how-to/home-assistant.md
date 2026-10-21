@@ -170,7 +170,7 @@ provides where it lives.
 | `cloud.pending_logins` | per login scope, the pending login a verification-code answer is sent inside: key ident, shared key, pending auth token and user id, the password wrap's client public key and ECDH secret, the `ab`, expiry (15 min) | when a login raises a verification-code challenge with a pending token; cleared by that scope's next successful login or a refused answer |
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
-| `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`) and its RSA private key when served (`rsa_ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), the key-refresh latch, a standalone camera's device session key (`dsk`, with its expiry) and each camera's preset slots (`presets`) | keys on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass. `dsk` when a wake needs it and less than 5 min of it remain; `presets` on each preset read that differs |
+| `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`) and its RSA private key when served (`rsa_ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), the key-refresh latch, the session-key state latch (`session_key_state`), a standalone camera's device session key (`dsk`, with its expiry) and each camera's preset slots (`presets`) | keys on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass. `dsk` when a wake needs it and less than 5 min of it remain; `presets` on each preset read that differs |
 | `devices` | the `get_devs_list` entries, each reduced to the fields `CloudDevice` reads (serials, type, name, channel, DID, IP, firmware versions, `app_conn`, the product code `device_new_pn`, the member's `admin_user_id` and `member_type`, and `cloud_region`, the region that listed it); the cloud's `params` snapshot for a station and a device reached on demand, and a station's `time_zone`. The member's e-mail and phone, MAC addresses and the rest never reach the store | only on `async_discover(refresh=True)`; an entry stored with more fields is reduced on load |
 | `push` | FCM credentials, the registered token, recent push ids and guard-mode times | on push start; delivery state written at most 30 s after it changes, and on close |
 | `refresh_attempts` | when the owner id (account-wide) and each station's cipher key were last force-fetched | with those fetches |
@@ -420,7 +420,12 @@ Each station's `stats()` (`SessionStats`) also carries `conn_init_version` (8: E
 anything else: the legacy RSA handshake) and the `cipher_id` it named, once a CONN_INIT
 reply arrived. `static_key_session` is True on an RSA session whose key is the static key
 (cipher 0, or a station that wraps its static key): it works, but none of its pushes is
-authenticated (see `docs/protocol/session-crypto.md`).
+authenticated (see `docs/protocol/session-crypto.md`). `state_frames_by_encryption`
+counts state frames by encryption and outcome (`"type1:accepted"`, `"type1:refused"`,
+`"clear:refused"`, `"type2:accepted"`, …), and `state_authenticated` is False while the
+station's state came only under the fixed key (an RSA station such as a T8414 that
+sends its state under the static key: taken, but it confirms no arm or disarm, which
+then raises `CommandNotAppliedError`), True once it came authenticated, None before any.
 
 ### Firmware updates
 
@@ -2722,7 +2727,8 @@ async def async_get_config_entry_diagnostics(hass, entry):
   station, whether the owner id is cached, `cipher_id` (the cipher the station uses),
   `cipher_id_named` (whether the station named it in a handshake; false means `cipher_id`
   is the default 40 and no handshake has completed), `cipher_cached` (whether its key
-  is), and the key-refresh latch state.
+  is), the key-refresh latch state and `session_key_state` (whether the station has
+  sent its state under its RSA session key, so its fixed-key state is refused).
 - `CloudDevice.as_redacted_dict()` gives a device without its DID, IP or owner id (only
   whether each is present) and with redacted serials.
 - `StationState.cloud_param_ids` names the station parameters read from the cloud's copy

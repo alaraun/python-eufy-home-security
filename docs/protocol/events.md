@@ -249,7 +249,8 @@ Arming and disarming also send `0x04B1`/`0x04B2` `[0, 0]` on each channel next t
 
 **What the library does with them.** The session decodes the three frames (GCM only: an
 ECB copy is refused once a session key exists and counted in `ecb_state_refused`, like
-the other state frames), caches the first value per `(channel, param)` — the tone's or
+the other state frames; on an RSA session see
+[fixed-key state](session-crypto.md#trust-policy-for-ecb-state)), caches the first value per `(channel, param)` — the tone's or
 siren's event type, the light state — and emits `ParamChanged` when it moves. The tone
 frame (1201) also drives `AlarmChanged`, on transitions only: a non-zero event type that
 is not a stop code starts the alarm (`duration_s` from the seconds), `[0, 0]` ends it,

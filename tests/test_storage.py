@@ -96,6 +96,26 @@ async def test_key_refresh_latch_is_per_station_and_persists() -> None:
     assert reloaded.key_refresh_outstanding("T8030P2000012345") is None
 
 
+async def test_session_key_state_latch_is_per_station_and_persists() -> None:
+    store = MemoryStore()
+    cache = SessionCache(store, "user@example.com")
+    await cache.async_load()
+    assert not cache.session_key_state("T8030P2000012345")
+    assert cache.station_serials() == []  # a read creates no section
+    assert cache.set_session_key_state("T8030P2000012345")
+    assert not cache.set_session_key_state("T8030P2000012345")  # already set
+    cache.set_cipher_key("T8030P2000067890", 40, "ab" * 32)
+    await cache.async_save()
+
+    reloaded = SessionCache(store, "user@example.com")
+    await reloaded.async_load()
+    assert reloaded.session_key_state("T8030P2000012345")
+    assert not reloaded.session_key_state("T8030P2000067890")
+    summary = reloaded.redacted_summary()["stations"]
+    assert summary["T8030***2345"]["session_key_state"] is True
+    assert summary["T8030***7890"]["session_key_state"] is False
+
+
 async def test_key_refresh_slow_retry_window() -> None:
     serial = "T8030P2000012345"
     cache = SessionCache(MemoryStore(), "user@example.com")

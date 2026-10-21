@@ -61,6 +61,7 @@ from eufy_home_security.p2p.crypto import (
     FRAME_PLAIN,
     FRAME_SESSION_ECB,
     FRAME_STATIC_ECB,
+    ecb_encrypt,
 )
 from eufy_home_security.p2p.did import Did, static_key
 from eufy_home_security.p2p.media import (
@@ -81,6 +82,7 @@ from eufy_home_security.p2p.session import (
     Inbound,
     MediaStream,
     MemoryKeyRefreshLatch,
+    MemorySessionKeyStateLatch,
     P2PCredentials,
     StationSession,
 )
@@ -1662,6 +1664,9 @@ async def test_stats_count_pushes_by_type_and_cipher(station: FakeStation) -> No
     assert stats.seconds_since_last_event is not None
     assert stats.seconds_since_last_probe is not None
     assert (stats.dropped_undecodable, stats.ecb_state_refused) == (0, 0)
+    assert stats.state_frames_by_encryption == {"gcm:accepted": 2}  # the dump, no push
+    assert stats.state_authenticated is True
+    assert not session.session_key_state_latched  # a GCM session never latches
 
 
 OTHER_ACCOUNT_ID = "fedcba9876543210fedcba9876543210fedcba98"
@@ -3947,6 +3952,214 @@ async def test_a_push_under_the_rsa_session_key_is_authenticated(station: FakeSt
     )
 
 
+def fixed_key_station(station: FakeStation) -> FakeStation:
+    """``station`` as an RSA station that sends its state under the fixed key (type 1):
+    the parameter dump, the guard-mode report and the alarm-tone frame."""
+    station.params_cipher = FrameCipher.ECB
+    station.state_cipher = FrameCipher.ECB
+    return station
+
+
+def _messages(caplog: pytest.LogCaptureFixture, text: str) -> list[str]:
+    return [r.getMessage() for r in caplog.records if text in r.getMessage()]
+
+
+async def test_fixed_key_state_is_taken_unauthenticated_before_the_latch(
+    station: FakeStation, short_settle: None, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Before the station ever sent state under its session key, its state under the
+    fixed key is taken (dump, mode report, alarm frame), unauthenticated and logged once;
+    clear state, and state of another tag or encryption type, is still refused."""
+    caplog.set_level(logging.DEBUG, logger=session_module.__name__)
+    fixed_key_station(station).params[255][1224] = "63"
+    latch = MemorySessionKeyStateLatch()
+    session = make_rsa_session(station, session_key_state=latch)
+    clear = bytes([FrameCipher.ECB, 0, 0xFF, FRAME_PLAIN, 0, 0])
+    forged = {"params": [{"dev_type": 255, "param_type": 1224, "param_value": "0"}]}
+    light = ecb_encrypt(station.static_key, struct.pack("<I", 1) + bytes(12))
+    try:
+        dump = await session.async_get_params()
+        station.send_alarm_mode(GuardMode.HOME, cipher=FrameCipher.ECB)
+        station.send_alarm_frame(FrameType.LIGHT_NOTIFY, 1, channel=1, cipher=FrameCipher.ECB)
+        station.send_frame(
+            FrameType.PARAM_NOTIFY, json.dumps(forged).encode(), cipher=0, subheader=clear
+        )
+        for tag, encryption in ((FrameCipher.GCM, FRAME_STATIC_ECB), (FrameCipher.ECB, 3)):
+            station.send_frame(
+                FrameType.LIGHT_NOTIFY,
+                light,
+                cipher=0,
+                channel=2,
+                subheader=bytes([tag, 0, 2, encryption, 0, 0]),
+            )
+        await wait_until(lambda: (1, 1400) in session.params and session.ecb_state_refused == 3)
+        reported = session.guard_mode
+        await session.async_get_params()
+        stats = session.stats()
+    finally:
+        await session.async_close()
+    assert dump.station == station.params[STATION_CHANNEL]
+    assert reported == GuardMode.HOME
+    assert (session.session_key_state_latched, latch.latched()) == (False, False)
+    assert stats.state_authenticated is False
+    assert (2, 1400) not in session.params
+    assert stats.state_frames_by_encryption == {
+        "type1:accepted": 6,
+        "clear:refused": 1,
+        "type1:refused": 1,  # the GCM tag
+        "other:refused": 1,
+    }
+    assert len(_messages(caplog, "under the fixed key; taken unauthenticated")) == 1
+    assert _messages(caplog, "refusing state frame 0x044f under clear encryption")
+    assert _messages(caplog, "refusing state frame 0x0578 under static-key encryption")
+    assert _messages(caplog, "refusing state frame 0x0578 under unknown encryption")
+
+
+async def test_a_dump_under_the_session_key_latches_the_station_against_the_fixed_key(
+    station: FakeStation, short_settle: None, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The first parameter dump with parameters under the RSA session key (type 2) sets
+    and stores the latch; from then on the station's state under the fixed key is
+    refused, and a guard-mode report under it moves nothing. A type-2 mode report, or a
+    type-2 dump without parameters or that does not decode, does not latch."""
+    caplog.set_level(logging.DEBUG, logger=session_module.__name__)
+    fixed_key_station(station)
+    latch = MemorySessionKeyStateLatch()
+    session = make_rsa_session(station, session_key_state=latch)
+    try:
+        await session.async_get_params()  # type 1: no latch
+        station.send_alarm_mode(GuardMode.AWAY)  # type 2, but no proof of the key
+        empties: list[dict[str, Any]] = [{"params": []}, {"params": "1"}]
+        for empty in empties:  # type 2, no parameters in it
+            station.send_json(FrameType.PARAM_NOTIFY, empty)
+        undecodable = bytes([FrameCipher.ECB, 0, 0xFF, FRAME_SESSION_ECB, 0, 0])
+        station.send_frame(
+            FrameType.PARAM_NOTIFY, bytes(32), cipher=FrameCipher.ECB, subheader=undecodable
+        )
+        await wait_until(
+            lambda: session.guard_mode == GuardMode.AWAY and session.stats().dropped_undecodable
+        )
+        await asyncio.sleep(0.1)
+        assert not session.session_key_state_latched
+        assert session.stats().state_authenticated is True
+        station.send_param_dump(cipher=FrameCipher.GCM)  # type 2 with parameters: latches
+        await wait_until(lambda: session.session_key_state_latched)
+        station.send_alarm_mode(GuardMode.HOME, cipher=FrameCipher.ECB)
+        station.send_param_dump(cipher=FrameCipher.ECB)
+        await wait_until(lambda: session.ecb_state_refused == 3)
+        stats = session.stats()
+    finally:
+        await session.async_close()
+    assert latch.latched()  # stored by the time the session closed
+    assert session.guard_mode == GuardMode.AWAY
+    assert stats.state_frames_by_encryption == {
+        "type1:accepted": 2,
+        "type2:accepted": 5,  # the undecodable dump is not taken
+        "type1:refused": 3,
+    }
+    assert len(_messages(caplog, "under its session key; its state under the fixed key")) == 1
+    assert _messages(caplog, "refusing state frame 0x047f under static-key encryption")
+    assert _messages(caplog, "refusing state frame 0x044f under static-key encryption")
+
+
+async def test_a_latched_station_has_its_fixed_key_state_refused_from_the_start(
+    station: FakeStation,
+) -> None:
+    latch = MemorySessionKeyStateLatch()
+    await latch.async_latch()  # a latch stored by an earlier session
+    session = make_rsa_session(fixed_key_station(station), session_key_state=latch)
+    try:
+        with pytest.raises(DeviceTimeoutError, match="refused"):
+            await session.async_get_params(timeout=1.0)
+        stats = session.stats()
+    finally:
+        await session.async_close()
+    assert set(stats.state_frames_by_encryption) == {"type1:refused"}
+    assert stats.state_authenticated is True
+    assert session._short_lived_session().session_key_state_latched  # one latch per station
+
+
+class _SlowLatch(MemorySessionKeyStateLatch):
+    """A latch whose store takes 0.5 s, or fails after it (``fail``)."""
+
+    def __init__(self, *, fail: bool = False) -> None:
+        super().__init__()
+        self.fail = fail
+
+    async def async_latch(self) -> None:
+        await asyncio.sleep(0.5)
+        if self.fail:
+            raise OSError("store unavailable")
+        await super().async_latch()
+
+
+async def test_the_latch_holds_while_its_store_is_pending(station: FakeStation) -> None:
+    """Fixed-key state right after the latching dump is refused before the store
+    returns, and closing the session waits for the store."""
+    latch = _SlowLatch()
+    session = make_rsa_session(fixed_key_station(station), session_key_state=latch)
+    try:
+        await session.async_get_params()
+        station.send_param_dump(cipher=FrameCipher.GCM)
+        await wait_until(lambda: session.session_key_state_latched)
+        station.send_param_dump(cipher=FrameCipher.ECB)
+        await wait_until(lambda: session.ecb_state_refused == 2)
+        assert not latch.latched()
+    finally:
+        await session.async_close()
+    assert latch.latched()
+
+
+async def test_a_latch_that_cannot_be_stored_still_holds_for_the_session(
+    station: FakeStation, caplog: pytest.LogCaptureFixture
+) -> None:
+    latch = _SlowLatch(fail=True)
+    session = make_rsa_session(fixed_key_station(station), session_key_state=latch)
+    try:
+        await session.async_get_params()
+        station.send_param_dump(cipher=FrameCipher.GCM)
+        await wait_until(lambda: session.session_key_state_latched)
+    finally:
+        await session.async_close()
+    assert session.session_key_state_latched
+    assert not latch.latched()
+    assert _messages(caplog, "session-key state latch not stored")
+
+
+@pytest.mark.parametrize("current", [False, True], ids=["change", "already-in-mode"])
+async def test_fixed_key_state_never_confirms_an_arm(
+    station: FakeStation, current: bool, short_settle: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Neither a mode report nor a read-back under the fixed key confirms an arm: the
+    arm is not confirmed, whatever mode they show."""
+    monkeypatch.setattr(session_module, "MODE_REPORT_GRACE", 0.2)
+    fixed_key_station(station)
+    if current:
+        station.guard_mode = GuardMode.HOME  # silent: the read-back alone would confirm it
+        station.params[255][1224] = "1"
+    session = make_rsa_session(station)
+    try:
+        with pytest.raises(CommandNotAppliedError, match=r"not confirmed.*fixed key"):
+            await session.async_set_guard_mode(GuardMode.HOME, timeout=1.0)
+    finally:
+        await session.async_close()
+    assert station.guard_mode == GuardMode.HOME
+    assert session.guard_mode == GuardMode.HOME  # still taken as state
+
+
+async def test_a_fixed_key_tone_frame_never_confirms_a_siren(station: FakeStation) -> None:
+    fixed_key_station(station).tone_frames = True
+    session = make_rsa_session(station)
+    events: list[Event] = []
+    session.subscribe(events.append)
+    try:
+        outcome = await session.async_set_tone_file(30, timeout=0.5)
+    finally:
+        await session.async_close()
+    assert outcome is CommandOutcome.DELIVERED
+    assert [e.alarming for e in events if isinstance(e, AlarmChanged)] == [True]
+
+
 DOORBELL_SN = "T8200P2000054321"
 """A synthetic serial of a model outside the app's static-key fallback list."""
 
@@ -3969,12 +4182,16 @@ DOORBELL_SN = "T8200P2000054321"
     ],
 )
 async def test_a_static_key_rsa_session_takes_the_station_state_unauthenticated(
-    station: FakeStation, case: tuple[str, int, str, int | None, int], short_settle: None
+    station: FakeStation,
+    case: tuple[str, int, str, int | None, int],
+    short_settle: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An RSA session whose key is the static key takes the station's state under the
     static key or in clear and authenticates no push. It sends type 2 after a wrapped
     key; with no session key (no cipher named, or a cipher key that does not parse),
     type 1 to a HomeBase-family model, clear to any other."""
+    monkeypatch.setattr(session_module, "MODE_REPORT_GRACE", 0.2)
     serial, cipher_id, rsa_key, station_encryption, sent = case
     station.serial = serial
     station.static_key = static_key(serial, station.did)
@@ -3982,6 +4199,7 @@ async def test_a_static_key_rsa_session_takes_the_station_state_unauthenticated(
     station.cipher_id = cipher_id
     station.station_encryption = station_encryption
     station.reply_to_settings = True
+    own = dict(station.params[STATION_CHANNEL])  # before the arm changes it
     session = StationSession(
         serial,
         RsaProvider(station, rsa_key=rsa_key != "absent", bad_key=rsa_key == "unparsable"),
@@ -3999,12 +4217,16 @@ async def test_a_static_key_rsa_session_takes_the_station_state_unauthenticated(
         )
         station.push_camera_event()
         await wait_until(lambda: any(isinstance(e, SecurityEvent) for e in events))
+        armed = await session.async_set_guard_mode(GuardMode.HOME, timeout=1.0)
         stats = session.stats()
         assert session.rsa_session
     finally:
         await session.async_close()
     assert stats.static_key_session
-    assert dump.station == station.params[STATION_CHANNEL]
+    assert armed == GuardMode.HOME  # its state confirms an arm, as before
+    assert stats.state_authenticated is False
+    assert not session.session_key_state_latched
+    assert dump.station == own
     assert outcome is CommandOutcome.APPLIED
     assert station.client_encryptions == {sent}
     assert (stats.ecb_state_refused, stats.cipher_id) == (0, cipher_id)

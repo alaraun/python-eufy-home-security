@@ -243,17 +243,35 @@ replayed within the same session.
 
 - ECB frames that are not state still decode: image replies (`0x051C`), legacy
   scalar results and camera pushes (cmd 2037).
-- On an RSA session ([RSA CONN_INIT](#rsa-conn_init-declared-app-legacy)) only state
-  under its session key (tag `0x01`, encryption type 2) counts; state in clear or under
-  any other tag is refused and counted. A clear frame decodes only under the ECB tag
-  and is never authenticated. A [static-key RSA session](#static-key-rsa-sessions-declared-app)
+- On an RSA session ([RSA CONN_INIT](#rsa-conn_init-declared-app-legacy)) state under
+  its session key (tag `0x01`, encryption type 2) counts and is authenticated; state in
+  clear or under any other tag is refused and counted. A clear frame decodes only under
+  the ECB tag and is never authenticated. A [static-key RSA session](#static-key-rsa-sessions-declared-app)
   takes state in clear and under types 1 and 2, all unauthenticated.
+- **Fixed-key state on an RSA session** **[declared: the eufy app takes state under any
+  encryption type]**. Some stations (a standalone T8414) send their state under the
+  static key (type 1) although the session has its own key. The library takes such
+  state, unauthenticated, until the station has once sent a parameter dump with
+  parameters under its session key; from then on its type-1 state is refused. That
+  latch is per station and kept in the session cache (`stations.<serial>.session_key_state`),
+  so a restart or a new client keeps it. A type-2 frame that random bytes could also
+  decrypt to (a guard-mode report, an alarm frame, a dump without parameters) does not
+  set it. Fixed-key state never confirms a write: a guard-mode report under it is not
+  an arm's result, an arm whose read-back took such state raises
+  `CommandNotAppliedError` (not confirmed) whatever mode it shows, and a siren write
+  that only such an alarm-tone frame reports stays `DELIVERED`.
 - A camera push records the cipher of its frame in `SecurityEvent.frame_cipher`.
   `SecurityEvent.authenticated` is False for a push under the static ECB key and True
   for a GCM push, a push under an RSA session's key (`SecurityEvent.session_ecb`) or a
   cloud push (`frame_cipher` None, TLS). It proves origin, not freshness.
-- Each refusal is logged at DEBUG (throttled) and counted in
-  `StationSession.ecb_state_refused`.
+- Each refusal is logged at DEBUG (throttled), naming the frame type and its
+  encryption (clear, static-key, session-key), and counted in
+  `StationSession.ecb_state_refused`. `SessionStats.state_frames_by_encryption` counts
+  state frames by encryption and outcome (`"type1:accepted"`, `"type1:refused"`,
+  `"clear:refused"`, `"type2:accepted"`; `"gcm:…"`/`"ecb:…"` on a GCM session), and
+  `SessionStats.state_authenticated` is False while the station's state came only under
+  the fixed key, True once it came authenticated or the station is latched, None before
+  any. The first fixed-key state of a session is logged once at INFO, the latch too.
 - A parameter read that times out while ECB dumps were refused says so in its
   `DeviceTimeoutError`. A firmware that answers the query under ECB only then does
   not look like an outage.

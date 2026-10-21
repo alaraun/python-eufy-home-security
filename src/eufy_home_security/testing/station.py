@@ -518,6 +518,9 @@ class FakeStation:
     answer_params: bool = True
     params_cipher: int = FrameCipher.GCM
     """The cipher the parameter dump answers under (ECB: the firmware the session refuses)."""
+    state_cipher: int = FrameCipher.GCM
+    """The cipher of the guard-mode report and alarm-tone frame a command makes the station
+    send (ECB: under the static key, encryption type 1 on an RSA session)."""
     sub_blocks_after: float | None = None
     """Send the sub-device blocks this many seconds AFTER the station block (None: before)."""
     dump_extra: dict[str, Any] = field(default_factory=dict)
@@ -1015,7 +1018,7 @@ class FakeStation:
                 self.params[block][1224] = str(self.guard_mode)
                 self.params[block][1151] = str(active)
             if str(active) != before:  # the report carries the mode in force, never 2
-                self.send_alarm_mode(active)  # as the live station: GCM, channel 2
+                self.send_alarm_mode(active, cipher=self.state_cipher)  # channel 2
             self.send_json(FrameType.NOTIFY_PAYLOAD, {"cmd": 1224, "code": 0})
         elif cmd == 1308:
             path = obj["payload"][0]["file"]
@@ -1103,7 +1106,9 @@ class FakeStation:
             if cmd == CMD_SET_TONE_FILE and self.tone_frames and isinstance(payload, dict):
                 seconds = int(payload.get("time_out", 0))
                 start = (3, seconds) if seconds else (16, 0)
-                self.send_alarm_frame(FrameType.ALARM_TONE_NOTIFY, *start, channel=255)
+                self.send_alarm_frame(
+                    FrameType.ALARM_TONE_NOTIFY, *start, channel=255, cipher=self.state_cipher
+                )
 
     def _answer_history(self, inner: dict[str, Any]) -> None:
         """A history page (10011), shaped and cut like the real station's.
