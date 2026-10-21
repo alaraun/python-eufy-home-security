@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.4](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.3...v0.4.4) (2026-10-21)
+
+
+### Bug Fixes
+
+* **p2p:** take station state (settings, guard mode, alarms) under any encryption, as the eufy app does ([issue 114](https://github.com/alaraun/homeassistant-eufy-home-security/issues/114)) ([66878e3](https://github.com/alaraun/python-eufy-home-security/commit/66878e3e790190419e70467ff85df6a714bbe2a8))
+
 ## [0.4.3](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.2...v0.4.3) (2026-10-21)
 
 
