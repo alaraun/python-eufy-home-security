@@ -215,8 +215,10 @@ camera, whether it needs a recording, typical time, verification status).
   first (the host's local date), takes the newest row of that camera whose `thumb_path`
   (`.jpg`) or `storage_path` (`.zxvideo`) passes the media-path rules, and fetches or
   plays it; `record_id` and `recorded_at` (the row's `start_time`) identify the event.
-  No such row in `days` days raises `RecordNotFoundError`. `LIVE` takes a live
-  keyframe.
+  No such row in `days` days raises `RecordNotFoundError`, whose message counts the
+  rows read, the camera's and why the camera's were skipped (a DEBUG line adds the
+  devices, path shapes and fields; see `docs/how-to/debug-logging.md`). `LIVE` takes a
+  live keyframe.
 
 - The content must be strict URL-safe base64 (padding optional, ASCII whitespace
   ignored), non-empty and at most 1 MiB decoded, or the fetch raises `ProtocolError`.

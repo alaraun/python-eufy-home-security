@@ -1257,6 +1257,93 @@ async def test_a_station_outside_the_homebase_3_family_is_paged_by_start_time() 
     assert all(q["start_time"] == "0" for q in station.history_queries[pages : pages + 1])
 
 
+def _timeless_row(counter: int) -> dict[str, Any]:
+    return {**_history_row("20260916", counter), "start_time": ""}
+
+
+def _repeating_rows() -> list[dict[str, Any]]:
+    """Rows a start_time cursor cannot move past: one timed row among timeless ones,
+    so the second page starts with the first page's first row."""
+    rows = [_timeless_row(n) for n in range(1, 31)]
+    rows[24] = _history_row("20260916", 25)  # in the first page of 20, not its first row
+    return rows
+
+
+@pytest.mark.parametrize(
+    ("serial", "rows", "kwargs", "expected"),
+    [
+        pytest.param(
+            _HB2_SN,
+            [_history_row("20260916", n) for n in range(1, 26)],
+            {"keep": lambda r: r.record_id % 2 == 0},
+            [
+                "page 1: 20 row(s), 20 new, 10 kept; asking the next",
+                "page 2: 5 row(s), 5 new, 2 kept; last page (short page)",
+            ],
+            id="short-page",
+        ),
+        pytest.param(
+            _HB2_SN,
+            [_history_row("20260916", n) for n in range(1, 26)],
+            {"count": 5},
+            ["page 1: 20 row(s), 20 new, 20 kept; last page (enough rows)"],
+            id="enough-rows",
+        ),
+        pytest.param(
+            _HB2_SN,
+            [_timeless_row(n) for n in range(1, 21)],
+            {},
+            ["page 1: 20 row(s), 20 new, 20 kept; last page (no start_time to page from)"],
+            id="no-start-time",
+        ),
+        pytest.param(
+            _HB2_SN,
+            _repeating_rows(),
+            {},
+            [
+                "page 1: 20 row(s), 20 new, 20 kept; asking the next",
+                "page 2: 20 row(s), 1 new, 1 kept; last page (first row repeats)",
+            ],
+            id="first-row-repeats",
+        ),
+        pytest.param(
+            SYNTHETIC.station_sn,
+            [{"device_sn": SYNTHETIC.camera_sn} for _ in range(30)],
+            {"page_size": 30},
+            ["page 1: 30 row(s), 30 new, 30 kept; last page (no new cursor)"],
+            id="no-new-cursor",
+        ),
+    ],
+)
+async def test_each_history_page_is_logged_with_its_counts_and_why_paging_stops(
+    caplog: pytest.LogCaptureFixture,
+    serial: str,
+    rows: list[dict[str, Any]],
+    kwargs: dict[str, Any],
+    expected: list[str],
+) -> None:
+    """One DEBUG line per answered page: rows, new and kept counts, and whether the
+    day goes on or why it ends; no record ids, times or paths."""
+    station = FakeStation(serial=serial)
+    await station.start()
+    station.rows = rows
+    session = StationSession(
+        serial, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        with caplog.at_level(logging.DEBUG, logger="eufy_home_security.p2p.session"):
+            await session.async_list_history("20260916", **kwargs)
+    finally:
+        await session.async_close()
+        station.stop()
+    marker = ": history of 2026-09-16, page"  # hygiene: ok
+    lines = [r.getMessage() for r in caplog.records if marker in r.getMessage()]
+    assert [line.split(", ", 1)[1] for line in lines] == expected
+    assert len(station.history_queries) == len(expected)
+    for needle in ("/zx/", "12:", "202609160"):  # a path, a time, a record id
+        assert not [line for line in lines if needle in line]
+
+
 @pytest.mark.parametrize(
     ("start", "end", "kwargs", "match"),
     [

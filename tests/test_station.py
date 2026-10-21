@@ -5,6 +5,7 @@ import base64
 import dataclasses
 import functools
 import json
+import logging
 import math
 import time
 from collections.abc import AsyncIterator, Callable
@@ -15,6 +16,7 @@ import pytest
 
 import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.station as station_mod
+from eufy_home_security._logging import redact_serial
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices.capabilities import Capability
 from eufy_home_security.devices.live_open import LiveOpen, live_open
@@ -1939,10 +1941,139 @@ async def test_async_camera_image_raises_when_no_usable_row_in_window(
         }
     ]
 
-    with pytest.raises(RecordNotFoundError, match="last 2 day"):
+    with pytest.raises(
+        RecordNotFoundError, match=r"last 2 day.*\(0 record\(s\) read, 0 of the camera\)"
+    ):
         await station.async_camera_image(SYNTHETIC.camera_sn, source=ImageSource.THUMBNAIL, days=2)
 
     assert len(fake.history_queries) == 2
+
+
+def _hb2_shaped_rows(day: int, path_field: str, ext: str) -> list[dict[str, Any]]:
+    """A day of rows none of which the camera-image lookup can use: the station's
+    own, one naming no device, and the camera's without a path, with a path off
+    ``/zx/`` (with and without an extension) and with an unsafe ``/zx/`` path."""
+    base = day * HISTORY_RECORD_COUNTER
+    cam = {
+        "device_sn": SYNTHETIC.camera_sn,
+        "device_type": 7,
+        "start_time": "2026-09-16 12:00:00",  # hygiene: ok
+        "cloud_path": "",  # blank: not a field the row carries
+    }
+    return [
+        {"record_id": base + 6, "device_sn": SYNTHETIC.station_sn, "device_type": 0},
+        {"record_id": base + 5, "device_sn": "", path_field: f"/zx/a{ext}"},
+        {"record_id": base + 4, **cam},
+        {"record_id": base + 3, **cam, path_field: "/media/mmcblk0p1/Camera00/20260916120000"},
+        {"record_id": base + 2, **cam, path_field: f"/media/mmcblk0p1/Camera00/x{ext}"},
+        {"record_id": base + 1, **cam, path_field: f"/zx/../escape{ext}"},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "path_field", "ext"),
+    [
+        (ImageSource.TRIGGER_FRAME, "storage_path", ".zxvideo"),
+        (ImageSource.THUMBNAIL, "thumb_path", ".jpg"),
+    ],
+)
+async def test_a_camera_image_lookup_that_finds_nothing_says_what_the_history_held(
+    *,
+    station: Station,
+    fake: FakeStation,
+    caplog: pytest.LogCaptureFixture,
+    source: ImageSource,
+    path_field: str,
+    ext: str,
+) -> None:
+    """When no row of the camera carries the media, a DEBUG line counts the rows read,
+    the camera's, the devices (redacted), device types, why each row was skipped, the
+    rejected paths' shapes and the fields the rows carried; the error names the counts.
+    Neither holds a full serial, a record id, a path or a time."""
+    today = int(datetime.now().astimezone().date().strftime("%Y%m%d"))
+    fake.rows = _hb2_shaped_rows(today, path_field, ext)
+    with (
+        caplog.at_level(logging.DEBUG, logger="eufy_home_security.station"),
+        pytest.raises(RecordNotFoundError) as caught,
+    ):
+        await station.async_camera_image(SYNTHETIC.camera_sn, source=source, days=1)
+
+    cam, sta = redact_serial(SYNTHETIC.camera_sn), redact_serial(SYNTHETIC.station_sn)
+    own_fields = ("device_sn", "device_type", "record_id", "start_time")
+    other_fields = ("device_sn", "device_type", "record_id")
+    assert str(caught.value) == (
+        f"no {source} of {cam} in the last 1 day(s) of history (6 record(s) read, "
+        f"4 of the camera: {path_field} of another shape 3, no {path_field} 1)"
+    )
+    [line] = [r.getMessage() for r in caplog.records if "day(s) of history:" in r.getMessage()]
+    assert line == (
+        f"{station._log_name}: no {source} of {cam} in 1 day(s) of history: "
+        f"6 record(s) read, 4 of the camera; devices {cam} 4, {sta} 1, none 1; "
+        "device types 7 4, 0 1, none 1; "
+        f"skipped {path_field} of another shape 3, other device 1, no device 1, "
+        f"no {path_field} 1; {path_field} shapes /media/… no extension 1, "
+        f"/media/…{ext} 1, /zx/…{ext} unsafe 1; "
+        f"fields of the camera's records {', '.join(sorted({*own_fields, path_field}))}; "
+        f"of other records {', '.join(sorted({*other_fields, path_field}))}"
+    )
+    for text in (line, str(caught.value)):
+        for needle in (
+            SYNTHETIC.camera_sn,
+            SYNTHETIC.station_sn,
+            "mmcblk",
+            "escape",
+            "12:00",
+            str(today),
+        ):
+            assert needle not in text
+
+
+async def test_a_repeated_fruitless_camera_image_lookup_is_logged_again_only_when_it_differs(
+    station: Station, fake: FakeStation, caplog: pytest.LogCaptureFixture
+) -> None:
+    today = int(datetime.now().astimezone().date().strftime("%Y%m%d"))
+    fake.rows = [
+        {"record_id": today * HISTORY_RECORD_COUNTER + 1, "device_sn": SYNTHETIC.camera_sn}
+    ]
+    with caplog.at_level(logging.DEBUG, logger="eufy_home_security.station"):
+        for _ in range(2):
+            with pytest.raises(RecordNotFoundError, match="1 record"):
+                await station.async_camera_image(SYNTHETIC.camera_sn, days=1)
+        fake.rows.append(
+            {"record_id": today * HISTORY_RECORD_COUNTER + 2, "device_sn": "T8160P2000099999"}
+        )
+        with pytest.raises(RecordNotFoundError, match="2 record"):
+            await station.async_camera_image(SYNTHETIC.camera_sn, days=1)
+    lines = [r.getMessage() for r in caplog.records if "day(s) of history:" in r.getMessage()]
+    assert [line.split(": ", 2)[2].split(";")[0] for line in lines] == [
+        "1 record(s) read, 1 of the camera",
+        "2 record(s) read, 1 of the camera",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("path", "suffix", "shape"),
+    [
+        ("/media/mmcblk0p1/Camera00/20260916120000", ".zxvideo", "/media/… no extension"),
+        ("/media/mmcblk0p1/Camera00/x.dat", ".zxvideo", "/media/….dat"),
+        ("/zx/hdd_data0/x.jpg", ".zxvideo", "/zx/….jpg"),
+        ("/zx/../x.zxvideo", ".zxvideo", "/zx/….zxvideo unsafe"),
+        ("/x.dat", ".zxvideo", "/….dat"),
+        ("relative/x.jpg", ".jpg", "relative ….jpg"),
+        ("/a-long-root-name/x.jpg", ".zxvideo", "/….jpg"),
+        ("/20260916/x.20260916120000", ".zxvideo", "/… no extension"),
+        ("/media/x.verylongextension", ".jpg", "/media/… no extension"),
+        ("/media/x.", ".jpg", "/media/… no extension"),
+        ("/media/x.abcdefghijkl", ".jpg", "/media/….abcdefghijkl"),
+        ("/media/x.abcdefghijklm", ".jpg", "/media/… no extension"),
+        ("/name", ".jpg", "/… no extension"),
+        ("/media/a/clip", ".jpg", "/media/… no extension"),
+    ],
+)
+def test_a_rejected_media_path_is_shown_by_its_root_and_extension_only(
+    path: str, suffix: str, shape: str
+) -> None:
+    assert station_mod._path_shape(path, suffix) == shape
 
 
 async def test_async_camera_image_live_does_not_query_history(

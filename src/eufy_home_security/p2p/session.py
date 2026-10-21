@@ -2940,7 +2940,7 @@ class StationSession:
         local = verb == DB_QUERY_LOCAL_EVENTS
         time_cursor = "0"
         first_id: int | None = None
-        for _ in range(HISTORY_MAX_PAGES):
+        for number in range(1, HISTORY_MAX_PAGES + 1):
             page, oldest = await self._history_page(
                 day,
                 cursor if not local else 0,
@@ -2955,25 +2955,40 @@ class StationSession:
                 wanted = [r for r in page if not r.record_id or r.record_id < start_id]
             fresh = [r for r in wanted if not r.record_id or r.record_id not in seen]
             seen.update(r.record_id for r in fresh)
-            records.extend(r for r in fresh if keep is None or keep(r))
+            kept = [r for r in fresh if keep is None or keep(r)]
+            records.extend(kept)
+            stop: str | None = None
             if count is not None and len(records) >= count:
-                return
-            if len(page) < page_size:
-                return
-            if local:
+                stop = "enough rows"
+            elif len(page) < page_size:
+                stop = "short page"
+            elif local:
                 # The app's paging: the oldest start_time of the page, and a page that
                 # starts with the same row as the last one ends the day.
-                if page[0].record_id and page[0].record_id == first_id:
-                    return
-                first_id = page[0].record_id
                 times = [r.start_time for r in page if r.start_time]
-                if not times:
-                    return
-                time_cursor = history_cursor_time(min(times))
-                continue
-            if not fresh or oldest is None or oldest == cursor:
+                if page[0].record_id and page[0].record_id == first_id:
+                    stop = "first row repeats"
+                elif not times:
+                    stop = "no start_time to page from"
+                else:
+                    first_id = page[0].record_id
+                    time_cursor = history_cursor_time(min(times))
+            elif not fresh or oldest is None or oldest == cursor:
+                stop = "no new cursor"
+            else:
+                cursor = oldest
+            _LOGGER.debug(
+                "%s: history of %s, page %d: %d row(s), %d new, %d kept; %s",
+                self._log_name,
+                day.isoformat(),
+                number,
+                len(page),
+                len(fresh),
+                len(kept),
+                f"last page ({stop})" if stop else "asking the next",
+            )
+            if stop:
                 return
-            cursor = oldest
         _LOGGER.warning(
             "%s: history of %s still had rows after %d pages; the rest is left out",
             self._log_name,

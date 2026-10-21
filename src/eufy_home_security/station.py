@@ -8,6 +8,7 @@ import contextlib
 import ipaddress
 import logging
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, tzinfo
@@ -95,6 +96,7 @@ from .devices.support import Evidence, Support
 from .devices.timezones import TIMEZONE_DOMAIN
 from .devices.types import DeviceKind, DeviceModel, model_for_serial
 from .events import (
+    MEDIA_PATH_PREFIX,
     RECORDING_SUFFIX,
     STILL_SUFFIX,
     AlarmChanged,
@@ -111,6 +113,7 @@ from .events import (
     StationStateChanged,
     Unsubscribe,
     ZoomChanged,
+    coerce_int,
     is_station_media_path,
 )
 from .exceptions import (
@@ -817,6 +820,97 @@ def _still_time(path: str) -> str | None:
     if len(stamp) != 14 or not stamp.isdigit():
         return None
     return f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]} {stamp[8:10]}:{stamp[10:12]}:{stamp[12:14]}"
+
+
+#: The longest root directory or file extension a media path's shape names.
+_SHAPE_PART_MAX: Final = 12
+
+
+def _shape_part(text: str) -> str | None:
+    """``text`` when it is a letter then up to :data:`_SHAPE_PART_MAX` - 1 ASCII
+    letters, digits or ``_`` (a firmware directory or extension, never a name or a
+    stamp), else None."""
+    plain = text.replace("_", "")
+    if len(text) <= _SHAPE_PART_MAX and plain.isascii() and plain.isalnum():
+        return text if text[0].isalpha() else None
+    return None
+
+
+def _path_shape(path: str, suffix: str) -> str:
+    """A rejected media path's shape for a log line: its root directory and file
+    extension only (``/media/… no extension``); ``unsafe`` when it has the right
+    prefix and suffix but fails another rule of :func:`~.events.is_station_media_path`."""
+    if path.startswith(MEDIA_PATH_PREFIX) and path.endswith(suffix):
+        return f"{MEDIA_PATH_PREFIX}…{suffix} unsafe"
+    head, _, rest = path.removeprefix("/").partition("/")
+    root = _shape_part(head) if path.startswith("/") and rest else None
+    name = path.rsplit("/", 1)[-1]
+    ext = _shape_part(name.rpartition(".")[2]) if "." in name else None
+    start = f"/{root}/…" if root else ("/…" if path.startswith("/") else "relative …")
+    return f"{start}.{ext}" if ext else f"{start} no extension"
+
+
+def _tally(counts: Counter[str]) -> str:
+    """``counts`` as ``key n, key n`` (most first), or ``none``."""
+    return ", ".join(f"{key} {n}" for key, n in counts.most_common()) or "none"
+
+
+@dataclass(slots=True)
+class _HistoryScan:
+    """What a camera-image lookup read from the history, for the log line and the
+    error when no row of the camera carries the media: counts, redacted serials,
+    device types, field names and path shapes, nothing that identifies a record."""
+
+    device_sn: str
+    path_field: Literal["thumb_path", "storage_path"]
+    suffix: str
+    read: int = 0
+    camera: int = 0
+    devices: Counter[str] = field(default_factory=Counter)
+    device_types: Counter[str] = field(default_factory=Counter)
+    skipped: Counter[str] = field(default_factory=Counter)
+    shapes: Counter[str] = field(default_factory=Counter)
+    camera_fields: set[str] = field(default_factory=set)
+    other_fields: set[str] = field(default_factory=set)
+
+    def usable(self, row: HistoryRecord) -> bool:
+        """Whether ``row`` is the camera's and carries the media; counts it either way."""
+        self.read += 1
+        self.devices[redact_serial(row.device_sn) if row.device_sn else "none"] += 1
+        kind = coerce_int(row.raw.get("device_type"))
+        self.device_types["none" if kind is None else str(kind)] += 1
+        carried = {key for key, value in row.raw.items() if value not in (None, "")}
+        if row.device_sn != self.device_sn:
+            self.other_fields |= carried
+            self.skipped["no device" if row.device_sn is None else "other device"] += 1
+            return False
+        self.camera += 1
+        self.camera_fields |= carried
+        path = getattr(row, self.path_field)
+        if is_station_media_path(path, self.suffix):
+            return True
+        if path is None:
+            self.skipped[f"no {self.path_field}"] += 1
+        else:
+            self.skipped[f"{self.path_field} of another shape"] += 1
+            self.shapes[_path_shape(path, self.suffix)] += 1
+        return False
+
+    def brief(self) -> str:
+        """The counts for an error message."""
+        own = {k: n for k, n in self.skipped.items() if k not in ("no device", "other device")}
+        text = f"{self.read} record(s) read, {self.camera} of the camera"
+        return f"{text}: {_tally(Counter(own))}" if own else text
+
+    def summary(self) -> str:
+        """The counts, devices, device types, path shapes and fields for a log line."""
+        return (
+            f"{self.read} record(s) read, {self.camera} of the camera; "
+            f"devices {_tally(self.devices)}; device types {_tally(self.device_types)}; "
+            f"skipped {_tally(self.skipped)}; {self.path_field} shapes {_tally(self.shapes)}; "
+            f"fields of the camera's records {', '.join(sorted(self.camera_fields)) or 'none'}; "
+            f"of other records {', '.join(sorted(self.other_fields)) or 'none'}"
+        )
 
 
 async def _settle(settle: float | None, default: float) -> None:
@@ -3332,23 +3426,34 @@ class Station:
     async def _newest_camera_record(
         self, device_sn: str, source: ImageSource, days: int
     ) -> HistoryRecord:
-        """The newest history record of ``device_sn`` carrying ``source``'s media path."""
+        """The newest history record of ``device_sn`` carrying ``source``'s media path.
 
-        def usable(row: HistoryRecord) -> bool:
-            if row.device_sn != device_sn:
-                return False
-            if source is ImageSource.THUMBNAIL:
-                return is_station_media_path(row.thumb_path, STILL_SUFFIX)
-            return is_station_media_path(row.storage_path, RECORDING_SUFFIX)
-
+        When there is none, a DEBUG line (once per 5 minutes for the same counts) says
+        what the rows held, and the error carries the counts.
+        """
+        if source is ImageSource.THUMBNAIL:
+            scan = _HistoryScan(device_sn, "thumb_path", STILL_SUFFIX)
+        else:
+            scan = _HistoryScan(device_sn, "storage_path", RECORDING_SUFFIX)
         today = datetime.now().astimezone().date()  # the host's day; stations keep local time
         for back in range(days):
             day = (today - timedelta(days=back)).strftime("%Y%m%d")
             rows = await self.async_list_history(day)
-            if found := next((row for row in rows if usable(row)), None):
+            if found := next((row for row in rows if scan.usable(row)), None):
                 return found
+        summary = scan.summary()
+        if self._throttle.should_log(("history miss", device_sn, source, summary)):
+            _LOGGER.debug(
+                "%s: no %s of %s in %d day(s) of history: %s",
+                self._log_name,
+                source,
+                redact_serial(device_sn),
+                days,
+                summary,
+            )
         raise RecordNotFoundError(
-            f"no {source} of {redact_serial(device_sn)} in the last {days} day(s) of history",
+            f"no {source} of {redact_serial(device_sn)} in the last {days} day(s) of history "
+            f"({scan.brief()})",
             device_sn=device_sn,
         )
 
