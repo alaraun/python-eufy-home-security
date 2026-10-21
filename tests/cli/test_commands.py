@@ -791,3 +791,11 @@ async def test_settings_model_unknown_code(
 ) -> None:
     assert await _run_offline(tmp_path, ["settings", "--model", typed]) == 0
     assert f"no bundled settings for {typed}" in capsys.readouterr().out
+
+
+async def test_diagnose_explain_prints_scope_and_exits(capsys: pytest.CaptureFixture[str]) -> None:
+    async with Context(parse_args(["diagnose", "--explain"]), env={}) as ctx:
+        assert await commands.COMMANDS["diagnose"](ctx) == 0
+    out = capsys.readouterr().out
+    assert "read-only" in out
+    assert "Never:" in out  # the privacy note names what is never collected
