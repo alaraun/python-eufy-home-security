@@ -142,9 +142,11 @@ async def _session(**kwargs: Any) -> tuple[Any, RtcSession]:
 
 async def test_start_discovers_logs_in_and_pings() -> None:
     server, session = await _session()
+    steps: list[str] = []
     try:
-        record = await session.start()
+        record = await session.start(on_step=steps.append)
         assert record.contact_id == CONTACT
+        assert steps == ["open", "discover", "login"]
         async with asyncio.timeout(5):
             while MessageType.MESSAGE not in server.kinds():
                 await asyncio.sleep(0.01)
@@ -157,9 +159,11 @@ async def test_a_quick_login_skips_discover() -> None:
     server, session = await _session(
         cfg={"quick_login": QuickLogin(SESSION_KEY, CONTACT, "127.0.0.1", 9e12)}
     )
+    steps: list[str] = []
     try:
-        await session.start()
+        await session.start(on_step=steps.append)
         assert MessageType.DISCOVER not in server.kinds()
+        assert steps == ["open", "login"]
     finally:
         await session.close()
 

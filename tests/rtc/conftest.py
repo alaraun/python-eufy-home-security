@@ -1,4 +1,4 @@
-"""Close the fake signaling servers a test started."""
+"""Close the fake signaling servers and stations a test started."""
 
 from __future__ import annotations
 
@@ -7,12 +7,13 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from .fakes import SERVERS
+from .fakes import SERVERS, stop_stations
 
 
 @pytest.fixture(autouse=True)
 async def _close_servers() -> AsyncIterator[None]:
     yield
+    await stop_stations()
     while SERVERS:
         SERVERS.pop().close()
     await asyncio.sleep(0)

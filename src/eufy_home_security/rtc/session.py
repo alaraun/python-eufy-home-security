@@ -279,12 +279,17 @@ class RtcSession:
         self._opens = 0
         self._log_name = redact_serial(config.station_sn)
 
-    async def start(self) -> QuickLogin:
+    async def start(self, *, on_step: Callable[[str], None] | None = None) -> QuickLogin:
         """Open the socket, DISCOVER, LOGIN and start the ping; returns the quick-login
-        record to keep for the next start."""
+        record to keep for the next start. ``on_step`` is told each step's name as it
+        begins: ``open``, ``discover`` (skipped with a usable quick login), ``login``."""
+        step = on_step or (lambda _name: None)
+        step("open")
         await self.signaling.open()
         if self._config.quick_login is None or not self._config.quick_login.usable():
+            step("discover")
             await self.signaling.discover()
+        step("login")
         record = await self.signaling.login()
         self.signaling.start_ping()
         return record
