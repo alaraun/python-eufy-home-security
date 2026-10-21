@@ -4,6 +4,19 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.3](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.2...v0.4.3) (2026-10-21)
+
+
+### Features
+
+* **history:** say what the history held when a camera image lookup finds nothing ([issue 107](https://github.com/alaraun/homeassistant-eufy-home-security/issues/107)) ([99237df](https://github.com/alaraun/python-eufy-home-security/commit/99237df2e26e02220b31d624a9419513bcacdcd3))
+
+
+### Bug Fixes
+
+* **cloud:** answer a login verification code inside the pending login ([issue 19](https://github.com/alaraun/homeassistant-eufy-home-security/issues/19)) ([83dd8fa](https://github.com/alaraun/python-eufy-home-security/commit/83dd8fae585e33c492a5e7df6eb982c35d136509))
+* **push:** decode eufy-obfuscated push pictures (V1/V2), name V8 ([issue 107](https://github.com/alaraun/homeassistant-eufy-home-security/issues/107)) ([a27f1c1](https://github.com/alaraun/python-eufy-home-security/commit/a27f1c15fa2a46d06c0ed5f9331cc164f5f86f37))
+
 ## [0.4.2](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.1...v0.4.2) (2026-10-19)
 
 
