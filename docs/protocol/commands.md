@@ -89,9 +89,12 @@ that serves reads, and do not resend into a stall — each resend queues again.
 **In the library** (`decode_command_receipt` in `p2p/messages.py`, `p2p/session.py`):
 
 - A frame on channel 0 that is GCM-tagged, 132 (or 36) bytes long and zero after its
-  first four bytes is taken as a receipt before any decrypt attempt. Receipts are
-  counted by code in `SessionStats.receipts_by_code` and never in
-  `dropped_undecodable`.
+  first four bytes is taken as a receipt before any decrypt attempt. On an RSA session
+  the receipt comes under any encryption type and is decrypted first
+  ([session-crypto.md](session-crypto.md#command-receipts-and-replies-under-any-encryption-declared-app)).
+  Receipts are counted by code in `SessionStats.receipts_by_code` and never in
+  `dropped_undecodable`; each is logged at DEBUG with its frame type, channel,
+  encryption and code.
 - `async_send_command` takes a `0x0546` receipt that arrives while it is in flight as
   its own. Code −108 raises `CommandUnsupportedError` (a `CommandRejectedError` with
   `code` −108 and an `UnsupportedError`); any other non-zero code raises
@@ -148,8 +151,8 @@ that serves reads, and do not resend into a stall — each resend queues again.
 - The `0x047F` follows every change, whoever made it: a P2P client, the eufy app, or a
   schedule slot starting or ending, and every open session on the station receives it
   (fw 3.8.7.4; see [events.md](events.md#guard-mode-announcements)). Keypad changes are
-  untested. The library trusts the report only under GCM once a session key exists
-  ([session-crypto.md](session-crypto.md)).
+  untested. The library takes the report under any encryption, as the eufy app does
+  ([session-crypto.md](session-crypto.md#station-state-under-any-encryption-declared-app)).
 - **Selected and effective mode are two parameters [verified].** Param **1224** is the
   mode the user *selected*; param **1151** is the mode *in force*. They differ only
   while Schedule is selected: 1224 reads 2 and 1151 follows the schedule's slots (1
@@ -157,8 +160,14 @@ that serves reads, and do not resend into a stall — each resend queues again.
   it never says 2 — and a schedule change reports the slot's mode. The cloud arming
   push carries both (`arming` = selected, `mode` = effective;
   [events.md](events.md#station-pushes-arming-and-alarm)).
-- Resend once if nothing at all (not even an ACK) comes back. The library resends
-  after 1.5 s within a 6 s deadline.
+- **Receipt.** The station also answers the arm with a `0x0546`
+  [command receipt](#command-receipt-verified). A non-zero code fails the arm with the
+  receipt's error (−108 `CommandUnsupportedError`, any other `CommandRejectedError`).
+  Code 0 only means queued: it is no confirmation, but the arm is not resent after it.
+  A receipted arm with neither a mode report nor a matching read-back raises
+  `CommandNotAppliedError`.
+- Resend once if neither a receipt, a result nor a report comes back. The library
+  resends after 1.5 s within a 6 s deadline.
 - GET commands do **not** read guard mode on this firmware: `1107`, `1108` and
   `1151` are rejected with receipt −108
   ([GET commands](#get-commands-not-served-verified)).

@@ -514,6 +514,10 @@ class FakeStation:
     station_encryption: int | None = None
     """Encryption type of an RSA station's sealed frames when set (0: clear); else 1 on a
     static-key session, 2 otherwise."""
+    answer_encryption: int | None = None
+    """Encryption type of an RSA station's command receipts and ECB scalar results when
+    set (0 clear, 1 the static key, 2 the session's key; a partial last block in clear);
+    else receipts in clear and results as :attr:`station_encryption`."""
     answer_conn_init: bool = True
     answer_params: bool = True
     params_cipher: int = FrameCipher.GCM
@@ -651,6 +655,15 @@ class FakeStation:
         if self.station_encryption is not None:
             return self.station_encryption
         return FRAME_STATIC_ECB if self.static_key_session else FRAME_SESSION_ECB
+
+    def _seal_as(self, encryption: int, plain: bytes) -> bytes:
+        """``plain`` under an RSA session's ``encryption`` type, its block-aligned prefix
+        only: a partial last block stays clear, as the client's ECB decrypt reads it."""
+        if encryption == FRAME_PLAIN:
+            return plain
+        key = self.static_key if encryption == FRAME_STATIC_ECB else self.rsa_key
+        aligned = len(plain) // 16 * 16
+        return ecb_encrypt(key, plain[:aligned]) + plain[aligned:]
 
     def _rsa_seal(self, plain: bytes) -> bytes:
         if self._sealed_encryption == FRAME_PLAIN:
@@ -1231,12 +1244,7 @@ class FakeStation:
             for channel, values in applied_params(obj).items():
                 block = self.params.setdefault(channel, {})
                 block.update({param: str(value) for param, value in values.items()})
-        self.send_frame(
-            CMD_SET_ALL_ACTION,
-            struct.pack("<i", code) + bytes(self.receipt_len - 4),
-            cipher=FrameCipher.GCM,
-            subheader=bytes([FrameCipher.GCM, 0, 0, 0, 1, 0]),
-        )
+        self.send_receipt(CMD_SET_ALL_ACTION, code)
 
     def _on_config_frame(self, ftype: int, obj: dict[str, Any], plain: bytes) -> None:
         """As the app's mode-list and schedule writes are answered: a receipt of the
@@ -1251,12 +1259,7 @@ class FakeStation:
             if ftype in own:
                 own[ftype] = stored
         if code is not None:
-            self.send_frame(
-                ftype,
-                struct.pack("<i", code) + bytes(self.receipt_len - 4),
-                cipher=FrameCipher.GCM,
-                subheader=bytes([FrameCipher.GCM, 0, 0, 0, 1, 0]),
-            )
+            self.send_receipt(ftype, code)
 
     def _on_string_command(self, ftype: int, plain: bytes) -> None:
         """As a T8170: a string command (1215) of the owner is stored verbatim on the
@@ -1287,8 +1290,11 @@ class FakeStation:
             self.params.setdefault(channel, {})[ftype] = str(value)
         result = struct.pack("<i", code) + b"\x00" * 12
         if self.rsa_session:  # the result under the session's key, like every frame
-            subheader = bytes([FrameCipher.ECB, 0, 0xFF, self._sealed_encryption, 0, 0])
-            result = self._rsa_seal(result)
+            encryption = self.answer_encryption
+            if encryption is None:
+                encryption = self._sealed_encryption
+            subheader = bytes([FrameCipher.ECB, 0, 0xFF, encryption, 0, 0])
+            result = self._seal_as(encryption, result)
             self.send_frame(ftype, result, cipher=FrameCipher.ECB, subheader=subheader)
         else:
             self.send_frame(ftype, result, cipher=FrameCipher.ECB)
@@ -1527,16 +1533,20 @@ class FakeStation:
         )
 
     def send_receipt(self, ftype: int, code: int, *, dev_type: int = 0, delay: float = 0.0) -> None:
-        """A command receipt on channel 0: the request's frame type, ``int32le code`` + zeros."""
+        """A command receipt on channel 0: the request's frame type, ``int32le code`` + zeros,
+        GCM-tagged clear (an RSA session: :attr:`answer_encryption`, clear by default)."""
         body = struct.pack("<i", code) + bytes(self.receipt_len - 4)
-        subheader = bytes([FrameCipher.GCM, 0, dev_type, 0, 1, 0])
+        cipher, encryption = FrameCipher.GCM, FRAME_PLAIN
+        if self.rsa_session and self.answer_encryption is not None:
+            cipher, encryption = FrameCipher.ECB, self.answer_encryption
+            body = self._seal_as(encryption, body)
+        subheader = bytes([cipher, 0, dev_type, encryption, 1, 0])
         if delay > 0:
             asyncio.get_running_loop().call_later(
-                delay,
-                lambda: self.send_frame(ftype, body, cipher=FrameCipher.GCM, subheader=subheader),
+                delay, lambda: self.send_frame(ftype, body, cipher=cipher, subheader=subheader)
             )
         else:
-            self.send_frame(ftype, body, cipher=FrameCipher.GCM, subheader=subheader)
+            self.send_frame(ftype, body, cipher=cipher, subheader=subheader)
 
     def set_mode_list(
         self,

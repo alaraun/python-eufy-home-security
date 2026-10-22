@@ -73,7 +73,11 @@ from eufy_home_security.p2p.media import (
     VideoCodec,
     generate_media_rsa_key,
 )
-from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN, history_cursor_time
+from eufy_home_security.p2p.messages import (
+    RECEIPT_NOT_HANDLED,
+    STANDALONE_RECEIPT_LEN,
+    history_cursor_time,
+)
 from eufy_home_security.p2p.session import (
     PARAM_SETTLE,
     CommandOutcome,
@@ -96,6 +100,7 @@ from eufy_home_security.testing.station import (
     MEDIA_PFRAME,
     MEDIA_RECORDING_PFRAME,
     MEDIA_WIDTH,
+    RSA_SESSION_KEY,
     SESSION_KEY,
     FakeStation,
     audio_record,
@@ -849,9 +854,13 @@ async def test_ecb_scalar_success_and_rejection(station: FakeStation) -> None:
     assert info.value.code == -104
 
 
-async def test_an_rsa_session_sends_ecb_scalars_and_reads_results_under_its_key(
-    station: FakeStation,
+@pytest.mark.parametrize("encryption", [None, FRAME_PLAIN, FRAME_STATIC_ECB, FRAME_SESSION_ECB])
+async def test_an_rsa_session_sends_ecb_scalars_and_reads_results_under_any_encryption(
+    station: FakeStation, encryption: int | None
 ) -> None:
+    """The result is read under the encryption type it names: clear, the fixed key or the
+    session key (None: the station's default, its session key)."""
+    station.answer_encryption = encryption
     session = make_rsa_session(station)
     try:
         await session.async_send_ecb_scalar(1250, 30, channel=0)
@@ -4076,6 +4085,216 @@ async def test_an_unauthenticated_tone_frame_confirms_a_siren(
     assert [e.alarming for e in events if isinstance(e, AlarmChanged)] == [True]
 
 
+def _rsa_receipt_frame(
+    station: FakeStation, encryption: int, body: bytes, *, ftype: int = FrameType.CMD_TRANSFER
+) -> Frame:
+    """A receipt-shaped frame of an RSA session: ``body`` under ``encryption``, its
+    block-aligned prefix only (0 clear, 1 the static key, 2 the session key; 3, a type
+    that names no key, under the static key)."""
+    keys = {FRAME_STATIC_ECB: station.static_key, FRAME_SESSION_ECB: RSA_SESSION_KEY}
+    key = keys.get(encryption, station.static_key if encryption == 3 else None)
+    aligned = len(body) // 16 * 16
+    wire = body if key is None else ecb_encrypt(key, body[:aligned]) + body[aligned:]
+    return Frame(
+        type=ftype, subheader=bytes([FrameCipher.ECB, 0, 0, encryption, 1, 0]), payload=wire
+    )
+
+
+_NOT_HANDLED = struct.pack("<i", RECEIPT_NOT_HANDLED)
+
+
+@pytest.mark.parametrize(
+    ("encryption", "body", "channel", "code"),
+    [
+        (FRAME_PLAIN, bytes(132), 0, 0),
+        (FRAME_STATIC_ECB, _NOT_HANDLED + bytes(128), 0, RECEIPT_NOT_HANDLED),
+        (FRAME_SESSION_ECB, _NOT_HANDLED + bytes(128), 0, RECEIPT_NOT_HANDLED),
+        (FRAME_STATIC_ECB, _NOT_HANDLED + bytes(32), 0, RECEIPT_NOT_HANDLED),  # a T8170's
+        (FRAME_STATIC_ECB, _NOT_HANDLED + bytes(127) + b"\x01", 0, None),  # non-zero tail
+        (FRAME_STATIC_ECB, _NOT_HANDLED + bytes(128), 1, None),  # not the request channel
+        (3, _NOT_HANDLED + bytes(128), 0, None),  # an encryption type that names no key
+    ],
+    ids=["clear", "fixed-key", "session-key", "fixed-key-36", "tail", "channel-1", "type-3"],
+)
+async def test_an_rsa_session_reads_a_receipt_under_any_encryption(
+    station: FakeStation, encryption: int, body: bytes, channel: int, code: int | None
+) -> None:
+    """A receipt is the shape (int32 code + zero bytes) after decrypting under the key its
+    encryption type names, as the eufy app takes it."""
+    session = make_rsa_session(station)
+    try:
+        await session.async_connect()
+        frame = _rsa_receipt_frame(station, encryption, body)
+        assert Inbound(channel, frame, session).receipt() == code
+        assert session._decode_json(frame) is None
+        dropped = session.stats().dropped_undecodable
+    finally:
+        await session.async_close()
+    assert dropped == int(code is None and channel == 0)  # only what is no receipt at all
+
+
+async def test_a_zero_frame_under_a_key_is_no_receipt(station: FakeStation) -> None:
+    """The zero body that is a clear receipt is ciphertext under a key: it decrypts to
+    noise, so no receipt; nor does an RSA-shaped receipt count on a GCM session."""
+    rsa = make_rsa_session(station)
+    try:
+        await rsa.async_connect()
+        for encryption in (FRAME_STATIC_ECB, FRAME_SESSION_ECB):
+            frame = Frame(
+                type=FrameType.CMD_TRANSFER,
+                subheader=bytes([FrameCipher.ECB, 0, 0, encryption, 1, 0]),
+                payload=bytes(132),
+            )
+            assert Inbound(0, frame, rsa).receipt() is None
+    finally:
+        await rsa.async_close()
+    station.conn_init_version = CONN_INIT_ECC_VERSION
+    gcm = make_session(station, Provider(station))
+    try:
+        await gcm.async_connect()
+        for encryption in (FRAME_PLAIN, FRAME_STATIC_ECB):
+            frame = _rsa_receipt_frame(station, encryption, bytes(132))
+            assert Inbound(0, frame, gcm).receipt() is None
+            assert gcm._decode_json(frame) is None
+        assert gcm.stats().dropped_undecodable == 2  # decoded as ECB, not skipped as receipts
+        gcm_receipt = Frame(
+            type=FrameType.CMD_TRANSFER,
+            subheader=bytes([FrameCipher.GCM, 0, 0, 0, 1, 0]),
+            payload=bytes(132),
+        )
+        assert Inbound(0, gcm_receipt, gcm).receipt() == 0
+    finally:
+        await gcm.async_close()
+
+
+@pytest.mark.parametrize("encryption", [FRAME_PLAIN, FRAME_STATIC_ECB, FRAME_SESSION_ECB])
+async def test_an_rsa_session_reads_playback_end_under_any_encryption(
+    station: FakeStation, encryption: int
+) -> None:
+    session = make_rsa_session(station)
+    try:
+        await session.async_connect()
+        frame = _rsa_receipt_frame(
+            station, encryption, struct.pack("<I", 2) + bytes(12), ftype=FrameType.RECORD_PLAY_CTRL
+        )
+        assert session._rsa_play_ctrl(frame) == 2
+    finally:
+        await session.async_close()
+
+
+@pytest.mark.parametrize(
+    ("encryption", "label"),
+    [
+        (FRAME_PLAIN, "clear"),
+        (FRAME_STATIC_ECB, "fixed key"),
+        (FRAME_SESSION_ECB, "session key"),
+    ],
+)
+async def test_an_rsa_session_takes_command_receipts_under_any_encryption(
+    station: FakeStation,
+    encryption: int,
+    label: str,
+    short_settle: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Receipts in clear or under either key confirm, refuse and count as the eufy app
+    takes them; a fixed-key receipt is logged at INFO once per session."""
+    caplog.set_level(logging.DEBUG, logger=session_module.__name__)
+    station.answer_encryption = encryption
+    station.reply_to_settings = True
+    station.refused_commands = {1276: -1}
+    session = make_rsa_session(station)
+    try:
+        await session.async_get_params()
+        outcome = await session.async_send_command(
+            1277, channel=0, payload={"night_sion": 1, "channel": 0}
+        )
+        with pytest.raises(CommandRejectedError) as err:
+            await session.async_send_command(1276, channel=0, payload={}, timeout=1.0)
+        reply = await session.async_run_recipe(goto_preset(2), timeout=1.0)
+        await session.async_send_string_command(1215, "JST-9|1.1307", channel=0, timeout=1.0)
+        written = await session.async_send_json_frame(
+            1256, lambda account: json.dumps({"account_id": account}).encode(), timeout=1.0
+        )
+        stats = session.stats()
+    finally:
+        await session.async_close()
+    assert outcome is CommandOutcome.APPLIED
+    assert err.value.code == -1
+    assert reply.outcome is CommandOutcome.DELIVERED  # the 1700 recipe's receipt
+    assert station.preset_gotos == [2]
+    assert written
+    assert station.params[0][1215] == "JST-9|1.1307"
+    assert stats.receipts_by_code == {"0": 5, "-1": 1}
+    assert _messages(caplog, f"frame ch0 ({label}): code 0 TAKEN")
+    info = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno == logging.INFO and "receipt" in r.getMessage()
+    ]
+    expected = (
+        "command receipt arrived under the fixed key (unauthenticated), taken as the eufy app does"
+    )
+    assert info == ([f"{session._log_name}: {expected}"] if encryption == FRAME_STATIC_ECB else [])
+
+
+@pytest.mark.parametrize("current", [False, True], ids=["change", "already-in-mode"])
+async def test_a_fixed_key_receipt_and_report_confirm_an_arm(
+    station: FakeStation, current: bool, short_settle: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A zero receipt under the fixed key stops the arm's resend; the mode report, or the
+    read-back of a station already in the mode, confirms it."""
+    monkeypatch.setattr(session_module, "COMMAND_RESEND_AFTER", 0.1)
+    monkeypatch.setattr(session_module, "MODE_REPORT_GRACE", 0.2)
+    state_station(station, "type1").answer_encryption = FRAME_STATIC_ECB
+    if current:
+        station.guard_mode = GuardMode.HOME
+        station.params[255][1224] = "1"
+    session = make_rsa_session(station)
+    try:
+        armed = await session.async_set_guard_mode(GuardMode.HOME, timeout=1.0)
+        stats = session.stats()
+    finally:
+        await session.async_close()
+    assert armed == station.guard_mode == GuardMode.HOME
+    assert [o["cmd"] for o in station.received] == [1224]  # receipted: never resent
+    assert stats.receipts_by_code == {"0": 1 + int(current)}  # the arm's, the read-back's
+
+
+async def test_a_receipted_arm_the_station_never_applies_is_not_applied(
+    station: FakeStation, short_settle: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_module, "COMMAND_RESEND_AFTER", 0.1)
+    state_station(station, "type1").answer_encryption = FRAME_STATIC_ECB
+    session = make_rsa_session(station)
+    try:
+        await session.async_connect()
+        station.account_id = "f" * 40  # taken off the queue, dropped without a word
+        with pytest.raises(CommandNotAppliedError, match=r"took the arm \(receipt 0\)"):
+            await session.async_set_guard_mode(GuardMode.HOME, timeout=0.5)
+    finally:
+        await session.async_close()
+
+
+@pytest.mark.parametrize(
+    ("code", "error"),
+    [(RECEIPT_NOT_HANDLED, CommandUnsupportedError), (-1, CommandRejectedError)],
+)
+async def test_a_fixed_key_receipt_refusing_an_arm_raises_its_code(
+    station: FakeStation, code: int, error: type[CommandRejectedError]
+) -> None:
+    station.answer_encryption = FRAME_STATIC_ECB
+    station.refused_commands = {1224: code}
+    session = make_rsa_session(station)
+    try:
+        with pytest.raises(error) as err:
+            await session.async_set_guard_mode(GuardMode.HOME, timeout=5.0)
+    finally:
+        await session.async_close()
+    assert type(err.value) is error
+    assert (err.value.command, err.value.code) == (1224, code)
+
+
 DOORBELL_SN = "T8200P2000054321"
 """A synthetic serial of a model outside the app's static-key fallback list."""
 
@@ -4116,6 +4335,7 @@ async def test_a_static_key_rsa_session_takes_the_station_state_unauthenticated(
     station.static_key_session = True
     station.cipher_id = cipher_id
     station.station_encryption = station_encryption
+    station.answer_encryption = FRAME_STATIC_ECB  # its own key: no INFO line
     station.reply_to_settings = True
     own = dict(station.params[STATION_CHANNEL])  # before the arm changes it
     session = StationSession(

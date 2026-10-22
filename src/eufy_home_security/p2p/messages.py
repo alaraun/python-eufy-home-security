@@ -630,26 +630,29 @@ def decode_json_payload(plain: bytes) -> dict[str, Any] | None:
     return obj if isinstance(obj, dict) else None
 
 
-def decode_command_receipt(frame: Frame, *, clear: bool = False) -> int | None:
-    """The code of a command receipt, or None when ``frame`` is not one.
+def decode_receipt_body(body: bytes) -> int | None:
+    """The code of a command receipt's plaintext body, or None when it is not one: an
+    ``int32le`` code followed by zero bytes, :data:`RECEIPT_LENS` long."""
+    if len(body) not in RECEIPT_LENS or any(body[4:]):
+        return None
+    return int(struct.unpack_from("<i", body, 0)[0])
+
+
+def decode_command_receipt(frame: Frame) -> int | None:
+    """The code of a GCM session's command receipt, or None when ``frame`` is not one.
 
     The station answers every GCM frame it takes from channel 0 (a ``0x0546``
     command, the ``0x044F`` parameter query, a command-id frame) with one frame of
-    the request's own type on channel 0: GCM-tagged but **not ciphertext**
-    (encryption type 0, subheader byte 3), an ``int32le`` code followed by zero bytes
-    (:data:`RECEIPT_LENS`: 128 on a HomeBase 3, 32 on a standalone T8170). Check for
-    it before any decrypt attempt. With ``clear`` (an RSA session, whose frames carry
-    the ECB tag) any frame of encryption type 0 qualifies. It carries no command id,
-    and the channel is the caller's to check.
+    the request's own type on channel 0: GCM-tagged but **not ciphertext**, a
+    :func:`decode_receipt_body` body (128 zero bytes on a HomeBase 3, 32 on a
+    standalone T8170). Check for it before any decrypt attempt. An RSA session's
+    receipt comes under any encryption type; the session decrypts it first (see
+    docs/protocol/session-crypto.md). It carries no command id, and the channel is
+    the caller's to check.
     """
-    payload = frame.payload
-    if clear:
-        tagged = len(frame.subheader) > 3 and frame.subheader[3] == crypto.FRAME_PLAIN
-    else:
-        tagged = frame.cipher == FrameCipher.GCM
-    if not tagged or len(payload) not in RECEIPT_LENS or any(payload[4:]):
+    if frame.cipher != FrameCipher.GCM:
         return None
-    return int(struct.unpack_from("<i", payload, 0)[0])
+    return decode_receipt_body(frame.payload)
 
 
 def decode_ecb_scalar_result(payload: bytes) -> int:

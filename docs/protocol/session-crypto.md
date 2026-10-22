@@ -122,7 +122,8 @@ key = RSA-PKCS#1-v1.5-decrypt(private_key, ciphertext) up to its first NUL, firs
 - The 16 bytes are an AES-128 key. From then on **every** frame in both directions is
   AES-128-ECB under it, zero-padded, subheader byte 3 = `02`; there is no GCM. A
   client frame is `01 <seq> <dev_type> 02 <flag> 00`. Byte 3 = `01` is still the static
-  key, `00` a clear frame (a receipt).
+  key, `00` a clear frame. Receipts and replies come under any of the three
+  ([below](#command-receipts-and-replies-under-any-encryption-declared-app)).
 - A wrong RSA key decrypts to noise rather than failing (PKCS#1 implicit rejection);
   the library takes a key that is not 16 printable bytes as a handshake failure.
 - A `private_key` whose bytes do not parse as a key at all is distinct from a wrong
@@ -268,6 +269,34 @@ seq, so a frame can be replayed within the same session.
   `station state 0x044f arrived under the fixed key (unauthenticated), taken as the eufy
   app does`.
 - `SessionStats.ecb_state_refused` is kept for compatibility and is always 0.
+
+### Command receipts and replies under any encryption **[declared, app]**
+
+On an RSA session the library takes a [command receipt](commands.md#command-receipt-verified)
+under whatever encryption it arrives, as the eufy app takes every frame: the body is
+decoded with the key its encryption type (subheader byte 3) names, then checked for the
+receipt shape (`int32le` code + zero bytes, 132 or 36 bytes).
+
+| encryption type | decoded with |
+|---|---|
+| 0 | nothing: the body is clear |
+| 1 | the static key |
+| 2 | the session key |
+| another | not a receipt |
+
+AES-ECB decrypts the whole blocks; a partial last block (the last 4 bytes of a 132-byte
+receipt) is read as is. A zero body under a key decrypts to noise and is no receipt. The
+same rule decodes an ECB scalar result and the end-of-playback frame (`0x0402`). A GCM
+session takes only GCM-tagged clear receipts.
+
+A standalone T8414-class camera on an RSA session answers its commands with
+receipt-sized frames that are not clear (reporter log); the fixed key is the inferred
+encryption. A receipt under the static key proves nothing about its origin (see
+**Security** above): a forged one can at most fail a command with its code or stop an
+arm's resend, never confirm a write. A receipt under the fixed key on a session that holds
+a key of its own is logged at INFO once per session: `command receipt arrived under the
+fixed key (unauthenticated), taken as the eufy app does`.
+
 - A camera push records the cipher of its frame in `SecurityEvent.frame_cipher`.
   `SecurityEvent.authenticated` is False for a push under the static ECB key and True
   for a GCM push, a push under an RSA session's key (`SecurityEvent.session_ecb`) or a
