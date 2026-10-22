@@ -193,11 +193,11 @@ from .messages import (
     database_query_payload,
     decode_alarm_mode_notify,
     decode_command_receipt,
+    decode_command_result,
     decode_database_rows,
     decode_ecb_scalar_result,
     decode_image_content,
     decode_json_payload,
-    decode_receipt_body,
     device_msg,
     encode_ecb_scalar_frame,
     event_count_payload,
@@ -260,6 +260,9 @@ PARAM_QUERY_TIMEOUT = 8.0
 STILL_FETCH_TIMEOUT = 12.0
 """A still (1308) download's wait."""
 COMMAND_RESEND_AFTER = 1.5
+RSA_RESULT_WINDOW = 35.0
+"""How long (seconds) after a send on an RSA session a channel-0 frame of the sent type
+is read as its result: the longest the eufy app waits for one (declared)."""
 COMMAND_RECEIPT_TIMEOUT = 20.0
 """How long after sending a command acknowledged without a result waits for its receipt.
 
@@ -397,10 +400,6 @@ _UNAUTHENTICATED_STATE: Mapping[str, str] = MappingProxyType(
     }
 )
 """How the log line on unauthenticated state names each state-frame label."""
-_RSA_RECEIPT_ENCRYPTIONS: Mapping[int | None, str] = MappingProxyType(
-    {FRAME_PLAIN: "clear", FRAME_STATIC_ECB: "fixed key", FRAME_SESSION_ECB: "session key"}
-)
-"""How the receipt log line names an RSA session receipt's encryption type."""
 _CLEAR_REPLY_TYPES = frozenset({FrameType.DB_SYNC, FrameType.MEDIA_DOWNLOAD})
 """Reply frame types a standalone device may send as clear JSON under the ECB tag."""
 
@@ -555,9 +554,11 @@ class SessionStats:
     body, a body that is not a JSON object, or a DRW stream reset. Command receipts
     are never counted here."""
     receipts_by_code: Mapping[str, int]
-    """Command receipts (channel 0, not ciphertext; see :data:`~.messages.RECEIPT_LENS`)
-    by code: ``"0"`` taken off
-    the station's queue, ``"-108"`` a command the station does not handle."""
+    """Command receipts and results by code: on a GCM session the channel-0 receipts
+    (not ciphertext; see :data:`~.messages.RECEIPT_LENS`), on an RSA session each
+    channel-0 reply to a send of its type (:func:`~.messages.decode_command_result`).
+    ``"0"`` taken (on an RSA session: done), ``"-108"`` a command the station does not
+    handle."""
     wrong_port_drops: int
     """Datagrams from the station's host but not its session port, summed over every
     connection (the transport counts per connection)."""
@@ -667,8 +668,10 @@ class Inbound:
         return self.frame.type
 
     def json(self) -> dict[str, Any] | None:
+        """The frame's JSON body, decoded at most once; None for a command receipt."""
         if not self._json_done:
-            self._json = self._session._decode_json(self.frame)
+            receipt = self.receipt() is not None
+            self._json = None if receipt else self._session._decode_json(self.frame)
             self._json_done = True
         return self._json
 
@@ -676,8 +679,8 @@ class Inbound:
         """The code of a command receipt on the request channel (0), decoded at most once;
         None for any other frame.
 
-        On an RSA session a receipt comes under any encryption type, as the eufy app
-        takes it (:meth:`StationSession._rsa_receipt`).
+        On an RSA session it is the reply to a send of the frame's type, its code read
+        in clear as the eufy app reads it (:meth:`StationSession._decode_receipt`).
         """
         if not self._receipt_done:
             self._receipt = self._session._decode_receipt(self.channel, self.frame)
@@ -1342,6 +1345,9 @@ class StationSession:
         self._gcm_seq = GCM_SEQ_START
         self._gcm_counter = 0
         self._ecb_seq = 0
+        self._results_due: dict[int, list[float]] = {}
+        """An RSA session's sends awaiting their result: frame type → deadlines (monotonic),
+        oldest first."""
 
         self._closed = False
         self._waiters: list[_Waiter] = []
@@ -1412,8 +1418,6 @@ class StationSession:
         """Whether authenticated state was taken; False after unauthenticated state only."""
         self._unauthenticated_logged: set[tuple[int, str]] = set()
         """The (frame type, encryption) kinds of unauthenticated state already logged."""
-        self._fixed_key_receipt_logged = False
-        """Whether a command receipt under the fixed key was logged at INFO."""
         self.still_file_mismatches = 0
         """1308 replies whose ``file`` differed from the requested path."""
         self.still_late_replies = 0
@@ -2047,8 +2051,9 @@ class StationSession:
         receipt the error :meth:`async_send_command` raises for it. A zero-code reply
         without a mode report is confirmed by reading the mode back, never taken on
         trust; a zero receipt only stops the resend (the station queued the arm). A
-        report or receipt counts under any encryption, as the eufy app takes it
-        (:meth:`_take_state`, :meth:`_rsa_receipt`).
+        report counts under any encryption, as the eufy app takes it
+        (:meth:`_take_state`); on an RSA session the receipt is the arm's result
+        (:meth:`_decode_receipt`).
 
         Raises :class:`CommandNotAppliedError` when the station acknowledged the
         datagram, never acted, and the read-back shows another mode (the classic
@@ -2538,13 +2543,10 @@ class StationSession:
 
         def match(inbound: Inbound) -> tuple[int, int | None] | None:
             frame = inbound.frame
-            if inbound.type != command:
+            if inbound.type != command or len(frame.payload) < 4:
                 return None
-            # An RSA session's result comes under any encryption type, as the app takes it.
-            plain = frame.payload if self._aes_key is None else self._rsa_plaintext(frame)
-            if plain is None or len(plain) < 4:
-                return None
-            return decode_ecb_scalar_result(plain), frame.cipher
+            # The code is clear at payload[0:4] on every session, as the eufy app reads it.
+            return decode_ecb_scalar_result(frame.payload), frame.cipher
 
         async with self._op("ECB command"):
             seq = self._ecb_seq
@@ -2572,7 +2574,7 @@ class StationSession:
             )
             try:
                 result = await self._request(
-                    lambda: indices.append(transport.send_drw(0, frame)),
+                    lambda: indices.append(self._send_request(command, frame, transport)),
                     match,
                     timeout=timeout,
                     label=f"ECB cmd {command}",
@@ -4081,6 +4083,7 @@ class StationSession:
         if transport.peer is not None:
             self._host = transport.peer[0]
         self._decoders.clear()
+        self._results_due.clear()
         self._gcm_seq = GCM_SEQ_START
         self._gcm_counter = 0
         self._ecb_seq = 0
@@ -4508,16 +4511,17 @@ class StationSession:
                 _LOGGER.debug("%s: media frame with no open stream", self._log_name)
             return
         _LOGGER.debug(
-            "%s: rx frame 0x%04x ch%d cipher %s (%d bytes)",
+            "%s: rx frame 0x%04x ch%d v%s enc%s (%d bytes)",
             self._log_name,
             inbound.type,
             inbound.channel,
             inbound.frame.cipher,
+            frame_encryption(inbound.frame.subheader),
             len(inbound.frame.payload),
         )
         receipt = inbound.receipt()
         if receipt is not None:
-            self._note_receipt(inbound.frame, receipt)
+            self._note_receipt(inbound, receipt)
             if receipt in CAMERA_WAKE_CODES and self._take_wake_failure(stream, inbound, receipt):
                 return
             if receipt != RECEIPT_TAKEN and self._take_open_refusal(stream, inbound, receipt):
@@ -4970,8 +4974,6 @@ class StationSession:
         return mode
 
     def _decode_json(self, frame: Frame) -> dict[str, Any] | None:
-        if self._rsa_receipt(frame) is not None:
-            return None  # an RSA session's receipt: not state, not JSON
         plain_rsa = self._plain_rsa_frame(frame)
         obj = self._decode_json_body(frame, plain_rsa=plain_rsa)
         if obj is not None and frame.type in _STATE_FRAME_TYPES:
@@ -5247,7 +5249,28 @@ class StationSession:
                 seq,
                 plaintext.hex() if obj is None else Payload(obj),
             )
-        return self._require_transport().send_drw(0, frame)
+        return self._send_request(frame_type, frame, self._require_transport())
+
+    def _send_request(self, frame_type: int, frame: bytes, transport: PPPPTransport) -> int:
+        """Send ``frame`` on channel 0; on an RSA session the next channel-0 frame of
+        ``frame_type`` within :data:`RSA_RESULT_WINDOW` is read as its result."""
+        if self._aes_key is not None:
+            due = time.monotonic() + RSA_RESULT_WINDOW
+            self._results_due.setdefault(frame_type, []).append(due)
+        return transport.send_drw(0, frame)
+
+    def _take_result_due(self, frame_type: int) -> bool:
+        """Whether a send of ``frame_type`` awaits its result; takes the oldest one."""
+        due = self._results_due.get(frame_type)
+        if not due:
+            return False
+        now = time.monotonic()
+        while due and due[0] < now:
+            due.pop(0)
+        if not due:
+            return False
+        due.pop(0)
+        return True
 
     def _ecb_key(self, frame: Frame) -> bytes | None:
         """The key of an ECB-tagged station frame: the RSA session's key when its
@@ -5280,44 +5303,41 @@ class StationSession:
             return None
         return None if key is None else ecb_decrypt(key, frame.payload)
 
-    def _rsa_receipt(self, frame: Frame) -> int | None:
-        """The code of an RSA session's command receipt under any encryption type, as
-        the eufy app takes it; None for any other frame or on a GCM session."""
-        body = self._rsa_plaintext(frame)
-        return None if body is None else decode_receipt_body(body)
-
     def _decode_receipt(self, channel: int, frame: Frame) -> int | None:
-        """The code of a command receipt on the request channel (0): GCM-tagged clear on
-        a GCM session, under any encryption type on an RSA session."""
+        """The code of a command receipt on the request channel (0), or None.
+
+        A GCM session: a GCM-tagged clear receipt (:func:`decode_command_receipt`). An
+        RSA session: the first channel-0 frame of a sent request's type whose payload
+        holds 4 to 132 bytes is that request's result, its code the clear ``int32le``
+        at ``payload[0:4]`` (:func:`decode_command_result`), as the eufy app reads it:
+        nothing decrypted, the encryption type and the tail ignored. Frames of any other
+        type stay notifies.
+        """
         if channel != 0:
             return None
         if self._aes_key is None:
             return decode_command_receipt(frame)
-        return self._rsa_receipt(frame)
+        code = decode_command_result(frame.payload)
+        if code is None or not self._take_result_due(frame.type):
+            return None
+        return code
 
-    def _note_receipt(self, frame: Frame, code: int) -> None:
-        """Count and log a command receipt. One under the fixed key on a session holding
-        its own key is logged at INFO once per session: it authenticates nothing."""
+    def _note_receipt(self, inbound: Inbound, code: int) -> None:
+        """Count a command receipt and log it at DEBUG: frame type, channel, encryption
+        type (subheader byte 3), payload length, code and whether the bytes after the
+        code are zero."""
         _count_capped(self._receipts_by_code, str(code))
-        encryption = frame_encryption(frame.subheader) if self._aes_key is not None else None
+        frame = inbound.frame
         _LOGGER.debug(
-            "%s: receipt for a 0x%04x frame ch%s (%s): code %d %s",
+            "%s: result 0x%04x ch%d enc%s len %d: code %d %s, tail %s",
             self._log_name,
             frame.type,
-            _frame_camera(frame),
-            _RSA_RECEIPT_ENCRYPTIONS.get(encryption, "clear, GCM tag"),
+            inbound.channel,
+            frame_encryption(frame.subheader),
+            len(frame.payload),
             code,
             RECEIPT_CODES.get(code, ""),
-        )
-        if encryption != FRAME_STATIC_ECB or not self._holds_own_key:
-            return
-        if self._fixed_key_receipt_logged:
-            return
-        self._fixed_key_receipt_logged = True
-        _LOGGER.info(
-            "%s: command receipt arrived under the fixed key (unauthenticated), taken as the "
-            "eufy app does",
-            self._log_name,
+            "nonzero" if any(frame.payload[4:]) else "zero",
         )
 
     def _session_ecb_frame(self, frame: Frame) -> bool:

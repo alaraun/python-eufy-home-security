@@ -122,8 +122,8 @@ key = RSA-PKCS#1-v1.5-decrypt(private_key, ciphertext) up to its first NUL, firs
 - The 16 bytes are an AES-128 key. From then on **every** frame in both directions is
   AES-128-ECB under it, zero-padded, subheader byte 3 = `02`; there is no GCM. A
   client frame is `01 <seq> <dev_type> 02 <flag> 00`. Byte 3 = `01` is still the static
-  key, `00` a clear frame. Receipts and replies come under any of the three
-  ([below](#command-receipts-and-replies-under-any-encryption-declared-app)).
+  key, `00` a clear frame. A command's result carries its code in clear whatever
+  byte 3 says ([below](#command-results-on-an-rsa-session-declared-app)).
 - A wrong RSA key decrypts to noise rather than failing (PKCS#1 implicit rejection);
   the library takes a key that is not 16 printable bytes as a handshake failure.
 - A `private_key` whose bytes do not parse as a key at all is distinct from a wrong
@@ -270,32 +270,38 @@ seq, so a frame can be replayed within the same session.
   app does`.
 - `SessionStats.ecb_state_refused` is kept for compatibility and is always 0.
 
-### Command receipts and replies under any encryption **[declared, app]**
+### Command results on an RSA session **[declared, app]**
 
-On an RSA session the library takes a [command receipt](commands.md#command-receipt-verified)
-under whatever encryption it arrives, as the eufy app takes every frame: the body is
-decoded with the key its encryption type (subheader byte 3) names, then checked for the
-receipt shape (`int32le` code + zero bytes, 132 or 36 bytes).
+On an RSA session the station answers each request it takes from channel 0 with one
+frame **of the request's own type** on channel 0: the request's result. The library
+reads it as the eufy app does:
 
-| encryption type | decoded with |
-|---|---|
-| 0 | nothing: the body is clear |
-| 1 | the static key |
-| 2 | the session key |
-| another | not a receipt |
+- The first channel-0 frame of a sent request's type, within 35 s of the send
+  (`RSA_RESULT_WINDOW`, the app's longest wait), is that request's result; each send
+  takes one. Frames of another type, on another channel or with no send waiting are
+  decoded as usual.
+- A payload of 4 to 132 bytes carries the result: an `int32le` code in **clear** at
+  bytes 0..3. Nothing is decrypted: the encryption type (subheader byte 3) and the bytes
+  after the code are ignored. A longer or shorter payload is no result.
+- Code 0 is done (for a recipe without a notify answer, the app's final result);
+  −108 raises `CommandUnsupportedError`, any other non-zero code `CommandRejectedError`.
+  The app retries codes 1 to 20 for up to 10 s; the library raises at once (a station
+  call may retry, as a preset go-to on a busy camera does).
+- A result is never JSON: it is counted in `SessionStats.receipts_by_code`, never in
+  `dropped_undecodable`, and logged at DEBUG as
+  `result 0x06a4 ch0 enc1 len 132: code 0 TAKEN, tail nonzero` (frame type, channel,
+  encryption type, payload length, code, whether the bytes after the code are zero).
 
-AES-ECB decrypts the whole blocks; a partial last block (the last 4 bytes of a 132-byte
-receipt) is read as is. A zero body under a key decrypts to noise and is no receipt. The
-same rule decodes an ECB scalar result and the end-of-playback frame (`0x0402`). A GCM
-session takes only GCM-tagged clear receipts.
+The same rule reads an ECB scalar result. A HomeBase 3 answers with the code and 128 zero
+bytes, a T8170 with 32 zero bytes; a standalone T8414-class camera sends 132 bytes whose
+last 128 are not zero (reporter log). The end-of-playback frame (`0x0402`) is no result:
+it is decoded under the key its encryption type names (0 clear, 1 the static key, 2 the
+session key). A GCM session takes only GCM-tagged clear receipts
+([commands.md](commands.md#command-receipt-verified)).
 
-A standalone T8414-class camera on an RSA session answers its commands with
-receipt-sized frames that are not clear (reporter log); the fixed key is the inferred
-encryption. A receipt under the static key proves nothing about its origin (see
-**Security** above): a forged one can at most fail a command with its code or stop an
-arm's resend, never confirm a write. A receipt under the fixed key on a session that holds
-a key of its own is logged at INFO once per session: `command receipt arrived under the
-fixed key (unauthenticated), taken as the eufy app does`.
+A result in clear proves nothing about its origin: a forged one can at most fail a
+command with its code or stop an arm's resend. An arm is still confirmed by the mode
+report or a read-back, and a recipe without a notify answer returns `DELIVERED`.
 
 - A camera push records the cipher of its frame in `SecurityEvent.frame_cipher`.
   `SecurityEvent.authenticated` is False for a push under the static ECB key and True

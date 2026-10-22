@@ -90,11 +90,13 @@ that serves reads, and do not resend into a stall — each resend queues again.
 
 - A frame on channel 0 that is GCM-tagged, 132 (or 36) bytes long and zero after its
   first four bytes is taken as a receipt before any decrypt attempt. On an RSA session
-  the receipt comes under any encryption type and is decrypted first
-  ([session-crypto.md](session-crypto.md#command-receipts-and-replies-under-any-encryption-declared-app)).
+  the result is the first channel-0 frame of the request's type after the send, 4 to
+  132 bytes, its `int32le` code read in clear at bytes 0..3 whatever its encryption
+  type and the bytes after the code (`decode_command_result`;
+  [session-crypto.md](session-crypto.md#command-results-on-an-rsa-session-declared-app)).
   Receipts are counted by code in `SessionStats.receipts_by_code` and never in
   `dropped_undecodable`; each is logged at DEBUG with its frame type, channel,
-  encryption and code.
+  encryption type, payload length, code and whether its tail is zero.
 - `async_send_command` takes a `0x0546` receipt that arrives while it is in flight as
   its own. Code −108 raises `CommandUnsupportedError` (a `CommandRejectedError` with
   `code` −108 and an `UnsupportedError`); any other non-zero code raises
@@ -163,8 +165,10 @@ that serves reads, and do not resend into a stall — each resend queues again.
 - **Receipt.** The station also answers the arm with a `0x0546`
   [command receipt](#command-receipt-verified). A non-zero code fails the arm with the
   receipt's error (−108 `CommandUnsupportedError`, any other `CommandRejectedError`).
-  Code 0 only means queued: it is no confirmation, but the arm is not resent after it.
-  A receipted arm with neither a mode report nor a matching read-back raises
+  Code 0 only means queued (on an RSA session the station's acceptance, its
+  [result](session-crypto.md#command-results-on-an-rsa-session-declared-app)): it is no
+  confirmation, but the arm is not resent after it. A receipted arm with neither a
+  mode report nor a matching read-back raises
   `CommandNotAppliedError`.
 - Resend once if neither a receipt, a result nor a report comes back. The library
   resends after 1.5 s within a 6 s deadline.

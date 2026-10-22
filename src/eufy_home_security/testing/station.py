@@ -515,9 +515,13 @@ class FakeStation:
     """Encryption type of an RSA station's sealed frames when set (0: clear); else 1 on a
     static-key session, 2 otherwise."""
     answer_encryption: int | None = None
-    """Encryption type of an RSA station's command receipts and ECB scalar results when
-    set (0 clear, 1 the static key, 2 the session's key; a partial last block in clear);
-    else receipts in clear and results as :attr:`station_encryption`."""
+    """Encryption type (subheader byte 3) of an RSA station's command receipts and ECB
+    scalar results when set; else receipts 0 and results as :attr:`station_encryption`.
+    The code stays clear at ``payload[0:4]``; the zero bytes after it go under the key
+    the type names (1 the static key, 2 the session's key; whole blocks only)."""
+    answer_tail: bytes | None = None
+    """The bytes after an RSA station's result code when set, whatever the encryption
+    type (a T8414 sends 128 that are not zero)."""
     answer_conn_init: bool = True
     answer_params: bool = True
     params_cipher: int = FrameCipher.GCM
@@ -656,14 +660,18 @@ class FakeStation:
             return self.station_encryption
         return FRAME_STATIC_ECB if self.static_key_session else FRAME_SESSION_ECB
 
-    def _seal_as(self, encryption: int, plain: bytes) -> bytes:
-        """``plain`` under an RSA session's ``encryption`` type, its block-aligned prefix
-        only: a partial last block stays clear, as the client's ECB decrypt reads it."""
-        if encryption == FRAME_PLAIN:
-            return plain
-        key = self.static_key if encryption == FRAME_STATIC_ECB else self.rsa_key
-        aligned = len(plain) // 16 * 16
-        return ecb_encrypt(key, plain[:aligned]) + plain[aligned:]
+    def _result_body(self, code: int, length: int, encryption: int) -> bytes:
+        """An RSA station's command result: ``int32le code`` in clear, then
+        :attr:`answer_tail` or ``length - 4`` zero bytes under ``encryption``'s key
+        (whole blocks; the rest clear)."""
+        tail = self.answer_tail
+        if tail is None:
+            tail = bytes(length - 4)
+            if encryption != FRAME_PLAIN:
+                key = self.static_key if encryption == FRAME_STATIC_ECB else self.rsa_key
+                aligned = len(tail) // 16 * 16
+                tail = ecb_encrypt(key, tail[:aligned]) + tail[aligned:]
+        return struct.pack("<i", code) + tail
 
     def _rsa_seal(self, plain: bytes) -> bytes:
         if self._sealed_encryption == FRAME_PLAIN:
@@ -1289,12 +1297,12 @@ class FakeStation:
         if code == 0 and self.apply_settings:
             self.params.setdefault(channel, {})[ftype] = str(value)
         result = struct.pack("<i", code) + b"\x00" * 12
-        if self.rsa_session:  # the result under the session's key, like every frame
+        if self.rsa_session:  # tagged like every frame, the code in clear
             encryption = self.answer_encryption
             if encryption is None:
                 encryption = self._sealed_encryption
             subheader = bytes([FrameCipher.ECB, 0, 0xFF, encryption, 0, 0])
-            result = self._seal_as(encryption, result)
+            result = self._result_body(code, len(result), encryption)
             self.send_frame(ftype, result, cipher=FrameCipher.ECB, subheader=subheader)
         else:
             self.send_frame(ftype, result, cipher=FrameCipher.ECB)
@@ -1534,12 +1542,14 @@ class FakeStation:
 
     def send_receipt(self, ftype: int, code: int, *, dev_type: int = 0, delay: float = 0.0) -> None:
         """A command receipt on channel 0: the request's frame type, ``int32le code`` + zeros,
-        GCM-tagged clear (an RSA session: :attr:`answer_encryption`, clear by default)."""
+        GCM-tagged clear (an RSA session: :meth:`_result_body` under
+        :attr:`answer_encryption`, clear by default)."""
         body = struct.pack("<i", code) + bytes(self.receipt_len - 4)
         cipher, encryption = FrameCipher.GCM, FRAME_PLAIN
-        if self.rsa_session and self.answer_encryption is not None:
-            cipher, encryption = FrameCipher.ECB, self.answer_encryption
-            body = self._seal_as(encryption, body)
+        if self.rsa_session:
+            if self.answer_encryption is not None:
+                cipher, encryption = FrameCipher.ECB, self.answer_encryption
+            body = self._result_body(code, self.receipt_len, encryption)
         subheader = bytes([cipher, 0, dev_type, encryption, 1, 0])
         if delay > 0:
             asyncio.get_running_loop().call_later(

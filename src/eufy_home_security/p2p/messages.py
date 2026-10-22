@@ -109,7 +109,8 @@ MAX_IMAGE_BYTES = 1024 * 1024
 _MAX_IMAGE_B64_LEN = (MAX_IMAGE_BYTES + 2) // 3 * 4
 _URLSAFE_TO_STD = str.maketrans("-_", "+/")
 
-#: A command receipt's body length on a HomeBase 3: ``int32le code`` + 128 zero bytes.
+#: A command receipt's body length on a HomeBase 3: ``int32le code`` + 128 zero bytes;
+#: also the longest channel-0 reply read as a command result.
 RECEIPT_LEN = 132
 #: The same receipt from a T8170 standalone camera: ``int32le code`` + 32 zero bytes.
 STANDALONE_RECEIPT_LEN = 36
@@ -630,29 +631,32 @@ def decode_json_payload(plain: bytes) -> dict[str, Any] | None:
     return obj if isinstance(obj, dict) else None
 
 
-def decode_receipt_body(body: bytes) -> int | None:
-    """The code of a command receipt's plaintext body, or None when it is not one: an
-    ``int32le`` code followed by zero bytes, :data:`RECEIPT_LENS` long."""
-    if len(body) not in RECEIPT_LENS or any(body[4:]):
-        return None
-    return int(struct.unpack_from("<i", body, 0)[0])
-
-
 def decode_command_receipt(frame: Frame) -> int | None:
     """The code of a GCM session's command receipt, or None when ``frame`` is not one.
 
     The station answers every GCM frame it takes from channel 0 (a ``0x0546``
     command, the ``0x044F`` parameter query, a command-id frame) with one frame of
-    the request's own type on channel 0: GCM-tagged but **not ciphertext**, a
-    :func:`decode_receipt_body` body (128 zero bytes on a HomeBase 3, 32 on a
-    standalone T8170). Check for it before any decrypt attempt. An RSA session's
-    receipt comes under any encryption type; the session decrypts it first (see
-    docs/protocol/session-crypto.md). It carries no command id, and the channel is
-    the caller's to check.
+    the request's own type on channel 0: GCM-tagged but **not ciphertext**, an
+    ``int32le`` code followed by zero bytes, :data:`RECEIPT_LENS` long (128 zero bytes
+    on a HomeBase 3, 32 on a standalone T8170). Check for it before any decrypt
+    attempt. It carries no command id, and the channel is the caller's to check. An
+    RSA session reads its replies with :func:`decode_command_result`.
     """
-    if frame.cipher != FrameCipher.GCM:
+    payload = frame.payload
+    if frame.cipher != FrameCipher.GCM or len(payload) not in RECEIPT_LENS or any(payload[4:]):
         return None
-    return decode_receipt_body(frame.payload)
+    return int(struct.unpack_from("<i", payload, 0)[0])
+
+
+def decode_command_result(payload: bytes) -> int | None:
+    """The result code of an RSA session's channel-0 reply to a command: the ``int32le``
+    at ``payload[0:4]``, read as is, for a payload of 4 to :data:`RECEIPT_LEN` bytes;
+    None for any other length. Nothing is decrypted: the frame's encryption type and
+    the bytes after the code are ignored, as the eufy app reads it (declared; see
+    docs/protocol/session-crypto.md)."""
+    if not 4 <= len(payload) <= RECEIPT_LEN:
+        return None
+    return int(struct.unpack_from("<i", payload, 0)[0])
 
 
 def decode_ecb_scalar_result(payload: bytes) -> int:

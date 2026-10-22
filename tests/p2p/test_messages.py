@@ -321,6 +321,23 @@ def test_decode_command_receipt(ftype: int, cipher: int, payload: bytes, code: i
     assert messages.decode_command_receipt(frame) == code
 
 
+@pytest.mark.parametrize(
+    ("payload", "code"),
+    [
+        (struct.pack("<i", -1), -1),  # the shortest: the code alone
+        (struct.pack("<i", 0) + bytes(range(128)), 0),  # the longest, any tail
+        (bytes.fromhex("94ffffff") + bytes(32), -108),  # a T8170's
+        (bytes(3), None),
+        (bytes(133), None),
+        (b"", None),
+    ],
+    ids=["4", "132", "36", "3", "133", "empty"],
+)
+def test_decode_command_result(payload: bytes, code: int | None) -> None:
+    """An RSA session's result: the clear int32 at payload[0:4] of a 4..132-byte body."""
+    assert messages.decode_command_result(payload) == code
+
+
 def _alarm_frame(payload: bytes, cipher: int) -> Frame:
     return Frame(type=0x047F, subheader=bytes([cipher, 0x71, 0xFF, 0x02, 0, 0]), payload=payload)
 
