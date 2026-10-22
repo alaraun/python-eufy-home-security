@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.5](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.4...v0.4.5) (2026-10-22)
+
+
+### Bug Fixes
+
+* **p2p:** take command receipts under any encryption on RSA sessions, as the eufy app does ([issue 114](https://github.com/alaraun/homeassistant-eufy-home-security/issues/114)) ([c22df81](https://github.com/alaraun/python-eufy-home-security/commit/c22df814dfde6d0930fb1c7a3cbdb471bfc06035))
+
 ## [0.4.4](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.3...v0.4.4) (2026-10-21)
 
 
