@@ -1942,11 +1942,13 @@ their own, which some models lack (a T8173 declares no store). Ask
 `station.ptz_action_support(device_sn, action)` with `PtzAction.STORE`, `DELETE`,
 `SET_DEFAULT` or `SLOT_PICTURE` (exported from the package root). It grades like
 `ptz_support`, from the same generated data: `UNKNOWN` when a capability the action needs
-is (`PTZ_PRESETS`, and `PTZ_CONTROL` for a store, delete or slot picture), or when the
-device's thing description does not declare the action or the library does not send it
-as the handler does under this station; `VERIFIED` where proven on hardware (the T8170);
-else `DECLARED`. Create the save button, the save and delete service targets, the slot
-pictures and the default select only for actions that are not `UNKNOWN`. A call for an
+is `UNKNOWN` under `ptz_support` (`PTZ_PRESETS`, and `PTZ_CONTROL` for a store, delete or
+slot picture), or when the device's thing description does not declare the action or the
+library does not send it as the handler does under this station; `VERIFIED` where proven
+on hardware (the T8170) and sent there; else `DECLARED`. Create each control only where
+its action is not `UNKNOWN`: the "Save view" button and the `save_preset` target for
+`STORE` (with `make_default`, `SET_DEFAULT` too), the `delete_preset` target for `DELETE`,
+the slot pictures for `SLOT_PICTURE`, the default select for `SET_DEFAULT`. A call for an
 action the model lacks raises `PtzActionUnsupportedError` (an `UnsupportedError`;
 `err.action` equals the `PtzAction`) before anything is sent; a slot the camera does not
 have, or an empty one, stays a plain `UnsupportedError`.
@@ -2131,7 +2133,8 @@ slot = await station.async_save_preset(device_sn, preset=2)
   "delete a preset first" before the press; the save itself re-reads.
 
 A service action on the camera entity, next to `pan_tilt` and `goto_preset`, and a
-"Save view" **button** per pan/tilt camera (next to the four pan buttons) calling
+"Save view" **button** per pan/tilt camera whose `PtzAction.STORE` is not `UNKNOWN`
+under `ptz_action_support` (next to the four pan buttons) calling
 `async_save_preset(device_sn)`:
 
 ```yaml

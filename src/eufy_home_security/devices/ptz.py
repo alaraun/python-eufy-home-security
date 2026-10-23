@@ -17,7 +17,7 @@ from types import MappingProxyType
 from typing import Final
 
 from ._ptz_data import APP_VERSION, PTZ
-from .recipes import ConnectType
+from .recipes import ConnectType, PtzAction
 
 
 class PtzForm(StrEnum):
@@ -28,20 +28,6 @@ class PtzForm(StrEnum):
     PLAIN = "plain"
     """Without the T8170's extra fields: a pan/tilt step (6030) of ``cmd_type`` and
     ``rotate_type`` only, a preset query (6034) without ``value``."""
-
-
-class PtzAction(StrEnum):
-    """A preset slot edit a consumer offers, valued by the thing-model action that carries
-    it (see :meth:`~..station.Station.ptz_action_support`)."""
-
-    STORE = "set_preset_positions"
-    """Store the current view in a slot."""
-    DELETE = "delete_preset_positions"
-    """Clear a slot."""
-    SET_DEFAULT = "default_preset_positions"
-    """Make a slot the one the camera returns to when idle."""
-    SLOT_PICTURE = "get_preset_position_pic"
-    """Read the picture the camera stored for a slot."""
 
 
 PTZ_IDENTIFIERS: Final = (

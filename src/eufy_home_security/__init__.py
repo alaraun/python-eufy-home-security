@@ -31,8 +31,14 @@ if TYPE_CHECKING:
     )
     from .devices.device_alarm import DeviceAlarm
     from .devices.model_settings import Setting, SettingControl, SettingKind
-    from .devices.ptz import PtzAction
-    from .devices.recipes import MAX_PRESET_SLOTS, MAX_ZOOM, MIN_ZOOM, PanTilt, PresetPosition
+    from .devices.recipes import (
+        MAX_PRESET_SLOTS,
+        MAX_ZOOM,
+        MIN_ZOOM,
+        PanTilt,
+        PresetPosition,
+        PtzAction,
+    )
     from .devices.sections import (
         MODES_SECTION,
         OTHER_SECTION,
@@ -202,7 +208,6 @@ _EXPORTS: dict[str, str] = {
     ),
     "DeviceAlarm": "devices.device_alarm",
     **dict.fromkeys(("Setting", "SettingControl", "SettingKind"), "devices.model_settings"),
-    "PtzAction": "devices.ptz",
     **dict.fromkeys(
         (
             "MODES_SECTION",
@@ -218,7 +223,8 @@ _EXPORTS: dict[str, str] = {
     ),
     **dict.fromkeys(("ModeTableStorage", "StationFeature"), "devices.station_config_support"),
     **dict.fromkeys(
-        ("MAX_PRESET_SLOTS", "MAX_ZOOM", "MIN_ZOOM", "PanTilt", "PresetPosition"), "devices.recipes"
+        ("MAX_PRESET_SLOTS", "MAX_ZOOM", "MIN_ZOOM", "PanTilt", "PresetPosition", "PtzAction"),
+        "devices.recipes",
     ),
     **dict.fromkeys(
         ("DEFAULT_QUEUE_CHUNKS", "FrameStream", "ResizePolicy", "StreamBroadcast"), "p2p.broadcast"

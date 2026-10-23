@@ -27,9 +27,9 @@ from ..models import (
 )
 from ..p2p.params import GUARD_MODE_PARAM
 from .live_open import app_version, library_live_open
-from .ptz import PtzAction, ptz_form
 from .ptz import app_version as ptz_app_version
-from .recipes import PARENT_CONNECT_TYPES, ConnectType
+from .ptz import ptz_form
+from .recipes import PARENT_CONNECT_TYPES, ConnectType, PtzAction
 from .support import Evidence, Support
 from .types import MODELS, DeviceKind, model_for_serial, serial_product_code
 

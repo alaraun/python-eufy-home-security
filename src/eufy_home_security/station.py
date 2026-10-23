@@ -50,7 +50,7 @@ from .devices.model_settings import (
     settings_of,
     sort_settings,
 )
-from .devices.ptz import PtzAction, PtzForm, has_ptz_recipes, ptz_actions, ptz_form
+from .devices.ptz import PtzForm, has_ptz_recipes, ptz_actions, ptz_form
 from .devices.ptz import app_version as ptz_app_version
 from .devices.recipes import (
     MAX_PRESET_SLOTS,
@@ -59,6 +59,7 @@ from .devices.recipes import (
     ConnectType,
     PanTilt,
     PresetPosition,
+    PtzAction,
     Recipe,
     RecipeCommand,
     SubCommand,
@@ -298,6 +299,7 @@ _PTZ_NAMES: Final[Mapping[Capability, str]] = {
     Capability.PTZ_ZOOM: "picture zoom",
 }
 """How a refusal names each pan/tilt/zoom capability the device lacks."""
+_NOT_PAIRED: Final = "the device is not paired to this station"
 # The kinds the eufy app's battery display rule covers (the camera card).
 _BATTERY_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
 FRESH_KEYFRAME_WINDOW: Final = 0.5
@@ -2909,6 +2911,10 @@ class Station:
             None,
         )
 
+    def _is_paired(self, device_sn: str) -> bool:
+        """Whether ``device_sn`` is this station or a device paired to it."""
+        return any(d.device_sn == device_sn for d in (self.device, *self.sub_devices))
+
     def _connect_type_of(self, device_sn: str) -> ConnectType:
         """How the app reaches ``device_sn``: on its own (this station's own serial when
         standalone) or through this station."""
@@ -2977,30 +2983,34 @@ class Station:
         presets (``PTZ_PRESETS``) or picture zoom (``PTZ_ZOOM``) of ``device_sn`` is
         supported through this station.
 
-        :attr:`~.devices.support.Support.VERIFIED` from the model's profile; else
-        ``DECLARED`` when the device's thing description declares every action of the
-        capability (:data:`~.devices.capabilities.PTZ_ACTIONS`) and the library sends
-        each as the device's handler does under this station (:mod:`.devices.ptz`,
-        generated from the eufy app's handlers); else ``UNKNOWN`` with the reason. A
-        model without recorded handler actions keeps its profile's own entry. Raises
-        ``ValueError`` for a capability that is not one of the three.
+        ``UNKNOWN`` with the reason for a device not paired here, or when the device's
+        thing description lacks an action of the capability
+        (:data:`~.devices.capabilities.PTZ_ACTIONS`) or the library does not send one as
+        the device's handler does under this station (:mod:`.devices.ptz`, generated from
+        the eufy app's handlers); else :attr:`~.devices.support.Support.VERIFIED` from
+        the model's profile; else ``DECLARED``. A model without recorded handler actions
+        keeps its profile's own entry. Raises ``ValueError`` for a capability that is not
+        one of the three.
         """
         actions = PTZ_ACTIONS.get(capability)
         if actions is None:
             raise ValueError(f"{capability} is not a pan/tilt/zoom capability")
+        if not self._is_paired(device_sn):
+            return Evidence(Support.UNKNOWN, _NOT_PAIRED)
+        code = self._product_code(device_sn)
+        connect = self._connect_type_of(device_sn)
+        if has_ptz_recipes(code):
+            missing = [a for a in actions if ptz_form(code, a, connect) is None]
+            if missing:
+                return Evidence(Support.UNKNOWN, self._ptz_unsupported_reason(device_sn, missing))
         profile = own_profile(device_sn)
         listed = None if profile is None else profile.capabilities.get(capability)
         if listed is not None and listed.support is Support.VERIFIED:
             return listed
-        code = self._product_code(device_sn)
         if not has_ptz_recipes(code):
             return listed or Evidence(
                 Support.UNKNOWN, f"no pan/tilt/zoom action recorded for {code or 'this model'}"
             )
-        connect = self._connect_type_of(device_sn)
-        missing = [a for a in actions if ptz_form(code, a, connect) is None]
-        if missing:
-            return Evidence(Support.UNKNOWN, self._ptz_unsupported_reason(device_sn, missing))
         return Evidence(
             Support.DECLARED,
             f"the {code} handler's {' and '.join(actions)} under {connect.value} "
@@ -3014,12 +3024,12 @@ class Station:
 
         ``UNKNOWN`` with the reason when a capability the action needs
         (:data:`~.devices.capabilities.PTZ_ACTION_NEEDS`) is ``UNKNOWN`` under
-        :meth:`ptz_support`; else :attr:`~.devices.support.Support.VERIFIED` from the
-        model's profile; else ``DECLARED`` when the device's thing description declares
-        the action and the library sends it as the device's handler does under this
-        station (:mod:`.devices.ptz`), ``UNKNOWN`` with the reason otherwise. A model
-        without recorded handler actions takes the weakest grade of the capabilities it
-        needs. Where this is ``UNKNOWN``, the action's method raises
+        :meth:`ptz_support`, or when the device's thing description does not declare the
+        action or the library does not send it as the device's handler does under this
+        station (:mod:`.devices.ptz`); else :attr:`~.devices.support.Support.VERIFIED`
+        from the model's profile; else ``DECLARED``. A model without recorded handler
+        actions takes the weakest grade of the capabilities it needs. Where this is
+        ``UNKNOWN``, the action's method raises
         :class:`~.exceptions.PtzActionUnsupportedError` (the action) or
         ``UnsupportedError`` (a capability) before sending.
         """
@@ -3030,16 +3040,16 @@ class Station:
         )
         if weakest.support is Support.UNKNOWN:
             return weakest
+        code = self._product_code(device_sn)
+        connect = self._connect_type_of(device_sn)
+        if has_ptz_recipes(code) and ptz_form(code, action, connect) is None:
+            return Evidence(Support.UNKNOWN, self._ptz_unsupported_reason(device_sn, [action]))
         profile = own_profile(device_sn)
         listed = None if profile is None else profile.ptz_actions.get(action)
         if listed is not None and listed.support is Support.VERIFIED:
             return listed
-        code = self._product_code(device_sn)
         if not has_ptz_recipes(code):
             return weakest
-        connect = self._connect_type_of(device_sn)
-        if ptz_form(code, action, connect) is None:
-            return Evidence(Support.UNKNOWN, self._ptz_unsupported_reason(device_sn, [action]))
         return Evidence(
             Support.DECLARED,
             f"the {code} handler's {action.value} under {connect.value} is the library's recipe",

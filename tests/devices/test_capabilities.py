@@ -12,7 +12,8 @@ from eufy_home_security.devices.capabilities import (
     kind_from_params,
     profile_for_serial,
 )
-from eufy_home_security.devices.ptz import PTZ_IDENTIFIERS, PtzAction
+from eufy_home_security.devices.ptz import PTZ_IDENTIFIERS
+from eufy_home_security.devices.recipes import PtzAction
 from eufy_home_security.devices.support import Evidence, Support
 from eufy_home_security.devices.types import MODELS, DeviceKind
 

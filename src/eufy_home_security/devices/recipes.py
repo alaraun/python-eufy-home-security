@@ -361,6 +361,20 @@ stores nothing, so a store is only real once the read-back shows the slot in use
 """
 
 
+class PtzAction(StrEnum):
+    """A preset slot edit a consumer offers, valued by the thing-model action that carries
+    it (see :meth:`~..station.Station.ptz_action_support`)."""
+
+    STORE = "set_preset_positions"
+    """Store the current view in a slot."""
+    DELETE = "delete_preset_positions"
+    """Clear a slot."""
+    SET_DEFAULT = "default_preset_positions"
+    """Make a slot the one the camera returns to when idle."""
+    SLOT_PICTURE = "get_preset_position_pic"
+    """Read the picture the camera stored for a slot."""
+
+
 def query_preset_positions(*, value: bool = True) -> Recipe:
     """Read the preset slots; answered by a 1351 notify carrying ``points``.
 
@@ -394,7 +408,7 @@ def preset_picture(index: int) -> Recipe:
     """The picture stored for preset ``index`` (``get_preset_position_pic``);
     answered by a 1351 notify."""
     return Recipe(
-        identifier="get_preset_position_pic",
+        identifier=PtzAction.SLOT_PICTURE.value,
         cmd=RecipeCommand.DOORBELL_PAYLOAD,
         sub_cmd=SubCommand.COMMAND_APP_SPAN_PTZ_PIC,
         notify_cmd=RecipeCommand.NOTIFY_PAYLOAD,
@@ -412,7 +426,7 @@ def set_default_preset(index: int, *, confirm: bool = False) -> Recipe:
     slot (6035) and its stored picture (6097); the library turns and reads back.
     """
     return Recipe(
-        identifier="default_preset_positions",
+        identifier=PtzAction.SET_DEFAULT.value,
         cmd=RecipeCommand.SET_PAYLOAD,
         sub_cmd=SubCommand.COMMAND_APP_SET_DEFAULT_POSITION,
         params=MappingProxyType({"index": index, "settingstate": int(confirm)}),
@@ -458,7 +472,7 @@ def store_preset(index: int, *, confirm: bool = False) -> Recipe:
     :meth:`~..station.Station.async_store_preset`.
     """
     return Recipe(
-        identifier="set_preset_positions",
+        identifier=PtzAction.STORE.value,
         cmd=RecipeCommand.DOORBELL_PAYLOAD,
         sub_cmd=SubCommand.COMMAND_INDOOR_SPAN_SET_POINT,
         params=MappingProxyType({"settingstate": int(confirm), "value": index}),
@@ -469,7 +483,7 @@ def delete_preset(index: int) -> Recipe:
     """Clear preset slot ``index`` (``delete_preset_positions``): 1700 / 6033,
     receipt only; confirm with a 6034 read-back."""
     return Recipe(
-        identifier="delete_preset_positions",
+        identifier=PtzAction.DELETE.value,
         cmd=RecipeCommand.DOORBELL_PAYLOAD,
         sub_cmd=SubCommand.COMMAND_INDOOR_SPAN_DEL_POINT,
         params=MappingProxyType({"value": index}),

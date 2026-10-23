@@ -19,20 +19,28 @@ import eufy_home_security.station as station_mod
 from eufy_home_security._logging import redact_serial
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices._ptz_data import PTZ
-from eufy_home_security.devices.capabilities import PTZ_ACTION_NEEDS, Capability, DeviceProfile
+from eufy_home_security.devices.capabilities import (
+    PTZ_ACTION_NEEDS,
+    PTZ_ACTIONS,
+    Capability,
+    DeviceProfile,
+)
 from eufy_home_security.devices.live_open import LiveOpen, live_open
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
+    bundled_codes,
     mode_table_settings,
     settings_of,
     sort_settings,
 )
-from eufy_home_security.devices.ptz import PtzAction, ptz_form
+from eufy_home_security.devices.ptz import ptz_form
 from eufy_home_security.devices.recipes import (
     MAX_PRESET_SLOTS,
+    PARENT_CONNECT_TYPES,
     ConnectType,
     PanTilt,
     PresetPosition,
+    PtzAction,
     pan_tilt,
     set_picture_zoom,
 )
@@ -3117,6 +3125,144 @@ def test_a_listed_model_whose_handler_sends_the_action_otherwise_is_unknown(
     evidence = hub.ptz_action_support(_FLOODLIGHT.device_sn, PtzAction.DELETE)
     assert evidence.support is Support.UNKNOWN
     assert "in a way this library does not implement" in evidence.source
+
+
+def _placed(code: str, parent: str | None) -> tuple[Station, str]:
+    """A device of product ``code``, standalone (``parent`` None) or paired to a station
+    whose serial starts with ``parent``, and its serial; no I/O."""
+    serial = f"{code}P2000067890"
+    session = _unconnected_station(host=None, local_ip=None, local_port=0).session
+    if parent is None:
+        device = CloudDevice(
+            device_sn=serial,
+            device_type=18,
+            name="PTZ",
+            p2p_did=SYNTHETIC.did,
+            station_sn=serial,
+            raw={"device_new_pn": code},
+        )
+        return Station(device, session), serial
+    hub = CloudDevice(device_sn=f"{parent}P2000012345", device_type=18, name="HB")
+    device = CloudDevice(
+        device_sn=serial,
+        device_type=47,
+        name="PTZ",
+        station_sn=hub.device_sn,
+        channel=2,
+        raw={"device_new_pn": code},
+    )
+    return Station(hub, session, sub_devices=[device]), serial
+
+
+def _ptz_refuses(station: Station, serial: str, capability: Capability) -> bool:
+    """Whether the capability's gate, or the form of one of its actions, refuses."""
+    try:
+        station._require_ptz(serial, capability)
+        for action in PTZ_ACTIONS[capability]:
+            station._ptz_form(serial, action)
+    except UnsupportedError:
+        return True
+    return False
+
+
+def _action_refuses(station: Station, serial: str, action: PtzAction) -> bool:
+    """Whether the gate of the slot edit ``action`` refuses."""
+    try:
+        station._require_ptz_action(serial, action)
+    except UnsupportedError:
+        return True
+    return False
+
+
+def test_every_ptz_grade_is_unknown_exactly_where_its_method_refuses() -> None:
+    """Every product of the generated data, standalone and behind every parent kind:
+    ``ptz_action_support`` is ``UNKNOWN`` exactly where the action's gate refuses, and
+    ``ptz_support`` exactly where the capability's gate or one of its actions' forms does."""
+    grades: set[Support] = set()
+    for code in sorted({*bundled_codes(), *PTZ}):
+        for parent in (None, *PARENT_CONNECT_TYPES):
+            station, serial = _placed(code, parent)
+            for capability in PTZ_ACTIONS:
+                support = station.ptz_support(serial, capability).support
+                refused = _ptz_refuses(station, serial, capability)
+                assert (support is Support.UNKNOWN) is refused, (code, parent, capability)
+                grades.add(support)
+            for action in PtzAction:
+                support = station.ptz_action_support(serial, action).support
+                refused = _action_refuses(station, serial, action)
+                assert (support is Support.UNKNOWN) is refused, (code, parent, action)
+                grades.add(support)
+    assert grades == set(Support)
+
+
+def test_a_verified_model_behind_a_station_the_library_cannot_reach_it_through_is_unknown() -> None:
+    """The T8170's profile is verified, but behind a HomeBase 4 the handler takes another route."""
+    station, serial = _placed("T8170", "T8040")
+    for capability in PTZ_ACTIONS:
+        assert station.ptz_support(serial, capability).support is Support.UNKNOWN, capability
+    for action in PtzAction:
+        evidence = station.ptz_action_support(serial, action)
+        assert evidence.support is Support.UNKNOWN, action
+        assert "behind a HB4 station" in evidence.source
+
+
+def test_a_serial_neither_this_station_nor_paired_to_it_is_unknown() -> None:
+    hub = _hub_with(_FLOODLIGHT)
+    stranger = "T8425P2000099999"
+    for capability in PTZ_ACTIONS:
+        evidence = hub.ptz_support(stranger, capability)
+        assert evidence == Evidence(Support.UNKNOWN, "the device is not paired to this station")
+    for action in PtzAction:
+        assert hub.ptz_action_support(stranger, action).support is Support.UNKNOWN, action
+
+
+@pytest.mark.parametrize("action", [PtzAction.DELETE, PtzAction.SLOT_PICTURE])
+async def test_a_delete_or_slot_picture_the_model_lacks_is_refused_before_sending(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch, action: PtzAction
+) -> None:
+    monkeypatch.setattr(
+        station_mod,
+        "ptz_form",
+        lambda code, name, connect: None if name == action else ptz_form(code, name, connect),
+    )
+    station = await _standalone(fake, "T8170P2000054321")
+    call = (
+        station.async_delete_preset if action is PtzAction.DELETE else station.async_preset_picture
+    )
+    try:
+        assert station.ptz_action_support(station.serial, action).support is Support.UNKNOWN
+        with pytest.raises(PtzActionUnsupportedError) as err:
+            await call(station.serial, 1)
+        assert err.value.action == action
+        assert err.value.device_sn == station.serial
+        assert fake.received == []
+    finally:
+        await station.async_close()
+
+
+async def test_without_pan_tilt_control_a_slot_edit_is_a_plain_unsupported_error(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    station = await _standalone(fake, "T8170P2000054321")
+    real = station.ptz_support
+    control = Evidence(Support.UNKNOWN, "no step")
+
+    def support(device_sn: str, capability: Capability) -> Evidence:
+        return control if capability is Capability.PTZ_CONTROL else real(device_sn, capability)
+
+    monkeypatch.setattr(station, "ptz_support", support)
+    try:
+        for call in (
+            station.async_store_preset(station.serial, 1),
+            station.async_delete_preset(station.serial, 1),
+            station.async_preset_picture(station.serial, 1),
+        ):
+            with pytest.raises(UnsupportedError, match="no step") as err:
+                await call
+            assert not isinstance(err.value, PtzActionUnsupportedError)
+        assert fake.received == []
+    finally:
+        await station.async_close()
 
 
 async def test_a_default_change_the_model_lacks_is_refused_before_the_slot_check(

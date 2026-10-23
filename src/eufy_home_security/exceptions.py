@@ -444,11 +444,13 @@ class ModeInUseError(UnsupportedError):
 class PtzActionUnsupportedError(UnsupportedError):
     """The camera's model has no such pan/tilt or preset action through this station.
 
-    ``action`` is the thing-model action refused (for a slot store, delete, default change
-    or picture, a :class:`~.devices.ptz.PtzAction` value): the device's thing description
-    does not declare it, or the eufy app sends it there in a form the library does not
-    implement. Raised before anything is sent; ``Station.ptz_action_support`` answers the
-    same up front. A slot the camera does not have stays a plain :class:`UnsupportedError`.
+    ``action`` is the thing-model action refused: the device's thing description does not
+    declare it, or the eufy app sends it there in a form the library does not implement.
+    Raised before anything is sent. For a slot store, delete, default change or picture it
+    is a :class:`~.devices.recipes.PtzAction`, which ``Station.ptz_action_support``
+    answers up front; for a pan/tilt step, a preset query or a zoom it is a plain ``str``,
+    which ``Station.ptz_support`` answers. A slot the camera does not have stays a plain
+    :class:`UnsupportedError`.
     """
 
     def __init__(self, message: str, *, action: str, device_sn: str | None = None) -> None:

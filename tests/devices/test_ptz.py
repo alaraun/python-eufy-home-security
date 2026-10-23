@@ -12,13 +12,12 @@ import pytest
 from eufy_home_security.devices import ptz
 from eufy_home_security.devices.ptz import (
     PTZ_IDENTIFIERS,
-    PtzAction,
     PtzForm,
     has_ptz_recipes,
     ptz_actions,
     ptz_form,
 )
-from eufy_home_security.devices.recipes import PARENT_CONNECT_TYPES, ConnectType
+from eufy_home_security.devices.recipes import PARENT_CONNECT_TYPES, ConnectType, PtzAction
 
 ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / ".work" / "cache" / "things_all"
