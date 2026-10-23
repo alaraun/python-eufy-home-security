@@ -4,6 +4,29 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.7](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.6...v0.4.7) (2026-10-23)
+
+
+### Features
+
+* **station:** a device siren's on/off state and DeviceAlarmChanged event, counted down as the eufy app does ([issue 117](https://github.com/alaraun/homeassistant-eufy-home-security/issues/117)) ([05921a8](https://github.com/alaraun/python-eufy-home-security/commit/05921a8ed63801d9936685a847da497878ef6ea6))
+* **station:** per-action support for pan/tilt preset edits (ptz_action_support, PtzActionUnsupportedError) ([f47deff](https://github.com/alaraun/python-eufy-home-security/commit/f47deffcf3330209fb1e48a15c24793f5009826f))
+* **station:** sound and stop a device's own siren or light as the eufy app does ([issue 117](https://github.com/alaraun/homeassistant-eufy-home-security/issues/117)) ([f08991f](https://github.com/alaraun/python-eufy-home-security/commit/f08991fd102ed59fe532eaa971b48be7ec466d88))
+
+
+### Bug Fixes
+
+* a station whose parameter dump lacks the guard mode reports it from the cloud copy until a local value arrives ([issue 114](https://github.com/alaraun/homeassistant-eufy-home-security/issues/114)) ([89a8952](https://github.com/alaraun/python-eufy-home-security/commit/89a89523375e85c5f7b663bccd840382b9a717d1))
+* an arm returns on its own result code 0 without waiting for a mode report; a queue receipt alone is no result ([issue 114](https://github.com/alaraun/homeassistant-eufy-home-security/issues/114)) ([89a8952](https://github.com/alaraun/python-eufy-home-security/commit/89a89523375e85c5f7b663bccd840382b9a717d1))
+* arm a station in the form the eufy app uses for its model (the station scalar 1224 on a standalone T8414 and the other bare-1224 models) ([issue 114](https://github.com/alaraun/homeassistant-eufy-home-security/issues/114)) ([89a8952](https://github.com/alaraun/python-eufy-home-security/commit/89a89523375e85c5f7b663bccd840382b9a717d1))
+* **cloud:** re-key and retry the thing-description request once instead of logging an internal error name ([5c63f16](https://github.com/alaraun/python-eufy-home-security/commit/5c63f16c4aacfaff80e6c9a6161f0c3c584f5152))
+* **deps:** every device time-zone id resolves on any host (tzdata is a runtime dependency) ([0b38a1d](https://github.com/alaraun/python-eufy-home-security/commit/0b38a1d8fe70bfc4989a26f50a5f26811d3885a1))
+* **devices:** regenerate model data from the eufy app's current thing descriptions ([3ca9221](https://github.com/alaraun/python-eufy-home-security/commit/3ca922122cb38ce2dc5fbdcd9b084297c605cf66))
+* **devices:** send an ECB value a handler repeats as a bool as one ECB scalar ([issue 117](https://github.com/alaraun/homeassistant-eufy-home-security/issues/117)) ([f08991f](https://github.com/alaraun/python-eufy-home-security/commit/f08991fd102ed59fe532eaa971b48be7ec466d88))
+* **models:** generate the eufy app's camera on/off switch for every model whose handler writes it ([issue 117](https://github.com/alaraun/homeassistant-eufy-home-security/issues/117)) ([f08991f](https://github.com/alaraun/python-eufy-home-security/commit/f08991fd102ed59fe532eaa971b48be7ec466d88))
+* result code -103 raises CommandUnsupportedError, as -108 does ([issue 114](https://github.com/alaraun/homeassistant-eufy-home-security/issues/114)) ([89a8952](https://github.com/alaraun/python-eufy-home-security/commit/89a89523375e85c5f7b663bccd840382b9a717d1))
+* write-only enum settings read back the value written, 84 enum settings on 56 models become readable, and continuous recording time writes the app's value for All time ([issue 114](https://github.com/alaraun/homeassistant-eufy-home-security/issues/114)) ([89a8952](https://github.com/alaraun/python-eufy-home-security/commit/89a89523375e85c5f7b663bccd840382b9a717d1))
+
 ## [0.4.6](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.5...v0.4.6) (2026-10-23)
 
 
