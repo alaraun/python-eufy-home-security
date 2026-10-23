@@ -801,8 +801,13 @@
     "1": "Schedule",
     "default:00": "All time"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "0": "default:00",
+     "1": 1
+    },
+    "param": 6011
+   },
    "section": "recording",
    "values": [
     "default:00",
@@ -814,7 +819,7 @@
     "params": {
      "type": {
       "$map": {
-       "default:00": null,
+       "default:00": 0,
        "1": 1
       }
      }
@@ -824,7 +829,7 @@
      "cmd": 6011,
      "paramValue": {
       "$map": {
-       "default:00": "NaN",
+       "default:00": "0",
        "1": "1"
       }
      }
@@ -1995,7 +2000,6 @@
    "contexts": [
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -2048,7 +2052,6 @@
     },
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -2072,8 +2075,14 @@
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "1": 0,
+     "2": 2,
+     "3": 1
+    },
+    "param": 6020
+   },
    "section": "notifications",
    "values": [
     0,
@@ -2612,8 +2621,15 @@
     "2": "Timestamp and logo"
    },
    "name": "Watermark",
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "": 0,
+     "0": 2,
+     "1": 0,
+     "2": 1
+    },
+    "param": 1214
+   },
    "section": "picture",
    "values": [
     0,

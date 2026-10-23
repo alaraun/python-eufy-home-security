@@ -1509,8 +1509,13 @@
     "0": "Switch modes by schedule",
     "1": "Switch modes from app"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "0": 0,
+     "16": 1
+    },
+    "param": 1283
+   },
    "section": "notifications",
    "values": [
     0,

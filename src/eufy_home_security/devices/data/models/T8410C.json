@@ -2454,7 +2454,6 @@
    "contexts": [
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -2507,7 +2506,6 @@
     },
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -2531,8 +2529,14 @@
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "1": 0,
+     "2": 2,
+     "3": 1
+    },
+    "param": 6020
+   },
    "section": "notifications",
    "values": [
     0,

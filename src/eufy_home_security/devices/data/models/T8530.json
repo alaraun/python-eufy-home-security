@@ -937,9 +937,11 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
-   "note": "round trip does not return the written value",
    "page": "MotionDetection",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1246
+   },
    "section": "power",
    "values": [
     0,

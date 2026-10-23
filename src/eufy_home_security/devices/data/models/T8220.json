@@ -635,8 +635,18 @@
     "3": "6 hours",
     "4": "12 hours"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "eyJzbm9vemVfdGltZSI6MH0=": -1,
+     "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
+     "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
+     "eyJzbm9vemVfdGltZSI6MzYwMH0=": 1,
+     "eyJzbm9vemVfdGltZSI6NDMyMDB9": 4,
+     "eyJzbm9vemVfdGltZSI6NzIwMH0=": 2,
+     "eyJzbm9vemVfdGltZSI6dW5kZWZpbmVkfQ==": ""
+    },
+    "param": 1271
+   },
    "section": "notifications",
    "values": [
     -1,

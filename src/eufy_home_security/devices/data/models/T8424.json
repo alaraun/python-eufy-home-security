@@ -808,8 +808,15 @@
     "8": "Low",
     "9": "Medium"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "0": 0,
+     "1": 8,
+     "2": 9,
+     "3": 10
+    },
+    "param": 1020
+   },
    "section": "recording",
    "values": [
     0,

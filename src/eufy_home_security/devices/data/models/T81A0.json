@@ -1483,8 +1483,14 @@
     "1": "Medium",
     "2": "Low"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "100": 2,
+     "70": 0,
+     "85": 1
+    },
+    "param": 6342
+   },
    "section": "audio",
    "values": [
     2,

@@ -72,7 +72,6 @@
    "contexts": [
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 1,
@@ -107,8 +106,14 @@
     "1": "3",
     "2": "5"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "1": 0,
+     "3": 1,
+     "5": 2
+    },
+    "param": 1276
+   },
    "section": "detection",
    "values": [
     0,

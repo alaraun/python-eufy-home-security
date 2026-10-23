@@ -272,8 +272,10 @@
    "kind": "range",
    "max": 5,
    "min": 1,
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1276
+   },
    "section": "detection",
    "step": 1,
    "write": {

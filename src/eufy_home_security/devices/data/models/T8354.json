@@ -1827,7 +1827,6 @@
    "contexts": [
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -1880,7 +1879,6 @@
     },
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -1904,8 +1902,14 @@
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "1": 0,
+     "2": 2,
+     "3": 1
+    },
+    "param": 6020
+   },
    "section": "notifications",
    "values": [
     0,
@@ -2362,8 +2366,14 @@
     "1": "Switch modes from app",
     "2": "Switch modes by geofencing"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "0": 0,
+     "16": 1,
+     "32": 2
+    },
+    "param": 1283
+   },
    "section": "notifications",
    "values": [
     2,

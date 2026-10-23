@@ -633,8 +633,12 @@
    "labels": {
     "default:0": "default:0"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "0": "default:0"
+    },
+    "param": 6011
+   },
    "section": "recording",
    "values": [
     "default:0"
@@ -643,12 +647,12 @@
     "cmd": 1700,
     "subCmd": 6011,
     "params": {
-     "type": null
+     "type": 0
     },
     "update": {
      "needUpdate": true,
      "cmd": 6011,
-     "paramValue": "NaN"
+     "paramValue": "0"
     }
    }
   },
@@ -2198,8 +2202,14 @@
     "1": "Switch modes from app",
     "2": "Switch modes by geofencing"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "0": 0,
+     "16": 1,
+     "32": 2
+    },
+    "param": 1283
+   },
    "section": "notifications",
    "values": [
     0,

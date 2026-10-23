@@ -1644,8 +1644,13 @@
     "3": "Custom recording"
    },
    "name": "Working mode",
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "1": 0,
+     "2": 3
+    },
+    "param": 1246
+   },
    "section": "power",
    "values": [
     0,

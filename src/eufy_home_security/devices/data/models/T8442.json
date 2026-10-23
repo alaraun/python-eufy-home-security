@@ -2122,8 +2122,14 @@
     "1": "Timestamp",
     "2": "Timestamp and logo"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "0": 2,
+     "1": 0,
+     "2": 1
+    },
+    "param": 1214
+   },
    "section": "picture",
    "values": [
     0,

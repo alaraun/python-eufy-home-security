@@ -389,8 +389,13 @@
     "5": "Human Only",
     "6": "All Motions"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "0": 5,
+     "2": 6
+    },
+    "param": 6071
+   },
    "section": "detection",
    "values": [
     5,

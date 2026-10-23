@@ -480,91 +480,6 @@
     }
    }
   },
-  "detection_sensitivity_test_mode": {
-   "access": "rw",
-   "contexts": [
-    {
-     "entry": {
-      "read": {
-       "map": null,
-       "param": 1276
-      },
-      "write": {
-       "cmd": 1350,
-       "subCmd": 1276,
-       "params": {
-        "sensitivity": "$v",
-        "channel": "$channel"
-       },
-       "update": {
-        "needUpdate": true,
-        "cmd": 1276,
-        "paramValue": "$v:str"
-       },
-       "extUpdates": [
-        {
-         "cmd": 1210,
-         "paramValue": "$v:str"
-        },
-        {
-         "cmd": 6070,
-         "paramValue": "$v:str"
-        }
-       ]
-      }
-     },
-     "names": [
-      "HB1",
-      "HB2",
-      "HB3",
-      "HB4",
-      "M8020",
-      "M8021",
-      "M8022",
-      "M8023",
-      "M8024",
-      "M8025",
-      "NVR",
-      "T7000",
-      "T9000"
-     ]
-    },
-    {
-     "entry": {
-      "note": "round trip does not return the written value",
-      "read": null,
-      "variant_of": null
-     },
-     "names": [
-      "standalone"
-     ]
-    }
-   ],
-   "control": "slider",
-   "default": 4,
-   "kind": "range",
-   "max": 7,
-   "min": 1,
-   "read": {
-    "map": null,
-    "param": 6070
-   },
-   "section": "detection",
-   "step": 1,
-   "variant_of": "detection_sensitivity",
-   "write": {
-    "cmd": 1700,
-    "subCmd": 6070,
-    "params": {
-     "value": "$v"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 6070,
-     "paramValue": "$v:str"
-    }
-   }
-  },
   "detection_type_set": {
    "access": "rw",
    "control": "toggles",
@@ -1892,7 +1807,6 @@
    "contexts": [
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "1": 0,
@@ -1944,7 +1858,6 @@
     },
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -1968,8 +1881,14 @@
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "1": 0,
+     "2": 2,
+     "3": 1
+    },
+    "param": 6020
+   },
    "section": "notifications",
    "values": [
     0,

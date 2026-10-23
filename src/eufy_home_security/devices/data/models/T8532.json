@@ -415,9 +415,14 @@
     "5": "Human Only",
     "6": "All Motions"
    },
-   "note": "round trip does not return the written value",
    "page": "MotionDetection",
-   "read": null,
+   "read": {
+    "map": {
+     "3": 5,
+     "32771": 6
+    },
+    "param": 1298
+   },
    "section": "detection",
    "values": [
     5,
@@ -1313,7 +1318,6 @@
    "contexts": [
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -1368,7 +1372,6 @@
     },
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0
@@ -1400,8 +1403,15 @@
     "9": "Medium"
    },
    "name": "Streaming quality",
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "eyJtb2RlXzAiOnsicXVhbGl0eSI6M319": 10,
+     "eyJtb2RlXzAiOnsicXVhbGl0eSI6MH19": 0,
+     "eyJtb2RlXzAiOnsicXVhbGl0eSI6MX19": 8,
+     "eyJtb2RlXzAiOnsicXVhbGl0eSI6Mn19": 9
+    },
+    "param": 2730
+   },
    "section": "recording",
    "values": [
     0,

@@ -395,8 +395,13 @@
    "contexts": [
     {
      "entry": {
-      "note": "round trip does not return the written value",
-      "read": null,
+      "read": {
+       "map": {
+        "0": 5,
+        "2": 6
+       },
+       "param": 1252
+      },
       "write": {
        "cmd": 1252,
        "params": {

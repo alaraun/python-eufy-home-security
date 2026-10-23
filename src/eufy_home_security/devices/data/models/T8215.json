@@ -2471,7 +2471,6 @@
    "contexts": [
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -2524,7 +2523,6 @@
     },
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -2548,10 +2546,16 @@
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
-   "note": "round trip does not return the written value",
    "order": 1,
    "page": "SettingsNotification",
-   "read": null,
+   "read": {
+    "map": {
+     "1": 0,
+     "2": 2,
+     "3": 1
+    },
+    "param": 6020
+   },
    "section": "notifications",
    "values": [
     0,
@@ -3445,6 +3449,13 @@
    "contexts": [
     {
      "entry": {
+      "read": {
+       "map": {
+        "1": 1,
+        "6": 0
+       },
+       "param": 1705
+      },
       "write": {
        "cmd": 1705,
        "params": {
@@ -3480,8 +3491,13 @@
     "1": "Smart display first"
    },
    "name": "Streaming to Alexa/Google smart displays",
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "0": 1,
+     "5": 0
+    },
+    "param": 1705
+   },
    "section": "recording",
    "values": [
     0,

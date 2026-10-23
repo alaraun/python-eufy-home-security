@@ -1059,7 +1059,6 @@
    "contexts": [
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0,
@@ -1114,7 +1113,6 @@
     },
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": 0
@@ -1145,8 +1143,15 @@
     "8": "Low",
     "9": "Medium"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "eyJtb2RlXzAiOnsicXVhbGl0eSI6M319": 10,
+     "eyJtb2RlXzAiOnsicXVhbGl0eSI6MH19": 0,
+     "eyJtb2RlXzAiOnsicXVhbGl0eSI6MX19": 8,
+     "eyJtb2RlXzAiOnsicXVhbGl0eSI6Mn19": 9
+    },
+    "param": 2730
+   },
    "section": "recording",
    "values": [
     0,

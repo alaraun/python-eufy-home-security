@@ -2114,6 +2114,13 @@
    "contexts": [
     {
      "entry": {
+      "read": {
+       "map": {
+        "1": 1,
+        "6": 0
+       },
+       "param": 1705
+      },
       "write": {
        "cmd": 1705,
        "params": {
@@ -2148,8 +2155,13 @@
     "0": "Smartphone first",
     "1": "Smart display first"
    },
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "0": 1,
+     "5": 0
+    },
+    "param": 1705
+   },
    "section": "recording",
    "values": [
     0,

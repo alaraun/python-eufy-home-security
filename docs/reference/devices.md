@@ -332,7 +332,7 @@ Settings: rw 30 / ro 62, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-e
 | preset action default_preset_positions | verified | live default change (6242) with a preset read-back and restore, T8170 Battery SoloCam, standalone, fw 3.3.5.4 |
 | preset action get_preset_position_pic | verified | live slot picture read (6097), decoded to the slot's JPEG, T8170 Battery SoloCam, standalone, fw 3.3.5.4 |
 
-Settings: rw 41 / ro 104, see [Settings of T8170 Battery SoloCam (T8170)](#settings-of-t8170-battery-solocam-t8170)
+Settings: rw 40 / ro 104, see [Settings of T8170 Battery SoloCam (T8170)](#settings-of-t8170-battery-solocam-t8170)
 
 | parameter | id |
 |---|---|
@@ -2866,7 +2866,7 @@ rw 38 / ro 84
 
 ### Settings of T8111 Camera
 
-rw 25 / ro 58
+rw 24 / ro 58
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2900,7 +2900,6 @@ rw 25 / ro 58
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
-| `detection_sensitivity_test_mode` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_type_set` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
 | `device_ability_data` | other | - | - | no | - | - |
 | `device_charging_mode` | other | - | - | no | - | - |
@@ -5365,7 +5364,7 @@ rw 40 / ro 87
 
 ### Settings of T8170 Battery SoloCam (T8170)
 
-rw 41 / ro 104
+rw 40 / ro 104
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5405,7 +5404,6 @@ rw 41 / ro 104
 | `cloud_storage_support_trail` | string | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
-| `detection_sensitivity_test_mode` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_type_set` | flags | any of 1, 2, 4 | - | yes | toggles | 1=Human, 2=Vehicle, 4=All Other Motions |
 | `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
 | `detection_type_set__v2` | flags | any of 0, 1, 2, 3, 4, 7 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle Detection, 3=Vehicle Detection, 4=All Other Motions, 7=Vehicle Recognition |
@@ -5517,7 +5515,7 @@ rw 41 / ro 104
 
 ### Settings of T8171 Battery Solo Cam 8171
 
-rw 36 / ro 102
+rw 35 / ro 102
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5556,7 +5554,6 @@ rw 36 / ro 102
 | `cloud_storage_support_trail` | string | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
-| `detection_sensitivity_test_mode` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_type_set` | flags | any of 1, 2, 4 | - | yes | toggles | 1=Human, 2=Vehicle, 4=All Other Motions |
 | `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
 | `device_ability_data` | other | - | - | no | - | - |
@@ -5836,7 +5833,7 @@ rw 51 / ro 116
 
 ### Settings of T8173 Battery Solo Cam 8173
 
-rw 38 / ro 98
+rw 37 / ro 98
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5874,7 +5871,6 @@ rw 38 / ro 98
 | `cloud_storage_support_trail` | string | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
-| `detection_sensitivity_test_mode` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_type_set` | flags | any of 1, 2, 4 | - | yes | toggles | 1=Human, 2=Vehicle, 4=All Other Motions |
 | `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
 | `device_ability_data` | other | - | - | no | - | - |
