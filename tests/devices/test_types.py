@@ -4,6 +4,8 @@ from typing import Final
 
 import pytest
 
+from eufy_home_security.devices._live_open_data import LIVE_OPEN
+from eufy_home_security.devices.app_models import APP_MODELS
 from eufy_home_security.devices.model_settings import bundled_codes
 from eufy_home_security.devices.support import Support
 from eufy_home_security.devices.types import (
@@ -15,6 +17,7 @@ from eufy_home_security.devices.types import (
     model_for_serial,
     serial_prefix,
 )
+from eufy_home_security.testing import SYNTHETIC
 
 
 def test_registry_keys_match_models() -> None:
@@ -103,8 +106,81 @@ def test_the_apps_models_are_catalogued(
     assert found.evidence.source.startswith("eufy app 6.1.10 model list: ")
 
 
-def test_a_prefix_the_app_names_as_two_kinds_is_not_catalogued() -> None:
-    assert "T8215" not in MODELS  # a battery doorbell and a battery SoloCam constant
+def _serial(prefix: str) -> str:
+    return prefix + SYNTHETIC.camera_sn[5:]
+
+
+@pytest.mark.parametrize(
+    ("prefix", "kind", "categories"),
+    [
+        ("T8162", DeviceKind.CAMERA, ("BatteryCamera", "Camera")),
+        ("T8144", DeviceKind.CAMERA, ("BatteryCamera", "Camera")),
+        ("T8215", DeviceKind.DOORBELL, ("VideoDoorbell", "Camera")),
+        ("T8452", DeviceKind.CAMERA, ("GarageCamera", "Camera")),
+        ("T8453", DeviceKind.CAMERA, ("GarageCamera", "Camera")),
+        ("T8532", DeviceKind.LOCK, ("VideoSmartLock", "Camera")),
+        ("T85M0", DeviceKind.LOCK, ("VideoSmartLock", "Camera")),
+        ("T85M1", DeviceKind.LOCK, ("VideoSmartLock", "Camera")),
+        ("T87A0", DeviceKind.OTHER, ()),
+    ],
+)
+def test_a_model_takes_its_kind_from_the_apps_product_category(
+    prefix: str, kind: DeviceKind, categories: tuple[str, ...]
+) -> None:
+    found = model_for_serial(_serial(prefix))
+    assert found is not None
+    assert (found.model, found.kind, found.categories) == (prefix, kind, categories)
+    assert found.evidence.support is Support.DECLARED
+
+
+def test_a_model_without_a_constant_is_named_by_its_device_type_or_its_code() -> None:
+    assert (MODELS["T8162"].name, MODELS["T8162"].cloud_device_type) == ("Camera 3 Pro", 26)
+    assert (
+        MODELS["T8162"].evidence.source
+        == "eufy app 6.1.10 model list: CAMERA3_PRO; device-type map (26)"
+    )
+    assert MODELS["T8452"].name == "T8452"
+    assert MODELS["T8452"].evidence.source == "eufy app 6.1.10 model list; device-type map (132)"
+    assert MODELS["T87A0"].evidence.note == "no app product category or constant"
+
+
+def test_the_evidence_names_the_category_or_the_name_rule() -> None:
+    assert MODELS["T8217"].evidence.note == "app product category: VideoDoorbell > Camera"
+    assert MODELS["T8020"].evidence.note == (
+        "no app product category; kind read from the constant's name"
+    )
+
+
+@pytest.mark.parametrize(
+    ("model", "kind"),
+    [
+        ("T8217", DeviceKind.DOORBELL),  # the app's battery doorbell, a SoloCam by name
+        ("T8352", DeviceKind.CAMERA),
+        ("T8354", DeviceKind.CAMERA),
+        ("T8790", DeviceKind.CAMERA),
+        ("T8960", DeviceKind.KEYPAD),  # filed under the generic sensor category
+        ("T8970", DeviceKind.OTHER),  # a siren sensor
+        ("T8020", DeviceKind.STATION),  # under no category: kind by name
+    ],
+)
+def test_the_apps_category_decides_where_it_differs_from_the_name(
+    model: str, kind: DeviceKind
+) -> None:
+    assert MODELS[model].kind is kind
+
+
+def test_a_hand_written_entry_carries_the_apps_categories_and_kind() -> None:
+    generated = {row[0]: row for row in APP_MODELS}
+    hand = [m for m in MODELS.values() if not m.evidence.source.startswith("eufy app 6.1.10")]
+    assert {m.model for m in hand} >= {"T8030", "T8160", "T8410"}
+    for model in hand:
+        _prefix, _constant, kind, _type, categories = generated[model.model]
+        assert (model.kind, model.categories) == (DeviceKind(kind), categories)
+
+
+def test_every_bundled_or_live_open_product_is_catalogued() -> None:
+    codes = set(bundled_codes()) | set(LIVE_OPEN)
+    assert {code for code in codes if model_for_serial(_serial(code[:5])) is None} == set()
 
 
 def test_a_hand_written_entry_wins_over_the_generated_one() -> None:

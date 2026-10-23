@@ -12,167 +12,223 @@ Support legend (models, capabilities and guard modes):
 
 | model | name | kind | cloud device_type | support | source |
 |---|---|---|---|---|---|
-| T6010 | Station 6010 | station | 108 | declared | eufy app 6.1.10 model list: STATION_6010; device-type map (108) (kind read from the constant's name) |
-| T6060 | Baby Mom Device Breast Pump 2 | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_2 (kind read from the constant's name) |
-| T7000 | Station T7000 | station |  | declared | eufy app 6.1.10 model list: STATION_T7000 (kind read from the constant's name) |
-| T7200 | Dogcam | camera |  | declared | eufy app 6.1.10 model list: DOGCAM (kind read from the constant's name) |
-| T7203 | Dogcam Low | camera |  | declared | eufy app 6.1.10 model list: DOGCAM_LOW (kind read from the constant's name) |
-| T7400 | Smart Safe 7400 | other |  | declared | eufy app 6.1.10 model list: SMART_SAFE_7400 (kind read from the constant's name) |
-| T7401 | Smart Safe 7401 | other | 141 | declared | eufy app 6.1.10 model list: SMART_SAFE_7401; device-type map (141) (kind read from the constant's name) |
-| T7402 | Smart Safe 7402 | other |  | declared | eufy app 6.1.10 model list: SMART_SAFE_7402 (kind read from the constant's name) |
-| T7403 | Smart Safe 7403 | other |  | declared | eufy app 6.1.10 model list: SMART_SAFE_7403 (kind read from the constant's name) |
-| T8001 | Station | station | 0 | declared | eufy app 6.1.10 model list: STATION; device-type map (0) (kind read from the constant's name) |
+| T1206 | T1206 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
+| T2801 | T2801 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T280B | T280B | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T2880 | T2880 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T600P | T600P | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T6010 | Station 6010 | station | 108 | declared | eufy app 6.1.10 model list: STATION_6010; device-type map (108) (no app product category; kind read from the constant's name) |
+| T6060 | Baby Mom Device Breast Pump 2 | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_2 (no app product category; kind read from the constant's name) |
+| T6310 | T6310 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T6311 | T6311 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T7000 | Station T7000 | station |  | declared | eufy app 6.1.10 model list: STATION_T7000 (app product category: HomeBase) |
+| T7100 | T7100 | camera |  | declared | eufy app 6.1.10 model list (app product category: Camera) |
+| T7200 | Dogcam | camera |  | declared | eufy app 6.1.10 model list: DOGCAM (app product category: PetCamera > Camera) |
+| T7203 | Dogcam Low | camera |  | declared | eufy app 6.1.10 model list: DOGCAM_LOW (app product category: PetCamera > Camera) |
+| T7260 | T7260 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T7400 | Smart Safe 7400 | other |  | declared | eufy app 6.1.10 model list: SMART_SAFE_7400 (app product category: SmartSafe) |
+| T7401 | Smart Safe 7401 | other | 141 | declared | eufy app 6.1.10 model list: SMART_SAFE_7401; device-type map (141) (app product category: SmartSafe) |
+| T7402 | Smart Safe 7402 | other |  | declared | eufy app 6.1.10 model list: SMART_SAFE_7402 (no app product category; kind read from the constant's name) |
+| T7403 | Smart Safe 7403 | other |  | declared | eufy app 6.1.10 model list: SMART_SAFE_7403 (no app product category; kind read from the constant's name) |
+| T7901 | T7901 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8001 | Station | station | 0 | declared | eufy app 6.1.10 model list: STATION; device-type map (0) (app product category: HomeBase) |
 | T8002 | HomeBase 1 | station | 0 | declared | eufy app model list: STATION_AI; eufy app device-type map (0) (the eufy app constant calls this prefix STATION_AI) |
 | T8010 | HomeBase 2 | station | 0 | declared | eufy app model list: STATION_2; eufy app device-type map (0) (the map files T8001/T8002/T8010/T8020 under one shared type 0) |
-| T8020 | Station S | station | 0 | declared | eufy app 6.1.10 model list: STATION_S; device-type map (0) (kind read from the constant's name) |
-| T8021 | Station 8021 | station |  | declared | eufy app 6.1.10 model list: STATION_8021 (kind read from the constant's name) |
-| T8023 | Station 8023 | station |  | declared | eufy app 6.1.10 model list: STATION_8023 (kind read from the constant's name) |
-| T8024 | Station 8024 | station |  | declared | eufy app 6.1.10 model list: STATION_8024 (kind read from the constant's name) |
-| T8025 | Station 8025 | station |  | declared | eufy app 6.1.10 model list: STATION_8025 (kind read from the constant's name) |
-| T8026 | Station 8026 | station | 600 | declared | eufy app 6.1.10 model list: STATION_8026; device-type map (600) (kind read from the constant's name) |
+| T8011 | T8011 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8012 | T8012 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8020 | Station S | station | 0 | declared | eufy app 6.1.10 model list: STATION_S; device-type map (0) (no app product category; kind read from the constant's name) |
+| T8021 | Station 8021 | station |  | declared | eufy app 6.1.10 model list: STATION_8021 (no app product category; kind read from the constant's name) |
+| T8023 | Station 8023 | station |  | declared | eufy app 6.1.10 model list: STATION_8023 (no app product category; kind read from the constant's name) |
+| T8024 | Station 8024 | station |  | declared | eufy app 6.1.10 model list: STATION_8024 (app product category: HomeBase) |
+| T8025 | Station 8025 | station |  | declared | eufy app 6.1.10 model list: STATION_8025 (app product category: HomeBase) |
+| T8026 | Station 8026 | station | 600 | declared | eufy app 6.1.10 model list: STATION_8026; device-type map (600) (no app product category; kind read from the constant's name) |
+| T8028 | Doorbell Chime 8028 | other | 601 | declared | eufy app 6.1.10 model list: DOORBELL_CHIME_8028; device-type map (601) (no app product category; kind read from the constant's name) |
 | T8030 | HomeBase 3 (S380) | station | 18 | verified | live P2P sessions, HomeBase 3 fw 3.8.6.0 and 3.8.7.4 (device_type 18 is from the cloud device list; event-push and event-database records for the same station carry device_type 43) |
-| T8040 | Station 4 | station |  | declared | eufy app 6.1.10 model list: STATION_4 (kind read from the constant's name) |
-| T8101 | Camera 101 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_101 (kind read from the constant's name) |
-| T8102 | Camera E 102 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_E_102 (kind read from the constant's name) |
-| T8110 | Battery Solo Cam 8110 | camera | 10035 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8110; device-type map (10035) (kind read from the constant's name) |
-| T8111 | Camera | camera | 1 | declared | eufy app 6.1.10 model list: CAMERA; device-type map (1) (kind read from the constant's name) |
-| T8112 | Camera E | camera | 1 | declared | eufy app 6.1.10 model list: CAMERA_E; device-type map (1) (kind read from the constant's name) |
-| T8113 | Camera 2C | camera | 8 | declared | eufy app 6.1.10 model list: CAMERA2C; device-type map (8) (kind read from the constant's name) |
-| T8114 | Camera 2 | camera | 9 | declared | eufy app 6.1.10 model list: CAMERA2; device-type map (9) (kind read from the constant's name) |
-| T8115 | Battery Solo Cam 8115 | camera | 10038 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8115; device-type map (10038) (kind read from the constant's name) |
-| T8122 | Battery Solo Cam Spotlight 1080 | camera | 60 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_1080; device-type map (60) (kind read from the constant's name) |
-| T8123 | Battery Solo Cam Spotlight 2K | camera | 61 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_2K; device-type map (61) (kind read from the constant's name) |
-| T8124 | Battery Solo Cam Spotlight Solar 8124 | camera | 62 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_SOLAR_8124; device-type map (62) (kind read from the constant's name) |
-| T8130 | Battery Solo Cam 8130 | camera | 32 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8130; device-type map (32) (kind read from the constant's name) |
-| T8131 | Battery Solo Cam Pro | camera | 33 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_PRO; device-type map (33) (kind read from the constant's name) |
-| T8134 | Battery Solo Cam 8134 | camera | 63 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8134; device-type map (63) (kind read from the constant's name) |
-| T8140 | Camera 2 Pro | camera | 14 | declared | eufy app 6.1.10 model list: CAMERA2_PRO; device-type map (14) (kind read from the constant's name) |
-| T8142 | Camera 2C Pro | camera | 15 | declared | eufy app 6.1.10 model list: CAMERA2C_PRO; device-type map (15) (kind read from the constant's name) |
-| T814X | Battery Solo Cam 814X | camera | 10037 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_814X; device-type map (10037) (kind read from the constant's name) |
-| T8150 | Cam 4G | camera |  | declared | eufy app 6.1.10 model list: CAM_4G (kind read from the constant's name) |
-| T8151 | Cam 4G EU | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_EU (kind read from the constant's name) |
-| T8152 | Cam 4G AUS | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_AUS (kind read from the constant's name) |
-| T8153 | Cam 4G TMO | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_TMO (kind read from the constant's name) |
+| T8040 | Station 4 | station |  | declared | eufy app 6.1.10 model list: STATION_4 (app product category: HomeBase) |
+| T8101 | Camera 101 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_101 (no app product category; kind read from the constant's name) |
+| T8102 | Camera E 102 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_E_102 (no app product category; kind read from the constant's name) |
+| T8110 | Battery Solo Cam 8110 | camera | 10035 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8110; device-type map (10035) (app product category: BatteryCamera > Camera) |
+| T8111 | Camera | camera | 1 | declared | eufy app 6.1.10 model list: CAMERA; device-type map (1) (app product category: BatteryCamera > Camera) |
+| T8112 | Camera E | camera | 1 | declared | eufy app 6.1.10 model list: CAMERA_E; device-type map (1) (app product category: BatteryCamera > Camera) |
+| T8113 | Camera 2C | camera | 8 | declared | eufy app 6.1.10 model list: CAMERA2C; device-type map (8) (app product category: BatteryCamera > Camera) |
+| T8114 | Camera 2 | camera | 9 | declared | eufy app 6.1.10 model list: CAMERA2; device-type map (9) (app product category: BatteryCamera > Camera) |
+| T8115 | Battery Solo Cam 8115 | camera | 10038 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8115; device-type map (10038) (app product category: BatteryCamera > Camera) |
+| T8119 | Battery Solo C 33 | camera | 10033 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_C33; device-type map (10033) (app product category: BatteryCamera > Camera) |
+| T8122 | Battery Solo Cam Spotlight 1080 | camera | 60 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_1080; device-type map (60) (app product category: BatteryCamera > Camera) |
+| T8123 | Battery Solo Cam Spotlight 2K | camera | 61 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_2K; device-type map (61) (app product category: BatteryCamera > Camera) |
+| T8124 | Battery Solo Cam Spotlight Solar 8124 | camera | 62 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_SOLAR_8124; device-type map (62) (app product category: BatteryCamera > Camera) |
+| T8126 | T8126 | camera |  | declared | eufy app 6.1.10 model list (app product category: LteCamera > BatteryCamera > Camera) |
+| T8130 | Battery Solo Cam 8130 | camera | 32 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8130; device-type map (32) (app product category: BatteryCamera > Camera) |
+| T8131 | Battery Solo Cam Pro | camera | 33 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_PRO; device-type map (33) (app product category: BatteryCamera > Camera) |
+| T8134 | Battery Solo Cam 8134 | camera | 63 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8134; device-type map (63) (app product category: BatteryCamera > Camera) |
+| T8140 | Camera 2 Pro | camera | 14 | declared | eufy app 6.1.10 model list: CAMERA2_PRO; device-type map (14) (app product category: BatteryCamera > Camera) |
+| T8142 | Camera 2C Pro | camera | 15 | declared | eufy app 6.1.10 model list: CAMERA2C_PRO; device-type map (15) (app product category: BatteryCamera > Camera) |
+| T8144 | Camera 8144 | camera | 49 | declared | eufy app 6.1.10 model list: CAMERA_8144; device-type map (49) (app product category: BatteryCamera > Camera) |
+| T814X | Battery Solo Cam 814X | camera | 10037 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_814X; device-type map (10037) (app product category: WiredCamera > Camera) |
+| T8150 | Cam 4G | camera |  | declared | eufy app 6.1.10 model list: CAM_4G (app product category: LteCamera > BatteryCamera > Camera) |
+| T8151 | Cam 4G EU | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_EU (app product category: LteCamera > BatteryCamera > Camera) |
+| T8152 | Cam 4G AUS | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_AUS (app product category: LteCamera > BatteryCamera > Camera) |
+| T8153 | Cam 4G TMO | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_TMO (app product category: LteCamera > BatteryCamera > Camera) |
 | T8160 | eufyCam 3 (S330) | camera | 19 | verified | live settings write+read-back and media on T8030 HomeBase 3, camera fw 3.4.3.0 (device_type 19 is carried by live event pushes and matches the eufy app device-type map) |
 | T8161 | eufyCam 3C | camera | 23 | declared | eufy app model list: CAMERA3C; eufy app device-type map (23) |
-| T8165 | Battery Solo Cam 8165 | camera |  | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8165 (kind read from the constant's name) |
+| T8162 | Camera 3 Pro | camera | 26 | declared | eufy app 6.1.10 model list: CAMERA3_PRO; device-type map (26) (app product category: BatteryCamera > Camera) |
+| T8165 | Battery Solo Cam 8165 | camera |  | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8165 (no app product category; kind read from the constant's name) |
 | T8170 | Battery SoloCam (T8170) | camera | 48 | declared | eufy app model list: BATTERY_SOLO_CAM_8170; eufy app device-type map (48) (a standalone camera, its own station; the cloud device list reports device_type 48 and the parameter dump labels its block 48) |
-| T8171 | Battery Solo Cam 8171 | camera | 88 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8171; device-type map (88) (kind read from the constant's name) |
-| T8172 | Battery Solo Cam 8172 | camera | 89 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8172; device-type map (89) (kind read from the constant's name) |
-| T8173 | Battery Solo Cam 8173 | camera | 98 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8173; device-type map (98) (kind read from the constant's name) |
-| T817L | Battery Solo Cam 817L | camera | 10031 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_817L; device-type map (10031) (kind read from the constant's name) |
-| T8180 | Battery Solo Cam 8180 | camera | 315 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8180; device-type map (315) (kind read from the constant's name) |
-| T81A0 | Walllight T81A0 | camera | 10005 | declared | eufy app 6.1.10 model list: WALLLIGHT_T81A0; device-type map (10005) (kind read from the constant's name) |
-| T8200 | Doorbell 2K | doorbell | 5 | declared | eufy app 6.1.10 model list: DOORBELL_2K; device-type map (5) (kind read from the constant's name) |
-| T8201 | Wired Doorbell 1080P | doorbell | 5 | declared | eufy app 6.1.10 model list: WIRED_DOORBELL_1080P; device-type map (5) (kind read from the constant's name) |
-| T8202 | Wired Doorbell 8202 | doorbell | 5 | declared | eufy app 6.1.10 model list: WIRED_DOORBELL_8202; device-type map (5) (kind read from the constant's name) |
-| T8203 | Battery Doorbell 8203 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8203 (kind read from the constant's name) |
-| T8210 | Battery Doorbell 8210 | doorbell | 7 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8210; device-type map (7) (kind read from the constant's name) |
-| T8212 | Battery Doorbell 8212 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8212 (kind read from the constant's name) |
-| T8213 | Battery Doorbell 8213 | doorbell | 91 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8213; device-type map (91) (kind read from the constant's name) |
-| T8214 | Battery Doorbell T8214 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_T8214 (kind read from the constant's name) |
-| T8217 | Battery Solo Cam 8217 | camera | 312 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8217; device-type map (312) (kind read from the constant's name) |
-| T8220 | Battery Doorbell 8220 | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8220; device-type map (16) (kind read from the constant's name) |
-| T8221 | Battery Doorbell 8221 | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8221; device-type map (16) (kind read from the constant's name) |
-| T8222 | Battery Doorbell 8222 | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8222; device-type map (16) (kind read from the constant's name) |
-| T8223 | Battery Doorbell 8223 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8223 (kind read from the constant's name) |
-| T8224 | Battery Doorbell 8224 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8224 (kind read from the constant's name) |
-| T8340 | Babycare Sock | other |  | declared | eufy app 6.1.10 model list: BABYCARE_SOCK (kind read from the constant's name) |
-| T8350 | Babycare Monitor | other |  | declared | eufy app 6.1.10 model list: BABYCARE_MONITOR (kind read from the constant's name) |
-| T8351 | Babycare Monitor No Screen | other |  | declared | eufy app 6.1.10 model list: BABYCARE_MONITOR_NO_SCREEN (kind read from the constant's name) |
-| T8352 | Babycare 8352 | other |  | declared | eufy app 6.1.10 model list: BABYCARE_8352 (kind read from the constant's name) |
-| T8353 | Babycare 8353 | other |  | declared | eufy app 6.1.10 model list: BABYCARE_8353 (kind read from the constant's name) |
-| T8354 | Babycare 8354 | other |  | declared | eufy app 6.1.10 model list: BABYCARE_8354 (kind read from the constant's name) |
-| T8360 | Babycare Camera | camera |  | declared | eufy app 6.1.10 model list: BABYCARE_CAMERA (kind read from the constant's name) |
-| T8400 | Indoor Camera | camera | 30 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA; device-type map (30) (kind read from the constant's name) |
-| T8401 | Indoor Camera 1080 | camera | 34 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_1080; device-type map (34) (kind read from the constant's name) |
-| T8404 | Camera 8404 | camera | 314 | declared | eufy app 6.1.10 model list: CAMERA_8404; device-type map (314) (kind read from the constant's name) |
+| T8171 | Battery Solo Cam 8171 | camera | 88 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8171; device-type map (88) (app product category: BatteryCamera > Camera) |
+| T8172 | Battery Solo Cam 8172 | camera | 89 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8172; device-type map (89) (app product category: BatteryCamera > Camera) |
+| T8173 | Battery Solo Cam 8173 | camera | 98 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8173; device-type map (98) (app product category: BatteryCamera > Camera) |
+| T8174 | Solo Camera 8174 | camera | 316 | declared | eufy app 6.1.10 model list: SOLO_CAMERA_8174; device-type map (316) (app product category: BatteryCamera > Camera) |
+| T817L | Battery Solo Cam 817L | camera | 10031 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_817L; device-type map (10031) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8180 | Battery Solo Cam 8180 | camera | 315 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8180; device-type map (315) (app product category: BatteryCamera > Camera) |
+| T81A0 | Walllight T81A0 | camera | 10005 | declared | eufy app 6.1.10 model list: WALLLIGHT_T81A0; device-type map (10005) (app product category: WallLightCamera > Camera) |
+| T8200 | Doorbell 2K | doorbell | 5 | declared | eufy app 6.1.10 model list: DOORBELL_2K; device-type map (5) (app product category: VideoDoorbell > Camera) |
+| T8201 | Wired Doorbell 1080P | doorbell | 5 | declared | eufy app 6.1.10 model list: WIRED_DOORBELL_1080P; device-type map (5) (app product category: VideoDoorbell > Camera) |
+| T8202 | Wired Doorbell 8202 | doorbell | 5 | declared | eufy app 6.1.10 model list: WIRED_DOORBELL_8202; device-type map (5) (app product category: VideoDoorbell > Camera) |
+| T8203 | Battery Doorbell 8203 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8203 (app product category: VideoDoorbell > Camera) |
+| T8210 | Battery Doorbell 8210 | doorbell | 7 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8210; device-type map (7) (app product category: VideoDoorbell > Camera) |
+| T8212 | Battery Doorbell 8212 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8212 (no app product category; kind read from the constant's name) |
+| T8213 | Battery Doorbell 8213 | doorbell | 91 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8213; device-type map (91) (app product category: VideoDoorbell > Camera) |
+| T8214 | Battery Doorbell T8214 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_T8214 (app product category: VideoDoorbell > Camera) |
+| T8215 | Battery Doorbell T8215 | doorbell | 97 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_T8215; device-type map (97) (app product category: VideoDoorbell > Camera) |
+| T8217 | Battery Doorbell Solo 8217 | doorbell | 312 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_SOLO_8217; device-type map (312) (app product category: VideoDoorbell > Camera) |
+| T8220 | Battery Doorbell 8220 | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8220; device-type map (16) (app product category: VideoDoorbell > Camera) |
+| T8221 | Battery Doorbell 8221 | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8221; device-type map (16) (app product category: VideoDoorbell > Camera) |
+| T8222 | Battery Doorbell 8222 | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8222; device-type map (16) (app product category: VideoDoorbell > Camera) |
+| T8223 | Battery Doorbell 8223 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8223 (app product category: VideoDoorbell > Camera) |
+| T8224 | Battery Doorbell 8224 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8224 (app product category: VideoDoorbell > Camera) |
+| T82B0 | T82B0 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8340 | Babycare Sock | other |  | declared | eufy app 6.1.10 model list: BABYCARE_SOCK (app product category: BabySock) |
+| T8350 | Babycare Monitor | other |  | declared | eufy app 6.1.10 model list: BABYCARE_MONITOR (no app product category; kind read from the constant's name) |
+| T8351 | Babycare Monitor No Screen | other |  | declared | eufy app 6.1.10 model list: BABYCARE_MONITOR_NO_SCREEN (app product category: BabySock) |
+| T8352 | Babycare 8352 | camera |  | declared | eufy app 6.1.10 model list: BABYCARE_8352 (app product category: BabyCamera > Camera) |
+| T8353 | Babycare 8353 | other |  | declared | eufy app 6.1.10 model list: BABYCARE_8353 (no app product category; kind read from the constant's name) |
+| T8354 | Babycare 8354 | camera |  | declared | eufy app 6.1.10 model list: BABYCARE_8354 (app product category: BabyCamera > Camera) |
+| T8360 | Babycare Camera | camera |  | declared | eufy app 6.1.10 model list: BABYCARE_CAMERA (app product category: BabyCamera > Camera) |
+| T8400 | Indoor Camera | camera | 30 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA; device-type map (30) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8401 | Indoor Camera 1080 | camera | 34 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_1080; device-type map (34) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8404 | Camera 8404 | camera | 314 | declared | eufy app 6.1.10 model list: CAMERA_8404; device-type map (314) (app product category: IndoorCamera > WiredCamera > Camera) |
 | T8410 | Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24) | camera | 31 | declared | eufy app model list: INDOOR_CAMERA_PT; eufy app device-type map (31) (a standalone camera, its own station; a serial with '5' at index 6 is the app's separate product T8410C, with its own thing description and handler) |
-| T8411 | Indoor Camera PT 1080 | camera | 35 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_PT_1080; device-type map (35) (kind read from the constant's name) |
-| T8414 | Indoor Camera Costdown T8414 | camera | 100 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_COSTDOWN_T8414; device-type map (100) (kind read from the constant's name) |
-| T8416 | Indoor Camera 8416 | camera | 104 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8416; device-type map (104) (kind read from the constant's name) |
-| T8417 | Indoor Camera 8417 | camera | 105 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8417; device-type map (105) (kind read from the constant's name) |
-| T8419 | Indoor Camera T8419 | camera | 10009 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_T8419; device-type map (10009) (kind read from the constant's name) |
-| T8420 | Floodlight | camera | 3 | declared | eufy app 6.1.10 model list: FLOODLIGHT; device-type map (3) (kind read from the constant's name) |
-| T8422 | Floodlight E 2K | camera | 37 | declared | eufy app 6.1.10 model list: FLOODLIGHT_E_2K; device-type map (37) (kind read from the constant's name) |
-| T8423 | Floodlight 2 | camera | 38 | declared | eufy app 6.1.10 model list: FLOODLIGHT2; device-type map (38) (kind read from the constant's name) |
-| T8424 | Floodlight Cam 2K | camera | 39 | declared | eufy app 6.1.10 model list: FLOODLIGHT_CAM_2K; device-type map (39) (kind read from the constant's name) |
-| T8425 | Floodlight 8425 | camera | 47 | declared | eufy app 6.1.10 model list: FLOODLIGHT_8425; device-type map (47) (kind read from the constant's name) |
-| T8426 | Floodlight 8426 | camera | 87 | declared | eufy app 6.1.10 model list: FLOODLIGHT_8426; device-type map (87) (kind read from the constant's name) |
-| T8440 | Indoor Outdoor Camera 1080P No Light | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_1080P_NO_LIGHT (kind read from the constant's name) |
-| T8441 | Indoor Outdoor Camera 2K | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_2K (kind read from the constant's name) |
-| T8442 | Indoor Outdoor Camera 1080P | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_1080P (kind read from the constant's name) |
-| T84A1 | Walllight T84A1 | camera | 151 | declared | eufy app 6.1.10 model list: WALLLIGHT_T84A1; device-type map (151) (kind read from the constant's name) |
-| T8500 | BLE Lock No Finger | lock | 52 | declared | eufy app 6.1.10 model list: BLE_LOCK_NO_FINGER; device-type map (52) (kind read from the constant's name) |
-| T8501 | Wifi Lock No Finger | lock | 53 | declared | eufy app 6.1.10 model list: WIFI_LOCK_NO_FINGER; device-type map (53) (kind read from the constant's name) |
-| T8502 | Lock 8502 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8502 (kind read from the constant's name) |
-| T8503 | Lock 8503 | lock | 54 | declared | eufy app 6.1.10 model list: LOCK_8503; device-type map (54) (kind read from the constant's name) |
-| T8504 | Lock 8504 | lock | 58 | declared | eufy app 6.1.10 model list: LOCK_8504; device-type map (58) (kind read from the constant's name) |
-| T8506 | Lock 8506 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8506 (kind read from the constant's name) |
-| T8510 | BLE Lock | lock | 50 | declared | eufy app 6.1.10 model list: BLE_LOCK; device-type map (50) (kind read from the constant's name) |
-| T8520 | Wifi Lock | lock | 51 | declared | eufy app 6.1.10 model list: WIFI_LOCK; device-type map (51) (kind read from the constant's name) |
-| T8530 | Lock 8530 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8530 (kind read from the constant's name) |
-| T8531 | Lock 8531 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8531 (kind read from the constant's name) |
-| T8592 | Keypad 8592 | keypad |  | declared | eufy app 6.1.10 model list: KEYPAD_8592 (kind read from the constant's name) |
-| T85A3 | Keypad 85A3 | keypad |  | declared | eufy app 6.1.10 model list: KEYPAD_85A3 (kind read from the constant's name) |
-| T85A4 | Keypad 85A4 | keypad |  | declared | eufy app 6.1.10 model list: KEYPAD_85A4 (kind read from the constant's name) |
-| T85D0 | Lock 85D0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85D0 (kind read from the constant's name) |
-| T85D2 | Lock 85D2 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85D2 (kind read from the constant's name) |
-| T85F0 | Lock 85F0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85F0 (kind read from the constant's name) |
-| T85F1 | Lock 85F1 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85F1 (kind read from the constant's name) |
-| T85L0 | Lock 85L0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85L0 (kind read from the constant's name) |
-| T85P0 | Lock 85P0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85P0 (kind read from the constant's name) |
-| T85P1 | Lock 85P1 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85P1 (kind read from the constant's name) |
-| T85V0 | Lock 85V0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85V0 (kind read from the constant's name) |
-| T8600 | Camera 8600 | camera | 24 | declared | eufy app 6.1.10 model list: CAMERA_8600; device-type map (24) (kind read from the constant's name) |
-| T86C1 | Camera 86C1 | camera | 298 | declared | eufy app 6.1.10 model list: CAMERA_86C1; device-type map (298) (kind read from the constant's name) |
-| T86P2 | Cam 4G PT | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_PT (kind read from the constant's name) |
-| T870G | Sensor 870G | sensor |  | declared | eufy app 6.1.10 model list: SENSOR_870G (kind read from the constant's name) |
-| T8740 | Chime 433 | other |  | declared | eufy app 6.1.10 model list: CHIME_433 (kind read from the constant's name) |
-| T8790 | Box SPB | other |  | declared | eufy app 6.1.10 model list: BOX_SPB (kind read from the constant's name) |
-| T87B0 | Tracker 87B0 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B0 (kind read from the constant's name) |
-| T87B1 | Tracker 87B1 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B1 (kind read from the constant's name) |
-| T87B2 | Tracker 87B2 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B2 (kind read from the constant's name) |
-| T87B3 | Tracker 87B3 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B3 (kind read from the constant's name) |
-| T87B4 | Tracker 87B4 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B4 (kind read from the constant's name) |
-| T87B5 | Tracker 87B5 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B5 (kind read from the constant's name) |
-| T87C0 | Baby Mom Breast Pump Charging Chamber | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_BREAST_PUMP_CHARGING_CHAMBER (kind read from the constant's name) |
-| T8900 | Entry Sensor | sensor | 2 | declared | eufy app 6.1.10 model list: ENTRY_SENSOR; device-type map (2) (kind read from the constant's name) |
+| T8411 | Indoor Camera PT 1080 | camera | 35 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_PT_1080; device-type map (35) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8414 | Indoor Camera Costdown T8414 | camera | 100 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_COSTDOWN_T8414; device-type map (100) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8416 | Indoor Camera 8416 | camera | 104 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8416; device-type map (104) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8417 | Indoor Camera 8417 | camera | 105 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8417; device-type map (105) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8419 | Indoor Camera T8419 | camera | 10009 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_T8419; device-type map (10009) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8420 | Floodlight | camera | 3 | declared | eufy app 6.1.10 model list: FLOODLIGHT; device-type map (3) (app product category: FloodlightCamera > Camera) |
+| T8421 | T8421 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8422 | Floodlight E 2K | camera | 37 | declared | eufy app 6.1.10 model list: FLOODLIGHT_E_2K; device-type map (37) (app product category: FloodlightCamera > Camera) |
+| T8423 | Floodlight 2 | camera | 38 | declared | eufy app 6.1.10 model list: FLOODLIGHT2; device-type map (38) (app product category: FloodlightCamera > Camera) |
+| T8424 | Floodlight Cam 2K | camera | 39 | declared | eufy app 6.1.10 model list: FLOODLIGHT_CAM_2K; device-type map (39) (app product category: FloodlightCamera > Camera) |
+| T8425 | Floodlight 8425 | camera | 47 | declared | eufy app 6.1.10 model list: FLOODLIGHT_8425; device-type map (47) (app product category: FloodlightCamera > Camera) |
+| T8426 | Floodlight 8426 | camera | 87 | declared | eufy app 6.1.10 model list: FLOODLIGHT_8426; device-type map (87) (app product category: FloodlightCamera > Camera) |
+| T8440 | Indoor Outdoor Camera 1080P No Light | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_1080P_NO_LIGHT (app product category: WiredCamera > Camera) |
+| T8441 | Indoor Outdoor Camera 2K | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_2K (app product category: WiredCamera > Camera) |
+| T8442 | Indoor Outdoor Camera 1080P | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_1080P (app product category: WiredCamera > Camera) |
+| T8450 | T8450 | camera |  | declared | eufy app 6.1.10 model list (app product category: GarageCamera > Camera) |
+| T8451 | T8451 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8452 | T8452 | camera | 132 | declared | eufy app 6.1.10 model list; device-type map (132) (app product category: GarageCamera > Camera) |
+| T8453 | T8453 | camera | 133 | declared | eufy app 6.1.10 model list; device-type map (133) (app product category: GarageCamera > Camera) |
+| T8480 | T8480 | camera |  | declared | eufy app 6.1.10 model list (app product category: BatteryCamera > Camera) |
+| T84A0 | T84A0 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T84A1 | Walllight T84A1 | camera | 151 | declared | eufy app 6.1.10 model list: WALLLIGHT_T84A1; device-type map (151) (app product category: WallLightCamera > Camera) |
+| T84B1 | T84B1 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8500 | BLE Lock No Finger | lock | 52 | declared | eufy app 6.1.10 model list: BLE_LOCK_NO_FINGER; device-type map (52) (app product category: SmartLock) |
+| T8501 | Wifi Lock No Finger | lock | 53 | declared | eufy app 6.1.10 model list: WIFI_LOCK_NO_FINGER; device-type map (53) (app product category: SmartLock) |
+| T8502 | Lock 8502 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8502 (app product category: SmartLock) |
+| T8503 | Lock 8503 | lock | 54 | declared | eufy app 6.1.10 model list: LOCK_8503; device-type map (54) (app product category: SmartLock) |
+| T8504 | Lock 8504 | lock | 58 | declared | eufy app 6.1.10 model list: LOCK_8504; device-type map (58) (app product category: SmartLock) |
+| T8506 | Lock 8506 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8506 (app product category: SmartLock) |
+| T8510 | BLE Lock | lock | 50 | declared | eufy app 6.1.10 model list: BLE_LOCK; device-type map (50) (app product category: SmartLock) |
+| T8520 | Wifi Lock | lock | 51 | declared | eufy app 6.1.10 model list: WIFI_LOCK; device-type map (51) (app product category: SmartLock) |
+| T8522 | T8522 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8530 | Lock 8530 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8530 (app product category: VideoSmartLock > Camera) |
+| T8531 | Lock 8531 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8531 (app product category: VideoSmartLock > Camera) |
+| T8532 | T8532 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
+| T853A | T853A | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
+| T8592 | Keypad 8592 | keypad |  | declared | eufy app 6.1.10 model list: KEYPAD_8592 (no app product category; kind read from the constant's name) |
+| T85A3 | Keypad 85A3 | keypad |  | declared | eufy app 6.1.10 model list: KEYPAD_85A3 (no app product category; kind read from the constant's name) |
+| T85A4 | Keypad 85A4 | keypad |  | declared | eufy app 6.1.10 model list: KEYPAD_85A4 (no app product category; kind read from the constant's name) |
+| T85B0 | T85B0 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T85D0 | Lock 85D0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85D0 (app product category: SmartLock) |
+| T85D1 | T85D1 | lock |  | declared | eufy app 6.1.10 model list (app product category: SmartLock) |
+| T85D2 | Lock 85D2 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85D2 (app product category: SmartLock) |
+| T85F0 | Lock 85F0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85F0 (app product category: SmartLock) |
+| T85F1 | Lock 85F1 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85F1 (app product category: SmartLock) |
+| T85F2 | T85F2 | lock |  | declared | eufy app 6.1.10 model list (app product category: SmartLock) |
+| T85F3 | T85F3 | lock |  | declared | eufy app 6.1.10 model list (app product category: SmartLock) |
+| T85L0 | Lock 85L0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85L0 (app product category: SmartLock) |
+| T85L1 | T85L1 | lock |  | declared | eufy app 6.1.10 model list (app product category: SmartLock) |
+| T85M0 | T85M0 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
+| T85M1 | T85M1 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
+| T85M2 | T85M2 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
+| T85P0 | Lock 85P0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85P0 (app product category: SmartLock) |
+| T85P1 | Lock 85P1 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85P1 (app product category: SmartLock) |
+| T85V0 | Lock 85V0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85V0 (app product category: VideoSmartLock > Camera) |
+| T85V1 | T85V1 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T85V2 | T85V2 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8600 | Camera 8600 | camera | 24 | declared | eufy app 6.1.10 model list: CAMERA_8600; device-type map (24) (app product category: WiredCamera > Camera) |
+| T86C0 | T86C0 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T86C1 | Camera 86C1 | camera | 298 | declared | eufy app 6.1.10 model list: CAMERA_86C1; device-type map (298) (app product category: WallLightCamera > Camera) |
+| T86P2 | Cam 4G PT | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_PT (app product category: LteCamera > BatteryCamera > Camera) |
+| T86P3 | T86P3 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T86P4 | T86P4 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T870G | Sensor 870G | sensor |  | declared | eufy app 6.1.10 model list: SENSOR_870G (app product category: Sensor) |
+| T8740 | Chime 433 | other |  | declared | eufy app 6.1.10 model list: CHIME_433 (no app product category; kind read from the constant's name) |
+| T8790 | Box SPB | camera |  | declared | eufy app 6.1.10 model list: BOX_SPB (app product category: Camera) |
+| T8791 | T8791 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T87A0 | T87A0 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T87B0 | Tracker 87B0 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B0 (app product category: SmartTracker) |
+| T87B1 | Tracker 87B1 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B1 (app product category: SmartTracker) |
+| T87B2 | Tracker 87B2 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B2 (app product category: SmartTracker) |
+| T87B3 | Tracker 87B3 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B3 (app product category: SmartTracker) |
+| T87B4 | Tracker 87B4 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B4 (app product category: SmartTracker) |
+| T87B5 | Tracker 87B5 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B5 (app product category: SmartTracker) |
+| T87C0 | Baby Mom Breast Pump Charging Chamber | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_BREAST_PUMP_CHARGING_CHAMBER (no app product category; kind read from the constant's name) |
+| T8900 | Entry Sensor | sensor | 2 | declared | eufy app 6.1.10 model list: ENTRY_SENSOR; device-type map (2) (app product category: EntrySensor > Sensor) |
 | T8910 | Motion sensor | sensor | 10 | declared | eufy app model list: MOTION_SENSOR; eufy app device-type map (10) (a T8910 paired to a HomeBase 3 reports device_type 10 in the cloud device list; its battery is in the station's parameter dump) |
-| T8920 | Water Sensor | sensor |  | declared | eufy app 6.1.10 model list: WATER_SENSOR (kind read from the constant's name) |
-| T8931 | Smoke Sensor | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR (kind read from the constant's name) |
-| T8960 | Keypad | keypad | 11 | declared | eufy app 6.1.10 model list: KEYPAD; device-type map (11) (kind read from the constant's name) |
-| T8970 | Siren Sensor | other |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR (kind read from the constant's name) |
-| T8B00 | Battery Solo Cam 8B00 | camera | 64 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8B00; device-type map (64) (kind read from the constant's name) |
-| T8D00 | Baby Mom Device Breast Pump Both | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_BOTH (kind read from the constant's name) |
-| T8D02 | Baby Mom Device Breast Pump With Heating | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_WITH_HEATING (kind read from the constant's name) |
-| T8D03 | Baby Mom Device Breast Pump | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP (kind read from the constant's name) |
-| T8D04 | Baby Mom Device Breast Pump S | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_S (kind read from the constant's name) |
-| T8E00 | Camera T8E00 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8E00 (kind read from the constant's name) |
-| T8L00 | Light 8L00 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L00 (kind read from the constant's name) |
-| T8L01 | Light 8L01 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L01 (kind read from the constant's name) |
-| T8L02 | Light 8L02 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L02 (kind read from the constant's name) |
-| T8L04 | Light 8L04 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L04 (kind read from the constant's name) |
-| T8L10 | Light 8L10 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L10 (kind read from the constant's name) |
-| T8L20 | Light 8L20 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L20 (kind read from the constant's name) |
-| T8L30 | Light 8L30 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L30 (kind read from the constant's name) |
-| T8L40 | Light 8L40 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L40 (kind read from the constant's name) |
-| T8L60 | Camera 8L60 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_8L60 (kind read from the constant's name) |
-| T8N00 | Station NVR | station |  | declared | eufy app 6.1.10 model list: STATION_NVR (kind read from the constant's name) |
-| T8P00 | Camera T8P00 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8P00 (kind read from the constant's name) |
-| T8P10 | Camera T8P10 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8P10 (kind read from the constant's name) |
-| T8W11 | Indoor Camera 8W11 | camera | 10006 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8W11; device-type map (10006) (kind read from the constant's name) |
-| T9000 | Station T9000 | station |  | declared | eufy app 6.1.10 model list: STATION_T9000 (kind read from the constant's name) |
-| T90C0 | Smoke Sensor T90C0 | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR_T90C0 (kind read from the constant's name) |
-| T90E0 | Entry Sensor T90E0 | sensor |  | declared | eufy app 6.1.10 model list: ENTRY_SENSOR_T90E0 (kind read from the constant's name) |
-| T90F0 | Water Sensor T90F0 | sensor |  | declared | eufy app 6.1.10 model list: WATER_SENSOR_T90F0 (kind read from the constant's name) |
-| T90G0 | Glass Break Sensor | sensor |  | declared | eufy app 6.1.10 model list: GLASS_BREAK_SENSOR (kind read from the constant's name) |
-| T90K0 | Keyfor Sensor T90K0 | sensor |  | declared | eufy app 6.1.10 model list: KEYFOR_SENSOR_T90K0 (kind read from the constant's name) |
-| T90M0 | Motion Sensor T90M0 | sensor |  | declared | eufy app 6.1.10 model list: MOTION_SENSOR_T90M0 (kind read from the constant's name) |
-| T90P0 | Panic Sensor T90P0 | sensor |  | declared | eufy app 6.1.10 model list: PANIC_SENSOR_T90P0 (kind read from the constant's name) |
-| T90R0 | Siren Sensor T90R0 | other |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR_T90R0 (kind read from the constant's name) |
-| T90R1 | Outdoor Siren Sensor | other |  | declared | eufy app 6.1.10 model list: OUTDOOR_SIREN_SENSOR (kind read from the constant's name) |
-| T90S0 | Smoke Sensor T90S0 | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR_T90S0 (kind read from the constant's name) |
+| T8920 | Water Sensor | sensor |  | declared | eufy app 6.1.10 model list: WATER_SENSOR (app product category: FloodSensor > Sensor) |
+| T8931 | Smoke Sensor | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR (app product category: SmokeSensor > Sensor) |
+| T8960 | Keypad | keypad | 11 | declared | eufy app 6.1.10 model list: KEYPAD; device-type map (11) (app product category: Sensor) |
+| T8970 | Siren Sensor | other |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR (app product category: SirenSensor > Sensor) |
+| T8B00 | Battery Solo Cam 8B00 | camera | 64 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8B00; device-type map (64) (app product category: BatteryCamera > Camera) |
+| T8C00 | T8C00 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8D00 | Baby Mom Device Breast Pump Both | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_BOTH (no app product category; kind read from the constant's name) |
+| T8D02 | Baby Mom Device Breast Pump With Heating | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_WITH_HEATING (app product category: BreastPump) |
+| T8D03 | Baby Mom Device Breast Pump | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP (app product category: BreastPump) |
+| T8D04 | Baby Mom Device Breast Pump S | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_S (app product category: BreastPump) |
+| T8E00 | Camera T8E00 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8E00 (app product category: Camera) |
+| T8L00 | Light 8L00 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L00 (no app product category; kind read from the constant's name) |
+| T8L01 | Light 8L01 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L01 (no app product category; kind read from the constant's name) |
+| T8L02 | Light 8L02 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L02 (no app product category; kind read from the constant's name) |
+| T8L04 | Light 8L04 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L04 (no app product category; kind read from the constant's name) |
+| T8L10 | Light 8L10 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L10 (no app product category; kind read from the constant's name) |
+| T8L20 | Light 8L20 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L20 (no app product category; kind read from the constant's name) |
+| T8L30 | Light 8L30 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L30 (no app product category; kind read from the constant's name) |
+| T8L40 | Light 8L40 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L40 (no app product category; kind read from the constant's name) |
+| T8L50 | T8L50 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T8L60 | Camera 8L60 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_8L60 (app product category: FloodlightCamera > Camera) |
+| T8N00 | Station NVR | station |  | declared | eufy app 6.1.10 model list: STATION_NVR (app product category: HomeBase) |
+| T8P00 | Camera T8P00 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8P00 (app product category: Camera) |
+| T8P10 | Camera T8P10 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8P10 (app product category: Camera) |
+| T8W11 | Indoor Camera 8W11 | camera | 10006 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8W11; device-type map (10006) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T9000 | Station T9000 | station |  | declared | eufy app 6.1.10 model list: STATION_T9000 (app product category: HomeBase) |
+| T90C0 | Smoke Sensor T90C0 | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR_T90C0 (app product category: SmokeSensor > Sensor) |
+| T90E0 | Entry Sensor T90E0 | sensor |  | declared | eufy app 6.1.10 model list: ENTRY_SENSOR_T90E0 (app product category: EntrySensor > Sensor) |
+| T90F0 | Water Sensor T90F0 | sensor |  | declared | eufy app 6.1.10 model list: WATER_SENSOR_T90F0 (app product category: FloodSensor > Sensor) |
+| T90G0 | Glass Break Sensor | sensor |  | declared | eufy app 6.1.10 model list: GLASS_BREAK_SENSOR (app product category: GlassSensor > Sensor) |
+| T90K0 | Keyfor Sensor T90K0 | sensor |  | declared | eufy app 6.1.10 model list: KEYFOR_SENSOR_T90K0 (app product category: PanicSensor > Sensor) |
+| T90M0 | Motion Sensor T90M0 | sensor |  | declared | eufy app 6.1.10 model list: MOTION_SENSOR_T90M0 (app product category: MotionSensor > Sensor) |
+| T90P0 | Panic Sensor T90P0 | sensor |  | declared | eufy app 6.1.10 model list: PANIC_SENSOR_T90P0 (app product category: PanicSensor > Sensor) |
+| T90R0 | Siren Sensor T90R0 | other |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR_T90R0 (app product category: SirenSensor > Sensor) |
+| T90R1 | Outdoor Siren Sensor | other |  | declared | eufy app 6.1.10 model list: OUTDOOR_SIREN_SENSOR (app product category: SirenSensor > Sensor) |
+| T90S0 | Smoke Sensor T90S0 | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR_T90S0 (app product category: SmokeSensor > Sensor) |
+| T9120 | T9120 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
+| T9130 | T9130 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
+| T9140 | T9140 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
+| T9146 | T9146 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
+| T9147 | T9147 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
+| T9148 | T9148 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
+| T9149 | T9149 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
+| T9150 | T9150 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
 
 Models without a profile below offer no capability (all *unknown*).
 
@@ -528,7 +584,7 @@ Restart: 1034
 | sound_alarm | unknown | - | the T8026 thing description declares no set_alarm_type |
 | working_mode | unknown | - | the T8026 thing description declares no working_mode_value |
 
-### Station configuration of T8028
+### Station configuration of T8028 Doorbell Chime 8028
 
 | feature | support | min firmware | source |
 |---|---|---|---|
@@ -2747,7 +2803,7 @@ rw 29 / ro 65
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8144
+### Settings of T8144 Camera 8144
 
 rw 35 / ro 81
 
@@ -3187,7 +3243,7 @@ rw 29 / ro 63
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8162
+### Settings of T8162 Camera 3 Pro
 
 rw 39 / ro 88
 
@@ -5125,7 +5181,7 @@ rw 49 / ro 110
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8215
+### Settings of T8215 Battery Doorbell T8215
 
 rw 53 / ro 125
 
@@ -7956,7 +8012,7 @@ rw 40 / ro 77
 | `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8452
+### Settings of T8452 T8452
 
 rw 19 / ro 64
 
@@ -8046,7 +8102,7 @@ rw 19 / ro 64
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8453
+### Settings of T8453 T8453
 
 rw 19 / ro 65
 
@@ -8498,7 +8554,7 @@ rw 20 / ro 74
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8532
+### Settings of T8532 T8532
 
 rw 32 / ro 130
 
@@ -8667,7 +8723,7 @@ rw 32 / ro 130
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T85M0
+### Settings of T85M0 T85M0
 
 rw 30 / ro 129
 
@@ -8833,7 +8889,7 @@ rw 30 / ro 129
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T85M1
+### Settings of T85M1 T85M1
 
 rw 31 / ro 135
 
@@ -9429,7 +9485,7 @@ rw 3 / ro 58
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | no | - | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T87A0
+### Settings of T87A0 T87A0
 
 rw 0 / ro 6
 

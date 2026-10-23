@@ -2,14 +2,15 @@
 
 The hand-written entries below carry what was observed or looked up per model; every
 other product the eufy app names comes from :mod:`.app_models` (generated from the app,
-graded *declared*).
+graded *declared*). A model's kind is its product category in the eufy app (see
+docs/how-to/add-a-device.md § The model).
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
@@ -38,7 +39,10 @@ class DeviceModel:
 
     ``model`` is the serial-number prefix (``"T8030"``). ``cloud_device_type`` is
     the ``device_type`` the cloud device list reports, recorded only where a source
-    states it.
+    states it. ``categories`` are the eufy app's product categories of the model,
+    nearest first (``("VideoDoorbell", "Camera")``): the app shows a camera card and a
+    live view for every model under ``"Camera"``, a video doorbell and a video lock
+    included. Empty where the app files the model under no category.
     """
 
     model: str
@@ -46,6 +50,7 @@ class DeviceModel:
     kind: DeviceKind
     cloud_device_type: int | None
     evidence: Evidence
+    categories: tuple[str, ...] = ()
 
 
 def _register(registry: dict[str, DeviceModel], *models: DeviceModel) -> None:
@@ -173,19 +178,37 @@ def _display_name(constant: str) -> str:
     return " ".join(words)
 
 
-def _app_model(prefix: str, constant: str, kind: str, device_type: int | None) -> DeviceModel:
-    source = f"eufy app {APP_VERSION} model list: {constant}"
+def _app_model(
+    prefix: str,
+    constant: str | None,
+    kind: str,
+    device_type: int | None,
+    categories: tuple[str, ...],
+) -> DeviceModel:
+    source = f"eufy app {APP_VERSION} model list"
+    if constant is not None:
+        source += f": {constant}"
     if device_type is not None:
         source += f"; device-type map ({device_type})"
+    if categories:
+        note = f"app product category: {' > '.join(categories)}"
+    elif constant is not None:
+        note = "no app product category; kind read from the constant's name"
+    else:
+        note = "no app product category or constant"
     return DeviceModel(
         model=prefix,
-        name=_display_name(constant),
+        name=prefix if constant is None else _display_name(constant),
         kind=DeviceKind(kind),
         cloud_device_type=device_type,
-        evidence=Evidence(Support.DECLARED, source, "kind read from the constant's name"),
+        evidence=Evidence(Support.DECLARED, source, note),
+        categories=categories,
     )
 
 
+_APP_CATEGORIES: Final = {row[0]: row[4] for row in APP_MODELS}
+for _prefix, _entry in _models.items():
+    _models[_prefix] = replace(_entry, categories=_APP_CATEGORIES.get(_prefix, ()))
 _register(_models, *(_app_model(*row) for row in APP_MODELS if row[0] not in _models))
 
 MODELS: Final[Mapping[str, DeviceModel]] = MappingProxyType(_models)

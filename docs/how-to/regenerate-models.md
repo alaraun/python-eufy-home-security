@@ -108,7 +108,7 @@ the cache.
 ## The model list
 
 The model list (`devices/app_models.py`: every serial prefix the app names, with its
-kind and cloud device type) comes from the same app build, through
+kind, product categories and cloud device type) comes from the same app build, through
 `scripts/gen_app_models.py`; see
 [add-a-device.md § The model](add-a-device.md#1-the-model). Regenerate it with the
 settings files, then the support matrix.
