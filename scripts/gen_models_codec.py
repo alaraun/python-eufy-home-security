@@ -97,6 +97,48 @@ def alt_channel(context: Context) -> Context:
     return replace(context, channel=ALT_CHANNEL[context.name])
 
 
+type Switches = Mapping[str, Mapping[bool, str]]
+"""``{identifier: {state: text}}``: string properties the app shows as an on/off switch,
+with the text it writes for on (True) and off (False) (``gen_models_join.switches``)."""
+
+
+def as_switch(prop: Mapping[str, Any], texts: Mapping[bool, str]) -> dict[str, Any]:
+    """A string property the app shows as a switch, typed as the bool it shows; any other
+    property unchanged. A TD default equal to one of ``texts`` becomes that state."""
+    if kind_of(prop) != "string":
+        return dict(prop)
+    default = specs_of(prop).get("defaultValue")
+    states = [s for s, text in texts.items() if text == default]
+    specs = {"defaultValue": value_key(states[0])} if states else {}
+    return {**prop, "data_type": {**(prop.get("data_type") or {}), "type": "bool", "specs": specs}}
+
+
+def to_wire(request: Mapping[str, Any], switches: Switches) -> dict[str, Any]:
+    """A driver request with a switch's state replaced by the text the app writes."""
+    out = dict(request)
+    texts = switches.get(str(request.get("identifier")))
+    if request.get("kind") == "set" and texts is not None and isinstance(out["payload"], bool):
+        out["payload"] = texts[out["payload"]]
+    return out
+
+
+def from_wire(request: Mapping[str, Any], reply: Any, switches: Switches) -> Any:
+    """A getProperty reply with each switch's text replaced by its state (other values,
+    an empty one among them, unchanged)."""
+    data = reply.get("data") if isinstance(reply, dict) else None
+    if request.get("kind") != "get" or not isinstance(data, dict):
+        return reply
+    values = data.get("p2p")
+    if not isinstance(values, dict):
+        return reply
+    decoded = dict(values)
+    for ident, texts in switches.items():
+        states = [s for s, text in texts.items() if decoded.get(ident) == text]
+        if ident in decoded and len(states) == 1:
+            decoded[ident] = states[0]
+    return {**reply, "data": {**data, "p2p": decoded}}
+
+
 class GeneratorError(Exception):
     """A model could not be generated."""
 
