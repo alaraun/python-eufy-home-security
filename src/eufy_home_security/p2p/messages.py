@@ -48,6 +48,7 @@ CMD_DATABASE_IMAGE = int(FrameType.MEDIA_DOWNLOAD)
 CMD_CAMERA_PUSH_NOTIFY = 2037
 #: Sound (``time_out`` seconds) or stop (0) the station's siren: a 1350 ``DeviceMsgBean``.
 CMD_SET_TONE_FILE = 1201
+CMD_SET_DEVS_TONE_FILE = 1202  # a device's own siren or light (see devices.device_alarm)
 #: The siren durations (seconds) the eufy app sounds a station's alarm for with 1201.
 SOUND_ALARM_SECONDS = (30,)
 #: Events-DB query verb (inside a CMD_DATABASE) with an explicit ``device_info``

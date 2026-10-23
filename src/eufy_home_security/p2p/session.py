@@ -61,6 +61,7 @@ from .._logging import (
     wire_logger,
 )
 from ..cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
+from ..devices.device_alarm import USER_NAME_SLOT
 from ..devices.live_open import LiveOpen, LiveStop
 from ..devices.param_info import ParamInfo, param_info
 from ..devices.recipes import (
@@ -175,6 +176,7 @@ from .messages import (
     CMD_DOWNLOAD_VIDEO,
     CMD_RECORD_VIEW,
     CMD_SET_ARMING,
+    CMD_SET_DEVS_TONE_FILE,
     CMD_SET_TONE_FILE,
     CMD_START_REALTIME_MEDIA,
     CMD_STOP_REALTIME_MEDIA,
@@ -1385,6 +1387,9 @@ class StationSession:
         """Whether the last alarm-tone frame started the alarm (see :meth:`_handle_alarm`)."""
         self._tone_waiters: list[tuple[bool, asyncio.Future[AlarmChanged]]] = []
         """SET_TONE_FILE writes waiting for an alarm-tone frame: (siren on?, result)."""
+        self._siren_waiters: list[tuple[int, bool, asyncio.Future[None]]] = []
+        """SET_DEVS_TONE_FILE writes waiting for a device-siren frame: (channel, on?,
+        result)."""
         self._arming_to: GuardMode | None = None
         """The mode an arm in flight asks for (see :meth:`_note_mode_report`)."""
         self.channel_scopes: dict[int, Scope] = {}
@@ -2409,29 +2414,61 @@ class StationSession:
         :func:`~.messages.tone_file_payload` with the session's user name, ``mChannel`` 0.
 
         Alarm-affecting. A HomeBase 3 acknowledges the command without a result and
-        reports the siren in its alarm-tone frame (:mod:`.alarm`). Returns ``APPLIED`` as
-        soon as a result arrives or an alarm-tone frame received after the send shows the
-        siren on (``seconds`` > 0) or ended (0); a frame arriving after the command's own
-        wait still counts within ``timeout`` (:data:`TONE_CONFIRM_TIMEOUT`) of the call.
-        Otherwise returns and raises as :meth:`async_send_command`.
+        reports the siren in its alarm-tone frame (:mod:`.alarm`). Returns and raises as
+        :meth:`async_send_alarm`.
         """
+        return await self.async_send_alarm(
+            CMD_SET_TONE_FILE,
+            tone_file_payload(seconds, USER_NAME_SLOT),
+            channel=0,
+            on=seconds > 0,
+            timeout=timeout,
+        )
+
+    async def async_send_alarm(
+        self,
+        command: int,
+        payload: Mapping[str, Any],
+        *,
+        channel: int,
+        on: bool,
+        timeout: float | None = None,
+    ) -> CommandOutcome:
+        """Start (``on``) or stop an alarm: SET_TONE_FILE (1201) or SET_DEVS_TONE_FILE
+        (1202) with ``payload`` on ``channel``; a payload value equal to
+        :data:`~.devices.device_alarm.USER_NAME_SLOT` is the session's user name.
+
+        Alarm-affecting. Returns ``APPLIED`` as soon as a result arrives or an alarm frame
+        received after the send shows the alarm in the asked state: for 1201 the
+        alarm-tone frame on any channel (the alarm on, or ended), for 1202 the device-siren
+        frame on ``channel`` (a non-zero event type, or 0). A frame arriving after the
+        command's own wait still counts within ``timeout`` (:data:`TONE_CONFIRM_TIMEOUT`)
+        of the call. Otherwise returns and raises as :meth:`async_send_command`
+        (``DELIVERED``: acknowledged, never confirmed). ``ValueError`` for another
+        command; nothing is sent.
+        """
+        if command not in (CMD_SET_TONE_FILE, CMD_SET_DEVS_TONE_FILE):
+            raise ValueError(f"command {command} is no alarm command")
         await self.async_connect()
         creds = self._require_creds()
+        body = {k: creds.user_name if v == USER_NAME_SLOT else v for k, v in payload.items()}
         started = time.monotonic()
-        future: asyncio.Future[AlarmChanged] = asyncio.get_running_loop().create_future()
-        entry = (seconds > 0, future)
+        tone: asyncio.Future[AlarmChanged] = asyncio.get_running_loop().create_future()
+        siren: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        tone_entry, siren_entry = (on, tone), (channel, on, siren)
+        future: asyncio.Future[Any] = tone if command == CMD_SET_TONE_FILE else siren
 
-        def watch() -> asyncio.Future[AlarmChanged]:
-            self._tone_waiters.append(entry)  # under the lock: only frames after the send
+        def watch() -> asyncio.Future[Any]:
+            # Under the lock: only frames after the send count.
+            if command == CMD_SET_TONE_FILE:
+                self._tone_waiters.append(tone_entry)
+            else:
+                self._siren_waiters.append(siren_entry)
             return future
 
         try:
             outcome = await self.async_send_command(
-                CMD_SET_TONE_FILE,
-                channel=0,
-                payload=tone_file_payload(seconds, creds.user_name),
-                timeout=timeout,
-                confirm=watch,
+                command, channel=channel, payload=body, timeout=timeout, confirm=watch
             )
             if outcome is CommandOutcome.APPLIED:
                 return outcome
@@ -2442,9 +2479,12 @@ class StationSession:
                 return outcome
             return CommandOutcome.APPLIED
         finally:
-            if entry in self._tone_waiters:
-                self._tone_waiters.remove(entry)
-            future.cancel()
+            if tone_entry in self._tone_waiters:
+                self._tone_waiters.remove(tone_entry)
+            if siren_entry in self._siren_waiters:
+                self._siren_waiters.remove(siren_entry)
+            tone.cancel()
+            siren.cancel()
 
     async def async_run_recipe(
         self,
@@ -4781,6 +4821,11 @@ class StationSession:
                     new=new,
                 )
             )
+        if alarm.param_id == FrameType.SIREN_NOTIFY:
+            sounding = alarm.values[0] != 0
+            for channel, on, waiter in self._siren_waiters:
+                if channel == alarm.channel and on == sounding and not waiter.done():
+                    waiter.set_result(None)
         change = alarm.alarm_change(self.serial, at=datetime.now(UTC))
         if change is not None:
             for alarming, future in self._tone_waiters:

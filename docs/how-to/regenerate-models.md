@@ -83,6 +83,16 @@ uv run python scripts/gen_ptz.py                 # rewrite the table
 uv run python scripts/gen_ptz.py --check         # compare, write nothing
 ```
 
+The device-alarm table (`devices/_device_alarm_data.py`: per product whose thing
+description declares `set_alarm_type`, per connect type, the alarm choices the app offers
+and the request its handler sends to start and stop each, read by
+`devices.device_alarm`) is generated the same way:
+
+```
+uv run python scripts/gen_device_alarm.py           # rewrite the table
+uv run python scripts/gen_device_alarm.py --check   # compare, write nothing
+```
+
 The station configuration table (`devices/_station_config_data.py`: per station model,
 which configuration features the app offers and the library sends as its handler does,
 where the model keeps its per-mode tables, the cross-camera tracking times, firmware

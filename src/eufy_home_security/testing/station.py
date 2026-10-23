@@ -65,6 +65,7 @@ from ..p2p.media import (
     v2_still_key,
 )
 from ..p2p.messages import (
+    CMD_SET_DEVS_TONE_FILE,
     CMD_SET_TONE_FILE,
     ECB_CHANNEL_VALUE_CMDS,
     HISTORY_RECORD_COUNTER,
@@ -402,6 +403,9 @@ class FakeStation:
     tone_frames: bool = False
     """Answer SET_TONE_FILE (1201) with an alarm-tone frame on the station's channel, as a
     HomeBase 3 does (it sends no result): ``[3, seconds]`` on, ``[16, 0]`` stopped."""
+    siren_frames: bool = False
+    """Answer SET_DEVS_TONE_FILE (1202) with a device-siren frame on the payload's channel
+    (no result): ``[type, seconds]`` on, ``[0, 0]`` off."""
     reply_codes: dict[int, int] = field(default_factory=dict)
     """Command → the non-zero ``code`` its 0x0547 reply carries under :attr:`reply_to_settings`
     (the command is then still recorded, as a station that rejects it after reading it)."""
@@ -1130,6 +1134,15 @@ class FakeStation:
                 start = (3, seconds) if seconds else (16, 0)
                 self.send_alarm_frame(
                     FrameType.ALARM_TONE_NOTIFY, *start, channel=255, cipher=self.state_cipher
+                )
+            if cmd == CMD_SET_DEVS_TONE_FILE and self.siren_frames and isinstance(payload, dict):
+                seconds = int(payload.get("time_out", 0))
+                values = (int(payload.get("type", 0)), seconds) if seconds else (0, 0)
+                self.send_alarm_frame(
+                    FrameType.SIREN_NOTIFY,
+                    *values,
+                    channel=int(payload.get("channel", 0)),
+                    cipher=self.state_cipher,
                 )
 
     def _answer_history(self, inner: dict[str, Any]) -> None:

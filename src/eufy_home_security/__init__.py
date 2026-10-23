@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         SessionState,
         StationRefreshStatus,
     )
+    from .devices.device_alarm import DeviceAlarm
     from .devices.model_settings import Setting, SettingControl, SettingKind
     from .devices.recipes import MAX_PRESET_SLOTS, MAX_ZOOM, MIN_ZOOM, PanTilt, PresetPosition
     from .devices.sections import (
@@ -197,6 +198,7 @@ _EXPORTS: dict[str, str] = {
         ),
         "cloud.status",
     ),
+    "DeviceAlarm": "devices.device_alarm",
     **dict.fromkeys(("Setting", "SettingControl", "SettingKind"), "devices.model_settings"),
     **dict.fromkeys(
         (
@@ -427,6 +429,7 @@ __all__ = [
     "CredentialsRefreshed",
     "CrossCameraConfig",
     "DetectionType",
+    "DeviceAlarm",
     "DeviceBusyError",
     "DeviceListSource",
     "DeviceTimeoutError",
