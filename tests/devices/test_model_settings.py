@@ -190,6 +190,19 @@ def test_ecb_value_repeated_under_two_names_goes_ecb() -> None:
     assert (wire.cmd, wire.value) == (1249, 30)
 
 
+@pytest.mark.parametrize(
+    ("switch", "value", "path"),
+    [(False, 0, WritePath.ECB), (True, 1, WritePath.ECB), (False, 1, WritePath.DIRECT)],
+)
+def test_ecb_value_repeated_as_a_bool_goes_ecb(switch: bool, value: int, path: WritePath) -> None:
+    """``{"switch": false, "value": 0}`` is one ECB value; two different numbers are not."""
+    recipe = {"cmd": 1035, "params": {"switch": switch, "value": value}}
+    wire = model_settings._classify(recipe, recipe)
+    assert wire.path is path
+    if path is WritePath.ECB:
+        assert (wire.cmd, wire.value) == (1035, value)
+
+
 def test_bool_ecb_value_is_zero_or_one() -> None:
     wire = _setting("T8160", "motion_stop_end_early").encode(True, CHILD)
     assert wire.path is WritePath.ECB

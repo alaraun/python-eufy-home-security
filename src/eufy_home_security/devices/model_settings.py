@@ -756,8 +756,9 @@ def _classify(template: Recipe, recipe: Mapping[str, Any]) -> WireCommand:
         if body is not None:
             channel = _channel_fields(template)
             fields = [v for k, v in body.items() if k not in channel]
-            # Some handlers repeat the value under two names ({"duration": v, "value": v}).
-            distinct = {json.dumps(v) for v in fields}
+            # Some handlers repeat the value under two names ({"duration": v, "value": v}),
+            # one of them as a bool ({"switch": false, "value": 0}).
+            distinct = {json.dumps(int(v) if isinstance(v, bool) else v) for v in fields}
             scalar = fields[0] if len(distinct) == 1 else None
         # An ECB body is an int: handlers write some values as digit strings.
         if isinstance(scalar, str):
