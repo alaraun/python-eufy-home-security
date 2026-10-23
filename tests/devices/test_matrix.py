@@ -101,6 +101,13 @@ def test_a_profile_links_its_models_settings_section() -> None:
     assert "(#settings-of-t8160-eufycam-3-s330)" in profile
 
 
+def test_a_profile_lists_its_graded_preset_actions() -> None:
+    text = render_support_matrix()
+    profile = text.split("\n## T8170 ", 1)[1].split("\n## ", 1)[0]
+    assert "| preset action set_preset_positions | verified | live store into a slot" in profile
+    assert "| preset action get_preset_position_pic | verified |" in profile
+
+
 def test_a_range_renders_min_max_and_step() -> None:
     row = _settings_rows(render_support_matrix(), "T8030")["alarm_volume_value"]
     assert row[1:5] == ["range", "1..26 step 1", "-", "yes"]

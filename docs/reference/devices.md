@@ -327,6 +327,10 @@ Settings: rw 30 / ro 62, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-e
 | ptz_presets | verified | live preset query (6034) and go-to (6035) with a live image per preset, T8170 Battery SoloCam, standalone, fw 3.3.5.4 (the camera is left at the preset; read the slots while it is awake) |
 | ptz_control | verified | live one-step pan/tilt (6030) and store/delete a slot (6032/6033), T8170 Battery SoloCam, standalone, fw 3.3.5.4 (at most 5 slots are stored; a store while full is receipted but does nothing) |
 | ptz_zoom | verified | live picture zoom 1-12 (6203) with its echo, measured in the stream, T8170 Battery SoloCam, standalone, fw 3.3.5.4; 4x and 8x also paired to a HomeBase 3 fw 3.8.7.4 (the library accepts 1-12; the camera caps near 14x; single view only; a go-to, the idle return or a reopened view resets it to 1x) |
+| preset action set_preset_positions | verified | live store into a slot (6032) with a preset read-back, T8170 Battery SoloCam, standalone, fw 3.3.5.4 (at most 5 slots are stored; a store while full is receipted but does nothing) |
+| preset action delete_preset_positions | verified | live slot delete (6033) with a preset read-back, T8170 Battery SoloCam, standalone, fw 3.3.5.4 |
+| preset action default_preset_positions | verified | live default change (6242) with a preset read-back and restore, T8170 Battery SoloCam, standalone, fw 3.3.5.4 |
+| preset action get_preset_position_pic | verified | live slot picture read (6097), decoded to the slot's JPEG, T8170 Battery SoloCam, standalone, fw 3.3.5.4 |
 
 Settings: rw 41 / ro 104, see [Settings of T8170 Battery SoloCam (T8170)](#settings-of-t8170-battery-solocam-t8170)
 

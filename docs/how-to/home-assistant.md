@@ -1935,9 +1935,21 @@ action, or a recipe or route the library does not implement). Create the control
 anything but `UNKNOWN`. The table behind it is generated from the app's handlers for
 every product (`scripts/gen_ptz.py`), so a new pan/tilt model needs a regeneration, not
 code. `profile_for_serial(...).support(...)` answers the same per model, `DECLARED` when
-the library sends the actions under *some* station; prefer `ptz_support`. Storing,
-deleting, picturing a slot or changing the default needs that action too: a model whose
-thing description lacks one raises `UnsupportedError` before anything is sent.
+the library sends the actions under *some* station; prefer `ptz_support`.
+
+Storing, deleting, picturing a slot and changing the default each need an action of
+their own, which some models lack (a T8173 declares no store). Ask
+`station.ptz_action_support(device_sn, action)` with `PtzAction.STORE`, `DELETE`,
+`SET_DEFAULT` or `SLOT_PICTURE` (exported from the package root). It grades like
+`ptz_support`, from the same generated data: `UNKNOWN` when a capability the action needs
+is (`PTZ_PRESETS`, and `PTZ_CONTROL` for a store, delete or slot picture), or when the
+device's thing description does not declare the action or the library does not send it
+as the handler does under this station; `VERIFIED` where proven on hardware (the T8170);
+else `DECLARED`. Create the save button, the save and delete service targets, the slot
+pictures and the default select only for actions that are not `UNKNOWN`. A call for an
+action the model lacks raises `PtzActionUnsupportedError` (an `UnsupportedError`;
+`err.action` equals the `PtzAction`) before anything is sent; a slot the camera does not
+have, or an empty one, stays a plain `UnsupportedError`.
 
 | call | what | camera |
 |---|---|---|
@@ -1995,7 +2007,7 @@ preset", so the choice is also available to automations (`select.select_option`)
 
 | select | from the library |
 |---|---|
-| created when | `station.ptz_support(device_sn, Capability.PTZ_PRESETS).support is not Support.UNKNOWN` |
+| created when | `station.ptz_action_support(device_sn, PtzAction.SET_DEFAULT).support is not Support.UNKNOWN` |
 | `options` | the enabled slots of `station.presets(device_sn)`, as strings (`"0"`, `"2"`, …), or friendlier labels you map back to the index |
 | `current_option` | `station.default_preset(device_sn)`; `None` (unknown) when the slots were never read or no slot is the default |
 | `async_select_option` | `await station.async_set_default_preset(device_sn, int(option))` |
@@ -2145,14 +2157,16 @@ delete_preset:
 `delete_preset` calls `async_delete_preset(device_sn, preset)`. Return the saved index
 as an optional service response (`SupportsResponse.OPTIONAL`) if automations want it.
 
-**Errors** (catch `DeviceBusyError` before `CommunicationError` and
-`PresetSlotsFullError` before `CommandNotAppliedError`, their base classes):
+**Errors** (catch `DeviceBusyError` before `CommunicationError`,
+`PresetSlotsFullError` before `CommandNotAppliedError` and `PtzActionUnsupportedError`
+before `UnsupportedError`, their base classes):
 
 | error | when | HA |
 |---|---|---|
 | `PresetSlotsFullError` (`slots`, `in_use`) | 5 slots are stored and `preset` is not one of them; nothing was sent when the cached read already showed it | `HomeAssistantError("all 5 preset slots are in use; delete a preset first")` |
 | `CommandNotAppliedError`, otherwise | the camera took the write but the read-back shows no store; with `err.command == 6242`, the store took but the slot did not become the default | `HomeAssistantError` |
-| `UnsupportedError` | a model without pan/tilt presets, or `preset` outside the camera's range (0–9); nothing sent | `ServiceValidationError` |
+| `PtzActionUnsupportedError` (`action`) | the model has no such action through this station: `ptz_action_support(device_sn, err.action)` is `UNKNOWN` (a T8173 has no store, so any save); nothing sent | `ServiceValidationError` naming the action, never "no preset slot *n*" |
+| `UnsupportedError`, otherwise | a model without pan/tilt presets, or `preset` outside the camera's range (0–9); nothing sent | `ServiceValidationError` |
 | `DeviceBusyError` | a live or preset image capture holds the camera; nothing sent | `HomeAssistantError("capture in progress")` |
 | `CommandRejectedError` | the camera refused: code 1 on all `PTZ_BUSY_ATTEMPTS` attempts (still moving), or -502 for the default (`confirm` wanted) | `HomeAssistantError` |
 | `CommunicationError` | the camera could not be reached or woken | `HomeAssistantError` |

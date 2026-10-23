@@ -15,6 +15,7 @@ from eufy_home_security.exceptions import (
     DeviceTimeoutError,
     EmptyResponseError,
     EufySecurityError,
+    PtzActionUnsupportedError,
     RateLimitedError,
     RecordNotFoundError,
     RefreshCooldownError,
@@ -45,6 +46,7 @@ def test_an_error_names_no_device_by_default() -> None:
     "err",
     [
         UnsupportedError("m", device_sn=SN),
+        PtzActionUnsupportedError("m", action="set_preset_positions", device_sn=SN),
         RecordNotFoundError("m", device_sn=SN),
         DeviceBusyError("m", device_sn=SN),
         DeviceTimeoutError("m", device_sn=SN),

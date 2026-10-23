@@ -6,12 +6,13 @@ from eufy_home_security.devices.capabilities import (
     FALLBACK_PROFILES,
     KIND_MARKERS,
     PROFILES,
+    PTZ_ACTION_NEEDS,
     PTZ_ACTIONS,
     Capability,
     kind_from_params,
     profile_for_serial,
 )
-from eufy_home_security.devices.ptz import PTZ_IDENTIFIERS
+from eufy_home_security.devices.ptz import PTZ_IDENTIFIERS, PtzAction
 from eufy_home_security.devices.support import Evidence, Support
 from eufy_home_security.devices.types import MODELS, DeviceKind
 
@@ -37,6 +38,13 @@ LOG_AREA: dict[Capability, str] = {
     Capability.RSSI: "Parameter dump",
     Capability.PIR_EVENT_TIME: "Motion sensor param 1605",
 }
+# The hardware-verification row that traces each pan/tilt preset action.
+LOG_AREA_PTZ_ACTION: dict[PtzAction, str] = {
+    PtzAction.STORE: "T8170 preset store and delete (6032, 6033)",
+    PtzAction.DELETE: "T8170 preset store and delete (6032, 6033)",
+    PtzAction.SET_DEFAULT: "T8170 default preset (6242) and auto-return",
+    PtzAction.SLOT_PICTURE: "T8170 preset picture (6097)",
+}
 # A model whose settings write was proven in a row of its own.
 LOG_AREA_BY_MODEL: dict[tuple[str, Capability], str] = {
     ("T8170", Capability.SETTINGS_WRITE): "Settings, T8170",
@@ -52,6 +60,7 @@ def test_profiles_belong_to_catalogued_models() -> None:
 def test_every_capability_has_a_source() -> None:
     for profile in PROFILES.values():
         assert all(e.source for e in profile.capabilities.values())
+        assert all(e.source for e in profile.ptz_actions.values())
 
 
 def test_profile_for_serial(station_sn: str) -> None:
@@ -153,6 +162,28 @@ def test_every_verified_capability_is_in_the_verification_log() -> None:
             )
             assert area in rows, (model, cap, area)
             assert rows[area][0] == VERIFIED_MARK, (model, cap, area)
+
+
+def test_every_verified_ptz_action_is_in_the_verification_log() -> None:
+    assert set(LOG_AREA_PTZ_ACTION) == set(PtzAction)
+    rows = log_rows()
+    verified = [
+        (model, action)
+        for model, profile in PROFILES.items()
+        for action, evidence in profile.ptz_actions.items()
+        if evidence.support is Support.VERIFIED
+    ]
+    assert verified
+    for model, action in verified:
+        assert rows[LOG_AREA_PTZ_ACTION[action]][0] == VERIFIED_MARK, (model, action)
+        assert model in LOG_AREA_PTZ_ACTION[action]
+
+
+def test_every_ptz_action_needs_presets() -> None:
+    assert set(PTZ_ACTION_NEEDS) == set(PtzAction)
+    for needs in PTZ_ACTION_NEEDS.values():
+        assert Capability.PTZ_PRESETS in needs
+        assert set(needs) <= set(PTZ_ACTIONS)
 
 
 def test_profiles_are_read_only() -> None:

@@ -12,6 +12,7 @@ import pytest
 from eufy_home_security.devices import ptz
 from eufy_home_security.devices.ptz import (
     PTZ_IDENTIFIERS,
+    PtzAction,
     PtzForm,
     has_ptz_recipes,
     ptz_actions,
@@ -66,6 +67,16 @@ def test_an_action_the_thing_description_does_not_declare_has_no_form() -> None:
     assert ptz_form("T8410", "set_picture_zoom", ConnectType.SINGLE) is None
     assert "set_preset_positions" not in ptz_actions("T8173")
     assert "set_preset_positions" in ptz_actions("t8425")
+
+
+def test_the_user_facing_preset_actions_are_thing_model_actions() -> None:
+    assert {a.value for a in PtzAction} == {
+        "set_preset_positions",
+        "delete_preset_positions",
+        "default_preset_positions",
+        "get_preset_position_pic",
+    }
+    assert set(PtzAction) <= set(PTZ_IDENTIFIERS)
 
 
 def test_an_unlisted_product_has_no_recorded_action() -> None:

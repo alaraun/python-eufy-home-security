@@ -30,14 +30,28 @@ class PtzForm(StrEnum):
     ``rotate_type`` only, a preset query (6034) without ``value``."""
 
 
+class PtzAction(StrEnum):
+    """A preset slot edit a consumer offers, valued by the thing-model action that carries
+    it (see :meth:`~..station.Station.ptz_action_support`)."""
+
+    STORE = "set_preset_positions"
+    """Store the current view in a slot."""
+    DELETE = "delete_preset_positions"
+    """Clear a slot."""
+    SET_DEFAULT = "default_preset_positions"
+    """Make a slot the one the camera returns to when idle."""
+    SLOT_PICTURE = "get_preset_position_pic"
+    """Read the picture the camera stored for a slot."""
+
+
 PTZ_IDENTIFIERS: Final = (
     "ptz_action_control",
     "query_preset_positions",
     "set_ptz_cruise_preview",
-    "get_preset_position_pic",
-    "set_preset_positions",
-    "delete_preset_positions",
-    "default_preset_positions",
+    PtzAction.SLOT_PICTURE.value,
+    PtzAction.STORE.value,
+    PtzAction.DELETE.value,
+    PtzAction.SET_DEFAULT.value,
     "set_picture_zoom",
 )
 """The thing-model actions behind the library's pan/tilt, preset and zoom calls."""

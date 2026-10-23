@@ -27,8 +27,8 @@ from ..models import (
 )
 from ..p2p.params import GUARD_MODE_PARAM
 from .live_open import app_version, library_live_open
+from .ptz import PtzAction, ptz_form
 from .ptz import app_version as ptz_app_version
-from .ptz import ptz_form
 from .recipes import PARENT_CONNECT_TYPES, ConnectType
 from .support import Evidence, Support
 from .types import MODELS, DeviceKind, model_for_serial, serial_product_code
@@ -76,12 +76,15 @@ class DeviceProfile:
     dump (``dev_type`` 255 for the station, the channel for a sub-device).
     ``kind_markers`` are parameter ids whose presence on a block marks a device of
     this model's kind when its serial is unknown (see :func:`kind_from_params`).
+    ``ptz_actions`` grades preset slot edits proven on the model's hardware; the
+    others are graded from the generated data (``Station.ptz_action_support``).
     """
 
     model: str
     capabilities: Mapping[Capability, Evidence]
     params: Mapping[str, int]
     kind_markers: frozenset[int] = frozenset()
+    ptz_actions: Mapping[PtzAction, Evidence] = MappingProxyType({})
 
     def support(self, capability: Capability) -> Support:
         """The support status of ``capability``; ``UNKNOWN`` when not listed."""
@@ -325,6 +328,27 @@ _T8170 = DeviceProfile(
         }
     ),
     params=MappingProxyType({}),
+    ptz_actions=MappingProxyType(
+        {
+            PtzAction.STORE: Evidence(
+                Support.VERIFIED,
+                f"live store into a slot (6032) with a preset read-back, {_T8170_SOLO}",
+                "at most 5 slots are stored; a store while full is receipted but does nothing",
+            ),
+            PtzAction.DELETE: Evidence(
+                Support.VERIFIED,
+                f"live slot delete (6033) with a preset read-back, {_T8170_SOLO}",
+            ),
+            PtzAction.SET_DEFAULT: Evidence(
+                Support.VERIFIED,
+                f"live default change (6242) with a preset read-back and restore, {_T8170_SOLO}",
+            ),
+            PtzAction.SLOT_PICTURE: Evidence(
+                Support.VERIFIED,
+                f"live slot picture read (6097), decoded to the slot's JPEG, {_T8170_SOLO}",
+            ),
+        }
+    ),
 )
 
 _T8161_HANDLER = "T8161 handler"
@@ -505,6 +529,17 @@ PTZ_ACTIONS: Final[Mapping[Capability, tuple[str, ...]]] = MappingProxyType(
 """The thing-model actions each pan/tilt/zoom capability sends (:mod:`.ptz`). A slot
 store, delete, picture or default change needs its own action besides
 :attr:`Capability.PTZ_PRESETS`."""
+
+PTZ_ACTION_NEEDS: Final[Mapping[PtzAction, tuple[Capability, ...]]] = MappingProxyType(
+    {
+        PtzAction.STORE: (Capability.PTZ_PRESETS, Capability.PTZ_CONTROL),
+        PtzAction.DELETE: (Capability.PTZ_PRESETS, Capability.PTZ_CONTROL),
+        PtzAction.SET_DEFAULT: (Capability.PTZ_PRESETS,),
+        PtzAction.SLOT_PICTURE: (Capability.PTZ_PRESETS, Capability.PTZ_CONTROL),
+    }
+)
+"""The capabilities a camera needs, besides the action itself, before the library sends
+each preset slot edit."""
 
 
 _GENERATED_PROFILES: dict[tuple[int, str], DeviceProfile] = {}

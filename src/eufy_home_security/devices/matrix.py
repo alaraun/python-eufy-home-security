@@ -193,11 +193,17 @@ def render_support_matrix() -> str:
         out += ["", f"## {model} {MODELS[model].name}", ""]
         out += _table(
             ("capability", "support", "source"),
-            (
-                (cap, profile.capabilities[cap].support, _source(profile.capabilities[cap]))
-                for cap in Capability
-                if cap in profile.capabilities
-            ),
+            [
+                *(
+                    (cap, profile.capabilities[cap].support, _source(profile.capabilities[cap]))
+                    for cap in Capability
+                    if cap in profile.capabilities
+                ),
+                *(
+                    (f"preset action {action}", evidence.support, _source(evidence))
+                    for action, evidence in profile.ptz_actions.items()
+                ),
+            ],
         )
         rw, ro = _settings_counts(model)
         out += [

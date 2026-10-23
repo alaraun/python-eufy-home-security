@@ -18,7 +18,8 @@ import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.station as station_mod
 from eufy_home_security._logging import redact_serial
 from eufy_home_security.cloud.models import CloudDevice
-from eufy_home_security.devices.capabilities import Capability
+from eufy_home_security.devices._ptz_data import PTZ
+from eufy_home_security.devices.capabilities import PTZ_ACTION_NEEDS, Capability, DeviceProfile
 from eufy_home_security.devices.live_open import LiveOpen, live_open
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
@@ -26,6 +27,7 @@ from eufy_home_security.devices.model_settings import (
     settings_of,
     sort_settings,
 )
+from eufy_home_security.devices.ptz import PtzAction, ptz_form
 from eufy_home_security.devices.recipes import (
     MAX_PRESET_SLOTS,
     ConnectType,
@@ -59,6 +61,7 @@ from eufy_home_security.exceptions import (
     DeviceTimeoutError,
     LiveStreamLimitError,
     PresetSlotsFullError,
+    PtzActionUnsupportedError,
     RecordNotFoundError,
     StillNotWrittenError,
     UnsupportedError,
@@ -2973,9 +2976,167 @@ async def test_a_slot_store_the_thing_description_lacks_is_refused_before_sendin
             station.async_store_preset(station.serial, 1),
             station.async_save_preset(station.serial),
         ):
-            with pytest.raises(UnsupportedError, match="declares no set_preset_positions"):
+            with pytest.raises(
+                PtzActionUnsupportedError, match="declares no set_preset_positions"
+            ) as err:
                 await call
+            assert err.value.action == PtzAction.STORE
+            assert err.value.device_sn == station.serial
+            assert isinstance(err.value, UnsupportedError)
         assert fake.doorbell_payloads == []
+    finally:
+        await station.async_close()
+
+
+async def test_a_model_without_the_store_action_still_deletes_and_reads_slot_pictures(
+    fake: FakeStation,
+) -> None:
+    station = await _standalone(fake, "T8173P2000054321")
+    try:
+        await station.async_delete_preset(station.serial, 1)
+        await station.async_preset_picture(station.serial, 0)
+        assert fake.preset_deletes == [1]
+        assert fake.preset_picture_requests == [0]
+    finally:
+        await station.async_close()
+
+
+def _solo(serial: str) -> Station:
+    """A standalone camera ``serial`` that is its own station; no I/O."""
+    device = CloudDevice(device_sn=serial, device_type=18, name="PTZ", station_sn=serial)
+    return Station(device, _unconnected_station(host=None, local_ip=None, local_port=0).session)
+
+
+@pytest.mark.parametrize("action", list(PtzAction))
+def test_ptz_action_support_follows_the_data_for_every_listed_product(action: PtzAction) -> None:
+    """Behind a HomeBase 3, per product of the generated table (named by ``device_new_pn``,
+    under a serial no profile knows): ``DECLARED`` where every capability the action needs
+    is supported and the handler sends the action as the library does, else ``UNKNOWN``."""
+    grades = set()
+    for code in PTZ:
+        device = CloudDevice(
+            device_sn="TZZZZP2000067890",
+            device_type=47,
+            name="PTZ",
+            station_sn=SYNTHETIC.station_sn,
+            channel=2,
+            raw={"device_new_pn": code},
+        )
+        hub = _hub_with(device)
+        needs = [hub.ptz_support(device.device_sn, c) for c in PTZ_ACTION_NEEDS[action]]
+        sendable = ptz_form(code, action, ConnectType.HB3) is not None
+        declared = sendable and all(e.support is not Support.UNKNOWN for e in needs)
+        evidence = hub.ptz_action_support(device.device_sn, action)
+        assert evidence.support is (Support.DECLARED if declared else Support.UNKNOWN), code
+        grades.add(evidence.support)
+    assert grades == {Support.DECLARED, Support.UNKNOWN}
+
+
+def test_a_model_without_the_store_action_grades_only_the_store_unknown() -> None:
+    """The T8173 (in the generated data only) declares no set_preset_positions."""
+    station = _solo("T8173P2000054321")
+    store = station.ptz_action_support(station.serial, PtzAction.STORE)
+    assert store.support is Support.UNKNOWN
+    assert "declares no set_preset_positions" in store.source
+    for action in (PtzAction.DELETE, PtzAction.SET_DEFAULT, PtzAction.SLOT_PICTURE):
+        evidence = station.ptz_action_support(station.serial, action)
+        assert evidence.support is Support.DECLARED, action
+        assert f"T8173 handler's {action.value} under SINGLE" in evidence.source
+
+
+def test_ptz_action_support_is_verified_from_the_profile() -> None:
+    station = _solo(_T8170_SN)
+    for action in PtzAction:
+        evidence = station.ptz_action_support(station.serial, action)
+        assert evidence.support is Support.VERIFIED, action
+        assert "T8170" in evidence.source
+
+
+def test_ptz_action_support_needs_the_actions_capabilities() -> None:
+    """A camera without presets: every action is unknown, for the presets' reason."""
+    hub = _hub_with(CAMERA)
+    presets = hub.ptz_support(SYNTHETIC.camera_sn, Capability.PTZ_PRESETS)
+    for action in PtzAction:
+        assert hub.ptz_action_support(SYNTHETIC.camera_sn, action) == presets
+
+
+def test_a_slot_edit_needs_pan_tilt_control_besides_presets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With presets but no pan/tilt step, the slot edits are unknown, a default change is not."""
+    hub = _hub_with(_FLOODLIGHT)
+    serial = _FLOODLIGHT.device_sn
+    control = Evidence(Support.UNKNOWN, "no step")
+    real = hub.ptz_support
+
+    def support(device_sn: str, capability: Capability) -> Evidence:
+        return control if capability is Capability.PTZ_CONTROL else real(device_sn, capability)
+
+    monkeypatch.setattr(hub, "ptz_support", support)
+    for action in (PtzAction.STORE, PtzAction.DELETE, PtzAction.SLOT_PICTURE):
+        assert hub.ptz_action_support(serial, action) == control
+    assert hub.ptz_action_support(serial, PtzAction.SET_DEFAULT).support is Support.DECLARED
+
+
+def test_ptz_action_support_of_a_model_the_table_does_not_list_follows_its_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without recorded handler actions the library sends the standard form: the grade is
+    the weakest of the profile's for the capabilities the action needs."""
+    presets = Evidence(Support.VERIFIED, "presets from the profile")
+    control = Evidence(Support.DECLARED, "control from the profile")
+    profile = DeviceProfile(
+        model="T8160",
+        capabilities={Capability.PTZ_PRESETS: presets, Capability.PTZ_CONTROL: control},
+        params={},
+    )
+    monkeypatch.setattr(station_mod, "own_profile", lambda serial: profile)
+    hub = _hub_with(CAMERA)
+    assert hub.ptz_action_support(SYNTHETIC.camera_sn, PtzAction.STORE) == control
+    assert hub.ptz_action_support(SYNTHETIC.camera_sn, PtzAction.SET_DEFAULT) == presets
+
+
+def test_ptz_action_support_is_unknown_where_the_app_takes_another_route() -> None:
+    """Behind a HomeBase 4 the handler routes the actions over WebRTC."""
+    homebase4 = dataclasses.replace(STATION, device_sn="T8040P2000012345")
+    floodlight = dataclasses.replace(_FLOODLIGHT, station_sn=homebase4.device_sn)
+    hub = Station(homebase4, _hub_with().session, sub_devices=[floodlight])
+    evidence = hub.ptz_action_support(floodlight.device_sn, PtzAction.STORE)
+    assert evidence.support is Support.UNKNOWN
+
+
+def test_a_listed_model_whose_handler_sends_the_action_otherwise_is_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Capabilities supported, the action declared, but sent in no form the library has."""
+    hub = _hub_with(_FLOODLIGHT)
+    monkeypatch.setattr(station_mod, "ptz_form", lambda code, action, connect: None)
+    monkeypatch.setattr(
+        hub, "ptz_support", lambda device_sn, capability: Evidence(Support.DECLARED, "x")
+    )
+    evidence = hub.ptz_action_support(_FLOODLIGHT.device_sn, PtzAction.DELETE)
+    assert evidence.support is Support.UNKNOWN
+    assert "in a way this library does not implement" in evidence.source
+
+
+async def test_a_default_change_the_model_lacks_is_refused_before_the_slot_check(
+    fake: FakeStation,
+) -> None:
+    """The T8419 declares no default_preset_positions: the refusal names the action, not
+    the slot, and nothing is sent."""
+    station = await _standalone(fake, "T8419P2000054321")
+    try:
+        await station.async_refresh_presets(station.serial)
+        sent = list(fake.doorbell_payloads)
+        for call in (
+            station.async_set_default_preset(station.serial, 9),
+            station.async_save_preset(station.serial, make_default=True),
+        ):
+            with pytest.raises(PtzActionUnsupportedError) as err:
+                await call
+            assert err.value.action == PtzAction.SET_DEFAULT
+        assert fake.doorbell_payloads == sent
+        assert fake.default_preset_sets == []
     finally:
         await station.async_close()
 
@@ -3062,7 +3223,7 @@ async def test_set_zoom_out_of_range_sends_nothing(
 
 
 async def test_set_zoom_unsupported(station: Station, fake: FakeStation) -> None:
-    with pytest.raises(UnsupportedError):
+    with pytest.raises(UnsupportedError, match="has no picture zoom"):
         await station.async_set_zoom(SYNTHETIC.camera_sn, 2)
     assert fake.zoom_writes == []
 
@@ -3118,7 +3279,7 @@ async def test_set_zoom_refused_in_dual_view(
 
 
 async def test_pan_tilt_unsupported(station: Station, fake: FakeStation) -> None:
-    with pytest.raises(UnsupportedError):
+    with pytest.raises(UnsupportedError, match="has no pan/tilt control"):
         await station.async_pan_tilt(SYNTHETIC.camera_sn, PanTilt.LEFT, settle=0)
 
 
@@ -3425,8 +3586,9 @@ async def test_preset_edits_reject_a_slot_outside_the_camera(
         standalone_station.async_delete_preset("T8170P2000054321", -1),
         standalone_station.async_preset_picture("T8170P2000054321", 42),
     ):
-        with pytest.raises(UnsupportedError):
+        with pytest.raises(UnsupportedError) as err:
             await call
+        assert not isinstance(err.value, PtzActionUnsupportedError)
 
     assert fake.preset_stores == []
     assert fake.preset_deletes == []
@@ -3847,8 +4009,9 @@ async def test_async_set_default_preset_raises_for_disabled_slot(
     standalone_station: Station, fake: FakeStation
 ) -> None:
     await standalone_station.async_refresh_presets("T8170P2000054321")
-    with pytest.raises(UnsupportedError):
+    with pytest.raises(UnsupportedError, match="preset 5 is not set") as err:
         await standalone_station.async_set_default_preset("T8170P2000054321", 5)
+    assert not isinstance(err.value, PtzActionUnsupportedError)
     assert fake.default_preset_sets == []
 
 

@@ -22,6 +22,7 @@ from .model_settings import (
     WritePath,
     sort_settings,
 )
+from .ptz import PtzAction
 from .sections import (
     MODES_SECTION,
     OTHER_SECTION,
@@ -103,6 +104,7 @@ __all__ = [
     "DeviceProfile",
     "Evidence",
     "ModeTableStorage",
+    "PtzAction",
     "Scope",
     "Setting",
     "SettingControl",
