@@ -1120,7 +1120,7 @@ per-mode settings; a paired camera or sensor adds 15 per-mode delays and actions
 |---|---|---|---|
 | T8030 | 74 | 12 | 62 |
 | T8160 | 101 | 32 | 69 |
-| T8170 | 144 | 40 | 104 |
+| T8170 | 145 | 41 | 104 |
 | T8910 | 11 | 2 | 9 |
 
 Every model's keys, values, units and labels are listed in
@@ -1149,9 +1149,10 @@ uses in this one's place on the same model (`record_resolution__v1` →
 `record_resolution`, `nightvision_type` → `nightvision_type_new`), else `None`: register
 a variant disabled by default instead of matching key suffixes. A variant identical to its
 primary in codec, domain, labels and control is not in the file at all
-(`detection_sensitivity_test_mode`): an entity registered under such a key has no
-setting; remove it. `setting.advanced` marks a setting the app puts behind a warning
-(`working_mode_value`: switching to Standard reduces the HomeBase's Wi-Fi range); register
+(`detection_sensitivity_test_mode` on a T8160): an entity registered under such a key has no
+setting; remove it. A released key stays: where an earlier file carried it (the same key on
+a T8170), it remains as a variant of its primary. `setting.advanced` marks a setting the
+app puts behind a warning (`working_mode_value`: switching to Standard reduces the HomeBase's Wi-Fi range); register
 it disabled by default and show `setting.note`, the warning, where the user enables it.
 A readable setting that is not writable and has no control (`hb_keypad_is_password_set`,
 a status the app only reads) is a sensor, not a switch.

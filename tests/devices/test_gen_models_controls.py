@@ -225,6 +225,28 @@ def test_a_same_codec_variant_is_dropped_and_its_key_resolves_to_the_primary() -
     assert controls.absorbed_by(key, settings) == "detection_sensitivity"
 
 
+def test_a_released_same_codec_variant_stays_as_variant_of_its_primary() -> None:
+    def ctx() -> dict[str, dict[str, Any]]:
+        return {
+            "detection_sensitivity": _rw(_W6070),
+            "detection_sensitivity_test_mode": _rw(_W6070, variant_of="detection_sensitivity"),
+        }
+
+    key = "detection_sensitivity_test_mode"
+    assert controls.variants_to_drop([ctx(), ctx()]) == {key}
+    drop = controls.variants_to_drop([ctx(), ctx()], released={key, "other"})
+    assert drop == set()
+    settings = ctx()
+    controls.drop_same_codec_variants(settings, {}, only=drop)
+    assert settings[key]["variant_of"] == "detection_sensitivity"
+
+
+def test_a_variant_that_duplicates_in_one_context_only_is_kept() -> None:
+    differs = {"k": _rw(_W6070), "k__v1": _rw(_W6070, max=5, variant_of="k")}
+    same = {"k": _rw(_W6070), "k__v1": _rw(_W6070, variant_of="k")}
+    assert controls.variants_to_drop([same, differs]) == set()
+
+
 @pytest.mark.parametrize(
     ("variant", "note"),
     [

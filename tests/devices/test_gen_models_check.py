@@ -1,4 +1,5 @@
-"""``scripts/gen_models.py --check`` regenerates two models byte-identically.
+"""``scripts/gen_models.py --check`` regenerates three models byte-identically (T8170
+carries a released key that duplicates another one, kept as its variant).
 
 Runs only on a maintainer host with Node and the private thing-model cache; the full-corpus
 ``--check`` is the maintainer's command (docs/reference/models-schema.md).
@@ -27,7 +28,14 @@ pytestmark = [
 @pytest.mark.timeout(180)
 def test_check_regenerates_committed_files_byte_identically() -> None:
     result = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "gen_models.py"), "--check", "T8160", "T8910"],
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "gen_models.py"),
+            "--check",
+            "T8160",
+            "T8170",
+            "T8910",
+        ],
         cwd=ROOT,
         capture_output=True,
         text=True,

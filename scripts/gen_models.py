@@ -35,7 +35,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -882,13 +882,15 @@ def generate(
     *,
     reference: list[dict[str, Any]] | None = None,
     titles: dict[str, Any] | None = None,
+    released: Collection[str] = (),
 ) -> tuple[dict[str, Any], dict[str, int]]:
     """The settings-file object of one model and its counters (the base context's).
 
     ``app_labels`` / ``tree`` are the model's entries of the label and settings-tree
     files (None: TD labels only / no UI placement); ``reference`` its v1 reference rows
     (``child`` rows check the base context, ``standalone`` rows the standalone one);
-    ``titles`` the app setting-title file (None: no names, app units or variants).
+    ``titles`` the app setting-title file (None: no names, app units or variants);
+    ``released`` the setting keys the model's bundled file carries (never dropped).
     Raises CheckError when a codec does not reproduce a swept recipe or an unaccepted
     reference row.
     """
@@ -950,8 +952,7 @@ def generate(
         per_context[name] = settings
         if name == BASE:
             counts = ctx_counts
-    # A variant is dropped only where it duplicates its primary in every context.
-    drop = set.intersection(*(set(controls.same_codec_variants(s)) for s in per_context.values()))
+    drop = controls.variants_to_drop(list(per_context.values()), released)
     for name, settings in per_context.items():
         controls.drop_same_codec_variants(settings, counts if name == BASE else {}, only=drop)
         shaped = reference_mismatches(settings, references[name])
@@ -1159,7 +1160,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.check:
         with tempfile.TemporaryDirectory() as tmp:
-            rc = _generate_all(args, cache, Path(tmp), quiet=True)
+            rc = _generate_all(args, cache, Path(tmp), quiet=True, released=args.out)
             if rc:
                 return rc
             differ = compare(Path(tmp), args.out, args.product_codes)
@@ -1170,13 +1171,26 @@ def main(argv: list[str] | None = None) -> int:
     return _generate_all(args, cache, args.out, quiet=False)
 
 
-def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bool) -> int:
-    """Generate the requested models into ``out``; 1 when any model failed its check."""
+def released_keys(out: Path, product_code: str) -> set[str]:
+    """The setting keys of the model's file in ``out`` (empty when there is none)."""
+    path = out / f"{product_code}.json"
+    return set(_read_json(path)["settings"]) if path.is_file() else set()
+
+
+def _generate_all(
+    args: argparse.Namespace, cache: Path, out: Path, *, quiet: bool, released: Path | None = None
+) -> int:
+    """Generate the requested models into ``out``; 1 when any model failed its check.
+
+    The keys of the files in ``released`` (default ``out``), read before any write, are
+    kept when they would be dropped as same-codec variants.
+    """
     labels = _read_json(args.labels)
     trees = _read_json(args.trees)
     titles = _read_json(args.titles)
     reference = load_reference()
     pns = args.product_codes or sorted(d.name for d in cache.iterdir() if d.is_dir())
+    bundled = {pn: released_keys(released or out, pn) for pn in pns}
     out.mkdir(parents=True, exist_ok=True)
 
     def build(pn: str) -> tuple[str, str | None, dict[str, int]]:
@@ -1189,6 +1203,7 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
                 args.app_version,
                 reference=reference.get(pn),
                 titles=titles,
+                released=bundled[pn],
             )
         except CheckError as err:
             print(err, file=sys.stderr)
