@@ -284,7 +284,8 @@ reads it as the eufy app does:
   bytes 0..3. Nothing is decrypted: the encryption type (subheader byte 3) and the bytes
   after the code are ignored. A longer or shorter payload is no result.
 - Code 0 is done (for a recipe without a notify answer, the app's final result);
-  −108 raises `CommandUnsupportedError`, any other non-zero code `CommandRejectedError`.
+  −108 and −103 raise `CommandUnsupportedError`, any other non-zero code
+  `CommandRejectedError`.
   The app retries codes 1 to 20 for up to 10 s; the library raises at once (a station
   call may retry, as a preset go-to on a busy camera does).
 - A result is never JSON: it is counted in `SessionStats.receipts_by_code`, never in
@@ -299,9 +300,10 @@ it is decoded under the key its encryption type names (0 clear, 1 the static key
 session key). A GCM session takes only GCM-tagged clear receipts
 ([commands.md](commands.md#command-receipt-verified)).
 
-A result in clear proves nothing about its origin: a forged one can at most fail a
-command with its code or stop an arm's resend. An arm is still confirmed by the mode
-report or a read-back, and a recipe without a notify answer returns `DELIVERED`.
+A result in clear proves nothing about its origin: a forged one can fail a command with
+its code, or report an arm applied that the station never applied, as it can to the
+eufy app, which takes the same result as final [declared, eufy app]. A recipe without a
+notify answer returns `DELIVERED`.
 
 - A camera push records the cipher of its frame in `SecurityEvent.frame_cipher`.
   `SecurityEvent.authenticated` is False for a push under the static ECB key and True
@@ -331,8 +333,10 @@ command id maps to:
 - `account_id` is the **owner's** user id, ASCII, NUL-terminated inside the 128-byte field.
 - A command on the default handler is not a scalar: send it as a GCM payload object
   ([commands.md](commands.md)) or not at all.
-- Id 1224 (arming) is in the station scalar set, but the app and the library arm
-  with the GCM payload object, which is the verified path.
+- Id 1224 (arming) is in the station scalar set: the eufy app arms a model whose
+  handler builds a bare 1224 (a standalone T8414) with it, and every other model with
+  the payload object; the library does the same
+  ([commands.md](commands.md#arming-1224-verified)).
 
 **String commands [verified: 1215 on a T8170].** The app's set-with-string handler
 (`msgType 6`) sends a GCM frame whose **type is the command id**, subheader channel 255,
@@ -346,8 +350,8 @@ only 1215 this way (`p2p/messages.py` `STRING_CMDS`).
 
 | code | name | usual cause |
 |---|---|---|
-| 0 | SUCCESSFUL | applied (still confirm by read-back, [commands.md](commands.md)) |
-| −103 | INVALID_COMMAND | the command is not a scalar on this path |
+| 0 | SUCCESSFUL | applied: final, as the eufy app takes it ([commands.md](commands.md)) |
+| −103 | INVALID_COMMAND | the command is not a scalar on this path (`CommandUnsupportedError`) |
 | −104 | INVALID_ACCOUNT | missing or wrong owner id, **or a wrong body layout** (for example, a channel-prefixed command sent without its prefix, which puts the value where the account belongs) |
 | −106 | NOT_FIND_DEV | a camera command sent on a channel with no device |
 | −110 | INVALID_PARAM | header channel outside 0..50 and 255 |

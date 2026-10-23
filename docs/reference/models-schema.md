@@ -32,7 +32,7 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `access` | `rw`: the handler has a value-dependent write. `ro`: it has none, or the setting is a status the eufy app only reads (`hb_keypad_is_password_set`) |
 | `write` | Recipe template (base context, below) |
 | `write_table` | `{"<value>": recipe}` when the recipe's shape depends on the value. It replaces `write` |
-| `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. Either may carry `view` (below). `null`: not readable |
+| `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. Either may carry `view` (below). `null`: not readable. The generator takes it from the handler's getProperty of each written value. An enum whose getProperty does not return the written value, but whose write stores every value as its own parameter value (no failed conversion such as `NaN`), is read as getProperty decodes those parameter values where it decodes each to another of the values, each once (what the eufy app shows), else by the inverse of the write unless a per-view read decodes it |
 | `contexts` | What other contexts change (below); absent when every context sees the base entry |
 | `labels` | `{"<value>": "<title>"}` from the app's titles, else the cleaned TD description. The app's option titles of `working_mode_value`: `Standard` (EU), `Performance (beta)` (US) |
 | `section` | Always present: the UI section id, one of `devices/sections.py`'s `SETTING_SECTIONS`. Assigned by `scripts/gen_models_sections.py` from the app page the setting lives on, else the station rules (station models), else the identifier rules, else `other`; a variant has its primary's. Every context has the same section |
@@ -148,7 +148,7 @@ Recipe templates are the handler's recipe with the value positions replaced:
 | `handler expects a structured value` | The recipe shape depends on a free-form value |
 | `non-linear range` | A range whose leaf is not `a * value + b` |
 | `serial embedded in a string` | A serial appears inside a longer string and cannot be slotted |
-| `round trip does not return the written value` | `rw` with `read: null`: getProperty does not decode the written value back |
+| `round trip does not return the written value` | `rw` with `read: null`: getProperty does not decode the written value back, and the write is no inverse-readable enum (two values share a parameter value, or it is no enum) |
 | `status the eufy app only reads` | `ro` with its read: the app shows the value and offers no control for it |
 
 A TD property that is not writable is `ro` without a note. `set_alarm_type` (and its

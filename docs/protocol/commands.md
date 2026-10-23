@@ -72,7 +72,8 @@ library takes both lengths (`RECEIPT_LENS`).
 
 `RECEIPT_CODES` names the other codes of the app's error table as well (−100 to −135,
 −203 to −205, spelled as in the app) **[declared]**; the app calls 0
-`SUCCESSFUL` and −108 `WAIT_TIMEOUT`; the library raises `CameraWakeError` for −203, −204 and
+`SUCCESSFUL` and −108 `WAIT_TIMEOUT`; the library raises `CommandUnsupportedError` for −108
+and −103 (`INVALID_COMMAND`: no command of this form), `CameraWakeError` for −203, −204 and
 −205 and `CommandRejectedError` with the name for the rest.
 
 The receipt carries no command id or transaction, so it can be attributed only
@@ -98,8 +99,8 @@ that serves reads, and do not resend into a stall — each resend queues again.
   `dropped_undecodable`; each is logged at DEBUG with its frame type, channel,
   encryption type, payload length, code and whether its tail is zero.
 - `async_send_command` takes a `0x0546` receipt that arrives while it is in flight as
-  its own. Code −108 raises `CommandUnsupportedError` (a `CommandRejectedError` with
-  `code` −108 and an `UnsupportedError`); any other non-zero code raises
+  its own. Code −108 or −103 raises `CommandUnsupportedError` (a `CommandRejectedError`
+  with that `code` and an `UnsupportedError`); any other non-zero code raises
   `CommandRejectedError`. Code 0 only means taken: the outcome is still `APPLIED` on
   a `0x0547` result, else `DELIVERED`.
 - The command is resent once, after 1.5 s, only when neither a receipt nor a DRW ACK
@@ -136,6 +137,18 @@ that serves reads, and do not resend into a stall — each resend queues again.
 | 47 | Geofence | **[app]** |
 | 63 | Disarmed | **[verified]** |
 
+- **Request form per model [declared, eufy app].** The payload object above is the form
+  for a HomeBase and for every model whose handler builds `arming_selected_mode` as
+  1350/1224. A model that is its own station and whose handler builds a bare 1224 (a
+  standalone T8414, and the other models the generated data names) is armed with the
+  station scalar instead: frame type 1224 (`0x04C8`), header channel 255, body
+  `u32le mode ‖ char[128] account_id`
+  ([session-crypto.md](session-crypto.md#legacy-ecb-scalar-frames-verified)); such a
+  camera answers the payload object with −103. The library picks the form from the
+  station model's generated data (`model_settings.arms_by_scalar`). A camera paired to a
+  HomeBase is armed through the HomeBase, in the HomeBase's form. Not verified on
+  hardware for the scalar form.
+
 - `user_name` is free text. The station records it in its event history as "by
   <user_name>" without authenticating it. The station also writes an `ARMING_EVT`
   row within about 2 s of the command.
@@ -146,10 +159,15 @@ that serves reads, and do not resend into a stall — each resend queues again.
     applied mode (same value space as the command and the FCM `arming` field).
   - `0x01`, AES-128-ECB under the static key: a 16-byte block holding four u32le
     values `mode, 0, <constant marker>, 0`. The first is the applied mode.
-- Take the applied mode from a decoded `0x047F` and fail if it differs from the
-  request. A `0x0547` naming 1224 with code 0 but no mode report only proves the
-  command was processed: confirm the mode by reading it back. A non-zero code is a
-  rejection.
+- **Result [declared, eufy app].** The arm's own result is final, as the eufy app
+  takes it: code 0 (the request's channel-0 receipt or result, a `0x0547` naming 1224,
+  the scalar's reply) means applied. The library files the mode (1224; 1151 the same
+  outside Schedule) as its own write and returns it, without waiting for a mode report.
+  A non-zero code is a rejection: −108 and −103 `CommandUnsupportedError`, any other
+  `CommandRejectedError`. A decoded `0x047F` that arrives before the result answers the
+  arm, and another mode than asked fails it. With neither, the mode is read back: the
+  station is silent when asked for the mode it is in, and any other mode raises
+  `CommandNotAppliedError` (a transport ACK alone is no success).
 - The `0x047F` follows every change, whoever made it: a P2P client, the eufy app, or a
   schedule slot starting or ending, and every open session on the station receives it
   (fw 3.8.7.4; see [events.md](events.md#guard-mode-announcements)). Keypad changes are
@@ -163,13 +181,14 @@ that serves reads, and do not resend into a stall — each resend queues again.
   push carries both (`arming` = selected, `mode` = effective;
   [events.md](events.md#station-pushes-arming-and-alarm)).
 - **Receipt.** The station also answers the arm with a `0x0546`
-  [command receipt](#command-receipt-verified). A non-zero code fails the arm with the
-  receipt's error (−108 `CommandUnsupportedError`, any other `CommandRejectedError`).
-  Code 0 only means queued (on an RSA session the station's acceptance, its
-  [result](session-crypto.md#command-results-on-an-rsa-session-declared-app)): it is no
-  confirmation, but the arm is not resent after it. A receipted arm with neither a
-  mode report nor a matching read-back raises
-  `CommandNotAppliedError`.
+  [command receipt](#command-receipt-verified) (on an RSA session its
+  [result](session-crypto.md#command-results-on-an-rsa-session-declared-app)). Its code
+  is the arm's result: 0 applies it, a non-zero code fails it with the receipt's error.
+- **Mode without a dump [declared].** A station whose parameter dump does not carry
+  1224 (a standalone T8414) reports its mode in the state from the cloud copy (the
+  device list's `params`) until a local value arrives: an applied arm or a mode report,
+  which the library files as the station's parameters. A cloud value dated after that
+  local value wins again. A station whose dump carries the mode keeps the dump's.
 - Resend once if neither a receipt, a result nor a report comes back. The library
   resends after 1.5 s within a 6 s deadline.
 - GET commands do **not** read guard mode on this firmware: `1107`, `1108` and

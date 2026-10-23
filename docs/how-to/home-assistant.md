@@ -608,8 +608,9 @@ A `DataUpdateCoordinator[StationState]` per station:
     `status` from cold sleep takes about 6.5 s; allow ~10 s. It can still fail with
     `StationUnreachableError` if the camera cannot be woken (its cloud link is down, or
     the cloud is unreachable so no DSK) — surface that as "could not reach the camera;
-    try again" rather than a permanent error. An arm takes about 6 s: a T8170 sends no
-    mode report, so the library confirms it by reading the mode back. The link ends
+    try again" rather than a permanent error. An arm returns with the camera's result:
+    code 0 is applied, as the eufy app takes it, though a T8170 sends no mode report
+    (see **Live guard mode over P2P** below). The link ends
     when the camera falls asleep (a T8170 goes quiet about 7 s after the last command,
     and the link times out 15 s later) or after 120 s idle at the latest, with
     `ConnectionChanged(connected=False, cause=DisconnectCause.IDLE)`: **not an outage**,
@@ -667,8 +668,22 @@ cloud and no push opt-in. What is covered:
 - Keep the poll as the safety net until the last row is settled: it catches a change
   made by a path that sends no report. Enable cloud push for remote stations, or where
   changes from the app must show within seconds.
-- A mode set to the one already in force sends no report; the library settles that by
-  read-back, so `async_set_guard_mode` still returns the applied mode.
+- **An arm's result is final** [declared, eufy app]: the station's result code 0 to the
+  arm means applied, as the eufy app takes it. `async_set_guard_mode` returns the mode
+  at once, `station.state` and a `GuardModeChanged` carry it, and a mode report that
+  follows (or never comes: a standalone camera such as a T8414 sends none) only moves
+  the mode again when it says otherwise. A non-zero code raises (`CommandUnsupportedError`
+  for −108 and −103, else `CommandRejectedError`), and an arm the station only
+  acknowledged raises `CommandNotAppliedError`. The request takes the form the eufy app
+  uses for the station's model (`commands.md` § Arming); nothing to choose in the
+  integration.
+- A mode set to the one already in force sends no report; its result settles it (a
+  station that sends no result is read back), so `async_set_guard_mode` still returns
+  the applied mode.
+- **A station whose dump lacks the mode** (a standalone T8414) takes
+  `StationState.guard_mode` from the cloud copy until a local value arrives (an applied
+  arm, a mode report), so it is known after a restart or reload; a cloud value dated
+  after the local one wins again.
 - A change can arrive on both channels (the `0x047f` report, then the cloud push). The
   library emits one `GuardModeChanged` per change, from the channel that delivered it
   first, and drops a guard-mode push older than the last mode applied for that station,
@@ -680,7 +695,8 @@ cloud and no push opt-in. What is covered:
   force**: the slot's mode under Schedule, equal to `mode` otherwise. One event per
   change of either, from whichever channel came first, so a schedule boundary is one
   `GuardModeChanged` with `mode=SCHEDULE` and the new `active_mode`. Arming to
-  `GuardMode.SCHEDULE` returns `SCHEDULE` (confirmed by read-back).
+  `GuardMode.SCHEDULE` returns `SCHEDULE` (by its result, else read back); the mode in
+  force stays as it was until the slot's report.
 - The station sends **no** arming push (msg_type 9) over P2P [verified]; the
   library's P2P arming-push path is dormant.
 
@@ -839,7 +855,12 @@ A closed session (`async_close`) never reconnects on its own — build a new
     value, it has no write path, it is the guard mode (use `async_set_guard_mode`), or it goes
     over a transport the library does not send (`cloud request`, `app-local`,
     `multi-command write`, `Bluetooth`, `MQTT`).
-  - `readable=False` → the dump never reports it, so its state is always unknown.
+  - `readable=False` → the dump never reports it, so its state is always unknown. An
+    enum the handler does not read back, but whose write gives every value its own
+    parameter value, is readable: as the eufy app shows it where the app reads each
+    stored value as another of the choices (a T8414 watermark: the app shows another
+    choice than the one written, and so does the library, after a write and after a
+    reload), else by the inverse of that write (a value written reads back as written).
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
     bool for a bool, str for a string. `default` is the vendor default; a station setting
