@@ -45,20 +45,25 @@ DATA = ROOT / ".work" / "notes" / "hb-config" / "data"
 
 #: Station models with a thing description and handler on record.
 ON_RECORD = (
+    "T7000",
     "T8001",
     "T8002",
     "T8010",
     "T8020",
+    "T8021",
     "T8023",
     "T8024",
     "T8025",
     "T8026",
+    "T8028",
     "T8030",
+    "T8040",
     "T8N00",
     "T9000",
 )
-#: Station models the app names without a thing description on record.
-NOT_ON_RECORD = ("T7000", "T8021", "T8028", "T8040")
+#: Station models with no mode table (``arming_config``) the library can send: none
+#: declared, or the handler builds none.
+WITHOUT_MODE_TABLES = ("T8021", "T8028")
 
 # The hardware-verification row that traces each verified (model, feature).
 LOG_AREA: dict[tuple[str, StationFeature], str] = {
@@ -79,7 +84,7 @@ LOG_AREA: dict[tuple[str, StationFeature], str] = {
 
 
 def test_every_station_model_has_every_feature() -> None:
-    assert station_config_models() == tuple(sorted(ON_RECORD + NOT_ON_RECORD))
+    assert station_config_models() == ON_RECORD
     for code in station_config_models():
         assert set(FEATURES[code]) == {f.value for f in StationFeature}, code
         for feature in StationFeature:
@@ -87,12 +92,12 @@ def test_every_station_model_has_every_feature() -> None:
             assert evidence.source, (code, feature)
 
 
-def test_a_model_without_a_thing_description_is_unknown_throughout() -> None:
-    for code in NOT_ON_RECORD:
-        for feature in StationFeature:
+def test_a_model_without_a_mode_table_has_no_mode_table_features() -> None:
+    for code in WITHOUT_MODE_TABLES:
+        for feature in (StationFeature.MODE_TABLES, StationFeature.MODE_DELAYS):
             evidence = config_support(code, feature)
             assert evidence.support is Support.UNKNOWN
-            assert "no thing description" in evidence.source
+            assert "arming_config" in evidence.source
         assert mode_table_storage(code) is None
         assert max_custom_modes(code) == 0
 
@@ -174,9 +179,9 @@ def test_mode_table_storage(code: str, storage: ModeTableStorage) -> None:
         assert params[GuardMode.HOME] == 1225
 
 
-def test_every_model_on_record_names_its_mode_table_storage() -> None:
+def test_every_model_with_a_mode_table_names_its_storage() -> None:
     for code in ON_RECORD:
-        assert mode_table_storage(code) is not None, code
+        assert (mode_table_storage(code) is None) is (code in WITHOUT_MODE_TABLES), code
 
 
 @pytest.mark.parametrize(

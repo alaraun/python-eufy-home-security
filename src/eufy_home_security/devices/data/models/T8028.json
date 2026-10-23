@@ -1,0 +1,331 @@
+{
+ "product_code": "T8028",
+ "schema_version": 3,
+ "settings": {
+  "add_device_model_config": {
+   "access": "ro",
+   "default": "{\"routeConfigForDeviceSetup\":{\"steps\":[{\"props\":{},\"route\":\"SignalTestScreen\"},{\"props\":{},\"route\":\"WorksAsIndoorChime\"}]}}",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "alarm_tones_mode": {
+   "access": "ro",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "alarm"
+  },
+  "alarm_volume_value": {
+   "access": "ro",
+   "default": 63,
+   "kind": "range",
+   "max": 63,
+   "min": 1,
+   "note": "no handler write path",
+   "read": null,
+   "section": "alarm",
+   "step": 1
+  },
+  "arming_geofence_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_modedetail_alarm_rules": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_modedetail_devices_rules": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_schedule_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_selected_mode": {
+   "access": "ro",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_arm_delay": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_arming": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_custom_mode": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_geofence": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_off_mode": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_privacy": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_query_working_mode": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_show_user_name": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "change_wifi_is_support": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "network"
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "device_is_online": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "device_model": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "device_name": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "device_not_disturb_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "notifications"
+  },
+  "device_serial_number": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "device_silent_ota_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "device_sync_data_on_repetor": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "network"
+  },
+  "device_wifi_name": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null,
+   "section": "network"
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "get_storage_status": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "storage"
+  },
+  "ignore_no_sd_card_alarm": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "storage"
+  },
+  "ip_address": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "is_support_mqtt": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "network"
+  },
+  "is_support_silent_ota_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "led_on_off": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "picture"
+  },
+  "mac_address": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "notification_alarm_delay_value": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "modes"
+  },
+  "prompt_volume_value": {
+   "access": "ro",
+   "default": 13,
+   "kind": "range",
+   "max": 26,
+   "min": 1,
+   "note": "no handler write path",
+   "read": null,
+   "section": "alarm",
+   "step": 1
+  },
+  "sdk_model_config": {
+   "access": "ro",
+   "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"supportedWifiTypes\":[\"Open\",\"WPA\",\"WPA2\",\"WPA3\",\"AUTO\"],\"wifiAuthTypeMap\":{\"Open\":0,\"WEP\":1,\"WPA\":2,\"WPA2\":3,\"WPA3\":4,\"AUTO\":5},\"encryptTypeMap\":{\"Open\":1,\"WPA\":1,\"WPA2\":1,\"WPA3\":1,\"AUTO\":1},\"encryptParam\":{\"ecc256\":false,\"aes128V1\":true,\"ecdhV1\":false,\"rsa1024\":false,\"aes128V2\":false,\"ecdhV2\":false}}}",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "setting_model_config": {
+   "access": "ro",
+   "default": "{\"config\":{\"useCloudDeviceImage\":true,\"max_chime_association_count\":7}}",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "switching_notification": {
+   "access": "ro",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "0": "Switch modes by schedule",
+    "1": "Switch modes from app",
+    "2": "Switch modes by geofencing",
+    "3": "Switch modes from Keypad",
+    "4": "Start Alarm Delay"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "section": "notifications",
+   "values": [
+    0,
+    2,
+    1,
+    3,
+    4
+   ]
+  },
+  "timezone_set": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "timezone_set_redirect": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "other"
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "25e26545-789b-400e-96df-2ddd4b70c714_T8028Handle.mix.js",
+  "handler_date": "2026-10-13",
+  "td_version": 19
+ }
+}

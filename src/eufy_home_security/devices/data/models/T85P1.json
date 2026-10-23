@@ -1,0 +1,269 @@
+{
+ "product_code": "T85P1",
+ "schema_version": 3,
+ "settings": {
+  "backup_battery_level": {
+   "access": "ro",
+   "default": " 4",
+   "kind": "other",
+   "read": null,
+   "section": "power"
+  },
+  "backup_battery_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null,
+   "section": "power"
+  },
+  "battery_level": {
+   "access": "ro",
+   "default": " 4",
+   "kind": "other",
+   "read": null,
+   "section": "power"
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "100",
+   "kind": "string",
+   "read": null,
+   "section": "power"
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "device_backup_battery_type": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Lithium Battery",
+    "1": "Dry Battery"
+   },
+   "read": null,
+   "section": "power",
+   "values": [
+    0,
+    1
+   ]
+  },
+  "device_is_battery_device": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "power"
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "device_name": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "device_power_saving_mode": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "power"
+  },
+  "device_silent_ota_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "device_text_event_data_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null,
+   "section": "network"
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "is_support_live_entry_open_smart_lock": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "is_support_mqtt": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "network"
+  },
+  "is_support_silent_ota_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_add_fingerprint_nums": {
+   "access": "ro",
+   "default": "8",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_auto_lock_type": {
+   "access": "ro",
+   "default": "3",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_calibrate_ui_show_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_connect_to_wifi_bridge": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "network"
+  },
+  "smart_lock_get_event_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_integrate_with_doorbell_or_camera": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_is_support_new_schedule_ui": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_is_support_one_time_user": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_is_support_temporary_pw": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_notification_locked_switch": {
+   "access": "ro",
+   "default": "true",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "notifications"
+  },
+  "smart_lock_notification_switch": {
+   "access": "ro",
+   "default": "true",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "notifications"
+  },
+  "smart_lock_notification_unlocked_switch": {
+   "access": "ro",
+   "default": "true",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "notifications"
+  },
+  "smart_lock_one_touch_locking_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_onoff_status": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler rejects the probed values",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_scramble_password_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_set_timezone": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_setting_manage_access": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T85P1Handle.mix.js",
+  "handler_date": "2026-07-09",
+  "td_version": 30
+ }
+}

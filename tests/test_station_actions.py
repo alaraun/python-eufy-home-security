@@ -126,7 +126,7 @@ async def test_an_unanswered_restart_is_not_success(station: Station, fake: Fake
         ("T8024", "declares no restart_device"),
         ("T8N00", "WebRTC"),
         ("T9000", "WebRTC"),
-        ("T8040", "no thing description"),
+        ("T8028", "builds restart_device as None"),
     ],
 )
 async def test_restart_is_refused_without_sending_on_a_model_without_it(
@@ -173,7 +173,7 @@ def test_sound_alarm_is_declared_where_the_library_sends_it() -> None:
         for pn in station_config_models()
         if config_support(pn, StationFeature.SOUND_ALARM).support is not Support.UNKNOWN
     }
-    assert declared == {"T8001", "T8002", "T8010", "T8020", "T8023", "T8025", "T8030"}
+    assert declared == {"T8001", "T8002", "T8010", "T8020", "T8021", "T8023", "T8025", "T8030"}
 
 
 async def test_trigger_and_stop_send_the_tone_file_body(

@@ -80,6 +80,23 @@ def test_a_page_decides_then_the_station_rules_then_the_key_rules() -> None:
     assert station["led_on_off"]["section"] == "system"
 
 
+@pytest.mark.parametrize(
+    ("ident", "section"),
+    [
+        ("device_monitor_indoor_temperature_switch", "alarm"),
+        ("device_indoor_temperatur_alarm_max_value", "alarm"),
+        ("device_indoor_temperature_unit", "system"),
+        ("device_white_noise_volume", "audio"),
+        ("daily_highlight_switch", "recording"),
+        ("breathing_light_schedule_config", "picture"),
+        ("zoom_spotlight_switch", "picture"),
+        ("radar_test_mode_on_off", "detection"),
+    ],
+)
+def test_an_identifier_rule_places_the_setting(ident: str, section: str) -> None:
+    assert sections.section_of(ident, {}, station=False) == (section, "key")
+
+
 def test_a_variant_takes_its_primary_s_section() -> None:
     settings = {
         "spotlight_status": _entry(),

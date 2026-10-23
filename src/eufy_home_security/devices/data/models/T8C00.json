@@ -1,0 +1,24 @@
+{
+ "product_code": "T8C00",
+ "schema_version": 3,
+ "settings": {
+  "radar_mac": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "detection"
+  },
+  "radar_sn": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "detection"
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T8C00Handle.mix.js",
+  "handler_date": "2026-03-30",
+  "td_version": 7
+ }
+}

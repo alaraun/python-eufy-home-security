@@ -1,0 +1,1665 @@
+{
+ "product_code": "T8150",
+ "schema_version": 3,
+ "settings": {
+  "activityzone_config": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "normalized": "1",
+    "panNum": "1",
+    "polyNum": "2",
+    "positionNum": "4",
+    "sideNum": "6",
+    "zoneHeight": "720",
+    "zoneWidth": "1280"
+   },
+   "note": "handler rejects the probed values",
+   "read": null,
+   "section": "detection",
+   "values": [
+    "sideNum",
+    "normalized",
+    "polyNum",
+    "panNum",
+    "positionNum",
+    "zoneWidth",
+    "zoneHeight"
+   ]
+  },
+  "ai_empower": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "detection"
+  },
+  "anti_theft_detection_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1015
+   },
+   "section": "alarm",
+   "write": {
+    "cmd": 1015,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1015,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "arming_cust_mode_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_modedetail_devices_rules": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_schedule_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_selected_mode": {
+   "access": "rw",
+   "control": "slider",
+   "default": 2,
+   "kind": "range",
+   "max": 10,
+   "min": 0,
+   "read": null,
+   "section": "modes",
+   "step": 1,
+   "write": {
+    "cmd": 1224,
+    "params": "$v",
+    "update": {
+     "needUpdate": true,
+     "cmd": 1224,
+     "paramValue": null
+    }
+   }
+  },
+  "arming_support_arming": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_custom_mode": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_geofence": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_off_mode": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "arming_support_query_working_mode": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "modes"
+  },
+  "audio_recording_on_off": {
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": true,
+        "0": true,
+        "1": false
+       },
+       "param": 1288
+      },
+      "write": {
+       "cmd": 1350,
+       "subCmd": 1288,
+       "params": {
+        "record_mute": {
+         "$map": {
+          "false": 1,
+          "true": 0
+         }
+        },
+        "channel": "$channel"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1288,
+        "paramValue": {
+         "$map": {
+          "false": "1",
+          "true": "0"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6012
+   },
+   "section": "recording",
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6012,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6012,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "power"
+  },
+  "camera_on_off": {
+   "access": "ro",
+   "default": "1",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null,
+   "section": "system"
+  },
+  "charging_status": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "power"
+  },
+  "detection_sensitivity": {
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "access": "ro",
+      "control": null,
+      "note": "no handler write path",
+      "read": null,
+      "write": null
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
+   "control": "select",
+   "default": 3,
+   "kind": "enum",
+   "labels": {
+    "0": "1",
+    "1": "2",
+    "2": "3",
+    "3": "4",
+    "4": "5",
+    "5": "6",
+    "6": "7"
+   },
+   "read": {
+    "map": {
+     "": 3,
+     "42": 1,
+     "5": 0,
+     "65": 2,
+     "78": 3,
+     "86": 4,
+     "91": 5,
+     "94": 6
+    },
+    "param": 6070
+   },
+   "section": "detection",
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6070,
+    "params": {
+     "value": {
+      "$map": {
+       "0": 5,
+       "1": 42,
+       "2": 65,
+       "3": 78,
+       "4": 86,
+       "5": 91,
+       "6": 94
+      }
+     }
+    },
+    "extUpdates": [
+     {
+      "cmd": 6070,
+      "paramValue": {
+       "$map": {
+        "0": "5",
+        "1": "42",
+        "2": "65",
+        "3": "78",
+        "4": "86",
+        "5": "91",
+        "6": "94"
+       }
+      }
+     }
+    ]
+   }
+  },
+  "detection_sensitivity_test_mode": {
+   "access": "rw",
+   "control": "select",
+   "default": 3,
+   "kind": "enum",
+   "labels": {
+    "0": "1",
+    "1": "2",
+    "2": "3",
+    "3": "4",
+    "4": "5",
+    "5": "6",
+    "6": "7"
+   },
+   "read": {
+    "map": {
+     "": 3,
+     "42": 1,
+     "5": 0,
+     "65": 2,
+     "78": 3,
+     "86": 4,
+     "91": 5,
+     "94": 6
+    },
+    "param": 6070
+   },
+   "section": "detection",
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6070,
+    "params": {
+     "value": {
+      "$map": {
+       "0": 5,
+       "1": 42,
+       "2": 65,
+       "3": 78,
+       "4": 86,
+       "5": 91,
+       "6": 94
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6070,
+     "paramValue": {
+      "$map": {
+       "0": "5",
+       "1": "42",
+       "2": "65",
+       "3": "78",
+       "4": "86",
+       "5": "91",
+       "6": "94"
+      }
+     }
+    }
+   }
+  },
+  "detection_type_set": {
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "access": "ro",
+      "control": null,
+      "note": "no handler write path",
+      "read": null,
+      "write": null
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
+   "control": "select",
+   "default": 6,
+   "kind": "enum",
+   "labels": {
+    "5": "Human Recognition",
+    "6": "All Motions"
+   },
+   "read": {
+    "map": {
+     "": 6,
+     "0": 5,
+     "2": 6
+    },
+    "param": 1252
+   },
+   "section": "detection",
+   "values": [
+    5,
+    6
+   ],
+   "write": {
+    "cmd": 1252,
+    "params": {
+     "type": {
+      "$map": {
+       "5": 0,
+       "6": 2
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1252,
+     "paramValue": {
+      "$map": {
+       "5": "0",
+       "6": "2"
+      }
+     }
+    }
+   }
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "device_is_battery_device": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "power"
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "device_model": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "default": "0",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "section": "system",
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_serial_number": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "device_silent_ota_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6287
+   },
+   "section": "system",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6287,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6287,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_snooze_time": {
+   "access": "rw",
+   "control": "select",
+   "default": -1,
+   "kind": "enum",
+   "labels": {
+    "-1": "Off",
+    "0": "30 min",
+    "1": "1 hour",
+    "2": "2 hours",
+    "3": "6 hours",
+    "4": "12 hours"
+   },
+   "read": {
+    "map": {
+     "": -1,
+     "eyJzbm9vemVfdGltZSI6MH0=": -1,
+     "eyJzbm9vemVfdGltZSI6MTgwMH0=": 0,
+     "eyJzbm9vemVfdGltZSI6MjE2MDB9": 3,
+     "eyJzbm9vemVfdGltZSI6MzYwMH0=": 1,
+     "eyJzbm9vemVfdGltZSI6NDMyMDB9": 4,
+     "eyJzbm9vemVfdGltZSI6NzIwMH0=": 2
+    },
+    "param": 1271
+   },
+   "section": "notifications",
+   "values": [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "write": {
+    "cmd": 1271,
+    "params": {
+     "snooze_time": {
+      "$map": {
+       "-1": 0,
+       "0": 1800,
+       "1": 3600,
+       "2": 7200,
+       "3": 21600,
+       "4": 43200
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1271,
+     "paramValue": {
+      "$map": {
+       "-1": "eyJzbm9vemVfdGltZSI6MH0=",
+       "0": "eyJzbm9vemVfdGltZSI6MTgwMH0=",
+       "1": "eyJzbm9vemVfdGltZSI6MzYwMH0=",
+       "2": "eyJzbm9vemVfdGltZSI6NzIwMH0=",
+       "3": "eyJzbm9vemVfdGltZSI6MjE2MDB9",
+       "4": "eyJzbm9vemVfdGltZSI6NDMyMDB9"
+      }
+     }
+    }
+   }
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "device_storage_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "section": "storage",
+   "values": [
+    0
+   ]
+  },
+  "device_wifi_name": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null,
+   "section": "network"
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "ip_address": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "is_connected_solar_panel": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null,
+   "section": "power"
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "is_support_silent_ota_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "led_on_off": {
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": false,
+        "0": false,
+        "1": true
+       },
+       "param": 1045
+      },
+      "write": {
+       "cmd": 1045,
+       "params": {
+        "ledStatus": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1045,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6014
+   },
+   "section": "picture",
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6014,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6014,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "live_bottom_hor_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Record",
+    "13": "Spotlight",
+    "14": "Light",
+    "2": "Speaker",
+    "4": "Sound"
+   },
+   "read": null,
+   "section": "system",
+   "values": [
+    0,
+    2,
+    4,
+    13,
+    14
+   ]
+  },
+  "live_bottom_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Record",
+    "1": "Screenshot",
+    "10": "Event",
+    "13": "Spotlight",
+    "14": "Light",
+    "2": "Speaker",
+    "4": "Sound",
+    "8": "Auto Night Vision"
+   },
+   "read": null,
+   "section": "system",
+   "values": [
+    0,
+    1,
+    2,
+    4,
+    8,
+    10,
+    13,
+    14
+   ]
+  },
+  "live_streaming_resolution": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "10": "High",
+    "8": "Low",
+    "9": "Middle"
+   },
+   "read": {
+    "map": {
+     "": 0,
+     "0": 0,
+     "1": 8,
+     "2": 9,
+     "3": 10
+    },
+    "param": 1020
+   },
+   "section": "recording",
+   "values": [
+    0,
+    8,
+    9,
+    10
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1020,
+    "params": {
+     "quality": {
+      "$map": {
+       "0": 0,
+       "8": 1,
+       "9": 2,
+       "10": 3
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1020,
+     "paramValue": {
+      "$map": {
+       "0": "0",
+       "8": "1",
+       "9": "2",
+       "10": "3"
+      }
+     }
+    }
+   }
+  },
+  "live_support_full": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "live_support_mute": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "live_support_record": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "live_support_screenshot": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "live_top_hor_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Alarm",
+    "1": "Setting"
+   },
+   "read": null,
+   "section": "system",
+   "values": [
+    0,
+    1
+   ]
+  },
+  "live_top_toolbar_list": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Alarm",
+    "1": "Setting"
+   },
+   "read": null,
+   "section": "system",
+   "values": [
+    0,
+    1
+   ]
+  },
+  "mac_address": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "microphone_on_off": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1240
+   },
+   "section": "audio",
+   "write": {
+    "cmd": 1240,
+    "params": {
+     "enable": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1240,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "motion_detection_status": {
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": false,
+        "0": false,
+        "1": true
+       },
+       "param": 1011
+      },
+      "write": {
+       "cmd": 1011,
+       "params": {
+        "enable": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1011,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6040
+   },
+   "section": "detection",
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6040,
+    "params": {
+     "status": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6040,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "motion_stop_end_early": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": true,
+     "1": false
+    },
+    "param": 1251
+   },
+   "section": "recording",
+   "write": {
+    "cmd": 1251,
+    "params": {
+     "enable": {
+      "$map": {
+       "false": 1,
+       "true": 0
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1251,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
+  },
+  "nightvision_type": {
+   "access": "rw",
+   "control": "select",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "0": "Off",
+    "1": "Black",
+    "2": "Color"
+   },
+   "read": {
+    "map": {
+     "": 1,
+     "0": 0,
+     "1": 1,
+     "2": 2
+    },
+    "param": 1277
+   },
+   "section": "picture",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1277,
+    "params": {
+     "night_sion": "$v",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1277,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "notification_type": {
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "access": "ro",
+      "control": null,
+      "note": "handler rejects the probed values",
+      "read": null,
+      "write": null
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Most Efficient",
+    "1": "Full Effect",
+    "2": "Include Thumbnail"
+   },
+   "read": {
+    "map": {
+     "": 0,
+     "1": 0,
+     "2": 2,
+     "3": 1
+    },
+    "param": 6020
+   },
+   "section": "notifications",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6020,
+    "params": {
+     "value": {
+      "$map": {
+       "0": 1,
+       "1": 3,
+       "2": 2
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6020,
+     "paramValue": {
+      "$map": {
+       "0": "1",
+       "1": "3",
+       "2": "2"
+      }
+     }
+    }
+   }
+  },
+  "power_charge_mode": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Battery",
+    "1": "External Solar Panel"
+   },
+   "read": {
+    "map": null,
+    "param": 1293
+   },
+   "section": "power",
+   "values": [
+    0,
+    1
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1293,
+    "params": {
+     "enable": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1293,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "power_manager_mode": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Optimal battery life",
+    "1": "Optimal surveillance",
+    "3": "Custom recording"
+   },
+   "read": {
+    "map": {
+     "": 0,
+     "0": 0,
+     "1": 1,
+     "2": 3
+    },
+    "param": 1246
+   },
+   "section": "power",
+   "values": [
+    0,
+    1,
+    3
+   ],
+   "write": {
+    "cmd": 1246,
+    "params": {
+     "mode": {
+      "$map": {
+       "0": 0,
+       "1": 1,
+       "3": 2
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1246,
+     "paramValue": {
+      "$map": {
+       "0": "0",
+       "1": "1",
+       "3": "2"
+      }
+     }
+    }
+   }
+  },
+  "record_resolution": {
+   "access": "rw",
+   "control": "select",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "2": "Full HD(1080P)",
+    "5": "2K HD"
+   },
+   "read": {
+    "map": {
+     "": 2,
+     "2": 2,
+     "3": 5
+    },
+    "param": 1023
+   },
+   "section": "recording",
+   "values": [
+    5,
+    2
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1023,
+    "params": {
+     "quality": {
+      "$map": {
+       "5": 3,
+       "2": 2
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1023,
+     "paramValue": {
+      "$map": {
+       "5": "3",
+       "2": "2"
+      }
+     }
+    }
+   }
+  },
+  "set_privacy_zone": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "normalized": "1",
+    "panNum": "1",
+    "polyNum": "2",
+    "positionNum": "4",
+    "sideNum": "6",
+    "zoneHeight": "720",
+    "zoneWidth": "1280"
+   },
+   "note": "handler rejects the probed values",
+   "read": null,
+   "section": "detection",
+   "values": [
+    "sideNum",
+    "normalized",
+    "polyNum",
+    "panNum",
+    "positionNum",
+    "zoneWidth",
+    "zoneHeight"
+   ]
+  },
+  "speaker_on_off": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1241
+   },
+   "section": "audio",
+   "write": {
+    "cmd": 1241,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1241,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "speaker_volume": {
+   "access": "rw",
+   "control": "slider",
+   "default": 80,
+   "kind": "range",
+   "max": 100,
+   "min": 0,
+   "read": {
+    "map": null,
+    "param": 2003
+   },
+   "section": "audio",
+   "step": 1,
+   "write": {
+    "cmd": 1230,
+    "params": {
+     "volume": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2003,
+     "paramValue": "$v:str"
+    },
+    "extUpdates": [
+     {
+      "cmd": 1230,
+      "paramValue": "$v:str"
+     },
+     {
+      "cmd": 2003,
+      "paramValue": "$v:str"
+     }
+    ]
+   }
+  },
+  "spotlight_status": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "picture"
+  },
+  "spotlight_switch": {
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1400,
+       "params": {
+        "value": "$v:int",
+        "open": "$v:int",
+        "type": 2
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1400,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1400
+   },
+   "section": "picture",
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1400,
+    "params": {
+     "value": "$v:int",
+     "open": "$v:int",
+     "type": 2
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1400,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "spotlight_switch_status_relate": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "picture"
+  },
+  "support_video_codec": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "H264",
+    "1": "H265"
+   },
+   "read": null,
+   "section": "recording",
+   "values": [
+    0,
+    1
+   ]
+  },
+  "switching_notification": {
+   "access": "rw",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "Switch modes by schedule",
+    "1": "Switch modes from app"
+   },
+   "note": "round trip does not return the written value",
+   "read": null,
+   "section": "notifications",
+   "values": [
+    0,
+    1
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1283,
+    "params": {
+     "arm_push_mode": {
+      "$map": {
+       "0": 0,
+       "1": 16
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1283,
+     "paramValue": {
+      "$map": {
+       "0": "0",
+       "1": "16"
+      }
+     }
+    }
+   }
+  },
+  "time_format_set": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "12-hour",
+    "1": "24-hour"
+   },
+   "read": {
+    "map": null,
+    "param": 1253
+   },
+   "section": "system",
+   "values": [
+    0,
+    1
+   ],
+   "write": {
+    "cmd": 1253,
+    "params": {
+     "timeSystem": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1253,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "timezone_set": {
+   "access": "rw",
+   "control": "select",
+   "domain": "timezone",
+   "kind": "string",
+   "read": {
+    "map": null,
+    "param": 1215
+   },
+   "section": "system",
+   "write": {
+    "cmd": 1215,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1215,
+     "paramValue": "$v"
+    }
+   }
+  },
+  "trigger_interval_time": {
+   "access": "rw",
+   "control": "slider",
+   "default": 5,
+   "kind": "range",
+   "max": 60,
+   "min": 5,
+   "read": {
+    "map": null,
+    "param": 1250
+   },
+   "section": "recording",
+   "step": 1,
+   "write": {
+    "cmd": 1250,
+    "params": {
+     "interval": "$v",
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1250,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "video_clip_length": {
+   "access": "rw",
+   "control": "slider",
+   "default": 30,
+   "kind": "range",
+   "max": 60,
+   "min": 5,
+   "read": {
+    "map": null,
+    "param": 1249
+   },
+   "section": "recording",
+   "step": 1,
+   "write": {
+    "cmd": 1249,
+    "params": {
+     "duration": "$v",
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1249,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "video_intercom_audio_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null,
+   "section": "audio"
+  },
+  "video_intercom_duplex": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "audio"
+  },
+  "watermark_set": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1214
+   },
+   "section": "picture",
+   "write": {
+    "cmd": 1214,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1214,
+     "paramValue": "$v:str"
+    }
+   }
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T8150Handle.mix.js",
+  "handler_date": "2026-04-21",
+  "td_version": 59
+ }
+}

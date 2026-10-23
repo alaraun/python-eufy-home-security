@@ -112,6 +112,7 @@ KEY_RULES: tuple[tuple[str, str], ...] = (
     (r"prompt_volume_value|audio_alert_volume|ignore_set_alarm", "alarm"),
     (r"anti_theft_detection_switch|device_sos_.*|sensor_panic_.*|sensor_siren_.*", "alarm"),
     (r"sensor_alarm_timeout|sensor_low_temperature_alarm_threshold", "alarm"),
+    (r"device_monitor_indoor_temperature_switch|device_indoor_temperatur_alarm_.*", "alarm"),
     (r"device_pro_alarm_subscription_switch|is_support_professional_alarm", "alarm"),
     # Pan & tilt.
     (r"ptz_.*", "ptz"),
@@ -124,10 +125,10 @@ KEY_RULES: tuple[tuple[str, str], ...] = (
     # Picture: the image, night vision, lights and LEDs.
     (r"nightvision_.*|smart_lock_night_vision_.*", "picture"),
     (
-        r"(auto_|bottom_)?spotlight_.*|enable_floodlights_status|support_setting_spotlight_switch",
+        r"(auto_|bottom_|zoom_)?spotlight_.*|enable_floodlights_status|support_setting_spotlight_switch",
         "picture",
     ),
-    (r"light_.*|manual_light_brightness|led_.*|indicator_led_status", "picture"),
+    (r"light_.*|manual_light_brightness|led_.*|indicator_led_status|breathing_light_.*", "picture"),
     (r"watermark_set|rotate_image_180_on_off|video_mirror_mode_set|video_setting_.*", "picture"),
     (r"video_settings_led_activate_time|view_mode|(video_)?watch_view_mode", "picture"),
     (r"video_quality_(hdr|wdr|distortion_correction)_switch", "picture"),
@@ -146,7 +147,7 @@ KEY_RULES: tuple[tuple[str, str], ...] = (
     (r"device_agree_face_recognition_switch|device_agree_ai_terms_switch", "detection"),
     (r"ai_.*|aic_.*|hb_aic_.*|bind_ai_card_info|inserted_ai_card_info", "detection"),
     (r"device_cross_cam_.*|device_linkage_mode|device_wildlife_watch_mode_switch", "detection"),
-    (r"sensor_motion_.*|sensor_grass_.*|device_radar_.*|device_rain_mode", "detection"),
+    (r"sensor_motion_.*|sensor_grass_.*|(device_)?radar_.*|device_rain_mode", "detection"),
     (r"smart_lock_rain_mode_switch|support_smart_search_switch", "detection"),
     # Recording.
     (r"record_.*|live_streaming_resolution.*|device_continuous_.*", "recording"),
@@ -157,9 +158,10 @@ KEY_RULES: tuple[tuple[str, str], ...] = (
     ),
     (r"(remember_)?video_download_type|playback_play_speed|encrypt_playback_version", "recording"),
     (r"support_video_codec|player_.*|recording_number|working_days|detected_events", "recording"),
-    (r"smart_lock_no_recording_while_unlocked", "recording"),
+    (r"smart_lock_no_recording_while_unlocked|daily_highlight_.*", "recording"),
     # Audio.
     (r"microphone_on_off|speaker_.*|video_intercom_.*|support_intercom_codec", "audio"),
+    (r"device_white_noise_.*", "audio"),
     (
         r"smart_lock_lock_sound_.*|device_mute_switch|nvr_get_device_volume|pet_command_status",
         "audio",
@@ -198,6 +200,7 @@ KEY_RULES: tuple[tuple[str, str], ...] = (
     ),
     # System: identity, time, firmware, status and what the device supports.
     (r"device_name|timezone_set|time_format_set|device_(date|temperature)_format_set", "system"),
+    (r"device_indoor_temperature_unit", "system"),
     (r"smart_lock_set_timezone|device_silent_ota_switch|is_support_silent_ota_switch", "system"),
     (r"auto_ota_.*|firmware_.*|is_device(_ready)?_upgrade|accessory_ota_status", "system"),
     (

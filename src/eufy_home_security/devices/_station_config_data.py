@@ -13,47 +13,47 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
     "T7000": {
         "guard_mode": (
             "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "the eufy app sends arming_selected_mode to a T7000 over WebRTC, which this library does not implement",
         ),
         "custom_modes": (
             "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "the eufy app sends arming_cust_mode_config to a T7000 over WebRTC, which this library does not implement",
         ),
         "schedule": (
             "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "the eufy app sends arming_schedule_config to a T7000 over WebRTC, which this library does not implement",
         ),
         "mode_tables": (
             "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "the eufy app sends arming_config to a T7000 over WebRTC, which this library does not implement",
         ),
         "mode_delays": (
             "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "the eufy app sends arming_config to a T7000 over WebRTC, which this library does not implement",
         ),
         "cross_camera": (
             "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "the eufy app sends device_cross_cam_tracking_swtich to a T7000 over WebRTC, which this library does not implement",
         ),
         "cross_camera_groups": (
             "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "the eufy app sends device_cross_cam_tracking_swtich to a T7000 over WebRTC, which this library does not implement",
         ),
         "arming_groups": (
-            "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "declared",
+            "the eufy app sets arming_support_arming for a T7000 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "the eufy app sends restart_device to a T7000 over WebRTC, which this library does not implement",
         ),
         "sound_alarm": (
             "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "the T7000 thing description declares no set_alarm_type",
         ),
         "working_mode": (
             "unknown",
-            "no thing description or handler of the T7000 is on record",
+            "the eufy app sends working_mode_value to a T7000 over WebRTC, which this library does not implement",
         ),
     },
     "T8001": {
@@ -243,47 +243,47 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
     "T8021": {
         "guard_mode": (
             "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "the T8021 thing description declares no arming_selected_mode",
         ),
         "custom_modes": (
             "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "the T8021 thing description declares no arming_cust_mode_config",
         ),
         "schedule": (
             "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "the T8021 thing description declares no arming_schedule_config",
         ),
         "mode_tables": (
             "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "the T8021 thing description declares no arming_config",
         ),
         "mode_delays": (
             "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "the T8021 thing description declares no arming_config",
         ),
         "cross_camera": (
             "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "the T8021 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list",
         ),
         "cross_camera_groups": (
             "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "the T8021 thing description declares no device_cross_cam_group",
         ),
         "arming_groups": (
-            "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "declared",
+            "the eufy app sets arming_support_arming for a T8021 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "the T8021 thing description declares no restart_device",
         ),
         "sound_alarm": (
-            "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "declared",
+            "the T8021 handler builds set_alarm_type as 1201 (eufy app 6.1.10)",
         ),
         "working_mode": (
             "unknown",
-            "no thing description or handler of the T8021 is on record",
+            "the T8021 thing description declares no working_mode_value",
         ),
     },
     "T8023": {
@@ -473,47 +473,47 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
     "T8028": {
         "guard_mode": (
             "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "the T8028 handler builds arming_selected_mode as None, not 1224",
         ),
         "custom_modes": (
             "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "the T8028 thing description declares no arming_cust_mode_config",
         ),
         "schedule": (
             "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "the T8028 handler builds arming_schedule_config as None, not 1254",
         ),
         "mode_tables": (
             "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "the T8028 handler builds arming_config as None, not 1255",
         ),
         "mode_delays": (
             "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "the T8028 handler builds arming_config as None, not 1255",
         ),
         "cross_camera": (
             "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "the T8028 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list",
         ),
         "cross_camera_groups": (
             "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "the T8028 thing description declares no device_cross_cam_group",
         ),
         "arming_groups": (
-            "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "declared",
+            "the eufy app sets arming_support_arming for a T8028 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "the T8028 handler builds restart_device as None, not 1034",
         ),
         "sound_alarm": (
             "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "the T8028 thing description declares no set_alarm_type",
         ),
         "working_mode": (
             "unknown",
-            "no thing description or handler of the T8028 is on record",
+            "the T8028 thing description declares no working_mode_value",
         ),
     },
     "T8030": {
@@ -565,47 +565,47 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
     "T8040": {
         "guard_mode": (
             "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "the eufy app sends arming_selected_mode to a T8040 over WebRTC, which this library does not implement",
         ),
         "custom_modes": (
             "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "the eufy app sends arming_cust_mode_config to a T8040 over WebRTC, which this library does not implement",
         ),
         "schedule": (
             "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "the eufy app sends arming_schedule_config to a T8040 over WebRTC, which this library does not implement",
         ),
         "mode_tables": (
             "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "the eufy app sends arming_config to a T8040 over WebRTC, which this library does not implement",
         ),
         "mode_delays": (
             "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "the eufy app sends arming_config to a T8040 over WebRTC, which this library does not implement",
         ),
         "cross_camera": (
             "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "the eufy app sends device_cross_cam_tracking_swtich to a T8040 over WebRTC, which this library does not implement",
         ),
         "cross_camera_groups": (
             "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "the eufy app sends device_cross_cam_tracking_swtich to a T8040 over WebRTC, which this library does not implement",
         ),
         "arming_groups": (
-            "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "declared",
+            "the eufy app sets arming_support_arming for a T8040 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode",
         ),
         "restart": (
             "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "the eufy app sends restart_device to a T8040 over WebRTC, which this library does not implement",
         ),
         "sound_alarm": (
             "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "the eufy app sends set_alarm_type to a T8040 over WebRTC, which this library does not implement",
         ),
         "working_mode": (
             "unknown",
-            "no thing description or handler of the T8040 is on record",
+            "the eufy app sends working_mode_value to a T8040 over WebRTC, which this library does not implement",
         ),
     },
     "T8N00": {
@@ -703,6 +703,7 @@ FEATURES: Final[dict[str, dict[str, tuple[str, str]]]] = {
 }
 
 MODE_TABLE_STORAGE: Final[dict[str, str]] = {
+    "T7000": "pro_alarm",
     "T8001": "action_params",
     "T8002": "action_params",
     "T8010": "action_params",
@@ -712,11 +713,13 @@ MODE_TABLE_STORAGE: Final[dict[str, str]] = {
     "T8025": "action_params",
     "T8026": "pro_alarm",
     "T8030": "hb3_tables",
+    "T8040": "action_params",
     "T8N00": "pro_alarm",
     "T9000": "pro_alarm",
 }
 
 MODE_TABLE_PARAMS: Final[dict[str, dict[int, int]]] = {
+    "T7000": {0: 61301, 1: 61300, 3: 61307, 4: 61308, 5: 61309, 63: 61306},
     "T8001": {0: 1239, 1: 1225, 3: 1148, 4: 1149, 5: 1150, 63: 1177},
     "T8002": {0: 1239, 1: 1225, 3: 1148, 4: 1149, 5: 1150, 63: 1177},
     "T8010": {0: 1239, 1: 1225, 3: 1148, 4: 1149, 5: 1150, 63: 1177},
@@ -726,6 +729,7 @@ MODE_TABLE_PARAMS: Final[dict[str, dict[int, int]]] = {
     "T8025": {0: 1239, 1: 1225, 3: 1148, 4: 1149, 5: 1150, 63: 1177},
     "T8026": {0: 61301, 1: 61300, 3: 61307, 4: 61308, 5: 61309, 63: 61306},
     "T8030": {0: 1158, 1: 1157, 3: 1159, 4: 1160, 5: 1161, 63: 1177},
+    "T8040": {0: 1239, 1: 1225, 3: 1148, 4: 1149, 5: 1150, 63: 1177},
     "T8N00": {0: 61301, 1: 61300, 3: 61307, 4: 61308, 5: 61309, 63: 61306},
     "T9000": {0: 61301, 1: 61300, 3: 61307, 4: 61308, 5: 61309, 63: 61306},
 }

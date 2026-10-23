@@ -1,0 +1,619 @@
+{
+ "product_code": "T870G",
+ "schema_version": 3,
+ "settings": {
+  "anti_theft_detection_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 2735
+   },
+   "section": "alarm",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 2735,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2735,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "100",
+   "kind": "string",
+   "read": null,
+   "section": "power"
+  },
+  "breathing_light_schedule_config": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "{\"enable\":false}": false,
+     "{\"enable\":true}": true
+    },
+    "param": 1421
+   },
+   "section": "picture",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1421,
+    "params": {
+     "enable": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1421,
+     "paramValue": {
+      "$map": {
+       "false": "{\"enable\":false}",
+       "true": "{\"enable\":true}"
+      }
+     }
+    }
+   }
+  },
+  "detection_sensitivity": {
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "note": null,
+      "read": {
+       "map": {
+        "": 1,
+        "1": 0,
+        "3": 1,
+        "5": 2
+       },
+       "param": 1276
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "1",
+    "1": "3",
+    "2": "5"
+   },
+   "note": "round trip does not return the written value",
+   "read": null,
+   "section": "detection",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1276,
+    "params": {
+     "sensitivity": {
+      "$map": {
+       "0": 1,
+       "1": 3,
+       "2": 5
+      }
+     },
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1276,
+     "paramValue": {
+      "$map": {
+       "0": "1",
+       "1": "3",
+       "2": "5"
+      }
+     }
+    }
+   }
+  },
+  "device_alarm_sound_list": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "read": null,
+   "section": "alarm",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6433,
+    "params": "$v"
+   }
+  },
+  "device_alarm_sound_type": {
+   "access": "rw",
+   "kind": "other",
+   "read": {
+    "map": null,
+    "param": 7023
+   },
+   "section": "alarm",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 7023,
+    "params": {
+     "type": "$v"
+    },
+    "update": {
+     "cmd": 7023,
+     "needUpdate": true,
+     "paramValue": "$v"
+    }
+   }
+  },
+  "device_is_battery_device": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "power"
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "device_model": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "section": "system",
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_on_off": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null,
+   "section": "other"
+  },
+  "device_set_alarm_light_type": {
+   "access": "rw",
+   "control": "select",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "0": "White flashing",
+    "1": "Red & blue flashing",
+    "2": "White breathing",
+    "3": "Reed & blue & white flashing"
+   },
+   "read": {
+    "map": null,
+    "param": 9251
+   },
+   "section": "alarm",
+   "values": [
+    2,
+    0,
+    1,
+    3
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 9251,
+    "params": {
+     "type": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 9251,
+     "paramValue": "$v"
+    }
+   }
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null,
+   "section": "network"
+  },
+  "firmware_main_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "firmware_main_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "firmware_sub_version": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "firmware_sub_version_time": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "ignore_set_alarm": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "alarm"
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "light_setting_schedule_list": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "picture"
+  },
+  "motion_activated_light_setting": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "picture"
+  },
+  "motion_detection_status": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6040
+   },
+   "section": "detection",
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6040,
+    "params": {
+     "status": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6040,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "multi_detection_sensitivity": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler transforms the value",
+   "read": null,
+   "section": "detection"
+  },
+  "power_manager_mode": {
+   "access": "ro",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "0": "Optimal battery life",
+    "1": "Optimal surveillance",
+    "2": "Balanced surveillance",
+    "3": "Custom recording"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "section": "power",
+   "values": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "power_source_mode": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Not charging",
+    "1": "USB charging",
+    "12": "External and built-in solar charging",
+    "2": "Not charging",
+    "3": "AC charging (doorbell)",
+    "4": "Built-in solar charging",
+    "5": "USB and built-in solar charging",
+    "8": "External solar panel"
+   },
+   "read": null,
+   "section": "power",
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    8,
+    12
+   ]
+  },
+  "sdk_model_config": {
+   "access": "ro",
+   "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"read\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"service\":\"8c850001-0302-41c5-b46e-cf057c562025\", \"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"syncHeartBeat\":true}}",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "setting_model_config": {
+   "access": "ro",
+   "default": "{\"config\":{\"useCloudDeviceImage\":true}}",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "speaker_on_off": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1241
+   },
+   "section": "audio",
+   "write": {
+    "cmd": 1241,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1241,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "speaker_volume": {
+   "access": "rw",
+   "control": "select",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "0": "High",
+    "1": "Medium",
+    "2": "Low"
+   },
+   "read": {
+    "map": null,
+    "param": 2003
+   },
+   "section": "audio",
+   "values": [
+    2,
+    1,
+    0
+   ],
+   "write": {
+    "cmd": 1230,
+    "params": {
+     "volume": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2003,
+     "paramValue": "$v:str"
+    },
+    "extUpdates": [
+     {
+      "cmd": 1230,
+      "paramValue": "$v:str"
+     },
+     {
+      "cmd": 2003,
+      "paramValue": "$v:str"
+     }
+    ]
+   }
+  },
+  "spotlight_brightness_level": {
+   "access": "rw",
+   "control": "slider",
+   "default": 50,
+   "kind": "range",
+   "max": 100,
+   "min": 1,
+   "read": {
+    "map": null,
+    "param": 1401
+   },
+   "section": "picture",
+   "step": 1,
+   "write": {
+    "cmd": 1401,
+    "params": {
+     "brightness": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1401,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "spotlight_status": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1403
+   },
+   "section": "picture",
+   "write": {
+    "cmd": 1403,
+    "params": {
+     "value": "$v:int",
+     "switch": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1403,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "spotlight_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "section": "picture",
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1403,
+    "params": {
+     "value": "$v:int",
+     "open": "$v:int",
+     "type": 2,
+     "time": 60
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1403,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "tilt_detection_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 9500
+   },
+   "section": "detection",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 9500,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 9500,
+     "paramValue": "$v:int"
+    }
+   }
+  },
+  "tilt_status": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T870GHandle.mix.js",
+  "handler_date": "2026-07-16",
+  "td_version": 48
+ }
+}

@@ -1,0 +1,177 @@
+{
+ "product_code": "T8L20",
+ "schema_version": 3,
+ "settings": {
+  "calibrated_switch": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "cloud_light_effect_id": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "color_gradient_switch": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "device_is_online": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "device_light_brightness": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "device_light_led_status": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "device_radar_bind_need_app_report_flag": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "detection"
+  },
+  "is_support_ble": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "network"
+  },
+  "is_support_mqtt": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "network"
+  },
+  "is_support_music_rhythm": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "is_support_share": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "light_effect_id": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "picture"
+  },
+  "light_effect_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "picture"
+  },
+  "light_effect_version": {
+   "access": "ro",
+   "default": "2",
+   "kind": "other",
+   "read": null,
+   "section": "picture"
+  },
+  "light_led_detection_status": {
+   "access": "ro",
+   "default": "-1",
+   "kind": "other",
+   "read": null,
+   "section": "picture"
+  },
+  "light_length": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "picture"
+  },
+  "light_music_rhythm_switch": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "picture"
+  },
+  "ota_status": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ota_timeout": {
+   "access": "ro",
+   "default": "450",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "power_light_effect_switch": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "power"
+  },
+  "radar_bind_status": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "detection"
+  },
+  "radar_mac": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "detection"
+  },
+  "radar_sn": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "detection"
+  },
+  "radar_status": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "detection"
+  },
+  "sdk_model_config": {
+   "access": "ro",
+   "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c5620225\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"syncHeartBeat\":true}}",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "spotlight_switch": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "picture"
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T8L20Handle.mix.js",
+  "handler_date": "2026-04-08",
+  "td_version": 14
+ }
+}

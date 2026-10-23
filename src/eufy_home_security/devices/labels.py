@@ -53,6 +53,7 @@ SETTING_NAMES: Final[Mapping[str, str]] = MappingProxyType(
         "playback_play_speed": "Playback speed",
         "record_resolution": "Recording quality",
         "sensor_motion_pet_setting": "Pet setting",
+        "spotlight_status": "Lighting",
         "spotlight_switch": "Spotlight",
         "time_format_set": "Clock format",
         "watermark_set": "Watermark",

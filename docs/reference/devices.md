@@ -389,26 +389,28 @@ Which station configuration features each station model offers (`Station.config_
 | mode_delays | yes | unknown | declared | declared | declared | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | cross_camera | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | cross_camera_groups | no | unknown | unknown | unknown | unknown | unknown | unknown | unknown | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
-| arming_groups | yes | unknown | declared | declared | declared | declared | unknown | declared | declared | declared | declared | unknown | verified | unknown | declared | unknown |
+| arming_groups | yes | declared | declared | declared | declared | declared | declared | declared | declared | declared | declared | declared | verified | declared | declared | unknown |
 | restart | yes | unknown | declared | declared | declared | declared | unknown | unknown | unknown | declared | declared | unknown | verified | unknown | unknown | unknown |
-| sound_alarm | yes | unknown | declared | declared | declared | declared | unknown | declared | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
+| sound_alarm | yes | unknown | declared | declared | declared | declared | declared | declared | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | working_mode | no | unknown | declared | declared | declared | unknown | unknown | unknown | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
 
 ### Station configuration of T7000 Station T7000
 
+Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, custom_3 61309, disarmed 61306)
+
 | feature | support | min firmware | source |
 |---|---|---|---|
-| guard_mode | unknown | - | no thing description or handler of the T7000 is on record |
-| custom_modes | unknown | - | no thing description or handler of the T7000 is on record |
-| schedule | unknown | - | no thing description or handler of the T7000 is on record |
-| mode_tables | unknown | - | no thing description or handler of the T7000 is on record |
-| mode_delays | unknown | - | no thing description or handler of the T7000 is on record |
-| cross_camera | unknown | - | no thing description or handler of the T7000 is on record |
-| cross_camera_groups | unknown | - | no thing description or handler of the T7000 is on record |
-| arming_groups | unknown | - | no thing description or handler of the T7000 is on record |
-| restart | unknown | - | no thing description or handler of the T7000 is on record |
-| sound_alarm | unknown | - | no thing description or handler of the T7000 is on record |
-| working_mode | unknown | - | no thing description or handler of the T7000 is on record |
+| guard_mode | unknown | - | the eufy app sends arming_selected_mode to a T7000 over WebRTC, which this library does not implement |
+| custom_modes | unknown | - | the eufy app sends arming_cust_mode_config to a T7000 over WebRTC, which this library does not implement |
+| schedule | unknown | - | the eufy app sends arming_schedule_config to a T7000 over WebRTC, which this library does not implement |
+| mode_tables | unknown | - | the eufy app sends arming_config to a T7000 over WebRTC, which this library does not implement |
+| mode_delays | unknown | - | the eufy app sends arming_config to a T7000 over WebRTC, which this library does not implement |
+| cross_camera | unknown | - | the eufy app sends device_cross_cam_tracking_swtich to a T7000 over WebRTC, which this library does not implement |
+| cross_camera_groups | unknown | - | the eufy app sends device_cross_cam_tracking_swtich to a T7000 over WebRTC, which this library does not implement |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T7000 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
+| restart | unknown | - | the eufy app sends restart_device to a T7000 over WebRTC, which this library does not implement |
+| sound_alarm | unknown | - | the T7000 thing description declares no set_alarm_type |
+| working_mode | unknown | - | the eufy app sends working_mode_value to a T7000 over WebRTC, which this library does not implement |
 
 ### Station configuration of T8001 Station
 
@@ -494,17 +496,17 @@ Restart: 1034
 
 | feature | support | min firmware | source |
 |---|---|---|---|
-| guard_mode | unknown | - | no thing description or handler of the T8021 is on record |
-| custom_modes | unknown | - | no thing description or handler of the T8021 is on record |
-| schedule | unknown | - | no thing description or handler of the T8021 is on record |
-| mode_tables | unknown | - | no thing description or handler of the T8021 is on record |
-| mode_delays | unknown | - | no thing description or handler of the T8021 is on record |
-| cross_camera | unknown | - | no thing description or handler of the T8021 is on record |
-| cross_camera_groups | unknown | - | no thing description or handler of the T8021 is on record |
-| arming_groups | unknown | - | no thing description or handler of the T8021 is on record |
-| restart | unknown | - | no thing description or handler of the T8021 is on record |
-| sound_alarm | unknown | - | no thing description or handler of the T8021 is on record |
-| working_mode | unknown | - | no thing description or handler of the T8021 is on record |
+| guard_mode | unknown | - | the T8021 thing description declares no arming_selected_mode |
+| custom_modes | unknown | - | the T8021 thing description declares no arming_cust_mode_config |
+| schedule | unknown | - | the T8021 thing description declares no arming_schedule_config |
+| mode_tables | unknown | - | the T8021 thing description declares no arming_config |
+| mode_delays | unknown | - | the T8021 thing description declares no arming_config |
+| cross_camera | unknown | - | the T8021 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list |
+| cross_camera_groups | unknown | - | the T8021 thing description declares no device_cross_cam_group |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8021 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
+| restart | unknown | - | the T8021 thing description declares no restart_device |
+| sound_alarm | declared | - | the T8021 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
+| working_mode | unknown | - | the T8021 thing description declares no working_mode_value |
 
 ### Station configuration of T8023 Station 8023
 
@@ -588,17 +590,17 @@ Restart: 1034
 
 | feature | support | min firmware | source |
 |---|---|---|---|
-| guard_mode | unknown | - | no thing description or handler of the T8028 is on record |
-| custom_modes | unknown | - | no thing description or handler of the T8028 is on record |
-| schedule | unknown | - | no thing description or handler of the T8028 is on record |
-| mode_tables | unknown | - | no thing description or handler of the T8028 is on record |
-| mode_delays | unknown | - | no thing description or handler of the T8028 is on record |
-| cross_camera | unknown | - | no thing description or handler of the T8028 is on record |
-| cross_camera_groups | unknown | - | no thing description or handler of the T8028 is on record |
-| arming_groups | unknown | - | no thing description or handler of the T8028 is on record |
-| restart | unknown | - | no thing description or handler of the T8028 is on record |
-| sound_alarm | unknown | - | no thing description or handler of the T8028 is on record |
-| working_mode | unknown | - | no thing description or handler of the T8028 is on record |
+| guard_mode | unknown | - | the T8028 handler builds arming_selected_mode as None, not 1224 |
+| custom_modes | unknown | - | the T8028 thing description declares no arming_cust_mode_config |
+| schedule | unknown | - | the T8028 handler builds arming_schedule_config as None, not 1254 |
+| mode_tables | unknown | - | the T8028 handler builds arming_config as None, not 1255 |
+| mode_delays | unknown | - | the T8028 handler builds arming_config as None, not 1255 |
+| cross_camera | unknown | - | the T8028 thing description declares no device_cross_cam_tracking_swtich, device_cross_cam_assistance_switch, device_cross_cam_interval, device_cross_cam_list |
+| cross_camera_groups | unknown | - | the T8028 thing description declares no device_cross_cam_group |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8028 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
+| restart | unknown | - | the T8028 handler builds restart_device as None, not 1034 |
+| sound_alarm | unknown | - | the T8028 thing description declares no set_alarm_type |
+| working_mode | unknown | - | the T8028 thing description declares no working_mode_value |
 
 ### Station configuration of T8030 HomeBase 3 (S380)
 
@@ -624,19 +626,21 @@ Restart: 1034
 
 ### Station configuration of T8040 Station 4
 
+Mode tables: action_params (away 1239, home 1225, custom_1 1148, custom_2 1149, custom_3 1150, disarmed 1177)
+
 | feature | support | min firmware | source |
 |---|---|---|---|
-| guard_mode | unknown | - | no thing description or handler of the T8040 is on record |
-| custom_modes | unknown | - | no thing description or handler of the T8040 is on record |
-| schedule | unknown | - | no thing description or handler of the T8040 is on record |
-| mode_tables | unknown | - | no thing description or handler of the T8040 is on record |
-| mode_delays | unknown | - | no thing description or handler of the T8040 is on record |
-| cross_camera | unknown | - | no thing description or handler of the T8040 is on record |
-| cross_camera_groups | unknown | - | no thing description or handler of the T8040 is on record |
-| arming_groups | unknown | - | no thing description or handler of the T8040 is on record |
-| restart | unknown | - | no thing description or handler of the T8040 is on record |
-| sound_alarm | unknown | - | no thing description or handler of the T8040 is on record |
-| working_mode | unknown | - | no thing description or handler of the T8040 is on record |
+| guard_mode | unknown | - | the eufy app sends arming_selected_mode to a T8040 over WebRTC, which this library does not implement |
+| custom_modes | unknown | - | the eufy app sends arming_cust_mode_config to a T8040 over WebRTC, which this library does not implement |
+| schedule | unknown | - | the eufy app sends arming_schedule_config to a T8040 over WebRTC, which this library does not implement |
+| mode_tables | unknown | - | the eufy app sends arming_config to a T8040 over WebRTC, which this library does not implement |
+| mode_delays | unknown | - | the eufy app sends arming_config to a T8040 over WebRTC, which this library does not implement |
+| cross_camera | unknown | - | the eufy app sends device_cross_cam_tracking_swtich to a T8040 over WebRTC, which this library does not implement |
+| cross_camera_groups | unknown | - | the eufy app sends device_cross_cam_tracking_swtich to a T8040 over WebRTC, which this library does not implement |
+| arming_groups | declared | - | the eufy app sets arming_support_arming for a T8040 (eufy app 6.1.10); a house-level cloud feature that sets each member's guard mode |
+| restart | unknown | - | the eufy app sends restart_device to a T8040 over WebRTC, which this library does not implement |
+| sound_alarm | unknown | - | the eufy app sends set_alarm_type to a T8040 over WebRTC, which this library does not implement |
+| working_mode | unknown | - | the eufy app sends working_mode_value to a T8040 over WebRTC, which this library does not implement |
 
 ### Station configuration of T8N00 Station NVR
 
@@ -679,6 +683,872 @@ Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, 
 Each model's settings as its bundled settings file lists them: *rw* settings the library can write, *ro* settings it only reads or lists. *control* is the control a UI offers for a writable setting. *labels* are the app's titles of the values.
 
 The per-mode settings (`alarm_delay_<mode>`, `leaving_delay_<mode>` and `<scope>_action_<mode>`) are not model data: they apply to every camera and sensor paired to a station and are listed with that device's settings.
+
+### Settings of T2801 T2801
+
+rw 0 / ro 280
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `automation_config` | string | - | - | no | - | - |
+| `ecl_debug_log_sw` | bool | - | - | no | - | - |
+| `ecl_device_info_product_name` | string | - | - | no | - | - |
+| `ecl_device_name` | string | - | - | no | - | - |
+| `ecl_get_device_status` | other | - | - | no | - | - |
+| `ecl_get_device_status_icon` | string | - | - | no | - | - |
+| `ecl_get_device_status_text` | string | - | - | no | - | - |
+| `ecl_get_voice_list` | enum | 1, 2, 3 | - | no | - | 1=Language type chinese, 2=Language type english, 3=Language type german |
+| `ecl_get_voice_list__v1` | enum | 1, 2, 3, 4, 5 | - | no | - | 1=Language type chinese, 2=Language type english, 3=Language type german, 4=Language type spanish, 5=Language type french |
+| `ecl_get_voice_list__v2` | enum | 1, 2, 3, 4, 5, 6, 7, 8 | - | no | - | 1=Language type chinese, 2=Language type english, 3=Language type german, 4=Language type spanish, 5=Language type french, 6=Language type italian, 7=Language type dutch, 8=Language type polish |
+| `ecl_language_current_id` | other | - | - | no | - | - |
+| `ecl_language_default_id` | other | - | - | no | - | - |
+| `ecl_language_version` | other | - | - | no | - | - |
+| `ecl_mow_4g_module_type` | other | - | - | no | - | - |
+| `ecl_mow_anti_theft_cmd_response_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_anti_theft_cmd_response_ret` | other | - | - | no | - | - |
+| `ecl_mow_anti_theft_cmd_response_verify_pin_result` | bool | - | - | no | - | - |
+| `ecl_mow_anti_theft_status_has_pin` | bool | - | - | no | - | - |
+| `ecl_mow_anti_theft_status_mode` | string | - | - | no | - | - |
+| `ecl_mow_anti_theft_status_sensitivity` | other | - | - | no | - | - |
+| `ecl_mow_battery_status_charger_connected` | bool | - | - | no | - | - |
+| `ecl_mow_battery_status_is_switch_on` | bool | - | - | no | - | - |
+| `ecl_mow_battery_status_state` | other | - | - | no | - | - |
+| `ecl_mow_battery_status_tempreture` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_expire_time` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_state` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_terminate_time` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_total_data` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_used_data` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_error_code` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_error_type` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_has_error` | bool | - | - | no | - | - |
+| `ecl_mow_cellular_info_is_enabled` | bool | - | - | no | - | - |
+| `ecl_mow_cellular_info_type` | other | - | - | no | - | - |
+| `ecl_mow_clean_record_statistic_clean_area` | other | - | - | no | - | - |
+| `ecl_mow_clean_record_statistic_clean_times` | other | - | - | no | - | - |
+| `ecl_mow_clean_record_statistic_duration` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_dp` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_anti_theft` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_battery_status` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_battery_strategy` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_blade_disk_speed` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_ble_communication` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_bluetooth_remote_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_cellular_network` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_clean_record` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_cliff_detection` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_custom_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_custom_mowing` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_custom_passage` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_daylight_period` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_defogger_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_device_info` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_edge_trim` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_extend_cmd` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_extra_info` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_high_grass_edge_trim` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_home_assistant` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_illuminate_light` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_main_direction_angle` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_map` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_map_area` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_map_status` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mission_status` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mow_speed` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_multi_base` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_ota` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_overnight_auto_resume` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_path` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_rain_sensor` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_remote_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_schedule` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_slope_detection` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_sparse_lawn_optimization` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_upload_log` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_video_stream` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_voice_notification` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_weather` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_wifi_roaming` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_work_mode` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_work_progress_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_overall` | other | - | - | no | - | - |
+| `ecl_mow_control_pause_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_pause_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_control_resume_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_resume_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_control_start_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_start_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_control_stop_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_stop_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_is_length_enough` | bool | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_is_on_grass` | bool | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_length` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_selected_point_x` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_selected_point_y` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_stage` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_type` | other | - | - | no | - | - |
+| `ecl_mow_debug_panel_ack_result` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_ap_app` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_ap_system` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_cellular` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_drive_wheel` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_drive_wheel_loader` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_main_controller` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_main_controller_loader` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_mow_motor` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_mow_motor_loader` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ble_info_id` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ble_info_mac` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ip` | string | - | - | no | - | - |
+| `ecl_mow_device_info_sn` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ssid` | string | - | - | no | - | - |
+| `ecl_mow_device_info_uuid` | string | - | - | no | - | - |
+| `ecl_mow_device_info_version` | string | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_first_online_time` | other | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_first_use_time` | other | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_is_activated` | bool | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_is_first_use_time_accruate` | bool | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_is_used` | bool | - | - | no | - | - |
+| `ecl_mow_device_info_wifi_mac` | string | - | - | no | - | - |
+| `ecl_mow_extend_cmd_ack_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_extend_cmd_ack_ret_code` | other | - | - | no | - | - |
+| `ecl_mow_extend_cmd_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_is_defogger_heating` | bool | - | - | no | - | - |
+| `ecl_mow_extend_status_is_illuminate_light_on` | bool | - | - | no | - | - |
+| `ecl_mow_extend_status_is_not_in_daylight_period` | bool | - | - | no | - | - |
+| `ecl_mow_extend_status_sunrise_hour` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_sunrise_minute` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_sunset_hour` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_sunset_minute` | other | - | - | no | - | - |
+| `ecl_mow_extream_weather_info_url` | string | - | - | no | - | - |
+| `ecl_mow_get_after_rain_stop_setting_auto_resume_delay_time_hours` | other | - | - | no | - | - |
+| `ecl_mow_get_after_rain_stop_setting_auto_resume_delay_time_minutes` | other | - | - | no | - | - |
+| `ecl_mow_get_after_rain_stop_setting_enable_auto_resume` | bool | - | - | no | - | - |
+| `ecl_mow_get_ai_forbidden_zone_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_base_station_use_time` | other | - | - | no | - | - |
+| `ecl_mow_get_bird_view_collection_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_blade_disk_use_time` | other | - | - | no | - | - |
+| `ecl_mow_get_ble_encryption_info_initial_key` | string | - | - | no | - | - |
+| `ecl_mow_get_cellular_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_children_lock` | bool | - | - | no | - | - |
+| `ecl_mow_get_daylight_period_minutes_after_sunrise` | other | - | - | no | - | - |
+| `ecl_mow_get_daylight_period_minutes_before_sunset` | other | - | - | no | - | - |
+| `ecl_mow_get_disable_wifi_roaming` | bool | - | - | no | - | - |
+| `ecl_mow_get_edge_cutting_distance` | other | - | - | no | - | - |
+| `ecl_mow_get_enable_cliff_detection` | bool | - | - | no | - | - |
+| `ecl_mow_get_enable_high_grass_edge_trim` | bool | - | - | no | - | - |
+| `ecl_mow_get_enable_slope_detection` | bool | - | - | no | - | - |
+| `ecl_mow_get_error_code` | other | - | - | no | - | - |
+| `ecl_mow_get_error_list` | string | - | - | no | - | - |
+| `ecl_mow_get_event_code` | other | - | - | no | - | - |
+| `ecl_mow_get_event_list` | string | - | - | no | - | - |
+| `ecl_mow_get_extra_info` | string | - | - | no | - | - |
+| `ecl_mow_get_force_cellular_network` | bool | - | - | no | - | - |
+| `ecl_mow_get_force_single_base_station_mode` | bool | - | - | no | - | - |
+| `ecl_mow_get_home_assistant_config_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_home_assistant_config_passwd` | string | - | - | no | - | - |
+| `ecl_mow_get_internet_connection_mode` | other | - | - | no | - | - |
+| `ecl_mow_get_low_battery_charge_to_resume_level` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_boundary_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_param_mode` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_speed` | other | - | - | no | - | - |
+| `ecl_mow_get_overnight_auto_resume_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_overnight_auto_resume_time_hour` | other | - | - | no | - | - |
+| `ecl_mow_get_overnight_auto_resume_time_minute` | other | - | - | no | - | - |
+| `ecl_mow_get_power_level` | other | - | - | no | - | - |
+| `ecl_mow_get_rain_return` | bool | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_reading_response_is_rainy` | bool | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_reading_response_reading` | other | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_threshold_lower_limit` | other | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_threshold_upper_limit` | other | - | - | no | - | - |
+| `ecl_mow_get_sparse_lawn_optimization_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_stuck_escape_level` | other | - | - | no | - | - |
+| `ecl_mow_get_volume` | other | - | - | no | - | - |
+| `ecl_mow_get_weather_config_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_weather_config_enable_extream_weather_optimize` | bool | - | - | no | - | - |
+| `ecl_mow_get_weather_info_extream_weather_info_url` | string | - | - | no | - | - |
+| `ecl_mow_get_weather_info_has_extream_weather` | bool | - | - | no | - | - |
+| `ecl_mow_get_wifi_signal_strength` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_base_stations` | string | - | - | no | - | - |
+| `ecl_mow_gps_info_is_valid` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_is_current_located` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_is_out_of_boundary` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_is_valid` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_position_latitude` | other | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_position_longitude` | other | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_position_positioning_error` | other | - | - | no | - | - |
+| `ecl_mow_gps_info_time` | other | - | - | no | - | - |
+| `ecl_mow_log_upload_status_is_uploading` | bool | - | - | no | - | - |
+| `ecl_mow_log_upload_status_process` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_blade_disk_speed` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_current_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_edge_cutting_distance` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_auto_rotate_mode_config_angle_interval` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_mode` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_multiple_mode_config_angles` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_single_mode_config_angle` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_current_angle` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_mow_speed` | other | - | - | no | - | - |
+| `ecl_mow_map_area_clean_area` | other | - | - | no | - | - |
+| `ecl_mow_map_area_is_completed` | bool | - | - | no | - | - |
+| `ecl_mow_map_area_total_area` | other | - | - | no | - | - |
+| `ecl_mow_map_area_type` | other | - | - | no | - | - |
+| `ecl_mow_map_area_work_duration` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_merge_region_ack_error_code` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_split_region_ack_error_code` | other | - | - | no | - | - |
+| `ecl_mow_map_get_save_progress` | other | - | - | no | - | - |
+| `ecl_mow_map_status_backup_map_backup_id` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_backup_map_id` | other | - | - | no | - | - |
+| `ecl_mow_map_status_is_able_to_run_build_map` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_is_backing_up_map` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_is_map_detected` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_is_spot_mode_map` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_main_direction_angle` | other | - | - | no | - | - |
+| `ecl_mow_map_status_map_id` | other | - | - | no | - | - |
+| `ecl_mow_map_status_map_number` | other | - | - | no | - | - |
+| `ecl_mow_map_status_map_state` | other | - | - | no | - | - |
+| `ecl_mow_map_status_spot_mode_map_number` | other | - | - | no | - | - |
+| `ecl_mow_max_rain_sensor_threshold` | other | - | - | no | - | - |
+| `ecl_mow_min_rain_sensor_threshold` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_back_to_station_reason` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_has_error` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_data_conversion_in_progress` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_robot_navi_located` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_saving_data` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_upgrading` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_mission` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_power_mode` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_state` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_sub_mission` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_create_backup_response_error_code` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_create_backup_response_need_delete_number` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_create_backup_response_total_number` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_update_backup_response_error_code` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_ota_status` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_type` | other | - | - | no | - | - |
+| `ecl_mow_remote_control_ack_error_code` | other | - | - | no | - | - |
+| `ecl_mow_remote_control_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_remote_control_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_schedule_ack_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_schedule_ack_code` | other | - | - | no | - | - |
+| `ecl_mow_schedule_ack_schedule_list` | string | - | - | no | - | - |
+| `ecl_mow_schedule_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_end_time_hour` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_end_time_minute` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_exist` | bool | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_item_id` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_shift_id` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_start_time_hour` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_start_time_minute` | other | - | - | no | - | - |
+| `ecl_mow_upload_log_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_upload_log_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_generate_pin_salt_result_pin_salt` | string | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_get_pin_salt_result_pin_salt` | string | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_ret` | other | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_verify_pin_salt_result_pin_salt` | bool | - | - | no | - | - |
+| `ecl_mow_video_stream_status_has_pin_code` | bool | - | - | no | - | - |
+| `ecl_mow_video_stream_status_is_enabled` | bool | - | - | no | - | - |
+| `ecl_mow_video_stream_status_is_in_enable_procedure` | bool | - | - | no | - | - |
+| `ecl_mow_work_mode_map_mode` | other | - | - | no | - | - |
+| `ecl_mow_work_mode_move_mode` | other | - | - | no | - | - |
+| `ecl_mow_work_mode_mow_mode` | other | - | - | no | - | - |
+| `ecl_support_function` | string | - | - | no | - | - |
+| `ecl_support_siri` | other | - | - | no | - | - |
+
+### Settings of T280B T280B
+
+rw 0 / ro 285
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `automation_config` | string | - | - | no | - | - |
+| `ecl_debug_log_sw` | bool | - | - | no | - | - |
+| `ecl_device_info_product_name` | string | - | - | no | - | - |
+| `ecl_device_name` | string | - | - | no | - | - |
+| `ecl_get_device_status` | other | - | - | no | - | - |
+| `ecl_get_device_status_icon` | string | - | - | no | - | - |
+| `ecl_get_device_status_text` | string | - | - | no | - | - |
+| `ecl_get_voice_list` | enum | 1, 2, 3 | - | no | - | 1=Language type chinese, 2=Language type english, 3=Language type german |
+| `ecl_get_voice_list__v1` | enum | 1, 2, 3, 4, 5 | - | no | - | 1=Language type chinese, 2=Language type english, 3=Language type german, 4=Language type spanish, 5=Language type french |
+| `ecl_get_voice_list__v2` | enum | 1, 2, 3, 4, 5, 6, 7, 8 | - | no | - | 1=Language type chinese, 2=Language type english, 3=Language type german, 4=Language type spanish, 5=Language type french, 6=Language type italian, 7=Language type dutch, 8=Language type polish |
+| `ecl_language_current_id` | other | - | - | no | - | - |
+| `ecl_language_default_id` | other | - | - | no | - | - |
+| `ecl_language_version` | other | - | - | no | - | - |
+| `ecl_mow_4g_module_type` | other | - | - | no | - | - |
+| `ecl_mow_acknowledge_cellular_feature_response_code` | other | - | - | no | - | - |
+| `ecl_mow_anti_theft_cmd_response_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_anti_theft_cmd_response_ret` | other | - | - | no | - | - |
+| `ecl_mow_anti_theft_cmd_response_verify_pin_result` | bool | - | - | no | - | - |
+| `ecl_mow_anti_theft_status_has_pin` | bool | - | - | no | - | - |
+| `ecl_mow_anti_theft_status_mode` | string | - | - | no | - | - |
+| `ecl_mow_anti_theft_status_sensitivity` | other | - | - | no | - | - |
+| `ecl_mow_battery_status_charger_connected` | bool | - | - | no | - | - |
+| `ecl_mow_battery_status_is_switch_on` | bool | - | - | no | - | - |
+| `ecl_mow_battery_status_state` | other | - | - | no | - | - |
+| `ecl_mow_battery_status_tempreture` | other | - | - | no | - | - |
+| `ecl_mow_cellular_feature_acknowledged` | bool | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_expire_time` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_state` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_terminate_time` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_total_data` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_used_data` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_error_code` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_error_type` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_has_error` | bool | - | - | no | - | - |
+| `ecl_mow_cellular_info_is_enabled` | bool | - | - | no | - | - |
+| `ecl_mow_cellular_info_type` | other | - | - | no | - | - |
+| `ecl_mow_cellular_module_presence` | other | - | - | no | - | - |
+| `ecl_mow_clean_record_statistic_clean_area` | other | - | - | no | - | - |
+| `ecl_mow_clean_record_statistic_clean_times` | other | - | - | no | - | - |
+| `ecl_mow_clean_record_statistic_duration` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_dp` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_anti_theft` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_battery_status` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_battery_strategy` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_blade_disk_speed` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_ble_communication` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_bluetooth_remote_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_cellular_network` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_clean_record` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_cliff_detection` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_custom_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_custom_mowing` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_custom_passage` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_daylight_period` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_defogger_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_device_info` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_edge_trim` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_extend_cmd` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_extra_info` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_high_grass_edge_trim` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_home_assistant` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_illuminate_light` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_main_direction_angle` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_map` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_map_area` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_map_status` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mission_status` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mow_speed` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_multi_base` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_ota` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_overnight_auto_resume` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_path` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_rain_sensor` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_remote_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_schedule` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_slope_detection` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_sparse_lawn_optimization` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_upload_log` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_video_stream` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_voice_notification` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_weather` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_wifi_roaming` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_work_mode` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_work_progress_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_overall` | other | - | - | no | - | - |
+| `ecl_mow_control_pause_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_pause_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_control_resume_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_resume_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_control_start_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_start_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_control_stop_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_stop_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_is_length_enough` | bool | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_is_on_grass` | bool | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_length` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_selected_point_x` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_selected_point_y` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_stage` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_type` | other | - | - | no | - | - |
+| `ecl_mow_debug_panel_ack_result` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_ap_app` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_ap_system` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_cellular` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_drive_wheel` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_drive_wheel_loader` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_main_controller` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_main_controller_loader` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_mow_motor` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_mow_motor_loader` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ble_info_id` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ble_info_mac` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ip` | string | - | - | no | - | - |
+| `ecl_mow_device_info_sn` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ssid` | string | - | - | no | - | - |
+| `ecl_mow_device_info_uuid` | string | - | - | no | - | - |
+| `ecl_mow_device_info_version` | string | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_first_online_time` | other | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_first_use_time` | other | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_is_activated` | bool | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_is_first_use_time_accruate` | bool | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_is_used` | bool | - | - | no | - | - |
+| `ecl_mow_device_info_wifi_mac` | string | - | - | no | - | - |
+| `ecl_mow_extend_cmd_ack_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_extend_cmd_ack_ret_code` | other | - | - | no | - | - |
+| `ecl_mow_extend_cmd_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_is_defogger_heating` | bool | - | - | no | - | - |
+| `ecl_mow_extend_status_is_illuminate_light_on` | bool | - | - | no | - | - |
+| `ecl_mow_extend_status_is_not_in_daylight_period` | bool | - | - | no | - | - |
+| `ecl_mow_extend_status_sunrise_hour` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_sunrise_minute` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_sunset_hour` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_sunset_minute` | other | - | - | no | - | - |
+| `ecl_mow_extream_weather_info_url` | string | - | - | no | - | - |
+| `ecl_mow_get_after_rain_stop_setting_auto_resume_delay_time_hours` | other | - | - | no | - | - |
+| `ecl_mow_get_after_rain_stop_setting_auto_resume_delay_time_minutes` | other | - | - | no | - | - |
+| `ecl_mow_get_after_rain_stop_setting_enable_auto_resume` | bool | - | - | no | - | - |
+| `ecl_mow_get_ai_forbidden_zone_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_base_station_use_time` | other | - | - | no | - | - |
+| `ecl_mow_get_bird_view_collection_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_blade_disk_use_time` | other | - | - | no | - | - |
+| `ecl_mow_get_ble_encryption_info_initial_key` | string | - | - | no | - | - |
+| `ecl_mow_get_cellular_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_children_lock` | bool | - | - | no | - | - |
+| `ecl_mow_get_daylight_period_minutes_after_sunrise` | other | - | - | no | - | - |
+| `ecl_mow_get_daylight_period_minutes_before_sunset` | other | - | - | no | - | - |
+| `ecl_mow_get_disable_wifi_roaming` | bool | - | - | no | - | - |
+| `ecl_mow_get_edge_cutting_distance` | other | - | - | no | - | - |
+| `ecl_mow_get_enable_cliff_detection` | bool | - | - | no | - | - |
+| `ecl_mow_get_enable_high_grass_edge_trim` | bool | - | - | no | - | - |
+| `ecl_mow_get_enable_slope_detection` | bool | - | - | no | - | - |
+| `ecl_mow_get_error_code` | other | - | - | no | - | - |
+| `ecl_mow_get_error_list` | string | - | - | no | - | - |
+| `ecl_mow_get_event_code` | other | - | - | no | - | - |
+| `ecl_mow_get_event_list` | string | - | - | no | - | - |
+| `ecl_mow_get_extra_info` | string | - | - | no | - | - |
+| `ecl_mow_get_force_cellular_network` | bool | - | - | no | - | - |
+| `ecl_mow_get_force_single_base_station_mode` | bool | - | - | no | - | - |
+| `ecl_mow_get_home_assistant_config_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_home_assistant_config_passwd` | string | - | - | no | - | - |
+| `ecl_mow_get_internet_connection_mode` | other | - | - | no | - | - |
+| `ecl_mow_get_low_battery_charge_to_resume_level` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_boundary_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_param_mode` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_speed` | other | - | - | no | - | - |
+| `ecl_mow_get_overnight_auto_resume_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_overnight_auto_resume_time_hour` | other | - | - | no | - | - |
+| `ecl_mow_get_overnight_auto_resume_time_minute` | other | - | - | no | - | - |
+| `ecl_mow_get_power_level` | other | - | - | no | - | - |
+| `ecl_mow_get_rain_return` | bool | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_reading_response_is_rainy` | bool | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_reading_response_reading` | other | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_threshold_lower_limit` | other | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_threshold_upper_limit` | other | - | - | no | - | - |
+| `ecl_mow_get_sparse_lawn_optimization_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_stuck_escape_level` | other | - | - | no | - | - |
+| `ecl_mow_get_volume` | other | - | - | no | - | - |
+| `ecl_mow_get_weather_config_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_weather_config_enable_extream_weather_optimize` | bool | - | - | no | - | - |
+| `ecl_mow_get_weather_info_extream_weather_info_url` | string | - | - | no | - | - |
+| `ecl_mow_get_weather_info_has_extream_weather` | bool | - | - | no | - | - |
+| `ecl_mow_get_wifi_signal_strength` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_base_stations` | string | - | - | no | - | - |
+| `ecl_mow_gps_info_is_valid` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_is_current_located` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_is_out_of_boundary` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_is_valid` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_position_latitude` | other | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_position_longitude` | other | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_position_positioning_error` | other | - | - | no | - | - |
+| `ecl_mow_gps_info_time` | other | - | - | no | - | - |
+| `ecl_mow_log_upload_status_is_uploading` | bool | - | - | no | - | - |
+| `ecl_mow_log_upload_status_process` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_blade_disk_speed` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_current_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_edge_cutting_distance` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_auto_rotate_mode_config_angle_interval` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_mode` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_multiple_mode_config_angles` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_single_mode_config_angle` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_current_angle` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_mow_speed` | other | - | - | no | - | - |
+| `ecl_mow_map_area_clean_area` | other | - | - | no | - | - |
+| `ecl_mow_map_area_is_completed` | bool | - | - | no | - | - |
+| `ecl_mow_map_area_total_area` | other | - | - | no | - | - |
+| `ecl_mow_map_area_type` | other | - | - | no | - | - |
+| `ecl_mow_map_area_work_duration` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_merge_region_ack_error_code` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_split_region_ack_error_code` | other | - | - | no | - | - |
+| `ecl_mow_map_get_save_progress` | other | - | - | no | - | - |
+| `ecl_mow_map_status_backup_map_backup_id` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_backup_map_id` | other | - | - | no | - | - |
+| `ecl_mow_map_status_is_able_to_run_build_map` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_is_backing_up_map` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_is_map_detected` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_is_spot_mode_map` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_main_direction_angle` | other | - | - | no | - | - |
+| `ecl_mow_map_status_map_id` | other | - | - | no | - | - |
+| `ecl_mow_map_status_map_number` | other | - | - | no | - | - |
+| `ecl_mow_map_status_map_state` | other | - | - | no | - | - |
+| `ecl_mow_map_status_spot_mode_map_number` | other | - | - | no | - | - |
+| `ecl_mow_max_rain_sensor_threshold` | other | - | - | no | - | - |
+| `ecl_mow_min_rain_sensor_threshold` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_back_to_station_reason` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_has_error` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_data_conversion_in_progress` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_robot_navi_located` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_saving_data` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_upgrading` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_mission` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_power_mode` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_state` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_sub_mission` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_create_backup_response_error_code` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_create_backup_response_need_delete_number` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_create_backup_response_total_number` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_update_backup_response_error_code` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_ota_status` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_type` | other | - | - | no | - | - |
+| `ecl_mow_remote_control_ack_error_code` | other | - | - | no | - | - |
+| `ecl_mow_remote_control_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_remote_control_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_schedule_ack_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_schedule_ack_code` | other | - | - | no | - | - |
+| `ecl_mow_schedule_ack_schedule_list` | string | - | - | no | - | - |
+| `ecl_mow_schedule_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_end_time_hour` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_end_time_minute` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_exist` | bool | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_item_id` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_shift_id` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_start_time_hour` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_start_time_minute` | other | - | - | no | - | - |
+| `ecl_mow_sim_card_presence` | other | - | - | no | - | - |
+| `ecl_mow_sim_type` | other | - | - | no | - | - |
+| `ecl_mow_upload_log_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_upload_log_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_generate_pin_salt_result_pin_salt` | string | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_get_pin_salt_result_pin_salt` | string | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_ret` | other | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_verify_pin_salt_result_pin_salt` | bool | - | - | no | - | - |
+| `ecl_mow_video_stream_status_has_pin_code` | bool | - | - | no | - | - |
+| `ecl_mow_video_stream_status_is_enabled` | bool | - | - | no | - | - |
+| `ecl_mow_video_stream_status_is_in_enable_procedure` | bool | - | - | no | - | - |
+| `ecl_mow_work_mode_map_mode` | other | - | - | no | - | - |
+| `ecl_mow_work_mode_move_mode` | other | - | - | no | - | - |
+| `ecl_mow_work_mode_mow_mode` | other | - | - | no | - | - |
+| `ecl_support_function` | string | - | - | no | - | - |
+| `ecl_support_siri` | other | - | - | no | - | - |
+
+### Settings of T2880 T2880
+
+rw 0 / ro 280
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `automation_config` | string | - | - | no | - | - |
+| `ecl_debug_log_sw` | bool | - | - | no | - | - |
+| `ecl_device_info_product_name` | string | - | - | no | - | - |
+| `ecl_device_name` | string | - | - | no | - | - |
+| `ecl_get_device_status` | other | - | - | no | - | - |
+| `ecl_get_device_status_icon` | string | - | - | no | - | - |
+| `ecl_get_device_status_text` | string | - | - | no | - | - |
+| `ecl_get_voice_list` | enum | 1, 2, 3 | - | no | - | 1=Language type chinese, 2=Language type english, 3=Language type german |
+| `ecl_get_voice_list__v1` | enum | 1, 2, 3, 4, 5 | - | no | - | 1=Language type chinese, 2=Language type english, 3=Language type german, 4=Language type spanish, 5=Language type french |
+| `ecl_get_voice_list__v2` | enum | 1, 2, 3, 4, 5, 6, 7, 8 | - | no | - | 1=Language type chinese, 2=Language type english, 3=Language type german, 4=Language type spanish, 5=Language type french, 6=Language type italian, 7=Language type dutch, 8=Language type polish |
+| `ecl_language_current_id` | other | - | - | no | - | - |
+| `ecl_language_default_id` | other | - | - | no | - | - |
+| `ecl_language_version` | other | - | - | no | - | - |
+| `ecl_mow_4g_module_type` | other | - | - | no | - | - |
+| `ecl_mow_anti_theft_cmd_response_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_anti_theft_cmd_response_ret` | other | - | - | no | - | - |
+| `ecl_mow_anti_theft_cmd_response_verify_pin_result` | bool | - | - | no | - | - |
+| `ecl_mow_anti_theft_status_has_pin` | bool | - | - | no | - | - |
+| `ecl_mow_anti_theft_status_mode` | string | - | - | no | - | - |
+| `ecl_mow_anti_theft_status_sensitivity` | other | - | - | no | - | - |
+| `ecl_mow_battery_status_charger_connected` | bool | - | - | no | - | - |
+| `ecl_mow_battery_status_is_switch_on` | bool | - | - | no | - | - |
+| `ecl_mow_battery_status_state` | other | - | - | no | - | - |
+| `ecl_mow_battery_status_tempreture` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_expire_time` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_state` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_terminate_time` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_total_data` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_bundle_used_data` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_error_code` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_error_type` | other | - | - | no | - | - |
+| `ecl_mow_cellular_info_has_error` | bool | - | - | no | - | - |
+| `ecl_mow_cellular_info_is_enabled` | bool | - | - | no | - | - |
+| `ecl_mow_cellular_info_type` | other | - | - | no | - | - |
+| `ecl_mow_clean_record_statistic_clean_area` | other | - | - | no | - | - |
+| `ecl_mow_clean_record_statistic_clean_times` | other | - | - | no | - | - |
+| `ecl_mow_clean_record_statistic_duration` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_dp` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_anti_theft` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_battery_status` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_battery_strategy` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_blade_disk_speed` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_ble_communication` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_bluetooth_remote_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_cellular_network` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_clean_record` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_cliff_detection` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_custom_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_custom_mowing` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_custom_passage` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_daylight_period` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_defogger_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_device_info` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_edge_trim` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_extend_cmd` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_extra_info` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_high_grass_edge_trim` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_home_assistant` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_illuminate_light` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_main_direction_angle` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_map` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_map_area` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_map_status` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mission_status` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_mow_speed` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_multi_base` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_ota` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_overnight_auto_resume` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_path` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_rain_sensor` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_remote_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_schedule` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_slope_detection` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_sparse_lawn_optimization` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_upload_log` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_video_stream` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_voice_notification` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_weather` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_wifi_roaming` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_work_mode` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_module_work_progress_control` | other | - | - | no | - | - |
+| `ecl_mow_compatibility_info_overall` | other | - | - | no | - | - |
+| `ecl_mow_control_pause_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_pause_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_control_resume_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_resume_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_control_start_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_start_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_control_stop_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_control_stop_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_is_length_enough` | bool | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_is_on_grass` | bool | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_length` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_selected_point_x` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_selected_point_y` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_stage` | other | - | - | no | - | - |
+| `ecl_mow_custom_passage_status_type` | other | - | - | no | - | - |
+| `ecl_mow_debug_panel_ack_result` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_ap_app` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_ap_system` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_cellular` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_drive_wheel` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_drive_wheel_loader` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_main_controller` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_main_controller_loader` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_mow_motor` | string | - | - | no | - | - |
+| `ecl_mow_detailed_version_info_mow_motor_loader` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ble_info_id` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ble_info_mac` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ip` | string | - | - | no | - | - |
+| `ecl_mow_device_info_sn` | string | - | - | no | - | - |
+| `ecl_mow_device_info_ssid` | string | - | - | no | - | - |
+| `ecl_mow_device_info_uuid` | string | - | - | no | - | - |
+| `ecl_mow_device_info_version` | string | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_first_online_time` | other | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_first_use_time` | other | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_is_activated` | bool | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_is_first_use_time_accruate` | bool | - | - | no | - | - |
+| `ecl_mow_device_info_warranty_is_used` | bool | - | - | no | - | - |
+| `ecl_mow_device_info_wifi_mac` | string | - | - | no | - | - |
+| `ecl_mow_extend_cmd_ack_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_extend_cmd_ack_ret_code` | other | - | - | no | - | - |
+| `ecl_mow_extend_cmd_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_is_defogger_heating` | bool | - | - | no | - | - |
+| `ecl_mow_extend_status_is_illuminate_light_on` | bool | - | - | no | - | - |
+| `ecl_mow_extend_status_is_not_in_daylight_period` | bool | - | - | no | - | - |
+| `ecl_mow_extend_status_sunrise_hour` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_sunrise_minute` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_sunset_hour` | other | - | - | no | - | - |
+| `ecl_mow_extend_status_sunset_minute` | other | - | - | no | - | - |
+| `ecl_mow_extream_weather_info_url` | string | - | - | no | - | - |
+| `ecl_mow_get_after_rain_stop_setting_auto_resume_delay_time_hours` | other | - | - | no | - | - |
+| `ecl_mow_get_after_rain_stop_setting_auto_resume_delay_time_minutes` | other | - | - | no | - | - |
+| `ecl_mow_get_after_rain_stop_setting_enable_auto_resume` | bool | - | - | no | - | - |
+| `ecl_mow_get_ai_forbidden_zone_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_base_station_use_time` | other | - | - | no | - | - |
+| `ecl_mow_get_bird_view_collection_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_blade_disk_use_time` | other | - | - | no | - | - |
+| `ecl_mow_get_ble_encryption_info_initial_key` | string | - | - | no | - | - |
+| `ecl_mow_get_cellular_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_children_lock` | bool | - | - | no | - | - |
+| `ecl_mow_get_daylight_period_minutes_after_sunrise` | other | - | - | no | - | - |
+| `ecl_mow_get_daylight_period_minutes_before_sunset` | other | - | - | no | - | - |
+| `ecl_mow_get_disable_wifi_roaming` | bool | - | - | no | - | - |
+| `ecl_mow_get_edge_cutting_distance` | other | - | - | no | - | - |
+| `ecl_mow_get_enable_cliff_detection` | bool | - | - | no | - | - |
+| `ecl_mow_get_enable_high_grass_edge_trim` | bool | - | - | no | - | - |
+| `ecl_mow_get_enable_slope_detection` | bool | - | - | no | - | - |
+| `ecl_mow_get_error_code` | other | - | - | no | - | - |
+| `ecl_mow_get_error_list` | string | - | - | no | - | - |
+| `ecl_mow_get_event_code` | other | - | - | no | - | - |
+| `ecl_mow_get_event_list` | string | - | - | no | - | - |
+| `ecl_mow_get_extra_info` | string | - | - | no | - | - |
+| `ecl_mow_get_force_cellular_network` | bool | - | - | no | - | - |
+| `ecl_mow_get_force_single_base_station_mode` | bool | - | - | no | - | - |
+| `ecl_mow_get_home_assistant_config_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_home_assistant_config_passwd` | string | - | - | no | - | - |
+| `ecl_mow_get_internet_connection_mode` | other | - | - | no | - | - |
+| `ecl_mow_get_low_battery_charge_to_resume_level` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_boundary_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_param_mode` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_get_mow_speed` | other | - | - | no | - | - |
+| `ecl_mow_get_overnight_auto_resume_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_overnight_auto_resume_time_hour` | other | - | - | no | - | - |
+| `ecl_mow_get_overnight_auto_resume_time_minute` | other | - | - | no | - | - |
+| `ecl_mow_get_power_level` | other | - | - | no | - | - |
+| `ecl_mow_get_rain_return` | bool | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_reading_response_is_rainy` | bool | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_reading_response_reading` | other | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_threshold_lower_limit` | other | - | - | no | - | - |
+| `ecl_mow_get_rain_sensor_threshold_upper_limit` | other | - | - | no | - | - |
+| `ecl_mow_get_sparse_lawn_optimization_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_stuck_escape_level` | other | - | - | no | - | - |
+| `ecl_mow_get_volume` | other | - | - | no | - | - |
+| `ecl_mow_get_weather_config_enable` | bool | - | - | no | - | - |
+| `ecl_mow_get_weather_config_enable_extream_weather_optimize` | bool | - | - | no | - | - |
+| `ecl_mow_get_weather_info_extream_weather_info_url` | string | - | - | no | - | - |
+| `ecl_mow_get_weather_info_has_extream_weather` | bool | - | - | no | - | - |
+| `ecl_mow_get_wifi_signal_strength` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_base_stations` | string | - | - | no | - | - |
+| `ecl_mow_gps_info_is_valid` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_is_current_located` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_is_out_of_boundary` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_is_valid` | bool | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_position_latitude` | other | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_position_longitude` | other | - | - | no | - | - |
+| `ecl_mow_gps_info_robot_position_positioning_error` | other | - | - | no | - | - |
+| `ecl_mow_gps_info_time` | other | - | - | no | - | - |
+| `ecl_mow_log_upload_status_is_uploading` | bool | - | - | no | - | - |
+| `ecl_mow_log_upload_status_process` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_blade_disk_speed` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_current_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_edge_cutting_distance` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_auto_rotate_mode_config_angle_interval` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_mode` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_multiple_mode_config_angles` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_config_single_mode_config_angle` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_main_direction_angle_current_angle` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_mow_height` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_mow_spacing` | other | - | - | no | - | - |
+| `ecl_mow_main_page_work_param_mow_speed` | other | - | - | no | - | - |
+| `ecl_mow_map_area_clean_area` | other | - | - | no | - | - |
+| `ecl_mow_map_area_is_completed` | bool | - | - | no | - | - |
+| `ecl_mow_map_area_total_area` | other | - | - | no | - | - |
+| `ecl_mow_map_area_type` | other | - | - | no | - | - |
+| `ecl_mow_map_area_work_duration` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_merge_region_ack_error_code` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_map_edit_ack_split_region_ack_error_code` | other | - | - | no | - | - |
+| `ecl_mow_map_get_save_progress` | other | - | - | no | - | - |
+| `ecl_mow_map_status_backup_map_backup_id` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_backup_map_id` | other | - | - | no | - | - |
+| `ecl_mow_map_status_is_able_to_run_build_map` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_is_backing_up_map` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_is_map_detected` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_is_spot_mode_map` | bool | - | - | no | - | - |
+| `ecl_mow_map_status_main_direction_angle` | other | - | - | no | - | - |
+| `ecl_mow_map_status_map_id` | other | - | - | no | - | - |
+| `ecl_mow_map_status_map_number` | other | - | - | no | - | - |
+| `ecl_mow_map_status_map_state` | other | - | - | no | - | - |
+| `ecl_mow_map_status_spot_mode_map_number` | other | - | - | no | - | - |
+| `ecl_mow_max_rain_sensor_threshold` | other | - | - | no | - | - |
+| `ecl_mow_min_rain_sensor_threshold` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_back_to_station_reason` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_has_error` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_data_conversion_in_progress` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_robot_navi_located` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_saving_data` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_is_upgrading` | bool | - | - | no | - | - |
+| `ecl_mow_mission_status_mission` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_power_mode` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_state` | other | - | - | no | - | - |
+| `ecl_mow_mission_status_sub_mission` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_create_backup_response_error_code` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_create_backup_response_need_delete_number` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_create_backup_response_total_number` | other | - | - | no | - | - |
+| `ecl_mow_multi_map_update_backup_response_error_code` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_ota_status` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_ota_cmd_ack_type` | other | - | - | no | - | - |
+| `ecl_mow_remote_control_ack_error_code` | other | - | - | no | - | - |
+| `ecl_mow_remote_control_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_remote_control_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_schedule_ack_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_schedule_ack_code` | other | - | - | no | - | - |
+| `ecl_mow_schedule_ack_schedule_list` | string | - | - | no | - | - |
+| `ecl_mow_schedule_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_end_time_hour` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_end_time_minute` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_exist` | bool | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_item_id` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_shift_id` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_start_time_hour` | other | - | - | no | - | - |
+| `ecl_mow_schedule_upcoming_chedule_start_time_minute` | other | - | - | no | - | - |
+| `ecl_mow_upload_log_ack_ret` | other | - | - | no | - | - |
+| `ecl_mow_upload_log_ack_seq` | other | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_cmd_type` | other | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_generate_pin_salt_result_pin_salt` | string | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_get_pin_salt_result_pin_salt` | string | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_ret` | other | - | - | no | - | - |
+| `ecl_mow_video_stream_cmd_response_verify_pin_salt_result_pin_salt` | bool | - | - | no | - | - |
+| `ecl_mow_video_stream_status_has_pin_code` | bool | - | - | no | - | - |
+| `ecl_mow_video_stream_status_is_enabled` | bool | - | - | no | - | - |
+| `ecl_mow_video_stream_status_is_in_enable_procedure` | bool | - | - | no | - | - |
+| `ecl_mow_work_mode_map_mode` | other | - | - | no | - | - |
+| `ecl_mow_work_mode_move_mode` | other | - | - | no | - | - |
+| `ecl_mow_work_mode_mow_mode` | other | - | - | no | - | - |
+| `ecl_support_function` | string | - | - | no | - | - |
+| `ecl_support_siri` | other | - | - | no | - | - |
 
 ### Settings of T6010 Station 6010
 
@@ -731,6 +1601,345 @@ rw 0 / ro 45
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
+
+### Settings of T6310 T6310
+
+rw 47 / ro 76
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `ai_tracking_status` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arm_delay` | bool | - | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `auto_calibration_status` | bool | - | - | yes | switch | - |
+| `auto_cruise_schedule_list` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
+| `change_wifi_is_press_sync` | bool | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `cloud_storage_support_show_device` | bool | - | - | no | - | - |
+| `cloud_storage_support_trail` | bool | - | - | no | - | - |
+| `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
+| `device_cloud_storage_status` | other | - | - | no | - | - |
+| `device_continuous_recording_switch` | bool | - | - | yes | switch | - |
+| `device_continuous_recording_time` | enum | 0, 1 | - | yes | select | 0=All time, 1=Schedule |
+| `device_continuous_schedule_list` | string | - | - | no | - | - |
+| `device_indoor_temperatur_alarm_max_value` | range | 50..100 step 1 | - | yes | slider | - |
+| `device_indoor_temperatur_alarm_min_value` | range | 50..100 step 1 | - | yes | slider | - |
+| `device_indoor_temperature` | other | - | - | no | - | - |
+| `device_indoor_temperature_unit` | other | - | - | yes | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_linkage_tracking_bypass` | string | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_monitor_indoor_temperature_switch` | bool | - | - | yes | switch | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | 5, 0, 1, 2, 3, 4, -1 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours, 5=15 min |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0, 1, 2 | - | no | - | 0=Local, 1=Cloud, 2=NAS |
+| `device_storage_type__v1` | enum | 0, 1, 2 | - | no | - | 0=Local, 1=Cloud, 2=NAS |
+| `device_watch_baby_switch` | bool | - | - | no | - | - |
+| `device_white_noise_list` | string | - | - | no | - | - |
+| `device_white_noise_play_info` | string | - | - | no | - | - |
+| `device_white_noise_time` | other | - | - | yes | - | - |
+| `device_white_noise_volume` | range | 0..100 step 1 | - | yes | slider | - |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `disable_ptz_turn_switch` | bool | - | - | yes | switch | - |
+| `entry_activity_zone_condition` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `gesture_control_quick_focus_tap_switch` | bool | - | - | no | - | - |
+| `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `hb_connect_is_connected` | string | - | - | no | - | - |
+| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
+| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
+| `hb_connect_support_version` | string | - | - | no | - | - |
+| `home_card_show_video_playback` | bool | - | - | no | - | - |
+| `homebase_connect_support` | bool | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `is_support_webrtc` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 9, 1, 8, 7, 6, 12, 3, 16 | - | no | - | 0=Record, 1=Screenshot, 12=Calibration, 16=Positions, 2=Speaker, 3=Pantili, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
+| `live_ptz_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=Preset, 1=Control, 2=Panorama |
+| `live_streaming_resolution` | enum | 0, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 5=2K HD, 6=720P |
+| `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
+| `nas_stream_switch` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 3, 4, 0 | - | yes | select | 0=Off, 3=Auto Night Vision, 4=Infrared |
+| `notification_ai_crying_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_motion_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_person_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_pet_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_sound_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_vehicle_switch` | bool | - | - | yes | switch | - |
+| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `ordered_trigger_actions` | enum | 0, 1, 2, 3 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=Light alarm |
+| `playback_play_speed` | enum | 0, 1, 2, 3, 2 | - | no | - | 0=2x, 1=4x, 2=2x, 3=16x |
+| `player_model_config` | string | - | - | no | - | - |
+| `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `sound_detection_round_look_switch` | bool | - | - | yes | switch | - |
+| `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
+| `sound_detection_status` | bool | - | - | yes | switch | - |
+| `sound_detection_type` | enum | 0, 1 | - | yes | select | 0=All sound, 1=Crying |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
+| `support_platform_v2` | bool | - | - | no | - | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `switching_notification` | enum | 2, 0, 1 | - | yes | select | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `video_auto_cruise_switch` | bool | - | - | yes | switch | - |
+| `video_camera_count` | range | 1..2 step 1 | - | no | - | - |
+| `video_intercom_audio_type` | range | 0..100 step 1 | - | no | - | - |
+| `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
+| `view_mode` | enum | 0, 1,  | - | yes | select | =, 0=Dual, 1=Single |
+| `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
+
+### Settings of T7000 Station T7000
+
+rw 17 / ro 78
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `accessory_ota_status` | other | - | - | no | - | - |
+| `ai_card_device_list` | string | - | - | no | - | - |
+| `ai_card_feature_switch` | string | - | - | no | - | - |
+| `ai_support_service` | bool | - | - | no | - | - |
+| `alarm_tones_mode` | enum | 1, 2 | - | yes | select | 1=Alarm Tone1, 2=Alarm Tone2 |
+| `alarm_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_get_alarm_away_mode` | string | - | - | no | - | - |
+| `arming_get_alarm_custom1_mode` | string | - | - | no | - | - |
+| `arming_get_alarm_custom2_mode` | string | - | - | no | - | - |
+| `arming_get_alarm_custom3_mode` | string | - | - | no | - | - |
+| `arming_get_alarm_disarm_mode` | string | - | - | no | - | - |
+| `arming_get_alarm_home_mode` | string | - | - | no | - | - |
+| `arming_jump_to_platform_setting_page` | bool | - | - | no | - | - |
+| `arming_keypad_set_cus_model` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | -1..100 step 1 | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_alert_volume` | enum | 0, 1, 2 | - | no | - | 0=Low, 1=Medium, 2=High |
+| `auto_ota_upgrade_scheduled_time` | string | - | - | no | - | - |
+| `auto_ota_upgrade_switch` | bool | - | - | yes | switch | - |
+| `bind_ai_card_info` | string | - | - | no | - | - |
+| `database_synchronize` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_agree_ai_terms_switch` | string | - | - | no | - | - |
+| `device_continuous_recording_time` | enum | 0, 1 | - | no | - | 0=All time, 1=Schedule |
+| `device_cpu_info` | string | - | - | no | - | - |
+| `device_cross_cam_assistance_switch` | bool | - | - | yes | switch | - |
+| `device_cross_cam_group` | string | - | - | no | - | - |
+| `device_cross_cam_interval` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=2 min, 1=3 min, 2=4 min, 3=5 min, 4=10 min, 5=15 min, 6=30 min |
+| `device_cross_cam_list` | string | - | - | no | - | - |
+| `device_cross_cam_tracking_swtich` | bool | - | - | yes | switch | - |
+| `device_current_temerature` | string | - | - | no | - | - |
+| `device_date_format_set` | enum | 0, 1, 2 | - | yes | select | 0=MM-DD-YYYY, 1=YYYY-MM-DD, 2=DD-MM-YYYY |
+| `device_has_buzzer` | bool | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_linkage_mode` | string | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_motion_detection` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_medium` | string | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_support_event_filter_detection_type` | enum | 1, 2, 3 | - | no | - | 1=Human, 2=Vehicle, 3=Pet |
+| `device_temperature_format_set` | enum | 0, 1 | - | yes | select | 0=Celsius, 1=Fahrenheit |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `general_account_init_status` | other | - | - | no | - | - |
+| `general_device_plugin_type` | other | - | - | no | - | - |
+| `hb_aic_feature_available` | bool | - | - | no | - | - |
+| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `home_card_show_video_playback` | bool | - | - | no | - | - |
+| `inserted_ai_card_info` | string | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_connect_webrtc` | other | - | - | no | - | - |
+| `is_device_ready_upgrade` | bool | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_familiar_face` | bool | - | - | no | - | - |
+| `is_support_professional_alarm` | bool | - | - | no | - | - |
+| `is_support_professional_cross_camera` | bool | - | - | no | - | - |
+| `is_support_professional_guard` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `is_support_webrtc` | bool | - | - | no | - | - |
+| `mac_address` | string | - | - | no | - | - |
+| `model_config` | string | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_ignore_switch` | bool | - | - | yes | switch | - |
+| `nvr_get_device_volume` | string | - | - | no | - | - |
+| `nvr_motion_detection` | string | - | - | no | - | - |
+| `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
+| `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
+| `query_event_list_cmd` | other | - | - | no | - | - |
+| `setting_current_connection_type` | other | - | - | no | - | - |
+| `setting_model_config` | string | - | - | no | - | - |
+| `support_multiple_live_stream` | bool | - | - | no | - | - |
+| `support_smart_search_switch` | bool | - | - | no | - | - |
+| `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
+| `system_maintenance` | string | - | - | no | - | - |
+| `system_notification_master_switch` | bool | - | - | yes | switch | - |
+| `system_switching_notification` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Emerg, 1=Update, 2=Admin, 3=Device, 4=User |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
+
+### Settings of T7100 T7100
+
+rw 31 / ro 69
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activity_privacy_zone_is_array_format` | bool | - | - | no | - | - |
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=4, positionNum=8, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `ai_tracking_status` | bool | - | - | yes | switch | - |
+| `aic_activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=4, positionNum=8, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `auto_cruise_schedule_list` | string | - | - | no | - | - |
+| `automation_config` | string | - | - | no | - | - |
+| `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
+| `camera_gun_ball_linkage_switch` | bool | - | - | yes | switch | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
+| `detection_sensitivity_for_sensor` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_connect_type` | other | - | - | no | - | - |
+| `device_continuous_recording_time` | enum | 0, 2, 3 | - | yes | select | 0=Continuous, 2=Event-based, 3=No Recording |
+| `device_continuous_schedule_list` | string | - | - | no | - | - |
+| `device_event_create_switch` | bool | - | - | yes | switch | - |
+| `device_event_recording_time_config` | string | - | - | no | - | - |
+| `device_event_show_trigger_sensor_icon` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_linkage_tracking_bypass` | string | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_motion_detection` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `device_motion_detection_for_sensor` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_recording_stream_config` | string | - | - | no | - | - |
+| `device_recording_type` | other | - | - | yes | - | - |
+| `device_sensor_count` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_set_alarm_light_type` | enum | 0, 1 | - | yes | select | 0=Spotlight flashing, 1=Red and blue lights flashing |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | -1, 0, 1, 2, 3, 4 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_support_max_resolution` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `gesture_control_quick_focus_tap_switch` | bool | - | - | no | - | - |
+| `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
+| `home_card_show_video_playback` | bool | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `light_ambient_lighting_setting` | string | - | - | no | - | - |
+| `live_ai_box_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=People, 1=Car, 2=Pet |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 1, 2, 19, 4, 18, 7, 9, 13, 8, 6, 20 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 18=PTZ Linkage, 19=PTZ Control Entrance, 2=Speaker, 20=Single Dual Screen Switch, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
+| `live_ptz_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=Preset, 1=Control, 2=Panorama |
+| `live_streaming_resolution` | enum | 0, 8, 10 | - | yes | select | 0=Auto, 10=High, 8=Low |
+| `live_support_full` | bool | - | - | no | - | - |
+| `live_support_long_time_watch` | bool | - | - | no | - | - |
+| `live_support_mute` | bool | - | - | no | - | - |
+| `live_support_record` | bool | - | - | no | - | - |
+| `live_support_screenshot` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0, 1, 7 | - | no | - | 0=Alarm, 1=Setting, 7=Multiple Live |
+| `live_top_toolbar_list` | enum | 0, 1, 7 | - | no | - | 0=Alarm, 1=Setting, 7=Multiple Live |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `model_config` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_detection_follow_global_setting` | bool | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_support_set_light_mode` | bool | - | - | no | - | - |
+| `motion_tracking_switch` | bool | - | - | no | - | - |
+| `nightvision_type` | enum | 7, 6, 0 | - | yes | select | 0=Disable, 6=Infrared auto, 7=Spotlight auto |
+| `nightvision_type_new` | enum | 100, 102, 103 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spotlight |
+| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
+| `notification_interval_time_for_sensor` | string | - | - | no | - | - |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
+| `player_model_config` | string | - | - | no | - | - |
+| `preset_position_hide_picture_zoom` | bool | - | - | no | - | - |
+| `preset_positions_calibrate_time` | other | - | - | no | - | - |
+| `ptz_turn_speed` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=11, 1=2, 2=3, 3=4, 4=5 |
+| `record_resolution` | string | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=4, positionNum=2, sideNum=4, zoneHeight=720, zoneWidth=1280 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 0..100 step 1 | - | yes | slider | - |
+| `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
+| `spotlight_status` | bool | - | - | yes | switch | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `spotlight_switch_status_relate` | bool | - | - | no | - | - |
+| `support_setting_spotlight_switch` | bool | - | - | no | - | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `video_auto_cruise_switch` | bool | - | - | yes | switch | - |
+| `video_camera_count` | other | - | - | no | - | - |
+| `video_mirror_mode_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Normal, 1=Rotated 180°, 2=Mirror, 3=Flipped vertically |
+| `video_quality_hdr_switch` | enum | 0, 1 | - | yes | select | 0=Off, 1=Always on |
+| `video_setting_flickers_adjustment` | enum | 3, 1, 2 | - | yes | select | 1=50 Hz, 2=60 Hz, 3=Auto |
+| `video_setting_image_effect_set` | string | - | - | no | - | - |
+| `video_watch_view_mode` | string | - | - | no | - | - |
+| `watermark_set` | enum | 0, 1, 3 | - | yes | select | 0=Off, 1=Timestamp, 3=Logo |
 
 ### Settings of T7400 Smart Safe 7400
 
@@ -1033,6 +2242,24 @@ rw 5 / ro 33
 | `time_format_set` | other | - | - | yes | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
+### Settings of T8021 Station 8021
+
+rw 1 / ro 10
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_has_buzzer` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_status` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+
 ### Settings of T8023 Station 8023
 
 rw 6 / ro 35
@@ -1264,6 +2491,58 @@ rw 7 / ro 37
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad |
 | `timezone_set` | string | - | - | yes | select | - |
 
+### Settings of T8028 Doorbell Chime 8028
+
+rw 0 / ro 45
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `add_device_model_config` | string | - | - | no | - | - |
+| `alarm_tones_mode` | other | - | - | no | - | - |
+| `alarm_volume_value` | range | 1..63 step 1 | - | no | - | - |
+| `arming_geofence_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | other | - | - | no | - | - |
+| `arming_support_arm_delay` | bool | - | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_not_disturb_config` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | no | - | - |
+| `device_sync_data_on_repetor` | bool | - | - | no | - | - |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `ignore_no_sd_card_alarm` | bool | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | no | - | - |
+| `mac_address` | string | - | - | no | - | - |
+| `notification_alarm_delay_value` | string | - | - | no | - | - |
+| `prompt_volume_value` | range | 1..26 step 1 | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `setting_model_config` | string | - | - | no | - | - |
+| `switching_notification` | enum | 0, 2, 1, 3, 4 | - | no | - | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad, 4=Start Alarm Delay |
+| `timezone_set` | string | - | - | no | - | - |
+| `timezone_set_redirect` | string | - | - | no | - | - |
+
 ### Settings of T8030 HomeBase 3 (S380)
 
 rw 12 / ro 62
@@ -1343,6 +2622,113 @@ rw 12 / ro 62
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad |
 | `time_format_set` | other | - | - | yes | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
+| `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
+
+### Settings of T8040 Station 4
+
+rw 19 / ro 81
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `accessory_ota_status` | other | - | - | no | - | - |
+| `ai_card_device_list` | string | - | - | no | - | - |
+| `ai_card_feature_switch` | string | - | - | no | - | - |
+| `ai_empower` | other | - | - | no | - | - |
+| `ai_support_service` | bool | - | - | no | - | - |
+| `aic_activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `aic_invasion_prevention` | string | - | - | no | - | - |
+| `alarm_tones_mode` | enum | 1, 2 | - | yes | select | 1=Alarm Tone1, 2=Alarm Tone2 |
+| `alarm_volume_value` | range | 1..10 step 1 | - | yes | slider | - |
+| `ambient_light_config` | string | - | - | no | - | - |
+| `animal_detection_action_config` | enum | 0, 1, 2 | - | no | - | 0=Off, 1=Notifacation, 2=Sound and light alarm |
+| `animal_detection_category_config` | enum | 1, 2, 3, 4, 5, 6, 7 | - | no | - | 1=Cat, 2=Dog, 3=Rabbit, 4=Deer, 5=Squirrel, 6=Raccoon, 7=Bird |
+| `animal_detection_switch` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_get_alarm_away_mode` | string | - | - | no | - | - |
+| `arming_get_alarm_disarm_mode` | string | - | - | no | - | - |
+| `arming_get_alarm_home_mode` | string | - | - | no | - | - |
+| `arming_jump_to_platform_setting_page` | bool | - | - | no | - | - |
+| `arming_keypad_set_cus_model` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | -1..100 step 1 | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_alert_volume` | enum | 0, 1, 2 | - | no | - | 0=Low, 1=Medium, 2=High |
+| `auto_ota_upgrade_scheduled_time` | string | - | - | no | - | - |
+| `auto_ota_upgrade_switch` | bool | - | - | yes | switch | - |
+| `bind_ai_card_info` | string | - | - | no | - | - |
+| `database_synchronize` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_agree_ai_terms_switch` | string | - | - | no | - | - |
+| `device_continuous_recording_time` | enum | 0, 1 | - | no | - | 0=All time, 1=Schedule |
+| `device_cpu_info` | string | - | - | no | - | - |
+| `device_cross_cam_assistance_switch` | bool | - | - | yes | switch | - |
+| `device_cross_cam_group` | string | - | - | no | - | - |
+| `device_cross_cam_interval` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=2 min, 1=3 min, 2=4 min, 3=5 min, 4=10 min, 5=15 min, 6=30 min |
+| `device_cross_cam_list` | string | - | - | no | - | - |
+| `device_cross_cam_tracking_swtich` | bool | - | - | yes | switch | - |
+| `device_current_temerature` | string | - | - | no | - | - |
+| `device_date_format_set` | enum | 0, 1, 2 | - | yes | select | 0=MM-DD-YYYY, 1=YYYY-MM-DD, 2=DD-MM-YYYY |
+| `device_has_buzzer` | bool | - | - | no | - | - |
+| `device_house_area_locations` | string | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_last_boot_time` | string | - | - | no | - | - |
+| `device_linkage_mode` | string | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_motion_detection` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_medium` | string | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_temperature_format_set` | enum | 0, 1 | - | yes | select | 0=Celsius, 1=Fahrenheit |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `hb_aic_feature_available` | bool | - | - | no | - | - |
+| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `home_card_show_video_playback` | bool | - | - | no | - | - |
+| `inserted_ai_card_info` | string | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_connect_webrtc` | other | - | - | no | - | - |
+| `is_device_ready_upgrade` | bool | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_dynamic_setup_payload` | bool | - | - | no | - | - |
+| `is_support_familiar_face` | bool | - | - | no | - | - |
+| `is_support_matter` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `is_support_webrtc` | bool | - | - | no | - | - |
+| `lcd_screen_config` | string | - | - | no | - | - |
+| `mac_address` | string | - | - | no | - | - |
+| `model_config` | string | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_ignore_switch` | bool | - | - | yes | switch | - |
+| `nvr_get_device_volume` | string | - | - | no | - | - |
+| `nvr_motion_detection` | string | - | - | no | - | - |
+| `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
+| `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
+| `query_event_list_cmd` | other | - | - | no | - | - |
+| `setting_current_connection_type` | other | - | - | no | - | - |
+| `setting_model_config` | string | - | - | no | - | - |
+| `support_multiple_live_stream` | bool | - | - | no | - | - |
+| `support_smart_search_switch` | bool | - | - | no | - | - |
+| `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes by app, 2=Switch modes by geofencing |
+| `system_maintenance` | string | - | - | no | - | - |
+| `system_notification_master_switch` | bool | - | - | yes | switch | - |
+| `system_switching_notification` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Emerg, 1=Update, 2=Admin, 3=Device, 4=User |
+| `system_uptime` | string | - | - | no | - | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `vehicle_detection_switch` | other | - | - | yes | - | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
 ### Settings of T8110 Battery Solo Cam 8110
@@ -1559,6 +2945,95 @@ rw 24 / ro 59
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
 | `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
 | `video_clip_length` | range | 5..120 step 1 | s | yes | slider | - |
+| `video_intercom_audio_type` | enum | 0, 1 | - | no | - | 0=ACC, 1=PCM |
+| `video_intercom_duplex` | other | - | - | no | - | - |
+| `watermark_set` | bool | - | - | yes | switch | - |
+| `working_days` | other | - | - | no | - | - |
+
+### Settings of T8112 Camera E
+
+rw 25 / ro 57
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=3, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `alerts_detection_type` | enum | 0, 1, 2 | - | yes | select | 0=All Alerts, 1=Person Alerts, 2=Facial Alerts |
+| `anti_theft_detection_switch` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | -1..10 step 1 | - | no | - | - |
+| `arming_support_arm_delay` | bool | - | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `automation_config` | string | - | - | no | - | - |
+| `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `cloud_storage_support_show_device` | bool | - | - | no | - | - |
+| `detected_events` | other | - | - | no | - | - |
+| `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
+| `detection_type_set` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `detection_type_set__v2` | flags | any of 0, 1, 2, 3, 4, 7 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle Detection, 3=Pet Detection, 4=All Other Motions, 7=Vehicle Recognition |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | 0, 1, 2, 3, 4, -1 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours |
+| `device_status` | string | - | - | no | - | - |
+| `device_storage_type` | enum | 2 | - | no | - | 2=NAS |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_sub_version` | string | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `hb_connect_is_connected` | string | - | - | no | - | - |
+| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
+| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_support_version` | string | - | - | no | - | - |
+| `is_connected_solar_panel` | other | - | - | no | - | - |
+| `is_device_upgrade` | string | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 2 | - | no | - | 0=Record, 2=Speaker, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 8, 10, 1 | - | no | - | 0=Record, 1=Screenshot, 10=Event, 2=Speaker, 4=Sound, 8=Auto Night Vision |
+| `live_support_long_time_watch` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `nas_stream_switch` | bool | - | - | yes | switch | - |
+| `nightvision_type` | bool | - | - | yes | switch | - |
+| `nightvision_type_new` | enum | 102, 100 | - | yes | select | 100=Night vision off, 102=Night vision infrared |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `ordered_trigger_actions` | enum | 0, 1, 2, 3, 4, 5 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=HomeBase alarm, 4=Light alarm, 5=Monitoring alarm |
+| `player_model_config` | string | - | - | no | - | - |
+| `power_charge_mode` | enum | 0, 1 | - | yes | select | 0=Battery, 1=External Solar Panel |
+| `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
+| `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 6, 7 | - | no | - | 0=Not charging, 1=USB charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 6=External solar panel, 7=External and built-in solar charging |
+| `recording_number` | other | - | - | no | - | - |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 5..120 step 1 | - | yes | slider | - |
 | `video_intercom_audio_type` | enum | 0, 1 | - | no | - | 0=ACC, 1=PCM |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
@@ -1884,6 +3359,136 @@ rw 38 / ro 83
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
+| `working_days` | other | - | - | no | - | - |
+
+### Settings of T8119 Battery Solo C 33
+
+rw 38 / ro 85
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `add_device_model_config` | string | - | - | no | - | - |
+| `ai_empower` | other | - | - | no | - | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_geofence_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arm_delay` | bool | - | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `automation_config` | string | - | - | no | - | - |
+| `automation_config__v1` | string | - | - | no | - | - |
+| `automation_detect_motion_trigger` | bool | - | - | no | - | - |
+| `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
+| `battery_temperature_value` | string | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `change_wifi_is_press_sync` | bool | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `detected_events` | other | - | - | no | - | - |
+| `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
+| `detection_type_set` | flags | any of 1, 2, 3, 4 | - | yes | toggles | 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle Detection, 3=Pet Detection, 4=All Other Motions |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_date_format_set` | enum | 0, 1, 2 | - | yes | select | 0=MM/DD/YYYY, 1=YYYY/MM/DD, 2=DD/MM/YYYY |
+| `device_generated_ssid_prefix` | string | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_multiple_bridge_connect_fail_flag` | bool | - | - | no | - | - |
+| `device_multiple_bridge_switch` | bool | - | - | yes | switch | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_set_time_lapse_photography` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | 5, 0, 1, 2, 3, 4, -1 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours, 5=15 min |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_support_event_filter_detection_type` | enum | 1, 2, 3 | - | no | - | 1=Human, 2=Vehicle, 3=Pet |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `enable_floodlights_status` | bool | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `get_device_old_p2p_did` | bool | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `hb_connect_is_connected` | string | - | - | no | - | - |
+| `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
+| `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
+| `hb_connect_support_version` | string | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_connected_solar_panel` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge__v1` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge__v2` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge__v3` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge__v4` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `light_schecule_daily_lighting` | enum | 0, 1, 2 | - | no | - | 0=Cool, 1=Normal, 2=Warm |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 2, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 8, 13, 1 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 2=Speaker, 4=Sound, 8=Auto Night Vision |
+| `live_streaming_resolution` | enum | 0, 10, 9, 8 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Medium |
+| `live_support_long_time_watch` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `model_config` | string | - | - | no | - | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `nightvision_supply_light_mode` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off (infrared), 1=Off, 2=Spotlight, 3=Infrared |
+| `nightvision_type` | enum | 7, 10 | - | yes | select | 10=Infrared, 7=Spotlights |
+| `nightvision_type_new` | enum | 100, 103, 102 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spotlight |
+| `notification_ai_motion_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_person_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_pet_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_vehicle_switch` | bool | - | - | yes | switch | - |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `ordered_trigger_actions` | enum | 0, 1, 2 | - | no | - | 0=Record, 1=Push, 2=Camera alarm |
+| `player_model_config` | string | - | - | no | - | - |
+| `power_charge_mode` | enum | 0, 1 | - | no | - | 0=Battery, 1=External Solar Panel |
+| `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
+| `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
+| `record_resolution` | enum | 10, 9, 8 | - | yes | select | 10=High, 8=Low, 9=Medium |
+| `recording_number` | other | - | - | no | - | - |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `sound_detection_round_look_switch` | bool | - | - | yes | switch | - |
+| `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
+| `sound_detection_type` | enum | 0, 1 | - | yes | select | 0=All sound, 1=Crying |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
+| `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
+| `spotlight_schedule_config` | string | - | - | yes | text | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 10..120 step 1 | - | yes | slider | - |
+| `video_intercom_audio_type` | other | - | - | no | - | - |
+| `video_intercom_duplex` | other | - | - | no | - | - |
+| `watermark_set` | enum | 0, 1, 3 | - | yes | select | 0=Off, 1=Timestamp, 3=Logo |
 | `working_days` | other | - | - | no | - | - |
 
 ### Settings of T8122 Battery Solo Cam Spotlight 1080
@@ -2925,6 +4530,383 @@ rw 35 / ro 81
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
+
+### Settings of T814X Battery Solo Cam 814X
+
+rw 37 / ro 88
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `add_device_model_config` | string | - | - | no | - | - |
+| `ai_empower` | other | - | - | no | - | - |
+| `ai_tracking_status` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_geofence_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arm_delay` | bool | - | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `automation_config` | string | - | - | no | - | - |
+| `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `change_wifi_is_press_sync` | bool | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `cloud_storage_support_show_device` | bool | - | - | no | - | - |
+| `cloud_storage_support_trail` | bool | - | - | no | - | - |
+| `detected_events` | other | - | - | no | - | - |
+| `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
+| `detection_type_set` | flags | any of 1, 2, 3, 4 | - | yes | toggles | 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `detection_type_set__v2` | flags | any of 0, 1, 2, 3, 4, 7 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle Detection, 3=Pet Detection, 4=All Other Motions, 7=Vehicle Recognition |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_power_working_mode` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Battery, 1=Wire, 2=Solar, 3=Charge only, 4=Charge and supply |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_set_outdoor_mode` | bool | - | - | no | - | - |
+| `device_set_time_lapse_photography` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | -1, 0, 1, 2, 3, 4 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_storage_type__v1` | enum | 0, 1 | - | no | - | 0=Local, 1=Cloud |
+| `device_support_event_filter_detection_type` | enum | 1, 2, 3 | - | no | - | 1=Human, 2=Vehicle, 3=Pet |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `disable_ptz_turn_switch` | bool | - | - | yes | switch | - |
+| `enable_floodlights_status` | bool | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `gesture_control_quick_focus_tap_switch` | bool | - | - | no | - | - |
+| `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
+| `get_device_old_p2p_did` | bool | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `hb_connect_is_connected` | string | - | - | no | - | - |
+| `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
+| `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
+| `hb_connect_support_version` | string | - | - | no | - | - |
+| `homebase_connect_support` | bool | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `light_schecule_daily_lighting` | enum | 0, 1, 2 | - | no | - | 0=Cool, 1=Normal, 2=Warm |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 2, 1, 3 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 8, 19, 13, 1, 7, 6, 12 | - | no | - | 0=Record, 1=Screenshot, 12=Playback, 13=Spotlight, 19=Playback, 2=Speaker, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision |
+| `live_ptz_toolbar_list` | enum | 0, 1 | - | no | - | 0=Preset, 1=Control |
+| `live_streaming_resolution` | enum | 0, 10, 9, 8 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Medium |
+| `live_support_long_time_watch` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `manual_light_brightness` | range | 1..100 step 1 | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
+| `nas_stream_switch` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 7, 10 | - | yes | select | 10=Infrared, 7=Spotlights |
+| `nightvision_type_new` | enum | 102, 103, 100 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spotlight |
+| `notification_ai_motion_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_person_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_pet_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_vehicle_switch` | bool | - | - | yes | switch | - |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `ordered_trigger_actions` | enum | 0, 1, 2 | - | no | - | 0=Record, 1=Push, 2=Camera alarm |
+| `player_model_config` | string | - | - | no | - | - |
+| `player_model_config__v1` | string | - | - | no | - | - |
+| `power_charge_mode` | enum | 0, 1 | - | no | - | 0=Battery, 1=External Solar Panel |
+| `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
+| `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
+| `preset_positions_calibrate_time` | other | - | - | no | - | - |
+| `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
+| `record_resolution` | enum | 10, 9, 8 | - | yes | select | 10=High, 8=Low, 9=Medium |
+| `recording_number` | other | - | - | no | - | - |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `sd_card_max_capacity` | other | - | - | no | - | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
+| `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
+| `spotlight_schedule_config` | string | - | - | yes | text | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `spotlight_switch_status_relate` | bool | - | - | no | - | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 10..120 step 1 | - | yes | slider | - |
+| `video_intercom_audio_type` | other | - | - | no | - | - |
+| `video_intercom_duplex` | other | - | - | no | - | - |
+| `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
+| `working_days` | other | - | - | no | - | - |
+
+### Settings of T8150 Cam 4G
+
+rw 26 / ro 46
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `anti_theft_detection_switch` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `detection_sensitivity` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
+| `detection_sensitivity_test_mode` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
+| `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Recognition, 6=All Motions |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | -1, 0, 1, 2, 3, 4 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_connected_solar_panel` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 2, 4, 13, 14 | - | no | - | 0=Record, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 1, 2, 4, 8, 10, 13, 14 | - | no | - | 0=Record, 1=Screenshot, 10=Event, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound, 8=Auto Night Vision |
+| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Middle |
+| `live_support_full` | bool | - | - | no | - | - |
+| `live_support_mute` | bool | - | - | no | - | - |
+| `live_support_record` | bool | - | - | no | - | - |
+| `live_support_screenshot` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Black, 2=Color |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `power_charge_mode` | enum | 0, 1 | - | yes | select | 0=Battery, 1=External Solar Panel |
+| `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
+| `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 0..100 step 1 | - | yes | slider | - |
+| `spotlight_status` | bool | - | - | no | - | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `spotlight_switch_status_relate` | bool | - | - | no | - | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `switching_notification` | enum | 0, 1 | - | yes | select | 0=Switch modes by schedule, 1=Switch modes from app |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 5..60 step 1 | - | yes | slider | - |
+| `video_intercom_audio_type` | other | - | - | no | - | - |
+| `video_intercom_duplex` | other | - | - | no | - | - |
+| `watermark_set` | bool | - | - | yes | switch | - |
+
+### Settings of T8151 Cam 4G EU
+
+rw 26 / ro 50
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `4g_signal_strength` | string | - | - | no | - | - |
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `anti_theft_detection_switch` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `detection_sensitivity` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
+| `detection_sensitivity_test_mode` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
+| `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Recognition, 6=All Motions |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | -1, 0, 1, 2, 3, 4 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_connected_solar_panel` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 2, 4, 13, 14 | - | no | - | 0=Record, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 1, 2, 4, 8, 10, 13, 14 | - | no | - | 0=Record, 1=Screenshot, 10=Event, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound, 8=Auto Night Vision |
+| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Middle |
+| `live_support_full` | bool | - | - | no | - | - |
+| `live_support_mute` | bool | - | - | no | - | - |
+| `live_support_record` | bool | - | - | no | - | - |
+| `live_support_screenshot` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Black, 2=Color |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `power_charge_mode` | enum | 0, 1 | - | yes | select | 0=Battery, 1=External Solar Panel |
+| `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
+| `power_source_mode` | other | - | - | no | - | - |
+| `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `setting_current_connection_type` | other | - | - | no | - | - |
+| `sim_card_info` | string | - | - | no | - | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 0..100 step 1 | - | yes | slider | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `spotlight_switch_status_relate` | bool | - | - | no | - | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `switching_notification` | enum | 0, 1 | - | yes | select | 0=Switch modes by schedule, 1=Switch modes from app |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 5..60 step 1 | - | yes | slider | - |
+| `video_intercom_audio_type` | other | - | - | no | - | - |
+| `video_intercom_duplex` | other | - | - | no | - | - |
+| `watermark_set` | bool | - | - | yes | switch | - |
+
+### Settings of T8152 Cam 4G AUS
+
+rw 26 / ro 50
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `4g_signal_strength` | string | - | - | no | - | - |
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `anti_theft_detection_switch` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `detection_sensitivity` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
+| `detection_sensitivity_test_mode` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
+| `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Recognition, 6=All Motions |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | -1, 0, 1, 2, 3, 4 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_connected_solar_panel` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 2, 4, 13, 14 | - | no | - | 0=Record, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 1, 2, 4, 8, 10, 13, 14 | - | no | - | 0=Record, 1=Screenshot, 10=Event, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound, 8=Auto Night Vision |
+| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Middle |
+| `live_support_full` | bool | - | - | no | - | - |
+| `live_support_mute` | bool | - | - | no | - | - |
+| `live_support_record` | bool | - | - | no | - | - |
+| `live_support_screenshot` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Black, 2=Color |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `power_charge_mode` | enum | 0, 1 | - | yes | select | 0=Battery, 1=External Solar Panel |
+| `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
+| `power_source_mode` | other | - | - | no | - | - |
+| `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `setting_current_connection_type` | other | - | - | no | - | - |
+| `sim_card_info` | string | - | - | no | - | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 0..100 step 1 | - | yes | slider | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `spotlight_switch_status_relate` | bool | - | - | no | - | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `switching_notification` | enum | 0, 1 | - | yes | select | 0=Switch modes by schedule, 1=Switch modes from app |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 5..60 step 1 | - | yes | slider | - |
+| `video_intercom_audio_type` | other | - | - | no | - | - |
+| `video_intercom_duplex` | other | - | - | no | - | - |
+| `watermark_set` | bool | - | - | yes | switch | - |
 
 ### Settings of T8160 eufyCam 3 (S330)
 
@@ -4142,6 +6124,158 @@ rw 51 / ro 96
 | `video_clip_length` | range | 10..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
+| `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
+| `working_days` | other | - | - | no | - | - |
+
+### Settings of T8180 Battery Solo Cam 8180
+
+rw 43 / ro 102
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `add_device_model_config` | string | - | - | no | - | - |
+| `ai_empower` | other | - | - | no | - | - |
+| `ai_tracking_status` | bool | - | - | yes | switch | - |
+| `aic_activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arm_delay` | bool | - | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `automation_config` | string | - | - | no | - | - |
+| `automation_detect_trigger_type` | enum | 0, 2, 4 | - | no | - | 0=Human Detection, 2=Vehicle, 4=Detected motion |
+| `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
+| `battery_temperature_value` | string | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `camera_snapshot_setting` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=3 min, 1=5 min, 2=15 min, 3=30 min, 4=60 min |
+| `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
+| `change_wifi_is_press_sync` | bool | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `cloud_storage_support_trail` | string | - | - | no | - | - |
+| `daily_highlight_switch` | bool | - | - | yes | switch | - |
+| `detected_events` | other | - | - | no | - | - |
+| `detection_sensitivity` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
+| `detection_sensitivity_test_mode` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
+| `detection_type_set` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions, 5=Human Only, 6=All Motions |
+| `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle Detection, 3=Pet Detection, 4=All Other Motions |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_continuous_recording_time` | enum | 0, 1 | - | yes | select | 0=All time, 1=Schedule |
+| `device_continuous_schedule_list` | string | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_motion_detection` | enum | 1, 2, 4 | - | no | - | 1=Human Detection, 2=Vehicle, 4=All Other Motions |
+| `device_motion_detection__v1` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `device_multiple_bridge_ap_type` | other | - | - | no | - | - |
+| `device_multiple_bridge_connect_fail_flag` | bool | - | - | no | - | - |
+| `device_multiple_bridge_connected_ssid` | string | - | - | no | - | - |
+| `device_multiple_bridge_mode` | enum | 0, 1, 2 | - | yes | select | 0=Auto, 1=HomeBase, 2=Router |
+| `device_multiple_bridge_switch` | bool | - | - | yes | switch | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_set_alarm_light_type` | enum | 0, 1 | - | yes | select | 0=Spotlight flashing, 1=Red and blue lights flashing |
+| `device_set_wifi_band_mode` | enum | 2 | - | no | - | 2=2.4G&5G |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | 5, 0, 1, 2, 3, 4, -1 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours, 5=15 min |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_storage_type__v1` | enum | 0, 1, 2 | - | no | - | 0=Local, 1=Cloud, 2=NAS |
+| `device_storage_type__v2` | enum | 0, 2 | - | no | - | 0=Local, 2=NAS |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `disable_ptz_turn_switch` | bool | - | - | yes | switch | - |
+| `entry_activity_zone_condition` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `firmware_sub_version` | string | - | - | no | - | - |
+| `gesture_control_quick_focus_tap_switch` | bool | - | - | no | - | - |
+| `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `hb_connect_is_connected` | string | - | - | no | - | - |
+| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
+| `hb_connect_support_version` | string | - | - | no | - | - |
+| `homebase_connect_support` | bool | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_connect_webrtc` | other | - | - | no | - | - |
+| `is_connect_webrtc__v1` | other | - | - | no | - | - |
+| `is_connected_solar_panel` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge` | bool | - | - | no | - | - |
+| `is_support_online_change_wifi` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 13, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 2=Speaker, 3=Pantili, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 3, 13, 1, 8, 7, 16, 6 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 16=Positions, 2=Speaker, 3=Pantili, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision |
+| `live_ptz_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=Preset, 1=Control, 2=Panorama |
+| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `live_streaming_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | no | - | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=360P |
+| `live_support_full` | string | - | - | no | - | - |
+| `live_support_long_time_watch` | bool | - | - | no | - | - |
+| `live_support_mute` | string | - | - | no | - | - |
+| `live_support_screenshot` | string | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `live_tracking_switch` | bool | - | - | no | - | - |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `model_config` | string | - | - | no | - | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
+| `nas_stream_switch` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 2, 1, 0 | - | yes | select | 0=Off, 1=B&W Night Vision, 2=Color Night Vision |
+| `nightvision_type_new` | enum | 102, 103, 100 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spolight |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `ordered_trigger_actions` | enum | 0, 1, 2, 3 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=Light alarm |
+| `p2p_ping_timeout` | other | - | - | no | - | - |
+| `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
+| `player_model_config` | string | - | - | no | - | - |
+| `power_charge_mode` | enum | 0, 1 | - | no | - | 0=Battery, 1=External Solar Panel |
+| `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
+| `power_manager_mode__v1` | enum | 1, 3 | - | yes | select | 1=Optimal surveillance, 3=Custom recording |
+| `power_source_mode` | enum | default:0 | - | no | - | default:0=default:0 |
+| `ptz_ai_follow_status` | string | - | - | no | - | - |
+| `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `record_resolution__v1` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `recording_number` | other | - | - | no | - | - |
+| `sd_card_max_capacity` | other | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=720, zoneWidth=1280 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `solar_panel_connected_status` | bool | - | - | no | - | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
+| `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
+| `spotlight_status` | bool | - | - | yes | switch | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `supported_bands` | enum | 2 | - | no | - | 2=2.4G&5G |
+| `switching_notification` | flags | any of 0, 1 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 10..120 step 1 | - | yes | slider | - |
+| `video_intercom_audio_type` | other | - | - | no | - | - |
+| `video_intercom_duplex` | other | - | - | no | - | - |
+| `view_mode` | enum | 0, 1 | - | yes | select | 0=Dual, 1=Single |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
@@ -5366,6 +7500,169 @@ rw 53 / ro 125
 | `watermark_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off, 1=Time, 2=Time and logo, 3=Logo |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
+### Settings of T8217 Battery Doorbell Solo 8217
+
+rw 46 / ro 110
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `add_device_model_config` | string | - | - | no | - | - |
+| `ai_empower` | other | - | - | no | - | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_keypad_set_cus_model` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | -1..100 step 1 | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `automation_config` | string | - | - | no | - | - |
+| `automation_detect_trigger_type` | enum | 0, 4, 3 | - | no | - | 0=Human Detection, 3=Package, 4=Detected motion |
+| `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detection_range_set_installation_height` | string | - | - | no | - | - |
+| `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
+| `detection_sensitivity_test_mode` | range | 1..7 step 1 | - | yes | slider | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_audio_ringtone_volume` | range | 1..100 step 1 | - | yes | slider | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_chime_hb_alert_switch` | bool | - | - | yes | switch | - |
+| `device_chime_hb_alert_tones` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 | - | yes | select | 0=Default, 1=Silent, 2=Beacon, 3=Chord, 4=Christmas, 5=Circuit, 6=Clock, 7=Ding, 8=Hillside, 9=Presto |
+| `device_chime_hb_ring_volume` | range | 0..26 step 1 | - | yes | slider | - |
+| `device_chime_minibase_chime_setting` | string | - | - | no | - | - |
+| `device_continuous_recording_switch` | bool | - | - | yes | switch | - |
+| `device_continuous_recording_time` | enum | 0, 1 | - | yes | select | 0=All time, 1=Schedule |
+| `device_continuous_schedule_list` | string | - | - | no | - | - |
+| `device_delivered_guard_switch` | bool | - | - | yes | switch | - |
+| `device_delivered_packages_count` | range | 0..10000 step 1 | - | no | - | - |
+| `device_delivery_guard_quick_response` | string | - | - | no | - | - |
+| `device_delivery_guard_support_ignored_zone` | bool | - | - | no | - | - |
+| `device_event_thumb_process_type` | other | - | - | no | - | - |
+| `device_indoor_chime_switch` | bool | - | - | yes | switch | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_motion_detection` | enum | 5, 6 | - | no | - | 5=Human Recognition, 6=All Other Motions |
+| `device_motion_detection__v1` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `device_motion_package_detection_switch` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_packages_detection_recording_switch` | bool | - | - | yes | switch | - |
+| `device_packages_guard_active_time` | string | - | - | no | - | - |
+| `device_packages_guard_switch` | bool | - | - | yes | switch | - |
+| `device_packages_init_guide_status` | string | - | - | no | - | - |
+| `device_packages_live_check_swich` | bool | - | - | yes | switch | - |
+| `device_packages_uncollected_alert_swich` | bool | - | - | yes | switch | - |
+| `device_packages_uncollected_check_time` | string | - | - | no | - | - |
+| `device_power_supply_mode` | enum | 1, 3, 4, 5 | - | yes | select | 1=Value 1, 3=Value 3, 4=Value 4, 5=Value 5 |
+| `device_pre_recording_switch` | bool | - | - | yes | switch | - |
+| `device_query_event_retry_time` | other | - | - | no | - | - |
+| `device_query_event_timeout` | other | - | - | no | - | - |
+| `device_response_timeout_delay_time` | other | - | - | yes | - | - |
+| `device_response_timeout_schedule` | string | - | - | no | - | - |
+| `device_response_timeout_switch` | bool | - | - | yes | switch | - |
+| `device_response_timeout_voice` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | -1, 0, 1, 2, 3, 4 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours |
+| `device_snooze_time_extra_type` | other | - | - | no | - | - |
+| `device_snooze_time_extra_type__v1` | enum | 0, 2 | - | no | - | 0=Motion notify onoff, 2=HomeBase onoff |
+| `device_snooze_time_extra_type__v2` | enum | 0, 1 | - | no | - | 0=Motion notify onoff, 1=Chime onoff |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_medium` | string | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_video_visitor_count` | range | 0..10000 step 1 | - | no | - | - |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `entry_activity_zone_condition` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `home_card_show_video_playback` | bool | - | - | no | - | - |
+| `homebase_connect_support` | bool | - | - | no | - | - |
+| `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_connect_webrtc` | bool | - | - | no | - | - |
+| `is_connected_solar_panel` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_ddr_live` | bool | - | - | no | - | - |
+| `is_support_main_auxiliary_camera` | bool | - | - | no | - | - |
+| `is_support_multi_live_stream` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
+| `live_bottom_hor_toolbar_list` | enum | 1, 2, 4, 15, 0 | - | no | - | 0=Record, 1=Screenshot, 15=Reply, 2=Speaker, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 15, 1, 11, 9, 13 | - | no | - | 0=Record, 1=Screenshot, 11=Streaming Quality, 13=Spotlight, 15=Reply, 2=Speaker, 4=Sound, 9=Playback |
+| `live_streaming_resolution` | enum | 0, 10, 9, 8 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Middle |
+| `live_support_full` | bool | - | - | no | - | - |
+| `live_support_long_time_watch` | bool | - | - | no | - | - |
+| `live_support_mute` | bool | - | - | no | - | - |
+| `live_support_record` | bool | - | - | no | - | - |
+| `live_support_screenshot` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_dection_doorbell_notification_switch` | bool | - | - | no | - | - |
+| `motion_dection_human_motion_notification_switch` | bool | - | - | no | - | - |
+| `motion_dection_other_motion_notification_switch` | bool | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 2, 5, 6, 0 | - | no | - | 0=Off, 2=Color, 5=Optimal Infrared, 6=Infrared Night Vision |
+| `nightvision_type_new` | enum | 103, 101, 102, 100 | - | no | - | 100=Night vision off, 101=Night vision infrared, 102=Night vision infrared, 103=Night vision spotlight |
+| `notification_ai_dection_package_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_doorbell_pressed_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_motion_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_person_switch` | bool | - | - | yes | switch | - |
+| `notification_jump_to` | enum | 0, 1 | - | no | - | 0=History event, 1=Live view |
+| `notification_motion_alert` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8 | - | no | - | 0=Default, 1=Silent, 2=Bell, 3=Change, 4=Ding, 5=Notify, 6=Security, 7=Success, 8=Type |
+| `notification_motion_onoff` | bool | - | - | no | - | - |
+| `notification_ring_alert` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 | - | no | - | 0=Default, 1=Silent, 2=Beacon, 3=Chord, 4=Christmas, 5=Circuit, 6=Clock, 7=Ding, 8=Hillside, 9=Presto |
+| `notification_ring_onoff` | bool | - | - | no | - | - |
+| `notification_type` | enum | 0, 1 | - | yes | select | 0=Most Efficient, 1=Full Effect |
+| `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
+| `player_model_config` | string | - | - | no | - | - |
+| `power_charge_history` | string | - | - | no | - | - |
+| `power_charge_mode` | enum | 0, 1 | - | no | - | 0=Battery, 1=External Solar Panel |
+| `power_manager_mode` | enum | 0, 2, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 2=Balanced surveillance, 3=Custom recording |
+| `power_manager_mode__v1` | enum | 1, 3 | - | yes | select | 1=Optimal surveillance, 3=Custom recording |
+| `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
+| `record_resolution` | enum | 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 5=2K HD, 6=720P(HD) |
+| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `sd_card_max_capacity` | other | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `set_ignore_object` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=4, sideNum=4, zoneHeight=9, zoneWidth=16 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `smart_lock_enable_voip_switch` | bool | - | - | yes | switch | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 1..100 step 1 | - | yes | slider | - |
+| `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `trigger_interval_time` | range | 2..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 8..120 step 1 | s | yes | slider | - |
+| `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
+| `video_quality_streaming_smart_displays` | enum | 0, 1 | - | yes | select | 0=Smartphone first, 1=Smart display first |
+| `video_quality_when_recoding_clips` | enum | 0, 1 | - | no | - | 0=Recording quality, 1=Streaming quality |
+| `video_watch_view_mode` | enum | 2, 3, 4, 5, 12 | - | no | - | 12=Split view, 2=Upper left, 3=Upper right, 4=Lower left, 5=Lower right |
+| `watch_view_mode` | string | - | - | no | - | - |
+| `watermark_set` | enum | 0, 1, 3 | - | yes | select | 0=Off, 1=Time, 3=Logo |
+| `working_days` | range | 10..120 step 1 | d | no | - | - |
+
 ### Settings of T8220 Battery Doorbell 8220
 
 rw 22 / ro 50
@@ -5861,6 +8158,268 @@ rw 31 / ro 87
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
+### Settings of T8352 Babycare 8352
+
+rw 47 / ro 77
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `ai_tracking_status` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arm_delay` | bool | - | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `auto_calibration_status` | bool | - | - | yes | switch | - |
+| `auto_cruise_schedule_list` | string | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
+| `change_wifi_is_press_sync` | bool | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `cloud_storage_support_show_device` | bool | - | - | no | - | - |
+| `cloud_storage_support_trail` | bool | - | - | no | - | - |
+| `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
+| `device_cloud_storage_status` | other | - | - | no | - | - |
+| `device_continuous_recording_switch` | bool | - | - | yes | switch | - |
+| `device_continuous_recording_time` | enum | 0, 1 | - | yes | select | 0=All time, 1=Schedule |
+| `device_continuous_schedule_list` | string | - | - | no | - | - |
+| `device_indoor_temperatur_alarm_max_value` | range | 50..100 step 1 | - | yes | slider | - |
+| `device_indoor_temperatur_alarm_min_value` | range | 50..100 step 1 | - | yes | slider | - |
+| `device_indoor_temperature` | other | - | - | no | - | - |
+| `device_indoor_temperature_unit` | other | - | - | yes | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_linkage_tracking_bypass` | string | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_monitor_indoor_temperature_switch` | bool | - | - | yes | switch | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | 5, 0, 1, 2, 3, 4, -1 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours, 5=15 min |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0, 1, 2 | - | no | - | 0=Local, 1=Cloud, 2=NAS |
+| `device_storage_type__v1` | enum | 0, 1, 2 | - | no | - | 0=Local, 1=Cloud, 2=NAS |
+| `device_watch_baby_switch` | bool | - | - | no | - | - |
+| `device_white_noise_list` | string | - | - | no | - | - |
+| `device_white_noise_play_info` | string | - | - | no | - | - |
+| `device_white_noise_time` | other | - | - | yes | - | - |
+| `device_white_noise_volume` | range | 0..100 step 1 | - | yes | slider | - |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `disable_ptz_turn_switch` | bool | - | - | yes | switch | - |
+| `entry_activity_zone_condition` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `gesture_control_quick_focus_tap_switch` | bool | - | - | no | - | - |
+| `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `hb_connect_is_connected` | string | - | - | no | - | - |
+| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
+| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
+| `hb_connect_support_version` | string | - | - | no | - | - |
+| `home_card_show_video_playback` | bool | - | - | no | - | - |
+| `homebase_connect_support` | bool | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `is_support_webrtc` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 9, 1, 8, 7, 6, 12, 3, 16 | - | no | - | 0=Record, 1=Screenshot, 12=Calibration, 16=Positions, 2=Speaker, 3=Pantili, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
+| `live_ptz_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=Preset, 1=Control, 2=Panorama |
+| `live_streaming_resolution` | enum | 0, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 5=2K HD, 6=720P |
+| `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
+| `nas_stream_switch` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 3, 4, 0 | - | yes | select | 0=Off, 3=Auto Night Vision, 4=Infrared |
+| `notification_ai_crying_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_motion_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_person_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_pet_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_sound_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_vehicle_switch` | bool | - | - | yes | switch | - |
+| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `ordered_trigger_actions` | enum | 0, 1, 2, 3 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=Light alarm |
+| `playback_play_speed` | enum | 0, 1, 2, 3, 2 | - | no | - | 0=2x, 1=4x, 2=2x, 3=16x |
+| `player_model_config` | string | - | - | no | - | - |
+| `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `sound_detection_round_look_switch` | bool | - | - | yes | switch | - |
+| `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
+| `sound_detection_status` | bool | - | - | yes | switch | - |
+| `sound_detection_type` | enum | 0, 1 | - | yes | select | 0=All sound, 1=Crying |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
+| `support_platform_v2` | bool | - | - | no | - | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `switching_notification` | enum | 2, 0, 1 | - | yes | select | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `video_auto_cruise_switch` | bool | - | - | yes | switch | - |
+| `video_camera_count` | range | 1..2 step 1 | - | no | - | - |
+| `video_intercom_audio_type` | range | 0..100 step 1 | - | no | - | - |
+| `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
+| `view_mode` | enum | 0, 1,  | - | yes | select | =, 0=Dual, 1=Single |
+| `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
+
+### Settings of T8354 Babycare 8354
+
+rw 47 / ro 77
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `ai_tracking_status` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arm_delay` | bool | - | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `auto_calibration_status` | bool | - | - | yes | switch | - |
+| `auto_cruise_schedule_list` | string | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
+| `change_wifi_is_press_sync` | bool | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `cloud_storage_support_show_device` | bool | - | - | no | - | - |
+| `cloud_storage_support_trail` | bool | - | - | no | - | - |
+| `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
+| `device_cloud_storage_status` | other | - | - | no | - | - |
+| `device_continuous_recording_switch` | bool | - | - | yes | switch | - |
+| `device_continuous_recording_time` | enum | 0, 1 | - | yes | select | 0=All time, 1=Schedule |
+| `device_continuous_schedule_list` | string | - | - | no | - | - |
+| `device_indoor_temperatur_alarm_max_value` | range | 50..100 step 1 | - | yes | slider | - |
+| `device_indoor_temperatur_alarm_min_value` | range | 50..100 step 1 | - | yes | slider | - |
+| `device_indoor_temperature` | other | - | - | no | - | - |
+| `device_indoor_temperature_unit` | other | - | - | yes | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_linkage_tracking_bypass` | string | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_monitor_indoor_temperature_switch` | bool | - | - | yes | switch | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | 5, 0, 1, 2, 3, 4, -1 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours, 5=15 min |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0, 1, 2 | - | no | - | 0=Local, 1=Cloud, 2=NAS |
+| `device_storage_type__v1` | enum | 0, 1, 2 | - | no | - | 0=Local, 1=Cloud, 2=NAS |
+| `device_watch_baby_switch` | bool | - | - | no | - | - |
+| `device_white_noise_list` | string | - | - | no | - | - |
+| `device_white_noise_play_info` | string | - | - | no | - | - |
+| `device_white_noise_time` | other | - | - | yes | - | - |
+| `device_white_noise_volume` | range | 0..100 step 1 | - | yes | slider | - |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `disable_ptz_turn_switch` | bool | - | - | yes | switch | - |
+| `entry_activity_zone_condition` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `gesture_control_quick_focus_tap_switch` | bool | - | - | no | - | - |
+| `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `hb_connect_is_connected` | string | - | - | no | - | - |
+| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
+| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
+| `hb_connect_support_version` | string | - | - | no | - | - |
+| `home_card_show_video_playback` | bool | - | - | no | - | - |
+| `homebase_connect_support` | bool | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `is_support_webrtc` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 9, 1, 8, 7, 6, 12, 3, 16 | - | no | - | 0=Record, 1=Screenshot, 12=Calibration, 16=Positions, 2=Speaker, 3=Pantili, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
+| `live_ptz_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=Preset, 1=Control, 2=Panorama |
+| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
+| `nas_stream_switch` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 3, 4, 0 | - | yes | select | 0=Off, 3=Auto Night Vision, 4=Infrared |
+| `notification_ai_crying_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_motion_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_person_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_pet_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_sound_switch` | bool | - | - | yes | switch | - |
+| `notification_ai_vehicle_switch` | bool | - | - | yes | switch | - |
+| `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `ordered_trigger_actions` | enum | 0, 1, 2, 3 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=Light alarm |
+| `playback_play_speed` | enum | 0, 1, 2, 3, 2 | - | no | - | 0=2x, 1=4x, 2=2x, 3=16x |
+| `player_model_config` | string | - | - | no | - | - |
+| `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `sound_detection_round_look_switch` | bool | - | - | yes | switch | - |
+| `sound_detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
+| `sound_detection_status` | bool | - | - | yes | switch | - |
+| `sound_detection_type` | enum | 0, 1 | - | yes | select | 0=All sound, 1=Crying |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
+| `support_platform_v2` | bool | - | - | no | - | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `switching_notification` | enum | 2, 0, 1 | - | yes | select | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `video_auto_cruise_switch` | bool | - | - | yes | switch | - |
+| `video_camera_count` | range | 1..2 step 1 | - | no | - | - |
+| `video_intercom_audio_type` | range | 0..100 step 1 | - | no | - | - |
+| `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
+| `view_mode` | enum | 0, 1,  | - | yes | select | =, 0=Dual, 1=Single |
+| `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
+
 ### Settings of T8400 Indoor Camera
 
 rw 38 / ro 79
@@ -6108,6 +8667,152 @@ rw 38 / ro 79
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
+
+### Settings of T8404 Camera 8404
+
+rw 33 / ro 106
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=8, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `ai_tracking_status` | bool | - | - | yes | switch | - |
+| `aic_activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_geofencing` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `auto_cruise_schedule_list` | string | - | - | no | - | - |
+| `automation_config` | string | - | - | no | - | - |
+| `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
+| `camera_gun_ball_linkage_switch` | bool | - | - | yes | switch | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `camera_snapshot_setting` | string | - | - | no | - | - |
+| `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
+| `change_wifi_is_press_sync` | bool | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `cloud_storage_support_show_device` | bool | - | - | no | - | - |
+| `cloud_storage_support_trail` | bool | - | - | no | - | - |
+| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_cloud_storage_status` | other | - | - | no | - | - |
+| `device_continuous_recording_switch` | bool | - | - | yes | switch | - |
+| `device_continuous_recording_time` | enum | 0, 1 | - | yes | select | 0=All time, 1=Schedule |
+| `device_continuous_schedule_list` | string | - | - | no | - | - |
+| `device_event_create_switch` | bool | - | - | yes | switch | - |
+| `device_event_recording_time_config` | string | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_linkage_tracking_bypass` | string | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_motion_detection` | enum | 1, 2, 3, 4 | - | no | - | 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `device_motion_detection__v1` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `device_multiple_bridge_ap_type` | other | - | - | no | - | - |
+| `device_multiple_bridge_connect_fail_flag` | bool | - | - | no | - | - |
+| `device_multiple_bridge_connected_ssid` | string | - | - | no | - | - |
+| `device_multiple_bridge_mode` | enum | 0, 1, 2 | - | yes | select | 0=Auto, 1=HomeBase, 2=Router |
+| `device_multiple_bridge_style` | string | - | - | no | - | - |
+| `device_multiple_bridge_style__v1` | string | - | - | no | - | - |
+| `device_multiple_bridge_style__v2` | string | - | - | no | - | - |
+| `device_multiple_bridge_switch` | bool | - | - | yes | switch | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_pre_recording_switch` | bool | - | - | yes | switch | - |
+| `device_query_event_retry_time` | other | - | - | no | - | - |
+| `device_query_event_timeout` | other | - | - | no | - | - |
+| `device_sensor_count` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_set_alarm_light_type` | enum | 0, 1 | - | yes | select | 0=Spotlight flashing, 1=Red and blue lights flashing |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | 5, 0, 1, 2, 3, 4, -1 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours, 5=15 min |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_medium` | string | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_storage_type__v1` | enum | 0, 1, 2 | - | no | - | 0=Local, 1=Cloud, 2=NAS |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `entry_activity_zone_condition` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `gesture_control_quick_focus_tap_switch` | bool | - | - | no | - | - |
+| `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `hb_connect_is_connected` | string | - | - | no | - | - |
+| `hb_connect_support_version` | string | - | - | no | - | - |
+| `home_card_show_video_playback` | bool | - | - | no | - | - |
+| `homebase_connect_support` | bool | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_connect_webrtc` | other | - | - | no | - | - |
+| `is_connected_solar_panel` | other | - | - | no | - | - |
+| `is_device_upgrade` | string | - | - | no | - | - |
+| `is_support_cloud_storage` | bool | - | - | no | - | - |
+| `is_support_multi_live_stream` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge__v1` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge__v2` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 19, 13, 1, 18, 7, 8, 9, 6 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 18=PTZ Linkage, 19=PTZ Control Entrance, 2=Speaker, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
+| `live_streaming_resolution` | enum | 0, 14, 2, 6 | - | yes | select | 0=Auto, 14=2.5K, 2=Full HD(1080P), 6=720P |
+| `live_support_long_time_watch` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
+| `nas_stream_switch` | bool | - | - | yes | switch | - |
+| `nightvision_supply_light_mode` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off (infrared), 1=Off, 2=Spotlight, 3=Infrared |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `ordered_trigger_actions` | enum | 0, 1, 2, 3 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=Light alarm |
+| `p2p_ping_interval` | other | - | ms | no | - | - |
+| `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
+| `player_model_config` | string | - | - | no | - | - |
+| `record_resolution` | enum | 0, 14, 2, 6 | - | yes | select | 0=Auto, 14=2.5K, 2=Full HD(1080P), 6=720P |
+| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
+| `sd_card_max_capacity` | other | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=2, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `smart_lock_night_vision_optimization` | bool | - | - | yes | switch | - |
+| `solar_panel_connected_status` | bool | - | - | no | - | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
+| `support_platform_v2` | bool | - | - | no | - | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `supported_bands` | enum | 2 | - | no | - | 2=2.4G&5G |
+| `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `trigger_interval_time` | range | 5..120 step 1 | d | yes | slider | - |
+| `video_camera_count` | range | 1..2 step 1 | - | no | - | - |
+| `video_clip_length` | range | 10..120 step 1 | d | yes | slider | - |
+| `video_intercom_audio_type` | range | 0..100 step 1 | - | no | - | - |
+| `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
+| `video_mirror_mode_set` | enum | 0, 1, 2, 3 | - | no | - | 0=Normal, 1=Rotated 180°, 2=Mirror, 3=Flipped vertically |
+| `video_setting_flickers_adjustment` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=50 Hz, 2=60 Hz |
+| `video_setting_image_effect_set` | string | - | - | no | - | - |
+| `video_watch_view_mode` | other | - | - | no | - | - |
+| `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
+| `working_days` | range | 10..120 step 1 | d | no | - | - |
 
 ### Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)
 
@@ -8286,6 +10991,264 @@ rw 13 / ro 73
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
+### Settings of T8500 BLE Lock No Finger
+
+rw 2 / ro 45
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_low_threshold` | other | - | - | no | - | - |
+| `battery_stop_charging_threshold` | other | - | - | no | - | - |
+| `battery_temperature_value` | string | - | - | no | - | - |
+| `battery_value` | other | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_audio_ringtone_volume` | range | 0..100 step 1 | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_status` | other | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `is_device_upgrade` | string | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_auto_lock_schedule_switch` | bool | - | - | no | - | - |
+| `smart_lock_auto_lock_switch` | bool | - | - | no | - | - |
+| `smart_lock_auto_lock_timer_value` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 | - | no | - | 0=1 s, 1=5 s, 10=180 s, 11=300 s, 12=600 s, 13=900 s, 14=1200 s, 15=1500 s, 16=1800 s, 2=10 s, 3=15 s, 4=20 s, 5=30 s, 6=60 s, 7=90 s, 8=120 s, 9=150 s |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_connect_to_wifi_bridge` | bool | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_need_pull_ble` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_lock_sound_switch` | bool | - | - | no | - | - |
+| `smart_lock_lock_sound_volume` | enum | 0, 1, 2, 3 | - | no | - | 0=Mute, 1=Low, 2=Medium, 3=High |
+| `smart_lock_no_recording_while_unlocked` | string | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | bool | - | - | yes | switch | - |
+| `smart_lock_notification_switch` | bool | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | bool | - | - | no | - | - |
+| `smart_lock_one_touch_locking_switch` | bool | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+| `smart_lock_scramble_password_switch` | bool | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `smart_lock_set_timezone` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+| `smart_lock_wifi_switch` | bool | - | - | no | - | - |
+| `smart_lock_wrong_try_protection_attempts` | range | 3..10 step 1 | - | no | - | - |
+| `smart_lock_wrong_try_protection_lockdown` | range | 1..5 step 1 | - | no | - | - |
+| `smart_lock_wrong_try_protection_switch` | bool | - | - | no | - | - |
+
+### Settings of T8501 Wifi Lock No Finger
+
+rw 1 / ro 14
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `device_wifi_switch` | bool | - | - | no | - | - |
+| `is_device_upgrade` | string | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+
+### Settings of T8502 Lock 8502
+
+rw 3 / ro 15
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | yes | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | other | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `timezone_set` | string | - | - | yes | select | - |
+
+### Settings of T8503 Lock 8503
+
+rw 3 / ro 34
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_status` | other | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `firmware_sub_version` | string | - | - | no | - | - |
+| `firmware_sub_version_time` | string | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `mac_address` | string | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_switch` | bool | - | - | no | - | - |
+| `smart_lock_onoff_status` | other | - | - | no | - | - |
+| `smart_lock_scramble_password_switch` | bool | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `smart_lock_wrong_try_protection_attempts` | range | 3..10 step 1 | - | no | - | - |
+| `smart_lock_wrong_try_protection_lockdown` | range | 1..5 step 1 | - | no | - | - |
+| `smart_lock_wrong_try_protection_switch` | bool | - | - | no | - | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+
+### Settings of T8504 Lock 8504
+
+rw 3 / ro 35
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_status` | other | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `firmware_sub_version` | string | - | - | no | - | - |
+| `firmware_sub_version_time` | string | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `mac_address` | string | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_auto_lock_schedule_switch` | bool | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_lock_sound_switch` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_switch` | bool | - | - | no | - | - |
+| `smart_lock_onoff_status` | other | - | - | no | - | - |
+| `smart_lock_scramble_password_switch` | bool | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+| `smart_lock_wrong_try_protection_attempts` | range | 3..10 step 1 | - | no | - | - |
+| `smart_lock_wrong_try_protection_lockdown` | range | 1..5 step 1 | - | no | - | - |
+| `smart_lock_wrong_try_protection_switch` | bool | - | - | no | - | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+
+### Settings of T8506 Lock 8506
+
+rw 3 / ro 23
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | yes | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | other | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `timezone_set` | string | - | - | yes | select | - |
+
+### Settings of T8510 BLE Lock
+
+rw 2 / ro 26
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_need_pull_ble` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | yes | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+
 ### Settings of T8510P
 
 rw 3 / ro 25
@@ -8320,6 +11283,33 @@ rw 3 / ro 25
 | `smart_lock_set_setting_params` | string | - | - | no | - | - |
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
+
+### Settings of T8520 Wifi Lock
+
+rw 1 / ro 19
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `device_wifi_switch` | bool | - | - | no | - | - |
+| `is_device_upgrade` | string | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_onoff_status` | other | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 
 ### Settings of T8520P
 
@@ -8723,6 +11713,229 @@ rw 32 / ro 130
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
+### Settings of T85D0 Lock 85D0
+
+rw 0 / ro 30
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_connect_to_wifi_bridge` | bool | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `smart_lock_set_timezone` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+
+### Settings of T85D2 Lock 85D2
+
+rw 0 / ro 30
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_connect_to_wifi_bridge` | bool | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `smart_lock_set_timezone` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+
+### Settings of T85F0 Lock 85F0
+
+rw 0 / ro 30
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_connect_to_wifi_bridge` | bool | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_timezone` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+
+### Settings of T85F1 Lock 85F1
+
+rw 0 / ro 28
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_connect_to_wifi_bridge` | bool | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+| `smart_lock_set_timezone` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+
+### Settings of T85L0 Lock 85L0
+
+rw 0 / ro 32
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `power_manager_mode` | enum | 0, 1, 2, 3 | - | no | - | 0=Optimal battery life, 1=Optimal surveillance, 2=Balanced surveillance, 3=Custom recording |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_connect_to_wifi_bridge` | bool | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_setting_params` | string | - | - | no | - | - |
+| `smart_lock_set_timezone` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+
+### Settings of T85L1 T85L1
+
+rw 0 / ro 31
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_power_saving_mode` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `power_manager_mode` | enum | 0, 1, 2, 3 | - | no | - | 0=Optimal battery life, 1=Optimal surveillance, 2=Balanced surveillance, 3=Custom recording |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_connect_to_wifi_bridge` | bool | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_timezone` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+
 ### Settings of T85M0 T85M0
 
 rw 30 / ro 129
@@ -9062,6 +12275,90 @@ rw 31 / ro 135
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
+### Settings of T85P0 Lock 85P0
+
+rw 0 / ro 35
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `backup_battery_level` | other | - | - | no | - | - |
+| `backup_battery_value` | other | - | - | no | - | - |
+| `battery_level` | other | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_backup_battery_type` | enum | 0, 1 | - | no | - | 0=Lithium Battery, 1=Dry Battery |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_power_saving_mode` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_connect_to_wifi_bridge` | bool | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_timezone` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+
+### Settings of T85P1 Lock 85P1
+
+rw 0 / ro 35
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `backup_battery_level` | other | - | - | no | - | - |
+| `backup_battery_value` | other | - | - | no | - | - |
+| `battery_level` | other | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_backup_battery_type` | enum | 0, 1 | - | no | - | 0=Lithium Battery, 1=Dry Battery |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_power_saving_mode` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | no | - | - |
+| `device_text_event_data_type` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `is_support_live_entry_open_smart_lock` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `smart_lock_add_fingerprint_nums` | other | - | - | no | - | - |
+| `smart_lock_auto_lock_type` | other | - | - | no | - | - |
+| `smart_lock_calibrate_ui_show_type` | other | - | - | no | - | - |
+| `smart_lock_connect_to_wifi_bridge` | bool | - | - | no | - | - |
+| `smart_lock_get_event_type` | other | - | - | no | - | - |
+| `smart_lock_integrate_with_doorbell_or_camera` | bool | - | - | no | - | - |
+| `smart_lock_is_support_new_schedule_ui` | bool | - | - | no | - | - |
+| `smart_lock_is_support_one_time_user` | bool | - | - | no | - | - |
+| `smart_lock_is_support_temporary_pw` | bool | - | - | no | - | - |
+| `smart_lock_notification_locked_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_switch` | other | - | - | no | - | - |
+| `smart_lock_notification_unlocked_switch` | other | - | - | no | - | - |
+| `smart_lock_one_touch_locking_type` | other | - | - | no | - | - |
+| `smart_lock_onoff_status` | string | - | - | no | - | - |
+| `smart_lock_scramble_password_type` | other | - | - | no | - | - |
+| `smart_lock_set_timezone` | string | - | - | no | - | - |
+| `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
+
 ### Settings of T85V0 Lock 85V0
 
 rw 24 / ro 111
@@ -9319,6 +12616,154 @@ rw 36 / ro 72
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
+### Settings of T86C1 Camera 86C1
+
+rw 36 / ro 105
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=0, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `ai_empower` | other | - | - | no | - | - |
+| `ai_tracking_status` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `auto_cruise_schedule_list` | string | - | - | no | - | - |
+| `automation_config` | string | - | - | no | - | - |
+| `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
+| `automation_light_trigger_config` | string | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_gun_ball_linkage_switch` | bool | - | - | yes | switch | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
+| `change_wifi_is_press_sync` | bool | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `cloud_storage_support_show_device` | bool | - | - | no | - | - |
+| `cloud_storage_support_trail` | bool | - | - | no | - | - |
+| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_cloud_storage_status` | other | - | - | no | - | - |
+| `device_continuous_recording_time` | enum | 0, 1 | - | yes | select | 0=All time, 1=Schedule |
+| `device_continuous_schedule_list` | string | - | - | no | - | - |
+| `device_event_create_switch` | bool | - | - | yes | switch | - |
+| `device_event_recording_time_config` | string | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_linkage_tracking_bypass` | string | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_motion_detection` | enum | 1, 2, 3, 4 | - | no | - | 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `device_motion_detection__v1` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `device_multiple_bridge_switch` | bool | - | - | yes | switch | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_query_event_retry_time` | other | - | - | no | - | - |
+| `device_query_event_timeout` | other | - | - | no | - | - |
+| `device_sensor_count` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_set_alarm_light_type` | enum | 1 | - | yes | select | 1=Red and blue lights flashing |
+| `device_set_time_lapse_photography` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | 0, 1, 2, 3, 4, -1 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0, 2 | - | no | - | 0=Local, 2=NAS |
+| `device_storage_type__v1` | enum | 0 | - | no | - | 0=Local |
+| `device_support_event_filter_detection_type` | enum | 1, 2, 3 | - | no | - | 1=Human, 2=Vehicle, 3=Pet |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `entry_activity_zone_condition` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `gesture_control_quick_focus_tap_switch` | bool | - | - | no | - | - |
+| `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
+| `get_device_old_p2p_did` | bool | - | - | no | - | - |
+| `hb_connect_is_connected` | string | - | - | no | - | - |
+| `hb_connect_support_version` | string | - | - | no | - | - |
+| `homebase_connect_support` | bool | - | - | no | - | - |
+| `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
+| `homekit_info` | string | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_device_upgrade` | string | - | - | no | - | - |
+| `is_support_multiple_bridge` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge__v1` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge__v2` | bool | - | - | no | - | - |
+| `is_support_multiple_bridge__v3` | bool | - | - | no | - | - |
+| `is_support_online_change_wifi` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `light_color_temperature` | range | 0..100 step 1 | - | yes | slider | - |
+| `light_setting_schedule_list` | string | - | - | no | - | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 1, 2, 13 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 2=Speaker, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 13, 1, 8, 10 | - | no | - | 0=Record, 1=Screenshot, 10=Event, 13=Spotlight, 2=Speaker, 4=Sound, 8=Auto Night Vision |
+| `live_ptz_toolbar_list` | enum | 0, 1 | - | no | - | 0=Preset, 1=Control |
+| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `live_streaming_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | no | - | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `live_support_long_time_watch` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `multi_detection_sensitivity` | string | - | - | no | - | - |
+| `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
+| `nas_stream_switch` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 7, 10, 0 | - | yes | select | 0=Disable, 10=Infrared, 7=Spotlights |
+| `nightvision_type_new` | enum | 103, 102, 100 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spotlight |
+| `notification_ai_face_recongnize_switch` | bool | - | - | yes | switch | - |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `ordered_trigger_actions` | enum | 0, 1, 2, 3 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=Light alarm |
+| `p2p_ping_timeout` | other | - | - | no | - | - |
+| `playback_play_speed` | enum | 0, 1, 2, 3, 2 | - | no | - | 0=2x, 1=4x, 2=2x, 3=16x |
+| `player_model_config` | string | - | - | no | - | - |
+| `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
+| `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
+| `preset_positions_calibrate_time` | other | - | - | no | - | - |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `record_resolution__v1` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=2, sideNum=4, zoneHeight=720, zoneWidth=1280 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `smart_lock_night_vision_optimization` | bool | - | - | yes | switch | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 0..100 step 1 | % | yes | slider | - |
+| `spotlight_brightness_level` | range | 0..100 step 1 | - | yes | slider | - |
+| `spotlight_status` | bool | - | - | yes | switch | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `spotlight_switch_status_relate` | bool | - | - | no | - | - |
+| `support_platform_v2` | bool | - | - | no | - | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `switching_notification` | flags | any of 0, 1 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `trigger_interval_time` | range | 10..120 step 1 | d | yes | slider | - |
+| `video_camera_count` | range | 1..2 step 1 | - | no | - | - |
+| `video_clip_length` | range | 10..120 step 1 | d | yes | slider | - |
+| `video_intercom_audio_type` | range | 0..100 step 1 | - | no | - | - |
+| `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
+| `video_mirror_mode_set` | other | - | - | no | - | - |
+| `video_setting_flickers_adjustment` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=50 Hz, 2=60 Hz |
+| `video_setting_image_effect_set` | string | - | - | no | - | - |
+| `video_watch_view_mode` | string | - | - | no | - | - |
+| `watermark_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo, 3=Logo |
+| `working_days` | range | 10..120 step 1 | d | no | - | - |
+
 ### Settings of T86P2 Cam 4G PT
 
 rw 30 / ro 61
@@ -9416,6 +12861,49 @@ rw 30 / ro 61
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
+
+### Settings of T870G Sensor 870G
+
+rw 12 / ro 24
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `anti_theft_detection_switch` | bool | - | - | yes | switch | - |
+| `battery_value` | string | - | - | no | - | - |
+| `breathing_light_schedule_config` | bool | - | - | yes | switch | - |
+| `detection_sensitivity` | enum | 0, 1, 2 | - | yes | select | 0=1, 1=3, 2=5 |
+| `device_alarm_sound_list` | string | - | - | no | - | - |
+| `device_alarm_sound_type` | other | - | - | yes | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_on_off` | string | - | - | no | - | - |
+| `device_set_alarm_light_type` | enum | 2, 0, 1, 3 | - | yes | select | 0=White flashing, 1=Red & blue flashing, 2=White breathing, 3=Reed & blue & white flashing |
+| `device_status` | other | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `firmware_sub_version` | string | - | - | no | - | - |
+| `firmware_sub_version_time` | string | - | - | no | - | - |
+| `ignore_set_alarm` | bool | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `light_setting_schedule_list` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `multi_detection_sensitivity` | string | - | - | no | - | - |
+| `power_manager_mode` | enum | 0, 1, 2, 3 | - | no | - | 0=Optimal battery life, 1=Optimal surveillance, 2=Balanced surveillance, 3=Custom recording |
+| `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `setting_model_config` | string | - | - | no | - | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | enum | 2, 1, 0 | - | yes | select | 0=High, 1=Medium, 2=Low |
+| `spotlight_brightness_level` | range | 1..100 step 1 | - | yes | slider | - |
+| `spotlight_status` | bool | - | - | yes | switch | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `tilt_detection_switch` | bool | - | - | yes | switch | - |
+| `tilt_status` | bool | - | - | no | - | - |
 
 ### Settings of T8790 Box SPB
 
@@ -9552,6 +13040,23 @@ rw 1 / ro 11
 | `sensor_not_disturb_switch` | bool | - | - | yes | switch | - |
 | `sensor_temperature_low_status` | bool | - | - | no | - | - |
 | `sensor_water_status` | bool | - | - | no | - | - |
+
+### Settings of T8931 Smoke Sensor
+
+rw 0 / ro 10
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `automation_config` | string | - | - | no | - | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_status` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `is_device_upgrade` | bool | - | - | no | - | - |
+| `sensor_is_low_power` | bool | - | - | no | - | - |
+| `sensor_smoke_status` | bool | - | - | no | - | - |
 
 ### Settings of T8960 Keypad
 
@@ -9691,6 +13196,15 @@ rw 28 / ro 67
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
+### Settings of T8C00 T8C00
+
+rw 0 / ro 2
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `radar_mac` | string | - | - | no | - | - |
+| `radar_sn` | string | - | - | no | - | - |
+
 ### Settings of T8E00 Camera T8E00
 
 rw 34 / ro 71
@@ -9802,6 +13316,429 @@ rw 34 / ro 71
 | `video_setting_image_effect_set` | string | - | - | no | - | - |
 | `video_watch_view_mode` | string | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 3 | - | yes | select | 0=Off, 1=Timestamp, 3=Logo |
+
+### Settings of T8L00 Light 8L00
+
+rw 0 / ro 23
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `automation_config` | string | - | - | no | - | - |
+| `calibrated_switch` | bool | - | - | no | - | - |
+| `cloud_light_effect_id` | other | - | - | no | - | - |
+| `color_gradient_switch` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_light_brightness` | other | - | - | no | - | - |
+| `device_light_led_status` | string | - | - | no | - | - |
+| `is_support_ble` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_share` | bool | - | - | no | - | - |
+| `light_effect_id` | other | - | - | no | - | - |
+| `light_effect_mode` | other | - | - | no | - | - |
+| `light_effect_version` | other | - | - | no | - | - |
+| `light_led_detection_status` | other | - | - | no | - | - |
+| `light_length` | other | - | - | no | - | - |
+| `light_music_rhythm_switch` | bool | - | - | no | - | - |
+| `light_regulator` | other | - | - | no | - | - |
+| `matter_category` | string | - | - | no | - | - |
+| `ota_status` | other | - | - | no | - | - |
+| `ota_timeout` | other | - | - | no | - | - |
+| `power_light_effect_switch` | bool | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `spotlight_switch` | other | - | - | no | - | - |
+
+### Settings of T8L01 Light 8L01
+
+rw 0 / ro 22
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `calibrated_switch` | bool | - | - | no | - | - |
+| `cloud_light_effect_id` | other | - | - | no | - | - |
+| `color_gradient_switch` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_light_brightness` | other | - | - | no | - | - |
+| `device_light_led_status` | string | - | - | no | - | - |
+| `is_support_ble` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_share` | bool | - | - | no | - | - |
+| `light_effect_id` | other | - | - | no | - | - |
+| `light_effect_mode` | other | - | - | no | - | - |
+| `light_effect_version` | other | - | - | no | - | - |
+| `light_led_detection_status` | other | - | - | no | - | - |
+| `light_length` | other | - | - | no | - | - |
+| `light_music_rhythm_switch` | bool | - | - | no | - | - |
+| `light_regulator` | other | - | - | no | - | - |
+| `matter_category` | string | - | - | no | - | - |
+| `ota_status` | other | - | - | no | - | - |
+| `ota_timeout` | other | - | - | no | - | - |
+| `power_light_effect_switch` | bool | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `spotlight_switch` | other | - | - | no | - | - |
+
+### Settings of T8L02 Light 8L02
+
+rw 0 / ro 23
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `calibrated_switch` | bool | - | - | no | - | - |
+| `cloud_light_effect_id` | other | - | - | no | - | - |
+| `color_gradient_switch` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_light_brightness` | other | - | - | no | - | - |
+| `device_light_led_status` | string | - | - | no | - | - |
+| `is_support_ble` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_music_rhythm` | bool | - | - | no | - | - |
+| `is_support_share` | bool | - | - | no | - | - |
+| `light_effect_id` | other | - | - | no | - | - |
+| `light_effect_mode` | other | - | - | no | - | - |
+| `light_effect_version` | other | - | - | no | - | - |
+| `light_led_detection_status` | other | - | - | no | - | - |
+| `light_length` | other | - | - | no | - | - |
+| `light_music_rhythm_switch` | bool | - | - | no | - | - |
+| `light_regulator` | other | - | - | no | - | - |
+| `matter_category` | string | - | - | no | - | - |
+| `ota_status` | other | - | - | no | - | - |
+| `ota_timeout` | other | - | - | no | - | - |
+| `power_light_effect_switch` | bool | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `spotlight_switch` | other | - | - | no | - | - |
+
+### Settings of T8L04 Light 8L04
+
+rw 0 / ro 33
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `calibrated_radar_sn` | string | - | - | no | - | - |
+| `calibrated_switch` | bool | - | - | no | - | - |
+| `cloud_light_effect_id` | other | - | - | no | - | - |
+| `color_gradient_switch` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_light_brightness` | other | - | - | no | - | - |
+| `device_light_led_status` | string | - | - | no | - | - |
+| `device_radar_bind_need_app_report_flag` | other | - | - | no | - | - |
+| `device_regulator` | other | - | - | no | - | - |
+| `is_support_ble` | bool | - | - | no | - | - |
+| `is_support_matter` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_music_rhythm` | bool | - | - | no | - | - |
+| `is_support_radar` | bool | - | - | no | - | - |
+| `is_support_share` | bool | - | - | no | - | - |
+| `light_effect_id` | other | - | - | no | - | - |
+| `light_effect_mode` | other | - | - | no | - | - |
+| `light_effect_version` | other | - | - | no | - | - |
+| `light_led_detection_status` | other | - | - | no | - | - |
+| `light_length` | other | - | - | no | - | - |
+| `light_music_rhythm_switch` | bool | - | - | no | - | - |
+| `light_regulator` | other | - | - | no | - | - |
+| `matter_category` | string | - | - | no | - | - |
+| `ota_status` | other | - | - | no | - | - |
+| `ota_timeout` | other | - | - | no | - | - |
+| `power_light_effect_switch` | bool | - | - | no | - | - |
+| `radar_bind_status` | other | - | - | no | - | - |
+| `radar_mac` | string | - | - | no | - | - |
+| `radar_sn` | string | - | - | no | - | - |
+| `radar_status` | other | - | - | no | - | - |
+| `radar_status_list` | string | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `spotlight_switch` | other | - | - | no | - | - |
+
+### Settings of T8L10 Light 8L10
+
+rw 0 / ro 26
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `calibrated_switch` | bool | - | - | no | - | - |
+| `cloud_light_effect_id` | other | - | - | no | - | - |
+| `color_gradient_switch` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_light_brightness` | other | - | - | no | - | - |
+| `device_light_led_status` | string | - | - | no | - | - |
+| `device_radar_bind_need_app_report_flag` | other | - | - | no | - | - |
+| `is_support_ble` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_music_rhythm` | bool | - | - | no | - | - |
+| `is_support_share` | bool | - | - | no | - | - |
+| `light_effect_id` | other | - | - | no | - | - |
+| `light_effect_mode` | other | - | - | no | - | - |
+| `light_effect_version` | other | - | - | no | - | - |
+| `light_led_detection_status` | other | - | - | no | - | - |
+| `light_length` | other | - | - | no | - | - |
+| `light_music_rhythm_switch` | bool | - | - | no | - | - |
+| `ota_status` | other | - | - | no | - | - |
+| `ota_timeout` | other | - | - | no | - | - |
+| `power_light_effect_switch` | bool | - | - | no | - | - |
+| `radar_bind_status` | other | - | - | no | - | - |
+| `radar_mac` | string | - | - | no | - | - |
+| `radar_sn` | string | - | - | no | - | - |
+| `radar_status` | other | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `spotlight_switch` | other | - | - | no | - | - |
+
+### Settings of T8L20 Light 8L20
+
+rw 0 / ro 26
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `calibrated_switch` | bool | - | - | no | - | - |
+| `cloud_light_effect_id` | other | - | - | no | - | - |
+| `color_gradient_switch` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_light_brightness` | other | - | - | no | - | - |
+| `device_light_led_status` | string | - | - | no | - | - |
+| `device_radar_bind_need_app_report_flag` | other | - | - | no | - | - |
+| `is_support_ble` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_music_rhythm` | bool | - | - | no | - | - |
+| `is_support_share` | bool | - | - | no | - | - |
+| `light_effect_id` | other | - | - | no | - | - |
+| `light_effect_mode` | other | - | - | no | - | - |
+| `light_effect_version` | other | - | - | no | - | - |
+| `light_led_detection_status` | other | - | - | no | - | - |
+| `light_length` | other | - | - | no | - | - |
+| `light_music_rhythm_switch` | bool | - | - | no | - | - |
+| `ota_status` | other | - | - | no | - | - |
+| `ota_timeout` | other | - | - | no | - | - |
+| `power_light_effect_switch` | bool | - | - | no | - | - |
+| `radar_bind_status` | other | - | - | no | - | - |
+| `radar_mac` | string | - | - | no | - | - |
+| `radar_sn` | string | - | - | no | - | - |
+| `radar_status` | other | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `spotlight_switch` | other | - | - | no | - | - |
+
+### Settings of T8L30 Light 8L30
+
+rw 0 / ro 26
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `calibrated_switch` | bool | - | - | no | - | - |
+| `cloud_light_effect_id` | other | - | - | no | - | - |
+| `color_gradient_switch` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_light_brightness` | other | - | - | no | - | - |
+| `device_light_led_status` | string | - | - | no | - | - |
+| `device_radar_bind_need_app_report_flag` | other | - | - | no | - | - |
+| `is_support_ble` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_music_rhythm` | bool | - | - | no | - | - |
+| `is_support_share` | bool | - | - | no | - | - |
+| `light_effect_id` | other | - | - | no | - | - |
+| `light_effect_mode` | other | - | - | no | - | - |
+| `light_effect_version` | other | - | - | no | - | - |
+| `light_led_detection_status` | other | - | - | no | - | - |
+| `light_length` | other | - | - | no | - | - |
+| `light_music_rhythm_switch` | bool | - | - | no | - | - |
+| `ota_status` | other | - | - | no | - | - |
+| `ota_timeout` | other | - | - | no | - | - |
+| `power_light_effect_switch` | bool | - | - | no | - | - |
+| `radar_bind_status` | other | - | - | no | - | - |
+| `radar_mac` | string | - | - | no | - | - |
+| `radar_sn` | string | - | - | no | - | - |
+| `radar_status` | other | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `spotlight_switch` | other | - | - | no | - | - |
+
+### Settings of T8L40 Light 8L40
+
+rw 0 / ro 26
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `calibrated_switch` | bool | - | - | no | - | - |
+| `cloud_light_effect_id` | other | - | - | no | - | - |
+| `color_gradient_switch` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_light_brightness` | other | - | - | no | - | - |
+| `device_light_led_status` | string | - | - | no | - | - |
+| `device_radar_bind_need_app_report_flag` | other | - | - | no | - | - |
+| `is_support_ble` | bool | - | - | no | - | - |
+| `is_support_mqtt` | bool | - | - | no | - | - |
+| `is_support_music_rhythm` | bool | - | - | no | - | - |
+| `is_support_share` | bool | - | - | no | - | - |
+| `light_effect_id` | other | - | - | no | - | - |
+| `light_effect_mode` | other | - | - | no | - | - |
+| `light_effect_version` | other | - | - | no | - | - |
+| `light_led_detection_status` | other | - | - | no | - | - |
+| `light_length` | other | - | - | no | - | - |
+| `light_music_rhythm_switch` | bool | - | - | no | - | - |
+| `ota_status` | other | - | - | no | - | - |
+| `ota_timeout` | other | - | - | no | - | - |
+| `power_light_effect_switch` | bool | - | - | no | - | - |
+| `radar_bind_status` | other | - | - | no | - | - |
+| `radar_mac` | string | - | - | no | - | - |
+| `radar_sn` | string | - | - | no | - | - |
+| `radar_status` | other | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `spotlight_switch` | other | - | - | no | - | - |
+
+### Settings of T8L60 Camera 8L60
+
+rw 45 / ro 110
+
+| key | kind | values or range | unit | writable | control | labels |
+|---|---|---|---|---|---|---|
+| `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=8, sideNum=6, zoneHeight=720, zoneWidth=1280 |
+| `add_device_model_config` | string | - | - | no | - | - |
+| `ai_empower` | other | - | - | no | - | - |
+| `ai_tracking_status` | bool | - | - | yes | switch | - |
+| `anti_theft_detection_switch` | bool | - | - | yes | switch | - |
+| `arming_cust_mode_config` | string | - | - | no | - | - |
+| `arming_modedetail_alarm_rules` | string | - | - | no | - | - |
+| `arming_modedetail_devices_rules` | string | - | - | no | - | - |
+| `arming_schedule_config` | string | - | - | no | - | - |
+| `arming_selected_mode` | range | 0..10 step 1 | - | no | - | - |
+| `arming_support_arming` | bool | - | - | no | - | - |
+| `arming_support_custom_mode` | bool | - | - | no | - | - |
+| `arming_support_geofence` | bool | - | - | no | - | - |
+| `arming_support_off_mode` | bool | - | - | no | - | - |
+| `arming_support_privacy` | bool | - | - | no | - | - |
+| `arming_support_query_working_mode` | bool | - | - | no | - | - |
+| `arming_support_show_user_name` | bool | - | - | no | - | - |
+| `arming_working_mode` | other | - | - | no | - | - |
+| `audio_recording_on_off` | bool | - | - | yes | switch | - |
+| `auto_cruise_schedule_list` | string | - | - | no | - | - |
+| `automation_config` | string | - | - | no | - | - |
+| `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
+| `automation_light_trigger_config` | string | - | - | no | - | - |
+| `battery_value` | string | - | - | no | - | - |
+| `camera_on_off` | string | - | - | no | - | - |
+| `camera_snapshot_setting` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=3 min, 1=5 min, 2=15 min, 3=30 min, 4=60 min |
+| `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
+| `change_wifi_is_press_sync` | bool | - | - | no | - | - |
+| `change_wifi_is_support` | bool | - | - | no | - | - |
+| `charging_status` | string | - | - | no | - | - |
+| `cloud_storage_support_show_device` | bool | - | - | no | - | - |
+| `cloud_storage_support_trail` | bool | - | - | no | - | - |
+| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
+| `device_ability_data` | other | - | - | no | - | - |
+| `device_charging_mode` | other | - | - | no | - | - |
+| `device_cloud_storage_status` | other | - | - | no | - | - |
+| `device_continuous_recording_switch` | bool | - | - | yes | switch | - |
+| `device_continuous_recording_time` | enum | 0, 1 | - | yes | select | 0=All time, 1=Schedule |
+| `device_continuous_schedule_list` | string | - | - | no | - | - |
+| `device_dsk_whitelist` | string | - | - | no | - | - |
+| `device_event_create_switch` | bool | - | - | yes | switch | - |
+| `device_event_recording_time_config` | string | - | - | no | - | - |
+| `device_is_battery_device` | bool | - | - | no | - | - |
+| `device_is_online` | bool | - | - | no | - | - |
+| `device_linkage_tracking_bypass` | string | - | - | no | - | - |
+| `device_model` | string | - | - | no | - | - |
+| `device_motion_detection` | enum | 1, 2, 3, 4 | - | no | - | 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `device_motion_detection__v1` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
+| `device_multiple_bridge_ap_type` | other | - | - | no | - | - |
+| `device_multiple_bridge_connect_fail_flag` | bool | - | - | no | - | - |
+| `device_multiple_bridge_connected_ssid` | string | - | - | no | - | - |
+| `device_multiple_bridge_mode` | enum | 0, 1, 2 | - | yes | select | 0=Auto, 1=HomeBase, 2=Router |
+| `device_multiple_bridge_switch` | bool | - | - | yes | switch | - |
+| `device_name` | string | - | - | no | - | - |
+| `device_power_supply_mode` | other | - | - | no | - | - |
+| `device_pre_recording_switch` | bool | - | - | yes | switch | - |
+| `device_query_event_retry_time` | other | - | - | no | - | - |
+| `device_query_event_timeout` | other | - | - | no | - | - |
+| `device_sensor_count` | string | - | - | no | - | - |
+| `device_serial_number` | string | - | - | no | - | - |
+| `device_set_alarm_light_type` | enum | 1, 0 | - | yes | select | 0=Spotlight flashing, 1=Red and blue lights flashing |
+| `device_set_time_lapse_photography` | string | - | - | no | - | - |
+| `device_silent_ota_switch` | bool | - | - | yes | switch | - |
+| `device_snooze_time` | enum | 0, 1, 2, 3, 4, -1 | - | yes | select | -1=Off, 0=30 min, 1=1 hour, 2=2 hours, 3=6 hours, 4=12 hours |
+| `device_status` | other | - | - | no | - | - |
+| `device_storage_type` | enum | 0 | - | no | - | 0=Local |
+| `device_storage_type__v1` | enum | 0 | - | no | - | 0=Local |
+| `device_support_event_filter_detection_type` | enum | 1, 2, 3 | - | no | - | 1=Human, 2=Vehicle, 3=Pet |
+| `device_wifi_name` | string | - | - | no | - | - |
+| `device_wifi_signal_strength` | string | - | - | no | - | - |
+| `device_wifi_signal_strength_level` | other | - | - | no | - | - |
+| `disable_ptz_turn_switch` | bool | - | - | yes | switch | - |
+| `entry_activity_zone_condition` | other | - | - | no | - | - |
+| `firmware_main_version` | string | - | - | no | - | - |
+| `firmware_main_version_time` | string | - | - | no | - | - |
+| `gesture_control_quick_focus_tap_switch` | bool | - | - | no | - | - |
+| `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
+| `get_device_old_p2p_did` | bool | - | - | no | - | - |
+| `get_storage_status` | string | - | - | no | - | - |
+| `hb_connect_is_connected` | string | - | - | no | - | - |
+| `hb_connect_support_version` | string | - | - | no | - | - |
+| `homebase_connect_support` | bool | - | - | no | - | - |
+| `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
+| `homekit_info` | string | - | - | no | - | - |
+| `ip_address` | string | - | - | no | - | - |
+| `is_connect_webrtc` | bool | - | - | no | - | - |
+| `is_device_upgrade` | string | - | - | no | - | - |
+| `is_support_multiple_bridge` | bool | - | - | no | - | - |
+| `is_support_silent_ota_switch` | bool | - | - | no | - | - |
+| `is_support_webrtc` | bool | - | - | no | - | - |
+| `led_on_off` | bool | - | - | yes | switch | - |
+| `light_setting_schedule_list` | string | - | - | no | - | - |
+| `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
+| `live_bottom_toolbar_list` | enum | 0, 4, 2, 19, 1, 18, 7, 8, 9, 6, 17, 13 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 17=AI Box, 18=PTZ Linkage, 19=PTZ Control Entrance, 2=Speaker, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
+| `live_ptz_toolbar_list` | enum | 0, 1 | - | no | - | 0=Preset, 1=Control |
+| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `live_support_long_time_watch` | bool | - | - | no | - | - |
+| `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
+| `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
+| `mac_address` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
+| `montion_detection_ui_show_type` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_detection_status` | bool | - | - | yes | switch | - |
+| `motion_stop_end_early` | bool | - | - | yes | switch | - |
+| `multi_detection_sensitivity` | string | - | - | no | - | - |
+| `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
+| `nas_stream_switch` | bool | - | - | yes | switch | - |
+| `nightvision_type` | enum | 7, 10, 0 | - | yes | select | 0=Disable, 10=Infrared, 7=Spotlights |
+| `nightvision_type_new` | enum | 103, 102, 100 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spotlight |
+| `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
+| `ordered_trigger_actions` | enum | 0, 1, 2, 3 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=Light alarm |
+| `playback_play_speed` | enum | 0, 1, 2, 3, 2 | - | no | - | 0=2x, 1=4x, 2=2x, 3=16x |
+| `player_model_config` | string | - | - | no | - | - |
+| `power_charge_mode` | enum | 0, 1 | - | yes | select | 0=Battery, 1=External Solar Panel |
+| `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
+| `power_manager_mode__v1` | enum | 1, 3 | - | yes | select | 1=Optimal surveillance, 3=Custom recording |
+| `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
+| `preset_positions_calibrate_time` | other | - | - | no | - | - |
+| `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
+| `radar_test_mode_on_off` | bool | - | - | yes | switch | - |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `record_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `reset_device_mode` | bool | - | - | no | - | - |
+| `sd_card_max_capacity` | other | - | - | no | - | - |
+| `sdk_model_config` | string | - | - | no | - | - |
+| `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=2, sideNum=4, zoneHeight=720, zoneWidth=1280 |
+| `setting_model_config` | string | - | - | no | - | - |
+| `smart_lock_night_vision_optimization` | bool | - | - | yes | switch | - |
+| `speaker_on_off` | bool | - | - | yes | switch | - |
+| `speaker_volume` | range | 1..100 step 1 | % | yes | slider | - |
+| `spotlight_brightness_level` | range | 0..100 step 1 | - | no | - | - |
+| `spotlight_status` | bool | - | - | yes | switch | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
+| `spotlight_switch_status_relate` | bool | - | - | no | - | - |
+| `support_platform_v2` | bool | - | - | no | - | - |
+| `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
+| `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
+| `timezone_set` | string | - | - | yes | select | - |
+| `trigger_interval_time` | range | 5..60 step 1 | d | yes | slider | - |
+| `video_camera_count` | range | 1..2 step 1 | - | no | - | - |
+| `video_clip_length` | range | 10..120 step 1 | d | yes | slider | - |
+| `video_intercom_audio_type` | range | 0..100 step 1 | - | no | - | - |
+| `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
+| `video_mirror_mode_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Normal, 1=Rotated 180°, 2=Mirror, 3=Flipped vertically |
+| `video_setting_flickers_adjustment` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=50 Hz, 2=60 Hz |
+| `video_setting_image_effect_set` | string | - | - | no | - | - |
+| `video_watch_view_mode` | string | - | - | no | - | - |
+| `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
+| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `zoom_spotlight_brightness_level` | range | 0..100 step 1 | - | no | - | - |
+| `zoom_spotlight_switch` | bool | - | - | yes | switch | - |
 
 ### Settings of T8N00 Station NVR
 

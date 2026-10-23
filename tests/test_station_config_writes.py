@@ -560,7 +560,7 @@ async def _station_of(fake: FakeStation, pn: str) -> Station:
 
 @pytest.mark.parametrize(
     ("pn", "reason"),
-    [("T8N00", "WebRTC"), ("T9000", "WebRTC"), ("T7000", "no thing description")],
+    [("T8N00", "WebRTC"), ("T9000", "WebRTC"), ("T8028", "builds arming_selected_mode as None")],
 )
 async def test_guard_mode_of_a_model_graded_unknown_is_refused_before_sending(
     fake: FakeStation, pn: str, reason: str

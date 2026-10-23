@@ -1,0 +1,458 @@
+{
+ "product_code": "T8500",
+ "schema_version": 3,
+ "settings": {
+  "battery_low_threshold": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null,
+   "section": "power"
+  },
+  "battery_stop_charging_threshold": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null,
+   "section": "power"
+  },
+  "battery_temperature_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "power"
+  },
+  "battery_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "read": null,
+   "section": "power"
+  },
+  "charging_status": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "power"
+  },
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "device_audio_ringtone_volume": {
+   "access": "ro",
+   "default": 0,
+   "kind": "range",
+   "max": 100,
+   "min": 0,
+   "note": "no handler write path",
+   "read": null,
+   "section": "doorbell",
+   "step": 1
+  },
+  "device_is_battery_device": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "section": "power"
+  },
+  "device_is_online": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "device_name": {
+   "access": "rw",
+   "control": "text",
+   "kind": "string",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "section": "system",
+   "write": {
+    "cmd": 1217,
+    "params": {
+     "deviceName": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1217,
+     "paramValue": "$v"
+    },
+    "payloadFrom": "mapOf",
+    "sendRequestUrl": "app/devicemanage/update_device_info"
+   }
+  },
+  "device_silent_ota_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6287
+   },
+   "section": "system",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6287,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6287,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_status": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "device_text_event_data_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "is_device_upgrade": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "is_support_silent_ota_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_add_fingerprint_nums": {
+   "access": "ro",
+   "default": "8",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_auto_lock_schedule_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_auto_lock_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_auto_lock_timer_value": {
+   "access": "ro",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "0": "1 s",
+    "1": "5 s",
+    "10": "180 s",
+    "11": "300 s",
+    "12": "600 s",
+    "13": "900 s",
+    "14": "1200 s",
+    "15": "1500 s",
+    "16": "1800 s",
+    "2": "10 s",
+    "3": "15 s",
+    "4": "20 s",
+    "5": "30 s",
+    "6": "60 s",
+    "7": "90 s",
+    "8": "120 s",
+    "9": "150 s"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "section": "system",
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+   ]
+  },
+  "smart_lock_auto_lock_type": {
+   "access": "ro",
+   "default": "3",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_calibrate_ui_show_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_connect_to_wifi_bridge": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "network"
+  },
+  "smart_lock_get_event_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_integrate_with_doorbell_or_camera": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_is_need_pull_ble": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_is_support_new_schedule_ui": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_is_support_one_time_user": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_is_support_temporary_pw": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_lock_sound_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "audio"
+  },
+  "smart_lock_lock_sound_volume": {
+   "access": "ro",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "0": "Mute",
+    "1": "Low",
+    "2": "Medium",
+    "3": "High"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "section": "audio",
+   "values": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "smart_lock_no_recording_while_unlocked": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "recording"
+  },
+  "smart_lock_notification_locked_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "note": "round trip does not return the written value",
+   "read": null,
+   "section": "notifications",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1919,
+    "params": {
+     "mode": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1919,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "smart_lock_notification_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "handler ignores the value",
+   "read": null,
+   "section": "notifications"
+  },
+  "smart_lock_notification_unlocked_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "handler ignores the value",
+   "read": null,
+   "section": "notifications"
+  },
+  "smart_lock_one_touch_locking_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_one_touch_locking_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_onoff_status": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_scramble_password_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_scramble_password_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_set_setting_params": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler rejects the probed values",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_set_timezone": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_setting_manage_access": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "section": "system"
+  },
+  "smart_lock_wifi_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "network"
+  },
+  "smart_lock_wrong_try_protection_attempts": {
+   "access": "ro",
+   "default": 5,
+   "kind": "range",
+   "max": 10,
+   "min": 3,
+   "note": "no handler write path",
+   "read": null,
+   "section": "system",
+   "step": 1
+  },
+  "smart_lock_wrong_try_protection_lockdown": {
+   "access": "ro",
+   "default": 3,
+   "kind": "range",
+   "max": 5,
+   "min": 1,
+   "note": "no handler write path",
+   "read": null,
+   "section": "system",
+   "step": 1
+  },
+  "smart_lock_wrong_try_protection_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "system"
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T8500Handle.mix.js",
+  "handler_date": "2026-07-16",
+  "td_version": 34
+ }
+}

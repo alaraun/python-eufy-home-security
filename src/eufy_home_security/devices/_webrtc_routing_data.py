@@ -183,6 +183,29 @@ ROUTE_PROPERTIES: Final[
             ],
         ),
     ],
+    "T8180": [
+        (
+            "is_connect_webrtc",
+            "1",
+            [],
+            [
+                [
+                    ["parent_sn", "RE", "^(?!T8030).*$"],
+                ],
+            ],
+        ),
+        (
+            "is_connect_webrtc__v1",
+            "1",
+            [],
+            [
+                [
+                    ["parent_sn", "RE", "^(T8030).*$"],
+                    ["parent_version", ">=", "3.7.4.3"],
+                ],
+            ],
+        ),
+    ],
     "T8215": [
         (
             "is_connect_webrtc",
@@ -206,6 +229,14 @@ ROUTE_PROPERTIES: Final[
             ],
         ),
     ],
+    "T8217": [
+        (
+            "is_connect_webrtc",
+            "true",
+            [],
+            [],
+        ),
+    ],
     "T8223": [
         (
             "is_connect_webrtc",
@@ -220,6 +251,26 @@ ROUTE_PROPERTIES: Final[
             "1",
             [],
             [],
+        ),
+    ],
+    "T8404": [
+        (
+            "is_connect_webrtc",
+            "1",
+            [],
+            [
+                [
+                    ["parent_sn", "RE", "^(?!T8030|T8025).*$"],
+                ],
+                [
+                    ["parent_sn", "RE", "^(T8030).*$"],
+                    ["parent_version", ">=", "3.8.5.1"],
+                ],
+                [
+                    ["parent_sn", "RE", "^(T8025).*$"],
+                    ["parent_version", ">=", "4.0.8.3"],
+                ],
+            ],
         ),
     ],
     "T8532": [
@@ -243,6 +294,14 @@ ROUTE_PROPERTIES: Final[
                     ["device_version", ">=", "2.0.0.0"],
                 ],
             ],
+            [],
+        ),
+    ],
+    "T8L60": [
+        (
+            "is_connect_webrtc",
+            "true",
+            [],
             [],
         ),
     ],

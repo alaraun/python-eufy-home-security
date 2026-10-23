@@ -1,0 +1,1753 @@
+{
+ "product_code": "T2880",
+ "schema_version": 3,
+ "settings": {
+  "automation_config": {
+   "access": "ro",
+   "default": "{\"trigger\":[],\"action\":[11]}",
+   "kind": "string",
+   "read": null,
+   "section": "modes"
+  },
+  "ecl_debug_log_sw": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_device_info_product_name": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_device_name": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_get_device_status": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_get_device_status_icon": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_get_device_status_text": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_get_voice_list": {
+   "access": "ro",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "1": "Language type chinese",
+    "2": "Language type english",
+    "3": "Language type german"
+   },
+   "read": null,
+   "section": "other",
+   "values": [
+    1,
+    2,
+    3
+   ]
+  },
+  "ecl_get_voice_list__v1": {
+   "access": "ro",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "1": "Language type chinese",
+    "2": "Language type english",
+    "3": "Language type german",
+    "4": "Language type spanish",
+    "5": "Language type french"
+   },
+   "read": null,
+   "section": "other",
+   "values": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "variant_of": "ecl_get_voice_list"
+  },
+  "ecl_get_voice_list__v2": {
+   "access": "ro",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "1": "Language type chinese",
+    "2": "Language type english",
+    "3": "Language type german",
+    "4": "Language type spanish",
+    "5": "Language type french",
+    "6": "Language type italian",
+    "7": "Language type dutch",
+    "8": "Language type polish"
+   },
+   "read": null,
+   "section": "other",
+   "values": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ],
+   "variant_of": "ecl_get_voice_list"
+  },
+  "ecl_language_current_id": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_language_default_id": {
+   "access": "ro",
+   "default": "2",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_language_version": {
+   "access": "ro",
+   "default": "2",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_4g_module_type": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_anti_theft_cmd_response_cmd_type": {
+   "access": "ro",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_anti_theft_cmd_response_ret": {
+   "access": "ro",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_anti_theft_cmd_response_verify_pin_result": {
+   "access": "ro",
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_anti_theft_status_has_pin": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_anti_theft_status_mode": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_anti_theft_status_sensitivity": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_battery_status_charger_connected": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_battery_status_is_switch_on": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_battery_status_state": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_battery_status_tempreture": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_cellular_info_bundle_expire_time": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_cellular_info_bundle_state": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_cellular_info_bundle_terminate_time": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_cellular_info_bundle_total_data": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_cellular_info_bundle_used_data": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_cellular_info_error_code": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_cellular_info_error_type": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_cellular_info_has_error": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_cellular_info_is_enabled": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_cellular_info_type": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_clean_record_statistic_clean_area": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_clean_record_statistic_clean_times": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_clean_record_statistic_duration": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_dp": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_anti_theft": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_battery_status": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_battery_strategy": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_blade_disk_speed": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_ble_communication": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_bluetooth_remote_control": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_cellular_network": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_clean_record": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_cliff_detection": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_control": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_custom_mow_height": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_custom_mowing": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_custom_passage": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_daylight_period": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_defogger_control": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_device_info": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_edge_trim": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_extend_cmd": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_extra_info": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_high_grass_edge_trim": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_home_assistant": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_illuminate_light": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_main_direction_angle": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_map": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_map_area": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_map_status": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_mission_status": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_mow_height": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_mow_spacing": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_mow_speed": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_multi_base": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_ota": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_overnight_auto_resume": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_path": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_rain_sensor": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_remote_control": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_schedule": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_slope_detection": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_sparse_lawn_optimization": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_upload_log": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_video_stream": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_voice_notification": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "notifications"
+  },
+  "ecl_mow_compatibility_info_module_weather": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_wifi_roaming": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "network"
+  },
+  "ecl_mow_compatibility_info_module_work_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_module_work_progress_control": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_compatibility_info_overall": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_control_pause_ack_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_control_pause_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_control_resume_ack_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_control_resume_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_control_start_ack_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_control_start_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_control_stop_ack_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_control_stop_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_custom_passage_ack_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_custom_passage_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_custom_passage_status_is_length_enough": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_custom_passage_status_is_on_grass": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_custom_passage_status_length": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_custom_passage_status_selected_point_x": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_custom_passage_status_selected_point_y": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_custom_passage_status_stage": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_custom_passage_status_type": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_debug_panel_ack_result": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_detailed_version_info_ap_app": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_detailed_version_info_ap_system": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_detailed_version_info_cellular": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_detailed_version_info_drive_wheel": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_detailed_version_info_drive_wheel_loader": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_detailed_version_info_main_controller": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_detailed_version_info_main_controller_loader": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_detailed_version_info_mow_motor": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_detailed_version_info_mow_motor_loader": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_ble_info_id": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_ble_info_mac": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_ip": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_sn": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_ssid": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_uuid": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_version": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_warranty_first_online_time": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_warranty_first_use_time": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_warranty_is_activated": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_warranty_is_first_use_time_accruate": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_warranty_is_used": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_device_info_wifi_mac": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "network"
+  },
+  "ecl_mow_extend_cmd_ack_cmd_type": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_extend_cmd_ack_ret_code": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_extend_cmd_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_extend_status_is_defogger_heating": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_extend_status_is_illuminate_light_on": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_extend_status_is_not_in_daylight_period": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_extend_status_sunrise_hour": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_extend_status_sunrise_minute": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_extend_status_sunset_hour": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_extend_status_sunset_minute": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_extream_weather_info_url": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_after_rain_stop_setting_auto_resume_delay_time_hours": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_after_rain_stop_setting_auto_resume_delay_time_minutes": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_after_rain_stop_setting_enable_auto_resume": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_ai_forbidden_zone_enable": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_base_station_use_time": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_bird_view_collection_enable": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_blade_disk_use_time": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_ble_encryption_info_initial_key": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_cellular_enable": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_children_lock": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_daylight_period_minutes_after_sunrise": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_daylight_period_minutes_before_sunset": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_disable_wifi_roaming": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "network"
+  },
+  "ecl_mow_get_edge_cutting_distance": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_enable_cliff_detection": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_enable_high_grass_edge_trim": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_enable_slope_detection": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_error_code": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_error_list": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_event_code": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_event_list": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_extra_info": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_force_cellular_network": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_force_single_base_station_mode": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_home_assistant_config_enable": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_home_assistant_config_passwd": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_internet_connection_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_low_battery_charge_to_resume_level": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_mow_boundary_enable": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_mow_height": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_mow_param_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_mow_spacing": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_mow_speed": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_overnight_auto_resume_enable": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_overnight_auto_resume_time_hour": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_overnight_auto_resume_time_minute": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_power_level": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_rain_return": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_rain_sensor_reading_response_is_rainy": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_rain_sensor_reading_response_reading": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_rain_sensor_threshold_lower_limit": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_rain_sensor_threshold_upper_limit": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_sparse_lawn_optimization_enable": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_stuck_escape_level": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_volume": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_weather_config_enable": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_weather_config_enable_extream_weather_optimize": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_weather_info_extream_weather_info_url": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_weather_info_has_extream_weather": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_get_wifi_signal_strength": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "network"
+  },
+  "ecl_mow_gps_info_base_stations": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_gps_info_is_valid": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_gps_info_robot_is_current_located": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_gps_info_robot_is_out_of_boundary": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_gps_info_robot_is_valid": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_gps_info_robot_position_latitude": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_gps_info_robot_position_longitude": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_gps_info_robot_position_positioning_error": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_gps_info_time": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_log_upload_status_is_uploading": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_log_upload_status_process": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_blade_disk_speed": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_current_mow_spacing": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_edge_cutting_distance": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_main_direction_angle_config_auto_rotate_mode_config_angle_interval": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_main_direction_angle_config_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_main_direction_angle_config_multiple_mode_config_angles": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_main_direction_angle_config_single_mode_config_angle": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_main_direction_angle_current_angle": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_mow_height": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_mow_spacing": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_main_page_work_param_mow_speed": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_area_clean_area": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_area_is_completed": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_area_total_area": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_area_type": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_area_work_duration": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_edit_ack_merge_region_ack_error_code": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_edit_ack_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_edit_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_edit_ack_split_region_ack_error_code": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_get_save_progress": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_backup_map_backup_id": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_backup_map_id": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_is_able_to_run_build_map": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_is_backing_up_map": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_is_map_detected": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_is_spot_mode_map": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_main_direction_angle": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_map_id": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_map_number": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_map_state": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_map_status_spot_mode_map_number": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_max_rain_sensor_threshold": {
+   "access": "ro",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_min_rain_sensor_threshold": {
+   "access": "ro",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_mission_status_back_to_station_reason": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_mission_status_has_error": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_mission_status_is_data_conversion_in_progress": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_mission_status_is_robot_navi_located": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_mission_status_is_saving_data": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_mission_status_is_upgrading": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_mission_status_mission": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_mission_status_power_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_mission_status_state": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_mission_status_sub_mission": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_multi_map_ack_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_multi_map_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_multi_map_create_backup_response_error_code": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_multi_map_create_backup_response_need_delete_number": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_multi_map_create_backup_response_total_number": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_multi_map_update_backup_response_error_code": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_ota_cmd_ack_ota_status": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_ota_cmd_ack_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_ota_cmd_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_ota_cmd_ack_type": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_remote_control_ack_error_code": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_remote_control_ack_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_remote_control_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_ack_cmd_type": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_ack_code": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_ack_schedule_list": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_upcoming_chedule_end_time_hour": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_upcoming_chedule_end_time_minute": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_upcoming_chedule_exist": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_upcoming_chedule_item_id": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_upcoming_chedule_shift_id": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_upcoming_chedule_start_time_hour": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_schedule_upcoming_chedule_start_time_minute": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_upload_log_ack_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_upload_log_ack_seq": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_video_stream_cmd_response_cmd_type": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_video_stream_cmd_response_generate_pin_salt_result_pin_salt": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_video_stream_cmd_response_get_pin_salt_result_pin_salt": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_video_stream_cmd_response_ret": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_video_stream_cmd_response_verify_pin_salt_result_pin_salt": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_video_stream_status_has_pin_code": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_video_stream_status_is_enabled": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_video_stream_status_is_in_enable_procedure": {
+   "access": "ro",
+   "kind": "bool",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_work_mode_map_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_work_mode_move_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_mow_work_mode_mow_mode": {
+   "access": "ro",
+   "kind": "other",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_support_function": {
+   "access": "ro",
+   "default": "{\"firstPage\":{\"quickScene\":false},\"deviceHomePage\":{\"realTimeCleanArea\":true,\"realTimeCleanTime\":true,\"realTimeCleanProgress\":true,\"waterVolume\":true,\"map\":true,\"baseStationFunction\":{\"dustCollection\":true,\"mopWash\":true,\"mopDry\":true},\"menuFunction\":{\"baseStation\":true,\"mapEdit\":true,\"addArea\":true,\"dustCollection\":false,\"rollBrushAutoClean\":false},\"mapFunction\":{\"mapEdit\":true,\"forbiddenArea\":true,\"virtualWall\":true,\"forbiddenMopArea\":true,\"roomEdit\":true,\"mapRotate\":true},\"deviceControlBoard\":{\"fullClean\":true,\"roomClean\":true,\"areaClean\":true},\"petMode\":false},\"modeConfig\":{\"customMode\":false,\"customModeDetail\":{\"cleanLevel\":false,\"cleanStrength\":false,\"mopSweepMode\":true,\"mopMode\":false,\"suction\":true,\"waterVolumeConfig\":true,\"edgeClean\":false,\"roomCleanEdgeClean\":false,\"cleanTimes\":true},\"smartMode\":false,\"customMode2\":true,\"generalMode\":true,\"customOrder\":true},\"deviceSetting\":{\"deviceInfo\":{\"baseStationVersioin\":true},\"mapManage\":{\"quickMap\":true,\"cleanMap\":false,\"multiMap\":false,\"mapBackup\":false,\"maxCount\":3},\"scheduleClean\":true,\"scheduleUIType\":0,\"cleanRecord\":{\"cleanRecordDetail\":true,\"cleanRecordMap\":true},\"carpetCleanConfigShow\":true,\"carpetCleanConfig\":{\"carpetCleanStrategy\":true,\"boostIQ\":true,\"carpetIgnoreShow\":true},\"baseStationConfigShow\":true,\"baseStationConfig\":{\"autoWash\":true,\"washFrequency\":true,\"washFrequencyRange\":{\"min\":15,\"max\":85},\"autoDry\":true,\"dryTime\":true,\"dryTimeRange\":[2,3,4],\"autoDustCollection\":true,\"dustCollectionFrequency\":true,\"rollBrushAutoCleanConfig\":false,\"autoAddCleaningAgent\":true,\"ozoneDisinfection\":true,\"hairCutAndDustCollection\":false,\"dustCollectionTimeRange\":[15,25,35,45,55,65,75,85]},\"eufyLabShow\":false,\"eufyLab\":{\"eufyLabWaterVolume\":false,\"eufyLabSmartFollow\":false},\"manualControl\":{\"backward\":true,\"spotClean\":false,\"autoClean\":true,\"recharge\":true},\"voiceSetting\":true,\"aiSee\":false,\"aiSeePic\":false,\"robotSetting\":{\"doNotDisturb\":true,\"breakpointResumeClean\":true,\"childLock\":false,\"areaUnit\":true,\"runLogUpload\":true,\"userExperiencePlan\":false,\"smallObstacles\":true,\"visualCliff\":true,\"bridgeHoleThreshold\":true},\"wifiManage\":false,\"firmwareUpgrade\":true,\"accessoryService\":true,\"helpAndFeedback\":true,\"findRobot\":true,\"shareDevice\":true},\"businessCategory\":{\"mapDataType\":6,\"mapUiType\":1,\"deviceType\":\"\"}}",
+   "kind": "string",
+   "read": null,
+   "section": "other"
+  },
+  "ecl_support_siri": {
+   "access": "ro",
+   "default": "1",
+   "kind": "other",
+   "note": "no handler write path",
+   "read": null,
+   "section": "other"
+  }
+ },
+ "source": {
+  "app_version": "6.1.10",
+  "handler": "T2880Handle.mix.js",
+  "handler_date": "2026-06-18",
+  "td_version": 51
+ }
+}

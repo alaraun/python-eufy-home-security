@@ -38,7 +38,8 @@ _LOGGER = logging.getLogger(__name__)
 #: The note of every setting listed from a cloud TD.
 LISTED_NOTE: Final = "not in bundled data"
 
-#: TD unit -> setting unit; None drops the unit (a count or no unit).
+#: TD unit -> setting unit; None drops the unit (a count, no unit, or a unit with no
+#: SettingUnit: a temperature bound in the device's display scale, a sound level).
 UNITS: Final[Mapping[str, SettingUnit | None]] = MappingProxyType(
     {
         "s": SettingUnit.SECONDS,
@@ -48,6 +49,8 @@ UNITS: Final[Mapping[str, SettingUnit | None]] = MappingProxyType(
         "天": SettingUnit.DAYS,
         "无": None,
         "个": None,
+        "degree": None,
+        "decibel": None,
     }
 )
 #: "音量" (volume) is a percentage only on a 0..100 or 1..100 scale.
