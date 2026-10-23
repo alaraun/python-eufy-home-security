@@ -444,29 +444,9 @@ def _own_params(kind: str, samples: Sequence[ReadSample]) -> Any:
     return cmd
 
 
-def shown_read(kind: str, samples: Sequence[ReadSample]) -> Any:
-    """Read codec ``{"param", "map": {"<param value>": value}}`` of an enum whose handler
-    reads each written parameter value as another of the written values, each once: the
-    value the eufy app shows for it. None where the decodes are no such permutation.
-    The caller rules out a write that stores a failed conversion (``FAILED_CONVERSIONS``).
-    """
-    cmd = _own_params(kind, samples)
-    if cmd is None:
-        return None
-    values = [s.value for s in samples]
-    shown: list[Value] = []
-    for s in samples:
-        named = next((v for v in values if decodes_to(s.decoded, v)), MISSING)
-        if named is MISSING or any(_same(named, v) for v in shown):
-            return None
-        shown.append(named)
-    return {"param": cmd, "map": {s.param_value: v for s, v in zip(samples, shown, strict=True)}}
-
-
 def inverse_read(kind: str, samples: Sequence[ReadSample]) -> Any:
-    """Read codec of an enum whose handler read tells its values apart by none (it does
-    not return the written value, nor another one per value; see :func:`shown_read`),
-    by the inverse of its write: ``{"param", "map": {"<param value>": value}}``; else
+    """Read codec of an enum whose handler read does not return the written value, by
+    the inverse of its write: ``{"param", "map": {"<param value>": value}}``; else
     None. The caller rules out a write that stores a failed conversion
     (``FAILED_CONVERSIONS``).
     """

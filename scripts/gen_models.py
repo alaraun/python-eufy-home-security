@@ -785,14 +785,10 @@ def build_context(
             if result.access == "rw":
                 read, read_note = codec.infer_read(kind, reads.get(ident, []))
                 if read is None and not stores_failed_conversion(row.raw):
-                    samples = reads.get(ident, [])
-                    read = codec.shown_read(kind, samples)
+                    read = codec.inverse_read(kind, reads.get(ident, []))
                     if read is not None:
-                        _count(counts, "read:as the handler shows another value")
-                    elif (read := codec.inverse_read(kind, samples)) is not None:
                         inverted.add(ident)
                         _count(counts, "read:inverse of the write")
-                    if read is not None:
                         read_note = None
                 _count(counts, "read:codec" if read else "read:null")
                 if read is not None:

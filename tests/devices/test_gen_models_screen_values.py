@@ -1,7 +1,6 @@
 """The settings generator drives a handler with the values the app's screens write
 (scripts/gen_models.py, ``screen_values``), and reads an enum whose handler read does not
-return the written value as the handler shows it, or through the inverse of a bijective
-write.
+return the written value through the inverse of a bijective write.
 
 Runs synthetic handlers through the real driver, so it needs Node.
 """
@@ -153,7 +152,6 @@ def test_a_screen_value_two_choices_share_is_not_decoded() -> None:
 @pytest.mark.parametrize("cmd", [None, 1214], ids=["no update", "no parameter value"])
 def test_a_write_that_stores_no_parameter_value_is_not_read(cmd: int | None) -> None:
     sample = codec.ReadSample(0, cmd, None, codec.MISSING)
-    assert codec.shown_read("enum", [sample]) is None
     assert codec.inverse_read("enum", [sample]) is None
 
 
@@ -192,15 +190,34 @@ def _mapped(
     return entry
 
 
-# The handler's read of every written parameter value names one value for all.
-CONSTANT_READ = {"0": 0, "1": 0, "2": 0}
-
-
 @pytest.mark.timeout(120)
-def test_a_bijective_write_is_read_by_its_inverse(tmp_path: Path) -> None:
-    """Where the handler's read tells no values apart, the read maps each written
-    parameter value back to the value that wrote it."""
-    entry = _mapped(tmp_path, {"0": 2, "1": 0, "2": 1}, _enum("0", "1", "2"), read=CONSTANT_READ)
+@pytest.mark.parametrize(
+    "read",
+    [
+        {"0": 0, "1": 0, "2": 0},
+        None,
+        {"0": 2, "1": 0, "2": 1, "": 0},
+        {"2": 1, "0": 2},
+        {"0": 2, "1": 2, "2": 1},
+        {"0": 0, "1": 0, "2": 0, "": 1},
+    ],
+    ids=[
+        "one-value-for-all",
+        "another-value-each",
+        "another-value-each-and-empty",
+        "no-value-for-one",
+        "one-value-twice",
+        "one-value-for-all-and-empty",
+    ],
+)
+def test_a_bijective_write_is_read_by_its_inverse(
+    tmp_path: Path, read: dict[str, int] | None
+) -> None:
+    """Where the handler's read does not return the written value (whatever it decodes,
+    the empty parameter included), the read maps each written parameter value back to the
+    value that wrote it; the write stays the handler's."""
+    entry = _mapped(tmp_path, {"0": 2, "1": 0, "2": 1}, _enum("0", "1", "2"), read=read)
+    assert entry["write"]["params"] == {"value": {"$map": {"0": 2, "1": 0, "2": 1}}}
     assert entry["read"] == {"param": 1214, "map": {"0": 1, "1": 2, "2": 0}}
     assert "note" not in entry
     for value in (0, 1, 2):  # write -> read
@@ -211,51 +228,9 @@ def test_a_bijective_write_is_read_by_its_inverse(tmp_path: Path) -> None:
 
 
 @pytest.mark.timeout(120)
-def test_a_handler_that_reads_another_value_per_value_is_read_as_it_shows(
-    tmp_path: Path,
-) -> None:
-    """A handler that maps the stored parameter through its write map again shows
-    another value for each one: the read is that, the write stays the handler's."""
-    entry = _mapped(tmp_path, {"0": 2, "1": 0, "2": 1}, _enum("0", "1", "2"))
-    assert entry["write"]["params"] == {"value": {"$map": {"0": 2, "1": 0, "2": 1}}}
-    assert entry["read"] == {"param": 1214, "map": {"2": 1, "0": 2, "1": 0}}
-    assert "note" not in entry
-
-
-@pytest.mark.timeout(120)
-def test_a_read_as_the_handler_shows_takes_its_empty_value_read(tmp_path: Path) -> None:
-    """The handler's decode of an empty parameter is what the app shows for it too."""
-    read = {"0": 2, "1": 0, "2": 1, "": 0}
-    entry = _mapped(tmp_path, {"0": 2, "1": 0, "2": 1}, _enum("0", "1", "2"), read=read)
-    assert entry["read"] == {"param": 1214, "map": {"2": 1, "0": 2, "1": 0, "": 0}}
-
-
-@pytest.mark.timeout(120)
-def test_a_read_that_names_no_value_for_one_falls_back_to_the_inverse(tmp_path: Path) -> None:
-    read = {"2": 1, "0": 2}  # the parameter value "1" decodes to nothing
-    entry = _mapped(tmp_path, {"0": 2, "1": 0, "2": 1}, _enum("0", "1", "2"), read=read)
-    assert entry["read"] == {"param": 1214, "map": {"0": 1, "1": 2, "2": 0}}
-
-
-@pytest.mark.timeout(120)
-def test_a_read_naming_one_value_twice_falls_back_to_the_inverse(tmp_path: Path) -> None:
-    read = {"0": 2, "1": 2, "2": 1}
-    entry = _mapped(tmp_path, {"0": 2, "1": 0, "2": 1}, _enum("0", "1", "2"), read=read)
-    assert entry["read"] == {"param": 1214, "map": {"0": 1, "1": 2, "2": 0}}
-
-
-@pytest.mark.timeout(120)
 def test_a_write_that_stores_the_value_itself_reads_it_as_is(tmp_path: Path) -> None:
     entry = _mapped(tmp_path, {"0": 0, "1": 1, "2": 2}, _enum("0", "1", "2"), read={})
     assert entry["read"] == {"param": 1214, "map": None}
-
-
-@pytest.mark.timeout(120)
-def test_the_handlers_empty_value_read_is_not_added_to_an_inverse_read(tmp_path: Path) -> None:
-    """The handler's decode of an empty parameter is not the inverse of any write."""
-    read = {**CONSTANT_READ, "": 1}
-    entry = _mapped(tmp_path, {"0": 2, "1": 0, "2": 1}, _enum("0", "1", "2"), read=read)
-    assert entry["read"] == {"param": 1214, "map": {"0": 1, "1": 2, "2": 0}}
 
 
 @pytest.mark.timeout(120)

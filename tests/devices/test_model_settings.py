@@ -785,10 +785,8 @@ def _enum_round_trips() -> Iterator[tuple[str, Setting, WriteContext]]:
 
 
 def test_every_readable_enum_reads_each_stored_value_as_one_of_its_values() -> None:
-    """Write -> read: the parameter values the writes store decode to the values written,
-    one each; each to the value that wrote it, but where the eufy app shows another."""
+    """Write -> read: the parameter value each write stores decodes to the value written."""
     checked = 0
-    shown_other: set[tuple[str, str]] = set()
     for code, setting, ctx in _enum_round_trips():
         param = cast(int, setting.read_param)
         stored = {
@@ -797,22 +795,15 @@ def test_every_readable_enum_reads_each_stored_value_as_one_of_its_values() -> N
             if (raw := dict(setting.encode(value, ctx).updates).get(param)) is not None
         }
         decoded = {value: setting.decode(raw) for value, raw in stored.items()}
-        assert sorted(map(repr, decoded.values())) == sorted(map(repr, decoded)), (
-            code,
-            setting.key,
-            stored,
-        )
-        if any(shown != value for value, shown in decoded.items()):
-            shown_other.add((code, setting.key))
+        assert decoded == {value: value for value in stored}, (code, setting.key, stored)
         checked += len(stored)
     assert checked > 1000
-    assert shown_other == {(c, "watermark_set") for c in ("T8414", "T8440", "T8442")}
 
 
 @pytest.mark.parametrize(
-    ("code", "key", "stored", "shown"),
+    ("code", "key", "stored", "read"),
     [
-        ("T8414", "watermark_set", {0: "2", 1: "0", 2: "1"}, {"2": 1, "0": 2, "1": 0}),
+        ("T8414", "watermark_set", {0: "2", 1: "0", 2: "1"}, {"2": 0, "0": 1, "1": 2}),
         (
             "T8414",
             "device_continuous_recording_time",
@@ -822,14 +813,14 @@ def test_every_readable_enum_reads_each_stored_value_as_one_of_its_values() -> N
     ],
 )
 def test_an_enum_the_handler_does_not_read_back_reads_as_generated(
-    code: str, key: str, stored: dict[object, str], shown: dict[str, object]
+    code: str, key: str, stored: dict[object, str], read: dict[str, object]
 ) -> None:
     """Each value's write stores its parameter value, and each parameter value reads as
-    the eufy app shows it: the watermark as another choice, the recording time as written."""
+    the value that wrote it."""
     setting = settings_of(code, standalone=True)[key]
     for value, raw in stored.items():
         assert dict(setting.encode(value, ALONE).updates)[cast(int, setting.read_param)] == raw
-        assert setting.decode(raw) == shown[raw]
+        assert setting.decode(raw) == read[raw] == value
 
 
 @pytest.mark.parametrize(

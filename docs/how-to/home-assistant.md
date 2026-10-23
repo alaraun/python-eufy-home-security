@@ -858,10 +858,10 @@ A closed session (`async_close`) never reconnects on its own — build a new
     `multi-command write`, `Bluetooth`, `MQTT`).
   - `readable=False` → the dump never reports it, so its state is always unknown. An
     enum the handler does not read back, but whose write gives every value its own
-    parameter value, is readable: as the eufy app shows it where the app reads each
-    stored value as another of the choices (a T8414 watermark: the app shows another
-    choice than the one written, and so does the library, after a write and after a
-    reload), else by the inverse of that write (a value written reads back as written).
+    parameter value, is readable by the inverse of that write: the value read is the one
+    the client wrote, after a write and after a reload. The eufy app's own display of
+    the watermark setting (T8414, T8440, T8442) differs: it shows another choice than the
+    one written.
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
     bool for a bool, str for a string. `default` is the vendor default; a station setting
