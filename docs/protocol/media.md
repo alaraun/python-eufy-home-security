@@ -342,28 +342,61 @@ Behind a NVR, a T9000, a T7000 or a HomeBase 4 the handlers send a 1350/1003 the
 does not build (`stitch_mode`, `camera_type` from `chn_list`), or flag the request `webRtc`;
 none matches a library open.
 
-The app chooses WebRTC or P2P from the parent's `is_connect_webrtc`, not from the handler's
-flag: 2 opens every child over WebRTC; 0 or no such property, P2P; 1, WebRTC for the children
-`is_connect_webrtc_sub_device_list` and the child's own `is_connect_webrtc` select. The
-thing descriptions declare 2 for a NVR and a T9000, none for a HomeBase 2, and for a
-HomeBase 3 1 with a sub-device list on firmware 3.7.4.3 to 4.1.9.999 (0 outside it); its 2
-from 4.2.0.0 applies only under a condition on the app's own SDK version that the app does
-not meet, so a HomeBase 3 on 4.2.0.0 or later is P2P in the app **[declared: eufy app]**.
-The library opens over P2P only and does not read the property. A HomeBase 3 at 3.8.7.4 answers a P2P
-open for a T8170, a model its declared sub-device list names (verified); P2P on a HomeBase 3
-at 4.2.0.0 or later, a NVR or a T9000 is not observed.
 The library sends the recorded open: on the device's own session every one of the three;
 behind a station `station`, and a 1700 open behind a HomeBase 2 or 3 as described
 [below](#wi-fi-camera-behind-a-homebase-open-17001000-on-the-homebases-session) where the
-handler's stop is one the library sends. A T8223 or T8224 behind a HomeBase 3 on firmware
-3.7.4.3 to 4.1.9.999, both bounds included, gets none: the app streams those over WebRTC
-there (the station's `is_connect_webrtc` is 1 and its sub-device list names both models).
-On any other station firmware, or with none known, it gets its handler's open, as the app
-streams it over P2P **[declared: eufy app]**. The firmware compares as the app compares
-versions: dotted fields as numbers, trailing letters dropped, a missing field or version
-as 0. Any other open raises `UnsupportedError` before anything is sent, and
-`Station.live_support` grades it `UNKNOWN`. A product the table does not list gets the
-defaults: `single` standalone, `station` behind a station.
+handler's stop is one the library sends. A device the eufy app streams over WebRTC
+([WebRTC or P2P](#webrtc-or-p2p-declared-eufy-app)) gets none, whatever its open. Any
+other open raises `UnsupportedError` before anything is sent, and `Station.live_support`
+grades it `UNKNOWN`. A product the table does not list gets the defaults: `single`
+standalone, `station` behind a station.
+
+### WebRTC or P2P **[declared: eufy app]**
+
+The eufy app decides per device, for live view, talkback and commands alike, from the
+`is_connect_webrtc*` properties of the thing descriptions; `devices.webrtc` evaluates the
+same rule for every device (`app_uses_webrtc`, `Station.app_uses_webrtc`), from data
+`scripts/gen_webrtc_routing.py` generates (`devices/_webrtc_routing_data.py`).
+
+1. A device paired to a station on the account reads the station's `is_connect_webrtc`
+   first: no such property or 0 means P2P; 2 means WebRTC; 1 means P2P unless the station
+   itself is routed over WebRTC (step 2), and then the device's own value decides.
+2. A device's own value (a station's or a standalone device's too): no such property
+   means P2P; above 0 means WebRTC, except that 1 with an
+   `is_connect_webrtc_sub_device_list` means WebRTC only when a product code in that
+   list is paired to it.
+3. A property is present when a property whose name starts with it has passing
+   `available_conditions`. Its value is the default of its `__v` variant whose
+   `read_conditions` pass with the most conditions (the first of equals), else of the
+   base property; it reads as 0 (an empty list) when the chosen property's
+   `read_conditions` fail. `true`/`false` read as 1/0.
+4. A condition list passes when every condition of one group passes. Firmware
+   conditions compare the device's (`device_version`) or its station's
+   (`parent_version`) firmware as the app compares versions: dotted fields as numbers,
+   trailing letters dropped, a missing field or version as 0, so an unknown firmware is
+   below every bound. Serial conditions (`device_sn`, `parent_sn`, the device's own
+   serial when it has no station) match a pattern anywhere; an empty pattern or serial
+   passes. `sdk_version` conditions compare a fixed version of the app itself.
+
+What the thing descriptions declare, read through that rule:
+
+| station or device | routed over WebRTC |
+|---|---|
+| T9000, T8N00, T7000, T8040 | the station and every device paired to it (value 2) |
+| HomeBase 3 (T8030) | firmware 3.7.4.3 to 4.1.9.999 (both included), when a product of its sub-device list is paired: T8223, T8224, T8215, and from 3.8.5.1 also T8L60, T8180, T8174, T8217, T85M1, T8532, T8404; outside that range, and from 4.2.0.0 (its 2 needs an app SDK version the app does not have), P2P |
+| HomeBase mini (T8025) | firmware 4.0.8.0 and later, the same way with its own lists |
+| T8223, T8224 | standalone, and behind a station that allows it (steps 1–2) |
+| T8215, T8172 | standalone, and behind a station other than a HomeBase 3 that allows it; T8215 also behind a HomeBase 3 from its firmware 3.7.4.3 |
+| T8532, T85M1 | from their own firmware 2.0.0.0, standalone or behind a station that allows it |
+| T8170 | from its firmware 3.4.0.0, standalone or behind a station other than a HomeBase 3 that allows it, unless the 7th character of its serial is `2` |
+| any other product (HomeBase 2 and its cameras, …) | never |
+
+A device with no thing description in the generated data reads as having no such
+property (P2P). The library has no WebRTC transport: it sends no live open where the app
+streams over WebRTC, and leaves out a station whose own value is 2 together with every
+device paired to it (`SkippedDevice` reason `webrtc_only`). A HomeBase 3 at 3.8.7.4
+answers a P2P open for a T8170 (verified), which the rule routes over P2P there; P2P on a
+NVR or a T9000 is not observed.
 
 ### Wi-Fi camera behind a HomeBase: open 1700/1000 on the HomeBase's session
 

@@ -27,7 +27,6 @@ from .devices.capabilities import (
 )
 from .devices.live_open import (
     LiveOpen,
-    app_uses_webrtc,
     has_live_open,
     library_live_open,
     live_stop,
@@ -95,6 +94,7 @@ from .devices.station_config_support import config_support as station_config_sup
 from .devices.support import Evidence, Support
 from .devices.timezones import TIMEZONE_DOMAIN
 from .devices.types import DeviceKind, DeviceModel, model_for_serial
+from .devices.webrtc import app_uses_webrtc, route_device
 from .events import (
     MEDIA_PATH_PREFIX,
     RECORDING_SUFFIX,
@@ -2905,27 +2905,33 @@ class Station:
             return ConnectType.SINGLE
         return connect_type(self.serial, device_sn)
 
+    def app_uses_webrtc(self, device_sn: str) -> bool:
+        """Whether the eufy app reaches ``device_sn`` (this station or a device paired to
+        it) over WebRTC rather than P2P (:func:`~.devices.webrtc.app_uses_webrtc`, from
+        the thing descriptions, the serials and the firmware of this station and its
+        devices). The library has no WebRTC transport: it sends no live open there."""
+        return app_uses_webrtc(device_sn, map(route_device, (self.device, *self.sub_devices)))
+
     def _live_open_of(self, device_sn: str) -> LiveOpen | None:
         """The live open the library sends ``device_sn``."""
         return library_live_open(
             self._product_code(device_sn),
             self._connect_type_of(device_sn),
-            station_firmware=self.device.main_sw_version,
+            over_webrtc=self.app_uses_webrtc(device_sn),
         )
 
     def _live_unsupported_reason(self, device_sn: str) -> str:
         code = self._product_code(device_sn)
         connect = self._connect_type_of(device_sn)
-        if app_uses_webrtc(code, connect, station_firmware=self.device.main_sw_version):
-            return (
-                f"the eufy app streams a {code} behind a {connect.value} station over "
-                "WebRTC, which this library does not implement"
-            )
-        return (
-            f"the eufy app opens a {code} live stream "
-            f"{'on its own' if connect is ConnectType.SINGLE else f'behind a {connect.value} station'} "
-            "in a way this library does not implement"
+        where = (
+            "on its own" if connect is ConnectType.SINGLE else f"behind a {connect.value} station"
         )
+        if self.app_uses_webrtc(device_sn):
+            return (
+                f"the eufy app streams a {code} {where} over WebRTC, which this library "
+                "does not implement"
+            )
+        return f"the eufy app opens a {code} live stream {where} in a way this library does not implement"
 
     def live_support(self, device_sn: str) -> Evidence:
         """How well a live stream of ``device_sn`` is supported (live view, live image).

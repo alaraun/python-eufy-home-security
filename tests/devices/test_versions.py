@@ -4,11 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from eufy_home_security.devices.versions import (
-    version_between,
-    version_bigger_than,
-    version_equals,
-)
+from eufy_home_security.devices.versions import version_bigger_than, version_equals
 
 
 @pytest.mark.parametrize(
@@ -56,19 +52,3 @@ def test_version_bigger_than(a: str, b: str, bigger: bool) -> None:
 )
 def test_version_equals(a: str, b: str, equal: bool) -> None:
     assert version_equals(a, b) is equal
-
-
-@pytest.mark.parametrize(
-    ("version", "inside"),
-    [
-        ("3.7.4.3", True),
-        ("3.8.7.4", True),
-        ("4.1.9.999", True),
-        ("3.7.4.2", False),
-        ("4.1.9.1000", False),
-        ("4.2.0.0", False),
-        ("", False),
-    ],
-)
-def test_version_between_includes_both_bounds(version: str, inside: bool) -> None:
-    assert version_between(version, "3.7.4.3", "4.1.9.999") is inside

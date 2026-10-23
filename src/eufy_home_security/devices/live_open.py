@@ -16,7 +16,6 @@ from typing import Final
 
 from ._live_open_data import APP_VERSION, LIVE_OPEN, LIVE_STOP
 from .recipes import ConnectType
-from .versions import version_between
 
 
 class LiveOpen(StrEnum):
@@ -45,24 +44,6 @@ class LiveStop(StrEnum):
 SINGLE_BEHIND: Final = frozenset({ConnectType.HB2, ConnectType.HB3})
 """Stations behind which the library sends a 1700 open: on the station's session, with
 the camera's channel in the frame header."""
-
-APP_WEBRTC_LIVE: Final[Mapping[ConnectType, frozenset[str]]] = MappingProxyType(
-    {ConnectType.HB3: frozenset({"T8223", "T8224"})}
-)
-"""Products whose live view the eufy app streams over WebRTC behind that station kind,
-inside the station firmware window of :data:`APP_WEBRTC_FIRMWARE` **[declared: eufy app]**.
-The station's ``is_connect_webrtc`` is 1 only inside that window (0 outside it), and a
-station at 1 routes the children its sub-device list names, which lists these products
-on every firmware the window covers; the products' own ``is_connect_webrtc`` is 1."""
-
-APP_WEBRTC_FIRMWARE: Final[Mapping[ConnectType, tuple[str, str]]] = MappingProxyType(
-    {ConnectType.HB3: ("3.7.4.3", "4.1.9.999")}
-)
-"""The station firmware window, both bounds inclusive, in which the eufy app streams the
-:data:`APP_WEBRTC_LIVE` products over WebRTC **[declared: eufy app]**; compared as the app
-compares versions (:func:`~.versions.version_between`). Outside it, and with no firmware
-known, the app streams them over P2P."""
-
 
 _TABLE: Final[Mapping[str, Mapping[ConnectType, LiveOpen | None]]] = MappingProxyType(
     {
@@ -117,37 +98,21 @@ def live_stop(product_code: str | None, connect: ConnectType) -> LiveStop | None
     return _STOPS.get(product_code.upper(), {}).get(connect)
 
 
-def app_uses_webrtc(
-    product_code: str | None, connect: ConnectType, *, station_firmware: str | None
-) -> bool:
-    """Whether the eufy app streams ``product_code`` over WebRTC under ``connect``, behind a
-    station on ``station_firmware`` (None when unknown, which the app compares as below
-    every window): :data:`APP_WEBRTC_LIVE` within :data:`APP_WEBRTC_FIRMWARE`."""
-    if product_code is None or product_code.upper() not in APP_WEBRTC_LIVE.get(
-        connect, frozenset()
-    ):
-        return False
-    low, high = APP_WEBRTC_FIRMWARE[connect]
-    return version_between(station_firmware or "", low, high)
-
-
 def library_live_open(
-    product_code: str | None, connect: ConnectType, *, station_firmware: str | None
+    product_code: str | None, connect: ConnectType, *, over_webrtc: bool
 ) -> LiveOpen | None:
-    """The open the library sends for ``product_code`` under ``connect``, behind a station
-    on ``station_firmware``: the handler's (:func:`live_open`) where the library can send
-    it there. On its own session (``SINGLE``) every :class:`LiveOpen`; behind a station
-    :attr:`LiveOpen.STATION`, and a 1700 open behind a :data:`SINGLE_BEHIND` station when
-    the library sends the handler's stop there (:func:`live_stop`) and the app does not
-    stream the product over WebRTC there (:func:`app_uses_webrtc`). None otherwise."""
+    """The open the library sends for ``product_code`` under ``connect``: none where the
+    eufy app streams the device over WebRTC (``over_webrtc``, from
+    :func:`~.webrtc.app_uses_webrtc`), else the handler's (:func:`live_open`) where the
+    library can send it there. On its own session (``SINGLE``) every :class:`LiveOpen`;
+    behind a station :attr:`LiveOpen.STATION`, and a 1700 open behind a
+    :data:`SINGLE_BEHIND` station when the library sends the handler's stop there
+    (:func:`live_stop`). None otherwise."""
+    if over_webrtc:
+        return None
     mode = live_open(product_code, connect)
     if connect is ConnectType.SINGLE or mode is LiveOpen.STATION:
         return mode
-    if (
-        mode is None
-        or connect not in SINGLE_BEHIND
-        or app_uses_webrtc(product_code, connect, station_firmware=station_firmware)
-        or live_stop(product_code, connect) is None
-    ):
+    if mode is None or connect not in SINGLE_BEHIND or live_stop(product_code, connect) is None:
         return None
     return mode

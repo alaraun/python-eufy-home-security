@@ -65,6 +65,15 @@ uv run python scripts/gen_live_open.py           # rewrite the table
 uv run python scripts/gen_live_open.py --check   # compare, write nothing
 ```
 
+The WebRTC route inputs (`devices/_webrtc_routing_data.py`: every product's
+`is_connect_webrtc*` properties with their default and conditions, read by
+`devices.webrtc`) come from the thing descriptions alone (no Node):
+
+```
+uv run python scripts/gen_webrtc_routing.py           # rewrite the table
+uv run python scripts/gen_webrtc_routing.py --check   # compare, write nothing
+```
+
 The pan/tilt/zoom table (`devices/_ptz_data.py`: per product whose thing description
 declares a pan/tilt, preset or zoom action, the library recipe form that reproduces the
 handler's, per connect type) is generated the same way:

@@ -13,14 +13,12 @@ from eufy_home_security.devices import live_open
 from eufy_home_security.devices.live_open import (
     LiveOpen,
     LiveStop,
-    app_uses_webrtc,
     has_live_open,
     library_live_open,
     live_stop,
 )
 from eufy_home_security.devices.recipes import PARENT_CONNECT_TYPES, ConnectType
 
-IN_WINDOW = "3.8.7.4"  # a HomeBase 3 firmware inside the app's WebRTC window
 ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / ".work" / "cache" / "things_all"
 
@@ -59,65 +57,38 @@ def test_the_handlers_open(code: str, connect: ConnectType, mode: LiveOpen | Non
 
 def test_the_library_sends_a_1700_open_on_its_own_session_and_behind_a_homebase() -> None:
     assert (
-        library_live_open("T8400", ConnectType.SINGLE, station_firmware=IN_WINDOW)
-        is LiveOpen.SINGLE_NO_EXT
+        library_live_open("T8400", ConnectType.SINGLE, over_webrtc=False) is LiveOpen.SINGLE_NO_EXT
     )
-    assert (
-        library_live_open("T8400", ConnectType.HB3, station_firmware=IN_WINDOW)
-        is LiveOpen.SINGLE_NO_EXT
-    )
-    assert (
-        library_live_open("T8400", ConnectType.HB2, station_firmware=IN_WINDOW)
-        is LiveOpen.SINGLE_NO_EXT
-    )
-    assert (
-        library_live_open("T8600", ConnectType.HB3, station_firmware=IN_WINDOW)
-        is LiveOpen.SINGLE_NO_EXT
-    )
-    assert (
-        library_live_open("T8113", ConnectType.HB2, station_firmware=IN_WINDOW) is LiveOpen.STATION
-    )
-    assert (
-        library_live_open("T8213", ConnectType.SINGLE, station_firmware=IN_WINDOW)
-        is LiveOpen.STATION
-    )
+    assert library_live_open("T8400", ConnectType.HB3, over_webrtc=False) is LiveOpen.SINGLE_NO_EXT
+    assert library_live_open("T8400", ConnectType.HB2, over_webrtc=False) is LiveOpen.SINGLE_NO_EXT
+    assert library_live_open("T8600", ConnectType.HB3, over_webrtc=False) is LiveOpen.SINGLE_NO_EXT
+    assert library_live_open("T8113", ConnectType.HB2, over_webrtc=False) is LiveOpen.STATION
+    assert library_live_open("T8213", ConnectType.SINGLE, over_webrtc=False) is LiveOpen.STATION
 
 
 def test_no_1700_open_behind_a_station_without_the_handlers_stop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(live_open, "_STOPS", {"T8600": {ConnectType.HB3: None}})
-    assert library_live_open("T8600", ConnectType.HB3, station_firmware=IN_WINDOW) is None
+    assert library_live_open("T8600", ConnectType.HB3, over_webrtc=False) is None
 
 
 def test_no_1700_open_behind_another_station_kind() -> None:
     assert live_open.live_open("T8400", ConnectType.M8025) is LiveOpen.SINGLE_NO_EXT
-    assert library_live_open("T8400", ConnectType.M8025, station_firmware=IN_WINDOW) is None
+    assert library_live_open("T8400", ConnectType.M8025, over_webrtc=False) is None
 
 
-@pytest.mark.parametrize("firmware", ["3.7.4.3", IN_WINDOW, "4.1.9.999"])
-def test_no_open_where_the_app_streams_over_webrtc(firmware: str) -> None:
-    assert live_open.live_open("T8224", ConnectType.HB3) is LiveOpen.SINGLE
-    assert app_uses_webrtc("t8224", ConnectType.HB3, station_firmware=firmware)
-    assert app_uses_webrtc("T8223", ConnectType.HB3, station_firmware=firmware)
-    assert library_live_open("T8224", ConnectType.HB3, station_firmware=firmware) is None
-
-
-@pytest.mark.parametrize("firmware", ["3.7.4.2", "4.1.9.1000", "4.2.0.0", "", None])
-def test_the_handlers_open_outside_the_apps_webrtc_firmware_window(firmware: str | None) -> None:
-    assert not app_uses_webrtc("T8224", ConnectType.HB3, station_firmware=firmware)
-    assert library_live_open("T8224", ConnectType.HB3, station_firmware=firmware) is (
-        LiveOpen.SINGLE
-    )
-
-
-def test_webrtc_only_for_the_listed_products_and_station_kind() -> None:
-    assert not app_uses_webrtc("T8224", ConnectType.HB2, station_firmware=IN_WINDOW)
-    assert library_live_open("T8224", ConnectType.HB2, station_firmware=IN_WINDOW) is (
-        LiveOpen.STATION
-    )
-    assert not app_uses_webrtc("T8600", ConnectType.HB3, station_firmware=IN_WINDOW)
-    assert not app_uses_webrtc(None, ConnectType.HB3, station_firmware=IN_WINDOW)
+@pytest.mark.parametrize(
+    ("code", "connect"),
+    [
+        ("T8224", ConnectType.HB3),  # a 1700 open behind a station
+        ("T8113", ConnectType.HB2),  # the station open
+        ("T8400", ConnectType.SINGLE),  # on its own session
+    ],
+)
+def test_no_open_where_the_app_streams_over_webrtc(code: str, connect: ConnectType) -> None:
+    assert library_live_open(code, connect, over_webrtc=False) is not None
+    assert library_live_open(code, connect, over_webrtc=True) is None
 
 
 @pytest.mark.parametrize(

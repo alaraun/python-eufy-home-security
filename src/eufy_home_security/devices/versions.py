@@ -78,10 +78,3 @@ def version_equals(a: str, b: str) -> bool:
     if any(_at(left, i) != _at(right, i) for i in range(run)):
         return False
     return left[run:] == right[run:]
-
-
-def version_between(version: str, low: str, high: str) -> bool:
-    """Whether ``low <= version <= high``, both bounds inclusive."""
-    at_least = version_bigger_than(version, low) or version_equals(version, low)
-    at_most = version_bigger_than(high, version) or version_equals(version, high)
-    return at_least and at_most

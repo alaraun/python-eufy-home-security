@@ -2746,8 +2746,9 @@ async def async_get_config_entry_diagnostics(hass, entry):
   `webrtc_only` or `orphan` deserves a non-fixable repair issue; `bad_did` is a station
   whose P2P id local P2P does not accept (the eufy app does not connect to it either),
   and its paired devices are listed as `orphan`; `webrtc_only` is a station the eufy app
-  reaches only over its WebRTC path (the HomeBase Professional S1, T9000, and the NVR,
-  T8N00), which the library does not speak, and every device paired to it;
+  reaches only over its WebRTC path, whatever is paired to it (its thing description says
+  so: the HomeBase Professional S1 T9000, the NVR T8N00, the T7000 and the T8040), which
+  the library does not speak, and every device paired to it;
   `no_did` is a device the library does not serve (a robot vacuum on the same account).
 - Add per station `dataclasses.asdict(station.stats())` (`SessionStats`): it carries no
   identifiers and needs no redaction. For "live view shows no picture", look at

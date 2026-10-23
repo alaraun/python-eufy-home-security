@@ -126,13 +126,6 @@ PARENT_CONNECT_TYPES: Final[Mapping[str, ConnectType]] = MappingProxyType(
 (the handler's ``getConnectType``); any other parent means a standalone device."""
 
 
-WEBRTC_ONLY_STATIONS: Final = frozenset({"T8N00", "T9000"})
-"""Station serial prefixes the eufy app reaches only over its WebRTC path, never over
-local P2P **[declared: app]**: their thing description sets ``is_connect_webrtc`` to 2
-with no condition, which routes the station and every device paired to it over WebRTC.
-The library has no WebRTC transport."""
-
-
 def connect_type(parent_sn: str | None, device_sn: str | None) -> ConnectType:
     """How the device ``device_sn`` under the station ``parent_sn`` is reached.
 
