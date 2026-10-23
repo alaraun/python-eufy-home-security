@@ -160,8 +160,8 @@ that serves reads, and do not resend into a stall — each resend queues again.
   - `0x01`, AES-128-ECB under the static key: a 16-byte block holding four u32le
     values `mode, 0, <constant marker>, 0`. The first is the applied mode.
 - **Result [declared, eufy app].** The arm's own result is final, as the eufy app
-  takes it: code 0 (the request's channel-0 receipt or result, a `0x0547` naming 1224,
-  the scalar's reply) means applied. The library files the mode (1224; 1151 the same
+  takes it: code 0 (a `0x0547` naming 1224, the scalar's reply, on an RSA session the
+  channel-0 result of the arm's own send) means applied. The library files the mode (1224; 1151 the same
   outside Schedule) as its own write and returns it, without waiting for a mode report.
   A non-zero code is a rejection: −108 and −103 `CommandUnsupportedError`, any other
   `CommandRejectedError`. A decoded `0x047F` that arrives before the result answers the
@@ -181,9 +181,12 @@ that serves reads, and do not resend into a stall — each resend queues again.
   push carries both (`arming` = selected, `mode` = effective;
   [events.md](events.md#station-pushes-arming-and-alarm)).
 - **Receipt.** The station also answers the arm with a `0x0546`
-  [command receipt](#command-receipt-verified) (on an RSA session its
-  [result](session-crypto.md#command-results-on-an-rsa-session-declared-app)). Its code
-  is the arm's result: 0 applies it, a non-zero code fails it with the receipt's error.
+  [command receipt](#command-receipt-verified). On a GCM session a receipt 0 only means
+  the station took the arm off its queue: it stops the resend, and the arm waits on for
+  the `0x0547`, the report or the read-back; a non-zero receipt fails it with the
+  receipt's error. On an RSA session the channel-0 frame is the arm's
+  [result](session-crypto.md#command-results-on-an-rsa-session-declared-app) only after
+  every result owed to an earlier send has arrived; its code 0 applies the arm.
 - **Mode without a dump [declared].** A station whose parameter dump does not carry
   1224 (a standalone T8414) reports its mode in the state from the cloud copy (the
   device list's `params`) until a local value arrives: an applied arm or a mode report,

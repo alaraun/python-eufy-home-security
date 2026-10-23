@@ -666,6 +666,7 @@ class Inbound:
     _mode_done: bool = field(default=False, repr=False)
     _receipt: int | None = field(default=None, repr=False)
     _receipt_done: bool = field(default=False, repr=False)
+    _result_slot: int | None = field(default=None, repr=False)
 
     @property
     def type(self) -> int:
@@ -687,9 +688,17 @@ class Inbound:
         in clear as the eufy app reads it (:meth:`StationSession._decode_receipt`).
         """
         if not self._receipt_done:
-            self._receipt = self._session._decode_receipt(self.channel, self.frame)
+            decoded = self._session._decode_receipt(self.channel, self.frame)
+            if decoded is not None:
+                self._receipt, self._result_slot = decoded
             self._receipt_done = True
         return self._receipt
+
+    def result_slot(self) -> int | None:
+        """On an RSA session, the slot of the send whose result this frame is
+        (:meth:`StationSession._send_request`); None on a GCM session or for no result."""
+        self.receipt()
+        return self._result_slot
 
     def alarm_mode(self) -> int | None:
         """The guard mode of a 0x047F report, decoded at most once."""
@@ -1349,9 +1358,11 @@ class StationSession:
         self._gcm_seq = GCM_SEQ_START
         self._gcm_counter = 0
         self._ecb_seq = 0
-        self._results_due: dict[int, list[float]] = {}
-        """An RSA session's sends awaiting their result: frame type → deadlines (monotonic),
-        oldest first."""
+        self._results_due: dict[int, list[tuple[float, int]]] = {}
+        """An RSA session's sends awaiting their result: frame type → (deadline (monotonic),
+        slot), oldest first."""
+        self._result_slot = 0
+        """The slot of the latest RSA send awaiting its result (:meth:`_send_request`)."""
 
         self._closed = False
         self._waiters: list[_Waiter] = []
@@ -2078,11 +2089,14 @@ class StationSession:
 
         The station's answer is read as the eufy app reads it (declared, eufy app):
 
-        - the arm's own result with code 0 (its channel-0 result or receipt, a 0x0547
-          naming 1224, the scalar's reply) is final: the mode is filed as this library's
-          write (:attr:`param_origins`) and returned, without waiting for a mode report;
+        - the arm's own result with code 0 (a 0x0547 naming 1224, the scalar's reply, on
+          an RSA session the channel-0 result of the arm's own send, after every result
+          owed to an earlier send) is final: the mode is filed as this library's write
+          (:attr:`param_origins`) and returned, without waiting for a mode report;
         - a non-zero code raises: -108 and -103 :class:`CommandUnsupportedError`, any
-          other :class:`CommandRejectedError`;
+          other :class:`CommandRejectedError`; on a GCM session a non-zero receipt too;
+        - a GCM receipt 0 only says the station took the command off its queue: it stops
+          the resend, and the arm waits on for its result, a report or the read-back;
         - a guard-mode report (0x047F) that comes first answers it, under any encryption
           (:meth:`_take_state`); another mode than asked raises
           :class:`CommandRejectedError`. While :attr:`GuardMode.SCHEDULE` is asked for,
@@ -2105,7 +2119,7 @@ class StationSession:
         if scalar:
             key, encryption = self._scalar_cipher()
 
-            def send() -> int:
+            def send_once() -> int:
                 seq = self._ecb_seq
                 self._ecb_seq = (seq + 1) & 0xFF
                 frame = encode_ecb_scalar_frame(
@@ -2116,17 +2130,35 @@ class StationSession:
         else:
             body = device_msg(creds.account_id, CMD_SET_ARMING, arm_payload(mode, creds.user_name))
 
-            def send() -> int:
+            def send_once() -> int:
                 return self._send_secure(body)
 
+        slots: set[int] = set()  # an RSA session's result slots of the arm's sends
+
+        def send() -> int:
+            first = self._result_slot
+            index = send_once()
+            slots.update(range(first + 1, self._result_slot + 1))
+            return index
+
         applied = False
+        taken = False
         processed_at: float | None = None
         reported: list[int] = []
         schedule = mode is GuardMode.SCHEDULE
 
         def match(inbound: Inbound) -> int | None:
-            nonlocal applied, processed_at
+            nonlocal applied, taken, processed_at
             code = self._arm_result(inbound, scalar=scalar)
+            if code is None and inbound.type == FrameType.CMD_TRANSFER and not scalar:
+                code = inbound.receipt()
+                if code is not None:
+                    slot = inbound.result_slot()
+                    if slot is not None and slot not in slots:
+                        return None  # the result of a send before the arm
+                    if slot is None and code == RECEIPT_TAKEN:
+                        taken = True  # a GCM receipt: off the queue, not applied
+                        return None
             if code is not None:
                 if code != 0:
                     raise _receipt_error(CMD_SET_ARMING, code)
@@ -2166,7 +2198,7 @@ class StationSession:
                         break
                     step = remaining if resent else min(remaining, COMMAND_RESEND_AFTER)
                     await asyncio.wait({waiter.future}, timeout=step)
-                    if not (waiter.future.done() or resent or processed_at is not None):
+                    if not (waiter.future.done() or resent or taken or processed_at is not None):
                         _LOGGER.debug("%s: no answer to the arm yet; resending", self._log_name)
                         indices.append(send())
                         resent = True
@@ -2174,10 +2206,11 @@ class StationSession:
                 self._arming_to = None
                 self._remove_waiter(waiter)
         _LOGGER.debug(
-            "%s: arm settled after %.0f ms: result %s, mode reports %s",
+            "%s: arm settled after %.0f ms: result %s, receipt %s, mode reports %s",
             self._log_name,
             (time.monotonic() - started) * 1000,
             "code 0" if applied else "none",
+            "0" if taken else "none",
             reported or "none",
         )
         _raise_waiter_error(waiter)  # the session was lost, or the station rejected it
@@ -2206,16 +2239,20 @@ class StationSession:
                 "%s: no result for the arm; the station reports %s", self._log_name, mode.name
             )
             return mode
+        if taken:
+            raise CommandNotAppliedError(
+                CMD_SET_ARMING,
+                f"the station took the arm (receipt 0) but reports guard mode {current!r}",
+            )
         raise error
 
     def _arm_result(self, inbound: Inbound, *, scalar: bool) -> int | None:
-        """The code of the arm's own result in ``inbound``, else None: the scalar's reply
-        (frame type 1224, the code in clear at ``payload[0:4]``), or the payload form's
-        channel-0 result or receipt and a 0x0547 reply naming 1224."""
+        """The code of a reply naming the arm in ``inbound``, else None: the scalar's
+        reply (frame type 1224, the code in clear at ``payload[0:4]``), or a 0x0547 reply
+        naming 1224 to the payload form. Its channel-0 receipt or result names no
+        command and is attributed in the arm's matcher."""
         if scalar:
             return _scalar_result(inbound, CMD_SET_ARMING)
-        if inbound.type == FrameType.CMD_TRANSFER and (code := inbound.receipt()) is not None:
-            return code
         return self._command_code(inbound, CMD_SET_ARMING)
 
     async def async_send_command(
@@ -5350,24 +5387,26 @@ class StationSession:
 
     def _send_request(self, frame_type: int, frame: bytes, transport: PPPPTransport) -> int:
         """Send ``frame`` on channel 0; on an RSA session the next channel-0 frame of
-        ``frame_type`` within :data:`RSA_RESULT_WINDOW` is read as its result."""
+        ``frame_type`` within :data:`RSA_RESULT_WINDOW` is read as its result, under a new
+        slot (:attr:`_result_slot`)."""
         if self._aes_key is not None:
             due = time.monotonic() + RSA_RESULT_WINDOW
-            self._results_due.setdefault(frame_type, []).append(due)
+            self._result_slot += 1
+            self._results_due.setdefault(frame_type, []).append((due, self._result_slot))
         return transport.send_drw(0, frame)
 
-    def _take_result_due(self, frame_type: int) -> bool:
-        """Whether a send of ``frame_type`` awaits its result; takes the oldest one."""
+    def _take_result_due(self, frame_type: int) -> int | None:
+        """The slot of the oldest send of ``frame_type`` that awaits its result, taken;
+        None when none does."""
         due = self._results_due.get(frame_type)
         if not due:
-            return False
+            return None
         now = time.monotonic()
-        while due and due[0] < now:
+        while due and due[0][0] < now:
             due.pop(0)
         if not due:
-            return False
-        due.pop(0)
-        return True
+            return None
+        return due.pop(0)[1]
 
     def _ecb_key(self, frame: Frame) -> bytes | None:
         """The key of an ECB-tagged station frame: the RSA session's key when its
@@ -5400,8 +5439,9 @@ class StationSession:
             return None
         return None if key is None else ecb_decrypt(key, frame.payload)
 
-    def _decode_receipt(self, channel: int, frame: Frame) -> int | None:
-        """The code of a command receipt on the request channel (0), or None.
+    def _decode_receipt(self, channel: int, frame: Frame) -> tuple[int, int | None] | None:
+        """The code of a command receipt on the request channel (0) and, on an RSA
+        session, the slot of the send it answers; None for any other frame.
 
         A GCM session: a GCM-tagged clear receipt (:func:`decode_command_receipt`). An
         RSA session: the first channel-0 frame of a sent request's type whose payload
@@ -5413,11 +5453,12 @@ class StationSession:
         if channel != 0:
             return None
         if self._aes_key is None:
-            return decode_command_receipt(frame)
+            code = decode_command_receipt(frame)
+            return None if code is None else (code, None)
         code = decode_command_result(frame.payload)
-        if code is None or not self._take_result_due(frame.type):
+        if code is None or (slot := self._take_result_due(frame.type)) is None:
             return None
-        return code
+        return code, slot
 
     def _note_receipt(self, inbound: Inbound, code: int) -> None:
         """Count a command receipt and log it at DEBUG: frame type, channel, encryption

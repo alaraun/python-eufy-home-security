@@ -406,23 +406,27 @@ async def test_report_only_off_is_refused_before_sending(station: FakeStation) -
     assert station.conn_inits == 0
 
 
-async def test_an_arm_only_acknowledged_is_not_applied(station: FakeStation) -> None:
-    """The transport ACK alone, with no result and no report, is no success."""
-    station.unanswered_commands = {1224}
+async def test_an_arm_only_acknowledged_is_not_applied(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A receipt 0 (the station took the arm off its queue) stops the resend; with no
+    result and no report, it is no success."""
+    monkeypatch.setattr(session_module, "COMMAND_RESEND_AFTER", 0.1)
     session = make_session(station, Provider(station, account_id="f" * 40))
     try:
-        with pytest.raises(CommandNotAppliedError, match="never acted"):
+        with pytest.raises(CommandNotAppliedError, match=r"took the arm \(receipt 0\)"):
             await session.async_set_guard_mode(GuardMode.HOME, timeout=1.0)
     finally:
         await session.async_close()
+    assert [o["cmd"] for o in station.received] == [1224]  # never resent
     assert station.guard_mode == 0
     assert session.guard_mode != GuardMode.HOME
 
 
 async def test_arm_takes_only_its_own_reply_as_the_result(station: FakeStation) -> None:
-    # The station leaves every arm unanswered, so only injected frames answer.
-    station.unanswered_commands = {1224}
-    session = make_session(station, Provider(station))
+    # A foreign account: the station takes every arm off its queue (receipt 0) and
+    # drops it, so only injected frames answer.
+    session = make_session(station, Provider(station, account_id="f" * 40))
     events: list[Event] = []
     session.subscribe(events.append)
     loop = asyncio.get_running_loop()
@@ -445,6 +449,45 @@ async def test_arm_takes_only_its_own_reply_as_the_result(station: FakeStation) 
     assert armed is GuardMode.HOME
     assert session.guard_mode is GuardMode.HOME
     assert [e.mode for e in events if isinstance(e, GuardModeChanged)][-1] is GuardMode.HOME
+
+
+async def test_a_receipt_then_a_rejecting_result_rejects_the_arm(station: FakeStation) -> None:
+    """A GCM receipt 0 only takes the arm off the queue: the result that follows decides."""
+    session = make_session(station, Provider(station, account_id="f" * 40))
+    try:
+        await session.async_connect()
+        reply_later(station, {"cmd": 1224, "code": -104})
+        with pytest.raises(CommandRejectedError) as rejected:
+            await session.async_set_guard_mode(GuardMode.HOME, timeout=2.0)
+        receipts = session.stats().receipts_by_code
+    finally:
+        await session.async_close()
+    assert (rejected.value.command, rejected.value.code) == (1224, -104)
+    assert receipts == {"0": 1}  # the arm's receipt came first
+    assert session.guard_mode != GuardMode.HOME
+
+
+@pytest.mark.parametrize("ticks", [0, 1, 2, 3, 5])
+async def test_another_requests_receipt_is_not_the_arms_result(
+    station: FakeStation, ticks: int
+) -> None:
+    """A still fetch's receipt 0, landing in any order around the arm's send, does not
+    apply an arm the station never answers."""
+    station.images["/zx/a.jpg"] = b"\xff\xd8image-A"
+    station.unanswered_commands = {1224}
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_get_params()
+        still = asyncio.ensure_future(session.async_fetch_still("/zx/a.jpg"))
+        for _ in range(ticks):
+            await asyncio.sleep(0)
+        with pytest.raises(CommandNotAppliedError):
+            await session.async_set_guard_mode(GuardMode.HOME, timeout=1.0)
+        await still
+    finally:
+        await session.async_close()
+    assert station.guard_mode != GuardMode.HOME
+    assert session.guard_mode != GuardMode.HOME
 
 
 async def test_a_dump_key_the_library_does_not_read_is_kept_and_logged_once(
@@ -4125,7 +4168,8 @@ def _result_frame(encryption: int, payload: bytes, *, ftype: int = FrameType.CMD
 def _sent(session: StationSession, ftype: int, *, ago: float = 0.0) -> None:
     """Mark a send of ``ftype`` awaiting its result, ``ago`` seconds back."""
     due = time.monotonic() - ago + session_module.RSA_RESULT_WINDOW
-    session._results_due.setdefault(ftype, []).append(due)
+    session._result_slot += 1
+    session._results_due.setdefault(ftype, []).append((due, session._result_slot))
 
 
 _NOT_HANDLED = struct.pack("<i", RECEIPT_NOT_HANDLED)
@@ -4541,6 +4585,29 @@ async def test_a_result_refusing_an_arm_raises_its_code(
         await session.async_close()
     assert type(err.value) is error
     assert (err.value.command, err.value.code) == (1224, code)
+
+
+async def test_an_rsa_arm_takes_only_the_result_after_those_owed_before_it(
+    station: FakeStation, short_settle: None
+) -> None:
+    """A result owed to an earlier send, arriving after the arm's, is that send's: the
+    arm takes the next one."""
+    standalone_camera(station)
+    station.arm_result_delay = 0.3
+    session = make_rsa_session(station)
+    try:
+        await session.async_get_params()
+        before = dict(session.stats().receipts_by_code)
+        _sent(session, FrameType.CMD_TRANSFER)  # an earlier request, its result owed
+        arm = asyncio.ensure_future(session.async_set_guard_mode(GuardMode.HOME, timeout=3.0))
+        await wait_until(lambda: [o["cmd"] for o in station.received] == [1224])
+        station.send_receipt(FrameType.CMD_TRANSFER, -1)  # the earlier request's result
+        armed = await arm
+        after = session.stats().receipts_by_code
+    finally:
+        await session.async_close()
+    assert armed is GuardMode.HOME
+    assert after == before | {"-1": 1, "0": before.get("0", 0) + 1}
 
 
 DOORBELL_SN = "T8200P2000054321"

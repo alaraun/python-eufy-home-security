@@ -674,7 +674,8 @@ cloud and no push opt-in. What is covered:
   follows (or never comes: a standalone camera such as a T8414 sends none) only moves
   the mode again when it says otherwise. A non-zero code raises (`CommandUnsupportedError`
   for −108 and −103, else `CommandRejectedError`), and an arm the station only
-  acknowledged raises `CommandNotAppliedError`. The request takes the form the eufy app
+  acknowledged or took off its queue (a receipt 0, which is no result) raises
+  `CommandNotAppliedError`. The request takes the form the eufy app
   uses for the station's model (`commands.md` § Arming); nothing to choose in the
   integration.
 - A mode set to the one already in force sends no report; its result settles it (a
