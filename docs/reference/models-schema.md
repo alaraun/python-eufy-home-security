@@ -109,10 +109,11 @@ own recipes prove the new form sends the same bytes:
   equals the primary's in everything but `variant_of` and a placement (`page`, `group`,
   `order`) it lacks is left out of the file: it would be a second entity for the same
   write and read. A variant that differs in any codec, domain, label or control stays,
-  and so does one an `applies_when` names. A key the bundled file already carries is
-  never dropped: a released key stays as `variant_of` its primary (the generator reads
-  the files in `--out` before writing). A v1 reference row of a dropped key is
-  checked through the longest remaining key it extends.
+  and so does one an `applies_when` names. A key a release bundled is never dropped: a
+  key the model lists in `RELEASED_KEYS.json` (product code → the setting keys a release
+  shipped, committed next to `INDEX.json`) stays as `variant_of` its primary. The
+  generator reads only that manifest, never the files in `--out`. A v1 reference row of a
+  dropped key is checked through the longest remaining key it extends.
 
 The v1 reference rows are checked again after shaping, with their payloads restated in
 the shaped form. `variant_of` names another setting of the file, which has no

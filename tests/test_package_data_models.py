@@ -52,7 +52,7 @@ def _wheel_members(tmp_path: Path) -> set[str]:
 
 def test_every_indexed_model_snapshot_ships_and_nothing_else(tmp_path: Path) -> None:
     """The wheel holds exactly one ``models/<PN>.json`` per ``INDEX.json`` code (159), the
-    index and the resource packages, and none of the removed v1 data or modules."""
+    index, the released-keys manifest and the resource packages, and none of the removed v1 data or modules."""
     codes = json.loads((ROOT / "src" / MODELS / "INDEX.json").read_text("utf-8"))["codes"]
     assert len(codes) == 159
     members = _wheel_members(tmp_path)
@@ -61,8 +61,13 @@ def test_every_indexed_model_snapshot_ships_and_nothing_else(tmp_path: Path) -> 
         for member in members
         if member.startswith(MODELS) and member.endswith(".json")
     }
-    assert sorted(shipped - {"INDEX"}) == sorted(codes)
-    for required in (f"{DATA}__init__.py", f"{MODELS}__init__.py", f"{MODELS}INDEX.json"):
+    assert sorted(shipped - {"INDEX", "RELEASED_KEYS"}) == sorted(codes)
+    for required in (
+        f"{DATA}__init__.py",
+        f"{MODELS}__init__.py",
+        f"{MODELS}INDEX.json",
+        f"{MODELS}RELEASED_KEYS.json",
+    ):
         assert required in members, required
     for removed in (
         f"{DATA}corpus_unanimous.json",

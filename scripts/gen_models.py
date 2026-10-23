@@ -15,11 +15,17 @@ must render to its recorded cmd/subCmd/params unless ``RELEASE_ACCEPTED`` names 
 that fails is not written and the run exits 1. ``--check`` regenerates into a temporary
 directory and compares byte for byte with ``--out``.
 
+A same-codec variant is kept when the released-keys manifest (``--released``, committed
+next to ``INDEX.json``) lists its key for the model; the generator never reads ``--out``
+to decide what to write. ``--update-released REF`` unions the setting keys of every model
+file bundled at git ``REF`` (a release tag) into the manifest and writes nothing else.
+
 Runs on a maintainer host only (needs Node and the private cache); nothing at runtime
 executes vendor code. See docs/reference/models-schema.md.
 
     gen_models.py [PN ...] [--check] [--cache DIR] [--out DIR] [--jobs N]
                   [--labels FILE] [--trees FILE] [--titles FILE] [--app-version V]
+                  [--released FILE] [--update-released REF]
 """
 
 from __future__ import annotations
@@ -50,6 +56,8 @@ DRIVER = ROOT / "scripts" / "gen_models_driver.js"
 DEFAULT_CACHE = ROOT / ".work" / "cache" / "things_all"
 DEFAULT_OUT = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models"
 INDEX = "INDEX.json"  # {"schema_version", "codes"}: the bundled product codes, sorted
+RELEASED = "RELEASED_KEYS.json"  # {PN: sorted setting keys a release bundled}: an input
+DEFAULT_RELEASED = DEFAULT_OUT / RELEASED
 DEFAULT_LABELS = ROOT / ".work" / "tools" / "data" / "app_choice_labels.json"
 DEFAULT_TREES = ROOT / ".work" / "tools" / "data" / "settings_trees.json"
 DEFAULT_TITLES = ROOT / ".work" / "tools" / "data" / "app_setting_titles.json"
@@ -890,7 +898,7 @@ def generate(
     files (None: TD labels only / no UI placement); ``reference`` its v1 reference rows
     (``child`` rows check the base context, ``standalone`` rows the standalone one);
     ``titles`` the app setting-title file (None: no names, app units or variants);
-    ``released`` the setting keys the model's bundled file carries (never dropped).
+    ``released`` the model's keys in the released-keys manifest (never dropped).
     Raises CheckError when a codec does not reproduce a swept recipe or an unaccepted
     reference row.
     """
@@ -1114,7 +1122,7 @@ def index_text(codes: list[str]) -> str:
 
 def write_index(out: Path) -> None:
     """Write ``out/INDEX.json`` from the ``<PN>.json`` files in ``out``."""
-    codes = [p.stem for p in out.glob("*.json") if p.name != INDEX]
+    codes = [p.stem for p in out.glob("*.json") if p.name not in {INDEX, RELEASED}]
     (out / INDEX).write_text(index_text(codes), encoding="utf-8")
 
 
@@ -1124,6 +1132,7 @@ def compare(fresh: Path, committed: Path, pns: list[str] | None) -> list[str]:
         names = {f"{pn}.json" for pn in pns}
     else:
         names = {p.name for p in fresh.glob("*.json")} | {p.name for p in committed.glob("*.json")}
+        names.discard(RELEASED)
     return sorted(
         name
         for name in names
@@ -1150,17 +1159,33 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--trees", type=Path, default=DEFAULT_TREES)
     parser.add_argument("--titles", type=Path, default=DEFAULT_TITLES)
     parser.add_argument("--app-version", default=DEFAULT_APP_VERSION)
+    parser.add_argument(
+        "--released",
+        type=Path,
+        default=DEFAULT_RELEASED,
+        help="released-keys manifest: same-codec variants it lists stay as variant_of",
+    )
+    parser.add_argument(
+        "--update-released",
+        metavar="REF",
+        help="union the keys of the model files bundled at git REF into --released, then exit",
+    )
     args = parser.parse_args(argv)
+    if args.update_released:
+        update_released(args.released, keys_at(args.update_released))
+        return 0
     cache: Path = args.cache
     missing = _missing_inputs(cache, args.product_codes)
     if missing is None and not all(p.is_file() for p in (args.labels, args.trees, args.titles)):
         missing = "label, settings-tree or title data not found"
+    if missing is None and not args.released.is_file():
+        missing = f"no released-keys manifest at {args.released}"
     if missing is not None:
         print(f"gen_models: {missing}", file=sys.stderr)
         return 2
     if args.check:
         with tempfile.TemporaryDirectory() as tmp:
-            rc = _generate_all(args, cache, Path(tmp), quiet=True, released=args.out)
+            rc = _generate_all(args, cache, Path(tmp), quiet=True)
             if rc:
                 return rc
             differ = compare(Path(tmp), args.out, args.product_codes)
@@ -1171,26 +1196,62 @@ def main(argv: list[str] | None = None) -> int:
     return _generate_all(args, cache, args.out, quiet=False)
 
 
-def released_keys(out: Path, product_code: str) -> set[str]:
-    """The setting keys of the model's file in ``out`` (empty when there is none)."""
-    path = out / f"{product_code}.json"
-    return set(_read_json(path)["settings"]) if path.is_file() else set()
+def released_text(released: Mapping[str, Collection[str]]) -> str:
+    """The text of the released-keys manifest: product code -> sorted setting keys."""
+    return codec.dump({pn: sorted(set(keys)) for pn, keys in released.items()})
 
 
-def _generate_all(
-    args: argparse.Namespace, cache: Path, out: Path, *, quiet: bool, released: Path | None = None
-) -> int:
+def merge_released(
+    released: Mapping[str, Collection[str]], bundled: Mapping[str, Collection[str]]
+) -> dict[str, list[str]]:
+    """``released`` with the keys of ``bundled`` (product code -> setting keys) added."""
+    out = {pn: set(keys) for pn, keys in released.items()}
+    for pn, keys in bundled.items():
+        out.setdefault(pn, set()).update(keys)
+    return {pn: sorted(keys) for pn, keys in sorted(out.items())}
+
+
+def keys_at(ref: str) -> dict[str, list[str]]:
+    """The setting keys of every model file that ``INDEX.json`` lists at git ``ref``."""
+    git = shutil.which("git")
+    if git is None:
+        raise GeneratorError("git is not on PATH")
+    folder = DEFAULT_OUT.relative_to(ROOT).as_posix()
+
+    def show(name: str) -> dict[str, Any]:
+        text = subprocess.run(
+            [git, "show", f"{ref}:{folder}/{name}"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        data = json.loads(text)
+        if not isinstance(data, dict):
+            raise GeneratorError(f"{ref}:{name}: not a JSON object")
+        return data
+
+    return {pn: sorted(show(f"{pn}.json")["settings"]) for pn in show(INDEX)["codes"]}
+
+
+def update_released(path: Path, bundled: Mapping[str, Collection[str]]) -> None:
+    """Union ``bundled`` (product code -> setting keys) into the manifest at ``path``."""
+    current = _read_json(path) if path.is_file() else {}
+    path.write_text(released_text(merge_released(current, bundled)), encoding="utf-8")
+
+
+def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bool) -> int:
     """Generate the requested models into ``out``; 1 when any model failed its check.
 
-    The keys of the files in ``released`` (default ``out``), read before any write, are
-    kept when they would be dropped as same-codec variants.
+    Nothing in ``out`` is read: the same-codec variants kept are those the released-keys
+    manifest (``args.released``) lists.
     """
     labels = _read_json(args.labels)
     trees = _read_json(args.trees)
     titles = _read_json(args.titles)
+    released = _read_json(args.released)
     reference = load_reference()
     pns = args.product_codes or sorted(d.name for d in cache.iterdir() if d.is_dir())
-    bundled = {pn: released_keys(released or out, pn) for pn in pns}
     out.mkdir(parents=True, exist_ok=True)
 
     def build(pn: str) -> tuple[str, str | None, dict[str, int]]:
@@ -1203,7 +1264,7 @@ def _generate_all(
                 args.app_version,
                 reference=reference.get(pn),
                 titles=titles,
-                released=bundled[pn],
+                released=released.get(pn, ()),
             )
         except CheckError as err:
             print(err, file=sys.stderr)

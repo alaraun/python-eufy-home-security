@@ -3,6 +3,7 @@
 Each row of ``tests/fixtures/models_v1_reference.json`` is rendered with its model's codec
 in the context and channel it was recorded in; cmd, subCmd and params must equal the
 recorded recipe, unless ``gen_models.RELEASE_ACCEPTED`` names the (PN, identifier).
+Every key of the released-keys manifest (``RELEASED_KEYS.json``) is still bundled.
 Needs only committed files: the renderer and the accepted list are loaded from
 ``scripts/`` by path, and nothing of the library is imported.
 """
@@ -173,3 +174,51 @@ def test_hardware_wire_values_are_what_the_payloads_render_to() -> None:
             assert hits, (item["identifier"], payload, params)
             sent.update(hits)
         assert sent == wires, item["identifier"]
+
+
+def test_every_released_key_is_still_bundled() -> None:
+    """Each manifest model is indexed and its file carries every key the manifest lists;
+    the manifest is in its canonical form."""
+    text = (MODELS / gen_models.RELEASED).read_text(encoding="utf-8")
+    released = json.loads(text)
+    assert text == gen_models.released_text(released)
+    codes = json.loads((MODELS / gen_models.INDEX).read_text(encoding="utf-8"))["codes"]
+    assert sorted(set(released) - set(codes)) == []
+    assert {
+        pn: missing
+        for pn, keys in released.items()
+        if (missing := sorted(set(keys) - set(_settings(pn))))
+    } == {}
+
+
+def test_merge_released_adds_new_keys_and_keeps_old_ones() -> None:
+    released = {"T0002": ["b", "a"], "T0001": ["x"]}
+    bundled = {"T0001": ["y", "x"], "T0003": ["z"]}
+    assert gen_models.merge_released(released, bundled) == {
+        "T0001": ["x", "y"],
+        "T0002": ["a", "b"],
+        "T0003": ["z"],
+    }
+
+
+def test_update_released_unions_into_the_file(tmp_path: Path) -> None:
+    path = tmp_path / gen_models.RELEASED
+    gen_models.update_released(path, {"T0001": ["b"]})
+    gen_models.update_released(path, {"T0001": ["a"], "T0002": ["c"]})
+    assert path.read_text("utf-8") == gen_models.released_text(
+        {"T0001": ["a", "b"], "T0002": ["c"]}
+    )
+
+
+def test_index_and_check_leave_the_manifest_out(tmp_path: Path) -> None:
+    """The manifest is no model: ``INDEX.json`` does not list it and ``--check`` does not
+    compare it (a fresh run does not write it)."""
+    fresh, committed = tmp_path / "fresh", tmp_path / "committed"
+    for folder in (fresh, committed):
+        folder.mkdir()
+        (folder / "T0001.json").write_text("{}\n", encoding="utf-8")
+        gen_models.write_index(folder)
+    (committed / gen_models.RELEASED).write_text("{}\n", encoding="utf-8")
+    gen_models.write_index(committed)
+    assert json.loads((committed / gen_models.INDEX).read_text("utf-8"))["codes"] == ["T0001"]
+    assert gen_models.compare(fresh, committed, None) == []

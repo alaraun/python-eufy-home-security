@@ -57,6 +57,16 @@ reference row that is meant to change (the vendor changed the recipe) goes into
 `INDEX.json` lists every `<PN>.json` in the output directory, so a new product code is
 bundled by generating its file.
 
+Which keys a release shipped is an input too: `RELEASED_KEYS.json`, next to
+`INDEX.json`, lists per product code every setting key a release bundled. A variant that
+duplicates its primary is left out of a file unless that list names its key, so a key
+never disappears after it shipped; the output directory's earlier contents play no part.
+After each release, union its keys into the list and commit it:
+
+```
+uv run python scripts/gen_models.py --update-released <tag>   # the release just tagged
+```
+
 The live-open table (`devices/_live_open_data.py`: which library open reproduces each
 product handler's `open_live_stream`, per connect type) is generated from the same cache:
 

@@ -19,7 +19,7 @@ wire values (the probe replies are passed in; this module does no I/O):
 
 Then every ``rw`` setting gets ``control`` (see ``control_of``), and an ``rw`` variant
 whose whole codec equals its primary's is dropped (``drop_same_codec_variants``), unless
-the bundled file already carries its key (``variants_to_drop``): a released key stays.
+the released-keys manifest lists its key (``variants_to_drop``): a released key stays.
 See docs/reference/models-schema.md.
 """
 
@@ -485,8 +485,8 @@ def same_codec_variants(settings: Settings) -> list[str]:
 
 def variants_to_drop(per_context: Sequence[Settings], released: Collection[str] = ()) -> set[str]:
     """The same-codec variants to drop: those that duplicate their primary in every
-    context of ``per_context``, less the keys in ``released`` (the bundled file's), which
-    stay as ``variant_of`` their primary."""
+    context of ``per_context``, less the keys in ``released`` (the model's released
+    keys), which stay as ``variant_of`` their primary."""
     drop = set.intersection(*(set(same_codec_variants(s)) for s in per_context))
     return drop - set(released)
 
