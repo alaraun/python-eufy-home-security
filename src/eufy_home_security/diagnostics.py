@@ -59,7 +59,7 @@ _STOPPING: Final = (RateLimitedError, SessionReplacedError, AuthenticationError)
 _ERROR_LEN: Final = 300
 
 HOUSE: Final = "house"
-"""The account-wide house device list (``app/house/get_devs_list``, what the library serves)."""
+"""The account-wide house device list (``app/house/get_devs_list``)."""
 SECURITY_STATIONS: Final = "security_stations"
 SECURITY_DEVICES: Final = "security_devices"
 INVITES: Final = "invites"
@@ -134,7 +134,7 @@ class DeviceEntryReport:
 
     ``listed_by`` names those lists (:data:`HOUSE`, :func:`house_source`,
     :data:`SECURITY_STATIONS`, :data:`SECURITY_DEVICES`); a device the library serves is
-    listed by :data:`HOUSE`. ``model_support`` is the catalogue's support grade, None
+    listed by :data:`HOUSE` or a :func:`house_source`. ``model_support`` is the catalogue's support grade, None
     for a model the catalogue lacks; ``cloud_model`` the entry's own ``device_model``
     (``station_model`` on a security-realm station). ``connect_type`` is how a sub-device is reached
     (its station's kind), None for a station. ``owner`` is ``"own"`` or ``"owner N"``,

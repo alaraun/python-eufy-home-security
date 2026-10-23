@@ -1112,8 +1112,9 @@ class EufySecurity:
     async def async_probe_cloud_session(self) -> None:
         """Ask the cloud whether it still accepts this client's session; raises if not.
 
-        One authenticated device-list fetch on the cached session, for a consumer to
-        run on a long interval (hours) so a kick-out or a lapsed key identity that
+        One authenticated device-list fetch on the cached session (its account-wide,
+        house and per-house lists: :meth:`EufyCloudApi.async_fetch_devices`), for a
+        consumer to run on a long interval (hours) so a kick-out or a lapsed key identity that
         happens while nothing else talks to the cloud is noticed. Nothing is rebuilt
         or applied: no :class:`~.events.DevicesChanged`, no station update, no wake;
         the fetched list replaces the cached one as any refresh does.

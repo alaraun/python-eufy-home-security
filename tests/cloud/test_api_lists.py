@@ -49,13 +49,11 @@ async def test_house_list_and_a_house_scoped_device_list(
     assert [(d.device_sn, d.region, d.source) for d in devices] == [
         (SYNTHETIC.camera_sn, "eu", "house")
     ]
-    assert _bodies(fake_mega, "devices") == [
-        {"house_id": "house-1", "categories": [], "add_pns": []}
-    ]
+    assert _bodies(fake_mega, "devices") == [{"house_id": "house-1", "device_sns": {}}]
     assert cache.cached_devices() is None  # a listing is never cached
 
 
-async def test_the_account_wide_house_list_sends_the_librarys_body(
+async def test_the_account_wide_house_list_sends_the_apps_body(
     fake_mega: FakeMega, cache: SessionCache
 ) -> None:
     fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 18}]
@@ -66,7 +64,7 @@ async def test_the_account_wide_house_list_sends_the_librarys_body(
             await api.async_login()
             devices = await api.async_list_house_devices("eu")
     assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
-    assert _bodies(fake_mega, "devices") == [{"device_sn": ""}]
+    assert _bodies(fake_mega, "devices") == [{"house_id": "", "device_sns": {}}]
 
 
 async def test_pending_invitations_of_homes_and_devices(

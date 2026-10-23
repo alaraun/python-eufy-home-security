@@ -128,7 +128,8 @@ class FakeMega:
         # Endpoint ("login", "devices", "push" …) -> a delay overriding ``latency``.
         self.slow: dict[str, float] = {}
         self.cipher_objects: list[dict[str, Any]] | None = None
-        # get_house_list's house_infos, and each house id's own device list.
+        # get_house_list's house_infos, and each house id's own device list, both on
+        # ``region``'s cluster only.
         self.houses: list[dict[str, Any]] = []
         self.house_devices: dict[str, list[dict[str, Any]]] = {}
         # The security realm's get_hub_list / get_devs_list entries.
@@ -242,7 +243,9 @@ class FakeMega:
         )
         mock.post(
             _url(house, const.HOUSES_PATH),
-            callback=self._delayed("houses", self._house_list, region),
+            callback=self._delayed(
+                "houses", functools.partial(self._house_list, region=region), region
+            ),
             repeat=True,
         )
         for host, path, endpoint in (
@@ -494,8 +497,10 @@ class FakeMega:
         self.calls.append(("devices", payload))
         if failure := self._failure_once("devices", kwargs):
             return failure
-        if "house_id" in payload:
+        if payload.get("house_id"):
             listed = self.house_devices.get(str(payload["house_id"]), [])
+            if region and region != self.region:
+                listed = []
             return self._reply(self._shared_for(kwargs), 0, {"devices": listed})
         token = str(kwargs["headers"].get("x-auth-token"))
         if (
@@ -512,11 +517,12 @@ class FakeMega:
         data = self.data_override.get("devices", {"devices": self.devices})
         return self._reply(self._shared_for(kwargs), 0, data)
 
-    def _house_list(self, url: str, **kwargs: Any) -> CallbackResult:
+    def _house_list(self, url: str, *, region: str = "", **kwargs: Any) -> CallbackResult:
         self.calls.append(("houses", self._decrypt_body(kwargs)))
         if failure := self._failure_once("houses", kwargs):
             return failure
-        return self._reply(self._shared_for(kwargs), 0, {"house_infos": self.houses})
+        houses = self.houses if not region or region == self.region else []
+        return self._reply(self._shared_for(kwargs), 0, {"house_infos": houses})
 
     def _invite_list(self, url: str, *, endpoint: str, **kwargs: Any) -> CallbackResult:
         self.calls.append((endpoint, self._decrypt_body(kwargs)))

@@ -103,8 +103,8 @@ _SUCCESS: Final = int(const.CloudCode.SUCCESS)
 _HTTP_429_THROTTLE: Final = const.Throttle(login_only=False, seconds=const.REQUEST_HOLD_OFF_SECONDS)
 """The hold-off an HTTP 429 answer starts (a request throttle)."""
 
-# The account-wide house device-list body (the house-scoped one names a ``house_id``).
-_ACCOUNT_DEVICES_BODY: Final[Mapping[str, Any]] = MappingProxyType({"device_sn": ""})
+_ALL_HOUSES: Final = ""
+"""The ``house_id`` of the account-wide device list (the eufy app's "All Devices")."""
 
 # Endpoints whose answer is logged as the count of this list only: their entries carry
 # names, nicknames and locations (the full answer goes to the wire logger).
@@ -410,7 +410,7 @@ class EufyCloudApi:
     :data:`~.const.DEFAULT_COUNTRY`.
 
     ``region`` pins the login country's scope to that region and leaves out the extra
-    countries homed elsewhere. A scope whose device list is empty is *suspended*: no
+    countries homed elsewhere. A scope whose device lists are empty is *suspended*: no
     later fetch or login asks it again until a rescan (``rescan_regions=True``), or,
     with ``scan_regions``, every fetch asks every scope. Scopes stand where regions do
     everywhere (listings, suspension, sessions, :attr:`CloudDevice.region`); the login
@@ -1980,10 +1980,11 @@ class EufyCloudApi:
         Asks each login scope of :meth:`regions_to_list` (``rescan_regions``: every
         scope), after looking up the login country when a login may follow and the
         extra countries' home regions neither cached nor answered in this process (a
-        rescan asks every one not cached again). Each device
-        is tagged with the scope that listed it (:attr:`CloudDevice.region`;
-        a serial two scopes list keeps the first scope's entry). A scope that lists no
-        devices is suspended. With every scope suspended nothing is sent and the cached
+        rescan asks every one not cached again). A scope's devices are its account-wide
+        list merged with each of its houses' own lists (:meth:`_account_entries`). Each
+        device is tagged with the scope that listed it (:attr:`CloudDevice.region`;
+        a serial two scopes list keeps the first scope's entry). A scope whose lists
+        name no device is suspended. With every scope suspended nothing is sent and the cached
         (empty) list is returned. Nothing is cached unless every scope asked answered.
         Sets :attr:`device_list_source` (``"fetched"``, or ``"unsent"`` when nothing
         was sent).
@@ -2012,7 +2013,7 @@ class EufyCloudApi:
         listed_by: dict[str, str] = {}
         for region in regions:
             try:
-                raw = await self._house_entries(region, _ACCOUNT_DEVICES_BODY, login=True)
+                raw = await self._account_entries(region)
             except _ScopeRefusedError:
                 continue  # skipped until a rescan; the other scopes carry on
             counts[region] = len(raw)
@@ -2059,6 +2060,21 @@ class EufyCloudApi:
         self.device_list_source = "fetched"
         return devices
 
+    async def _account_entries(self, region: str) -> list[Mapping[str, Any]]:
+        """Every raw device entry ``region`` lists for the account, the way the eufy app's
+        house selector shows them **[declared: app]**: the account-wide list, then the
+        house list and each house's own list, merged by :func:`_merge_house`. A shared
+        home's devices can be in its house's list only (see docs/protocol/cloud.md
+        § Device list)."""
+        entries = await self._house_entries(region, _house_devices_body(_ALL_HOUSES), login=True)
+        for house in await self.async_list_houses(region):
+            answer = await self._house_entries(
+                region, _house_devices_body(house.house_id), login=True
+            )
+            _LOGGER.debug("a house of the %s region lists %d device(s)", region, len(answer))
+            entries = _merge_house(entries, house.house_id, answer)
+        return entries
+
     async def _house_entries(
         self, region: str, body: Mapping[str, Any], *, login: bool
     ) -> list[Mapping[str, Any]]:
@@ -2073,16 +2089,12 @@ class EufyCloudApi:
     ) -> list[CloudDevice]:
         """The house device list of ``region`` as the cloud answers it now; not cached.
 
-        ``house_id`` None asks the account-wide list :meth:`async_fetch_devices` reads
-        (body ``{"device_sn": ""}``); a house id asks that house in the app's body
-        (``house_id``, empty ``categories`` and ``add_pns``). Each device is tagged with
-        ``region``. Without ``login`` nothing logs in (see :meth:`_with_session`).
+        ``house_id`` None asks the account-wide list, a house id that house's own list,
+        both in the eufy app's body (see :meth:`async_fetch_devices`, which serves their
+        merge). Each device is tagged with ``region``. Without ``login`` nothing logs in
+        (see :meth:`_with_session`).
         """
-        body: Mapping[str, Any] = (
-            _ACCOUNT_DEVICES_BODY
-            if house_id is None
-            else {"house_id": house_id, "categories": [], "add_pns": []}
-        )
+        body = _house_devices_body(_ALL_HOUSES if house_id is None else house_id)
         raw = await self._house_entries(region, body, login=login)
         return [CloudDevice.from_api({**entry, REGION_KEY: region}) for entry in raw]
 
@@ -3416,6 +3428,28 @@ def _cipher_items(data: object) -> list[object]:
     if not isinstance(items, list):
         raise ProtocolError(f"cloud response to {const.CIPHERS_PATH} has no cipher list")
     return items
+
+
+def _house_devices_body(house_id: str) -> dict[str, Any]:
+    """The eufy app's ``get_devs_list`` body **[declared: app]**: ``house_id``
+    :data:`_ALL_HOUSES` asks every device of the account, a house id that house's own."""
+    return {"house_id": house_id, "device_sns": {}}
+
+
+def _merge_house(
+    entries: Sequence[Mapping[str, Any]], house_id: str, answer: Sequence[Mapping[str, Any]]
+) -> list[Mapping[str, Any]]:
+    """``entries`` with house ``house_id``'s own list ``answer`` merged in as the eufy app
+    merges it **[declared: app]**: the answer replaces every entry of that house and
+    every entry of a serial it names."""
+    named = {str(entry.get("device_sn") or "") for entry in answer}
+    kept = [
+        entry
+        for entry in entries
+        if str(entry.get("device_sn") or "") not in named
+        and str(entry.get("house_id") or "") != house_id
+    ]
+    return [*kept, *answer]
 
 
 def _device_list(data: object) -> list[Mapping[str, Any]]:

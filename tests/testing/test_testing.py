@@ -91,7 +91,13 @@ async def test_a_cold_start_records_each_cloud_request_redacted(fake: FakeStatio
         await eufy.async_close()
     # Calls to other regions (``call@region``) are left to the region tests.
     home_region_calls = [call for call in cloud.calls if "@" not in call]
-    assert home_region_calls == ["login", "devices", "things", "cipher:T8030***2345"]
+    assert home_region_calls == [
+        "login",
+        "devices",
+        "houses",
+        "things",
+        "cipher:T8030***2345",
+    ]
 
 
 async def test_a_region_lists_its_own_devices(fake: FakeStation) -> None:
@@ -103,7 +109,14 @@ async def test_a_region_lists_its_own_devices(fake: FakeStation) -> None:
     finally:
         await eufy.async_close()
     assert {station.device.region for station in stations} == {"us"}
-    assert cloud.calls[:4] == ["login@eu", "login", "devices@eu", "devices"]
+    assert cloud.calls[:6] == [
+        "login@eu",
+        "login",
+        "devices@eu",
+        "houses@eu",
+        "devices",
+        "houses",
+    ]
 
 
 async def test_a_login_error_is_raised_and_the_cloud_status_agrees(fake: FakeStation) -> None:
@@ -225,7 +238,7 @@ async def test_a_served_401_costs_one_login_and_a_retry() -> None:
         await eufy.cloud.async_fetch_devices()
     finally:
         await eufy.async_close()
-    assert cloud.calls == ["devices", "login", "devices"]
+    assert cloud.calls == ["devices", "login", "devices", "houses"]
 
 
 async def test_a_served_429_holds_off_every_later_call() -> None:

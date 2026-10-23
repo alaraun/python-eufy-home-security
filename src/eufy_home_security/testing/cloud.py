@@ -318,7 +318,8 @@ class FakeCloud:
 
     ``houses`` are the ``house_infos`` the ``region`` cluster's house list answers, and
     ``house_devices`` each house id's own device list (a ``get_devs_list`` naming a
-    ``house_id``). ``security_stations`` and ``security_devices`` are the raw entries of
+    house id; an empty ``house_id`` asks the account-wide list, ``devices``).
+    ``security_stations`` and ``security_devices`` are the raw entries of
     the security realm's ``get_hub_list`` and ``get_devs_list`` in the ``region`` cluster
     (see :func:`security_station`, :func:`security_device`); other regions list none of
     these. ``cipher_records`` serves a cipher id the same keys for every station
@@ -517,7 +518,7 @@ class FakeCloud:
             note("client_country")
             self._raise_call_error()
             return {"ab_code": self.client_country or ""}
-        if path == const.DEVICES_PATH and "house_id" in payload:
+        if path == const.DEVICES_PATH and payload.get("house_id"):
             house_id = str(payload["house_id"])
             note(f"house:{house_id}")
             self._raise_call_error()

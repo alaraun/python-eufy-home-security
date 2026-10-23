@@ -244,11 +244,30 @@ two logins per scope, which count in its cluster's login budget.
 
 ## Device list
 
-`POST app-house-{region}-pr.eufy.com/app/house/get_devs_list`, body `{"device_sn": ""}` (encrypted).
+The eufy app shows an account's devices per house: a house selector holding every house
+of `get_house_list`, "All Devices" (the account-wide list) and "Shared Devices" (the
+account-wide entries without a `house_id`); one `get_devs_list` per selection
+**[declared: app]**. A shared home's devices can be listed by its house only: the app
+selects a shared home when its invitation is accepted. So the library asks, per login
+scope and in this order **[declared: app]**:
+
+1. `POST app-house-{region}-pr.eufy.com/app/house/get_devs_list`, body
+   `{"house_id": "", "device_sns": {}}` (encrypted): every device of the account;
+2. `POST app-house-{region}-pr.eufy.com/app/house/get_house_list`, body `{}`;
+3. for each house, in the answer's order, `get_devs_list` with
+   `{"house_id": <house_id>, "device_sns": {}}`.
+
+Each house's answer is merged as the app merges it: it replaces every entry of that
+house (`house_id`) and every entry of a serial it names. A scope is suspended only when
+the merged list is empty, i.e. when every list is. Each fetch costs two requests plus
+one per house per scope.
+
+The device entries:
 
 | field | use |
 |---|---|
 | `device_sn`, `device_type`, `device_name` | identity. `device_type` 18 = HomeBase 3 here, but event records for the same station say 43 **[verified]**. 19 = eufyCam 3. |
+| `house_id` | the house the device belongs to; empty for a device shared on its own **[declared: app]** |
 | `parent_sn` | the station a sub-device is paired to |
 | `device_channel` | the sub-device slot: `mChannel` in commands, `channel` in events, `dev_type` in the parameter dump |
 | `p2p_did` | the DID. Discovery also returns it, so LAN use does not strictly need this field. |
@@ -269,19 +288,23 @@ carries no P2P material.
 
 Read by `EufyCloudApi.async_list_houses`, `async_list_house_devices(region, house_id)`
 and `async_list_security_devices(region, stations=…)`, uncached; the library serves
-only the account-wide house list above. The request bodies are the app's **[declared:
-app]**; the answers below were read on one account (a shared member, one HomeBase 3
-with four paired cameras) **[verified, one account]**.
+the account-wide and per-house lists merged ([Device list](#device-list)), not the
+security realm's. The request bodies are the app's **[declared: app]**; the answers
+below were read on one account (a shared member, one HomeBase 3 with four paired
+cameras) **[verified, one account]**.
 
 - `POST app-house-{region}-pr.eufy.com/app/house/get_house_list`, body `{}`:
   `data.house_infos[]` with `house_id`, `house_name`, `admin_user_id`, `member_type`,
   `is_default`, `user_id` and location fields. The account had three houses in `eu`
-  and one in `us`.
-- The same `get_devs_list` per house: body `{"house_id": …, "categories": [],
-  "add_pns": []}` (the app's shape). On that account one house listed the same six
-  devices as the account-wide body (`{"device_sn": ""}`), the others none; the bare `{}`
-  and `{"house_id": ""}` bodies list the same six as `{"device_sn": ""}`
-  **[verified, one account]**.
+  and one in `us`. A house whose `admin_user_id` is not the account's `user_id` is a
+  home shared with it.
+- The same `get_devs_list` per house. On that account one house listed the same six
+  devices as the account-wide list, the others none; the bodies `{"device_sn": ""}`,
+  `{}`, `{"house_id": ""}` and, per house, `{"house_id": …, "categories": [],
+  "add_pns": []}` answered the same **[verified, one account]**; the app's own body
+  ([Device list](#device-list)) was not compared there. A member of a shared home
+  reported an empty account-wide list while the eufy app showed the home's devices
+  under that home **[open]**.
 - Pending invitations, read by `EufyCloudApi.async_list_invites(region)`: a shared home
   shows its devices only once the invitation is accepted in the eufy app.
   `POST app-house-{region}-pr.eufy.com/app/house/get_house_invite_records`, body

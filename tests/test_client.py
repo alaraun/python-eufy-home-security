@@ -575,7 +575,12 @@ async def test_credentials_come_from_the_owner() -> None:
         creds = await provider(refresh=True, cipher_id=None)
     assert creds.account_id == OWNER_ID
     assert creds.ecc_private_key == key
-    assert cloud.calls == ["things", "owner:T8030***2345", "cipher:T8030***2345"]  # both re-read
+    assert cloud.calls == [
+        "things",
+        "owner:T8030***2345",
+        "houses",
+        "cipher:T8030***2345",
+    ]  # both re-read
 
 
 def _arming(source: EventSource, mode: int, at_ms: int) -> SecurityEvent:
@@ -1591,7 +1596,7 @@ async def test_stations_start_concurrently_and_one_failure_does_not_hold_up_anot
     # to the region tests.
     home_region_calls = [call for call in cloud.calls if "@" not in call]
     assert sorted(home_region_calls) == sorted(
-        ["login", "devices", "things", f"cipher:{redact_serial(up.serial)}"]
+        ["login", "devices", "houses", "things", f"cipher:{redact_serial(up.serial)}"]
     )
 
 
@@ -2121,7 +2126,7 @@ async def test_the_session_probe_fetches_once_and_applies_nothing() -> None:
         eufy.subscribe(events.append)
         cloud.calls.clear()
         await eufy.async_probe_cloud_session()
-        assert cloud.calls == ["devices"]
+        assert cloud.calls == ["devices", "houses"]
         assert events == []  # no DevicesChanged, no CloudProblem
         await eufy.async_close()
 
@@ -2163,7 +2168,7 @@ async def test_a_probe_rekeys_a_lapsed_identity_without_a_login() -> None:
         cloud.call_errors = [FakeCloud.refusal(463, 4404, "get identity error")]
         cloud.calls.clear()
         await eufy.async_probe_cloud_session()
-        assert cloud.calls == ["devices", "devices"]  # refused, re-keyed, retried
+        assert cloud.calls == ["devices", "devices", "houses"]  # refused, re-keyed, retried
         assert eufy.cache.cloud_session("eu")["key_ident"] != before
         assert _problems(events) == []
         await eufy.async_close()

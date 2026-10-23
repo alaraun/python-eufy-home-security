@@ -332,8 +332,11 @@ device, the *login scope* that listed it: the region (`eu`) for the login countr
   this instance or a new one on the same store.
 - While no country is known (no `country`, and eufy names no IP country), both regions
   log in with the region as `ab`.
-- A scope that lists no devices is **suspended**: no later device list, login or push
-  registration asks it. It is asked again only when the user says so:
+- A scope's device list is its account-wide list merged with each of its houses' own
+  lists, as the eufy app shows them (a shared home's devices can be in its house's list
+  only; see `docs/protocol/cloud.md` § Device list).
+- A scope that lists no devices in any of them is **suspended**: no later device list,
+  login or push registration asks it. It is asked again only when the user says so:
   `async_discover(rescan_regions=True)` (one fetch that asks every scope), or the
   client option `EufySecurity(scan_regions=True)` (every device-list refresh asks every
   scope; one whose session lapsed costs a login). With every scope suspended a refresh
@@ -367,10 +370,10 @@ It answers "which devices does eufy list for this account, and could the library
 them", including devices the library does not serve:
 
 - `listings`: per region, how many entries each list answered (or its error): the
-  account-wide house device list the library serves (`house`), the house list
-  (`houses`), the pending invitations (`invites`), and the security realm's station and
-  device lists (`security_stations`, `security_devices`). `houses`: per house, its own
-  device count and this account's role.
+  account-wide house device list (`house`), the house list (`houses`), the pending
+  invitations (`invites`), and the security realm's station and device lists
+  (`security_stations`, `security_devices`). `houses`: per house, its own device count
+  and this account's role.
 - `invites`: each pending invitation sent to the account: whether it shares a home or a
   device, the device's redacted serial and product code, when it was sent.
 - `devices`: each device once, merged over every list that named it (`listed_by`), with
