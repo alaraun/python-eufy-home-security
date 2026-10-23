@@ -318,9 +318,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-p2p", action="store_true", help="skip the stations served over local P2P"
     )
     diagnose.add_argument(
-        "--no-webrtc", action="store_true", help="skip the WebRTC-only stations (T9000, T8N00)"
+        "--no-webrtc",
+        action="store_true",
+        help="skip the WebRTC probe (T9000, T8N00, and a HomeBase 3 with a camera the eufy "
+        "app streams over WebRTC, e.g. a Video Doorbell C30)",
     )
-    webrtc = diagnose.add_argument_group("WebRTC-only stations")
+    webrtc = diagnose.add_argument_group("WebRTC probe")
     webrtc.add_argument(
         "--webrtc-all",
         action="store_true",
@@ -332,7 +335,8 @@ def build_parser() -> argparse.ArgumentParser:
     webrtc.add_argument(
         "--camera-channel",
         type=int,
-        help="channel of the camera for the live view (default: the lowest paired channel)",
+        help="channel of the camera for the live view (default: the lowest channel the eufy "
+        "app streams over WebRTC, else the lowest paired channel)",
     )
     webrtc.add_argument(
         "--listen", type=float, default=8.0, help="seconds of live view to count (default 8)"

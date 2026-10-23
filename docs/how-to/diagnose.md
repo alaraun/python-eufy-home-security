@@ -3,8 +3,10 @@
 `eufy-security diagnose` writes one report of the whole account (read-only unless the
 opt-in below is given): every device
 the eufy cloud lists, the health of each station the library serves over local P2P,
-and a WebRTC probe of the stations the app reaches only over WebRTC (`T9000`, the NVR
-`T8N00`), which the library cannot serve yet. The report is safe to share: it is built
+and a WebRTC probe of the stations the eufy app reaches over WebRTC, which the library
+cannot serve that way yet: the stations it reaches only over WebRTC (`T9000`, the NVR
+`T8N00`), and a HomeBase 3 with a paired camera the app streams over WebRTC (the
+battery doorbells `T8223` and `T8224`, e.g. a Video Doorbell C30). The report is safe to share: it is built
 from descriptors and redacted views only.
 
 ## What it does
@@ -28,7 +30,15 @@ an exception type).
    record `Station.diagnostics()`: model, connection, last error type, LAN-path
    warnings, local-event support, paired devices, session counters, storage figures.
    A failed read is recorded by exception type under `read_errors`.
-4. **WebRTC-only stations:**
+4. **WebRTC probe.** By default it probes each WebRTC-only station (`T9000`, `T8N00`)
+   and each HomeBase 3 with a paired camera the eufy app streams over WebRTC (a
+   `T8223` or `T8224`; the rule is `devices.live_open.app_uses_webrtc`). Such a
+   HomeBase 3 keeps its P2P read of step 3 as well. `--webrtc-all` adds every other
+   station, `--no-webrtc` skips the whole step. Each probed station's entry names why it
+   was probed (`probe_reason`: `webrtc_only`, `webrtc_child` or `webrtc_all`) and the
+   camera its live view used (`live_camera`: channel, model, product code, shortened
+   serial, and `chosen_by`: `camera_channel`, `webrtc_child` or `lowest_channel`;
+   null with `--no-live`). For each:
    - the station's cloud record (firmware, WebRTC SDK version, product code, which
      signaling fields are present, the record's key names, its cloud parameter ids and
      the cloud's guard mode) and its paired devices (model, product code, channel,
@@ -53,8 +63,9 @@ an exception type).
      source, models, small-integer fields (`msg_type`, `event_type`, `guard_mode`,
      `mode` ...) and the key names of its raw payload; `watch_windows_ms` says when
      each watch window ran;
-   - a live call (kind 6) to one camera (the lowest paired channel, or
-     `--camera-channel`): the live open over the data channel (the route the station's
+   - a live call (kind 6) to one camera (`--camera-channel` when given; else the
+     lowest channel the eufy app streams over WebRTC, the doorbell behind a HomeBase 3;
+     else the lowest paired channel): the live open over the data channel (the route the station's
      handler declares), the RTCP route when no RTP packet arrives, then `--listen`
      seconds of stream descriptors (skip with `--no-live`): per RTP payload type the
      packets, bytes, SSRC count, sequence gaps, timestamp steps and clock-rate estimate;
@@ -75,7 +86,7 @@ an exception type).
 
 ### Opt-in: re-send the current guard mode
 
-`--rewrite-guard-mode` is a **write**. For each WebRTC-only station whose cloud guard
+`--rewrite-guard-mode` is a **write**. For each WebRTC-probed station whose cloud guard
 mode (parameter 1224) is Away, Home or Disarmed, it asks on the terminal (showing the
 mode it read) and, on `yes`, sends that same mode once as the station's 1350/1224
 command at channel 255, after the read-only queries, to record the station's reply. A
@@ -108,7 +119,7 @@ A second account the stations are shared to with admin rights avoids that.
 
 ## Running it
 
-Needs Python 3.13 or newer and, for the WebRTC stations, the `rtc` extra (`aioice`,
+Needs Python 3.13 or newer and, for the WebRTC probe, the `rtc` extra (`aioice`,
 `pylibsrtp`; both ship wheels, nothing is compiled). Run it on the same network as the
 stations: local P2P finds them by LAN broadcast.
 
@@ -125,7 +136,8 @@ eufy-security --email you@example.com diagnose --watch 60
 Options: `--station SN|NAME` (one station), `--no-p2p`, `--no-webrtc` (skip either
 part; `--no-webrtc` needs no `rtc` extra), `--output PATH` (default
 `eufy-diagnostics-<ts>.json`). WebRTC part: `--webrtc-all` (also probe the other
-stations over WebRTC, e.g. a HomeBase 3 for comparison), `--channel N` (the
-data-channel call, default 0), `--camera-channel N`, `--listen SECONDS` (default 8),
+stations over WebRTC, e.g. a HomeBase 3 without such a camera, for comparison),
+`--channel N` (the data-channel call, default 0), `--camera-channel N` (the live
+view's camera), `--listen SECONDS` (default 8),
 `--watch SECONDS`, `--no-push`, `--no-commands`, `--no-live`, `--rewrite-guard-mode`
 (the opt-in write above). A summary is printed at the end.
