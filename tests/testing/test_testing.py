@@ -443,3 +443,24 @@ async def test_the_fake_cloud_answers_thing_descriptions_for_the_codes_it_knows(
     finally:
         await eufy.async_close()
     assert cloud.calls == ["things", "things"]
+
+
+async def test_the_fake_cloud_serves_things_errors_once_each_ahead_of_things_error() -> None:
+    cloud = FakeCloud(
+        things={},
+        things_errors=[CommunicationError("first"), CommunicationError("second")],
+        things_error=CommunicationError("standing"),
+    )
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+    seen: list[str] = []
+    try:
+        await eufy.async_login()
+        for _ in range(3):
+            with pytest.raises(CommunicationError) as caught:
+                await eufy.cloud.async_get_thing_descriptions(["T9999"])
+            seen.append(str(caught.value))
+    finally:
+        await eufy.async_close()
+    assert seen == ["first", "second", "standing"]

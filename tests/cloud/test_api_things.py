@@ -294,6 +294,71 @@ async def test_a_second_rekey_answer_raises_key_exchange_refused(
     assert fake_mega.login_calls == 1
 
 
+_EXPIRED_401 = (401, {"code": 401, "msg": "expired"})
+_REPLACED_401 = (401, {"code": int(const.CloudCode.SESSION_REPLACED), "msg": "replaced"})
+
+
+async def test_an_expired_answer_to_the_rekey_exchange_raises_no_session_never_a_login(
+    fake_mega: FakeMega, login_guard: _LoginGuard
+) -> None:
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api, cache = await _seeded(session, login_guard)
+            token = cache.cloud_session("eu")["auth_token"]
+            fake_mega.error_bodies["things"] = [_REKEY]
+            fake_mega.error_bodies["exchange"] = [_EXPIRED_401]
+            with pytest.raises(NoCachedSessionError) as caught:
+                await api.async_get_thing_descriptions(["TX0001"])
+            assert not isinstance(caught.value, AuthenticationError)
+            assert cache.cloud_session("eu")["auth_token"] == token
+            assert api.session_replaced is False
+    assert fake_mega.things_calls == 1
+    assert fake_mega.login_calls == 1
+
+
+@pytest.mark.parametrize("answer", ["HTTP 401", "code 26084"])
+async def test_a_takeover_answer_to_the_rekey_exchange_latches_like_the_call(
+    fake_mega: FakeMega, login_guard: _LoginGuard, answer: str
+) -> None:
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api, cache = await _seeded(session, login_guard)
+            fake_mega.error_bodies["things"] = [_REKEY]
+            if answer == "HTTP 401":
+                fake_mega.error_bodies["exchange"] = [_REPLACED_401]
+            else:
+                fake_mega.code_once["exchange"] = int(const.CloudCode.SESSION_REPLACED)
+            with pytest.raises(SessionReplacedError):
+                await api.async_get_thing_descriptions(["TX0001"])
+            assert api.session_replaced is True
+            assert "auth_token" not in cache.cloud_session("eu")
+            sent = _sent(mock)
+            with pytest.raises(SessionReplacedError):
+                await api.async_get_thing_descriptions(["TX0001"])
+            assert _sent(mock) == sent
+    assert fake_mega.things_calls == 1
+    assert fake_mega.login_calls == 1
+
+
+async def test_a_rekey_answer_to_the_rekey_exchange_raises_key_exchange_refused(
+    fake_mega: FakeMega, login_guard: _LoginGuard
+) -> None:
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api, _cache = await _seeded(session, login_guard)
+            fake_mega.error_bodies["things"] = [_REKEY]
+            fake_mega.error_bodies["exchange"] = [_REKEY]
+            with pytest.raises(KeyExchangeRefusedError) as caught:
+                await api.async_get_thing_descriptions(["TX0001"])
+            assert api.session_replaced is False
+    assert (caught.value.code, caught.value.status) == (4404, 463)
+    assert fake_mega.things_calls == 1  # no retry after a refused exchange
+    assert fake_mega.login_calls == 1
+
+
 @pytest.mark.parametrize("answer", ["HTTP 401", "code 26084"])
 async def test_a_replaced_session_latches_without_a_login(
     fake_mega: FakeMega, login_guard: _LoginGuard, answer: str

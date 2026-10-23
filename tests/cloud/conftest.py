@@ -109,8 +109,8 @@ class FakeMega:
         # get_things_list: the thing descriptions the fake knows; a request is answered
         # with those whose ``profile.product_code`` it names (unknown codes omitted).
         self.things: list[dict[str, Any]] = []
-        # Endpoint ("devices", "ciphers", "push") -> a body code its next call answers
-        # with instead of success, e.g. {"devices": 401}.
+        # Endpoint ("devices", "ciphers", "push", "exchange") -> a body code its next call
+        # answers with instead of success, e.g. {"devices": 401}.
         self.code_once: dict[str, int] = {}
         # Endpoint -> the raw decrypted ``data`` its success carries instead of the default.
         self.data_override: dict[str, Any] = {}
@@ -405,6 +405,8 @@ class FakeMega:
                 refused := self._security_refusal("exchange", kwargs, category=False)
             ):
                 return refused
+            if failure := self._failure_once("exchange", kwargs):
+                return failure
             body = json.loads(kwargs["data"])
             client_pub = crypto.preset_decrypt(body["client_public_key"], preset)
             client_key = crypto.load_public_key(client_pub)

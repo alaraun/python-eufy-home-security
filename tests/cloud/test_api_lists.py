@@ -12,7 +12,12 @@ from aioresponses import aioresponses
 
 from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import EufyCloudApi
-from eufy_home_security.exceptions import AuthenticationError, NoCachedSessionError
+from eufy_home_security.exceptions import (
+    AuthenticationError,
+    KeyExchangeRefusedError,
+    NoCachedSessionError,
+    SessionReplacedError,
+)
 from eufy_home_security.storage import SessionCache
 from eufy_home_security.testing import SYNTHETIC, security_device, security_station
 
@@ -284,6 +289,66 @@ async def test_without_login_an_expired_token_is_not_logged_in_again(
                 await api.async_list_houses("eu", login=False)
     assert not isinstance(caught.value, AuthenticationError)
     assert cache.cloud_session("eu")["auth_token"] == token  # left for the next call
+    assert fake_mega.login_calls == 1
+
+
+_REKEY = (463, {"code": int(const.CloudCode.NEED_NEGOTIATE_KEY), "msg": "get identity error"})
+
+
+async def test_without_login_an_expired_answer_to_the_rekey_exchange_is_no_session(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.error_bodies["houses"] = [_REKEY]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            token = cache.cloud_session("eu")["auth_token"]
+            fake_mega.error_bodies["exchange"] = [(401, {"code": 401, "msg": "expired"})]
+            with pytest.raises(NoCachedSessionError) as caught:
+                await api.async_list_houses("eu", login=False)
+    assert not isinstance(caught.value, AuthenticationError)
+    assert cache.cloud_session("eu")["auth_token"] == token
+    assert not api.session_replaced
+    assert fake_mega.login_calls == 1
+
+
+@pytest.mark.parametrize("answer", ["HTTP 401", "code 26084"])
+async def test_without_login_a_takeover_answer_to_the_rekey_exchange_latches(
+    fake_mega: FakeMega, cache: SessionCache, answer: str
+) -> None:
+    fake_mega.error_bodies["houses"] = [_REKEY]
+    replaced = {"code": int(const.CloudCode.SESSION_REPLACED), "msg": "replaced"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            if answer == "HTTP 401":
+                fake_mega.error_bodies["exchange"] = [(401, replaced)]
+            else:
+                fake_mega.code_once["exchange"] = int(const.CloudCode.SESSION_REPLACED)
+            with pytest.raises(SessionReplacedError):
+                await api.async_list_houses("eu", login=False)
+    assert api.session_replaced
+    assert "auth_token" not in cache.cloud_session("eu")
+    assert fake_mega.login_calls == 1
+
+
+async def test_without_login_a_rekey_answer_to_the_rekey_exchange_is_refused(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.error_bodies["houses"] = [_REKEY]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            fake_mega.error_bodies["exchange"] = [_REKEY]
+            with pytest.raises(KeyExchangeRefusedError):
+                await api.async_list_houses("eu", login=False)
+    assert sum(1 for name, _ in fake_mega.calls if name == "houses") == 1
     assert fake_mega.login_calls == 1
 
 

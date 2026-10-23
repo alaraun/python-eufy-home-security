@@ -882,6 +882,24 @@ async def test_a_second_rekey_refusal_raises_instead_of_serving_the_cached_list(
     assert not api.session_replaced
 
 
+async def test_an_expired_answer_to_the_rekey_exchange_costs_one_login_and_no_second_exchange(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 18}]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            exchanges = len(fake_mega._shared["mega"])
+            fake_mega.error_bodies["devices"] = [(463, {"code": 4404, "msg": "get identity error"})]
+            fake_mega.error_bodies["exchange"] = [(401, {"code": 401, "msg": "expired"})]
+            devices = await api.async_get_devices(refresh=True)
+    assert [d.device_sn for d in devices] == [SYNTHETIC.station_sn]
+    assert fake_mega.login_calls == 2
+    assert len(fake_mega._shared["mega"]) == exchanges + 1  # the login's own exchange only
+
+
 async def test_other_non_200_answers_name_their_body_code(
     fake_mega: FakeMega, cache: SessionCache
 ) -> None:

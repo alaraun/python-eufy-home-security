@@ -2361,6 +2361,27 @@ async def test_a_second_rekey_answer_to_the_scan_is_logged_at_info_by_its_meanin
     )
 
 
+async def test_a_no_session_line_and_a_key_refused_line_for_one_code_both_appear(
+    scan_logs: pytest.LogCaptureFixture,
+) -> None:
+    cloud = unbundled_cloud(
+        things={UNBUNDLED: unbundled_td()},
+        things_errors=[NoCachedSessionError("no session")],
+        things_error=FakeCloud.refusal(463, 4404, "get identity error"),
+    )
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        await eufy.async_discover()
+        await eufy.async_discover(refresh=True)
+        await eufy.async_close()
+    prefix = f"no settings listed for {UNBUNDLED} from its thing description: "
+    assert [r.getMessage() for r in scan_records(scan_logs)] == [
+        f"{prefix}no cached cloud session",
+        f"{prefix}the cloud refused this client's key identity after a new key exchange; "
+        "listed at the next refresh",
+    ]
+
+
 @pytest.mark.parametrize(
     ("first", "second", "text"),
     [

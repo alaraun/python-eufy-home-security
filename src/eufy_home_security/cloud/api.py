@@ -1848,8 +1848,9 @@ class EufyCloudApi:
 
         A session-expired code costs one re-login. A re-key answer (HTTP 463, body 463 /
         4404: the gateway forgot the key identity) costs one new key exchange on the
-        same auth token, never a login, and a second refusal raises
-        :class:`KeyExchangeRefusedError`. A credential rejection, a throttle, a session
+        same auth token, never a login, and a second refusal (the exchange's own included)
+        raises :class:`KeyExchangeRefusedError`; the exchange's other answers are mapped
+        as the call's. A credential rejection, a throttle, a session
         another client took over, or any other failure propagates at once.
 
         Without ``login`` nothing logs in: no usable session, or one the cloud answers
@@ -1857,9 +1858,14 @@ class EufyCloudApi:
         :class:`AuthenticationError`), the session left for the next ordinary call.
         """
         identity = await self._ensure_session(region, login=login)
+        # The re-key runs inside the try: its exchange's answers take the same mapping.
+        rekey: _RekeyRequiredError | None = None
         rekeyed = relogged = False
         while True:
             try:
+                if rekey is not None:
+                    identity = await self._rekey(identity, rekey)
+                    rekey = None
                 return await operation(identity)
             except SessionReplacedError:
                 await self._mark_replaced(identity)
@@ -1867,14 +1873,14 @@ class EufyCloudApi:
             except _RekeyRequiredError as err:
                 if rekeyed:
                     raise err.refused() from err
-                rekeyed = True
-                identity = await self._rekey(identity, err)
+                rekeyed, rekey = True, err
             except _SessionExpiredError as err:
                 if not login:
                     raise _no_session_error(region, err) from err
                 if relogged:
                     raise
                 relogged = True
+                rekey = None  # a login brings its own key identity
                 _LOGGER.info("cloud session no longer accepted (%s); logging in once more", err)
                 await self._drop_session_if_current(identity)
                 identity = await self._ensure_session(region)
@@ -1896,15 +1902,13 @@ class EufyCloudApi:
                 "running a new key exchange on the same session, no login",
                 err,
             )
-            try:
-                fresh = await self._key_exchange(
-                    self._host("openapi", region),
-                    const.KEY_EXCHANGE_PATH,
-                    const.MEGA_PRESET_KEY,
-                    region=region,
-                )
-            except _RekeyRequiredError as again:
-                raise again.refused() from again
+            # A re-key answer to the exchange itself reaches the caller's refusal mapping.
+            fresh = await self._key_exchange(
+                self._host("openapi", region),
+                const.KEY_EXCHANGE_PATH,
+                const.MEGA_PRESET_KEY,
+                region=region,
+            )
             fresh.auth_token = failed.auth_token
             fresh.user_id = failed.user_id
             self._identities[region] = fresh
@@ -2613,7 +2617,9 @@ class EufyCloudApi:
         :class:`NoCachedSessionError` without a request; an expired-token answer
         raises it too, leaving the session for the next ordinary call. A re-key answer
         costs one key exchange on the same auth token and one retry, as every call
-        (see :meth:`_with_session`); a second one raises :class:`KeyExchangeRefusedError`.
+        (see :meth:`_with_session`); a second one, the exchange's own included, raises
+        :class:`KeyExchangeRefusedError`, and the exchange's other answers are mapped as
+        the request's.
         A hold-off refuses locally, and a 429 or throttle code
         starts the account's shared hold-off exactly as every other call does. Only
         a session another client took over is latched and forgotten, as everywhere.
@@ -2634,9 +2640,12 @@ class EufyCloudApi:
             _LOGGER.debug("thing descriptions skipped: no usable cached cloud session")
             raise NoCachedSessionError("no usable cached cloud session; not logging in")
         body = {"product_codes": codes, "code_time_map": {}, "use_network_version": True}
-        rekeyed = False
+        # The re-key runs inside the try: its exchange's answers take the same mapping.
+        pending: _RekeyRequiredError | None = None
         while True:
             try:
+                if pending is not None:
+                    identity = await self._rekey(identity, pending)
                 _code, _resp, data = await self._call(
                     self._host("things", region),
                     const.THINGS_PATH,
@@ -2650,10 +2659,9 @@ class EufyCloudApi:
             except _SessionExpiredError as err:
                 raise _no_session_error(region, err) from err
             except _RekeyRequiredError as err:
-                if rekeyed:
+                if pending is not None:
                     raise err.refused() from err
-                rekeyed = True
-                identity = await self._rekey(identity, err)
+                pending = err
         if not isinstance(data, Mapping) or not isinstance(data.get("things_list"), list):
             raise ProtocolError(f"cloud response to {const.THINGS_PATH} has no things_list")
         things = [t for t in data["things_list"] if isinstance(t, Mapping)]
