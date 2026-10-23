@@ -26,9 +26,9 @@ async def fake() -> AsyncIterator[FakeStation]:
     station.stop()
 
 
-def _session(fake: FakeStation, *, account_id: str = SYNTHETIC.account_id) -> StationSession:
+def _session(fake: FakeStation) -> StationSession:
     async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
-        return P2PCredentials(account_id, "user", fake.ecc_private_key_hex)
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     return StationSession(
         SYNTHETIC.station_sn, provider, host="127.0.0.1", port=fake.discovery_port
@@ -84,7 +84,8 @@ async def test_a_patched_command_timeout_bounds_a_call_without_a_timeout(
     fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(session_module, "COMMAND_TIMEOUT", 0.3)
-    session = _session(fake, account_id="f" * 40)  # the station ignores this account's arm
+    fake.unanswered_commands = {1224}  # the arm gets no result and no report
+    session = _session(fake)
     try:
         await session.async_connect()
         started = time.monotonic()

@@ -984,6 +984,22 @@ def settings_of(
     return _resolved(product_code.upper(), context)
 
 
+def arms_by_scalar(product_code: str | None) -> bool:
+    """Whether the eufy app arms a station of ``product_code`` with the station scalar
+    1224 (``[u32 mode][char[128] account]``) rather than the 1350 payload object
+    ``{mode_type, user_name}``: the handler's ``arming_selected_mode`` write of the
+    device as its own station is a bare 1224, not 1350 carrying 1224 (declared, eufy
+    app). False without a product code, a file or that write: the payload object is the
+    default.
+    """
+    setting = settings_of(product_code or "", standalone=True).get(_GUARD_MODE_KEY)
+    template = None if setting is None else setting._write
+    # Deferred: p2p.messages loads cryptography, which the light CLI modules must not.
+    from ..p2p.messages import CMD_SET_ARMING  # noqa: PLC0415 - the command's one definition
+
+    return template is not None and template.get("cmd") == CMD_SET_ARMING
+
+
 def _context_name(connect: ConnectType | None) -> str | None:
     return None if connect in (None, ConnectType.SINGLE) else cast(ConnectType, connect).value
 

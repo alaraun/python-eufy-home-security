@@ -45,6 +45,7 @@ from .devices.model_settings import (
     WireCommand,
     WriteContext,
     WritePath,
+    arms_by_scalar,
     mode_table_settings,
     product_code_of,
     settings_of,
@@ -322,6 +323,25 @@ picture size to hold: a woken T8170 climbs 1280x720 -> 1920x1080 -> 2880x1616 at
 EPOCH_MS_RANGE = (1_420_070_400_000, 4_102_444_800_000)
 
 type SerialSource = Literal["cloud"]
+
+
+def _station_modes(
+    dump: ParamDump, values: Mapping[int, str | None], cloud: Mapping[int, str]
+) -> tuple[GuardMode | int | None, GuardMode | int | None]:
+    """The station's selected and effective guard mode (1224, 1151).
+
+    The held parameters' (a dump, a report, an applied arm), else the cloud copy's
+    (``cloud``) where they lack the mode or hold this library's own value of it that the
+    cloud changed after (``values``, :attr:`StationState.setting_params`, then holds the
+    cloud's). The effective mode defaults to the selected one.
+    """
+    if values.get(GUARD_MODE_PARAM) != dump.station.get(GUARD_MODE_PARAM):
+        dump = ParamDump()
+        dump.devices[STATION_CHANNEL] = {
+            pid: cloud[pid] for pid in (GUARD_MODE_PARAM, ACTIVE_MODE_PARAM) if pid in cloud
+        }
+    mode = dump.guard_mode
+    return mode, mode if dump.active_mode is None else dump.active_mode
 
 
 def _int_or_none(value: str | None) -> int | None:
@@ -1745,11 +1765,14 @@ class Station:
         self.session.channel_scopes.update(
             {ch: scope_for_kind(d.kind) for ch, d in devices.items() if d.kind is not None}
         )
+        guard_mode, active_mode = _station_modes(
+            dump, setting_params, {pid: c.value for pid, c in self._cloud.items()}
+        )
         return StationState(
             serial=self.serial,
             product_code=product_code,
-            guard_mode=dump.guard_mode,
-            active_mode=dump.guard_mode if dump.active_mode is None else dump.active_mode,
+            guard_mode=guard_mode,
+            active_mode=active_mode,
             firmware=_text_or_none(dump.meta.get("main_sw_version")) or self.device.main_sw_version,
             devices=devices,
             params=dict(station),
@@ -1810,7 +1833,13 @@ class Station:
     # ── writes ───────────────────────────────────────────────────────────────
 
     async def async_set_guard_mode(self, mode: GuardMode | str | int) -> GuardMode | int:
-        """Arm/disarm; returns the mode the station reports it applied.
+        """Arm/disarm; returns the mode the station applied.
+
+        The request takes the form the eufy app sends this station's model
+        (:func:`~.devices.model_settings.arms_by_scalar`): the station scalar 1224 where
+        its handler builds a bare 1224, else the 1350 payload object. The station's
+        result code 0 is final, as the eufy app takes it
+        (:meth:`~.p2p.session.StationSession.async_set_guard_mode`).
 
         Raises ``UnsupportedError`` before anything is sent for a station model on
         record whose guard mode is *unknown* (:meth:`config_support`: T8N00, T9000 and
@@ -1820,7 +1849,8 @@ class Station:
         guard = GuardMode.parse(mode)
         self._require_guard_mode()
         self.target_mode_name(guard)
-        return await self.session.async_set_guard_mode(guard)
+        scalar = arms_by_scalar(self._product_code(self.serial))
+        return await self.session.async_set_guard_mode(guard, scalar=scalar)
 
     def _require_guard_mode(self) -> None:
         """``UnsupportedError`` (nothing sent) where the station's model is a station

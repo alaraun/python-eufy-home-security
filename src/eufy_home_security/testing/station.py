@@ -458,6 +458,8 @@ class FakeStation:
     received_header_channels: list[int] = field(default_factory=list)
     """The subheader channel (byte 2) of each command in :attr:`received`, in step."""
     ecb_received: list[tuple[int, int, int]] = field(default_factory=list)
+    ecb_encryptions: list[int] = field(default_factory=list)
+    """The encryption type (subheader byte 3) of each scalar in :attr:`ecb_received`."""
     mode_tables_received: list[dict[str, Any]] = field(default_factory=list)
     """Every 1255 mode-table body, in arrival order (whatever its account id)."""
     string_commands_received: list[tuple[int, int, str]] = field(default_factory=list)
@@ -543,8 +545,22 @@ class FakeStation:
     ``DOWNLOAD_CANCEL`` (1051) and the ``GET_*`` commands."""
     refused_commands: dict[int, int] = field(default_factory=dict)
     """Command → the non-zero receipt code it is answered with, and nothing else."""
+    refused_scalars: dict[int, int] = field(default_factory=dict)
+    """ECB scalar command → the non-zero result code it is answered with, applying nothing."""
+    unanswered_commands: set[int] = field(default_factory=set)
+    """Commands only acknowledged: no receipt, no reply, nothing applied (the transport
+    ACK alone)."""
+    mode_reports: bool = True
+    """Send the guard-mode report (0x047F) after an arm changes the mode in force (a
+    standalone T8414-class camera sends none)."""
+    mode_in_dump: bool = True
+    """Carry the guard mode (1224, 1151) in the parameter dump (a standalone T8414-class
+    camera's dump lacks it)."""
     rejection_delay: float = 0.0
     """Seconds before a -108 receipt (the real station: 11 to 17 s)."""
+    arm_result_delay: float = 0.0
+    """Seconds an arm's receipt and result (0x0547 naming 1224, code 0) come after its
+    mode report."""
     relayed_channels: set[int] = field(default_factory=set)
     """Channels of paired Wi-Fi cameras (a T8170) the station passes a 1350 command on to
     only when the subheader names the channel; under another subheader channel the
@@ -608,6 +624,7 @@ class FakeStation:
         self.live_opens: list[int] = []
         """Per live open (1003): the camera channel it named in its subheader."""
         self._late_writes: list[tuple[int, int, int]] = []
+        self._mode_in_force: str | None = None  # 1151 of a station whose dump lacks it
         """ECB writes taken under :attr:`ecb_apply_late`, applied at the next dump."""
         self.doorbell_payloads: list[dict[str, Any]] = []
         """Every 1700 body received (``{"commandType", "data"}``), in arrival order."""
@@ -929,6 +946,8 @@ class FakeStation:
             if (refused := self.refused_commands.get(obj.get("cmd", -1))) is not None:
                 self.send_receipt(FrameType.CMD_TRANSFER, refused)
                 return
+            if obj.get("cmd") in self.unanswered_commands:
+                return
             if obj.get("cmd") == 1003 and self.live_open_receipt_code != RECEIPT_TAKEN:
                 # As a HomeBase that cannot wake the camera: no queue receipt, one
                 # failure receipt later, no stream.
@@ -941,7 +960,8 @@ class FakeStation:
                 return
             # Assumed for a foreign account_id too: the receipt is the queue's, and
             # whether the real station sends one then is not known.
-            self.send_receipt(FrameType.CMD_TRANSFER, RECEIPT_TAKEN)
+            delay = self.arm_result_delay if obj.get("cmd") == 1224 else 0.0
+            self.send_receipt(FrameType.CMD_TRANSFER, RECEIPT_TAKEN, delay=delay)
             self._on_command(obj, subheader)
 
     def doorbell_receipt_code(self) -> int:
@@ -1029,23 +1049,35 @@ class FakeStation:
             self.params.setdefault(block, {})
         return blocks
 
+    def _arm(self, mode: int) -> bool:
+        """Select ``mode``; False (nothing sent) when it is the mode already selected, as
+        the real station is silent then. The report carries the mode in force, never 2."""
+        if mode == self.guard_mode:
+            return False
+        self.guard_mode = mode
+        active = self.schedule_mode if mode == 2 else mode
+        before = self._mode_in_force
+        if self.mode_in_dump:
+            blocks = self._own_blocks()
+            before = self.params[blocks[0]].get(1151)
+            for block in blocks:
+                self.params[block][1224] = str(mode)
+                self.params[block][1151] = str(active)
+        self._mode_in_force = str(active)
+        if str(active) != before and self.mode_reports:
+            self.send_alarm_mode(active, cipher=self.state_cipher)  # channel 2
+        return True
+
     def _on_command(self, obj: dict[str, Any], subheader: bytes) -> None:
         if obj.get("account_id") != self.account_id:
             return  # the real station drops these without a word
         cmd = obj["cmd"]
         if cmd == 1224:
-            if obj["payload"]["mode_type"] == self.guard_mode:
-                return  # the real station is silent when asked for the mode it is in
-            self.guard_mode = obj["payload"]["mode_type"]
-            blocks = self._own_blocks()
-            before = self.params[blocks[0]].get(1151)
-            active = self.schedule_mode if self.guard_mode == 2 else self.guard_mode
-            for block in blocks:
-                self.params[block][1224] = str(self.guard_mode)
-                self.params[block][1151] = str(active)
-            if str(active) != before:  # the report carries the mode in force, never 2
-                self.send_alarm_mode(active, cipher=self.state_cipher)  # channel 2
-            self.send_json(FrameType.NOTIFY_PAYLOAD, {"cmd": 1224, "code": 0})
+            if self._arm(obj["payload"]["mode_type"]):
+                result = {"cmd": 1224, "code": 0}
+                asyncio.get_running_loop().call_later(
+                    self.arm_result_delay, self.send_json, FrameType.NOTIFY_PAYLOAD, result
+                )
         elif cmd == 1308:
             path = obj["payload"][0]["file"]
             self.image_requests.append(path)
@@ -1303,11 +1335,15 @@ class FakeStation:
         value = struct.unpack_from("<I", body, offset)[0]
         account = body[offset + 4 : offset + 132].split(b"\x00", 1)[0].decode()
         self.ecb_received.append((ftype, channel, value))
+        self.ecb_encryptions.append(subheader[3])
         code = 0 if account == self.account_id else -104
+        code = self.refused_scalars.get(ftype, code)
         if self.ecb_apply_late and code == 0:
             self._late_writes.append((channel, ftype, value))
             return  # taken, never answered: the session reports it as not acted on
-        if code == 0 and self.apply_settings:
+        if code == 0 and ftype == 1224:
+            self._arm(value)
+        elif code == 0 and self.apply_settings:
             self.params.setdefault(channel, {})[ftype] = str(value)
         result = struct.pack("<i", code) + b"\x00" * 12
         if self.rsa_session:  # tagged like every frame, the code in clear

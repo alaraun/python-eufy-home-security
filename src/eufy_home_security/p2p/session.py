@@ -189,6 +189,7 @@ from .messages import (
     RECEIPT_CODES,
     RECEIPT_NOT_HANDLED,
     RECEIPT_TAKEN,
+    RESULT_INVALID_COMMAND,
     app_ping_frame,
     arm_payload,
     conn_init_request,
@@ -493,7 +494,8 @@ class ParamOrigin(StrEnum):
     CLOUD = "cloud"
     """A cloud snapshot (:meth:`StationSession.ingest_cloud_params`)."""
     LOCAL_WRITE = "local_write"
-    """This library's own write (:meth:`StationSession.apply_local_params`)."""
+    """This library's own write (:meth:`StationSession.apply_local_params`, an applied
+    arm), or a guard mode the station reported outside a dump."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1629,12 +1631,13 @@ class StationSession:
         # parameters, so its state (and a later, older cloud snapshot) sees them.
         self._file_modes("push")
 
-    def _file_modes(self, origin: str) -> None:
+    def _file_modes(self, origin: str, *, origin_kind: ParamOrigin | None = None) -> None:
         """File the known modes as the station's own parameters (1224, 1151), dated now.
 
         The station's state is built from the held parameters, so a mode learned without
-        a dump (a push, an arm's own report) is filed there; a cloud snapshot dated
+        a dump (a push, an arm's result or report) is filed there; a cloud snapshot dated
         before it then no longer overwrites it (:meth:`ingest_cloud_params`).
+        ``origin_kind`` marks the values as no dump's (:attr:`param_origins`).
         """
         values = {GUARD_MODE_PARAM: self._guard_mode, ACTIVE_MODE_PARAM: self._active_mode}
         dump = ParamDump()
@@ -1645,8 +1648,21 @@ class StationSession:
                 dump.devices.setdefault(block, {})[param_id] = str(int(value))
         if not dump.devices:
             return
-        self._merge_dump(dump, origin, time.time())
+        self._merge_dump(dump, origin, time.time(), origin_kind=origin_kind)
         self._complete_dump(None)
+
+    def _scalar_cipher(self) -> tuple[bytes, int]:
+        """Key and encryption type of an ECB scalar frame: the session key on an RSA
+        session (every command goes under it), else the static key."""
+        key = self._require_static_key()
+        if self._aes_key is not None:
+            return self._aes_key, self._session_encryption
+        return key, FRAME_STATIC_ECB
+
+    def _dump_carries_mode(self) -> bool:
+        """Whether a dump delivered the station's selected mode (1224) that is held."""
+        key = (self._station_blocks[0], GUARD_MODE_PARAM)
+        return key in self._params and key not in self._param_origin
 
     def ingest_cloud_params(
         self, dev_type: int, params: Iterable[tuple[int, str, float | None]]
@@ -2051,114 +2067,133 @@ class StationSession:
         return dump
 
     async def async_set_guard_mode(
-        self, mode: GuardMode, *, timeout: float | None = None
+        self, mode: GuardMode, *, timeout: float | None = None, scalar: bool = False
     ) -> GuardMode | int:
-        """Arm or disarm; returns the mode the station reports it applied.
+        """Arm or disarm; returns the mode the station applied.
 
-        :attr:`GuardMode.SCHEDULE` is confirmed by reading param 1224 back: the report
-        that follows it carries the schedule slot's mode (the effective mode), never 2.
+        The request is the 1350 payload object ``{mode_type, user_name}``, or with
+        ``scalar`` the station scalar 1224 (frame type 1224, channel 255,
+        ``[u32 mode][char[128] account]``): the form the eufy app sends a station whose
+        handler builds a bare 1224 (see docs/protocol/commands.md § Guard mode).
 
-        The station answers a change with an alarm-mode report, but stays silent
-        when asked for the mode it is already in — which is indistinguishable, on
-        the wire, from a command it ignored. So silence is settled by reading the
-        mode back: if it matches, the request is satisfied.
+        The station's answer is read as the eufy app reads it (declared, eufy app):
 
-        Only the frames that are this command's own answer count: the guard-mode
-        report (0x047F), a 0x0547 reply naming cmd 1224, or the command receipt. A
-        reply with a non-zero code raises :class:`CommandRejectedError`, a non-zero
-        receipt the error :meth:`async_send_command` raises for it. A zero-code reply
-        without a mode report is confirmed by reading the mode back, never taken on
-        trust; a zero receipt only stops the resend (the station queued the arm). A
-        report counts under any encryption, as the eufy app takes it
-        (:meth:`_take_state`); on an RSA session the receipt is the arm's result
-        (:meth:`_decode_receipt`).
+        - the arm's own result with code 0 (its channel-0 result or receipt, a 0x0547
+          naming 1224, the scalar's reply) is final: the mode is filed as this library's
+          write (:attr:`param_origins`) and returned, without waiting for a mode report;
+        - a non-zero code raises: -108 and -103 :class:`CommandUnsupportedError`, any
+          other :class:`CommandRejectedError`;
+        - a guard-mode report (0x047F) that comes first answers it, under any encryption
+          (:meth:`_take_state`); another mode than asked raises
+          :class:`CommandRejectedError`. While :attr:`GuardMode.SCHEDULE` is asked for,
+          a report carries the slot's mode and answers nothing;
+        - with neither, the mode is read back: the station is silent when asked for the
+          mode it is in, so the asked mode is success. Anything else raises
+          :class:`CommandNotAppliedError` (the transport ACK alone is no success; the
+          classic case is an ``account_id`` that is not the owner's), or
+          :class:`DeviceTimeoutError` when not even the datagram was acknowledged.
 
-        Raises :class:`CommandNotAppliedError` when the station acknowledged the
-        datagram, never acted, and the read-back shows another mode (the classic
-        wrong-``account_id`` case) or answered and still reports another mode, and
-        :class:`CommandRejectedError` when it applied a different mode.
-
-        :attr:`GuardMode.OFF` is report-only and raises :class:`UnsupportedError`
-        before anything is sent: disarm with :attr:`GuardMode.DISARMED`.
+        A later report or dump still moves the mode. :attr:`GuardMode.OFF` is report-only
+        and raises :class:`UnsupportedError` before anything is sent: disarm with
+        :attr:`GuardMode.DISARMED`.
         """
         timeout = _or(timeout, COMMAND_TIMEOUT)
         if mode is GuardMode.OFF:
             raise UnsupportedError("guard mode OFF (6) is report-only; disarm with DISARMED (63)")
         await self.async_connect()
         creds = self._require_creds()
-        body = device_msg(creds.account_id, CMD_SET_ARMING, arm_payload(mode, creds.user_name))
-        applied_at: float | None = None
-        receipted = False
+        if scalar:
+            key, encryption = self._scalar_cipher()
+
+            def send() -> int:
+                seq = self._ecb_seq
+                self._ecb_seq = (seq + 1) & 0xFF
+                frame = encode_ecb_scalar_frame(
+                    key, CMD_SET_ARMING, int(mode), creds.account_id, seq=seq, encryption=encryption
+                )
+                return self._send_request(CMD_SET_ARMING, frame, self._require_transport())
+
+        else:
+            body = device_msg(creds.account_id, CMD_SET_ARMING, arm_payload(mode, creds.user_name))
+
+            def send() -> int:
+                return self._send_secure(body)
+
+        applied = False
+        processed_at: float | None = None
         reported: list[int] = []
         schedule = mode is GuardMode.SCHEDULE
 
         def match(inbound: Inbound) -> int | None:
-            nonlocal applied_at, receipted
-            if inbound.type == FrameType.CMD_TRANSFER and (code := inbound.receipt()) is not None:
-                if code != RECEIPT_TAKEN:
+            nonlocal applied, processed_at
+            code = self._arm_result(inbound, scalar=scalar)
+            if code is not None:
+                if code != 0:
                     raise _receipt_error(CMD_SET_ARMING, code)
-                receipted = True
-                return None
+                applied = True
+                return int(mode)
             if inbound.type == FrameType.ALARM_MODE_NOTIFY:
                 value = inbound.alarm_mode()
                 if value is not None:
                     reported.append(value)
-                    if schedule:
-                        # A slot's mode, not the selection: processed, not confirmed.
-                        applied_at = applied_at or time.monotonic()
-                        return None
-                    return value
-                return None
-            code = self._command_code(inbound, CMD_SET_ARMING)
-            if code is not None:
-                _raise_for_code(CMD_SET_ARMING, code)
-                if applied_at is None:
-                    applied_at = time.monotonic()
+                    if not schedule:
+                        return value
+                    # A slot's mode, not the selection: processed, not confirmed.
+                    processed_at = processed_at or time.monotonic()
             return None
 
         async with self._op("guard mode write"):
-            _LOGGER.info("%s: setting guard mode %s", self._log_name, mode.name)
+            _LOGGER.info(
+                "%s: setting guard mode %s%s",
+                self._log_name,
+                mode.name,
+                " (station scalar)" if scalar else "",
+            )
             waiter = self._add_waiter(match)
             started = time.monotonic()
             self._arming_to = mode
             try:
-                indices = [self._send_secure(body)]
+                indices = [send()]
                 deadline = time.monotonic() + timeout
                 resent = False
                 while not waiter.future.done():
                     now = time.monotonic()
                     remaining = deadline - now
-                    if applied_at is not None:
-                        # The station processed it; give the mode report a moment.
-                        remaining = min(remaining, applied_at + MODE_REPORT_GRACE - now)
+                    if processed_at is not None:
+                        # The station took it; give its result a moment.
+                        remaining = min(remaining, processed_at + MODE_REPORT_GRACE - now)
                     if remaining <= 0:
                         break
                     step = remaining if resent else min(remaining, COMMAND_RESEND_AFTER)
                     await asyncio.wait({waiter.future}, timeout=step)
-                    if not (waiter.future.done() or resent or receipted or applied_at is not None):
+                    if not (waiter.future.done() or resent or processed_at is not None):
                         _LOGGER.debug("%s: no answer to the arm yet; resending", self._log_name)
-                        indices.append(self._send_secure(body))
+                        indices.append(send())
                         resent = True
             finally:
                 self._arming_to = None
                 self._remove_waiter(waiter)
         _LOGGER.debug(
-            "%s: arm settled after %.0f ms: result %s, receipt %s, mode reports %s",
+            "%s: arm settled after %.0f ms: result %s, mode reports %s",
             self._log_name,
             (time.monotonic() - started) * 1000,
-            "code 0" if applied_at is not None else "none",
-            "0" if receipted else "none",
+            "code 0" if applied else "none",
             reported or "none",
         )
         _raise_waiter_error(waiter)  # the session was lost, or the station rejected it
 
+        if applied:
+            self._set_modes(mode, None if schedule else mode)
+            self._file_modes("arm", origin_kind=ParamOrigin.LOCAL_WRITE)
+            return mode
         if reported and not schedule:
             result = as_guard_mode(reported[-1])
             self._set_modes(result, result)
             # The report is the station's word on its mode: file it as its parameters,
             # so the state follows it on a station no dump follows (one reached on
-            # demand) until a newer dump or cloud snapshot says otherwise.
-            self._file_modes("arm")
+            # demand, one whose dump lacks the mode) until a newer dump or cloud
+            # snapshot says otherwise.
+            self._file_modes("arm", origin_kind=ParamOrigin.LOCAL_WRITE)
             if result != mode:
                 raise CommandRejectedError(
                     CMD_SET_ARMING, int(result), f"station applied {result!r}"
@@ -2168,19 +2203,20 @@ class StationSession:
         current = (await self.async_get_params()).guard_mode
         if current == mode:
             _LOGGER.debug(
-                "%s: no mode report for the arm; the station reports %s", self._log_name, mode.name
+                "%s: no result for the arm; the station reports %s", self._log_name, mode.name
             )
             return mode
-        if applied_at is not None:
-            raise CommandNotAppliedError(
-                CMD_SET_ARMING, f"the station answered the arm but reports guard mode {current!r}"
-            )
-        if receipted:
-            raise CommandNotAppliedError(
-                CMD_SET_ARMING,
-                f"the station took the arm (receipt 0) but reports guard mode {current!r}",
-            )
         raise error
+
+    def _arm_result(self, inbound: Inbound, *, scalar: bool) -> int | None:
+        """The code of the arm's own result in ``inbound``, else None: the scalar's reply
+        (frame type 1224, the code in clear at ``payload[0:4]``), or the payload form's
+        channel-0 result or receipt and a 0x0547 reply naming 1224."""
+        if scalar:
+            return _scalar_result(inbound, CMD_SET_ARMING)
+        if inbound.type == FrameType.CMD_TRANSFER and (code := inbound.receipt()) is not None:
+            return code
+        return self._command_code(inbound, CMD_SET_ARMING)
 
     async def async_send_command(
         self,
@@ -2582,25 +2618,20 @@ class StationSession:
     ) -> None:
         """Send a legacy scalar setting (frame type = command id, AES-ECB body).
 
-        Raises :class:`CommandRejectedError` with the station's result code, or
-        :class:`CommandNotAppliedError` / :class:`DeviceTimeoutError` when no
+        Raises :class:`CommandRejectedError` with the station's result code
+        (:class:`CommandUnsupportedError` for -103, a command it takes in no scalar
+        form), or :class:`CommandNotAppliedError` / :class:`DeviceTimeoutError` when no
         result came back. A ``channel`` or account id the frame cannot carry raises
         :class:`ValueError` before anything is sent, like any out-of-domain argument.
         """
         timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
-        key = self._require_static_key()
-        encryption = FRAME_STATIC_ECB
-        if self._aes_key is not None:  # an RSA session: every command under its key
-            key, encryption = self._aes_key, self._session_encryption
+        key, encryption = self._scalar_cipher()
 
         def match(inbound: Inbound) -> tuple[int, int | None] | None:
-            frame = inbound.frame
-            if inbound.type != command or len(frame.payload) < 4:
-                return None
-            # The code is clear at payload[0:4] on every session, as the eufy app reads it.
-            return decode_ecb_scalar_result(frame.payload), frame.cipher
+            code = _scalar_result(inbound, command)
+            return None if code is None else (code, inbound.frame.cipher)
 
         async with self._op("ECB command"):
             seq = self._ecb_seq
@@ -2651,8 +2682,7 @@ class StationSession:
                 self._log_name,
                 command,
             )
-        if code != 0:
-            raise CommandRejectedError(command, code, ECB_RESULT_CODES.get(code, ""))
+        _raise_for_code(command, code)
 
     async def async_send_string_command(
         self,
@@ -4911,18 +4941,21 @@ class StationSession:
         selection that says the same thing, so a parameter read is cued to tell them
         apart; a report of the mode this session's own arm asks for is that arm's. A report
         during an arm to Schedule is the slot's mode that selection put in force; the arm's
-        read-back confirms the selection (or corrects it).
+        result or read-back confirms the selection (or corrects it). On a station whose
+        dump does not carry the mode, the report is filed as its parameters.
         """
         arming = self._arming_to
         if arming is GuardMode.SCHEDULE:
             self._set_modes(GuardMode.SCHEDULE, value)
-            return
-        if self._guard_mode != GuardMode.SCHEDULE or value == arming:
+        elif self._guard_mode != GuardMode.SCHEDULE or value == arming:
             self._set_modes(value, value)
-            return
-        self._set_modes(None, value)
-        if self._reprobe_at is None:
-            self._reprobe_at = time.monotonic() + UNSOLICITED_REPROBE_DELAY
+        else:
+            self._set_modes(None, value)
+            if self._reprobe_at is None:
+                self._reprobe_at = time.monotonic() + UNSOLICITED_REPROBE_DELAY
+        if not self._dump_carries_mode():
+            # A station whose dump lacks the mode: the report is its only local word.
+            self._file_modes("mode report", origin_kind=ParamOrigin.LOCAL_WRITE)
 
     def _apply_modes(self, mode: GuardMode | int | None, active: GuardMode | int | None) -> bool:
         """Update the selected and effective mode; whether either changed.
@@ -5500,10 +5533,25 @@ def _command_header_channel(channel: int) -> int:
     return 0 if channel == STATION_CHANNEL else channel
 
 
+def _scalar_result(inbound: Inbound, command: int) -> int | None:
+    """The result code of an ECB scalar reply to ``command``, else None: frame type
+    ``command``, the code in clear at ``payload[0:4]`` on every session, as the eufy app
+    reads it."""
+    if inbound.type != command or len(inbound.frame.payload) < 4:
+        return None
+    return decode_ecb_scalar_result(inbound.frame.payload)
+
+
+_UNSUPPORTED_CODES = frozenset({RECEIPT_NOT_HANDLED, RESULT_INVALID_COMMAND})
+"""Codes that refuse a command the station does not take at all, or not in this form."""
+
+
 def _receipt_error(command: int, code: int) -> CommandRejectedError:
-    """The error a non-zero command receipt raises."""
+    """The error a non-zero command receipt or result raises: -108 and -103
+    :class:`CommandUnsupportedError`, a camera wake failure :class:`CameraWakeError`,
+    any other :class:`CommandRejectedError`."""
     name = RECEIPT_CODES.get(code, "")
-    if code == RECEIPT_NOT_HANDLED:
+    if code in _UNSUPPORTED_CODES:
         return CommandUnsupportedError(command, code, name)
     if code in CAMERA_WAKE_CODES:
         return CameraWakeError(command, code, f"the station could not wake the camera ({name})")
@@ -5587,6 +5635,10 @@ def _parse_day(text: str) -> date:
 
 
 def _raise_for_code(command: int, code: int) -> None:
+    """Raise for a non-zero result code: -103 :class:`CommandUnsupportedError`, any
+    other :class:`CommandRejectedError`."""
+    if code == RESULT_INVALID_COMMAND:
+        raise CommandUnsupportedError(command, code, ECB_RESULT_CODES[code])
     if code != 0:
         raise CommandRejectedError(command, code, ECB_RESULT_CODES.get(code, ""))
 

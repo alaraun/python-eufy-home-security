@@ -120,6 +120,9 @@ RECEIPT_LENS = frozenset({RECEIPT_LEN, STANDALONE_RECEIPT_LEN})
 RECEIPT_TAKEN = 0
 #: Receipt code: the station does not handle this command.
 RECEIPT_NOT_HANDLED = -108
+#: Result code ``INVALID_COMMAND``: the station takes no command of this form (a scalar
+#: for a command it takes only as a payload object, or the other way round).
+RESULT_INVALID_COMMAND = -103
 #: Receipt code: the station tried to wake the camera and failed (the camera's Wi-Fi).
 RECEIPT_WAKE_FAILED = -204
 #: Receipt codes meaning the camera, not the station, could not be reached.
@@ -131,7 +134,7 @@ P2P_ERROR_CODES: dict[int, str] = {
     -100: "NULL_POINT",
     -101: "HAVE_CONNECT",
     -102: "MAX_HUB_CONNECT_NUM",
-    -103: "INVALID_COMMAND",
+    RESULT_INVALID_COMMAND: "INVALID_COMMAND",
     -104: "INVALID_ACCOUNT",
     -105: "WRITE_FLASH",
     -106: "NOT_FIND_DEV",

@@ -221,6 +221,9 @@ async def test_stats_are_json_safe_and_carry_no_identifier(
 async def test_guard_mode_accepts_names(station: Station, fake: FakeStation) -> None:
     assert await station.async_set_guard_mode("home") is GuardMode.HOME
     assert fake.guard_mode == GuardMode.HOME
+    # The HomeBase's own form: its paired camera's model (a bare-1224 handler) is no input.
+    assert fake.received[-1]["payload"]["mode_type"] == GuardMode.HOME
+    assert fake.ecb_received == []
 
 
 # ── settings: writes ──────────────────────────────────────────────────────────────
@@ -2537,6 +2540,85 @@ async def t8410_station(fake: FakeStation) -> AsyncIterator[Station]:
     station = await _standalone(fake, _T8410_SN)
     yield station
     await station.async_close()
+
+
+@pytest.mark.parametrize(
+    ("serial", "scalar"),
+    [("T8441P2000054321", True), ("T8172P2000054321", False)],
+    ids=["bare-1224", "1350"],
+)
+async def test_a_standalone_station_arms_in_the_form_its_model_data_names(
+    fake: FakeStation, serial: str, scalar: bool
+) -> None:
+    """A model whose handler builds a bare 1224 is armed with the station scalar, one
+    whose handler builds 1350/1224 with the payload object; neither is named in code."""
+    station = await _standalone(fake, serial)
+    try:
+        assert await station.async_set_guard_mode(GuardMode.HOME) is GuardMode.HOME
+    finally:
+        await station.async_close()
+    payloads = [o["payload"] for o in fake.received if o.get("cmd") == 1224]
+    assert fake.ecb_received == ([(1224, STATION_CHANNEL, 1)] if scalar else [])
+    assert payloads == ([] if scalar else [{"mode_type": 1, "user_name": "user"}])
+
+
+def _mode_snapshot(serial: str, mode: GuardMode, updated_at: float) -> CloudDevice:
+    return CloudDevice(
+        device_sn=serial,
+        device_type=18,
+        name="PTZ",
+        p2p_did=SYNTHETIC.did,
+        station_sn=serial,
+        raw={
+            "params": [
+                {"param_type": 1224, "param_value": str(int(mode)), "update_time": updated_at}
+            ]
+        },
+    )
+
+
+async def test_a_held_station_whose_dump_lacks_the_mode_reads_the_cloud_copy(
+    fake: FakeStation,
+) -> None:
+    """The cloud copy's mode until a local value arrives (an applied arm), which a cloud
+    copy dated after it replaces again."""
+    serial = "T8441P2000054321"
+    fake.params[STATION_CHANNEL].pop(1224)
+    fake.mode_in_dump = False
+    fake.mode_reports = False
+    station = await _standalone(fake, serial)
+    try:
+        assert station.state is not None
+        assert station.state.guard_mode is None
+        station.apply_cloud_device(_mode_snapshot(serial, GuardMode.HOME, time.time() - 60))
+        state = await station.async_update()
+        assert (state.guard_mode, state.active_mode) == (GuardMode.HOME, GuardMode.HOME)
+        assert state.param_sources[1224] is ValueSource.CLOUD
+
+        assert await station.async_set_guard_mode(GuardMode.AWAY) is GuardMode.AWAY
+        state = await station.async_update()
+        assert (state.guard_mode, state.active_mode) == (GuardMode.AWAY, GuardMode.AWAY)
+
+        station.apply_cloud_device(_mode_snapshot(serial, GuardMode.HOME, time.time() - 30))
+        assert (await station.async_update()).guard_mode is GuardMode.AWAY  # older news
+
+        station.apply_cloud_device(_mode_snapshot(serial, GuardMode.DISARMED, time.time() + 60))
+        state = await station.async_update()
+        assert (state.guard_mode, state.active_mode) == (GuardMode.DISARMED, GuardMode.DISARMED)
+    finally:
+        await station.async_close()
+
+
+async def test_a_dump_that_carries_the_mode_wins_over_the_cloud_copy(
+    station: Station, fake: FakeStation
+) -> None:
+    station.apply_cloud_device(
+        dataclasses.replace(
+            STATION,
+            raw={"params": [{"param_type": 1224, "param_value": "1", "update_time": time.time()}]},
+        )
+    )
+    assert (await station.async_update()).guard_mode is GuardMode.DISARMED  # the dump's 63
 
 
 async def test_a_standalone_cameras_writes_go_to_its_own_channel(

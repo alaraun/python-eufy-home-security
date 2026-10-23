@@ -514,10 +514,11 @@ class StillNotWrittenError(RecordNotFoundError):
 
 
 class CommandUnsupportedError(CommandRejectedError, UnsupportedError):
-    """The station does not handle this command: its receipt carried code -108.
+    """The station does not handle this command: its receipt or result carried code
+    -108 (no handler) or -103 (``INVALID_COMMAND``: no command of this form).
 
-    A rejection (``code`` is -108) and an :class:`UnsupportedError` at once: the
-    firmware has no handler for the command, so sending it again changes nothing.
+    A rejection (``code`` is -108 or -103) and an :class:`UnsupportedError` at once: the
+    firmware does not take the command as sent, so sending it again changes nothing.
     """
 
 

@@ -9,6 +9,7 @@ import operator
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -19,6 +20,7 @@ from eufy_home_security.devices.model_settings import (
     SettingKind,
     WriteContext,
     WritePath,
+    arms_by_scalar,
     bundled_codes,
     mode_table_settings,
     product_code_of,
@@ -765,3 +767,75 @@ def test_a_malformed_index_names_the_index(
     _write_index(data_root, codes, schema_version)
     with pytest.raises(ModelDataError, match=r"INDEX\.json"):
         bundled_codes()
+
+
+def _enum_round_trips() -> Iterator[tuple[str, Setting, WriteContext]]:
+    """Every readable, writable enum of the bundled models (per-view reads aside), in
+    the base, standalone and HomeBase 3 contexts."""
+    for code in bundled_codes():
+        for connect, ctx in ((None, CHILD), (None, ALONE), (ConnectType.HB3, CHILD)):
+            for setting in settings_of(code, connect, standalone=ctx.standalone).values():
+                if (
+                    setting.kind is SettingKind.ENUM
+                    and setting.readable
+                    and setting.writable
+                    and setting._read_view is None
+                ):
+                    yield code, setting, ctx
+
+
+def test_every_readable_enum_reads_each_stored_value_as_one_of_its_values() -> None:
+    """Write -> read: the parameter values the writes store decode to the values written,
+    one each; each to the value that wrote it, but where the eufy app shows another."""
+    checked = 0
+    shown_other: set[tuple[str, str]] = set()
+    for code, setting, ctx in _enum_round_trips():
+        param = cast(int, setting.read_param)
+        stored = {
+            value: raw
+            for value in setting.values
+            if (raw := dict(setting.encode(value, ctx).updates).get(param)) is not None
+        }
+        decoded = {value: setting.decode(raw) for value, raw in stored.items()}
+        assert sorted(map(repr, decoded.values())) == sorted(map(repr, decoded)), (
+            code,
+            setting.key,
+            stored,
+        )
+        if any(shown != value for value, shown in decoded.items()):
+            shown_other.add((code, setting.key))
+        checked += len(stored)
+    assert checked > 1000
+    assert shown_other == {(c, "watermark_set") for c in ("T8414", "T8440", "T8442")}
+
+
+@pytest.mark.parametrize(
+    ("code", "key", "stored", "shown"),
+    [
+        ("T8414", "watermark_set", {0: "2", 1: "0", 2: "1"}, {"2": 1, "0": 2, "1": 0}),
+        (
+            "T8414",
+            "device_continuous_recording_time",
+            {"default:00": "0", 1: "1"},
+            {"0": "default:00", "1": 1},
+        ),
+    ],
+)
+def test_an_enum_the_handler_does_not_read_back_reads_as_generated(
+    code: str, key: str, stored: dict[object, str], shown: dict[str, object]
+) -> None:
+    """Each value's write stores its parameter value, and each parameter value reads as
+    the eufy app shows it: the watermark as another choice, the recording time as written."""
+    setting = settings_of(code, standalone=True)[key]
+    for value, raw in stored.items():
+        assert dict(setting.encode(value, ALONE).updates)[cast(int, setting.read_param)] == raw
+        assert setting.decode(raw) == shown[raw]
+
+
+@pytest.mark.parametrize(
+    ("code", "scalar"),
+    [("T8441", True), ("T8172", False), ("T8030", False), ("T9ZZ9", False)],
+    ids=["bare-1224", "1350-camera", "homebase", "no-file"],
+)
+def test_the_arm_form_follows_the_models_handler(code: str, scalar: bool) -> None:
+    assert arms_by_scalar(code) is scalar

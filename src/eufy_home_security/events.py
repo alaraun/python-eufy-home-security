@@ -1346,7 +1346,7 @@ class GuardModeTracker:
       stamp. An admitted push moves the stamp to its event time. A push without an
       event time is admitted;
     * a **report** (the station's own state over P2P: a ``0x047F`` report, a
-      parameter dump, an arm's read-back) is never stale. :meth:`note_report` moves the
+      parameter dump, an arm's result or read-back) is never stale. :meth:`note_report` moves the
       stamp to its receipt minus :data:`GUARD_REPORT_SLACK_SECONDS`, so a late push
       about an earlier change cannot move the mode back;
     * :meth:`changed` says whether the pair of selected and effective mode differs

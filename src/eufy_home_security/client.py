@@ -1241,7 +1241,7 @@ class EufySecurity:
             self._deliver(event)
             return
         if isinstance(event, GuardModeChanged):
-            # The station's own state (0x047F, a parameter dump, an arm's read-back):
+            # The station's own state (0x047F, a parameter dump, an arm's result or read-back):
             # never stale, and later pushes are ordered after it.
             tracker = self._guard_tracker()
             tracker.note_report(event.station_sn)
