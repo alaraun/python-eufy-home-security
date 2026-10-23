@@ -207,7 +207,7 @@ KEY_RULES: tuple[tuple[str, str], ...] = (
         r"device_model|device_serial_number|device_status|device_is_online|device_ability_data",
         "system",
     ),
-    (r"working_mode_value|camera_on_off(_privacy_mode)?|privacy_mode_status", "system"),
+    (r"working_mode_value|(camera|device)_on_off(_privacy_mode)?|privacy_mode_status", "system"),
     (r"reset_device_mode|system_maintenance|device_cpu_info|device_current_temerature", "system"),
     (r"device_running_status|general_.*|hide_.*|device_house_area_locations", "system"),
     (r"device_support_.*|is_support_.*|support_.*|device_not_support_.*", "system"),
