@@ -56,6 +56,7 @@ dev = [
   "mypy>=1.17",
   "ruff>=0.13",
   "prek>=0.2",
+  "tzdata>=2025.2",
 ]
 
 [tool.uv.build-backend]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-import zoneinfo
+from importlib.resources import files
 from pathlib import Path
 from types import ModuleType
 
@@ -20,6 +20,9 @@ from eufy_home_security.devices.timezones import (
 
 ROOT = Path(__file__).resolve().parents[2]
 TABLE = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "timezones.json"
+# Every IANA zone name, backward links included, from the tzdata package: the host's own
+# zone files may leave the legacy links out.
+IANA_NAMES = frozenset(files("tzdata").joinpath("zones").read_text("utf-8").split())
 
 
 def _generator() -> ModuleType:
@@ -39,7 +42,7 @@ def test_every_zone_is_a_zoneinfo_key_with_a_unique_row_number() -> None:
     assert len(zones) > 400
     assert zone_ids() == tuple(z.id for z in zones)
     assert len({z.id for z in zones}) == len({z.sn for z in zones}) == len(zones)
-    assert not {z.id for z in zones} - zoneinfo.available_timezones()
+    assert not {z.id for z in zones} - IANA_NAMES
     assert all(z.posix and "|" not in z.posix for z in zones)
 
 
