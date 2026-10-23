@@ -516,7 +516,7 @@ _ECB_ACCOUNT_LEN = 128
 
 #: The result codes a station returns in an ECB scalar reply, with their eufy names.
 ECB_RESULT_CODES: dict[int, str] = {
-    code: P2P_ERROR_CODES[code] for code in (0, -103, -104, -106, -110)
+    code: P2P_ERROR_CODES[code] for code in (0, RESULT_INVALID_COMMAND, -104, -106, -110)
 }
 
 

@@ -2609,6 +2609,23 @@ async def test_a_held_station_whose_dump_lacks_the_mode_reads_the_cloud_copy(
         await station.async_close()
 
 
+async def test_a_cloud_schedule_without_the_mode_in_force_leaves_it_unknown(
+    fake: FakeStation,
+) -> None:
+    """A cloud copy with Schedule selected (1224 = 2) and no 1151: the mode in force is
+    unknown, never Schedule itself."""
+    serial = "T8441P2000054321"
+    fake.params[STATION_CHANNEL].pop(1224)
+    fake.mode_in_dump = False
+    station = await _standalone(fake, serial)
+    try:
+        station.apply_cloud_device(_mode_snapshot(serial, GuardMode.SCHEDULE, time.time()))
+        state = await station.async_update()
+    finally:
+        await station.async_close()
+    assert (state.guard_mode, state.active_mode) == (GuardMode.SCHEDULE, None)
+
+
 async def test_a_dump_that_carries_the_mode_wins_over_the_cloud_copy(
     station: Station, fake: FakeStation
 ) -> None:

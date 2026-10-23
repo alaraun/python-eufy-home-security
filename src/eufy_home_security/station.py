@@ -333,15 +333,18 @@ def _station_modes(
     The held parameters' (a dump, a report, an applied arm), else the cloud copy's
     (``cloud``) where they lack the mode or hold this library's own value of it that the
     cloud changed after (``values``, :attr:`StationState.setting_params`, then holds the
-    cloud's). The effective mode defaults to the selected one.
+    cloud's). The effective mode defaults to the selected one, except Schedule, which is
+    never in force itself: without 1151 its effective mode is unknown (None).
     """
     if values.get(GUARD_MODE_PARAM) != dump.station.get(GUARD_MODE_PARAM):
         dump = ParamDump()
         dump.devices[STATION_CHANNEL] = {
             pid: cloud[pid] for pid in (GUARD_MODE_PARAM, ACTIVE_MODE_PARAM) if pid in cloud
         }
-    mode = dump.guard_mode
-    return mode, mode if dump.active_mode is None else dump.active_mode
+    mode, active = dump.guard_mode, dump.active_mode
+    if active is None and mode != GuardMode.SCHEDULE:
+        active = mode
+    return mode, active
 
 
 def _int_or_none(value: str | None) -> int | None:
