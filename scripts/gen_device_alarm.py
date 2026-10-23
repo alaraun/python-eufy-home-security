@@ -141,6 +141,13 @@ def request(
     return [command, slotted]
 
 
+def start_stop(start: list[Any] | None, stop: list[Any] | None) -> list[list[Any]] | None:
+    """``[start, stop]`` when both are alarm requests with the same fields, else None."""
+    if start is None or stop is None or set(start[1]) != set(stop[1]):
+        return None
+    return [start, stop]
+
+
 def generate(cache: Path) -> dict[str, dict[str, dict[str, Any]]]:
     tm = gen_models
     products: dict[str, dict[str, dict[str, Any]]] = {}
@@ -195,10 +202,9 @@ def generate(cache: Path) -> dict[str, dict[str, dict[str, Any]]]:
                     )
                     for start in (True, False)
                 ]
-                start_req, stop_req = pair
-                if start_req is None or stop_req is None or set(start_req[1]) != set(stop_req[1]):
-                    continue
-                recorded[choice] = [start_req, stop_req]
+                both = start_stop(*pair)
+                if both is not None:
+                    recorded[choice] = both
             if recorded:
                 first = default if default in recorded else min(recorded)
                 kinds[kind.value] = {"default": first, "choices": recorded}
