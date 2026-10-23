@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from eufy_home_security import station as station_module
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices import device_alarm
 from eufy_home_security.devices.device_alarm import DeviceAlarm
@@ -520,3 +521,112 @@ async def test_an_off_frame_names_no_choice(
         (CAMERA.device_sn, True, None, 10),
         (CAMERA.device_sn, False, None, 1),
     ]
+
+
+async def test_a_paired_device_without_a_channel_has_no_state(fake: FakeStation) -> None:
+    """A device with an alarm but no channel reads None and is skipped, not raised, when
+    a siren frame reports its station's devices."""
+    loose = dataclasses.replace(CAMERA, device_sn=SYNTHETIC.camera_sn[:-1] + "2", channel=None)
+    station = _station(fake, [loose, CAMERA])
+    events = _changes(station)
+    try:
+        assert station.device_alarms(loose.device_sn)
+        assert station.device_alarm_on(loose.device_sn) is None
+        await _frames(station, fake, (SIREN, 10, 30, CHANNEL))
+        assert station.device_alarm_on(loose.device_sn) is None
+    finally:
+        await station.async_close()
+    assert _alarm_changes(events) == [(CAMERA.device_sn, True, DeviceAlarm.SOUND, 10)]
+
+
+async def test_a_failing_alarm_listener_does_not_stop_the_others(
+    station: Station, fake: FakeStation
+) -> None:
+    """A listener that raises, called before the station's: the tone frame still ends in
+    AlarmChanged and the station still takes this and later frames."""
+
+    def boom(frame: object) -> None:
+        raise RuntimeError("listener")
+
+    station.session._alarm_listeners.insert(0, boom)
+    events = _changes(station)
+    await _frames(station, fake, (TONE, 4, 30, CHANNEL))
+    assert [e.alarming for e in events if isinstance(e, AlarmChanged)] == [True]
+    assert station.device_alarm_on(HB3.device_sn) is True
+    await _frames(station, fake, (SIREN, 10, 30, CHANNEL))
+    assert station.device_alarm_on(CAMERA.device_sn) is True
+
+
+# ── expiry: an on state lasts its time left ──────────────────────────────────
+
+
+@pytest.fixture
+def short_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 1 s siren expires 50 ms after its frame."""
+    monkeypatch.setattr(station_module, "SIREN_EXPIRY_MARGIN_S", -0.95)
+
+
+@pytest.mark.usefixtures("short_expiry")
+async def test_a_siren_without_its_end_frame_reads_off_when_its_time_runs_out(
+    station: Station, fake: FakeStation
+) -> None:
+    events = _changes(station)
+    camera = CAMERA.device_sn
+    await _frames(station, fake, (SIREN, 10, 1, CHANNEL))
+    assert station.device_alarm_on(camera) is True
+    await _until(lambda: station.device_alarm_on(camera) is False)
+    assert not station._siren_expiry
+    assert _alarm_changes(events) == [
+        (camera, True, DeviceAlarm.SOUND, 10),
+        (camera, False, None, None),
+    ]
+
+
+@pytest.mark.usefixtures("short_expiry")
+async def test_the_next_frame_replaces_or_cancels_the_expiry(
+    station: Station, fake: FakeStation
+) -> None:
+    """A later on frame restarts the countdown from its own time left; an off frame
+    cancels it, so nothing more is emitted."""
+    events = _changes(station)
+    camera = CAMERA.device_sn
+    await _frames(station, fake, (SIREN, 10, 1, CHANNEL), (SIREN, 10, 30, CHANNEL))
+    await asyncio.sleep(0.1)
+    assert station.device_alarm_on(camera) is True
+    await _frames(station, fake, (SIREN, 0, 0, CHANNEL))
+    assert not station._siren_expiry
+    await _frames(station, fake, (SIREN, 10, 1, CHANNEL), (SIREN, 16, 0, CHANNEL))
+    await asyncio.sleep(0.1)
+    assert _alarm_changes(events) == [
+        (camera, True, DeviceAlarm.SOUND, 10),
+        (camera, False, None, 0),
+        (camera, True, DeviceAlarm.SOUND, 10),
+        (camera, False, None, 16),
+    ]
+
+
+async def test_frames_the_app_ignores_change_nothing(station: Station, fake: FakeStation) -> None:
+    """An on type with no time left, an off type with time left: no state, no event, the
+    running expiry kept."""
+    events = _changes(station)
+    camera = CAMERA.device_sn
+    await _frames(station, fake, (SIREN, 10, 0, CHANNEL))
+    assert station.device_alarm_on(camera) is None
+    await _frames(station, fake, (SIREN, 10, 30, CHANNEL))
+    timer = station._siren_expiry[CHANNEL]
+    await _frames(
+        station, fake, (SIREN, 16, 5, CHANNEL), (SIREN, 1, 5, CHANNEL), (SIREN, 25, 0, CHANNEL)
+    )
+    assert station.device_alarm_on(camera) is True
+    assert station._siren_expiry[CHANNEL] is timer
+    assert _alarm_changes(events) == [(camera, True, DeviceAlarm.SOUND, 10)]
+
+
+async def test_closing_the_station_cancels_the_expiry(fake: FakeStation) -> None:
+    station = _station(fake)
+    await _frames(station, fake, (SIREN, 10, 30, CHANNEL))
+    timer = station._siren_expiry[CHANNEL]
+    await station.async_close()
+    assert timer.cancelled()
+    assert not station._siren_expiry
+    assert station.device_alarm_on(CAMERA.device_sn) is None

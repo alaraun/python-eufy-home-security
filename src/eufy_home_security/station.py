@@ -270,6 +270,9 @@ CAMERA_IMAGE_DAYS = 7
 """Days of history :meth:`Station.async_camera_image` searches for a camera's newest event."""
 RECORDINGS_DAYS = 2
 """Days :meth:`Station.async_list_recordings` covers by default: today and yesterday."""
+SIREN_EXPIRY_MARGIN_S: Final = 2.0
+"""Seconds past a device siren's reported time left before :meth:`Station.device_alarm_on`
+reads it off without an end frame."""
 RECORDING_QUIET = 30.0
 """Seconds past a history row's end time before :meth:`Station.recording_settled` calls its
 clip finished (clips of 6 to 37 s seen; a detection's row exists while it records)."""
@@ -1086,8 +1089,10 @@ class Station:
         """:meth:`_shared_lock` per shared parameter group."""
         self._alarm: AlarmChanged | None = None
         """The last alarm transition (:attr:`last_alarm`)."""
-        self._sirens: dict[int, AlarmFrame] = {}
-        """The last device-siren frame per channel (:meth:`device_alarm_on`)."""
+        self._sirens: dict[int, bool] = {}
+        """The device-siren state per channel (:meth:`device_alarm_on`)."""
+        self._siren_expiry: dict[int, asyncio.TimerHandle] = {}
+        """The pending off of each channel whose siren is on (:data:`SIREN_EXPIRY_MARGIN_S`)."""
         session.add_dump_listener(self._on_dump_complete)
         session.add_alarm_listener(self._on_alarm_frame)
         session.add_notify_listener(self._on_notify)
@@ -1479,7 +1484,14 @@ class Station:
         await self.session.async_start()
 
     async def async_close(self) -> None:
-        await self.session.async_close()
+        """Close the session; forget the device-siren states and cancel their expiry."""
+        try:
+            await self.session.async_close()
+        finally:
+            for timer in self._siren_expiry.values():
+                timer.cancel()
+            self._siren_expiry.clear()
+            self._sirens.clear()
 
     @property
     def connected(self) -> bool:
@@ -4262,25 +4274,29 @@ class Station:
 
     def device_alarm_on(self, device_sn: str) -> bool | None:
         """Whether ``device_sn``'s own alarm (siren, light or both) is on, from the frames
-        the eufy app reads it from; None before any, and where :meth:`device_alarms` is
-        empty. Each transition is announced as :class:`~.events.DeviceAlarmChanged`.
+        the eufy app reads it from; None before any, where :meth:`device_alarms` is
+        empty, for a paired device without a channel, and after :meth:`async_close`.
+        Each transition is announced as :class:`~.events.DeviceAlarmChanged`.
 
         A device whose alarm request is SET_TONE_FILE (1201) sounds the station's alarm
         tone: its state is the station's alarm (:attr:`alarming`, None before any
-        :class:`~.events.AlarmChanged`), as for a HomeBase's own serial. Any other device
-        reads the last device-siren frame (``0x04B2``) on its channel; parameter dumps
-        do not count. An event type 0, 1 (stopped by the device) or a stop code
-        (15/16/17) is off, any other on."""
+        :class:`~.events.AlarmChanged`), as for a HomeBase's own serial, with its rules
+        (no countdown: it stays on until the next transition). Any other device reads the
+        device-siren frames (``0x04B2``) on its channel as the app does
+        (:attr:`~.p2p.alarm.AlarmFrame.alarm_state`): on for an on type with time left,
+        off for an off type (0, 1, 15/16/17) with none; other frames and parameter dumps
+        change nothing. An on state reads off when its time left plus
+        :data:`SIREN_EXPIRY_MARGIN_S` passes without another frame on that channel (an
+        end frame lost, or sent while the session was down)."""
         alarms = self._device_alarms_of(device_sn)
         if alarms is None:
             return None
         if alarms.station_tone:
             return None if self._alarm is None else self._alarm.alarming
         try:
-            frame = self._sirens.get(self._alarm_channel(device_sn))
+            return self._sirens.get(self._alarm_channel(device_sn))
         except UnsupportedError:
             return None
-        return None if frame is None else frame.alarm_on
 
     def _alarm_channel(self, device_sn: str) -> int:
         """The channel ``device_sn``'s alarm is addressed on: a hub's own on channel 0, as
@@ -4290,24 +4306,44 @@ class Station:
         return self.channel_for(device_sn)
 
     def _on_alarm_frame(self, frame: AlarmFrame) -> None:
-        """Keep a device-siren frame per channel; announce a change of its on/off state
-        for the devices it reports (an unseen channel counts as off)."""
+        """Take a device-siren frame's state for its channel; an on state expires after
+        its time left plus :data:`SIREN_EXPIRY_MARGIN_S`, the next counted frame on that
+        channel replaces or cancels the expiry."""
         if frame.param_id != FrameType.SIREN_NOTIFY:
             return
-        old = self._sirens.get(frame.channel)
-        self._sirens[frame.channel] = frame
-        if (old is not None and old.alarm_on) == frame.alarm_on:
+        on = frame.alarm_state
+        if on is None:
+            return
+        timer = self._siren_expiry.pop(frame.channel, None)
+        if timer is not None:
+            timer.cancel()
+        if on:
+            self._siren_expiry[frame.channel] = asyncio.get_running_loop().call_later(
+                frame.seconds_left + SIREN_EXPIRY_MARGIN_S, self._expire_siren, frame.channel
+            )
+        self._set_siren(frame.channel, on, frame.values[0])
+
+    def _expire_siren(self, channel: int) -> None:
+        self._siren_expiry.pop(channel, None)
+        self._set_siren(channel, False, None)
+
+    def _set_siren(self, channel: int, on: bool, event_type: int | None) -> None:
+        """Store ``channel``'s siren state; announce a change for the devices it reports
+        (an unseen channel counts as off)."""
+        was = self._sirens.get(channel, False)
+        self._sirens[channel] = on
+        if was == on:
             return
 
         def reported(alarms: DeviceAlarms, device_sn: str) -> bool:
             if alarms.station_tone:
                 return False
             try:
-                return self._alarm_channel(device_sn) == frame.channel
+                return self._alarm_channel(device_sn) == channel
             except UnsupportedError:
                 return False
 
-        self._emit_device_alarms(reported, frame.alarm_on, frame.values[0], datetime.now(UTC))
+        self._emit_device_alarms(reported, on, event_type, datetime.now(UTC))
 
     def _emit_device_alarms(
         self,

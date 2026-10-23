@@ -21,6 +21,8 @@ frame                     param    body                       meaning
 A tone or siren frame reports its alarm off when the event type is one of
 :data:`ALARM_OFF_TYPES` (0 ended, 1 stopped by the device, 15/16/17 stopped from a
 keypad, the app or the HomeBase) and on for any other type, as the eufy app reads them.
+As a state (:attr:`AlarmFrame.alarm_state`), the app takes an off type only with no
+time left and an on type only with time left; it ignores the other frames.
 
 Arming and disarming also send ``[0, 0]`` tone and siren frames on each channel. The
 station sends them under GCM; the session refuses ECB copies once a session key exists
@@ -36,7 +38,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
-from ..events import AlarmChanged, AlarmStopSource, EventSource
+from ..events import ALARM_OFF_TYPES, AlarmChanged, AlarmStopSource, EventSource
 from .xzyh import Frame, FrameType
 
 #: The alarm frame types, each with the number of u32 values its body carries.
@@ -44,10 +46,6 @@ ALARM_FRAME_VALUES: Final[Mapping[int, int]] = MappingProxyType(
     {FrameType.ALARM_TONE_NOTIFY: 2, FrameType.SIREN_NOTIFY: 2, FrameType.LIGHT_NOTIFY: 1}
 )
 _CHANNEL_BYTE: Final = 2
-#: The event type of a tone or siren frame for an alarm the device itself stopped.
-DEVICE_STOP: Final = 1
-#: The event types of a tone or siren frame that report the alarm off.
-ALARM_OFF_TYPES: Final = frozenset({0, DEVICE_STOP, *AlarmStopSource})
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +68,23 @@ class AlarmFrame:
         """Whether a tone or siren frame reports its alarm on: an event type outside
         :data:`ALARM_OFF_TYPES`."""
         return self.values[0] not in ALARM_OFF_TYPES
+
+    @property
+    def seconds_left(self) -> int:
+        """A tone or siren frame's time left in seconds; a value above 1000 is read as
+        milliseconds, as the eufy app does."""
+        seconds = self.values[1]
+        return seconds // 1000 if seconds > 1000 else seconds
+
+    @property
+    def alarm_state(self) -> bool | None:
+        """The state a tone or siren frame sets, as the eufy app reads it: off for an
+        off type (:attr:`alarm_on` False) with no time left, on for an on type with time
+        left, None (no change) for the rest (``[10, 0]``, ``[16, 5]``)."""
+        left = self.values[1]
+        if self.alarm_on:
+            return True if left > 0 else None
+        return False if left == 0 else None
 
     def alarm_change(self, station_sn: str, *, at: datetime) -> AlarmChanged | None:
         """The alarm state an alarm-tone frame (1201) reports; None for other frames.

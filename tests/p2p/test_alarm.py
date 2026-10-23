@@ -92,3 +92,27 @@ def test_the_stop_codes_read_off_and_every_other_event_type_on(event_type: int, 
     """0 ended, 1 stopped by the device, 15/16/17 stopped by keypad, app or HomeBase."""
     assert AlarmFrame(1202, 1, (event_type, 0)).alarm_on is on
     assert AlarmFrame(1201, 1, (event_type, 0)).alarm_on is on
+
+
+@pytest.mark.parametrize(
+    ("values", "state"),
+    [
+        ((10, 30), True),
+        ((25, 1), True),
+        ((10, 0), None),  # an on type with no time left
+        ((0, 0), False),
+        ((1, 0), False),
+        ((16, 0), False),
+        ((16, 5), None),  # an off type with time left
+        ((0, 30), None),
+    ],
+)
+def test_the_state_needs_time_left_for_on_and_none_for_off(
+    values: tuple[int, int], state: bool | None
+) -> None:
+    assert AlarmFrame(1202, 1, values).alarm_state is state
+
+
+@pytest.mark.parametrize(("seconds", "left"), [(30, 30), (1000, 1000), (1001, 1), (30000, 30)])
+def test_a_time_left_above_1000_is_milliseconds(seconds: int, left: int) -> None:
+    assert AlarmFrame(1202, 1, (10, seconds)).seconds_left == left

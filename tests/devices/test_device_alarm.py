@@ -53,3 +53,9 @@ def test_a_request_without_a_type_names_no_choice() -> None:
     alarms = _alarms("T8010")
     assert alarms.choices == (DeviceAlarm.SOUND,)
     assert alarms.choice_for(None) is None
+
+
+def test_an_alarm_with_any_siren_start_is_not_the_station_tone() -> None:
+    """One choice starts with SET_TONE_FILE, another with SET_DEVS_TONE_FILE."""
+    raw = {"default": 0, "choices": {0: ((1201, {}), (1201, {})), 1: ((1202, {}), (1202, {}))}}
+    assert device_alarm._alarms(raw).station_tone is False

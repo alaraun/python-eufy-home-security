@@ -292,6 +292,8 @@ def test_alarm_type_is_the_inner_type_never_the_device_type() -> None:
     event = decode_push(_message({"msg_type": 10, "type": 16}, type="43"))
     assert event.alarm_type == 16
     assert event.alarm_phase is AlarmPhase.STOPPED  # a cloud push is authenticated
+    for off in (0, 1):  # an off type that is no stop: neither a start nor a stop
+        assert decode_push(_message({"msg_type": 10, "type": off}, type="43")).alarm_phase is None
     no_inner = decode_push(_message({"msg_type": 10}, type="16"))
     assert no_inner.alarm_type is None
     assert no_inner.alarm_phase is AlarmPhase.TRIGGERED
