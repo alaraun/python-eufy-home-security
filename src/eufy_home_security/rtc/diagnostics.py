@@ -1,9 +1,9 @@
 """Read-only WebRTC diagnostics for a station the eufy app reaches over WebRTC, as a
 report safe to share.
 
-Built to run on a volunteer's own hardware: the webrtc_only models (T9000/T8N00) this
-library otherwise skips, and a station with a paired camera the app streams over WebRTC
-(:func:`webrtc_children`). The report dataclasses hold only *descriptors*: model codes,
+Built to run on a volunteer's own hardware: the stations the eufy app reaches only over
+WebRTC (:func:`~..devices.webrtc.app_webrtc_only`), which this library otherwise skips,
+and a station with a paired camera the app streams over WebRTC (:func:`webrtc_children`). The report dataclasses hold only *descriptors*: model codes,
 firmware and SDK versions, channels, lengths, counts, timings, protocol-header bytes,
 JSON key names and a whitelist of small integer fields. They have no field for a key,
 a serial, an address, a token, an account id or any audio/video payload, so the whole
@@ -34,9 +34,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from .._logging import redact_serial
-from ..devices.live_open import app_uses_webrtc
 from ..devices.model_settings import BATTERY_PROPERTY, product_code_of, settings_of
-from ..devices.recipes import WEBRTC_ONLY_STATIONS, connect_type
+from ..devices.webrtc import app_uses_webrtc, app_webrtc_only, route_device
 from ..exceptions import CommunicationError, EufySecurityError
 from ..models import PARAM_DEV_STATUS, STATION_CHANNEL, GuardMode
 from ..p2p.messages import CMD_SET_ARMING, arm_payload, device_msg
@@ -352,7 +351,7 @@ def describe_station(device: CloudDevice) -> StationRecord:
     online = raw.get("webrtc_online_status")
     return StationRecord(
         model=model,
-        is_webrtc_only=model in WEBRTC_ONLY_STATIONS,
+        is_webrtc_only=app_webrtc_only(route_device(device)),
         main_sw_version=device.main_sw_version,
         webrtc_sdk_version=sdk,
         member_type=device.member_type,
@@ -420,15 +419,10 @@ def _paired(station_sn: str, devices: Iterable[CloudDevice]) -> list[CloudDevice
 
 def webrtc_children(station_sn: str, devices: Iterable[CloudDevice]) -> list[CloudDevice]:
     """The devices paired to ``station_sn`` that the eufy app streams over WebRTC behind
-    it (:func:`~..devices.live_open.app_uses_webrtc`), by channel."""
-    return [
-        d
-        for d in _paired(station_sn, devices)
-        if app_uses_webrtc(
-            product_code_of(d.raw.get("device_new_pn"), d.device_sn),
-            connect_type(station_sn, d.device_sn),
-        )
-    ]
+    it (:func:`~..devices.webrtc.app_uses_webrtc`), by channel."""
+    devices = list(devices)
+    routes = [route_device(d) for d in devices]
+    return [d for d in _paired(station_sn, devices) if app_uses_webrtc(d.device_sn, routes)]
 
 
 def webrtc_probe_reason(
@@ -437,7 +431,7 @@ def webrtc_probe_reason(
     """Why diagnose probes ``station`` over WebRTC: ``webrtc_only`` (the app reaches it
     only over WebRTC), ``webrtc_child`` (a paired camera the app streams over WebRTC),
     ``webrtc_all`` (the option, any other station); None when it is not probed."""
-    if station.device_sn[:5] in WEBRTC_ONLY_STATIONS:
+    if app_webrtc_only(route_device(station)):
         return "webrtc_only"
     if webrtc_children(station.device_sn, devices):
         return "webrtc_child"

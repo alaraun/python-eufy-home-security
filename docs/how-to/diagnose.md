@@ -4,9 +4,9 @@
 opt-in below is given): every device
 the eufy cloud lists, the health of each station the library serves over local P2P,
 and a WebRTC probe of the stations the eufy app reaches over WebRTC, which the library
-cannot serve that way yet: the stations it reaches only over WebRTC (`T9000`, the NVR
-`T8N00`), and a HomeBase 3 with a paired camera the app streams over WebRTC (the
-battery doorbells `T8223` and `T8224`, e.g. a Video Doorbell C30). The report is safe to share: it is built
+cannot serve that way yet: the stations it reaches only over WebRTC (for example
+`T9000` or the NVR `T8N00`), and a station with a paired camera the app streams over
+WebRTC (for example a Video Doorbell C30 behind a HomeBase 3 on some firmware). The report is safe to share: it is built
 from descriptors and redacted views only.
 
 ## What it does
@@ -30,10 +30,12 @@ an exception type).
    record `Station.diagnostics()`: model, connection, last error type, LAN-path
    warnings, local-event support, paired devices, session counters, storage figures.
    A failed read is recorded by exception type under `read_errors`.
-4. **WebRTC probe.** By default it probes each WebRTC-only station (`T9000`, `T8N00`)
-   and each HomeBase 3 with a paired camera the eufy app streams over WebRTC (a
-   `T8223` or `T8224`; the rule is `devices.live_open.app_uses_webrtc`). Such a
-   HomeBase 3 keeps its P2P read of step 3 as well. `--webrtc-all` adds every other
+4. **WebRTC probe.** By default it probes each station the eufy app reaches only over
+   WebRTC (`devices.webrtc.app_webrtc_only`) and each station with a paired camera the
+   app streams over WebRTC (`devices.webrtc.app_uses_webrtc`: the app's rule over the
+   models and their firmware, see
+   [WebRTC or P2P](../protocol/media.md#webrtc-or-p2p-declared-eufy-app)).
+   Such a station keeps its P2P read of step 3 as well. `--webrtc-all` adds every other
    station, `--no-webrtc` skips the whole step. Each probed station's entry names why it
    was probed (`probe_reason`: `webrtc_only`, `webrtc_child` or `webrtc_all`) and the
    camera its live view used (`live_camera`: channel, model, product code, shortened
