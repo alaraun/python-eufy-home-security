@@ -510,6 +510,8 @@ def test_generated_t8160_custom_recording_settings_apply_when_mode_is_3() -> Non
         ("音量", 0, 100, "%"),
         ("无", 0, 1, None),
         ("个", 1, 2, None),
+        ("degree", 0, 100, None),
+        ("decibel", 0, 100, None),
     ],
 )
 def test_vendor_units_normalise_to_setting_units(

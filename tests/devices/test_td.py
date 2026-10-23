@@ -63,6 +63,12 @@ def test_an_unmapped_unit_is_dropped_not_raised(raw: str) -> None:
     assert s.unit is None
 
 
+@pytest.mark.parametrize("raw", ["degree", "decibel"])
+def test_a_unit_with_no_setting_unit_is_dropped(raw: str) -> None:
+    """A temperature bound or a sound level carries no setting unit."""
+    assert normalise_unit(raw, 0, 100) is None
+
+
 def test_normalise_unit_raises_value_error_when_unmapped() -> None:
     assert normalise_unit("个", 0, 3) is None
     assert normalise_unit("day", None, None) is SettingUnit.DAYS

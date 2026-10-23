@@ -1265,7 +1265,7 @@ for an unknown id). All are exported from the package root.
 
 ### Models without a settings file
 
-The bundled files cover 110 product codes. For any other code of the account,
+The bundled files cover 159 product codes. For any other code of the account,
 `async_discover()` asks the cloud for its thing description, once on the first discovery
 and again on every `async_discover(refresh=True)`, in the same request as every other
 code. The request uses the cached cloud session and never logs in: without one, the

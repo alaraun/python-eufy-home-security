@@ -1,7 +1,7 @@
 # Settings files (schema v3)
 
 `src/eufy_home_security/devices/data/models/<PN>.json` holds one file per product
-code (110). Each file lists the model's settings, as the vendor's thing description (TD)
+code (159). Each file lists the model's settings, as the vendor's thing description (TD)
 declares them, with the write and read codecs the vendor's handler
 (`<PN>Handle.mix.js`) gives. `scripts/gen_models.py` generates the files and
 `INDEX.json` beside them, `{"schema_version": 3, "codes": [...]}`: the sorted product
@@ -259,6 +259,6 @@ A model that fails is not written, and the run exits 1. `--check` exits 1 on any
 difference and 2 when Node, the cache, the labels, the layout or the title data are missing.
 Run it on the full corpus after changing the generator.
 
-Tests that need only committed files check the schema of all 110 files and the v1
+Tests that need only committed files check the schema of all 159 files and the v1
 reference. The `--check` test runs on two models and skips without Node or the cache.
 When and how to regenerate: [how-to/regenerate-models.md](../how-to/regenerate-models.md).
