@@ -346,16 +346,22 @@ The app chooses WebRTC or P2P from the parent's `is_connect_webrtc`, not from th
 flag: 2 opens every child over WebRTC; 0 or no such property, P2P; 1, WebRTC for the children
 `is_connect_webrtc_sub_device_list` and the child's own `is_connect_webrtc` select. The
 thing descriptions declare 2 for a NVR and a T9000, none for a HomeBase 2, and for a
-HomeBase 3 1 with a sub-device list from firmware 3.7.4.3 and 2 from 4.2.0.0. The library
-opens over P2P only and does not read the property. A HomeBase 3 at 3.8.7.4 answers a P2P
+HomeBase 3 1 with a sub-device list on firmware 3.7.4.3 to 4.1.9.999 (0 outside it); its 2
+from 4.2.0.0 applies only under a condition on the app's own SDK version that the app does
+not meet, so a HomeBase 3 on 4.2.0.0 or later is P2P in the app **[declared: eufy app]**.
+The library opens over P2P only and does not read the property. A HomeBase 3 at 3.8.7.4 answers a P2P
 open for a T8170, a model its declared sub-device list names (verified); P2P on a HomeBase 3
 at 4.2.0.0 or later, a NVR or a T9000 is not observed.
 The library sends the recorded open: on the device's own session every one of the three;
 behind a station `station`, and a 1700 open behind a HomeBase 2 or 3 as described
 [below](#wi-fi-camera-behind-a-homebase-open-17001000-on-the-homebases-session) where the
-handler's stop is one the library sends. A T8223 or T8224 behind a HomeBase 3 gets none:
-the app streams those over WebRTC there (the T8030's `is_connect_webrtc`, firmware
-3.7.4.3-4.1.9.999). Any other open raises `UnsupportedError` before anything is sent, and
+handler's stop is one the library sends. A T8223 or T8224 behind a HomeBase 3 on firmware
+3.7.4.3 to 4.1.9.999, both bounds included, gets none: the app streams those over WebRTC
+there (the station's `is_connect_webrtc` is 1 and its sub-device list names both models).
+On any other station firmware, or with none known, it gets its handler's open, as the app
+streams it over P2P **[declared: eufy app]**. The firmware compares as the app compares
+versions: dotted fields as numbers, trailing letters dropped, a missing field or version
+as 0. Any other open raises `UnsupportedError` before anything is sent, and
 `Station.live_support` grades it `UNKNOWN`. A product the table does not list gets the
 defaults: `single` standalone, `station` behind a station.
 

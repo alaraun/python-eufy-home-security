@@ -197,6 +197,13 @@ def test_live_video_is_declared_where_the_library_sends_the_handlers_open(
     assert profile_for_serial(serial) is profile
 
 
+def test_a_t8224_lists_live_video_behind_a_homebase_3_outside_the_webrtc_window() -> None:
+    profile = profile_for_serial("T8224P2000067890")
+    assert profile is not None
+    where = profile.capabilities[Capability.LIVE_STREAM].source.split(" under ")[1]
+    assert "HB3" in where.split(" (")[0].split(", ")
+
+
 def test_the_generic_profile_itself_claims_no_live_video() -> None:
     assert FALLBACK_PROFILES[DeviceKind.CAMERA].support(Capability.LIVE_STREAM) is Support.UNKNOWN
 

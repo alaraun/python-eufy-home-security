@@ -523,7 +523,8 @@ def _with_generated(profile: DeviceProfile, product_code: str) -> DeviceProfile:
 
 def _build_with_live(profile: DeviceProfile, product_code: str) -> DeviceProfile:
     """``profile`` with live video graded ``DECLARED`` where the library sends the open the
-    product's handler sends under some connect type (:mod:`.live_open`); an entry the
+    product's handler sends under some connect type, on a station firmware outside the
+    app's WebRTC window (:mod:`.live_open`; None compares below it); an entry the
     profile grades itself (other than ``UNKNOWN``) stands. ``profile`` itself when
     nothing changes."""
     open_entries = [
@@ -531,7 +532,11 @@ def _build_with_live(profile: DeviceProfile, product_code: str) -> DeviceProfile
         for c in _LIVE_CAPABILITIES
         if profile.capabilities.get(c, Evidence(Support.UNKNOWN, "")).support is Support.UNKNOWN
     ]
-    where = [ct.value for ct in _CONNECT_TYPES if library_live_open(product_code, ct) is not None]
+    where = [
+        ct.value
+        for ct in _CONNECT_TYPES
+        if library_live_open(product_code, ct, station_firmware=None) is not None
+    ]
     if not where or not open_entries:
         return profile
     evidence = Evidence(

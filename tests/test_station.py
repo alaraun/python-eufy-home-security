@@ -2791,6 +2791,21 @@ async def test_a_t8224_behind_a_homebase_3_is_refused_as_the_app_streams_it_over
     assert "WebRTC" in evidence.source
 
 
+@pytest.mark.parametrize("firmware", ["4.2.0.0", None])
+async def test_a_t8224_behind_a_homebase_3_outside_the_apps_webrtc_window_gets_its_open(
+    station: Station, fake: FakeStation, firmware: str | None
+) -> None:
+    t8224 = dataclasses.replace(CAMERA, device_sn="T8224P2000067890", channel=3)
+    hub_device = dataclasses.replace(station.device, main_sw_version=firmware)
+    hub = Station(hub_device, station.session, sub_devices=[t8224])
+    assert hub.live_support(t8224.device_sn).support is Support.DECLARED
+    async with await hub.async_open_live(t8224.device_sn) as stream:
+        await anext(aiter(stream))
+    (body,) = fake.doorbell_payloads
+    assert body["data"]["mChannel"] == 3
+    assert body["data"]["extValue"] == 1000
+
+
 @pytest.mark.parametrize(
     ("serial", "support", "mode"),
     [

@@ -2907,12 +2907,16 @@ class Station:
 
     def _live_open_of(self, device_sn: str) -> LiveOpen | None:
         """The live open the library sends ``device_sn``."""
-        return library_live_open(self._product_code(device_sn), self._connect_type_of(device_sn))
+        return library_live_open(
+            self._product_code(device_sn),
+            self._connect_type_of(device_sn),
+            station_firmware=self.device.main_sw_version,
+        )
 
     def _live_unsupported_reason(self, device_sn: str) -> str:
         code = self._product_code(device_sn)
         connect = self._connect_type_of(device_sn)
-        if app_uses_webrtc(code, connect):
+        if app_uses_webrtc(code, connect, station_firmware=self.device.main_sw_version):
             return (
                 f"the eufy app streams a {code} behind a {connect.value} station over "
                 "WebRTC, which this library does not implement"
