@@ -333,6 +333,9 @@ class FakeCloud:
     returns (see :func:`thing_description`); a code not in it is omitted from the reply.
     ``things_error``, when set, refuses every such request as a ``call_errors`` entry
     does; it is independent of ``call_errors``, which a things request never consumes.
+    ``things_errors`` refuses, in order, the next such requests once each, ahead of
+    ``things_error`` (``[refusal(463, 4404)]`` is one lapsed-key answer, met with one key
+    exchange and a retry).
 
     ``arming_groups`` holds each house id's raw arming groups (``guard_list``
     ``data.groups``), served by the ``region`` cluster with ``arming_guided`` and changed
@@ -393,6 +396,7 @@ class FakeCloud:
     dsk_keys: dict[str, str] = field(default_factory=dict)
     things: dict[str, dict[str, Any]] = field(default_factory=dict)
     things_error: EufySecurityError | None = None
+    things_errors: list[EufySecurityError] = field(default_factory=list)
     things_requested: list[tuple[str, ...]] = field(default_factory=list)
     """The product codes of each ``get_things_list`` request, in order."""
     calls: list[str] = field(default_factory=list)
@@ -598,6 +602,8 @@ class FakeCloud:
             note("things")
             codes = list(payload.get("product_codes") or [])
             self.things_requested.append(tuple(codes))
+            if self.things_errors:
+                raise _Refusal(self.things_errors.pop(0))
             if self.things_error is not None:
                 raise _Refusal(self.things_error)
             return {"things_list": [self.things[c] for c in codes if c in self.things]}

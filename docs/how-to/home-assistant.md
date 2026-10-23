@@ -1269,8 +1269,10 @@ The bundled files cover 159 product codes. For any other code of the account,
 `async_discover()` asks the cloud for its thing description, once on the first discovery
 and again on every `async_discover(refresh=True)`, in the same request as every other
 code. The request uses the cached cloud session and never logs in: without one, the
-code stays unlisted until a later refresh. A failure is logged once and never fails
-discovery.
+code stays unlisted until a later refresh. A re-key answer costs one key exchange on the
+same session and one retry, as every cloud call. A failure is logged once (a key identity
+the cloud still refuses at INFO, others at WARNING with the error's message) and never
+fails discovery.
 
 When the thing description arrives, `station.settings_for(device_sn)` lists the model's
 properties with domain, labels, unit and default, all read-only: `writable` and

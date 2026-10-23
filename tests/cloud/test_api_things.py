@@ -25,6 +25,7 @@ from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.exceptions import (
     AuthenticationError,
     CloudError,
+    KeyExchangeRefusedError,
     NoCachedSessionError,
     ProtocolError,
     RateLimitedError,
@@ -222,21 +223,74 @@ async def test_refused_locally_without_a_request_or_login(
 # ── the cloud refuses the session: propagate, never re-login ─────────────────
 
 
-@pytest.mark.parametrize("code", [int(const.CloudCode.SESSION_TIMEOUT), *sorted(const.REKEY_CODES)])
-async def test_an_expired_or_rekey_answer_propagates_and_keeps_the_session(
-    fake_mega: FakeMega, login_guard: _LoginGuard, code: int
+async def test_an_expired_answer_raises_no_session_and_keeps_the_session(
+    fake_mega: FakeMega, login_guard: _LoginGuard
 ) -> None:
     with aioresponses() as mock:
         fake_mega.install(mock)
         async with aiohttp.ClientSession() as session:
             api, cache = await _seeded(session, login_guard)
             token = cache.cloud_session("eu")["auth_token"]
-            fake_mega.code_once["things"] = code
-            with pytest.raises(CloudError):
+            fake_mega.code_once["things"] = int(const.CloudCode.SESSION_TIMEOUT)
+            with pytest.raises(NoCachedSessionError):
                 await api.async_get_thing_descriptions(["TX0001"])
             assert cache.cloud_session("eu")["auth_token"] == token  # a guest never drops it
             assert api.session_replaced is False
     assert fake_mega.things_calls == 1
+    assert fake_mega.login_calls == 1
+
+
+_REKEY = (463, {"code": int(const.CloudCode.NEED_NEGOTIATE_KEY), "msg": "get identity error"})
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [_REKEY, *((200, {"code": code, "msg": "error"}) for code in sorted(const.REKEY_CODES))],
+    ids=["http-463", *(f"body-{code}" for code in sorted(const.REKEY_CODES))],
+)
+async def test_a_rekey_answer_costs_one_key_exchange_and_one_retry_never_a_login(
+    fake_mega: FakeMega, login_guard: _LoginGuard, answer: tuple[int, dict[str, Any]]
+) -> None:
+    thing = _thing("TX0001")
+    fake_mega.things = [thing]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api, cache = await _seeded(session, login_guard)
+            token = cache.cloud_session("eu")["auth_token"]
+            ident = cache.cloud_session("eu")["key_ident"]
+            logins = api.cloud_status().logins_in_window
+            exchanges = len(fake_mega._shared["mega"])
+            fake_mega.error_bodies["things"] = [answer]
+            assert await api.async_get_thing_descriptions(["TX0001"]) == [thing]
+            assert len(fake_mega._shared["mega"]) == exchanges + 1
+            assert cache.cloud_session("eu")["auth_token"] == token
+            assert cache.cloud_session("eu")["key_ident"] != ident  # the new identity is kept
+            assert api.cloud_status().logins_in_window == logins
+    assert fake_mega.things_calls == 2  # refused, then retried once
+    assert fake_mega.login_calls == 1
+
+
+async def test_a_second_rekey_answer_raises_key_exchange_refused(
+    fake_mega: FakeMega, login_guard: _LoginGuard
+) -> None:
+    fake_mega.things = [_thing("TX0001")]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api, cache = await _seeded(session, login_guard)
+            token = cache.cloud_session("eu")["auth_token"]
+            logins = api.cloud_status().logins_in_window
+            exchanges = len(fake_mega._shared["mega"])
+            fake_mega.error_bodies["things"] = [_REKEY, _REKEY]
+            with pytest.raises(KeyExchangeRefusedError) as caught:
+                await api.async_get_thing_descriptions(["TX0001"])
+            assert len(fake_mega._shared["mega"]) == exchanges + 1  # no second exchange
+            assert cache.cloud_session("eu")["auth_token"] == token
+            assert api.cloud_status().logins_in_window == logins
+            assert api.session_replaced is False
+    assert (caught.value.code, caught.value.status) == (4404, 463)
+    assert fake_mega.things_calls == 2
     assert fake_mega.login_calls == 1
 
 
@@ -364,4 +418,5 @@ def test_structural_scan_finds_no_login_path() -> None:
     names = _names(inspect.getsource(EufyCloudApi.async_get_thing_descriptions))
     assert "_call" in names  # the scan sees the call it makes (not a vacuous pass)
     assert "_mark_replaced" in names
+    assert "_rekey" in names  # a re-key answer takes the same key exchange as every call
     assert names.isdisjoint(_FORBIDDEN), sorted(names & _FORBIDDEN)

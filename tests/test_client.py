@@ -2318,6 +2318,73 @@ async def test_a_failed_listing_leaves_nothing_and_never_fails_discovery(
     assert [r.levelno for r in scan_records(scan_logs)] == [level]
 
 
+async def test_a_rekey_answer_to_the_scan_rekeys_once_and_lists_the_settings(
+    scan_logs: pytest.LogCaptureFixture,
+) -> None:
+    cloud = unbundled_cloud(
+        things={UNBUNDLED: unbundled_td()},
+        things_errors=[FakeCloud.refusal(463, 4404, "get identity error")],
+    )
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        await eufy.async_probe_cloud_session()  # loads the cache
+        logins = eufy.cloud.cloud_status().logins_in_window
+        exchanges = cloud.key_exchanges
+        (station,) = await eufy.async_discover()
+        keys = [s.key for s in station.settings_for(SYNTHETIC.camera_sn)]
+        assert eufy.cloud.cloud_status().logins_in_window == logins
+        await eufy.async_close()
+    assert keys == ["motion_sensitivity", "record_time"]
+    assert cloud.key_exchanges == exchanges + 1
+    assert cloud.calls.count("things") == 2  # refused, then retried once
+    assert "login" not in cloud.calls
+    assert scan_records(scan_logs) == []
+
+
+async def test_a_second_rekey_answer_to_the_scan_is_logged_at_info_by_its_meaning(
+    scan_logs: pytest.LogCaptureFixture,
+) -> None:
+    refusal = FakeCloud.refusal(463, 4404, "get identity error")
+    cloud = unbundled_cloud(things={UNBUNDLED: unbundled_td()}, things_error=refusal)
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        (station,) = await eufy.async_discover()
+        assert station.settings_for(SYNTHETIC.camera_sn) == ()
+        await eufy.async_close()
+    assert cloud.calls.count("things") == 2
+    assert "login" not in cloud.calls
+    (record,) = scan_records(scan_logs)
+    assert record.levelno == logging.INFO
+    assert record.getMessage() == (
+        f"no settings listed for {UNBUNDLED} from its thing description: the cloud refused "
+        "this client's key identity after a new key exchange; listed at the next refresh"
+    )
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "text"),
+    [
+        (CloudError("synthetic refusal"), CloudError("other text"), "synthetic refusal"),
+        (CloudError(), CloudError(), "cloud request failed"),
+    ],
+    ids=["message", "no-message"],
+)
+async def test_a_scan_failure_is_logged_once_by_its_message_never_a_class_name(
+    scan_logs: pytest.LogCaptureFixture, first: CloudError, second: CloudError, text: str
+) -> None:
+    cloud = unbundled_cloud(things_error=first)
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        await eufy.async_discover()
+        cloud.things_error = second  # the same kind of failure, another text: no new line
+        await eufy.async_discover(refresh=True)
+        await eufy.async_close()
+    assert cloud.calls.count("things") == 2
+    assert [r.getMessage() for r in scan_records(scan_logs)] == [
+        f"no settings listed for {UNBUNDLED} from its thing description: {text}"
+    ]
+
+
 async def test_newer_vendor_data_is_logged_once_and_the_bundled_settings_stay(
     scan_logs: pytest.LogCaptureFixture,
 ) -> None:

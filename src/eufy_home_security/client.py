@@ -63,6 +63,7 @@ from .exceptions import (
     CommunicationError,
     EmptyResponseError,
     EufySecurityError,
+    KeyExchangeRefusedError,
     ModelDataError,
     NoCachedSessionError,
     ProtocolError,
@@ -99,6 +100,10 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 _SKIP_THROTTLE = LogThrottle()  # one line per skipped device, not one per discovery
+_SCAN_KEY_REFUSED = (
+    "the cloud refused this client's key identity after a new key exchange; "
+    "listed at the next refresh"
+)
 
 type ModelState = Literal["bundled", "cloud-listed", "unknown"]
 type SkipReason = Literal["bad_serial", "bad_did", "webrtc_only", "no_did", "orphan"]
@@ -685,8 +690,14 @@ class EufySecurity:
         except NoCachedSessionError:
             self._scan_note(missing, "no cached cloud session", logging.INFO)
             return
+        except KeyExchangeRefusedError:
+            # The next ordinary call runs a new key exchange; the next refresh lists them.
+            self._scan_note(missing, _SCAN_KEY_REFUSED, logging.INFO)
+            return
         except EufySecurityError as err:
-            self._scan_note(missing, type(err).__name__, logging.WARNING)
+            # The message, never the class name: an internal error type is no user text.
+            reason = str(err) or "cloud request failed"
+            self._scan_note(missing, reason, logging.WARNING, kind=type(err))
             return
         found = _by_code(things, codes)
         for code in codes:
@@ -708,13 +719,16 @@ class EufySecurity:
             else:
                 await self._note_newer(code, version)
 
-    def _scan_note(self, codes: Sequence[str], reason: str, level: int) -> None:
-        """Log that the thing descriptions of ``codes`` (unbundled ones) stay unlisted."""
+    def _scan_note(
+        self, codes: Sequence[str], reason: str, level: int, *, kind: object = None
+    ) -> None:
+        """Log that the thing descriptions of ``codes`` (unbundled ones) stay unlisted:
+        once per code and ``kind`` (``reason`` when None)."""
         if not codes:
             _LOGGER.debug("model scan skipped: %s", reason)
             return
         for code in codes:
-            if self._scan_throttle.should_log(("scan", code, reason)):
+            if self._scan_throttle.should_log(("scan", code, reason if kind is None else kind)):
                 _LOGGER.log(
                     level, "no settings listed for %s from its thing description: %s", code, reason
                 )

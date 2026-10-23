@@ -246,6 +246,12 @@ class _RekeyRequiredError(CloudApiError):
         self.status = status
         super().__init__(code, message, endpoint=endpoint)
 
+    def refused(self) -> KeyExchangeRefusedError:
+        """This answer as the public error of a re-key that did not help."""
+        return KeyExchangeRefusedError(
+            self.code, self.message, endpoint=self.endpoint, status=self.status
+        )
+
 
 class _ScopeRefusedError(CloudApiError):
     """The cloud refused an extra country's login: the scope is skipped until a rescan."""
@@ -1860,9 +1866,7 @@ class EufyCloudApi:
                 raise
             except _RekeyRequiredError as err:
                 if rekeyed:
-                    raise KeyExchangeRefusedError(
-                        err.code, err.message, endpoint=err.endpoint, status=err.status
-                    ) from err
+                    raise err.refused() from err
                 rekeyed = True
                 identity = await self._rekey(identity, err)
             except _SessionExpiredError as err:
@@ -1899,10 +1903,8 @@ class EufyCloudApi:
                     const.MEGA_PRESET_KEY,
                     region=region,
                 )
-            except _RekeyRequiredError as refused:
-                raise KeyExchangeRefusedError(
-                    refused.code, refused.message, endpoint=refused.endpoint, status=refused.status
-                ) from refused
+            except _RekeyRequiredError as again:
+                raise again.refused() from again
             fresh.auth_token = failed.auth_token
             fresh.user_id = failed.user_id
             self._identities[region] = fresh
@@ -2606,11 +2608,13 @@ class EufyCloudApi:
         know, so the caller matches entries by ``profile.product_code``.
 
         It never spends a login: it never logs in, never logs in again,
-        and never drops or refreshes the session. With no usable session (none
+        and never drops the session. With no usable session (none
         cached, the cache not loaded, or one expiring within the margin) it raises
         :class:`NoCachedSessionError` without a request; an expired-token answer
-        raises it too, and a re-key answer propagates as a :class:`CloudError`, both
-        leaving the session for the next ordinary call. A hold-off refuses locally, and a 429 or throttle code
+        raises it too, leaving the session for the next ordinary call. A re-key answer
+        costs one key exchange on the same auth token and one retry, as every call
+        (see :meth:`_with_session`); a second one raises :class:`KeyExchangeRefusedError`.
+        A hold-off refuses locally, and a 429 or throttle code
         starts the account's shared hold-off exactly as every other call does. Only
         a session another client took over is latched and forgotten, as everywhere.
         """
@@ -2630,18 +2634,26 @@ class EufyCloudApi:
             _LOGGER.debug("thing descriptions skipped: no usable cached cloud session")
             raise NoCachedSessionError("no usable cached cloud session; not logging in")
         body = {"product_codes": codes, "code_time_map": {}, "use_network_version": True}
-        try:
-            _code, _resp, data = await self._call(
-                self._host("things", region),
-                const.THINGS_PATH,
-                body,
-                identity,
-            )
-        except SessionReplacedError:
-            await self._mark_replaced(identity)
-            raise
-        except _SessionExpiredError as err:
-            raise _no_session_error(region, err) from err
+        rekeyed = False
+        while True:
+            try:
+                _code, _resp, data = await self._call(
+                    self._host("things", region),
+                    const.THINGS_PATH,
+                    body,
+                    identity,
+                )
+                break
+            except SessionReplacedError:
+                await self._mark_replaced(identity)
+                raise
+            except _SessionExpiredError as err:
+                raise _no_session_error(region, err) from err
+            except _RekeyRequiredError as err:
+                if rekeyed:
+                    raise err.refused() from err
+                rekeyed = True
+                identity = await self._rekey(identity, err)
         if not isinstance(data, Mapping) or not isinstance(data.get("things_list"), list):
             raise ProtocolError(f"cloud response to {const.THINGS_PATH} has no things_list")
         things = [t for t in data["things_list"] if isinstance(t, Mapping)]
