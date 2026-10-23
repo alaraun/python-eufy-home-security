@@ -171,11 +171,22 @@ def test_children_are_listed_by_channel_with_power_and_online_state() -> None:
 
 
 HB3_SN = SYNTHETIC.station_sn
+HB3_WEBRTC_FIRMWARE = "3.8.7.4"
+"""A HomeBase 3 firmware inside the range its thing description routes a listed
+doorbell over WebRTC."""
 
 
-def _hb3(*children: tuple[str, int], parent: str = HB3_SN) -> list[CloudDevice]:
+def _hb3(
+    *children: tuple[str, int], parent: str = HB3_SN, firmware: str | None = HB3_WEBRTC_FIRMWARE
+) -> list[CloudDevice]:
     """A station and its children, each ``(model, channel)``."""
-    station = CloudDevice(device_sn=parent, device_type=18, name="Home Base", p2p_did=SYNTHETIC.did)
+    station = CloudDevice(
+        device_sn=parent,
+        device_type=18,
+        name="Home Base",
+        p2p_did=SYNTHETIC.did,
+        main_sw_version=firmware,
+    )
     return [
         station,
         *(
@@ -212,23 +223,39 @@ def test_a_homebase_3_with_a_camera_the_app_streams_over_webrtc_is_probed() -> N
         (_hb3(("T8160", 0)), False, None),
         (_hb3(("T8160", 0)), True, "webrtc_all"),
         (_hb3(("T8224", 1)), True, "webrtc_child"),
+        (_hb3(("T8224", 1), firmware="3.7.4.2"), False, None),
+        (_hb3(("T8224", 1), firmware="4.2.0.0"), False, None),
+        (_hb3(("T8224", 1), firmware="4.2.0.0"), True, "webrtc_all"),
         ([CloudDevice(device_sn="T2261" + "0" * 11, device_type=0, name="x")], True, None),
         (_hb3(("T8224", 1), parent="T8010" + HB3_SN[5:]), False, None),
         (_devices(), False, "webrtc_only"),
+        (_hb3(("T8160", 0), parent="T8040" + HB3_SN[5:], firmware=None), False, "webrtc_only"),
     ],
     ids=[
         "hb3-p2p-children",
         "webrtc-all",
         "child-before-all",
+        "hb3-below-range",
+        "hb3-above-range",
+        "hb3-above-range-all",
         "no-p2p-identity",
         "hb2-with-c30",
         "webrtc-only",
+        "webrtc-only-by-data",
     ],
 )
 def test_which_stations_are_probed_over_webrtc(
     devices: list[CloudDevice], webrtc_all: bool, reason: str | None
 ) -> None:
     assert diagnostics.webrtc_probe_reason(devices[0], devices, webrtc_all=webrtc_all) == reason
+
+
+@pytest.mark.parametrize(("code", "expected"), [("T8040", True), ("T8030", False)])
+def test_a_station_record_names_whether_the_app_reaches_it_only_over_webrtc(
+    code: str, expected: bool
+) -> None:
+    station = _hb3(parent=code + HB3_SN[5:])[0]
+    assert describe_station(station).is_webrtc_only is expected
 
 
 def test_the_live_view_takes_the_option_else_the_lowest_paired_channel() -> None:
@@ -238,9 +265,13 @@ def test_the_live_view_takes_the_option_else_the_lowest_paired_channel() -> None
     assert (chosen.channel, chosen.model, chosen.chosen_by) == (4, "T8160", "camera_channel")
     unknown = diagnostics.live_target(HB3_SN, devices, camera_channel=9)
     assert unknown == diagnostics.LiveTarget(9, "?", None, None, "camera_channel")
-    lowest = diagnostics.live_target(STATION_SN, _devices())
+    lowest = diagnostics.live_target(HB3_SN, _hb3(("T8160", 4), ("T8224", 2), firmware="4.2.0.0"))
     assert lowest is not None
-    assert (lowest.channel, lowest.model, lowest.chosen_by) == (1, "T8410", "lowest_channel")
+    assert (lowest.channel, lowest.model, lowest.chosen_by) == (2, "T8224", "lowest_channel")
+    # every camera of a WebRTC-only station is streamed over WebRTC
+    streamed = diagnostics.live_target(STATION_SN, _devices())
+    assert streamed is not None
+    assert (streamed.channel, streamed.model, streamed.chosen_by) == (1, "T8410", "webrtc_child")
     assert diagnostics.live_target(HB3_SN, _hb3()) is None
 
 

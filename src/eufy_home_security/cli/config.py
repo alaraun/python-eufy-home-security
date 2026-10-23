@@ -322,8 +322,8 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose.add_argument(
         "--no-webrtc",
         action="store_true",
-        help="skip the WebRTC probe (T9000, T8N00, and a HomeBase 3 with a camera the eufy "
-        "app streams over WebRTC, e.g. a Video Doorbell C30)",
+        help="skip the WebRTC probe (the stations the eufy app reaches only over WebRTC, and a "
+        "station with a camera the app streams over WebRTC, e.g. a Video Doorbell C30)",
     )
     webrtc = diagnose.add_argument_group("WebRTC probe")
     webrtc.add_argument(

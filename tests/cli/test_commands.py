@@ -800,7 +800,7 @@ async def test_diagnose_explain_prints_scope_and_exits(capsys: pytest.CaptureFix
     out = capsys.readouterr().out
     assert "read-only" in out
     assert "Never:" in out  # the privacy note names what is never collected
-    assert "HomeBase 3 with a paired camera the eufy app streams over WebRTC" in out
+    assert "station with a paired camera the eufy app streams over WebRTC" in out
 
 
 class WebRtcCloud(StubCloud):
@@ -857,8 +857,9 @@ C30_SN = "T8224" + SYNTHETIC.camera_sn[5:-1] + "2"
 
 
 class C30Cloud(WebRtcCloud):
-    """:class:`WebRtcCloud` whose HomeBase 3 carries signaling fields and has a Video
-    Doorbell C30 (T8224) on channel 2 next to its camera on channel 0."""
+    """:class:`WebRtcCloud` whose HomeBase 3 carries signaling fields, runs a firmware
+    the eufy app streams a Video Doorbell C30 over WebRTC behind, and has a C30 (T8224)
+    on channel 2 next to its camera on channel 0."""
 
     async def async_get_devices(
         self, *, refresh: bool = False, rescan_regions: bool = False
@@ -873,7 +874,7 @@ class C30Cloud(WebRtcCloud):
         c30 = CloudDevice(
             device_sn=C30_SN, device_type=7, name="Front Porch", station_sn=hb3.device_sn, channel=2
         )
-        return [replace(hb3, raw=raw), c30, *rest]
+        return [replace(hb3, raw=raw, main_sw_version="3.8.7.4"), c30, *rest]
 
 
 @pytest.fixture
@@ -928,8 +929,8 @@ async def test_diagnose_reports_the_p2p_stations_and_probes_the_webrtc_ones(
     assert block["session"]["connects"] >= 1
     assert all("name" not in d for d in block["devices"])
     assert block["storage"]["storage_days"] == 30  # read, without the disk's serial/label
-    # The T9000 over WebRTC, with the owner's id and the lowest-channel camera; the one
-    # lacking its license is reported, not probed.
+    # The T9000 over WebRTC, with the owner's id and its lowest-channel camera (all of
+    # them streamed over WebRTC); the one lacking its license is reported, not probed.
     assert len(calls) == 1
     call = calls[0]
     assert call["account_id"] == "o" * 40
@@ -943,7 +944,7 @@ async def test_diagnose_reports_the_p2p_stations_and_probes_the_webrtc_ones(
         "model": "T8410",
         "product_code": "T8410",
         "serial": redact_serial("T8410" + SYNTHETIC.camera_sn[5:]),
-        "chosen_by": "lowest_channel",
+        "chosen_by": "webrtc_child",
     }
     assert [c["channel"] for c in report["webrtc_stations"][0]["children"]] == [2, 4]
     assert "webrtc_only" in {d["reason"] for d in report["skipped_devices"]}

@@ -738,11 +738,12 @@ What it does (read-only by default: nothing is armed, disarmed, changed or trigg
   3. Each station served over local P2P (HomeBases, standalone cameras): connect,
      read its state and storage once, and record its session counters.
   4. Over WebRTC, the way the eufy app reaches them:
-       - each WebRTC-only station (T9000, T8N00);
-       - each HomeBase 3 with a paired camera the eufy app streams over WebRTC (the
-         battery doorbells T8223 and T8224, e.g. a Video Doorbell C30). Its P2P read of
-         step 3 still runs; the live view below opens on that camera (the lowest
-         channel if there are several).
+       - each station the eufy app reaches only over WebRTC (e.g. T9000, T8N00);
+       - each station with a paired camera the eufy app streams over WebRTC, decided
+         as the app decides it from the models and firmware (e.g. a Video Doorbell C30
+         behind a HomeBase 3 on some firmware). Its P2P read of step 3 still runs; the
+         live view below opens on that camera (the lowest channel if there are
+         several).
      For each: place the data-channel call (with the time each step took and whether
      the connection is direct or relayed), check its keep-alive, send two read-only
      queries (storage, paired devices), and open a live view of one camera
