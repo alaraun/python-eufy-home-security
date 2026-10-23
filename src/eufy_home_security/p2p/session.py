@@ -2454,7 +2454,8 @@ class StationSession:
         Alarm-affecting. Returns ``APPLIED`` as soon as a result arrives or an alarm frame
         received after the send shows the alarm in the asked state: for 1201 the
         alarm-tone frame on any channel (the alarm on, or ended), for 1202 the device-siren
-        frame on ``channel`` (:attr:`~.alarm.AlarmFrame.alarm_on`). A frame arriving after the
+        frame on ``channel`` (:attr:`~.alarm.AlarmFrame.alarm_state`; a frame that changes
+        no state, ``[10, 0]`` or ``[16, 5]``, confirms nothing). A frame arriving after the
         command's own wait still counts within ``timeout`` (:data:`TONE_CONFIRM_TIMEOUT`)
         of the call. Otherwise returns and raises as :meth:`async_send_command`
         (``DELIVERED``: acknowledged, never confirmed). ``ValueError`` for another
@@ -4842,7 +4843,7 @@ class StationSession:
                 _LOGGER.exception("%s: alarm listener failed", self._log_name)
         if alarm.param_id == FrameType.SIREN_NOTIFY:
             for channel, on, waiter in self._siren_waiters:
-                if channel == alarm.channel and on == alarm.alarm_on and not waiter.done():
+                if channel == alarm.channel and alarm.alarm_state is on and not waiter.done():
                     waiter.set_result(None)
         change = alarm.alarm_change(self.serial, at=datetime.now(UTC))
         if change is not None:

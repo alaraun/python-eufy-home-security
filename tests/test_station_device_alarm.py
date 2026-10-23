@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import logging
 from collections.abc import AsyncIterator, Callable, Sequence
 from typing import Any
 
@@ -152,18 +153,25 @@ async def test_a_siren_frame_in_the_other_state_confirms_nothing(
         await station.async_trigger_device_alarm(CAMERA.device_sn, timeout=0.5)
 
 
-async def test_the_event_type_alone_gives_the_sirens_state(
-    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(("trigger", "values"), [(True, (10, 0)), (False, (16, 5))])
+async def test_a_siren_frame_that_sets_no_state_confirms_nothing(
+    station: Station,
+    fake: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    trigger: bool,
+    values: tuple[int, int],
 ) -> None:
-    """A start frame ``[type, 0]`` and a stop frame ``[0, seconds]`` confirm each."""
+    """A trigger answered by an on type without time left, a stop by an off type with
+    time left: neither frame sets a state, so neither confirms."""
     send = fake.send_alarm_frame
 
-    def type_only(ftype: int, *values: int, channel: int, cipher: int) -> None:
-        send(ftype, values[0], 0 if values[0] else 30, channel=channel, cipher=cipher)
+    def unchanged(ftype: int, *_: int, channel: int, cipher: int) -> None:
+        send(ftype, *values, channel=channel, cipher=cipher)
 
-    monkeypatch.setattr(fake, "send_alarm_frame", type_only)
-    assert await station.async_trigger_device_alarm(CAMERA.device_sn) is CommandOutcome.APPLIED
-    assert await station.async_stop_device_alarm(CAMERA.device_sn) is CommandOutcome.APPLIED
+    monkeypatch.setattr(fake, "send_alarm_frame", unchanged)
+    call = station.async_trigger_device_alarm if trigger else station.async_stop_device_alarm
+    with pytest.raises(CommandNotAppliedError):
+        await call(CAMERA.device_sn, timeout=0.5)
 
 
 async def test_a_refused_siren_raises_the_stations_code(
@@ -630,3 +638,29 @@ async def test_closing_the_station_cancels_the_expiry(fake: FakeStation) -> None
     assert timer.cancelled()
     assert not station._siren_expiry
     assert station.device_alarm_on(CAMERA.device_sn) is None
+
+
+@pytest.mark.parametrize("left", [30, 30000])
+async def test_the_expiry_is_due_the_time_left_plus_the_margin(
+    station: Station, fake: FakeStation, left: int
+) -> None:
+    """30 s as seconds or as milliseconds (above 1000): the off is due 30 s plus
+    :data:`~eufy_home_security.station.SIREN_EXPIRY_MARGIN_S` after the frame."""
+    await _frames(station, fake, (SIREN, 10, left, CHANNEL))
+    delay = station._siren_expiry[CHANNEL].when() - asyncio.get_running_loop().time()
+    assert delay == pytest.approx(30 + station_module.SIREN_EXPIRY_MARGIN_S, abs=0.5)
+
+
+async def test_a_failing_expiry_is_logged_with_the_siren_off(
+    station: Station, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    station._sirens[CHANNEL] = True
+
+    def boom(*_: object) -> None:
+        raise RuntimeError("emit")
+
+    monkeypatch.setattr(station, "_emit_device_alarms", boom)
+    with caplog.at_level(logging.ERROR, logger=station_module.__name__):
+        station._expire_siren(CHANNEL)
+    assert station._sirens[CHANNEL] is False
+    assert "siren expiry on channel 3 failed" in caplog.text

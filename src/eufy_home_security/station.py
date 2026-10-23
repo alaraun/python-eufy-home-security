@@ -4324,8 +4324,12 @@ class Station:
         self._set_siren(frame.channel, on, frame.values[0])
 
     def _expire_siren(self, channel: int) -> None:
-        self._siren_expiry.pop(channel, None)
-        self._set_siren(channel, False, None)
+        # A loop callback: an error is logged, the state is set before the emit.
+        try:
+            self._siren_expiry.pop(channel, None)
+            self._set_siren(channel, False, None)
+        except Exception:
+            _LOGGER.exception("%s: siren expiry on channel %d failed", self._log_name, channel)
 
     def _set_siren(self, channel: int, on: bool, event_type: int | None) -> None:
         """Store ``channel``'s siren state; announce a change for the devices it reports
