@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import zoneinfo
+from collections.abc import Iterator
 from importlib.resources import files
 from pathlib import Path
 from types import ModuleType
@@ -25,6 +27,18 @@ TABLE = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "timezones.js
 IANA_NAMES = frozenset(files("tzdata").joinpath("zones").read_text("utf-8").split())
 
 
+@pytest.fixture
+def no_host_zone_files() -> Iterator[None]:
+    """zoneinfo with the host's zone files switched off: only the tzdata package answers."""
+    zoneinfo.reset_tzpath(to=[])
+    zoneinfo.ZoneInfo.clear_cache()
+    try:
+        yield
+    finally:
+        zoneinfo.reset_tzpath()
+        zoneinfo.ZoneInfo.clear_cache()
+
+
 def _generator() -> ModuleType:
     spec = importlib.util.spec_from_file_location(
         "gen_timezones", ROOT / "scripts" / "gen_timezones.py"
@@ -40,6 +54,7 @@ def _generator() -> ModuleType:
 def test_every_zone_is_a_zoneinfo_key_with_a_unique_row_number() -> None:
     zones = time_zones()
     assert len(zones) > 400
+    assert len(IANA_NAMES) > 500
     assert zone_ids() == tuple(z.id for z in zones)
     assert len({z.id for z in zones}) == len({z.sn for z in zones}) == len(zones)
     assert not {z.id for z in zones} - IANA_NAMES
@@ -109,3 +124,9 @@ def test_the_generator_builds_the_shipped_layout_and_refuses_bad_rows() -> None:
     ):
         with pytest.raises(ValueError, match=r"row|duplicate|separator"):
             gen.build(bad, "1.0")
+
+
+@pytest.mark.usefixtures("no_host_zone_files")
+def test_every_zone_resolves_without_the_hosts_zone_files() -> None:
+    for zone_id in zone_ids():
+        assert zoneinfo.ZoneInfo(zone_id).key == zone_id
