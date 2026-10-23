@@ -3,7 +3,8 @@
 Each row of ``tests/fixtures/models_v1_reference.json`` is rendered with its model's codec
 in the context and channel it was recorded in; cmd, subCmd and params must equal the
 recorded recipe, unless ``gen_models.RELEASE_ACCEPTED`` names the (PN, identifier).
-Every key of the released-keys manifest (``RELEASED_KEYS.json``) is still bundled.
+Every key of the released-keys manifest (``scripts/data/released_keys.json``) is still
+bundled.
 Needs only committed files: the renderer and the accepted list are loaded from
 ``scripts/`` by path, and nothing of the library is imported.
 """
@@ -12,6 +13,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -179,7 +182,7 @@ def test_hardware_wire_values_are_what_the_payloads_render_to() -> None:
 def test_every_released_key_is_still_bundled() -> None:
     """Each manifest model is indexed and its file carries every key the manifest lists;
     the manifest is in its canonical form."""
-    text = (MODELS / gen_models.RELEASED).read_text(encoding="utf-8")
+    text = gen_models.DEFAULT_RELEASED.read_text(encoding="utf-8")
     released = json.loads(text)
     assert text == gen_models.released_text(released)
     codes = json.loads((MODELS / gen_models.INDEX).read_text(encoding="utf-8"))["codes"]
@@ -192,17 +195,17 @@ def test_every_released_key_is_still_bundled() -> None:
 
 
 def test_merge_released_adds_new_keys_and_keeps_old_ones() -> None:
-    released = {"T0002": ["b", "a"], "T0001": ["x"]}
+    released = {"T0002": ["b", "a"], "T0001": ["x", "w"]}
     bundled = {"T0001": ["y", "x"], "T0003": ["z"]}
     assert gen_models.merge_released(released, bundled) == {
-        "T0001": ["x", "y"],
+        "T0001": ["w", "x", "y"],
         "T0002": ["a", "b"],
         "T0003": ["z"],
     }
 
 
 def test_update_released_unions_into_the_file(tmp_path: Path) -> None:
-    path = tmp_path / gen_models.RELEASED
+    path = tmp_path / "released_keys.json"
     gen_models.update_released(path, {"T0001": ["b"]})
     gen_models.update_released(path, {"T0001": ["a"], "T0002": ["c"]})
     assert path.read_text("utf-8") == gen_models.released_text(
@@ -210,15 +213,48 @@ def test_update_released_unions_into_the_file(tmp_path: Path) -> None:
     )
 
 
-def test_index_and_check_leave_the_manifest_out(tmp_path: Path) -> None:
-    """The manifest is no model: ``INDEX.json`` does not list it and ``--check`` does not
-    compare it (a fresh run does not write it)."""
-    fresh, committed = tmp_path / "fresh", tmp_path / "committed"
-    for folder in (fresh, committed):
-        folder.mkdir()
-        (folder / "T0001.json").write_text("{}\n", encoding="utf-8")
-        gen_models.write_index(folder)
-    (committed / gen_models.RELEASED).write_text("{}\n", encoding="utf-8")
-    gen_models.write_index(committed)
-    assert json.loads((committed / gen_models.INDEX).read_text("utf-8"))["codes"] == ["T0001"]
-    assert gen_models.compare(fresh, committed, None) == []
+def test_index_does_not_list_itself(tmp_path: Path) -> None:
+    (tmp_path / "T0001.json").write_text("{}\n", encoding="utf-8")
+    gen_models.write_index(tmp_path)
+    gen_models.write_index(tmp_path)
+    assert json.loads((tmp_path / gen_models.INDEX).read_text("utf-8"))["codes"] == ["T0001"]
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_update_released_with_a_ref_without_models_exits_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "released_keys.json"
+    ref = "no-such-ref"
+    assert gen_models.main(["--update-released", ref, "--released", str(path)]) == 2
+    folder = gen_models.DEFAULT_OUT.relative_to(ROOT).as_posix()
+    assert capsys.readouterr().err == f"gen_models: {ref}: no bundled models at {folder}\n"
+    assert not path.exists()
+
+
+def _latest_tag() -> str | None:
+    git = shutil.which("git")
+    if git is None:
+        return None
+    result = subprocess.run(
+        [git, "describe", "--tags", "--abbrev=0"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def test_the_manifest_holds_every_key_of_the_latest_release() -> None:
+    """Maintainer check: the manifest lists every key the latest release tag bundled
+    (``--update-released`` was run after it); skipped without git history or tags."""
+    tag = _latest_tag()
+    if tag is None:
+        pytest.skip("no git or no release tag (shallow clone)")
+    released = json.loads(gen_models.DEFAULT_RELEASED.read_text(encoding="utf-8"))
+    assert {
+        pn: missing
+        for pn, keys in gen_models.keys_at(tag).items()
+        if (missing := sorted(set(keys) - set(released.get(pn, ()))))
+    } == {}

@@ -16,9 +16,10 @@ that fails is not written and the run exits 1. ``--check`` regenerates into a te
 directory and compares byte for byte with ``--out``.
 
 A same-codec variant is kept when the released-keys manifest (``--released``, committed
-next to ``INDEX.json``) lists its key for the model; the generator never reads ``--out``
-to decide what to write. ``--update-released REF`` unions the setting keys of every model
-file bundled at git ``REF`` (a release tag) into the manifest and writes nothing else.
+as ``scripts/data/released_keys.json``, not shipped) lists its key for the model; the
+generator never reads ``--out`` to decide what to write. ``--update-released REF`` unions
+the setting keys of every model file bundled at git ``REF`` (a release tag) into the
+manifest and writes nothing else.
 
 Runs on a maintainer host only (needs Node and the private cache); nothing at runtime
 executes vendor code. See docs/reference/models-schema.md.
@@ -56,8 +57,8 @@ DRIVER = ROOT / "scripts" / "gen_models_driver.js"
 DEFAULT_CACHE = ROOT / ".work" / "cache" / "things_all"
 DEFAULT_OUT = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models"
 INDEX = "INDEX.json"  # {"schema_version", "codes"}: the bundled product codes, sorted
-RELEASED = "RELEASED_KEYS.json"  # {PN: sorted setting keys a release bundled}: an input
-DEFAULT_RELEASED = DEFAULT_OUT / RELEASED
+# {PN: sorted setting keys a release bundled}: a generator input, not package data
+DEFAULT_RELEASED = ROOT / "scripts" / "data" / "released_keys.json"
 DEFAULT_LABELS = ROOT / ".work" / "tools" / "data" / "app_choice_labels.json"
 DEFAULT_TREES = ROOT / ".work" / "tools" / "data" / "settings_trees.json"
 DEFAULT_TITLES = ROOT / ".work" / "tools" / "data" / "app_setting_titles.json"
@@ -1122,7 +1123,7 @@ def index_text(codes: list[str]) -> str:
 
 def write_index(out: Path) -> None:
     """Write ``out/INDEX.json`` from the ``<PN>.json`` files in ``out``."""
-    codes = [p.stem for p in out.glob("*.json") if p.name not in {INDEX, RELEASED}]
+    codes = [p.stem for p in out.glob("*.json") if p.name != INDEX]
     (out / INDEX).write_text(index_text(codes), encoding="utf-8")
 
 
@@ -1132,7 +1133,6 @@ def compare(fresh: Path, committed: Path, pns: list[str] | None) -> list[str]:
         names = {f"{pn}.json" for pn in pns}
     else:
         names = {p.name for p in fresh.glob("*.json")} | {p.name for p in committed.glob("*.json")}
-        names.discard(RELEASED)
     return sorted(
         name
         for name in names
@@ -1172,7 +1172,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     if args.update_released:
-        update_released(args.released, keys_at(args.update_released))
+        try:
+            bundled = keys_at(args.update_released)
+        except GeneratorError as err:
+            print(f"gen_models: {err}", file=sys.stderr)
+            return 2
+        update_released(args.released, bundled)
         return 0
     cache: Path = args.cache
     missing = _missing_inputs(cache, args.product_codes)
@@ -1212,7 +1217,10 @@ def merge_released(
 
 
 def keys_at(ref: str) -> dict[str, list[str]]:
-    """The setting keys of every model file that ``INDEX.json`` lists at git ``ref``."""
+    """The setting keys of every model file that ``INDEX.json`` lists at git ``ref``.
+
+    Raises ``GeneratorError`` when git is missing or ``ref`` bundles no readable models.
+    """
     git = shutil.which("git")
     if git is None:
         raise GeneratorError("git is not on PATH")
@@ -1231,7 +1239,10 @@ def keys_at(ref: str) -> dict[str, list[str]]:
             raise GeneratorError(f"{ref}:{name}: not a JSON object")
         return data
 
-    return {pn: sorted(show(f"{pn}.json")["settings"]) for pn in show(INDEX)["codes"]}
+    try:
+        return {pn: sorted(show(f"{pn}.json")["settings"]) for pn in show(INDEX)["codes"]}
+    except (subprocess.CalledProcessError, KeyError) as err:
+        raise GeneratorError(f"{ref}: no bundled models at {folder}") from err
 
 
 def update_released(path: Path, bundled: Mapping[str, Collection[str]]) -> None:

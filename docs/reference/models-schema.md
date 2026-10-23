@@ -110,8 +110,9 @@ own recipes prove the new form sends the same bytes:
   `order`) it lacks is left out of the file: it would be a second entity for the same
   write and read. A variant that differs in any codec, domain, label or control stays,
   and so does one an `applies_when` names. A key a release bundled is never dropped: a
-  key the model lists in `RELEASED_KEYS.json` (product code → the setting keys a release
-  shipped, committed next to `INDEX.json`) stays as `variant_of` its primary. The
+  key the model lists in `scripts/data/released_keys.json` (product code → the setting
+  keys a release shipped; a generator input, not package data) stays as `variant_of` its
+  primary, and a released product code stays in `INDEX.json`. The
   generator reads only that manifest, never the files in `--out`. A v1 reference row of a
   dropped key is checked through the longest remaining key it extends.
 

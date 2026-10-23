@@ -52,7 +52,8 @@ def _wheel_members(tmp_path: Path) -> set[str]:
 
 def test_every_indexed_model_snapshot_ships_and_nothing_else(tmp_path: Path) -> None:
     """The wheel holds exactly one ``models/<PN>.json`` per ``INDEX.json`` code (159), the
-    index, the released-keys manifest and the resource packages, and none of the removed v1 data or modules."""
+    index and the resource packages, and none of the removed v1 data or modules nor the
+    released-keys manifest (a generator input)."""
     codes = json.loads((ROOT / "src" / MODELS / "INDEX.json").read_text("utf-8"))["codes"]
     assert len(codes) == 159
     members = _wheel_members(tmp_path)
@@ -61,12 +62,11 @@ def test_every_indexed_model_snapshot_ships_and_nothing_else(tmp_path: Path) -> 
         for member in members
         if member.startswith(MODELS) and member.endswith(".json")
     }
-    assert sorted(shipped - {"INDEX", "RELEASED_KEYS"}) == sorted(codes)
+    assert sorted(shipped - {"INDEX"}) == sorted(codes)
     for required in (
         f"{DATA}__init__.py",
         f"{MODELS}__init__.py",
         f"{MODELS}INDEX.json",
-        f"{MODELS}RELEASED_KEYS.json",
     ):
         assert required in members, required
     for removed in (
@@ -74,6 +74,7 @@ def test_every_indexed_model_snapshot_ships_and_nothing_else(tmp_path: Path) -> 
         "eufy_home_security/devices/registry.py",
         "eufy_home_security/devices/aliases.py",
         f"{DATA}app_choice_labels.json",
+        f"{MODELS}RELEASED_KEYS.json",
     ):
         assert removed not in members, removed
     assert [m for m in members if "td_corpus" in m] == []

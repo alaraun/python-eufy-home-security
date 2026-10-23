@@ -20,7 +20,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / ".work" / "cache" / "things_all"
 MODELS = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models"
-RELEASED = MODELS / "RELEASED_KEYS.json"
+RELEASED = ROOT / "scripts" / "data" / "released_keys.json"
 PN = "T8170"
 KEY = "detection_sensitivity_test_mode"  # released, duplicates detection_sensitivity
 

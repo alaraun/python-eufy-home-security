@@ -305,7 +305,6 @@ def test_models_holds_exactly_the_indexed_codes() -> None:
     names = {p.name for p in MODELS.iterdir() if p.is_file()}
     assert names == {f"{c}.json" for c in CODES} | {
         "INDEX.json",
-        "RELEASED_KEYS.json",
         "__init__.py",
     }
     assert list(model_settings.bundled_codes()) == CODES

@@ -57,11 +57,14 @@ reference row that is meant to change (the vendor changed the recipe) goes into
 `INDEX.json` lists every `<PN>.json` in the output directory, so a new product code is
 bundled by generating its file.
 
-Which keys a release shipped is an input too: `RELEASED_KEYS.json`, next to
-`INDEX.json`, lists per product code every setting key a release bundled. A variant that
-duplicates its primary is left out of a file unless that list names its key, so a key
-never disappears after it shipped; the output directory's earlier contents play no part.
-After each release, union its keys into the list and commit it:
+Which keys a release shipped is an input too: `scripts/data/released_keys.json` (a
+generator input, not shipped in the package) lists per product code every setting key a
+release bundled. A variant that duplicates its primary is left out of a file unless that
+list names its key, so a key never disappears after it shipped; the output directory's
+earlier contents play no part. A released product code must stay in `INDEX.json`:
+`tests/devices/test_models_release_check.py` fails when a listed code or key is no longer
+bundled. After each release, union its keys into the list and commit it (a ref without
+bundled models exits 2):
 
 ```
 uv run python scripts/gen_models.py --update-released <tag>   # the release just tagged
@@ -154,3 +157,7 @@ settings files, then the support matrix.
    every file, the index against the files, and the wheel's file set.
 5. Review the diff of the model files: a key that disappears is a breaking change for a
    consumer whose entity ids use it.
+6. Once the release is tagged, run `gen_models.py --update-released <tag>` and commit
+   `scripts/data/released_keys.json`; until then
+   `test_the_manifest_holds_every_key_of_the_latest_release` fails (it is skipped in a
+   checkout without git tags).
