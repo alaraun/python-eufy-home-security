@@ -11,7 +11,7 @@ import time
 from collections import Counter
 from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, timedelta, tzinfo
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -107,6 +107,7 @@ from .events import (
     AlarmChanged,
     CameraBusyChanged,
     ConnectionChanged,
+    DeviceAlarmChanged,
     DevicesChanged,
     Event,
     EventBus,
@@ -175,6 +176,7 @@ from .models import (
 )
 from .network import LanPath, lan_path_for
 from .p2p._json import json_int
+from .p2p.alarm import AlarmFrame
 from .p2p.clip import ClipWriter, MediaClip
 from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
 from .p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
@@ -235,6 +237,7 @@ from .p2p.station_config_codecs import (
     require_custom_mode,
 )
 from .p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
+from .p2p.xzyh import FrameType
 from .station_config import (
     ModeInfo,
     StationConfig,
@@ -1083,7 +1086,10 @@ class Station:
         """:meth:`_shared_lock` per shared parameter group."""
         self._alarm: AlarmChanged | None = None
         """The last alarm transition (:attr:`last_alarm`)."""
+        self._sirens: dict[int, AlarmFrame] = {}
+        """The last device-siren frame per channel (:meth:`device_alarm_on`)."""
         session.add_dump_listener(self._on_dump_complete)
+        session.add_alarm_listener(self._on_alarm_frame)
         session.add_notify_listener(self._on_notify)
         session.subscribe(self._on_session_event)
 
@@ -1383,8 +1389,8 @@ class Station:
         """The session's events plus this station's own (:class:`~.events.DevicesChanged`,
         :class:`~.events.StationStateChanged`, :class:`~.events.StationConfigChanged`,
         :class:`~.events.CameraBusyChanged`,
-        :class:`~.events.PresetsChanged`, :class:`~.events.ZoomChanged`); returns the
-        unsubscribe callable."""
+        :class:`~.events.PresetsChanged`, :class:`~.events.ZoomChanged`,
+        :class:`~.events.DeviceAlarmChanged`); returns the unsubscribe callable."""
         unsubscribes = (self.session.subscribe(callback), self._bus.subscribe(callback))
 
         def unsubscribe() -> None:
@@ -1501,10 +1507,18 @@ class Station:
 
         The station records its own session's at once; :class:`~.client.EufySecurity`
         records the ones its tracker makes from a push or a disarm before emitting
-        them. A change for another station is ignored.
+        them. A change for another station is ignored. A transition is also a
+        :class:`~.events.DeviceAlarmChanged` for every device here whose alarm is the
+        station's tone (:meth:`device_alarm_on`).
         """
-        if change.station_sn == self.serial:
-            self._alarm = change
+        if change.station_sn != self.serial:
+            return
+        was = self._alarm is not None and self._alarm.alarming
+        self._alarm = change
+        if change.alarming != was:
+            self._emit_device_alarms(
+                lambda alarms, _: alarms.station_tone, change.alarming, change.event_type, change.at
+            )
 
     @property
     def last_error(self) -> EufySecurityError | None:
@@ -4246,6 +4260,79 @@ class Station:
             return None
         return alarms_for(self._product_code(device_sn), self._connect_type_of(device_sn))
 
+    def device_alarm_on(self, device_sn: str) -> bool | None:
+        """Whether ``device_sn``'s own alarm (siren, light or both) is on, from the frames
+        the eufy app reads it from; None before any, and where :meth:`device_alarms` is
+        empty. Each transition is announced as :class:`~.events.DeviceAlarmChanged`.
+
+        A device whose alarm request is SET_TONE_FILE (1201) sounds the station's alarm
+        tone: its state is the station's alarm (:attr:`alarming`, None before any
+        :class:`~.events.AlarmChanged`), as for a HomeBase's own serial. Any other device
+        reads the last device-siren frame (``0x04B2``) on its channel; parameter dumps
+        do not count. An event type 0, 1 (stopped by the device) or a stop code
+        (15/16/17) is off, any other on."""
+        alarms = self._device_alarms_of(device_sn)
+        if alarms is None:
+            return None
+        if alarms.station_tone:
+            return None if self._alarm is None else self._alarm.alarming
+        try:
+            frame = self._sirens.get(self._alarm_channel(device_sn))
+        except UnsupportedError:
+            return None
+        return None if frame is None else frame.alarm_on
+
+    def _alarm_channel(self, device_sn: str) -> int:
+        """The channel ``device_sn``'s alarm is addressed on: a hub's own on channel 0, as
+        SET_TONE_FILE does; else :meth:`channel_for`."""
+        if device_sn == self.serial and own_channel(self.device) is None:
+            return 0
+        return self.channel_for(device_sn)
+
+    def _on_alarm_frame(self, frame: AlarmFrame) -> None:
+        """Keep a device-siren frame per channel; announce a change of its on/off state
+        for the devices it reports (an unseen channel counts as off)."""
+        if frame.param_id != FrameType.SIREN_NOTIFY:
+            return
+        old = self._sirens.get(frame.channel)
+        self._sirens[frame.channel] = frame
+        if (old is not None and old.alarm_on) == frame.alarm_on:
+            return
+
+        def reported(alarms: DeviceAlarms, device_sn: str) -> bool:
+            if alarms.station_tone:
+                return False
+            try:
+                return self._alarm_channel(device_sn) == frame.channel
+            except UnsupportedError:
+                return False
+
+        self._emit_device_alarms(reported, frame.alarm_on, frame.values[0], datetime.now(UTC))
+
+    def _emit_device_alarms(
+        self,
+        reports: Callable[[DeviceAlarms, str], bool],
+        on: bool,
+        event_type: int | None,
+        at: datetime,
+    ) -> None:
+        """Emit :class:`~.events.DeviceAlarmChanged` for every device here with an alarm
+        whose state ``reports(alarms, device_sn)`` says changed."""
+        for device in (self.device, *self.sub_devices):
+            alarms = self._device_alarms_of(device.device_sn)
+            if alarms is None or not reports(alarms, device.device_sn):
+                continue
+            self._bus.emit(
+                DeviceAlarmChanged(
+                    station_sn=self.serial,
+                    device_sn=device.device_sn,
+                    on=on,
+                    alarm=alarms.choice_for(event_type) if on else None,
+                    event_type=event_type,
+                    at=at,
+                )
+            )
+
     async def async_trigger_device_alarm(
         self,
         device_sn: str,
@@ -4313,11 +4400,9 @@ class Station:
                 f"{redact_serial(device_sn)}: the eufy app offers no {name} alarm here",
                 device_sn=device_sn,
             )
-        own = device_sn == self.serial and own_channel(self.device) is None
-        if own:
+        if device_sn == self.serial and own_channel(self.device) is None:
             self._require_action(StationFeature.SOUND_ALARM)
-        # A hub addresses its own alarm on channel 0, as SET_TONE_FILE does.
-        channel = 0 if own else self.channel_for(device_sn)
+        channel = self._alarm_channel(device_sn)
         outcome = await self.session.async_send_alarm(
             request.command,
             render_alarm(request.params, channel=channel),

@@ -782,7 +782,7 @@ confirmed by the command it was sent with:
 
 | request command | wire | success |
 |---|---|---|
-| 1202 (`SET_DEVS_TONE_FILE`) | `DeviceMsgBean` cmd 1202, `mChannel` = the device's channel, payload `{"channel": <ch>, "type": <t>, "time_out": 30, "user_name": <name>}`; stop: `time_out` 0 (and the handler's stop `type`) | a `0x0547` reply naming 1202 with code 0, or a device-siren frame (`0x04B2`) on that channel after the send: a non-zero event type for a start, 0 for a stop |
+| 1202 (`SET_DEVS_TONE_FILE`) | `DeviceMsgBean` cmd 1202, `mChannel` = the device's channel, payload `{"channel": <ch>, "type": <t>, "time_out": 30, "user_name": <name>}`; stop: `time_out` 0 (and the handler's stop `type`) | a `0x0547` reply naming 1202 with code 0, or a device-siren frame (`0x04B2`) on that channel after the send reading on for a start, off for a stop ([alarm over P2P](events.md#alarm-over-p2p)) |
 | 1201 (`SET_TONE_FILE`) | cmd 1201 with the handler's payload, `mChannel` = the device's channel (0 for a HomeBase's own siren) | a `0x0547` reply naming 1201 with code 0, or an alarm-tone frame on any channel after the send showing the alarm on or ended, as [sound the alarm](#station-actions-verified-t8030-declared-app) |
 
 A HomeBase's own serial offers sound only, light only and sound and light, as the app

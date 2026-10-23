@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from typing import Any
 
 import pytest
@@ -13,6 +14,7 @@ from eufy_home_security.devices import device_alarm
 from eufy_home_security.devices.device_alarm import DeviceAlarm
 from eufy_home_security.devices.recipes import ConnectType
 from eufy_home_security.devices.support import Evidence, Support
+from eufy_home_security.events import AlarmChanged, DeviceAlarmChanged, Event, EventSource
 from eufy_home_security.exceptions import (
     CommandNotAppliedError,
     CommandRejectedError,
@@ -133,14 +135,16 @@ async def test_a_siren_frame_of_another_channel_confirms_nothing(
         await station.async_trigger_device_alarm(CAMERA.device_sn, timeout=0.5)
 
 
+@pytest.mark.parametrize("stop", [0, 1, 16])
 async def test_a_siren_frame_in_the_other_state_confirms_nothing(
-    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch, stop: int
 ) -> None:
-    """A trigger answered by an off frame (an arm sends ``[0, 0]`` on every channel)."""
+    """A trigger answered by an off frame: ``[0, 0]`` (an arm sends it on every channel),
+    or a stop code."""
     send = fake.send_alarm_frame
 
     def off(ftype: int, *values: int, channel: int, cipher: int) -> None:
-        send(ftype, 0, 0, channel=channel, cipher=cipher)
+        send(ftype, stop, 0, channel=channel, cipher=cipher)
 
     monkeypatch.setattr(fake, "send_alarm_frame", off)
     with pytest.raises(CommandNotAppliedError):
@@ -327,3 +331,192 @@ async def test_the_stations_own_alarm_is_refused_where_its_siren_is(
     with pytest.raises(UnsupportedError, match="no siren here"):
         await station.async_stop_device_alarm(HB3.device_sn)
     assert fake.received == []
+
+
+# ── state: Station.device_alarm_on and DeviceAlarmChanged ─────────────────────
+
+SIREN, TONE = FrameType.SIREN_NOTIFY, FrameType.ALARM_TONE_NOTIFY
+
+
+async def _until(predicate: Callable[[], bool]) -> None:
+    async with asyncio.timeout(3):
+        while not predicate():
+            await asyncio.sleep(0.01)
+
+
+def _changes(station: Station) -> list[Event]:
+    events: list[Event] = []
+    station.subscribe(events.append)
+    return events
+
+
+def _alarm_changes(events: list[Event]) -> list[tuple[str, bool, DeviceAlarm | None, int | None]]:
+    return [
+        (e.device_sn, e.on, e.alarm, e.event_type)
+        for e in events
+        if isinstance(e, DeviceAlarmChanged)
+    ]
+
+
+async def _frames(station: Station, fake: FakeStation, *frames: tuple[int, int, int, int]) -> None:
+    """Send ``(type, event_type, seconds, channel)`` frames, then wait until the last one
+    (a light frame marks it) was taken."""
+    if not station.session.connected:
+        await station.session.async_connect()
+    marks: list[int] = []
+    unsubscribe = station.session.add_alarm_listener(
+        lambda frame: marks.append(1) if frame.param_id == FrameType.LIGHT_NOTIFY else None
+    )
+    try:
+        for ftype, event_type, seconds, channel in frames:
+            fake.send_alarm_frame(ftype, event_type, seconds, channel=channel)
+        fake.send_alarm_frame(FrameType.LIGHT_NOTIFY, 0, channel=CHANNEL)
+        await _until(lambda: bool(marks))
+    finally:
+        unsubscribe()
+
+
+async def test_a_siren_devices_state_follows_its_siren_frames(
+    station: Station, fake: FakeStation
+) -> None:
+    """None before any frame; on and off from the device-siren frame on its channel, one
+    event per transition, the choice whose request sends the frame's type named."""
+    events = _changes(station)
+    camera = CAMERA.device_sn
+    assert station.device_alarm_on(camera) is None
+    await station.async_trigger_device_alarm(camera)
+    assert station.device_alarm_on(camera) is True
+    await station.async_stop_device_alarm(camera)
+    assert station.device_alarm_on(camera) is False
+    await _frames(station, fake, (SIREN, 23, 30, CHANNEL))
+    assert station.device_alarm_on(camera) is True
+    assert _alarm_changes(events) == [
+        (camera, True, DeviceAlarm.SOUND, 10),
+        (camera, False, None, 0),
+        (camera, True, DeviceAlarm.SOUND_AND_LIGHT, 23),
+    ]
+    change = next(e for e in events if isinstance(e, DeviceAlarmChanged))
+    assert change.station_sn == HB3.device_sn
+
+
+async def test_arming_frames_that_change_nothing_emit_nothing(
+    station: Station, fake: FakeStation
+) -> None:
+    """``[0, 0]`` before any alarm reads off without an event; a detection's siren (25)
+    is on with no choice named; a repeated state emits nothing."""
+    events = _changes(station)
+    camera = CAMERA.device_sn
+    await _frames(station, fake, (SIREN, 0, 0, CHANNEL), (TONE, 0, 0, CHANNEL))
+    assert station.device_alarm_on(camera) is False
+    await _frames(
+        station,
+        fake,
+        (SIREN, 25, 30, CHANNEL),
+        (SIREN, 25, 29, CHANNEL),
+        (SIREN, 0, 0, CHANNEL),
+        (SIREN, 0, 0, CHANNEL),
+    )
+    assert _alarm_changes(events) == [(camera, True, None, 25), (camera, False, None, 0)]
+
+
+@pytest.mark.parametrize("stop", [1, 15, 16, 17])
+async def test_a_stop_code_turns_the_siren_off(
+    station: Station, fake: FakeStation, stop: int
+) -> None:
+    await _frames(station, fake, (SIREN, 10, 30, CHANNEL), (SIREN, stop, 0, CHANNEL))
+    assert station.device_alarm_on(CAMERA.device_sn) is False
+
+
+async def test_each_channel_has_its_own_siren_state(fake: FakeStation) -> None:
+    other = dataclasses.replace(CAMERA, device_sn=SYNTHETIC.camera_sn[:-1] + "1", channel=4)
+    station = _station(fake, [CAMERA, other])
+    events = _changes(station)
+    try:
+        await _frames(station, fake, (SIREN, 10, 30, 4), (SIREN, 10, 30, 9))
+        assert station.device_alarm_on(other.device_sn) is True
+        assert station.device_alarm_on(CAMERA.device_sn) is None
+    finally:
+        await station.async_close()
+    assert _alarm_changes(events) == [(other.device_sn, True, DeviceAlarm.SOUND, 10)]
+
+
+async def test_the_stations_own_serial_is_its_station_alarm(station: Station) -> None:
+    """A HomeBase's own serial reads :attr:`Station.alarming`: None before any alarm
+    change, one event per transition, none for another station's change."""
+    events = _changes(station)
+    hub = HB3.device_sn
+    assert station.device_alarm_on(hub) is None
+    station.note_alarm(AlarmChanged(station_sn=hub, alarming=False, source=EventSource.P2P))
+    assert station.device_alarm_on(hub) is False
+    for alarming in (True, True, False):
+        station.note_alarm(
+            AlarmChanged(
+                station_sn=hub,
+                alarming=alarming,
+                source=EventSource.CLOUD,
+                event_type=3 if alarming else None,
+            )
+        )
+    station.note_alarm(
+        AlarmChanged(station_sn=CAMERA.device_sn, alarming=True, source=EventSource.P2P)
+    )
+    assert station.device_alarm_on(hub) is False
+    assert _alarm_changes(events) == [(hub, True, None, 3), (hub, False, None, None)]
+
+
+async def test_a_device_without_an_alarm_or_not_paired_has_no_state(fake: FakeStation) -> None:
+    station = _station(fake, [_camera("T8210")])
+    stranger = SYNTHETIC.camera_sn[:-1] + "9"
+    events = _changes(station)
+    try:
+        await _frames(station, fake, (SIREN, 10, 30, CHANNEL))
+        station.note_alarm(
+            AlarmChanged(station_sn=HB3.device_sn, alarming=True, source=EventSource.P2P)
+        )
+        assert station.device_alarm_on(CAMERA.device_sn) is None
+        assert station.device_alarm_on(stranger) is None
+    finally:
+        await station.async_close()
+    assert _alarm_changes(events) == [(HB3.device_sn, True, None, None)]
+
+
+async def test_a_device_whose_alarm_is_the_station_tone_follows_the_station_alarm(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A device whose handler sends SET_TONE_FILE sounds the station's alarm tone: its
+    state is the station's alarm, whichever channel the tone frame names; its channel's
+    siren frame is not its state."""
+    _only_product(monkeypatch, (1201, 10), (1201, 10))
+    station = _station(fake, [_camera("T9ZZ9")])
+    camera = CAMERA.device_sn
+    events = _changes(station)
+    try:
+        await _frames(station, fake, (SIREN, 10, 30, CHANNEL))
+        assert station.device_alarm_on(camera) is None
+        await _frames(station, fake, (TONE, 10, 30, 0))
+        assert station.device_alarm_on(camera) is True
+        await _frames(station, fake, (SIREN, 0, 0, CHANNEL), (TONE, 16, 0, 255))
+        assert station.device_alarm_on(camera) is False
+    finally:
+        await station.async_close()
+    assert _alarm_changes(events) == [
+        (camera, True, DeviceAlarm.SOUND, 10),
+        (camera, False, None, 16),
+    ]
+
+
+async def test_an_off_frame_names_no_choice(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Even where a start request sends an off type (1 here), an off report names none."""
+    _only_product(monkeypatch, (1202, 1), (1202, 0))
+    station = _station(fake, [_camera("T9ZZ9")])
+    events = _changes(station)
+    try:
+        await _frames(station, fake, (SIREN, 10, 30, CHANNEL), (SIREN, 1, 0, CHANNEL))
+    finally:
+        await station.async_close()
+    assert _alarm_changes(events) == [
+        (CAMERA.device_sn, True, None, 10),
+        (CAMERA.device_sn, False, None, 1),
+    ]

@@ -18,6 +18,10 @@ frame                     param    body                       meaning
                                                               detection and periodically)
 ========================  =======  =========================  =============================
 
+A tone or siren frame reports its alarm off when the event type is one of
+:data:`ALARM_OFF_TYPES` (0 ended, 1 stopped by the device, 15/16/17 stopped from a
+keypad, the app or the HomeBase) and on for any other type, as the eufy app reads them.
+
 Arming and disarming also send ``[0, 0]`` tone and siren frames on each channel. The
 station sends them under GCM; the session refuses ECB copies once a session key exists
 (they would be forgeable state). This module is pure: the session decrypts.
@@ -40,6 +44,10 @@ ALARM_FRAME_VALUES: Final[Mapping[int, int]] = MappingProxyType(
     {FrameType.ALARM_TONE_NOTIFY: 2, FrameType.SIREN_NOTIFY: 2, FrameType.LIGHT_NOTIFY: 1}
 )
 _CHANNEL_BYTE: Final = 2
+#: The event type of a tone or siren frame for an alarm the device itself stopped.
+DEVICE_STOP: Final = 1
+#: The event types of a tone or siren frame that report the alarm off.
+ALARM_OFF_TYPES: Final = frozenset({0, DEVICE_STOP, *AlarmStopSource})
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,14 +65,20 @@ class AlarmFrame:
         (the event type of a tone or siren frame, the light state)."""
         return str(self.values[0])
 
+    @property
+    def alarm_on(self) -> bool:
+        """Whether a tone or siren frame reports its alarm on: an event type outside
+        :data:`ALARM_OFF_TYPES`."""
+        return self.values[0] not in ALARM_OFF_TYPES
+
     def alarm_change(self, station_sn: str, *, at: datetime) -> AlarmChanged | None:
         """The alarm state an alarm-tone frame (1201) reports; None for other frames.
 
-        A non-zero event type that is not an :class:`~..events.AlarmStopSource` starts
-        the alarm (``duration_s`` from the seconds, None when 0); 0 ends it, and a stop
-        code (16 from the app) ends it naming its source. ``at`` is when the frame
-        arrived (the frame carries no time of its own). Emit it only on a transition:
-        arming sends ``[0, 0]`` on every channel.
+        An event type that :attr:`alarm_on` reads on starts the alarm (``duration_s``
+        from the seconds, None when 0); any other ends it, an
+        :class:`~..events.AlarmStopSource` (16 from the app) naming its source. ``at``
+        is when the frame arrived (the frame carries no time of its own). Emit it only on
+        a transition: arming sends ``[0, 0]`` on every channel.
         """
         if self.param_id != FrameType.ALARM_TONE_NOTIFY:
             return None
@@ -73,7 +87,7 @@ class AlarmFrame:
             stop: AlarmStopSource | None = AlarmStopSource(event_type)
         except ValueError:
             stop = None
-        alarming = event_type != 0 and stop is None
+        alarming = self.alarm_on
         return AlarmChanged(
             station_sn=station_sn,
             alarming=alarming,

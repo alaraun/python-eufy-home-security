@@ -251,10 +251,36 @@ Arming and disarming also send `0x04B1`/`0x04B2` `[0, 0]` on each channel next t
 encryption, like the other state frames (see
 [station state under any encryption](session-crypto.md#station-state-under-any-encryption-declared-app)),
 caches the first value per `(channel, param)` — the tone's or
-siren's event type, the light state — and emits `ParamChanged` when it moves. The tone
-frame (1201) also drives `AlarmChanged`, on transitions only: a non-zero event type that
-is not a stop code starts the alarm (`duration_s` from the seconds), `[0, 0]` ends it,
-and `[16, 0]` ends it with `stop_source` `APP`.
+siren's event type, the light state — and emits `ParamChanged` when it moves. A tone or
+siren frame reads off for the event types 0 (ended), 1 (stopped by the device), 15, 16
+and 17 (stopped from a keypad, the app, the HomeBase) and on for any other, as the eufy
+app reads them. The tone frame (1201) also drives `AlarmChanged`, on transitions only:
+an event type that reads on starts the alarm (`duration_s` from the seconds), one that
+reads off ends it, `[16, 0]` with `stop_source` `APP`. The siren frame (1202) drives
+[`DeviceAlarmChanged`](#device-alarm-state).
+
+### Device alarm state
+
+`Station.device_alarm_on(device_sn)` and `DeviceAlarmChanged(station_sn, device_sn, on,
+alarm, event_type, at)` give a device's own alarm (the eufy app's alarm button), for
+every device whose `device_alarms` is not empty **[declared: app]**. Which frame reports
+it follows the command the model's handler sends for it
+([commands.md § Device siren](commands.md#device-siren-declared-app)):
+
+| alarm request | state from | channel |
+|---|---|---|
+| 1202 `SET_DEVS_TONE_FILE` | the last siren frame (`0x04B2`) | the device's |
+| 1201 `SET_TONE_FILE` | the station's alarm (`AlarmChanged`, `Station.alarming`) | any: the tone's start and end may name different channels |
+
+- None before the first report; a parameter dump does not set it (the eufy app takes the
+  siren state from the frames only).
+- One event per transition; before its first report a device counts as off, so the
+  `[0, 0]` frames of an arm or disarm emit nothing. A change of the station's alarm
+  emits one event per 1201 device of that station.
+- `alarm` is the choice whose start request sends the reported event type (10, 22, 23
+  … per model), None for any other type (25: a detection's siren) and when off.
+- The frames do not say which client sounded a manual alarm (the library and the app
+  send the same request), so the event carries no source.
 
 ### Alarm lifecycle
 

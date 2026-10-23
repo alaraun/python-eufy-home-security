@@ -8,6 +8,7 @@ from typing import Any
 from eufy_home_security.cli import render
 from eufy_home_security.cli.render import render_network
 from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.devices.device_alarm import DeviceAlarm
 from eufy_home_security.devices.recipes import PresetPosition
 from eufy_home_security.events import (
     AccountMismatch,
@@ -17,6 +18,7 @@ from eufy_home_security.events import (
     CloudProblem,
     ConnectionChanged,
     CredentialsRefreshed,
+    DeviceAlarmChanged,
     DevicesChanged,
     EventSource,
     GuardModeChanged,
@@ -558,3 +560,22 @@ def test_zoom_changed_renders_and_serialises() -> None:
     assert render.render_event(event, now=NOW, show_serials=False).endswith("zoom: 2.5x")
     data = json.loads(json.dumps(render.event_json(event)))
     assert (data["type"], data["zoom"]) == ("ZoomChanged", 2.5)
+
+
+def test_device_alarm_changed_renders_and_serialises() -> None:
+    on = DeviceAlarmChanged(
+        station_sn=SYNTHETIC.station_sn,
+        device_sn=SYNTHETIC.camera_sn,
+        on=True,
+        alarm=DeviceAlarm.SOUND_AND_LIGHT,
+        event_type=23,
+    )
+    assert render.render_event(on, now=NOW, show_serials=False).endswith(
+        "alarm on (sound_and_light)"
+    )
+    off = DeviceAlarmChanged(
+        station_sn=SYNTHETIC.station_sn, device_sn=SYNTHETIC.camera_sn, on=False
+    )
+    assert render.render_event(off, now=NOW, show_serials=False).endswith("alarm off")
+    data = json.loads(json.dumps(render.event_json(on), default=str))
+    assert (data["type"], data["on"], data["alarm"]) == ("DeviceAlarmChanged", True, 2)

@@ -47,6 +47,7 @@ from .models import FrameCipher, GuardMode
 
 if TYPE_CHECKING:
     from .cloud.status import DeviceListSource
+    from .devices.device_alarm import DeviceAlarm
     from .p2p.storage_info import StorageInfo
     from .station import StationState
 
@@ -994,6 +995,31 @@ class AlarmChanged:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class DeviceAlarmChanged:
+    """A device's own alarm (siren, light or both) turned on or off.
+
+    Emitted by :class:`~.station.Station` once per transition of
+    :meth:`~.station.Station.device_alarm_on`, for every device whose
+    :meth:`~.station.Station.device_alarms` is not empty; the state is already set when
+    a subscriber receives it. Before the first report a device counts as off, so the
+    ``[0, 0]`` frames of an arm or disarm emit nothing.
+
+    ``alarm`` is the choice whose request sends the reported event type (a manual
+    alarm from the library or the app), None for any other alarm (a detection's
+    siren) and when off. ``event_type`` is the frame's or the station alarm's event
+    type (see :class:`AlarmChanged`). ``at`` is when the library saw the change (UTC,
+    the host clock); it is not part of equality.
+    """
+
+    station_sn: str
+    device_sn: str
+    on: bool
+    alarm: DeviceAlarm | None = None
+    event_type: int | None = None
+    at: datetime = field(default_factory=lambda: datetime.now(UTC), compare=False)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ParamChanged:
     """One station/sub-device parameter changed between two parameter dumps.
 
@@ -1617,6 +1643,7 @@ type Event = (
     SecurityEvent
     | GuardModeChanged
     | AlarmChanged
+    | DeviceAlarmChanged
     | ParamChanged
     | ConnectionChanged
     | CloudProblem

@@ -1324,6 +1324,7 @@ card) is a call on the station it is paired to, for every device the app offers 
 | `device_alarm_default(device_sn)` | the choice the app preselects, None when none | — |
 | `async_trigger_device_alarm(device_sn, alarm=None)` | sounds `alarm` (default: the preselected one) for 30 s (**alarm-affecting**) | `UnsupportedError` when the app offers the device no alarm, or not that choice |
 | `async_stop_device_alarm(device_sn, alarm=None)` | stops it (**alarm-affecting**) | as the trigger |
+| `device_alarm_on(device_sn)` | whether it is on (`True`/`False`), None before any report and where `device_alarms` is empty | — |
 
 The choices and requests come from the model's handler per connect type (generated
 data, [commands.md § Device siren](../protocol/commands.md#device-siren-declared-app));
@@ -1333,7 +1334,25 @@ alarm in the asked state; otherwise as the station actions above. A serial that 
 neither the station nor paired to it gets `()` / None and `UnsupportedError`, as does
 an int choice that is no `DeviceAlarm`. For a
 siren entity per device: create it where `device_alarms(sn)` is not empty, `turn_on` →
-trigger, `turn_off` → stop, and offer the choices as tones.
+trigger, `turn_off` → stop, offer the choices as tones, and take `is_on` from
+`device_alarm_on(sn)`, refreshed on `DeviceAlarmChanged`.
+
+`DeviceAlarmChanged(station_sn, device_sn, on, alarm, event_type, at)` is emitted once per
+transition, whoever sounded or stopped the alarm (this library, the eufy app, a
+detection, a timeout, a disarm); the state is set before it is emitted. `alarm` names the
+choice whose request sends the reported type (a manual alarm), None for a detection's
+siren and when off. A device counts as off before its first report, so the `[0, 0]`
+frames an arm or disarm sends emit nothing. The state comes from the frames the eufy app
+reads (declared: eufy app, not verified on hardware):
+
+- a device whose alarm request is 1202 (most cameras behind a HomeBase): the
+  device-siren frame on its channel; a parameter dump does not count;
+- a device whose alarm request is 1201 (a HomeBase's own serial, a standalone device, a
+  few devices behind a station): the station's alarm tone, which is `alarming` and
+  `AlarmChanged`; every such device of the station changes with it.
+
+No `source` is given: a manual alarm from this library and from the eufy app send the
+same request and are reported by the same frame.
 
 A HomeBase's own serial is its station siren: the app offers sound, light and sound
 and light there, and all send the request of `async_trigger_alarm` (refused where that

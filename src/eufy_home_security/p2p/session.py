@@ -111,7 +111,7 @@ from ..exceptions import (
 )
 from ..models import STATION_CHANNEL, GuardMode
 from ._json import json_int
-from .alarm import ALARM_FRAME_VALUES, decode_alarm_frame
+from .alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
 from .clip import ClipWriter, MediaClip, mux_frames
 from .crypto import (
     CONN_INIT_NO_CIPHER,
@@ -1376,6 +1376,7 @@ class StationSession:
         """Top-level dump keys the parser does not read, each logged once."""
         self._dump_listeners: list[Callable[[], None]] = []
         self._notify_listeners: list[Callable[[Mapping[str, Any], FrameCipher], None]] = []
+        self._alarm_listeners: list[Callable[[AlarmFrame], None]] = []
         self._push_channels: set[int] = set()
         """Blocks of the unsolicited dump in progress (see :meth:`_note_pushed_blocks`)."""
         self._push_timer: asyncio.TimerHandle | None = None
@@ -1796,6 +1797,18 @@ class StationSession:
         def unsubscribe() -> None:
             with contextlib.suppress(ValueError):
                 self._notify_listeners.remove(callback)
+
+        return unsubscribe
+
+    def add_alarm_listener(self, callback: Callable[[AlarmFrame], None]) -> Unsubscribe:
+        """Call ``callback(frame)`` with every alarm frame decoded (tone, siren, light),
+        after the session took it; returns the unsubscribe. A failing callback is
+        logged, never raised."""
+        self._alarm_listeners.append(callback)
+
+        def unsubscribe() -> None:
+            with contextlib.suppress(ValueError):
+                self._alarm_listeners.remove(callback)
 
         return unsubscribe
 
@@ -2441,7 +2454,7 @@ class StationSession:
         Alarm-affecting. Returns ``APPLIED`` as soon as a result arrives or an alarm frame
         received after the send shows the alarm in the asked state: for 1201 the
         alarm-tone frame on any channel (the alarm on, or ended), for 1202 the device-siren
-        frame on ``channel`` (a non-zero event type, or 0). A frame arriving after the
+        frame on ``channel`` (:attr:`~.alarm.AlarmFrame.alarm_on`). A frame arriving after the
         command's own wait still counts within ``timeout`` (:data:`TONE_CONFIRM_TIMEOUT`)
         of the call. Otherwise returns and raises as :meth:`async_send_command`
         (``DELIVERED``: acknowledged, never confirmed). ``ValueError`` for another
@@ -4789,8 +4802,9 @@ class StationSession:
 
     def _handle_alarm(self, frame: Frame) -> None:
         """An alarm frame (tone, siren, light): cache its value per channel, emit
-        :class:`ParamChanged` when it moved, and :class:`AlarmChanged` when a tone frame
-        starts or ends the alarm. Taken under any encryption (:meth:`_take_state`)."""
+        :class:`ParamChanged` when it moved, hand it to the alarm listeners, and emit
+        :class:`AlarmChanged` when a tone frame starts or ends the alarm. Taken under any
+        encryption (:meth:`_take_state`)."""
         plain = self._state_body(frame)
         if plain is None:
             return
@@ -4821,10 +4835,14 @@ class StationSession:
                     new=new,
                 )
             )
+        for listener in list(self._alarm_listeners):
+            try:
+                listener(alarm)
+            except Exception:
+                _LOGGER.exception("%s: alarm listener failed", self._log_name)
         if alarm.param_id == FrameType.SIREN_NOTIFY:
-            sounding = alarm.values[0] != 0
             for channel, on, waiter in self._siren_waiters:
-                if channel == alarm.channel and on == sounding and not waiter.done():
+                if channel == alarm.channel and on == alarm.alarm_on and not waiter.done():
                     waiter.set_result(None)
         change = alarm.alarm_change(self.serial, at=datetime.now(UTC))
         if change is not None:

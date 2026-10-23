@@ -82,6 +82,21 @@ class DeviceAlarms:
         """The offered choices, in enum order."""
         return tuple(sorted(self.start))
 
+    @property
+    def station_tone(self) -> bool:
+        """Whether every start request is SET_TONE_FILE: the alarm is the station's
+        alarm tone, reported by its alarm-tone frames on whichever channel; otherwise
+        the device-siren frame on the device's channel reports it."""
+        return all(r.command == CMD_SET_TONE_FILE for r in self.start.values())
+
+    def choice_for(self, event_type: int | None) -> DeviceAlarm | None:
+        """The one choice whose start request sends ``event_type`` as its ``type``; None
+        when none or several do, and for None."""
+        if event_type is None:
+            return None
+        found = [c for c, r in self.start.items() if r.params.get("type") == event_type]
+        return found[0] if len(found) == 1 else None
+
 
 def _request(raw: Any) -> AlarmRequest:
     command, params = raw

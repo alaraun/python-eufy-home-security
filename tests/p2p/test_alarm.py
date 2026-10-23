@@ -72,6 +72,7 @@ def _change(**fields: object) -> AlarmChanged:
             _change(alarming=False, channel=255, event_type=16, stop_source=AlarmStopSource.APP),
         ),
         (AlarmFrame(1201, 1, (3, 0)), _change(alarming=True, channel=1, event_type=3)),
+        (AlarmFrame(1201, 1, (1, 0)), _change(alarming=False, channel=1, event_type=1)),
         (AlarmFrame(1202, 1, (25, 30)), None),  # the siren is not the alarm's state
         (AlarmFrame(1400, 1, (1,)), None),
     ],
@@ -81,3 +82,13 @@ def test_the_tone_frame_is_the_alarm_state(frame: AlarmFrame, change: AlarmChang
     assert got == change
     if got is not None:
         assert (got.at, got.event_time) == (_AT, None)  # a frame carries no time of its own
+
+
+@pytest.mark.parametrize(
+    ("event_type", "on"),
+    [(0, False), (1, False), (15, False), (16, False), (17, False), (10, True), (25, True)],
+)
+def test_the_stop_codes_read_off_and_every_other_event_type_on(event_type: int, on: bool) -> None:
+    """0 ended, 1 stopped by the device, 15/16/17 stopped by keypad, app or HomeBase."""
+    assert AlarmFrame(1202, 1, (event_type, 0)).alarm_on is on
+    assert AlarmFrame(1201, 1, (event_type, 0)).alarm_on is on

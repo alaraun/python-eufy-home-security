@@ -23,6 +23,7 @@ from ..events import (
     CloudProblem,
     ConnectionChanged,
     CredentialsRefreshed,
+    DeviceAlarmChanged,
     DevicesChanged,
     Event,
     GuardModeChanged,
@@ -938,6 +939,10 @@ def render_event(event: Event, *, now: datetime, show_serials: bool) -> str:
                 f"[{stamp}] {fmt_serial(event.device_sn, show_serials)} presets: "
                 f"{', '.join(enabled) or 'none set'}"
             )
+        case DeviceAlarmChanged():
+            state = "alarm on" if event.on else "alarm off"
+            kind = "" if event.alarm is None else f" ({event.alarm.name.lower()})"
+            return f"[{stamp}] {fmt_serial(event.device_sn, show_serials)} {state}{kind}"
         case ZoomChanged():
             return f"[{stamp}] {fmt_serial(event.device_sn, show_serials)} zoom: {event.zoom:g}x"
         case _:
