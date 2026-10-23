@@ -260,8 +260,8 @@ def test_cloud_params_no_params_key() -> None:
     assert device.cloud_params == ()
 
 
-# A get_devs_list entry: everything CloudDevice reads, plus the kind of thing it never
-# does (the member's contact details, radio MACs, MQTT/WebRTC details, cover images).
+# A get_devs_list entry: everything CloudDevice and the RTC config read, plus the kind of
+# thing they never do (the member's contact details, radio MACs, MQTT details, cover images).
 _FULL_ENTRY = {
     "cloud_region": "eu",
     "cloud_source": "security",
@@ -275,6 +275,9 @@ _FULL_ENTRY = {
     "main_sw_version": "1.2.3",
     "sec_sw_version": "4.5.6",
     "app_conn": "EBGCEBGCEBGC",
+    "p2p_license": "ABCDEF",
+    "signaling_servers": ["https://198.51.100.20"],
+    "webrtc_sdk_version": "6.1.3",
     "device_new_pn": "T8170",
     "time_zone": "UTC0|1.1",
     "member": {

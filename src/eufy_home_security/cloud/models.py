@@ -664,10 +664,10 @@ def _key_or_none(value: object) -> str | None:
 
 
 # What of a ``get_devs_list`` entry is worth persisting: exactly what CloudDevice reads
-# (:meth:`CloudDevice.from_api` and its properties) and the product code in ``raw``. The
-# rest of an entry — the member's e-mail, phone and avatar, MAC addresses, MQTT and WebRTC
-# details, firmware build times, cover images … — is personal or never read, and is
-# four-fifths of the bytes.
+# (:meth:`CloudDevice.from_api` and its properties), the product code and the WebRTC
+# signaling inputs in ``raw``. The rest of an entry — the member's e-mail, phone and
+# avatar, MAC addresses, MQTT details, firmware build times, cover images … — is personal
+# or never read, and is four-fifths of the bytes.
 CACHED_DEVICE_FIELDS: Final = (
     "device_sn",
     "device_type",
@@ -679,6 +679,10 @@ CACHED_DEVICE_FIELDS: Final = (
     "main_sw_version",
     "sec_sw_version",
     "app_conn",  # rendezvous_servers: how a battery station is woken
+    # The station's WebRTC signaling inputs (rtc.config.RtcConfig.from_device).
+    "p2p_license",
+    "signaling_servers",
+    "webrtc_sdk_version",
     "device_new_pn",  # the product code that keys a model's settings
     "time_zone",  # a station's time zone setting
     REGION_KEY,

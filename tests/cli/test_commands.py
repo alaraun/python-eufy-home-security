@@ -897,6 +897,8 @@ def _fake_collect(calls: list[dict[str, Any]]) -> Callable[..., Any]:
 
     async def collect(session: Any, **kwargs: Any) -> diagnostics.StationReport:
         calls.append(kwargs)
+        if kwargs["watch_s"] > 0:
+            kwargs["on_watch"](kwargs["watch_s"])
         return diagnostics.StationReport(
             station=kwargs["station"],
             children=list(kwargs["children"]),
@@ -937,6 +939,11 @@ async def test_diagnose_reports_the_p2p_stations_and_probes_the_webrtc_ones(
     assert call["camera"].channel == 2
     assert (call["watch_s"], call["do_live"], call["do_commands"]) == (5.0, True, True)
     assert [s["phase_reached"] for s in report["webrtc_stations"]] == ["done", "config"]
+    assert report["webrtc_stations"][1]["error"] == (
+        "config: the station's cloud record has no device_sn, p2p_license, signaling_servers"
+    )
+    assert len(report["watch_windows_ms"]) == 1  # the probe's window, no second one
+    assert report["hints"] == []
     # The HomeBase 3 has no camera the eufy app streams over WebRTC: not probed.
     assert [s["probe_reason"] for s in report["webrtc_stations"]] == ["webrtc_only"] * 2
     assert report["webrtc_stations"][0]["live_camera"] == {
@@ -1381,10 +1388,8 @@ async def test_diagnose_records_a_push_listener_that_does_not_start(
 
 
 @pytest.mark.usefixtures("account_views")
-@pytest.mark.parametrize(
-    "argv", [["--watch", "1", "--no-push"], [], ["--watch", "1", "--no-webrtc"]]
-)
-async def test_diagnose_starts_push_only_for_a_webrtc_watch(
+@pytest.mark.parametrize("argv", [["--watch", "0.05", "--no-push"], []])
+async def test_diagnose_starts_push_only_for_a_watch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, argv: list[str]
 ) -> None:
     from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
@@ -1397,6 +1402,134 @@ async def test_diagnose_starts_push_only_for_a_webrtc_watch(
     assert await run(["diagnose", "--no-p2p", *argv, "--output", str(out)], tmp_path) == 0
     started.assert_not_called()
     assert "push" not in json.loads(out.read_text())
+
+
+def _late_push(monkeypatch: pytest.MonkeyPatch, delay: float) -> None:
+    """A push listener that starts at once and delivers one push ``delay`` s later."""
+    from eufy_home_security.events import EventSource, SecurityEvent  # noqa: PLC0415
+
+    async def start(self: Any, *, p2p: bool = True, push: bool = True) -> dict[str, Any]:
+        self._push_running = True
+        event = SecurityEvent(source=EventSource.CLOUD, station_sn=SYNTHETIC.station_sn)
+        asyncio.get_running_loop().call_later(delay, self._bus.emit, event)
+        return {}
+
+    monkeypatch.setattr(client_module.EufySecurity, "async_start", start)
+
+
+@pytest.mark.usefixtures("account_views")
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["diagnose", "--no-webrtc"],
+        # Its WebRTC config fails: the record lacks the license.
+        ["--station", "Bare", "diagnose"],
+        # Its WebRTC probe fails before its watch window.
+        ["--station", "Pro", "diagnose"],
+    ],
+)
+async def test_diagnose_watches_even_when_no_webrtc_probe_gets_to_its_window(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    argv: list[str],
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    async def fails(session: Any, **kwargs: Any) -> diagnostics.StationReport:
+        return diagnostics.StationReport(
+            station=kwargs["station"],
+            children=[],
+            channel=0,
+            phase_reached="signaling.login",
+            error="signaling.login: SignalingError",
+        )
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    monkeypatch.setattr(diagnostics, "collect_station", fails)
+    _late_push(monkeypatch, 0.05)
+    out = tmp_path / "r.json"
+    run_argv = [*argv, "--no-p2p", "--watch", "0.4", "--output", str(out)]
+    assert await run(run_argv, tmp_path) == 0
+    report = json.loads(out.read_text())
+    assert report["complete"] is True
+    assert report["push"] == {"running": True, "error": None}
+    ((_start_ms, length_ms),) = report["watch_windows_ms"]
+    assert length_ms == 400
+    assert [e["kind"] for e in report["events"]] == ["SecurityEvent"]  # pushed in the window
+    assert "Recording notifications for 0 s" in capsys.readouterr().out
+
+
+class CachedC30Cloud(C30Cloud):
+    """:class:`C30Cloud` whose cached list (no refresh) lacks the HomeBase's license, as
+    a cache written without the WebRTC fields does."""
+
+    async def async_get_devices(
+        self, *, refresh: bool = False, rescan_regions: bool = False
+    ) -> list[CloudDevice]:
+        devices = await super().async_get_devices(refresh=refresh, rescan_regions=rescan_regions)
+        if refresh:
+            return devices
+        return [
+            replace(d, raw={k: v for k, v in d.raw.items() if k != "p2p_license"}) for d in devices
+        ]
+
+
+@pytest.mark.usefixtures("account_views")
+async def test_diagnose_reads_the_webrtc_inputs_from_the_list_it_fetched(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", CachedC30Cloud)
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(diagnostics, "collect_station", _fake_collect(calls))
+    out = tmp_path / "r.json"
+    argv = ["--station", "Home Base", "diagnose", "--no-p2p", "--output", str(out)]
+    assert await run(argv, tmp_path) == 0
+    (entry,) = json.loads(out.read_text())["webrtc_stations"]
+    assert (entry["phase_reached"], entry["station"]["has_p2p_license"]) == ("done", True)
+    assert len(calls) == 1
+
+
+def test_diagnose_hints_name_what_points_at_the_network() -> None:
+    cert = "CloudCertificateError: cloud request to /v3/openapi/oauth/key/exchange failed"
+    data: dict[str, Any] = {
+        "stations": {
+            "T8030***0001": {"model": "T8030", "read_errors": {"state": "CloudCertificateError"}},
+            "T8024***0002": {"model": "T8024", "read_errors": {"state": "StationUnreachableError"}},
+            "T8010***0003": {"model": "T8010", "read_errors": {}},
+        },
+        "account": {"ciphers": [{"error": cert}]},
+    }
+    certificate, unreachable = commands.diagnose_hints(data)
+    assert "certificate was not trusted on this network" in certificate
+    assert "station keys could not be fetched" in certificate
+    assert unreachable.startswith("No local reply from station T8024***0002 (T8024)")
+    assert "same network" in unreachable
+    # A certificate failure that kept no station read from its keys says only that.
+    (only,) = commands.diagnose_hints({"stations": {}, "account": {"listings": [{"error": cert}]}})
+    assert "station keys" not in only
+    plain = {"stations": {"x": {"read_errors": {"state": "CommunicationError"}}}}
+    assert commands.diagnose_hints(plain) == []
+
+
+@pytest.mark.usefixtures("account_views")
+async def test_diagnose_prints_its_hints(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from eufy_home_security.exceptions import StationUnreachableError  # noqa: PLC0415
+
+    async def unreachable(self: Any, **kwargs: Any) -> None:
+        raise StationUnreachableError("no reply")
+
+    monkeypatch.setattr(Station, "async_update", unreachable)
+    out = tmp_path / "r.json"
+    argv = ["--host", "127.0.0.1", "diagnose", "--no-webrtc", "--output", str(out)]
+    assert await run(argv, tmp_path) == 0
+    (hint,) = json.loads(out.read_text())["hints"]
+    assert hint.startswith("No local reply from station T8030")
+    assert f"Note: {hint}" in capsys.readouterr().out
 
 
 def test_diagnose_explain_names_the_opt_in_write() -> None:

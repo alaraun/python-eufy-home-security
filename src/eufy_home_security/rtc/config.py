@@ -14,7 +14,7 @@ import re
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from .._logging import redact, redact_serial
 
@@ -118,6 +118,21 @@ def commands_encrypted(model: str, firmware: int | None) -> bool:
     return True
 
 
+def missing_inputs(raw: Mapping[str, Any]) -> tuple[str, ...]:
+    """The fields of a station's device-list entry ``raw`` an RTC config needs and the
+    entry lacks: ``device_sn``, ``p2p_did``, ``p2p_license`` (non-empty strings) and
+    ``signaling_servers`` (a list with a bare IPv4 entry)."""
+    missing = [
+        key
+        for key in ("device_sn", "p2p_did", "p2p_license")
+        if not (isinstance(raw.get(key), str) and raw[key])
+    ]
+    servers = raw.get("signaling_servers")
+    if not isinstance(servers, list) or signaling_ipv4(servers) is None:
+        missing.append("signaling_servers")
+    return tuple(missing)
+
+
 @dataclass(frozen=True, slots=True)
 class QuickLogin:
     """What a LOGIN 200 leaves for the next start: the session key, the contact id,
@@ -175,21 +190,17 @@ class RtcConfig:
         quick_login: QuickLogin | None = None,
     ) -> RtcConfig | None:
         """The config of the station whose device-list entry is ``raw``; None when the
-        entry lacks a serial, a DID, a license or an IPv4 signaling server."""
-        servers = raw.get("signaling_servers")
-        servers = servers if isinstance(servers, list) else []
-        sn, did, lic = raw.get("device_sn"), raw.get("p2p_did"), raw.get("p2p_license")
-        host = signaling_ipv4(servers)
-        if not (isinstance(sn, str) and sn and isinstance(did, str) and did):
+        entry lacks one of :func:`missing_inputs`."""
+        if missing_inputs(raw):
             return None
-        if not (isinstance(lic, str) and lic and host):
-            return None
+        servers = raw["signaling_servers"]
+        host = cast("str", signaling_ipv4(servers))  # missing_inputs found one
         sdk = raw.get("webrtc_sdk_version")
         version = raw.get("main_sw_version")
         return cls(
-            station_sn=sn,
-            p2p_did=did,
-            p2p_license=lic,
+            station_sn=raw["device_sn"],
+            p2p_did=raw["p2p_did"],
+            p2p_license=raw["p2p_license"],
             signaling_host=host,
             user_id=user_id,
             app_id=app_id,

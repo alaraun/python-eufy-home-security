@@ -7,6 +7,7 @@ import string
 
 import pytest
 
+from eufy_home_security.cloud.models import CloudDevice, device_cache_entry
 from eufy_home_security.exceptions import SignalingError
 from eufy_home_security.rtc.config import (
     KCP_TYPE_MULTI,
@@ -15,6 +16,7 @@ from eufy_home_security.rtc.config import (
     commands_encrypted,
     data_channel_kcp_type,
     firmware_number,
+    missing_inputs,
     signaling_domain,
     signaling_ipv4,
 )
@@ -66,7 +68,36 @@ def test_config_from_a_device_list_entry() -> None:
 def test_an_entry_missing_an_input_has_no_config(missing: str) -> None:
     raw = _raw()
     del raw[missing]
+    assert missing_inputs(raw) == (missing,)
     assert RtcConfig.from_device(raw, user_id="u", app_id="a") is None
+
+
+@pytest.mark.parametrize(
+    ("extra", "missing"),
+    [
+        ({"p2p_license": ""}, ("p2p_license",)),
+        ({"p2p_did": 5}, ("p2p_did",)),
+        ({"signaling_servers": ["https://webrtc-signal-eu.example.com"]}, ("signaling_servers",)),
+        ({"signaling_servers": "https://198.51.100.20"}, ("signaling_servers",)),
+        ({"signaling_servers": 5}, ("signaling_servers",)),
+        ({"p2p_license": None, "signaling_servers": []}, ("p2p_license", "signaling_servers")),
+    ],
+)
+def test_missing_inputs_names_every_unusable_field(
+    extra: dict[str, object], missing: tuple[str, ...]
+) -> None:
+    raw = _raw(**extra)
+    assert missing_inputs(raw) == missing
+    assert RtcConfig.from_device(raw, user_id="u", app_id="a") is None
+    assert missing_inputs(_raw()) == ()
+
+
+def test_a_station_entry_read_back_from_the_cache_keeps_its_config() -> None:
+    entry = _raw(device_type=18, member={"admin_user_id": "o", "email": "a@b.example"})
+    cached = CloudDevice.from_api(device_cache_entry(entry, keep_params=True))
+    assert RtcConfig.from_device(cached.raw, user_id="u", app_id="a") == RtcConfig.from_device(
+        entry, user_id="u", app_id="a"
+    )
 
 
 def test_firmware_number() -> None:
