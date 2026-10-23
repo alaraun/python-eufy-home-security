@@ -16,6 +16,7 @@ from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.models import LoginCountry
 from eufy_home_security.exceptions import (
+    CloudCertificateError,
     CommunicationError,
     LoginChallengeError,
     LoginLimitedError,
@@ -24,7 +25,7 @@ from eufy_home_security.exceptions import (
 from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
 
-from .conftest import FAKE_AUTH_TOKEN, FakeMega
+from .conftest import FAKE_AUTH_TOKEN, FakeMega, untrusted_certificate
 
 # A body code the cloud refuses a login with, outside every typed family.
 _PLAIN_REFUSAL = 26502
@@ -202,6 +203,7 @@ _ESTIMATE_DOMAIN_URL = f"https://{const.mega_host('eu')}{const.ESTIMATE_DOMAIN_P
     ("answer", "error"),
     [
         ({"exception": aiohttp.ClientConnectionError("down")}, CommunicationError),
+        ({"exception": untrusted_certificate(const.mega_host("eu"))}, CloudCertificateError),
         ({"status": 503, "body": ""}, CommunicationError),
         ({"status": 200, "body": "<html>blocked</html>"}, CommunicationError),
         ({"status": 200, "body": b"\xff\xfe\xfa"}, CommunicationError),
@@ -211,7 +213,7 @@ _ESTIMATE_DOMAIN_URL = f"https://{const.mega_host('eu')}{const.ESTIMATE_DOMAIN_P
             RateLimitedError,
         ),
     ],
-    ids=["network", "http-503", "not-json", "not-text", "http-429", "throttle-code"],
+    ids=["network", "certificate", "http-503", "not-json", "not-text", "http-429", "throttle-code"],
 )
 async def test_a_home_region_lookup_without_an_answer_spends_no_login(
     fake_mega: FakeMega,

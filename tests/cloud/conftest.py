@@ -66,6 +66,16 @@ ARMING_ENDPOINTS = {
 FAKE_MALFORMED_CODE = 999_001
 
 
+def untrusted_certificate(host: str = "security-app-eu.eufylife.com") -> Exception:
+    """What aiohttp raises when ``host``'s TLS certificate does not verify."""
+    import ssl  # noqa: PLC0415
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    key = SimpleNamespace(host=host, port=443, is_ssl=True, ssl=True)
+    cause = ssl.SSLCertVerificationError(1, "self-signed certificate in certificate chain")
+    return aiohttp.ClientConnectorCertificateError(cast(Any, key), cause)
+
+
 def _url(host: str, path: str) -> str:
     return f"https://{host}{path}"
 

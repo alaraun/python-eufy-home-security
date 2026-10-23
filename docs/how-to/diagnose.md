@@ -59,12 +59,14 @@ an exception type).
      owner's id (skip with `--no-commands`);
    - with `--watch SECONDS`, every notification the station sends meanwhile, e.g. while
      the user switches the guard mode in the eufy app: the guard-mode notification
-     without the tool sending a mode change. The cloud push listener runs during the
-     WebRTC part of such a run (`--no-push` leaves it out), and every event of the
-     library's bus (cloud push, P2P stations) is recorded under `events`: its class,
-     source, models, small-integer fields (`msg_type`, `event_type`, `guard_mode`,
-     `mode` ...) and the key names of its raw payload; `watch_windows_ms` says when
-     each watch window ran;
+     without the tool sending a mode change. With `--watch` the cloud push listener
+     runs from here to the end of the run (`--no-push` leaves it out), and every event
+     of the library's bus (cloud push, P2P stations) is recorded under `events`: its
+     class, source, models, small-integer fields (`msg_type`, `event_type`,
+     `guard_mode`, `mode` ...) and the key names of its raw payload; `watch_windows_ms`
+     says when each watch window ran. When no WebRTC probe reaches its window (none is
+     probed, or each fails earlier), one window of the same length runs on its own
+     after the probes, recording the cloud push and the bus;
    - a live call (kind 6) to one camera (`--camera-channel` when given; else the
      lowest channel the eufy app streams over WebRTC, the doorbell behind a HomeBase 3;
      else the lowest paired channel): the live open over the data channel (the route the station's
@@ -142,4 +144,8 @@ stations over WebRTC, e.g. a HomeBase 3 without such a camera, for comparison),
 `--channel N` (the data-channel call, default 0), `--camera-channel N` (the live
 view's camera), `--listen SECONDS` (default 8),
 `--watch SECONDS`, `--no-push`, `--no-commands`, `--no-live`, `--rewrite-guard-mode`
-(the opt-in write above). A summary is printed at the end.
+(the opt-in write above). A summary is printed at the end, with a note for what points
+at the network the run was made on rather than at a station (the report keeps them under
+`hints`): a cloud certificate that did not verify (a firewall, proxy or security software
+inspecting encrypted connections; without the cloud's keys no station can be read), or a
+station that gave no local reply (run it on the station's network).

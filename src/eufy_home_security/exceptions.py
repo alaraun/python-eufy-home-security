@@ -295,6 +295,12 @@ class CommunicationError(EufySecurityError):
     """The network or the device did not answer."""
 
 
+class CloudCertificateError(CommunicationError):
+    """A cloud host's TLS certificate was not trusted: something on the network path (a
+    TLS-inspecting proxy, firewall or security software) presented its own certificate,
+    so nothing reached the eufy cloud."""
+
+
 class StationUnreachableError(CommunicationError):
     """The station did not answer LAN discovery or dropped the session."""
 

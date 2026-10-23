@@ -22,6 +22,7 @@ from eufy_home_security.exceptions import (
     AuthenticationError,
     CipherUnavailableError,
     CloudApiError,
+    CloudCertificateError,
     CommunicationError,
     EmptyResponseError,
     EufySecurityError,
@@ -48,6 +49,7 @@ from .conftest import (
     MEGA_REALM,
     SECURITY_REALM,
     FakeMega,
+    untrusted_certificate,
 )
 
 
@@ -788,6 +790,20 @@ async def test_refresh_without_a_cache_propagates_the_outage(
             api = _api(session, cache)
             with pytest.raises(CommunicationError):
                 await api.async_get_devices(refresh=True)
+
+
+async def test_an_untrusted_certificate_is_a_certificate_error(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            await _api(session, cache).async_login()
+    with aioresponses() as mock:
+        mock.post(_devices_url(fake_mega), exception=untrusted_certificate(), repeat=True)
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(CloudCertificateError, match="self-signed"):
+                await _api(session, cache).async_get_devices(refresh=True)
 
 
 async def test_an_expired_token_triggers_a_single_relogin(
@@ -2212,6 +2228,7 @@ async def test_a_picture_url_without_a_session_gets_no_token_and_no_login(
     [
         ({"status": 404}, CloudApiError),
         ({"exception": aiohttp.ClientConnectionError("down")}, CommunicationError),
+        ({"exception": untrusted_certificate("faces.example.invalid")}, CloudCertificateError),
         ({"body": b"x" * 65}, ProtocolError),
     ],
 )
