@@ -775,10 +775,19 @@ device's station (a `parent_sn` pattern), the app reads that one. The choices ar
 property's enum without the HomeBase-alarm choice (3): 0 sound only, 1 light only, 2
 sound and light; the default is the enum's default.
 
-| device | wire | success |
+Each model's handler picks the command per request and per connect type: the start
+and the stop of one choice may use different commands (a standalone camera that starts
+with 1201 and stops with 1202), and a device behind a station may use 1201. A request is
+confirmed by the command it was sent with:
+
+| request command | wire | success |
 |---|---|---|
-| behind a station | `DeviceMsgBean` cmd 1202 (`SET_DEVS_TONE_FILE`), `mChannel` = the device's channel, payload `{"channel": <ch>, "type": <t>, "time_out": 30, "user_name": <name>}`; stop: `time_out` 0 (and the handler's stop `type`) | a `0x0547` reply naming 1202 with code 0, or a device-siren frame (`0x04B2`) on that channel after the send: a non-zero event type for a start, 0 for a stop |
-| standalone, or the station itself | cmd 1201 (`SET_TONE_FILE`) with the handler's payload | as [sound the alarm](#station-actions-verified-t8030-declared-app) |
+| 1202 (`SET_DEVS_TONE_FILE`) | `DeviceMsgBean` cmd 1202, `mChannel` = the device's channel, payload `{"channel": <ch>, "type": <t>, "time_out": 30, "user_name": <name>}`; stop: `time_out` 0 (and the handler's stop `type`) | a `0x0547` reply naming 1202 with code 0, or a device-siren frame (`0x04B2`) on that channel after the send: a non-zero event type for a start, 0 for a stop |
+| 1201 (`SET_TONE_FILE`) | cmd 1201 with the handler's payload, `mChannel` = the device's channel (0 for a HomeBase's own siren) | a `0x0547` reply naming 1201 with code 0, or an alarm-tone frame on any channel after the send showing the alarm on or ended, as [sound the alarm](#station-actions-verified-t8030-declared-app) |
+
+A HomeBase's own serial offers sound only, light only and sound and light, as the app
+does, even where all three send the same station siren request; it is the station siren
+of [sound the alarm](#station-actions-verified-t8030-declared-app), refused where that is.
 
 `type` is the handler's per-choice alarm type (10 sound, 22 light, 23 sound and light on
 most models; 4 on some). A handler 1350 wrapper is sent as its sub-command, as every

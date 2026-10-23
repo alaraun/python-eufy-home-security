@@ -152,8 +152,9 @@ Recipe templates are the handler's recipe with the value positions replaced:
 | `status the eufy app only reads` | `ro` with its read: the app shows the value and offers no control for it |
 
 A TD property that is not writable is `ro` without a note. `set_alarm_type` (and its
-`__v<n>` forms) is not in the files: it sounds the HomeBase, an action rather than a
-setting.
+`__v<n>` forms) is not in the files: it is the device siren, an action rather than a
+setting, served by `Station.async_trigger_device_alarm` from its own generated table
+([commands.md § Device siren](../protocol/commands.md#device-siren-declared-app)).
 
 ## Example
 

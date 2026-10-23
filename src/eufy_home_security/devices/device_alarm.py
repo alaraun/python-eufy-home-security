@@ -5,11 +5,12 @@ handlers and thing descriptions the eufy app runs. A product is listed when its 
 description declares ``set_alarm_type`` (or a ``__v`` form of it); per connect type the
 table holds each alarm choice the app offers there (the identifier's enum, the
 HomeBase-alarm choice aside) with the command and payload the handler sends to start it
-and to stop it, and the choice the app preselects. Only the device-alarm command
-(SET_DEVS_TONE_FILE, 1202) and the station-alarm command (SET_TONE_FILE, 1201, which a
-standalone device sends to itself) are recorded: the station confirms both with an alarm
-frame. **[declared: eufy app]**; see docs/protocol/commands.md, *Device siren*. Pure
-lookups: no I/O.
+and to stop it, and the choice the app preselects. The handler picks the command per
+request: SET_DEVS_TONE_FILE (1202) goes on the device's channel and is confirmed by a
+device-siren frame (``0x04B2``) on that channel; SET_TONE_FILE (1201) is confirmed by an
+alarm-tone frame. Start and stop may use different commands. Requests with any other
+command are not recorded. **[declared: eufy app]**; see docs/protocol/commands.md,
+*Device siren*. Pure lookups: no I/O.
 """
 
 from __future__ import annotations

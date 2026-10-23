@@ -1327,10 +1327,15 @@ The choices and requests come from the model's handler per connect type (generat
 data, [commands.md § Device siren](../protocol/commands.md#device-siren-declared-app));
 graded *declared (eufy app)*, not verified on hardware. Each returns
 `CommandOutcome.APPLIED` only once the station answered or its alarm frame shows the
-alarm in the asked state; otherwise as the station actions above. The station's own
-serial works too (the HomeBase siren, the same request as `async_trigger_alarm`). For a
+alarm in the asked state; otherwise as the station actions above. A serial that is
+neither the station nor paired to it gets `()` / None and `UnsupportedError`, as does
+an int choice that is no `DeviceAlarm`. For a
 siren entity per device: create it where `device_alarms(sn)` is not empty, `turn_on` →
 trigger, `turn_off` → stop, and offer the choices as tones.
+
+A HomeBase's own serial is its station siren: the app offers sound, light and sound
+and light there, and all send the request of `async_trigger_alarm` (refused where that
+is). Do not create a second siren entity for it; the existing station siren covers it.
 
 A camera's on/off switch is the setting `camera_on_off` (bool, `True` = on) on every
 model whose handler writes it; write it with `async_set_setting("camera_on_off", on,
