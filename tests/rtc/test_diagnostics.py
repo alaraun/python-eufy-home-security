@@ -32,7 +32,6 @@ from eufy_home_security.rtc.diagnostics import (
     describe_event,
     describe_message,
     describe_station,
-    first_camera_channel,
     render_station,
     rewritable_guard_mode,
 )
@@ -169,8 +168,80 @@ def test_children_are_listed_by_channel_with_power_and_online_state() -> None:
             cloud_param_types=[1131],
         ),
     ]
-    assert first_camera_channel(children) == children[0]
-    assert first_camera_channel([]) is None
+
+
+HB3_SN = SYNTHETIC.station_sn
+
+
+def _hb3(*children: tuple[str, int], parent: str = HB3_SN) -> list[CloudDevice]:
+    """A station and its children, each ``(model, channel)``."""
+    station = CloudDevice(device_sn=parent, device_type=18, name="Home Base", p2p_did=SYNTHETIC.did)
+    return [
+        station,
+        *(
+            CloudDevice(
+                device_sn=model + SYNTHETIC.camera_sn[5:-1] + str(channel),
+                device_type=7,
+                name=f"Cam {channel}",
+                station_sn=parent,
+                channel=channel,
+            )
+            for model, channel in children
+        ),
+    ]
+
+
+def test_a_homebase_3_with_a_camera_the_app_streams_over_webrtc_is_probed() -> None:
+    devices = _hb3(("T8160", 0), ("T8224", 2), ("T8223", 6))
+    assert diagnostics.webrtc_probe_reason(devices[0], devices, webrtc_all=False) == "webrtc_child"
+    assert [d.channel for d in diagnostics.webrtc_children(HB3_SN, devices)] == [2, 6]
+    target = diagnostics.live_target(HB3_SN, reversed(devices))
+    assert target == diagnostics.LiveTarget(
+        channel=2,
+        model="T8224",
+        product_code="T8224",
+        serial="T8224***" + (SYNTHETIC.camera_sn[5:-1] + "2")[-4:],
+        chosen_by="webrtc_child",
+    )
+    assert SYNTHETIC.camera_sn[5:-1] not in str(target)
+
+
+@pytest.mark.parametrize(
+    ("devices", "webrtc_all", "reason"),
+    [
+        (_hb3(("T8160", 0)), False, None),
+        (_hb3(("T8160", 0)), True, "webrtc_all"),
+        (_hb3(("T8224", 1)), True, "webrtc_child"),
+        ([CloudDevice(device_sn="T2261" + "0" * 11, device_type=0, name="x")], True, None),
+        (_hb3(("T8224", 1), parent="T8010" + HB3_SN[5:]), False, None),
+        (_devices(), False, "webrtc_only"),
+    ],
+    ids=[
+        "hb3-p2p-children",
+        "webrtc-all",
+        "child-before-all",
+        "no-p2p-identity",
+        "hb2-with-c30",
+        "webrtc-only",
+    ],
+)
+def test_which_stations_are_probed_over_webrtc(
+    devices: list[CloudDevice], webrtc_all: bool, reason: str | None
+) -> None:
+    assert diagnostics.webrtc_probe_reason(devices[0], devices, webrtc_all=webrtc_all) == reason
+
+
+def test_the_live_view_takes_the_option_else_the_lowest_paired_channel() -> None:
+    devices = _hb3(("T8160", 4), ("T8224", 2))
+    chosen = diagnostics.live_target(HB3_SN, devices, camera_channel=4)
+    assert chosen is not None
+    assert (chosen.channel, chosen.model, chosen.chosen_by) == (4, "T8160", "camera_channel")
+    unknown = diagnostics.live_target(HB3_SN, devices, camera_channel=9)
+    assert unknown == diagnostics.LiveTarget(9, "?", None, None, "camera_channel")
+    lowest = diagnostics.live_target(STATION_SN, _devices())
+    assert lowest is not None
+    assert (lowest.channel, lowest.model, lowest.chosen_by) == (1, "T8410", "lowest_channel")
+    assert diagnostics.live_target(HB3_SN, _hb3()) is None
 
 
 @pytest.mark.parametrize("raw", [{}, {"device_new_pn": "Z9999"}], ids=["no-code", "no-file"])

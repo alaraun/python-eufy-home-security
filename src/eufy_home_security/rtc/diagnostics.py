@@ -1,7 +1,9 @@
-"""Read-only WebRTC diagnostics for a webrtc_only station, as a report safe to share.
+"""Read-only WebRTC diagnostics for a station the eufy app reaches over WebRTC, as a
+report safe to share.
 
-Built to run on a volunteer's own hardware (the webrtc_only models, T9000/T8N00, this
-library otherwise skips). The report dataclasses hold only *descriptors*: model codes,
+Built to run on a volunteer's own hardware: the webrtc_only models (T9000/T8N00) this
+library otherwise skips, and a station with a paired camera the app streams over WebRTC
+(:func:`webrtc_children`). The report dataclasses hold only *descriptors*: model codes,
 firmware and SDK versions, channels, lengths, counts, timings, protocol-header bytes,
 JSON key names and a whitelist of small integer fields. They have no field for a key,
 a serial, an address, a token, an account id or any audio/video payload, so the whole
@@ -31,8 +33,10 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, cast
 
+from .._logging import redact_serial
+from ..devices.live_open import app_uses_webrtc
 from ..devices.model_settings import BATTERY_PROPERTY, product_code_of, settings_of
-from ..devices.recipes import WEBRTC_ONLY_STATIONS
+from ..devices.recipes import WEBRTC_ONLY_STATIONS, connect_type
 from ..exceptions import CommunicationError, EufySecurityError
 from ..models import PARAM_DEV_STATUS, STATION_CHANNEL, GuardMode
 from ..p2p.messages import CMD_SET_ARMING, arm_payload, device_msg
@@ -387,9 +391,90 @@ def describe_children(station_sn: str, devices: Iterable[CloudDevice]) -> list[C
     ]
 
 
-def first_camera_channel(children: Sequence[ChildRecord]) -> ChildRecord | None:
-    """The paired device with the lowest channel (the default live-view target)."""
-    return next((c for c in children if c.channel is not None), None)
+@dataclass(frozen=True, slots=True)
+class LiveTarget:
+    """The camera a station's live view opens, and why (a shortened serial, no name)."""
+
+    channel: int
+    model: str
+    product_code: str | None
+    serial: str | None
+    """The camera's serial as :func:`~.._logging.redact_serial` shortens it; None for a
+    channel no paired device has."""
+    chosen_by: str
+    """``camera_channel`` (the option), ``webrtc_child`` (the lowest channel the eufy app
+    streams over WebRTC) or ``lowest_channel`` (the lowest paired channel)."""
+
+
+def _paired(station_sn: str, devices: Iterable[CloudDevice]) -> list[CloudDevice]:
+    """The devices paired to ``station_sn`` that have a channel, by channel."""
+    return sorted(
+        (
+            d
+            for d in devices
+            if d.station_sn == station_sn and d.device_sn != station_sn and d.channel is not None
+        ),
+        key=lambda d: d.channel or 0,
+    )
+
+
+def webrtc_children(station_sn: str, devices: Iterable[CloudDevice]) -> list[CloudDevice]:
+    """The devices paired to ``station_sn`` that the eufy app streams over WebRTC behind
+    it (:func:`~..devices.live_open.app_uses_webrtc`), by channel."""
+    return [
+        d
+        for d in _paired(station_sn, devices)
+        if app_uses_webrtc(
+            product_code_of(d.raw.get("device_new_pn"), d.device_sn),
+            connect_type(station_sn, d.device_sn),
+        )
+    ]
+
+
+def webrtc_probe_reason(
+    station: CloudDevice, devices: Iterable[CloudDevice], *, webrtc_all: bool
+) -> str | None:
+    """Why diagnose probes ``station`` over WebRTC: ``webrtc_only`` (the app reaches it
+    only over WebRTC), ``webrtc_child`` (a paired camera the app streams over WebRTC),
+    ``webrtc_all`` (the option, any other station); None when it is not probed."""
+    if station.device_sn[:5] in WEBRTC_ONLY_STATIONS:
+        return "webrtc_only"
+    if webrtc_children(station.device_sn, devices):
+        return "webrtc_child"
+    if webrtc_all and station.is_station:
+        return "webrtc_all"
+    return None
+
+
+def live_target(
+    station_sn: str, devices: Iterable[CloudDevice], camera_channel: int | None = None
+) -> LiveTarget | None:
+    """The camera the live view of ``station_sn`` opens: ``camera_channel`` when given,
+    else the lowest channel the app streams over WebRTC, else the lowest paired channel;
+    None for a station with no paired channel."""
+    devices = list(devices)
+    paired = _paired(station_sn, devices)
+    streamed = webrtc_children(station_sn, devices)
+    if camera_channel is not None:
+        device = next((d for d in paired if d.channel == camera_channel), None)
+        channel, chosen_by = camera_channel, "camera_channel"
+    elif streamed:
+        device, chosen_by = streamed[0], "webrtc_child"
+        channel = cast("int", device.channel)
+    elif paired:
+        device, chosen_by = paired[0], "lowest_channel"
+        channel = cast("int", device.channel)
+    else:
+        return None
+    if device is None:
+        return LiveTarget(channel, "?", None, None, chosen_by)
+    return LiveTarget(
+        channel=channel,
+        model=device.device_sn[:5],
+        product_code=product_code_of(device.raw.get("device_new_pn"), device.device_sn),
+        serial=redact_serial(device.device_sn),
+        chosen_by=chosen_by,
+    )
 
 
 def rewritable_guard_mode(record: StationRecord) -> GuardMode | None:

@@ -737,11 +737,18 @@ What it does (read-only by default: nothing is armed, disarmed, changed or trigg
      region/session status.
   3. Each station served over local P2P (HomeBases, standalone cameras): connect,
      read its state and storage once, and record its session counters.
-  4. Each WebRTC-only station (T9000, T8N00): place the data-channel call (with the
-     time each step took and whether the connection is direct or relayed), check its
-     keep-alive, send two read-only queries (storage, paired devices), and open a live
-     view of one camera for a few seconds to describe its video and audio streams
-     (codec, resolution, frame rate, packet counts; never the picture or sound).
+  4. Over WebRTC, the way the eufy app reaches them:
+       - each WebRTC-only station (T9000, T8N00);
+       - each HomeBase 3 with a paired camera the eufy app streams over WebRTC (the
+         battery doorbells T8223 and T8224, e.g. a Video Doorbell C30). Its P2P read of
+         step 3 still runs; the live view below opens on that camera (the lowest
+         channel if there are several).
+     For each: place the data-channel call (with the time each step took and whether
+     the connection is direct or relayed), check its keep-alive, send two read-only
+     queries (storage, paired devices), and open a live view of one camera
+     (--camera-channel picks another) for a few seconds to describe its video and
+     audio streams (codec, resolution, frame rate, packet counts; never the picture
+     or sound). --webrtc-all adds every other station; --no-webrtc skips this step.
      With --watch N it also records, for N seconds, what the station and the eufy
      cloud push send while you switch the guard mode in the eufy app (--no-push
      leaves the cloud push out).
@@ -749,7 +756,7 @@ What it does (read-only by default: nothing is armed, disarmed, changed or trigg
   limit, and the report is written even when a step fails or you press Ctrl+C.
 
 Opt-in, a write (off unless you pass it):
-  --rewrite-guard-mode  re-sends each WebRTC-only station's CURRENT guard mode (as the
+  --rewrite-guard-mode  re-sends each WebRTC-probed station's CURRENT guard mode (as the
      eufy cloud reports it: Away, Home or Disarmed only) unchanged, once, after asking
      you to confirm the mode it read, to record how the station acknowledges a mode
      command. The station may log it or announce the mode as if it had been set.
@@ -872,9 +879,10 @@ async def _guard_rewrite(
 async def _diagnose_webrtc(
     ctx: Context, eufy: EufySecurity, devices: Sequence[CloudDevice], report: _Report
 ) -> None:
-    """Probe the account's webrtc_only stations (every station with ``--webrtc-all``),
-    adding each station's report to ``report`` as soon as it is done (or interrupted)."""
-    from ..devices.recipes import WEBRTC_ONLY_STATIONS  # noqa: PLC0415
+    """Probe over WebRTC the account's webrtc_only stations, every station with a paired
+    camera the eufy app streams over WebRTC, and with ``--webrtc-all`` every other
+    station (:func:`~..rtc.diagnostics.webrtc_probe_reason`), adding each station's
+    report to ``report`` as soon as it is done (or interrupted)."""
     from ..rtc import diagnostics as diag  # noqa: PLC0415
     from ..rtc.config import RtcConfig  # noqa: PLC0415
     from ..rtc.crypto import RtcSignalingCrypto  # noqa: PLC0415
@@ -886,12 +894,13 @@ async def _diagnose_webrtc(
         raise UsageError("logged in but the account has no user id")
     # A WebRTC station may lack the P2P fields `is_station` asks for: pick by parent.
     own_parent = [d for d in devices if d.station_sn in (None, d.device_sn)]
-    if ctx.args.webrtc_all:
-        targets = [d for d in own_parent if d.is_station or d.device_sn[:5] in WEBRTC_ONLY_STATIONS]
-    else:
-        targets = [d for d in own_parent if d.device_sn[:5] in WEBRTC_ONLY_STATIONS]
-    if ctx.args.station:
-        targets = [d for d in targets if ctx.args.station in (d.device_sn, d.name)]
+    targets: list[tuple[CloudDevice, str]] = []
+    for d in own_parent:
+        reason = diag.webrtc_probe_reason(d, devices, webrtc_all=ctx.args.webrtc_all)
+        if reason is not None and (
+            not ctx.args.station or ctx.args.station in (d.device_sn, d.name)
+        ):
+            targets.append((d, reason))
     app_id = secrets.token_hex(8)
 
     def on_watch(seconds: float) -> None:
@@ -902,15 +911,22 @@ async def _diagnose_webrtc(
             flush=True,
         )
 
-    for device in targets:
+    for device, reason in targets:
         record = diag.describe_station(device)
         children = await asyncio.to_thread(diag.describe_children, device.device_sn, devices)
-        camera = diag.first_camera_channel(children)
-        if ctx.args.camera_channel is not None:
+        target = diag.live_target(device.device_sn, devices, ctx.args.camera_channel)
+        camera = None
+        if target is not None:
             camera = next(
-                (c for c in children if c.channel == ctx.args.camera_channel),
-                diag.ChildRecord("?", ctx.args.camera_channel, None, has_signaling=False),
+                (c for c in children if c.channel == target.channel),
+                diag.ChildRecord("?", target.channel, None, has_signaling=False),
             )
+        extra = {
+            "probe_reason": reason,
+            "live_camera": None
+            if target is None or ctx.args.no_live
+            else dataclasses.asdict(target),
+        }
         try:
             config = RtcConfig.from_device(device.raw, user_id=user_id, app_id=app_id)
         except Exception:  # any failure is recorded, never raised
@@ -923,11 +939,14 @@ async def _diagnose_webrtc(
                 phase_reached="config",
                 error="config: the cloud record lacks a DID, license or IPv4 server",
             )
-            sink.append(dataclasses.asdict(entry))
+            sink.append({**dataclasses.asdict(entry), **extra})
             print("\n".join(diag.render_station(entry)))
             continue
         rewrite, note = await _guard_rewrite(ctx, record)
-        print(f"Probing WebRTC station {record.model} ...", flush=True)
+        why = reason
+        if camera is not None and not ctx.args.no_live:
+            why += f", live view: {camera.model} on channel {camera.channel}"
+        print(f"Probing WebRTC station {record.model} ({why}) ...", flush=True)
         session = RtcSession(config, RtcSignalingCrypto())
         done: list[diag.StationReport] = []
         try:
@@ -949,7 +968,9 @@ async def _diagnose_webrtc(
             if not done:
                 done.append(result)
         finally:
-            sink.extend({**dataclasses.asdict(entry), "guard_rewrite": note} for entry in done)
+            sink.extend(
+                {**dataclasses.asdict(entry), **extra, "guard_rewrite": note} for entry in done
+            )
             with contextlib.suppress(Exception):
                 await session.close()
         for entry in done:
@@ -992,7 +1013,7 @@ def _diagnose_options(args: argparse.Namespace) -> dict[str, Any]:
 
 async def cmd_diagnose(ctx: Context) -> int:
     """One report of the account: every device, the P2P stations' health, and the
-    webrtc_only stations' WebRTC probe. The report file is written after every step
+    WebRTC probe of the stations the eufy app reaches over WebRTC. The report file is written after every step
     and on any exit; ``complete`` says whether the run got to its end."""
     from datetime import UTC  # noqa: PLC0415
 

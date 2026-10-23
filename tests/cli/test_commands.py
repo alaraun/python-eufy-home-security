@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from eufy_home_security import client as client_module
+from eufy_home_security._logging import redact_serial
 from eufy_home_security.cli import commands
 from eufy_home_security.cli.commands import Context, date_window, select_station
 from eufy_home_security.cli.config import UsageError, parse_args
@@ -799,6 +800,7 @@ async def test_diagnose_explain_prints_scope_and_exits(capsys: pytest.CaptureFix
     out = capsys.readouterr().out
     assert "read-only" in out
     assert "Never:" in out  # the privacy note names what is never collected
+    assert "HomeBase 3 with a paired camera the eufy app streams over WebRTC" in out
 
 
 class WebRtcCloud(StubCloud):
@@ -849,6 +851,29 @@ class WebRtcCloud(StubCloud):
                 raw={"p2p_did": SYNTHETIC.did},
             ),
         ]
+
+
+C30_SN = "T8224" + SYNTHETIC.camera_sn[5:-1] + "2"
+
+
+class C30Cloud(WebRtcCloud):
+    """:class:`WebRtcCloud` whose HomeBase 3 carries signaling fields and has a Video
+    Doorbell C30 (T8224) on channel 2 next to its camera on channel 0."""
+
+    async def async_get_devices(
+        self, *, refresh: bool = False, rescan_regions: bool = False
+    ) -> list[CloudDevice]:
+        hb3, *rest = await super().async_get_devices(refresh=refresh, rescan_regions=rescan_regions)
+        raw = {
+            "device_sn": hb3.device_sn,
+            "p2p_did": SYNTHETIC.did,
+            "p2p_license": "ABCDEF",
+            "signaling_servers": ["https://198.51.100.1"],
+        }
+        c30 = CloudDevice(
+            device_sn=C30_SN, device_type=7, name="Front Porch", station_sn=hb3.device_sn, channel=2
+        )
+        return [replace(hb3, raw=raw), c30, *rest]
 
 
 @pytest.fixture
@@ -911,6 +936,15 @@ async def test_diagnose_reports_the_p2p_stations_and_probes_the_webrtc_ones(
     assert call["camera"].channel == 2
     assert (call["watch_s"], call["do_live"], call["do_commands"]) == (5.0, True, True)
     assert [s["phase_reached"] for s in report["webrtc_stations"]] == ["done", "config"]
+    # The HomeBase 3 has no camera the eufy app streams over WebRTC: not probed.
+    assert [s["probe_reason"] for s in report["webrtc_stations"]] == ["webrtc_only"] * 2
+    assert report["webrtc_stations"][0]["live_camera"] == {
+        "channel": 2,
+        "model": "T8410",
+        "product_code": "T8410",
+        "serial": redact_serial("T8410" + SYNTHETIC.camera_sn[5:]),
+        "chosen_by": "lowest_channel",
+    }
     assert [c["channel"] for c in report["webrtc_stations"][0]["children"]] == [2, 4]
     assert "webrtc_only" in {d["reason"] for d in report["skipped_devices"]}
     assert (report["account"], report["cache"]) == ({"devices": []}, {"version": 1})
@@ -951,12 +985,71 @@ async def test_diagnose_picks_a_station_by_name_and_a_camera_by_channel(
 
 
 @pytest.mark.usefixtures("account_views")
-async def test_diagnose_without_webrtc_reads_only_the_p2p_stations(
+async def test_diagnose_probes_a_homebase_3_with_a_c30_on_the_c30s_channel(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", C30Cloud)
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(diagnostics, "collect_station", _fake_collect(calls))
+    out = tmp_path / "r.json"
+    argv = ["--host", "127.0.0.1", "diagnose", "--output", str(out)]
+    assert await run(argv, tmp_path) == 0
+    report = json.loads(out.read_text())
+    (label,) = report["stations"]  # its P2P read stays
+    assert label.startswith("T8030")
+    assert [c["station"].model for c in calls] == ["T8030", "T9000"]
+    assert [c["camera"].channel for c in calls] == [2, 2]
+    assert calls[0]["camera"].model == "T8224"
+    hb3, t9000, _bare = report["webrtc_stations"]
+    assert (hb3["probe_reason"], t9000["probe_reason"]) == ("webrtc_child", "webrtc_only")
+    assert hb3["live_camera"] == {
+        "channel": 2,
+        "model": "T8224",
+        "product_code": "T8224",
+        "serial": redact_serial(C30_SN),
+        "chosen_by": "webrtc_child",
+    }
+    assert "(webrtc_child, live view: T8224 on channel 2)" in capsys.readouterr().out
+    text = out.read_text()
+    for private in (C30_SN, SYNTHETIC.station_sn, "Front Porch", "ABCDEF", "198.51.100.1"):
+        assert private not in text, private
+
+
+@pytest.mark.usefixtures("account_views")
+async def test_diagnose_live_view_of_a_homebase_3_follows_the_camera_channel_option(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
 
-    monkeypatch.setattr(client_module, "EufyCloudApi", WebRtcCloud)
+    monkeypatch.setattr(client_module, "EufyCloudApi", C30Cloud)
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(diagnostics, "collect_station", _fake_collect(calls))
+    out = tmp_path / "r.json"
+    argv = ["--station", "Home Base", "diagnose", "--no-p2p", "--camera-channel", "0"]
+    assert await run([*argv, "--output", str(out)], tmp_path) == 0
+    assert [(c["camera"].model, c["camera"].channel) for c in calls] == [("T8160", 0)]
+    (hb3,) = json.loads(out.read_text())["webrtc_stations"]
+    assert hb3["probe_reason"] == "webrtc_child"
+    assert (hb3["live_camera"]["chosen_by"], hb3["live_camera"]["model"]) == (
+        "camera_channel",
+        "T8160",
+    )
+    assert await run([*argv, "--no-live", "--output", str(out)], tmp_path) == 0
+    assert json.loads(out.read_text())["webrtc_stations"][0]["live_camera"] is None
+
+
+@pytest.mark.usefixtures("account_views")
+@pytest.mark.parametrize("cloud", [WebRtcCloud, C30Cloud], ids=["webrtc-only", "hb3-c30"])
+async def test_diagnose_without_webrtc_reads_only_the_p2p_stations(
+    cloud: type[StubCloud],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from eufy_home_security.rtc import diagnostics  # noqa: PLC0415
+
+    monkeypatch.setattr(client_module, "EufyCloudApi", cloud)
     calls: list[dict[str, Any]] = []
     monkeypatch.setattr(diagnostics, "collect_station", _fake_collect(calls))
     out = tmp_path / "r.json"
