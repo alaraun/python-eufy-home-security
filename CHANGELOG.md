@@ -4,6 +4,17 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.6](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.5...v0.4.6) (2026-10-23)
+
+
+### Bug Fixes
+
+* **cloud:** list devices per house as the eufy app does, so a home shared with Share Home is served ([issue 45](https://github.com/alaraun/homeassistant-eufy-home-security/issues/45)) ([d1776de](https://github.com/alaraun/python-eufy-home-security/commit/d1776de65565be0e67248ca32023428e6d2806f2))
+* **devices:** allow P2P live view of a HomeBase 3's T8223/T8224 outside the eufy app's WebRTC firmware range ([issue 108](https://github.com/alaraun/homeassistant-eufy-home-security/issues/108)) ([e0587e8](https://github.com/alaraun/python-eufy-home-security/commit/e0587e88499a00b532f9fef9c30885aebb454dad))
+* **devices:** decide WebRTC or P2P for every device as the eufy app does ([e94ffab](https://github.com/alaraun/python-eufy-home-security/commit/e94ffab48fa9633d601c14e41b80927ea2d2237d))
+* **devices:** take each model's kind from the eufy app's product category, so the eufyCam S3 Pro (T8162) and eight other models are recognised ([issue 123](https://github.com/alaraun/homeassistant-eufy-home-security/issues/123)) ([fd6dec7](https://github.com/alaraun/python-eufy-home-security/commit/fd6dec760d4293e09fdd557386fbe93c66fedc88))
+* **p2p:** read RSA command results as the eufy app does ([issue 114](https://github.com/alaraun/homeassistant-eufy-home-security/issues/114)) ([0e3a2fc](https://github.com/alaraun/python-eufy-home-security/commit/0e3a2fc9ac63c14c6b5588dc6033baeecb6d4fbf))
+
 ## [0.4.5](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.4...v0.4.5) (2026-10-22)
 
 
