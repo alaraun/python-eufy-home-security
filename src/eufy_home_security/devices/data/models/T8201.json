@@ -167,12 +167,35 @@
    }
   },
   "camera_on_off": {
-   "access": "ro",
-   "default": "1",
-   "kind": "string",
-   "note": "handler ignores the value",
-   "read": null,
-   "section": "system"
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "false": false,
+     "true": true
+    },
+    "param": 2001
+   },
+   "section": "system",
+   "write": {
+    "cmd": 1035,
+    "params": {
+     "switch": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2001,
+     "paramValue": {
+      "$map": {
+       "false": "false",
+       "true": "true"
+      }
+     }
+    }
+   }
   },
   "detection_sensitivity": {
    "access": "rw",

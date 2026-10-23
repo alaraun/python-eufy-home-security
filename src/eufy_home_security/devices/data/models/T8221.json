@@ -169,12 +169,90 @@
    "section": "power"
   },
   "camera_on_off": {
-   "access": "ro",
-   "default": "0",
-   "kind": "string",
-   "note": "handler ignores the value",
-   "read": null,
-   "section": "system"
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": false,
+        "0": true,
+        "1": false
+       },
+       "param": 99904
+      },
+      "write": {
+       "cmd": 1035,
+       "params": {
+        "switch": {
+         "$map": {
+          "false": true,
+          "true": false
+         }
+        }
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 99904,
+        "paramValue": {
+         "$map": {
+          "false": "1",
+          "true": "0"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": true,
+     "1": false
+    },
+    "param": 1035
+   },
+   "section": "system",
+   "write": {
+    "cmd": 1035,
+    "params": {
+     "switch": {
+      "$map": {
+       "false": true,
+       "true": false
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1035,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    },
+    "extUpdates": [
+     {
+      "needUpdate": true,
+      "cmd": 99904,
+      "paramValue": {
+       "$map": {
+        "false": "1",
+        "true": "0"
+       }
+      }
+     }
+    ]
+   }
   },
   "charging_status": {
    "access": "ro",

@@ -19,8 +19,8 @@
   },
   "camera_on_off": {
    "access": "ro",
-   "default": "1",
-   "kind": "string",
+   "default": true,
+   "kind": "bool",
    "note": "no handler write path",
    "read": null,
    "section": "system"

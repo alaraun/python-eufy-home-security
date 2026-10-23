@@ -313,12 +313,40 @@
    }
   },
   "camera_on_off": {
-   "access": "ro",
-   "default": "1",
-   "kind": "string",
-   "note": "handler ignores the value",
-   "read": null,
-   "section": "system"
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": true,
+     "1": false
+    },
+    "param": 1035
+   },
+   "section": "system",
+   "write": {
+    "cmd": 1035,
+    "params": {
+     "switch": {
+      "$map": {
+       "false": true,
+       "true": false
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1035,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
   },
   "change_wifi_is_check_same_lan": {
    "access": "ro",

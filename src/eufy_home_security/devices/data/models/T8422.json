@@ -227,12 +227,35 @@
    ]
   },
   "camera_on_off": {
-   "access": "ro",
+   "access": "rw",
+   "control": "switch",
    "default": true,
    "kind": "bool",
-   "note": "handler ignores the value",
-   "read": null,
-   "section": "system"
+   "read": {
+    "map": {
+     "": false,
+     "false": false,
+     "true": true
+    },
+    "param": 2001
+   },
+   "section": "system",
+   "write": {
+    "cmd": 1035,
+    "params": {
+     "switch": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2001,
+     "paramValue": {
+      "$map": {
+       "false": "false",
+       "true": "true"
+      }
+     }
+    }
+   }
   },
   "cloud_storage_support_trail": {
    "access": "ro",

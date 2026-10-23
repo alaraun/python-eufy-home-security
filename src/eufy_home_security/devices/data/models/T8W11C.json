@@ -424,8 +424,18 @@
    "write": {
     "cmd": 1035,
     "params": {
-     "switch": true,
-     "value": 0
+     "switch": {
+      "$map": {
+       "false": true,
+       "true": false
+      }
+     },
+     "value": {
+      "$map": {
+       "false": 1,
+       "true": 0
+      }
+     }
     },
     "update": {
      "needUpdate": true,

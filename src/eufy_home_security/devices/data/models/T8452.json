@@ -191,11 +191,15 @@
    ]
   },
   "camera_on_off": {
-   "access": "ro",
+   "access": "rw",
    "contexts": [
     {
      "entry": {
-      "note": "no handler write path"
+      "access": "ro",
+      "control": null,
+      "note": "no handler write path",
+      "read": null,
+      "write": null
      },
      "names": [
       "HB1",
@@ -214,11 +218,39 @@
      ]
     }
    ],
-   "default": "1",
-   "kind": "string",
-   "note": "handler ignores the value",
-   "read": null,
-   "section": "system"
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": true,
+     "1": false
+    },
+    "param": 1035
+   },
+   "section": "system",
+   "write": {
+    "cmd": 1035,
+    "params": {
+     "switch": {
+      "$map": {
+       "false": true,
+       "true": false
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1035,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
   },
   "change_wifi_is_support": {
    "access": "ro",

@@ -280,7 +280,7 @@ Settings: rw 12 / ro 62, see [Settings of T8030 HomeBase 3 (S380)](#settings-of-
 | battery | verified | live parameter dump (param 1101), T8160 eufyCam 3 fw 3.4.3.0 |
 | rssi | verified | live parameter dump (param 1142), T8160 eufyCam 3 fw 3.4.3.0 |
 
-Settings: rw 31 / ro 70, see [Settings of T8160 eufyCam 3 (S330)](#settings-of-t8160-eufycam-3-s330)
+Settings: rw 32 / ro 69, see [Settings of T8160 eufyCam 3 (S330)](#settings-of-t8160-eufycam-3-s330)
 
 Kind markers (a block without a known serial): 1400, 1401
 
@@ -305,7 +305,7 @@ Kind markers (a block without a known serial): 1400, 1401
 | battery | declared | T8161 handler battery_value reads param 1101 |
 | rssi | declared | T8161 handler device_wifi_signal_strength reads param 1142 |
 
-Settings: rw 29 / ro 63, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-eufycam-3c)
+Settings: rw 30 / ro 62, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-eufycam-3c)
 
 | parameter | id |
 |---|---|
@@ -328,7 +328,7 @@ Settings: rw 29 / ro 63, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-e
 | ptz_control | verified | live one-step pan/tilt (6030) and store/delete a slot (6032/6033), T8170 Battery SoloCam, standalone, fw 3.3.5.4 (at most 5 slots are stored; a store while full is receipted but does nothing) |
 | ptz_zoom | verified | live picture zoom 1-12 (6203) with its echo, measured in the stream, T8170 Battery SoloCam, standalone, fw 3.3.5.4; 4x and 8x also paired to a HomeBase 3 fw 3.8.7.4 (the library accepts 1-12; the camera caps near 14x; single view only; a go-to, the idle return or a reopened view resets it to 1x) |
 
-Settings: rw 40 / ro 105, see [Settings of T8170 Battery SoloCam (T8170)](#settings-of-t8170-battery-solocam-t8170)
+Settings: rw 41 / ro 104, see [Settings of T8170 Battery SoloCam (T8170)](#settings-of-t8170-battery-solocam-t8170)
 
 | parameter | id |
 |---|---|
@@ -341,7 +341,7 @@ Settings: rw 40 / ro 105, see [Settings of T8170 Battery SoloCam (T8170)](#setti
 | live_stream | declared | T8410 handler open_live_stream: the 1700/1000 open without extValue, and a bare 1004 stop (reached over the RSA session variant, CONN_INIT version 1; not verified on hardware) |
 | ptz_control | declared | T8410 handler ptz_action_control: 1700/6030 with cmd_type and rotate_type only (no zoom, no ivalue) (one pan/tilt step only: the handler has no preset or picture-zoom actions; reached over the RSA session variant, CONN_INIT version 1; not verified on hardware) |
 
-Settings: rw 42 / ro 85, see [Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)](#settings-of-t8410-indoor-cam-2k-pan--tilt-solo-indoorcam-p24)
+Settings: rw 43 / ro 84, see [Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)](#settings-of-t8410-indoor-cam-2k-pan--tilt-solo-indoorcam-p24)
 
 | parameter | id |
 |---|---|
@@ -1604,7 +1604,7 @@ rw 0 / ro 45
 
 ### Settings of T6310 T6310
 
-rw 47 / ro 76
+rw 48 / ro 75
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1628,7 +1628,7 @@ rw 47 / ro 76
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `auto_calibration_status` | bool | - | - | yes | switch | - |
 | `auto_cruise_schedule_list` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -1836,7 +1836,7 @@ rw 17 / ro 78
 
 ### Settings of T7100 T7100
 
-rw 31 / ro 69
+rw 32 / ro 68
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1851,7 +1851,7 @@ rw 31 / ro 69
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `camera_gun_ball_linkage_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_sensitivity_for_sensor` | string | - | - | no | - | - |
 | `device_ability_data` | other | - | - | no | - | - |
@@ -1995,7 +1995,7 @@ rw 0 / ro 40
 |---|---|---|---|---|---|---|
 | `ai_empower` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
 | `detection_type_set` | enum | 5, 6 | - | no | - | 5=Human Only, 6=All Motions |
@@ -2733,7 +2733,7 @@ rw 19 / ro 81
 
 ### Settings of T8110 Battery Solo Cam 8110
 
-rw 37 / ro 85
+rw 38 / ro 84
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2759,7 +2759,7 @@ rw 37 / ro 85
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -2862,7 +2862,7 @@ rw 37 / ro 85
 
 ### Settings of T8111 Camera
 
-rw 24 / ro 59
+rw 25 / ro 58
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2890,7 +2890,7 @@ rw 24 / ro 59
 | `automation_detect_motion_trigger` | bool | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -2952,7 +2952,7 @@ rw 24 / ro 59
 
 ### Settings of T8112 Camera E
 
-rw 25 / ro 57
+rw 26 / ro 56
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2978,7 +2978,7 @@ rw 25 / ro 57
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -3041,7 +3041,7 @@ rw 25 / ro 57
 
 ### Settings of T8113 Camera 2C
 
-rw 26 / ro 68
+rw 27 / ro 67
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3068,7 +3068,7 @@ rw 26 / ro 68
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -3142,7 +3142,7 @@ rw 26 / ro 68
 
 ### Settings of T8114 Camera 2
 
-rw 25 / ro 61
+rw 26 / ro 60
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3171,7 +3171,7 @@ rw 25 / ro 61
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -3235,7 +3235,7 @@ rw 25 / ro 61
 
 ### Settings of T8115 Battery Solo Cam 8115
 
-rw 38 / ro 83
+rw 39 / ro 82
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3261,7 +3261,7 @@ rw 38 / ro 83
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `automation_config` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -3363,7 +3363,7 @@ rw 38 / ro 83
 
 ### Settings of T8119 Battery Solo C 33
 
-rw 38 / ro 85
+rw 39 / ro 84
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3392,7 +3392,7 @@ rw 38 / ro 85
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -3493,7 +3493,7 @@ rw 38 / ro 85
 
 ### Settings of T8122 Battery Solo Cam Spotlight 1080
 
-rw 30 / ro 63
+rw 31 / ro 62
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3519,7 +3519,7 @@ rw 30 / ro 63
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -3593,7 +3593,7 @@ rw 30 / ro 63
 
 ### Settings of T8123 Battery Solo Cam Spotlight 2K
 
-rw 32 / ro 62
+rw 33 / ro 61
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3619,7 +3619,7 @@ rw 32 / ro 62
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -3694,7 +3694,7 @@ rw 32 / ro 62
 
 ### Settings of T8124 Battery Solo Cam Spotlight Solar 8124
 
-rw 30 / ro 65
+rw 31 / ro 64
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3720,7 +3720,7 @@ rw 30 / ro 65
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -3796,7 +3796,7 @@ rw 30 / ro 65
 
 ### Settings of T8124R
 
-rw 32 / ro 65
+rw 33 / ro 64
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3821,7 +3821,7 @@ rw 32 / ro 65
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -3900,7 +3900,7 @@ rw 32 / ro 65
 
 ### Settings of T8130 Battery Solo Cam 8130
 
-rw 26 / ro 61
+rw 27 / ro 60
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -3926,7 +3926,7 @@ rw 26 / ro 61
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -3994,7 +3994,7 @@ rw 26 / ro 61
 
 ### Settings of T8131 Battery Solo Cam Pro
 
-rw 27 / ro 65
+rw 28 / ro 64
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4021,7 +4021,7 @@ rw 27 / ro 65
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -4093,7 +4093,7 @@ rw 27 / ro 65
 
 ### Settings of T8134 Battery Solo Cam 8134
 
-rw 30 / ro 78
+rw 31 / ro 77
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4124,7 +4124,7 @@ rw 30 / ro 78
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -4208,7 +4208,7 @@ rw 30 / ro 78
 
 ### Settings of T8140 Camera 2 Pro
 
-rw 28 / ro 66
+rw 29 / ro 65
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4238,7 +4238,7 @@ rw 28 / ro 66
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -4309,7 +4309,7 @@ rw 28 / ro 66
 
 ### Settings of T8142 Camera 2C Pro
 
-rw 29 / ro 65
+rw 30 / ro 64
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4337,7 +4337,7 @@ rw 29 / ro 65
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -4410,7 +4410,7 @@ rw 29 / ro 65
 
 ### Settings of T8144 Camera 8144
 
-rw 35 / ro 81
+rw 36 / ro 80
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4438,7 +4438,7 @@ rw 35 / ro 81
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_snapshot_setting` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=3 min, 1=5 min, 2=15 min, 3=30 min, 4=60 min |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -4533,7 +4533,7 @@ rw 35 / ro 81
 
 ### Settings of T814X Battery Solo Cam 814X
 
-rw 37 / ro 88
+rw 38 / ro 87
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4560,7 +4560,7 @@ rw 37 / ro 88
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -4665,7 +4665,7 @@ rw 37 / ro 88
 
 ### Settings of T8150 Cam 4G
 
-rw 26 / ro 46
+rw 27 / ro 45
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4683,7 +4683,7 @@ rw 26 / ro 46
 | `arming_support_query_working_mode` | bool | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detection_sensitivity` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
 | `detection_sensitivity_test_mode` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
@@ -4744,7 +4744,7 @@ rw 26 / ro 46
 
 ### Settings of T8151 Cam 4G EU
 
-rw 26 / ro 50
+rw 27 / ro 49
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4763,7 +4763,7 @@ rw 26 / ro 50
 | `arming_support_query_working_mode` | bool | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detection_sensitivity` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
 | `detection_sensitivity_test_mode` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
@@ -4827,7 +4827,7 @@ rw 26 / ro 50
 
 ### Settings of T8152 Cam 4G AUS
 
-rw 26 / ro 50
+rw 27 / ro 49
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4846,7 +4846,7 @@ rw 26 / ro 50
 | `arming_support_query_working_mode` | bool | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detection_sensitivity` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
 | `detection_sensitivity_test_mode` | enum | 0, 1, 2, 3, 4, 5, 6 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5, 5=6, 6=7 |
@@ -4910,7 +4910,7 @@ rw 26 / ro 50
 
 ### Settings of T8160 eufyCam 3 (S330)
 
-rw 31 / ro 70
+rw 32 / ro 69
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -4938,7 +4938,7 @@ rw 31 / ro 70
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -5018,7 +5018,7 @@ rw 31 / ro 70
 
 ### Settings of T8160C
 
-rw 32 / ro 71
+rw 33 / ro 70
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5046,7 +5046,7 @@ rw 32 / ro 71
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -5128,7 +5128,7 @@ rw 32 / ro 71
 
 ### Settings of T8161 eufyCam 3C
 
-rw 29 / ro 63
+rw 30 / ro 62
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5155,7 +5155,7 @@ rw 29 / ro 63
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -5227,7 +5227,7 @@ rw 29 / ro 63
 
 ### Settings of T8162 Camera 3 Pro
 
-rw 39 / ro 88
+rw 40 / ro 87
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5256,7 +5256,7 @@ rw 39 / ro 88
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_snapshot_setting` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=3 min, 1=5 min, 2=15 min, 3=30 min, 4=60 min |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -5361,7 +5361,7 @@ rw 39 / ro 88
 
 ### Settings of T8170 Battery SoloCam (T8170)
 
-rw 40 / ro 105
+rw 41 / ro 104
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5393,7 +5393,7 @@ rw 40 / ro 105
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -5513,7 +5513,7 @@ rw 40 / ro 105
 
 ### Settings of T8171 Battery Solo Cam 8171
 
-rw 35 / ro 103
+rw 36 / ro 102
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5545,7 +5545,7 @@ rw 35 / ro 103
 | `battery_residue_time` | other | - | - | no | - | - |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -5658,7 +5658,7 @@ rw 35 / ro 103
 
 ### Settings of T8172 Battery Solo Cam 8172
 
-rw 50 / ro 117
+rw 51 / ro 116
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5687,7 +5687,7 @@ rw 50 / ro 117
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
 | `camera_gun_ball_linkage_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_snapshot_setting` | string | - | - | no | - | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
@@ -5832,7 +5832,7 @@ rw 50 / ro 117
 
 ### Settings of T8173 Battery Solo Cam 8173
 
-rw 37 / ro 99
+rw 38 / ro 98
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -5863,7 +5863,7 @@ rw 37 / ro 99
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -5975,7 +5975,7 @@ rw 37 / ro 99
 
 ### Settings of T817L Battery Solo Cam 817L
 
-rw 51 / ro 96
+rw 52 / ro 95
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6004,7 +6004,7 @@ rw 51 / ro 96
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 0, 1 | - | no | - | 0=Crying, 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_on_off_privacy_mode` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -6129,7 +6129,7 @@ rw 51 / ro 96
 
 ### Settings of T8180 Battery Solo Cam 8180
 
-rw 43 / ro 102
+rw 44 / ro 101
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6158,7 +6158,7 @@ rw 43 / ro 102
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_snapshot_setting` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=3 min, 1=5 min, 2=15 min, 3=30 min, 4=60 min |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
@@ -6306,7 +6306,7 @@ rw 15 / ro 83
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | no | - | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -6386,7 +6386,7 @@ rw 15 / ro 83
 
 ### Settings of T8200 Doorbell 2K
 
-rw 18 / ro 54
+rw 19 / ro 53
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6404,7 +6404,7 @@ rw 18 / ro 54
 | `arming_support_show_user_name` | bool | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `audio_settings_chimes_alert_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `detection_sensitivity` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5 |
 | `device_ability_data` | other | - | - | no | - | - |
 | `device_audio_ringtone_volume` | range | 0..130 step 1 | - | yes | slider | - |
@@ -6465,7 +6465,7 @@ rw 18 / ro 54
 
 ### Settings of T8200X
 
-rw 17 / ro 53
+rw 18 / ro 52
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6483,7 +6483,7 @@ rw 17 / ro 53
 | `arming_support_show_user_name` | bool | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `audio_settings_chimes_alert_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
@@ -6542,7 +6542,7 @@ rw 17 / ro 53
 
 ### Settings of T8201 Wired Doorbell 1080P
 
-rw 18 / ro 54
+rw 19 / ro 53
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6560,7 +6560,7 @@ rw 18 / ro 54
 | `arming_support_show_user_name` | bool | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `audio_settings_chimes_alert_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `detection_sensitivity` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5 |
 | `device_ability_data` | other | - | - | no | - | - |
 | `device_audio_ringtone_volume` | range | 0..130 step 1 | - | yes | slider | - |
@@ -6621,7 +6621,7 @@ rw 18 / ro 54
 
 ### Settings of T8201X
 
-rw 17 / ro 54
+rw 18 / ro 53
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6639,7 +6639,7 @@ rw 17 / ro 54
 | `arming_support_show_user_name` | bool | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `audio_settings_chimes_alert_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
@@ -6699,7 +6699,7 @@ rw 17 / ro 54
 
 ### Settings of T8202 Wired Doorbell 8202
 
-rw 20 / ro 57
+rw 21 / ro 56
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6716,7 +6716,7 @@ rw 20 / ro 57
 | `arming_support_query_working_mode` | bool | - | - | no | - | - |
 | `arming_support_show_user_name` | bool | - | - | no | - | - |
 | `audio_settings_chimes_alert_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detection_sensitivity` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=1, 1=2, 2=3, 3=4, 4=5 |
 | `device_ability_data` | other | - | - | no | - | - |
@@ -6783,7 +6783,7 @@ rw 20 / ro 57
 
 ### Settings of T8203 Battery Doorbell 8203
 
-rw 19 / ro 63
+rw 20 / ro 62
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6804,7 +6804,7 @@ rw 19 / ro 63
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
@@ -6872,7 +6872,7 @@ rw 19 / ro 63
 
 ### Settings of T8210 Battery Doorbell 8210
 
-rw 27 / ro 57
+rw 28 / ro 56
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6886,7 +6886,7 @@ rw 27 / ro 57
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
@@ -6963,7 +6963,7 @@ rw 27 / ro 57
 
 ### Settings of T8210C
 
-rw 27 / ro 49
+rw 28 / ro 48
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6972,7 +6972,7 @@ rw 27 / ro 49
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
@@ -7046,7 +7046,7 @@ rw 27 / ro 49
 
 ### Settings of T8213 Battery Doorbell 8213
 
-rw 34 / ro 64
+rw 35 / ro 63
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7058,7 +7058,7 @@ rw 34 / ro 64
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Vehicle, 2=Pet, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_loitering_detection_length` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=15 s, 1=20 s, 2=25 s, 3=30 s, 4=45 s, 5=60 s |
@@ -7151,7 +7151,7 @@ rw 34 / ro 64
 
 ### Settings of T8214 Battery Doorbell T8214
 
-rw 49 / ro 110
+rw 50 / ro 109
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7180,7 +7180,7 @@ rw 49 / ro 110
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
 | `bottom_spotlight_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -7317,7 +7317,7 @@ rw 49 / ro 110
 
 ### Settings of T8215 Battery Doorbell T8215
 
-rw 53 / ro 125
+rw 54 / ro 124
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7337,7 +7337,7 @@ rw 53 / ro 125
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `automation_config` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -7502,7 +7502,7 @@ rw 53 / ro 125
 
 ### Settings of T8217 Battery Doorbell Solo 8217
 
-rw 46 / ro 110
+rw 47 / ro 109
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7524,7 +7524,7 @@ rw 46 / ro 110
 | `automation_detect_trigger_type` | enum | 0, 4, 3 | - | no | - | 0=Human Detection, 3=Package, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detected_events` | range | 10..120 step 1 | d | no | - | - |
@@ -7665,7 +7665,7 @@ rw 46 / ro 110
 
 ### Settings of T8220 Battery Doorbell 8220
 
-rw 22 / ro 50
+rw 23 / ro 49
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7677,7 +7677,7 @@ rw 22 / ro 50
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Vehicle, 2=Pet, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_human_only_at_night_status` | bool | - | - | yes | switch | - |
@@ -7744,7 +7744,7 @@ rw 22 / ro 50
 
 ### Settings of T8221 Battery Doorbell 8221
 
-rw 21 / ro 50
+rw 22 / ro 49
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7756,7 +7756,7 @@ rw 21 / ro 50
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_human_only_at_night_status` | bool | - | - | yes | switch | - |
@@ -7822,7 +7822,7 @@ rw 21 / ro 50
 
 ### Settings of T8222 Battery Doorbell 8222
 
-rw 22 / ro 53
+rw 23 / ro 52
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7836,7 +7836,7 @@ rw 22 / ro 53
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_human_only_at_night_status` | bool | - | - | yes | switch | - |
@@ -7904,7 +7904,7 @@ rw 22 / ro 53
 
 ### Settings of T8223 Battery Doorbell 8223
 
-rw 31 / ro 93
+rw 32 / ro 92
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -7927,7 +7927,7 @@ rw 31 / ro 93
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detected_events` | range | 10..120 step 1 | d | no | - | - |
@@ -8035,7 +8035,7 @@ rw 31 / ro 93
 
 ### Settings of T8224 Battery Doorbell 8224
 
-rw 31 / ro 87
+rw 32 / ro 86
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8057,7 +8057,7 @@ rw 31 / ro 87
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_pull_ble` | bool | - | - | no | - | - |
@@ -8160,7 +8160,7 @@ rw 31 / ro 87
 
 ### Settings of T8352 Babycare 8352
 
-rw 47 / ro 77
+rw 48 / ro 76
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8185,7 +8185,7 @@ rw 47 / ro 77
 | `auto_calibration_status` | bool | - | - | yes | switch | - |
 | `auto_cruise_schedule_list` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -8291,7 +8291,7 @@ rw 47 / ro 77
 
 ### Settings of T8354 Babycare 8354
 
-rw 47 / ro 77
+rw 48 / ro 76
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8316,7 +8316,7 @@ rw 47 / ro 77
 | `auto_calibration_status` | bool | - | - | yes | switch | - |
 | `auto_cruise_schedule_list` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -8422,7 +8422,7 @@ rw 47 / ro 77
 
 ### Settings of T8400 Indoor Camera
 
-rw 38 / ro 79
+rw 39 / ro 78
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8448,7 +8448,7 @@ rw 38 / ro 79
 | `automation_detect_trigger_type` | enum | 0, 1, 4 | - | no | - | 0=Human Detection, 1=Pet, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 0, 1 | - | no | - | 0=Crying, 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -8546,7 +8546,7 @@ rw 38 / ro 79
 
 ### Settings of T8401 Indoor Camera 1080
 
-rw 38 / ro 79
+rw 39 / ro 78
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8572,7 +8572,7 @@ rw 38 / ro 79
 | `automation_detect_trigger_type` | enum | 0, 1, 4 | - | no | - | 0=Human Detection, 1=Pet, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 0, 1 | - | no | - | 0=Crying, 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -8670,7 +8670,7 @@ rw 38 / ro 79
 
 ### Settings of T8404 Camera 8404
 
-rw 33 / ro 106
+rw 34 / ro 105
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8697,7 +8697,7 @@ rw 33 / ro 106
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `camera_gun_ball_linkage_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_snapshot_setting` | string | - | - | no | - | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
@@ -8816,7 +8816,7 @@ rw 33 / ro 106
 
 ### Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)
 
-rw 42 / ro 85
+rw 43 / ro 84
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8842,7 +8842,7 @@ rw 42 / ro 85
 | `automation_detect_trigger_type` | enum | 0, 1, 4 | - | no | - | 0=Human Detection, 1=Pet, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 0, 1 | - | no | - | 0=Crying, 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -8950,7 +8950,7 @@ rw 42 / ro 85
 
 ### Settings of T8410C
 
-rw 45 / ro 85
+rw 46 / ro 84
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -8976,7 +8976,7 @@ rw 45 / ro 85
 | `automation_detect_trigger_type` | enum | 0, 1, 4 | - | no | - | 0=Human Detection, 1=Pet, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 0, 1 | - | no | - | 0=Crying, 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_on_off_privacy_mode` | bool | - | - | no | - | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
@@ -9087,7 +9087,7 @@ rw 45 / ro 85
 
 ### Settings of T8411 Indoor Camera PT 1080
 
-rw 38 / ro 78
+rw 39 / ro 77
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9113,7 +9113,7 @@ rw 38 / ro 78
 | `automation_detect_trigger_type` | enum | 0, 1, 4 | - | no | - | 0=Human Detection, 1=Pet, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 0, 1 | - | no | - | 0=Crying, 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -9210,7 +9210,7 @@ rw 38 / ro 78
 
 ### Settings of T8414 Indoor Camera Costdown T8414
 
-rw 37 / ro 73
+rw 38 / ro 72
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9237,7 +9237,7 @@ rw 37 / ro 73
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 1 | - | no | - | 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_on_off_privacy_mode` | bool | - | - | no | - | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
@@ -9327,7 +9327,7 @@ rw 37 / ro 73
 
 ### Settings of T8416 Indoor Camera 8416
 
-rw 47 / ro 92
+rw 48 / ro 91
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9357,7 +9357,7 @@ rw 47 / ro 92
 | `automation_detect_trigger_type` | enum | 0, 1, 4 | - | no | - | 0=Human Detection, 1=Pet, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 0, 1 | - | no | - | 0=Crying, 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_on_off_privacy_mode` | bool | - | - | no | - | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
@@ -9473,7 +9473,7 @@ rw 47 / ro 92
 
 ### Settings of T8417 Indoor Camera 8417
 
-rw 47 / ro 86
+rw 48 / ro 85
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9501,7 +9501,7 @@ rw 47 / ro 86
 | `automation_detect_trigger_type` | enum | 0, 1, 4 | - | no | - | 0=Human Detection, 1=Pet, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 0, 1 | - | no | - | 0=Crying, 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_on_off_privacy_mode` | bool | - | - | no | - | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
@@ -9613,7 +9613,7 @@ rw 47 / ro 86
 
 ### Settings of T8419 Indoor Camera T8419
 
-rw 38 / ro 78
+rw 39 / ro 77
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9640,7 +9640,7 @@ rw 38 / ro 78
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 1 | - | no | - | 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_on_off_privacy_mode` | bool | - | - | no | - | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
@@ -9736,7 +9736,7 @@ rw 38 / ro 78
 
 ### Settings of T8420 Floodlight
 
-rw 19 / ro 55
+rw 20 / ro 54
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9755,7 +9755,7 @@ rw 19 / ro 55
 | `arming_support_query_working_mode` | bool | - | - | no | - | - |
 | `arming_support_show_user_name` | bool | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | no | - | - |
-| `camera_on_off` | bool | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -9817,7 +9817,7 @@ rw 19 / ro 55
 
 ### Settings of T8420X
 
-rw 24 / ro 49
+rw 25 / ro 48
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9836,7 +9836,7 @@ rw 24 / ro 49
 | `arming_support_query_working_mode` | bool | - | - | no | - | - |
 | `arming_support_show_user_name` | bool | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
@@ -9897,7 +9897,7 @@ rw 24 / ro 49
 
 ### Settings of T8422 Floodlight E 2K
 
-rw 25 / ro 52
+rw 26 / ro 51
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -9918,7 +9918,7 @@ rw 25 / ro 52
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
-| `camera_on_off` | bool | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
@@ -9981,7 +9981,7 @@ rw 25 / ro 52
 
 ### Settings of T8423 Floodlight 2
 
-rw 30 / ro 64
+rw 31 / ro 63
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10005,7 +10005,7 @@ rw 30 / ro 64
 | `auto_cruise_schedule_list` | string | - | - | no | - | - |
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
-| `camera_on_off` | bool | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -10082,7 +10082,7 @@ rw 30 / ro 64
 
 ### Settings of T8424 Floodlight Cam 2K
 
-rw 26 / ro 51
+rw 27 / ro 50
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10103,7 +10103,7 @@ rw 26 / ro 51
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `cloud_storage_support_trail` | enum | default:true | - | no | - | default:true=default:true |
 | `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
@@ -10166,7 +10166,7 @@ rw 26 / ro 51
 
 ### Settings of T8425 Floodlight 8425
 
-rw 42 / ro 80
+rw 43 / ro 79
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10193,7 +10193,7 @@ rw 42 / ro 80
 | `auto_spotlight_switch` | bool | - | - | yes | switch | - |
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -10295,7 +10295,7 @@ rw 42 / ro 80
 
 ### Settings of T8426 Floodlight 8426
 
-rw 40 / ro 77
+rw 41 / ro 76
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10322,7 +10322,7 @@ rw 40 / ro 77
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 2, 4 | - | no | - | 0=Human Detection, 2=Vehicle, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -10419,7 +10419,7 @@ rw 40 / ro 77
 
 ### Settings of T8440 Indoor Outdoor Camera 1080P No Light
 
-rw 36 / ro 70
+rw 37 / ro 69
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10441,7 +10441,7 @@ rw 36 / ro 70
 | `arming_working_mode` | other | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `auto_spotlight_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -10532,7 +10532,7 @@ rw 36 / ro 70
 
 ### Settings of T8441 Indoor Outdoor Camera 2K
 
-rw 12 / ro 44
+rw 13 / ro 43
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10553,7 +10553,7 @@ rw 12 / ro 44
 | `arming_working_mode` | other | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `auto_spotlight_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -10595,7 +10595,7 @@ rw 12 / ro 44
 
 ### Settings of T8442 Indoor Outdoor Camera 1080P
 
-rw 40 / ro 77
+rw 41 / ro 76
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10621,7 +10621,7 @@ rw 40 / ro 77
 | `automation_detect_trigger_type` | enum | 0, 1, 4 | - | no | - | 0=Human Detection, 1=Pet, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_sound_trigger_type` | enum | 0, 1 | - | no | - | 0=Crying, 1=Other |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -10719,7 +10719,7 @@ rw 40 / ro 77
 
 ### Settings of T8452 T8452
 
-rw 19 / ro 64
+rw 20 / ro 63
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10742,7 +10742,7 @@ rw 19 / ro 64
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -10809,7 +10809,7 @@ rw 19 / ro 64
 
 ### Settings of T8453 T8453
 
-rw 19 / ro 65
+rw 20 / ro 64
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10832,7 +10832,7 @@ rw 19 / ro 65
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
@@ -10922,7 +10922,7 @@ rw 13 / ro 73
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | no | - | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -11350,7 +11350,7 @@ rw 3 / ro 27
 
 ### Settings of T8530 Lock 8530
 
-rw 9 / ro 79
+rw 10 / ro 78
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -11373,7 +11373,7 @@ rw 9 / ro 79
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
 | `detection_loitering_detection_length` | range | 15..60 step 5 | - | no | - | - |
 | `detection_loitering_detection_range` | range | 2..10 step 2 | - | no | - | - |
@@ -11445,7 +11445,7 @@ rw 9 / ro 79
 
 ### Settings of T8531 Lock 8531
 
-rw 20 / ro 74
+rw 21 / ro 73
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -11468,7 +11468,7 @@ rw 20 / ro 74
 | `automation_detect_trigger_type` | enum | 0, 4 | - | no | - | 0=Human Detection, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
 | `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle Detection, 3=Pet Detection, 4=All Other Motions |
@@ -11546,7 +11546,7 @@ rw 20 / ro 74
 
 ### Settings of T8532 T8532
 
-rw 32 / ro 130
+rw 33 / ro 129
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -11569,7 +11569,7 @@ rw 32 / ro 130
 | `backup_battery_level` | other | - | - | no | - | - |
 | `battery_level` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
 | `detected_events` | range | 10..120 step 1 | d | no | - | - |
@@ -11938,7 +11938,7 @@ rw 0 / ro 31
 
 ### Settings of T85M0 T85M0
 
-rw 30 / ro 129
+rw 31 / ro 128
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -11963,7 +11963,7 @@ rw 30 / ro 129
 | `backup_battery_value` | other | - | - | no | - | - |
 | `battery_level` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
 | `detected_events` | range | 10..120 step 1 | d | no | - | - |
@@ -12104,7 +12104,7 @@ rw 30 / ro 129
 
 ### Settings of T85M1 T85M1
 
-rw 31 / ro 135
+rw 32 / ro 134
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -12129,7 +12129,7 @@ rw 31 / ro 135
 | `backup_battery_value` | other | - | - | no | - | - |
 | `battery_level` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
 | `detected_events` | range | 10..120 step 1 | d | no | - | - |
@@ -12361,7 +12361,7 @@ rw 0 / ro 35
 
 ### Settings of T85V0 Lock 85V0
 
-rw 24 / ro 111
+rw 25 / ro 110
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -12387,7 +12387,7 @@ rw 24 / ro 111
 | `backup_battery_value` | other | - | - | no | - | - |
 | `battery_level` | other | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
 | `detection_loitering_detection_length` | range | 15..60 step 5 | - | no | - | - |
 | `detection_loitering_detection_range` | range | 2..10 step 2 | - | no | - | - |
@@ -12503,7 +12503,7 @@ rw 24 / ro 111
 
 ### Settings of T8600 Camera 8600
 
-rw 36 / ro 72
+rw 37 / ro 71
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -12527,7 +12527,7 @@ rw 36 / ro 72
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 2, 4 | - | no | - | 0=Human Detection, 2=Vehicle, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
@@ -12618,7 +12618,7 @@ rw 36 / ro 72
 
 ### Settings of T86C1 Camera 86C1
 
-rw 36 / ro 105
+rw 37 / ro 104
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -12645,7 +12645,7 @@ rw 36 / ro 105
 | `automation_light_trigger_config` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
 | `camera_gun_ball_linkage_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
@@ -12766,7 +12766,7 @@ rw 36 / ro 105
 
 ### Settings of T86P2 Cam 4G PT
 
-rw 30 / ro 61
+rw 31 / ro 60
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -12788,7 +12788,7 @@ rw 30 / ro 61
 | `automation_detect_trigger_type` | enum | 0, 2, 4 | - | no | - | 0=Human Detection, 2=Vehicle, 4=Detected motion |
 | `automation_detect_trigger_type__v1` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `charging_status` | string | - | - | no | - | - |
 | `detected_events` | other | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
@@ -12864,7 +12864,7 @@ rw 30 / ro 61
 
 ### Settings of T870G Sensor 870G
 
-rw 12 / ro 24
+rw 13 / ro 23
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -12878,7 +12878,7 @@ rw 12 / ro 24
 | `device_is_online` | bool | - | - | no | - | - |
 | `device_model` | string | - | - | no | - | - |
 | `device_name` | string | - | - | no | - | - |
-| `device_on_off` | string | - | - | no | - | - |
+| `device_on_off` | bool | - | - | yes | switch | - |
 | `device_set_alarm_light_type` | enum | 2, 0, 1, 3 | - | yes | select | 0=White flashing, 1=Red & blue flashing, 2=White breathing, 3=Reed & blue & white flashing |
 | `device_status` | other | - | - | no | - | - |
 | `device_wifi_signal_strength` | string | - | - | no | - | - |
@@ -12914,7 +12914,7 @@ rw 3 / ro 58
 | `ai_empower` | other | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
@@ -13096,7 +13096,7 @@ rw 1 / ro 9
 
 ### Settings of T8B00 Battery Solo Cam 8B00
 
-rw 28 / ro 67
+rw 29 / ro 66
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -13124,7 +13124,7 @@ rw 28 / ro 67
 | `battery_healthy` | other | - | - | no | - | - |
 | `battery_temperature_value` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
@@ -13207,7 +13207,7 @@ rw 0 / ro 2
 
 ### Settings of T8E00 Camera T8E00
 
-rw 34 / ro 71
+rw 35 / ro 70
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -13222,7 +13222,7 @@ rw 34 / ro 71
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `camera_gun_ball_linkage_switch` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_sensitivity_for_sensor` | string | - | - | no | - | - |
 | `device_ability_data` | other | - | - | no | - | - |
@@ -13580,7 +13580,7 @@ rw 0 / ro 26
 
 ### Settings of T8L60 Camera 8L60
 
-rw 45 / ro 110
+rw 46 / ro 109
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -13608,7 +13608,7 @@ rw 45 / ro 110
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
 | `automation_light_trigger_config` | string | - | - | no | - | - |
 | `battery_value` | string | - | - | no | - | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_snapshot_setting` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=3 min, 1=5 min, 2=15 min, 3=30 min, 4=60 min |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
@@ -13859,7 +13859,7 @@ rw 17 / ro 93
 
 ### Settings of T8P00 Camera T8P00
 
-rw 29 / ro 61
+rw 30 / ro 60
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -13871,7 +13871,7 @@ rw 29 / ro 61
 | `auto_cruise_schedule_list` | string | - | - | no | - | - |
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `device_ability_data` | other | - | - | no | - | - |
 | `device_connect_type` | other | - | - | no | - | - |
@@ -13956,7 +13956,7 @@ rw 29 / ro 61
 
 ### Settings of T8P10 Camera T8P10
 
-rw 29 / ro 64
+rw 30 / ro 63
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -13968,7 +13968,7 @@ rw 29 / ro 64
 | `auto_cruise_schedule_list` | string | - | - | no | - | - |
 | `automation_config` | string | - | - | no | - | - |
 | `automation_detect_trigger_type` | enum | 0, 1, 2, 4 | - | no | - | 0=Human Detection, 1=Pet, 2=Vehicle, 4=Detected motion |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `device_ability_data` | other | - | - | no | - | - |
 | `device_connect_type` | other | - | - | no | - | - |
@@ -14056,7 +14056,7 @@ rw 29 / ro 64
 
 ### Settings of T8W11 Indoor Camera 8W11
 
-rw 30 / ro 57
+rw 31 / ro 56
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -14077,7 +14077,7 @@ rw 30 / ro 57
 | `arming_support_show_user_name` | bool | - | - | no | - | - |
 | `arming_working_mode` | other | - | - | no | - | - |
 | `audio_recording_on_off` | bool | - | - | yes | switch | - |
-| `camera_on_off` | string | - | - | no | - | - |
+| `camera_on_off` | bool | - | - | yes | switch | - |
 | `camera_on_off_privacy_mode` | bool | - | - | no | - | - |
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |

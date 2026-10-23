@@ -172,12 +172,51 @@
    "section": "power"
   },
   "camera_on_off": {
-   "access": "ro",
-   "default": "1",
-   "kind": "string",
-   "note": "handler ignores the value",
-   "read": null,
-   "section": "system"
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "note": "round trip does not return the written value",
+      "read": null
+     },
+     "names": [
+      "M8021"
+     ]
+    }
+   ],
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": true,
+     "1": false
+    },
+    "param": 1035
+   },
+   "section": "system",
+   "write": {
+    "cmd": 1035,
+    "params": {
+     "switch": {
+      "$map": {
+       "false": 1,
+       "true": 0
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1035,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
   },
   "cloud_storage_support_trail": {
    "access": "ro",

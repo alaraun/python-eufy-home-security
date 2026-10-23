@@ -117,11 +117,15 @@
    "section": "recording"
   },
   "camera_on_off": {
-   "access": "ro",
+   "access": "rw",
    "contexts": [
     {
      "entry": {
-      "note": "no handler write path"
+      "access": "ro",
+      "control": null,
+      "note": "no handler write path",
+      "read": null,
+      "write": null
      },
      "names": [
       "HB1",
@@ -140,11 +144,39 @@
      ]
     }
    ],
+   "control": "switch",
    "default": false,
    "kind": "bool",
-   "note": "handler ignores the value",
-   "read": null,
-   "section": "system"
+   "read": {
+    "map": {
+     "": false,
+     "0": true,
+     "1": false
+    },
+    "param": 99904
+   },
+   "section": "system",
+   "write": {
+    "cmd": 1035,
+    "params": {
+     "switch": {
+      "$map": {
+       "false": true,
+       "true": false
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 99904,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
   },
   "change_wifi_is_check_same_lan": {
    "access": "ro",
