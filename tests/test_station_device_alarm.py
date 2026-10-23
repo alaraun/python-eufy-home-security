@@ -12,12 +12,14 @@ from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices import device_alarm
 from eufy_home_security.devices.device_alarm import DeviceAlarm
 from eufy_home_security.devices.recipes import ConnectType
+from eufy_home_security.devices.support import Evidence, Support
 from eufy_home_security.exceptions import (
     CommandNotAppliedError,
     CommandRejectedError,
     UnsupportedError,
 )
 from eufy_home_security.p2p.session import CommandOutcome, P2PCredentials, StationSession
+from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.station import Station
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import FakeStation
@@ -145,6 +147,20 @@ async def test_a_siren_frame_in_the_other_state_confirms_nothing(
         await station.async_trigger_device_alarm(CAMERA.device_sn, timeout=0.5)
 
 
+async def test_the_event_type_alone_gives_the_sirens_state(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A start frame ``[type, 0]`` and a stop frame ``[0, seconds]`` confirm each."""
+    send = fake.send_alarm_frame
+
+    def type_only(ftype: int, *values: int, channel: int, cipher: int) -> None:
+        send(ftype, values[0], 0 if values[0] else 30, channel=channel, cipher=cipher)
+
+    monkeypatch.setattr(fake, "send_alarm_frame", type_only)
+    assert await station.async_trigger_device_alarm(CAMERA.device_sn) is CommandOutcome.APPLIED
+    assert await station.async_stop_device_alarm(CAMERA.device_sn) is CommandOutcome.APPLIED
+
+
 async def test_a_refused_siren_raises_the_stations_code(
     station: Station, fake: FakeStation
 ) -> None:
@@ -162,6 +178,30 @@ async def test_a_choice_the_app_does_not_offer_there_is_refused_unsent(
     ``set_alarm_type__v1`` there)."""
     with pytest.raises(UnsupportedError, match="LIGHT"):
         await station.async_trigger_device_alarm(CAMERA.device_sn, DeviceAlarm.LIGHT)
+    assert fake.received == []
+
+
+@pytest.mark.parametrize("alarm", [3, 5])
+async def test_an_int_that_is_no_offered_choice_is_refused_unsent(
+    station: Station, fake: FakeStation, alarm: int
+) -> None:
+    with pytest.raises(UnsupportedError, match=f"no {alarm} alarm"):
+        await station.async_trigger_device_alarm(CAMERA.device_sn, alarm)
+    with pytest.raises(UnsupportedError, match=f"no {alarm} alarm"):
+        await station.async_stop_device_alarm(CAMERA.device_sn, alarm)
+    assert fake.received == []
+
+
+async def test_a_serial_not_paired_here_has_no_alarm_and_is_refused_unsent(
+    station: Station, fake: FakeStation
+) -> None:
+    """A serial of a model with an alarm, neither the station nor one of its devices."""
+    stranger = SYNTHETIC.camera_sn[:-1] + "9"
+    assert stranger != CAMERA.device_sn
+    assert station.device_alarms(stranger) == ()
+    assert station.device_alarm_default(stranger) is None
+    with pytest.raises(UnsupportedError, match="not paired"):
+        await station.async_trigger_device_alarm(stranger)
     assert fake.received == []
 
 
@@ -190,26 +230,26 @@ async def test_the_default_choice_is_the_one_the_app_preselects(fake: FakeStatio
     assert _sent(fake, 1202) == [_siren(30, 22)]
 
 
+def _only_product(
+    monkeypatch: pytest.MonkeyPatch, start: tuple[int, int], stop: tuple[int, int]
+) -> None:
+    """Make T9ZZ9 behind a HomeBase 3 the only product with an alarm: one choice whose
+    start and stop requests are ``(command, type)``."""
+
+    def req(command_type: tuple[int, int], seconds: int) -> tuple[int, dict[str, Any]]:
+        command, kind = command_type
+        params = {"channel": "$channel", "type": kind, "time_out": seconds}
+        return command, params | {"user_name": "$user_name"}
+
+    raw = {"default": 0, "choices": {0: (req(start, 30), req(stop, 0))}}
+    table = {"T9ZZ9": {ConnectType.HB3: device_alarm._alarms(raw)}}
+    monkeypatch.setattr(device_alarm, "_TABLE", table)
+
+
 async def test_a_product_named_nowhere_in_code_takes_its_alarm_from_the_data(
     fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    raw = {
-        "default": 0,
-        "choices": {
-            0: (
-                (
-                    1202,
-                    {"channel": "$channel", "type": 4, "time_out": 30, "user_name": "$user_name"},
-                ),
-                (
-                    1202,
-                    {"channel": "$channel", "type": 0, "time_out": 0, "user_name": "$user_name"},
-                ),
-            )
-        },
-    }
-    table = {"T9ZZ9": {ConnectType.HB3: device_alarm._alarms(raw)}}
-    monkeypatch.setattr(device_alarm, "_TABLE", table)
+    _only_product(monkeypatch, (1202, 4), (1202, 0))
     station = _station(fake, [_camera("T9ZZ9")])
     try:
         assert station.device_alarms(CAMERA.device_sn) == (DeviceAlarm.SOUND,)
@@ -218,6 +258,45 @@ async def test_a_product_named_nowhere_in_code_takes_its_alarm_from_the_data(
     finally:
         await station.async_close()
     assert _sent(fake, 1202) == [_siren(30, 4), _siren(0, 0)]
+
+
+async def test_each_request_is_confirmed_by_the_frame_of_its_own_command(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A start with SET_TONE_FILE on the device's channel is confirmed by the alarm-tone
+    frame (sent on 255), its stop with SET_DEVS_TONE_FILE by the siren frame."""
+    _only_product(monkeypatch, (1201, 10), (1202, 10))
+    fake.tone_frames = True
+    station = _station(fake, [_camera("T9ZZ9")])
+    try:
+        assert await station.async_trigger_device_alarm(CAMERA.device_sn) is CommandOutcome.APPLIED
+        assert await station.async_stop_device_alarm(CAMERA.device_sn) is CommandOutcome.APPLIED
+        assert not station.session._tone_waiters
+        assert not station.session._siren_waiters
+    finally:
+        await station.async_close()
+    assert [obj["cmd"] for obj in fake.received] == [1201, 1202]
+    assert fake.received_header_channels == [CHANNEL, CHANNEL]
+
+
+async def test_a_tone_request_without_its_alarm_tone_frame_is_not_success(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A SET_TONE_FILE start is not confirmed by a siren frame on the device's channel."""
+    _only_product(monkeypatch, (1201, 10), (1202, 10))
+    send = fake.send_alarm_frame
+
+    def siren_instead(ftype: int, *values: int, channel: int, cipher: int) -> None:
+        send(FrameType.SIREN_NOTIFY, 10, 30, channel=CHANNEL, cipher=cipher)
+
+    monkeypatch.setattr(fake, "send_alarm_frame", siren_instead)
+    fake.tone_frames = True
+    station = _station(fake, [_camera("T9ZZ9")])
+    try:
+        with pytest.raises(CommandNotAppliedError):
+            await station.async_trigger_device_alarm(CAMERA.device_sn, timeout=0.5)
+    finally:
+        await station.async_close()
 
 
 async def test_the_station_itself_sounds_through_its_own_handlers_request(
@@ -231,4 +310,20 @@ async def test_the_station_itself_sounds_through_its_own_handlers_request(
     await station.async_stop_device_alarm(HB3.device_sn, DeviceAlarm.SOUND)
     payloads = [obj["payload"] for obj in _sent(fake, 1201)]
     assert payloads == [{"time_out": 30, "user_name": "user"}, {"time_out": 0, "user_name": "user"}]
+    assert [obj["mChannel"] for obj in _sent(fake, 1201)] == [0, 0]
+    assert fake.received_header_channels == [0, 0]
     assert not station.session._tone_waiters
+
+
+async def test_the_stations_own_alarm_is_refused_where_its_siren_is(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The HomeBase's own serial is its station siren: refused like async_trigger_alarm."""
+    unknown = Evidence(Support.UNKNOWN, "no siren here")
+    monkeypatch.setattr(Station, "config_support", lambda self, feature: unknown)
+    assert DeviceAlarm.SOUND in station.device_alarms(HB3.device_sn)
+    with pytest.raises(UnsupportedError, match="no siren here"):
+        await station.async_trigger_device_alarm(HB3.device_sn)
+    with pytest.raises(UnsupportedError, match="no siren here"):
+        await station.async_stop_device_alarm(HB3.device_sn)
+    assert fake.received == []

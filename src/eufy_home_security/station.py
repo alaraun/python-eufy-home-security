@@ -25,7 +25,8 @@ from .devices.capabilities import (
     own_profile,
     profile_for_serial,
 )
-from .devices.device_alarm import DeviceAlarm, device_alarms
+from .devices.device_alarm import DeviceAlarm, DeviceAlarms
+from .devices.device_alarm import device_alarms as alarms_for
 from .devices.device_alarm import render as render_alarm
 from .devices.live_open import (
     LiveOpen,
@@ -4162,19 +4163,29 @@ class Station:
         """The alarm choices the eufy app's alarm button offers for ``device_sn`` (a
         device paired here, or this station): its own siren, light or both, by its model
         and how it is reached (:mod:`~.devices.device_alarm`; declared: eufy app, not
-        verified on hardware). Empty when the app offers the device none."""
-        alarms = device_alarms(self._product_code(device_sn), self._connect_type_of(device_sn))
+        verified on hardware). Empty when the app offers the device none, or when
+        ``device_sn`` is neither this station nor paired to it.
+
+        A HomeBase's own serial offers sound, light and sound and light as the app does,
+        each sending the station siren request of :meth:`async_trigger_alarm`."""
+        alarms = self._device_alarms_of(device_sn)
         return () if alarms is None else alarms.choices
 
     def device_alarm_default(self, device_sn: str) -> DeviceAlarm | None:
-        """The choice the app preselects for ``device_sn``; None when it offers none."""
-        alarms = device_alarms(self._product_code(device_sn), self._connect_type_of(device_sn))
+        """The choice the app preselects for ``device_sn``; None when it offers none or
+        ``device_sn`` is neither this station nor paired to it."""
+        alarms = self._device_alarms_of(device_sn)
         return None if alarms is None else alarms.default
+
+    def _device_alarms_of(self, device_sn: str) -> DeviceAlarms | None:
+        if all(d.device_sn != device_sn for d in (self.device, *self.sub_devices)):
+            return None
+        return alarms_for(self._product_code(device_sn), self._connect_type_of(device_sn))
 
     async def async_trigger_device_alarm(
         self,
         device_sn: str,
-        alarm: DeviceAlarm | None = None,
+        alarm: DeviceAlarm | int | None = None,
         *,
         timeout: float | None = None,
     ) -> CommandOutcome:
@@ -4182,49 +4193,66 @@ class Station:
         choice) for the 30 s the app uses, as the eufy app's alarm button does; declared:
         eufy app, not verified on hardware. **Alarm-affecting.**
 
-        Sends the request the device's handler builds for its model and connect type
-        (SET_DEVS_TONE_FILE on its channel for a device behind a station, SET_TONE_FILE
-        for a standalone device or the station itself). Returns ``APPLIED`` once the
-        station answered the command or its alarm frame shows the alarm on (a transport
-        ACK alone is never success). Raises ``UnsupportedError`` before sending when the
-        app offers the device no alarm or not ``alarm`` (:meth:`device_alarms`),
-        :class:`CommandRejectedError` for a non-zero result, :class:`CommandNotAppliedError`
-        when the station acknowledged it but no confirmation came, and
-        :class:`DeviceTimeoutError` without even an ACK.
+        Sends the start request the device's handler builds for its model and connect
+        type: SET_DEVS_TONE_FILE (1202) on the device's channel, or SET_TONE_FILE (1201);
+        the stop request may use the other command. Returns ``APPLIED`` once the station
+        answered the command, or once the frame of the command sent shows the alarm on:
+        for 1202 the device-siren frame (``0x04B2``) on the device's channel, for 1201
+        the alarm-tone frame on any channel (a transport ACK alone is never success).
+        A HomeBase's own serial is its station siren, refused like
+        :meth:`async_trigger_alarm`. Raises ``UnsupportedError`` before sending when
+        ``device_sn`` is neither this station nor paired to it, when the app offers the
+        device no alarm or not ``alarm`` (:meth:`device_alarms`; an int that is no
+        :class:`DeviceAlarm` too), :class:`CommandRejectedError` for a non-zero result,
+        :class:`CommandNotAppliedError` when the station acknowledged it but no
+        confirmation came, and :class:`DeviceTimeoutError` without even an ACK.
         """
         return await self._async_device_alarm(device_sn, alarm, start=True, timeout=timeout)
 
     async def async_stop_device_alarm(
         self,
         device_sn: str,
-        alarm: DeviceAlarm | None = None,
+        alarm: DeviceAlarm | int | None = None,
         *,
         timeout: float | None = None,
     ) -> CommandOutcome:
         """Stop ``device_sn``'s own alarm with the stop request of ``alarm`` (default the
-        app's preselected choice); confirmed by the alarm frame showing it off.
-        **Alarm-affecting.** Refuses, returns and raises as
+        app's preselected choice); confirmed by the frame of the command sent showing it
+        off. **Alarm-affecting.** Refuses, returns and raises as
         :meth:`async_trigger_device_alarm`."""
         return await self._async_device_alarm(device_sn, alarm, start=False, timeout=timeout)
 
     async def _async_device_alarm(
-        self, device_sn: str, alarm: DeviceAlarm | None, *, start: bool, timeout: float | None
+        self,
+        device_sn: str,
+        alarm: DeviceAlarm | int | None,
+        *,
+        start: bool,
+        timeout: float | None,
     ) -> CommandOutcome:
-        alarms = device_alarms(self._product_code(device_sn), self._connect_type_of(device_sn))
+        if device_sn != self.serial:
+            self.sub_device(device_sn)  # UnsupportedError when not paired here
+        alarms = self._device_alarms_of(device_sn)
         if alarms is None:
             raise UnsupportedError(
                 f"{redact_serial(device_sn)}: the eufy app offers this device no alarm",
                 device_sn=device_sn,
             )
-        choice = alarms.default if alarm is None else alarm
-        request = (alarms.start if start else alarms.stop).get(choice)
+        try:
+            choice = alarms.default if alarm is None else DeviceAlarm(alarm)
+        except ValueError:
+            choice = None
+        request = None if choice is None else (alarms.start if start else alarms.stop).get(choice)
         if request is None:
+            name = alarm if choice is None else choice.name
             raise UnsupportedError(
-                f"{redact_serial(device_sn)}: the eufy app offers no {choice.name} alarm here",
+                f"{redact_serial(device_sn)}: the eufy app offers no {name} alarm here",
                 device_sn=device_sn,
             )
-        # The station addresses its own alarm on channel 0, as SET_TONE_FILE does.
         own = device_sn == self.serial and own_channel(self.device) is None
+        if own:
+            self._require_action(StationFeature.SOUND_ALARM)
+        # A hub addresses its own alarm on channel 0, as SET_TONE_FILE does.
         channel = 0 if own else self.channel_for(device_sn)
         outcome = await self.session.async_send_alarm(
             request.command,
