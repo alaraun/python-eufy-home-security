@@ -28,6 +28,7 @@ __all__ = [
     "hold_members",
     "join",
     "normalise_unit",
+    "screen_values",
     "source_block",
     "switches",
 ]
@@ -299,6 +300,23 @@ def switches(pn: str, titles: Mapping[str, Any] | None) -> dict[str, dict[bool, 
         if not isinstance(on, str) or not isinstance(off, str) or on == off:
             raise GeneratorError(f"{pn}: switch {ident} needs two distinct on/off texts")
         out[ident] = {True: on, False: off}
+    return out
+
+
+def screen_values(pn: str, titles: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:
+    """``{identifier: {value key: value}}``: the enum properties whose app screen writes
+    its own value for a thing-description value, for model ``pn``.
+
+    From the title file's ``screen_values`` (``values``, a per-model map under
+    ``models`` overriding it); raises GeneratorError for a value that is no scalar.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for ident, rule in ((titles or {}).get("screen_values") or {}).items():
+        values = {**(rule.get("values") or {}), **(rule.get("models") or {}).get(pn, {})}
+        for key, value in values.items():
+            if isinstance(value, bool) or not isinstance(value, int | float | str):
+                raise GeneratorError(f"{pn}: screen value {ident} {key} is not a scalar")
+        out[ident] = values
     return out
 
 

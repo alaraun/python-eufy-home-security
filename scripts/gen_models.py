@@ -181,11 +181,11 @@ def run_driver(
     product_code: str,
     handler: Path,
     requests: list[dict[str, Any]],
-    switches: codec.Switches | None = None,
+    wire: codec.WireValues | None = None,
 ) -> list[Any]:
-    """One node batch: a reply per request, in order. A switch of ``switches`` is sent as
-    the text the app writes for its state, and read back as that state."""
-    sent = [codec.to_wire(r, switches) for r in requests] if switches else requests
+    """One node batch: a reply per request, in order. A value of ``wire`` is sent as the
+    value the app writes for it, and read back as that value."""
+    sent = [codec.to_wire(r, wire) for r in requests] if wire else requests
     job = json.dumps({"handler": str(handler), "requests": sent})
     for _ in range(SIGNAL_RETRIES + 1):
         res = subprocess.run(
@@ -209,8 +209,8 @@ def run_driver(
         raise GeneratorError(f"{product_code}: driver output is not JSON: {err}") from err
     if not isinstance(replies, list) or len(replies) != len(requests):
         raise GeneratorError(f"{product_code}: driver returned {len(replies)} replies")
-    if switches:
-        return [codec.from_wire(r, rep, switches) for r, rep in zip(sent, replies, strict=True)]
+    if wire:
+        return [codec.from_wire(r, rep, wire) for r, rep in zip(sent, replies, strict=True)]
     return replies
 
 
@@ -282,6 +282,17 @@ def _param_dump(recipe: dict[str, Any] | None) -> list[dict[str, Any]]:
     return dump
 
 
+def stores_failed_conversion(rows: list[tuple[Any, dict[str, Any] | None]]) -> bool:
+    """Whether a swept write stores a value its handler could not convert (``NaN``) in
+    any parameter: the probe is no value the app writes, or the write not this setting's
+    alone."""
+    return any(
+        isinstance(item["param_value"], str) and item["param_value"] in codec.FAILED_CONVERSIONS
+        for _, recipe in rows
+        for item in _param_dump(recipe)
+    )
+
+
 @dataclass
 class Sweep:
     """One identifier's setProperty replies in one context, on both of its channels:
@@ -308,7 +319,7 @@ def sweep(
     handler: Path,
     props: list[dict[str, Any]],
     contexts: dict[str, codec.Context],
-    switches: codec.Switches | None = None,
+    wire: codec.WireValues | None = None,
 ) -> dict[str, dict[str, Sweep]]:
     """setProperty over every writable property's domain in every context, on both of
     each context's channels: ``{context: {identifier: Sweep}}``.
@@ -334,7 +345,7 @@ def sweep(
                         }
                     )
                     index.append((prop["identifier"], v))
-            replies = run_driver(product_code, handler, requests, switches) if requests else []
+            replies = run_driver(product_code, handler, requests, wire) if requests else []
             for (ident, v), reply in zip(index, replies, strict=True):
                 recipe = p2p(reply)
                 row = out[name].setdefault(ident, Sweep())
@@ -355,7 +366,7 @@ def read_samples(
     counts: dict[str, int],
     *,
     background: Mapping[int, Any] | None = None,
-    switches: codec.Switches | None = None,
+    wire: codec.WireValues | None = None,
 ) -> dict[str, list[Any]]:
     """getProperty over each recipe's own parameter dump in ``context``, per identifier,
     the way the app asks: ``commandId`` = every parameter of the device.
@@ -394,7 +405,7 @@ def read_samples(
             if len({p["param_type"] for p in dump}) > 1:
                 for p in dump:
                     ask([q for q in dump if q is not p], ident, i, p["param_type"])
-    replies = run_driver(product_code, handler, requests, switches) if requests else []
+    replies = run_driver(product_code, handler, requests, wire) if requests else []
     decoded: dict[tuple[str, int, int | None], Any] = {}
     for key, reply in zip(index, replies, strict=True):
         values = p2p(reply) or {}
@@ -441,7 +452,7 @@ def param_slots(
     seen: Mapping[int, list[str]],
     *,
     counts: dict[str, int],
-    switches: codec.Switches | None = None,
+    wire: codec.WireValues | None = None,
 ) -> dict[str, dict[LeafPath, str]]:
     """``{identifier: {path: "$param:<id>:<form>"}}`` for each write leaf the handler takes
     from a device parameter: null in every swept recipe (the parameter is absent there)
@@ -470,7 +481,7 @@ def param_slots(
                     }
                 )
                 asks.append((ident, param, raw))
-    replies = run_driver(product_code, handler, requests, switches) if requests else []
+    replies = run_driver(product_code, handler, requests, wire) if requests else []
     leaves: dict[tuple[str, int], list[tuple[str, dict[LeafPath, Any]]]] = {}
     for (ident, param, raw), reply in zip(asks, replies, strict=True):
         recipe = p2p(reply)
@@ -511,9 +522,12 @@ def view_reads(
     settings: dict[str, Any],
     context: codec.Context,
     counts: dict[str, int],
+    *,
+    inverted: set[str],
 ) -> None:
     """Add a per-view read to each enum whose write sends a ``quality`` per value and
-    whose handler decodes a per-view report of that quality parameter.
+    whose handler decodes a per-view report of that quality parameter. A read by the
+    inverse of the write (``inverted``) gives way to it.
 
     A multi-view camera reports such a parameter as base64 JSON
     ``{"mode_0": {"quality": q}, "mode_1": {…}, "cur_mode": m}``. Each value's quality is
@@ -572,7 +586,10 @@ def view_reads(
         quality = entry["write"]["params"]["quality"]["$map"]
         values = {codec.value_key(v): v for v in entry["values"]}
         qmap = {str(q): values[k] for k, q in quality.items() if k in values}
-        read = entry["read"] or {"param": param_of(entry), "map": {}}
+        read = entry["read"]
+        if read is None or ident in inverted:
+            read = {"param": param_of(entry), "map": {}}
+            inverted.discard(ident)
         if read["map"] is not None:
             read["map"] = {k: v for k, v in read["map"].items() if not _is_view_report(k)}
         read["view"] = {"by": matching[0], "map": dict(sorted(qmap.items()))}
@@ -650,16 +667,17 @@ def empty_value_reads(
     context: codec.Context,
     counts: dict[str, int],
     *,
-    switches: codec.Switches | None = None,
+    wire: codec.WireValues | None = None,
+    skip: frozenset[str] = frozenset(),
 ) -> None:
     """Add the empty parameter value to the read map of each readable enum or bool
     whose handler decodes ``""`` to one of its values (a dump can report the parameter
-    empty)."""
+    empty). ``skip``: settings read by the inverse of their write, not by the handler."""
     asks: list[tuple[str, list[Any]]] = []
     requests: list[dict[str, Any]] = []
     for ident, entry in settings.items():
         read = entry.get("read")
-        if not isinstance(read, dict) or entry.get("bit") is not None:
+        if not isinstance(read, dict) or entry.get("bit") is not None or ident in skip:
             continue
         if entry["kind"] == "bool":
             values: list[Any] = [False, True]
@@ -674,7 +692,7 @@ def empty_value_reads(
         device["params"] = [{"param_type": read["param"], "param_value": ""}]
         requests.append({"kind": "get", "cmds": [read["param"]], "device": device})
         asks.append((ident, values))
-    replies = run_driver(product_code, handler, requests, switches) if requests else []
+    replies = run_driver(product_code, handler, requests, wire) if requests else []
     for (ident, values), reply in zip(asks, replies, strict=True):
         got = (p2p(reply) or {}).get(ident, codec.MISSING)
         hits = [v for v in values if codec.decodes_to(got, v)]
@@ -702,7 +720,7 @@ def build_context(
     reference: list[dict[str, Any]],
     background: Mapping[int, Any],
     seen: Mapping[int, list[str]],
-    switches: codec.Switches | None = None,
+    wire: codec.WireValues | None = None,
 ) -> tuple[dict[str, Any], dict[str, int]]:
     """The settings of one model in one context and its counters. ``background``: every
     parameter the model's writes set in any context, with one value each; ``seen``: the
@@ -714,15 +732,13 @@ def build_context(
     counts: dict[str, int] = {}
     alt = codec.alt_channel(context)
     raw = {i: s.raw for i, s in swept.items()}
-    reads = read_samples(product_code, handler, raw, context, counts, switches=switches)
+    reads = read_samples(product_code, handler, raw, context, counts, wire=wire)
     kinds = {p["identifier"]: codec.domain(p)[0] for p in props}
     # A handler keeps state between the requests of one driver run, so a read can fail
     # only for what the batch asked before it: ask each failed one again on its own.
     failed = {i for i, rows in reads.items() if codec.infer_read(kinds[i], rows)[0] is None}
     for ident in sorted(failed):
-        alone = read_samples(
-            product_code, handler, {ident: raw[ident]}, context, {}, switches=switches
-        )
+        alone = read_samples(product_code, handler, {ident: raw[ident]}, context, {}, wire=wire)
         if ident in alone and codec.infer_read(kinds[ident], alone[ident])[0] is not None:
             reads[ident] = alone[ident]
             _count(counts, "read:asked alone")
@@ -737,16 +753,15 @@ def build_context(
             context,
             counts,
             background=background,
-            switches=switches,
+            wire=wire,
         )
         for ident, rows in retry.items():
             if codec.infer_read(kinds[ident], rows)[0] is not None:
                 reads[ident] = rows
                 _count(counts, "read:with the other parameters")
-    slots = param_slots(
-        product_code, handler, context, swept, seen, counts=counts, switches=switches
-    )
+    slots = param_slots(product_code, handler, context, swept, seen, counts=counts, wire=wire)
     settings: dict[str, Any] = {}
+    inverted: set[str] = set()
     for prop in props:
         ident = prop["identifier"]
         kind, values = codec.domain(prop)
@@ -769,6 +784,16 @@ def build_context(
             read, read_note = None, None
             if result.access == "rw":
                 read, read_note = codec.infer_read(kind, reads.get(ident, []))
+                if read is None and not stores_failed_conversion(row.raw):
+                    samples = reads.get(ident, [])
+                    read = codec.shown_read(kind, samples)
+                    if read is not None:
+                        _count(counts, "read:as the handler shows another value")
+                    elif (read := codec.inverse_read(kind, samples)) is not None:
+                        inverted.add(ident)
+                        _count(counts, "read:inverse of the write")
+                    if read is not None:
+                        read_note = None
                 _count(counts, "read:codec" if read else "read:null")
                 if read is not None:
                     _count(counts, "read:identity" if read["map"] is None else "read:map")
@@ -793,11 +818,13 @@ def build_context(
     _raise_unaccepted(product_code, context, found, "codec mismatches")
     if reference:
         _count(counts, "reference_rows", len(reference))
-    shape_controls(product_code, handler, settings, counts, context, switches=switches)
+    shape_controls(product_code, handler, settings, counts, context, wire=wire)
     joiner.hold_members(product_code, settings, titles, counts)
-    view_reads(product_code, handler, settings, context, counts)
+    view_reads(product_code, handler, settings, context, counts, inverted=inverted)
     drop_absent_prior_updates(settings, counts)
-    empty_value_reads(product_code, handler, settings, context, counts, switches=switches)
+    empty_value_reads(
+        product_code, handler, settings, context, counts, wire=wire, skip=frozenset(inverted)
+    )
     return settings, counts
 
 
@@ -888,9 +915,9 @@ def generate(
         codec.as_switch(p, switch_texts[p["identifier"]]) if p["identifier"] in switch_texts else p
         for p in props
     ]
-    switched = {i: t for i, t in switch_texts.items() if any(p["identifier"] == i for p in props)}
+    wire = app_wire_values(props, switch_texts, joiner.screen_values(product_code, titles))
     contexts = contexts_of(product_code)
-    swept = sweep(product_code, handler, props, contexts, switched)
+    swept = sweep(product_code, handler, props, contexts, wire)
     background: dict[int, Any] = {}
     seen: dict[int, list[str]] = {}
     for rows in swept.values():
@@ -922,7 +949,7 @@ def generate(
             reference=references[name],
             background=background,
             seen=seen,
-            switches=switched,
+            wire=wire,
         )
         per_context[name] = settings
         if name == BASE:
@@ -953,6 +980,27 @@ def generate(
     return doc, counts
 
 
+def app_wire_values(
+    props: list[dict[str, Any]],
+    switch_texts: Mapping[str, Mapping[bool, str]],
+    screens: Mapping[str, Mapping[str, Any]],
+) -> dict[str, tuple[tuple[Any, Any], ...]]:
+    """The values the app writes for the model's ``props``: a switch's text per state, an
+    enum's screen value per thing-description value it lists."""
+    out: dict[str, tuple[tuple[Any, Any], ...]] = {}
+    for prop in props:
+        ident = prop["identifier"]
+        if ident in switch_texts:
+            out[ident] = tuple(switch_texts[ident].items())
+        elif ident in screens:
+            screen = screens[ident]
+            _, values = codec.domain(prop)
+            out[ident] = tuple(
+                (v, screen[k]) for v in values if (k := codec.value_key(v)) in screen
+            )
+    return out
+
+
 def shape_controls(
     product_code: str,
     handler: Path,
@@ -960,7 +1008,7 @@ def shape_controls(
     counts: dict[str, int],
     context: codec.Context,
     *,
-    switches: codec.Switches | None = None,
+    wire: codec.WireValues | None = None,
 ) -> None:
     """Bit switches, flags, scales, same-write variants and controls
     (``scripts/gen_models_controls.py``), probing the handler once more in ``context``
@@ -991,7 +1039,7 @@ def shape_controls(
         for payload in [codec.value_key(v) for v in values] + controls.flag_payloads(values)
     ]
     requests = [r for *_, r in bit_reqs] + [r for *_, r in flag_reqs]
-    replies = run_driver(product_code, handler, requests, switches) if requests else []
+    replies = run_driver(product_code, handler, requests, wire) if requests else []
 
     def slotted(reply: Any) -> Any:
         recipe = p2p(reply)

@@ -97,9 +97,11 @@ def alt_channel(context: Context) -> Context:
     return replace(context, channel=ALT_CHANNEL[context.name])
 
 
-type Switches = Mapping[str, Mapping[bool, str]]
-"""``{identifier: {state: text}}``: string properties the app shows as an on/off switch,
-with the text it writes for on (True) and off (False) (``gen_models_join.switches``)."""
+type WireValues = Mapping[str, Sequence[tuple[Value, Value]]]
+"""``{identifier: ((public value, value the app writes), ...)}``: properties whose app
+screen writes another value than the public one, a switch's text for its state
+(``gen_models_join.switches``) or an enum choice's screen value
+(``gen_models_join.screen_values``)."""
 
 
 def as_switch(prop: Mapping[str, Any], texts: Mapping[bool, str]) -> dict[str, Any]:
@@ -113,18 +115,20 @@ def as_switch(prop: Mapping[str, Any], texts: Mapping[bool, str]) -> dict[str, A
     return {**prop, "data_type": {**(prop.get("data_type") or {}), "type": "bool", "specs": specs}}
 
 
-def to_wire(request: Mapping[str, Any], switches: Switches) -> dict[str, Any]:
-    """A driver request with a switch's state replaced by the text the app writes."""
+def to_wire(request: Mapping[str, Any], wire: WireValues) -> dict[str, Any]:
+    """A driver request with a public value replaced by the value the app writes."""
     out = dict(request)
-    texts = switches.get(str(request.get("identifier")))
-    if request.get("kind") == "set" and texts is not None and isinstance(out["payload"], bool):
-        out["payload"] = texts[out["payload"]]
+    pairs = wire.get(str(request.get("identifier")))
+    if request.get("kind") == "set" and pairs is not None:
+        sent = [w for public, w in pairs if _same(public, out["payload"])]
+        if sent:
+            out["payload"] = sent[0]
     return out
 
 
-def from_wire(request: Mapping[str, Any], reply: Any, switches: Switches) -> Any:
-    """A getProperty reply with each switch's text replaced by its state (other values,
-    an empty one among them, unchanged)."""
+def from_wire(request: Mapping[str, Any], reply: Any, wire: WireValues) -> Any:
+    """A getProperty reply with each value the app writes replaced by its public value,
+    matched as text (other values, an empty one among them, unchanged)."""
     data = reply.get("data") if isinstance(reply, dict) else None
     if request.get("kind") != "get" or not isinstance(data, dict):
         return reply
@@ -132,9 +136,9 @@ def from_wire(request: Mapping[str, Any], reply: Any, switches: Switches) -> Any
     if not isinstance(values, dict):
         return reply
     decoded = dict(values)
-    for ident, texts in switches.items():
-        states = [s for s, text in texts.items() if decoded.get(ident) == text]
-        if ident in decoded and len(states) == 1:
+    for ident, pairs in wire.items():
+        states = [public for public, w in pairs if str(decoded.get(ident)) == str(w)]
+        if len(states) == 1:
             decoded[ident] = states[0]
     return {**reply, "data": {**data, "p2p": decoded}}
 
@@ -420,6 +424,58 @@ def decodes_to(decoded: Any, value: Value) -> bool:
     if isinstance(value, bool):
         return str(decoded).lower() in (str(value).lower(), str(int(value)))
     return False
+
+
+FAILED_CONVERSIONS = frozenset({"NaN", "undefined", "null"})
+"""Parameter values a handler stores when it could not convert the written value: no
+value a device reports."""
+
+
+def _own_params(kind: str, samples: Sequence[ReadSample]) -> Any:
+    """The parameter of an enum whose written values (one sample each) stored each its
+    own text value in it; else None."""
+    cmds = {s.cmd for s in samples}
+    raws = [s.param_value for s in samples]
+    if kind != "enum" or len(cmds) != 1 or len(set(raws)) != len(raws):
+        return None
+    if not all(isinstance(r, str) for r in raws):
+        return None
+    (cmd,) = cmds
+    return cmd
+
+
+def shown_read(kind: str, samples: Sequence[ReadSample]) -> Any:
+    """Read codec ``{"param", "map": {"<param value>": value}}`` of an enum whose handler
+    reads each written parameter value as another of the written values, each once: the
+    value the eufy app shows for it. None where the decodes are no such permutation.
+    The caller rules out a write that stores a failed conversion (``FAILED_CONVERSIONS``).
+    """
+    cmd = _own_params(kind, samples)
+    if cmd is None:
+        return None
+    values = [s.value for s in samples]
+    shown: list[Value] = []
+    for s in samples:
+        named = next((v for v in values if decodes_to(s.decoded, v)), MISSING)
+        if named is MISSING or any(_same(named, v) for v in shown):
+            return None
+        shown.append(named)
+    return {"param": cmd, "map": {s.param_value: v for s, v in zip(samples, shown, strict=True)}}
+
+
+def inverse_read(kind: str, samples: Sequence[ReadSample]) -> Any:
+    """Read codec of an enum whose handler read tells its values apart by none (it does
+    not return the written value, nor another one per value; see :func:`shown_read`),
+    by the inverse of its write: ``{"param", "map": {"<param value>": value}}``; else
+    None. The caller rules out a write that stores a failed conversion
+    (``FAILED_CONVERSIONS``).
+    """
+    cmd = _own_params(kind, samples)
+    if cmd is None:
+        return None
+    if all(s.param_value == str_form(s.value) for s in samples):
+        return {"param": cmd, "map": None}
+    return {"param": cmd, "map": {s.param_value: s.value for s in samples}}
 
 
 def infer_read(
