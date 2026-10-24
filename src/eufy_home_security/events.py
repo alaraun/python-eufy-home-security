@@ -149,6 +149,13 @@ _DETECTION_EVIDENCE: Final[Mapping[DetectionType, Evidence]] = MappingProxyType(
 )
 
 
+PIR_MOTION_PUSH_EVIDENCE: Final = Evidence(
+    Support.VERIFIED,
+    "T8910 motion trigger observed via HomeBase 2 FCM push",
+    "msg_type 14 and sensor_open 1",
+)
+
+
 PUSH_KIND_EVIDENCE: Final = Evidence(
     Support.DECLARED,
     "eufy app notification text of a msg_type 1 push",
@@ -663,6 +670,7 @@ class SecurityEvent:
     device_name: str | None = None
     msg_type: int | None = None
     event_type: int | None = None
+    sensor_open: int | None = None
     event_time_ms: int | None = None
     guard_mode: int | None = None
     person_name: str | None = None
@@ -755,6 +763,11 @@ class SecurityEvent:
         :attr:`detection_evidence`.
         """
         wire = _enum_or_none(DetectionType, self.event_type)
+        if self.msg_type == PushMessageType.MOTION_SENSOR:
+            if self.sensor_open == 1:
+                return DetectionType.MOTION
+            if self.sensor_open == 0:
+                return None
         if self.msg_type != PushMessageType.SECURITY:
             return wire
         if self.person_name is not None:
@@ -775,6 +788,8 @@ class SecurityEvent:
         detection = self.detection
         if detection is None:
             return None
+        if self.msg_type == PushMessageType.MOTION_SENSOR and self.sensor_open == 1:
+            return PIR_MOTION_PUSH_EVIDENCE
         if detection is not _enum_or_none(DetectionType, self.event_type):
             return PUSH_KIND_EVIDENCE
         return detection.evidence
