@@ -140,9 +140,9 @@ An attached record that is merely unbound is not a rejection: its fields are Non
 3104 crying, 3105 sound, 3106 pet, **3107 vehicle** `*`, 3108–3110 dog / lick / poop,
 **3111 identified person** `*`, 3112 stranger.
 
-**Detection kind** (`SecurityEvent.detection`). The `event_type` as an enum, except on a
-`msg_type` 1 (SECURITY_EVT) push, whose kind the eufy app takes from two side fields
-first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on hardware):
+**Detection kind** (`SecurityEvent.detection`). Most pushes use `event_type` as an
+enum. For a `msg_type` 1 (SECURITY_EVT) push, the eufy app takes the kind from
+two side fields first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on hardware):
 
 | condition, in order | kind |
 |---|---|
@@ -151,6 +151,8 @@ first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on hardware):
 | `fetch_id` `3107`, or `event_type` 3107 | vehicle |
 | `fetch_id` `3106`, or `event_type` 3106 | pet |
 | any other `fetch_id` (a face id) | person, or the `event_type` when it already names a person (3102, 3111, 3112) |
+
+The eufy app classifies every `msg_type` 14 motion-sensor push as motion, regardless of the `e` field (including `0` or missing). Only `msg_type` 3 entry-sensor pushes use `e` to indicate opened or closed state. Motion-sensor pushes announce a detection but do not provide a cleared edge; consumers representing motion as a binary state must use a detection hold timeout.
 
 `event_type` stays the wire value. The app shows motion for any `msg_type` 1 push without
 a `fetch_id`; the library keeps the `event_type` there, so a pushed 3102 stays a person.

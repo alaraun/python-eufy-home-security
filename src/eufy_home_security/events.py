@@ -149,10 +149,9 @@ _DETECTION_EVIDENCE: Final[Mapping[DetectionType, Evidence]] = MappingProxyType(
 )
 
 
-PIR_MOTION_PUSH_EVIDENCE: Final = Evidence(
-    Support.VERIFIED,
-    "T8910 motion trigger observed via HomeBase 2 FCM push",
-    "msg_type 14 and sensor_open 1",
+_PIR_MOTION_PUSH_EVIDENCE: Final = Evidence(
+    Support.DECLARED,
+    "eufy app notification text of a msg_type 14 push",
 )
 
 
@@ -670,7 +669,6 @@ class SecurityEvent:
     device_name: str | None = None
     msg_type: int | None = None
     event_type: int | None = None
-    sensor_open: int | None = None
     event_time_ms: int | None = None
     guard_mode: int | None = None
     person_name: str | None = None
@@ -761,13 +759,14 @@ class SecurityEvent:
         (3102, 3111, 3112). Without either the ``event_type`` stands: a 3102 push without
         a face id stays PERSON. Graded :data:`PUSH_KIND_EVIDENCE`; see
         :attr:`detection_evidence`.
+
+
+        Every type-14 motion sensor push is motion, regardless of ``e``,
+        as reported by the eufy app.
         """
         wire = _enum_or_none(DetectionType, self.event_type)
         if self.msg_type == PushMessageType.MOTION_SENSOR:
-            if self.sensor_open == 1:
-                return DetectionType.MOTION
-            if self.sensor_open == 0:
-                return None
+            return DetectionType.MOTION
         if self.msg_type != PushMessageType.SECURITY:
             return wire
         if self.person_name is not None:
@@ -784,12 +783,16 @@ class SecurityEvent:
     def detection_evidence(self) -> Evidence | None:
         """How :attr:`detection` is known: :data:`PUSH_KIND_EVIDENCE` when ``fetch_id`` or
         ``person_name`` changed it from the ``event_type``, else the value's own
-        :attr:`DetectionType.evidence`; None without a detection."""
+        :attr:`DetectionType.evidence`; None without a detection.
+
+        The type-14 mapping is declared from the eufy app.
+        Hardware verification is documented separately.
+        """
         detection = self.detection
         if detection is None:
             return None
-        if self.msg_type == PushMessageType.MOTION_SENSOR and self.sensor_open == 1:
-            return PIR_MOTION_PUSH_EVIDENCE
+        if self.msg_type == PushMessageType.MOTION_SENSOR:
+            return _PIR_MOTION_PUSH_EVIDENCE
         if detection is not _enum_or_none(DetectionType, self.event_type):
             return PUSH_KIND_EVIDENCE
         return detection.evidence

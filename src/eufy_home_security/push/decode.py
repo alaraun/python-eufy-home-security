@@ -141,7 +141,6 @@ def decode_push(data: Mapping[str, Any], *, now_ms: Callable[[], int] = wall_ms)
         inner = decode_payload(data.get("payload"))
         reader = PushFieldReader(EventSource.CLOUD, now_ms=now_ms)
         common = reader.common(inner)
-        common["sensor_open"] = coerce_int(inner.get("sensor_open"))
         for name in ("channel", "msg_type", "event_type"):
             if common[name] is None:
                 common[name] = coerce_int(data.get(name))

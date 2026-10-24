@@ -16,6 +16,7 @@ from eufy_home_security.events import (
     EventDeduplicator,
     EventScope,
     EventSource,
+    PushMessageType,
     SecurityEvent,
 )
 from eufy_home_security.models import FrameCipher
@@ -403,3 +404,31 @@ def test_a_first_push_at_the_same_moment_is_still_its_own_detection() -> None:
     dedupe = EventDeduplicator()
     assert dedupe.admit(first) is first
     assert dedupe.admit(other) is other
+
+
+def test_motion_sensor_short_key_push_is_motion_even_without_e() -> None:
+    """FCM msg_type 14 is motion whether short key e is absent, 0 or 1."""
+
+    now_ms = 1792799978000
+    for short_e in (None, 0, 1, "0", "1"):
+        payload = {
+            "a": 14,
+            "s": SYNTHETIC.camera_sn,
+            "n": "Synthetic motion",
+            "t": str(now_ms // 1000 - 2),
+        }
+        if short_e is not None:
+            payload["e"] = short_e
+        event = decode_push(
+            {
+                "app_tab": "eufy_security",
+                "type": "10",
+                "station_sn": SYNTHETIC.station_sn,
+                "device_sn": SYNTHETIC.camera_sn,
+                "event_time": str(now_ms // 1000 - 2),
+                "payload": base64.b64encode(json.dumps(payload).encode()).decode(),
+            },
+            now_ms=lambda: now_ms,
+        )
+        assert event.msg_type == PushMessageType.MOTION_SENSOR
+        assert event.detection is DetectionType.MOTION

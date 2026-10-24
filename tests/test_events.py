@@ -536,6 +536,27 @@ def test_a_security_push_is_classified_as_the_eufy_app_names_it(
     assert event.detection_evidence == expected
 
 
+def test_a_motion_sensor_push_is_classified_as_the_eufy_app_names_it() -> None:
+    """Type 14 means motion without model or payload-field gating."""
+
+    event = SecurityEvent(
+        source=EventSource.CLOUD,
+        station_sn=SYNTHETIC.station_sn,
+        device_sn=SYNTHETIC.camera_sn,
+        msg_type=PushMessageType.MOTION_SENSOR,
+    )
+    assert event.detection is DetectionType.MOTION
+    assert event.detection_evidence is not None
+
+    other = SecurityEvent(
+        source=EventSource.CLOUD,
+        station_sn=SYNTHETIC.station_sn,
+        device_sn=SYNTHETIC.camera_sn,
+        msg_type=3,
+    )
+    assert other.detection is None
+
+
 def test_fetch_id_and_person_name_classify_only_a_security_push() -> None:
     indoor = dataclasses.replace(_CLOUD, event_type=3101, fetch_id="1a2b3c", person_name="Al")
     assert indoor.detection is DetectionType.MOTION
