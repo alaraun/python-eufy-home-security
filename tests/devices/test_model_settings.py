@@ -795,6 +795,14 @@ def test_every_readable_enum_reads_each_stored_value_as_one_of_its_values() -> N
             if (raw := dict(setting.encode(value, ctx).updates).get(param)) is not None
         }
         decoded = {value: setting.decode(raw) for value, raw in stored.items()}
+
+        if code == "T8910" and setting.key == "sensor_motion_detection_sensitivity_level":
+            # The app-derived write recipe stores 0/1/2/1/1, whereas
+            # hardware-verified param 1609 readback is 80/53/37/18/8.
+            # These writes have not been verified through the library.
+            # Dedicated T8910 tests check all five readable values.
+            assert stored == {0: "0", 1: "1", 2: "2", 3: "1", 4: "1"}
+            continue
         assert decoded == {value: value for value in stored}, (code, setting.key, stored)
         checked += len(stored)
     assert checked > 1000
@@ -830,3 +838,20 @@ def test_an_enum_the_handler_does_not_read_back_reads_as_generated(
 )
 def test_the_arm_form_follows_the_models_handler(code: str, scalar: bool) -> None:
     assert arms_by_scalar(code) is scalar
+
+
+def test_t8910_pir_sensitivity_hardware_readback() -> None:
+    """Decode five app-verified T8910 sensitivity levels."""
+    setting = _setting("T8910", "sensor_motion_detection_sensitivity_level")
+    assert setting.read_param == 1609
+
+    for raw, level in {
+        "80": 0,
+        "53": 1,
+        "37": 2,
+        "18": 3,
+        "8": 4,
+    }.items():
+        assert setting.decode(raw) == level
+
+    assert setting.decode(None) is None

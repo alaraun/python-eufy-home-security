@@ -88,7 +88,16 @@
    },
    "note": "round trip does not return the written value",
    "page": "SensorMotionTestMode",
-   "read": null,
+   "read": {
+    "map": {
+     "18": 3,
+     "37": 2,
+     "53": 1,
+     "8": 4,
+     "80": 0
+    },
+    "param": 1609
+   },
    "section": "detection",
    "values": [
     0,

@@ -882,6 +882,35 @@ def merge_contexts(per_context: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def apply_hardware_readbacks(product_code: str, settings: dict[str, Any]) -> None:
+    """Preserve readbacks verified against physical hardware.
+
+    The app's T8910 sensitivity write recipe stores 0/1/2/1/1,
+    but a HomeBase 2 reports 80/53/37/18/8 for app levels 1-5.
+    The generated write recipe is deliberately left unchanged.
+    """
+    if product_code != "T8910":
+        return
+
+    key = "sensor_motion_detection_sensitivity_level"
+    verified = {
+        "param": 1609,
+        "map": {"80": 0, "53": 1, "37": 2, "18": 3, "8": 4},
+    }
+
+    setting = settings.get(key)
+    if setting is None:
+        raise CheckError(f"{product_code}: missing {key}")
+
+    generated = setting.get("read")
+    if generated is not None and generated != verified:
+        raise CheckError(
+            f"{product_code}: generated {key} readback conflicts with hardware verification"
+        )
+
+    setting["read"] = verified
+
+
 def generate(
     product_code: str,
     cache: Path,
@@ -969,6 +998,7 @@ def generate(
     if skipped:
         counts["skipped"] = skipped
     merged = merge_contexts(per_context)
+    apply_hardware_readbacks(product_code, merged)
     model = model_for_serial(product_code)
     station = model is not None and model.kind is DeviceKind.STATION
     for key, n in sections.assign(merged, station=station).items():

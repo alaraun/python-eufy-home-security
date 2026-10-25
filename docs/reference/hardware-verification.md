@@ -19,6 +19,32 @@ before), **restore** (written back to the start value and read back), **app disp
 (the eufy app's screen read with the value in place), **live capture of the wire**
 (the traffic on the LAN or Wi-Fi recorded and decoded).
 
+## HomeBase 2 (T8010), firmware 3.4.2.6h
+
+### T8910 PIR sensitivity readback (parameter 1609)
+
+Verified on HomeBase 2 (T8010), firmware 3.4.2.6h,
+with four paired T8910 motion sensors. The Office sensor was
+used for the controlled sensitivity tests.
+
+The Office sensor was changed through all five sensitivity levels
+using the eufy app. Independent HomeBase parameter dumps established:
+
+| Eufy app level | Raw parameter 1609 |
+| --- | ---: |
+| 1 | 80 |
+| 2 | 53 |
+| 3 | 37 |
+| 4 | 18 |
+| 5 | 8 |
+
+Office was restored to level 4. The final parameter distribution
+across all four T8910 sensors matched the initial baseline.
+
+This verifies app-controlled changes and the library's readback
+mapping. It does not verify the library's existing write recipe,
+which uses different values.
+
 ## HomeBase 3 (T8030), main firmware 3.8.7.4, with eufyCam 3 (T8160) fw 3.4.3.0 and a T8910
 
 | area | verified | notes |
