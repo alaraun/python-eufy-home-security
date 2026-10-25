@@ -19,6 +19,12 @@ before), **restore** (written back to the start value and read back), **app disp
 (the eufy app's screen read with the value in place), **live capture of the wire**
 (the traffic on the LAN or Wi-Fi recorded and decoded).
 
+## HomeBase 2 (T8010), main firmware 3.4.2.6h, with T8910 motion sensor (fw 2.0.1.1)
+
+| area | verified | notes |
+|---|---|---|
+| Motion-sensor cloud push (FCM, `msg_type` 14) | ✓ | Four physical T8910 motion sensors paired to a HomeBase 2 were tested with Library (this change) through Home Assistant. Each produced motion notifications and working native motion binary sensors and detection events. A captured type-14 payload carried `e` = `"1"` and was decoded as `DetectionType.MOTION`. No type-14 payload with `e` = `0` or missing `e` was observed; those classification cases follow the eufy app's rule, not direct hardware evidence. No separate motion-cleared notification was established; Home Assistant resets the binary motion state using its detection hold timeout. Firmware 2.0.1.1 was reported for a tested T8910; the firmware of each of the other sensors was not independently recorded. |
+
 ## HomeBase 3 (T8030), main firmware 3.8.7.4, with eufyCam 3 (T8160) fw 3.4.3.0 and a T8910
 
 | area | verified | notes |
