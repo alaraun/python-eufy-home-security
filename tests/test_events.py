@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from eufy_home_security.devices.support import Support
+from eufy_home_security.devices.support import Evidence, Support
 from eufy_home_security.events import (
     ALARM_PUSH_MAX_AGE_SECONDS,
     GUARD_PUSH_MAX_AGE_SECONDS,
@@ -546,7 +546,9 @@ def test_a_motion_sensor_push_is_classified_as_the_eufy_app_names_it() -> None:
         msg_type=PushMessageType.MOTION_SENSOR,
     )
     assert event.detection is DetectionType.MOTION
-    assert event.detection_evidence is not None
+    assert event.detection_evidence == Evidence(
+        Support.DECLARED, "eufy app notification text of a msg_type 14 push"
+    )
 
     other = SecurityEvent(
         source=EventSource.CLOUD,

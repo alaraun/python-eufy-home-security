@@ -152,12 +152,14 @@ two side fields first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on har
 | `fetch_id` `3106`, or `event_type` 3106 | pet |
 | any other `fetch_id` (a face id) | person, or the `event_type` when it already names a person (3102, 3111, 3112) |
 
-The eufy app classifies every `msg_type` 14 motion-sensor push as motion, regardless of the `e` field (including `0` or missing). Only `msg_type` 3 entry-sensor pushes use `e` to indicate opened or closed state. Motion-sensor pushes announce a detection but do not provide a cleared edge; consumers representing motion as a binary state must use a detection hold timeout.
-
 `event_type` stays the wire value. The app shows motion for any `msg_type` 1 push without
 a `fetch_id`; the library keeps the `event_type` there, so a pushed 3102 stays a person.
 A camera paired to a HomeBase 2 is reported this way: a 3101 push with a face id is a
 person. `SecurityEvent.detection_evidence` names the grade of the kind an event reports.
+
+A `msg_type` 14 (MOTION_SENSOR) push is motion whatever its `e` field says, as the eufy
+app shows it; `e` (opened / closed) is read only on a `msg_type` 3 entry-sensor push.
+Like a camera detection, it has no cleared edge (see the notes above).
 
 **`notification_style`**: 1 text, 2 thumbnail, 3 both.
 

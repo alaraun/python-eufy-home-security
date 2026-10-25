@@ -406,29 +406,29 @@ def test_a_first_push_at_the_same_moment_is_still_its_own_detection() -> None:
     assert dedupe.admit(other) is other
 
 
-def test_motion_sensor_short_key_push_is_motion_even_without_e() -> None:
+@pytest.mark.parametrize("short_e", [None, 0, 1, "0", "1"])
+def test_motion_sensor_short_key_push_is_motion_even_without_e(short_e: int | str | None) -> None:
     """FCM msg_type 14 is motion whether short key e is absent, 0 or 1."""
 
     now_ms = 1792799978000
-    for short_e in (None, 0, 1, "0", "1"):
-        payload = {
-            "a": 14,
-            "s": SYNTHETIC.camera_sn,
-            "n": "Synthetic motion",
-            "t": str(now_ms // 1000 - 2),
-        }
-        if short_e is not None:
-            payload["e"] = short_e
-        event = decode_push(
-            {
-                "app_tab": "eufy_security",
-                "type": "10",
-                "station_sn": SYNTHETIC.station_sn,
-                "device_sn": SYNTHETIC.camera_sn,
-                "event_time": str(now_ms // 1000 - 2),
-                "payload": base64.b64encode(json.dumps(payload).encode()).decode(),
-            },
-            now_ms=lambda: now_ms,
-        )
-        assert event.msg_type == PushMessageType.MOTION_SENSOR
-        assert event.detection is DetectionType.MOTION
+    payload = {
+        "a": 14,
+        "s": SYNTHETIC.camera_sn,
+        "n": "Synthetic motion",
+        "t": str(now_ms // 1000 - 2),
+    }
+    if short_e is not None:
+        payload["e"] = short_e
+    event = decode_push(
+        {
+            "app_tab": "eufy_security",
+            "type": "10",
+            "station_sn": SYNTHETIC.station_sn,
+            "device_sn": SYNTHETIC.camera_sn,
+            "event_time": str(now_ms // 1000 - 2),
+            "payload": base64.b64encode(json.dumps(payload).encode()).decode(),
+        },
+        now_ms=lambda: now_ms,
+    )
+    assert event.msg_type == PushMessageType.MOTION_SENSOR
+    assert event.detection is DetectionType.MOTION
