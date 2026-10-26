@@ -938,7 +938,7 @@ def apply_param_values(
                 raise CheckError(f"{product_code}: param_values {ident}: legacy read conflict")
             read_map[key] = value
 
-        def rewrite_write(write: Any) -> int:
+        def rewrite_write(write: Any, ident: str, direct: dict[str, int]) -> int:
             if not isinstance(write, dict):
                 raise CheckError(f"{product_code}: param_values {ident}: missing write")
 
@@ -965,7 +965,7 @@ def apply_param_values(
             update["paramValue"] = {"$map": {key: str(raw) for key, raw in direct.items()}}
             return update["cmd"]
 
-        param = rewrite_write(entry.get("write"))
+        param = rewrite_write(entry.get("write"), ident, direct)
         entry["read"] = {"param": param, "map": read_map}
 
         note = entry.get("note")
@@ -982,11 +982,12 @@ def apply_param_values(
                 raise CheckError(f"{product_code}: param_values {ident}: invalid context")
             if difference.get("write_table"):
                 raise CheckError(f"{product_code}: param_values {ident}: context write table")
-            if "write" in difference and difference["write"] is not None:
-                if rewrite_write(difference["write"]) != param:
-                    raise CheckError(
-                        f"{product_code}: param_values {ident}: context parameter differs"
-                    )
+            if (
+                "write" in difference
+                and difference["write"] is not None
+                and rewrite_write(difference["write"], ident, direct) != param
+            ):
+                raise CheckError(f"{product_code}: param_values {ident}: context parameter differs")
             if "read" in difference:
                 difference["read"] = {"param": param, "map": read_map.copy()}
             if isinstance(difference.get("note"), str):
