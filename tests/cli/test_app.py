@@ -13,6 +13,7 @@ from eufy_home_security.cli import app, main
 from eufy_home_security.cli.commands import COMMANDS, Context
 from eufy_home_security.cli.config import UsageError, parse_args
 from eufy_home_security.exceptions import (
+    AccountRejectedError,
     AuthenticationError,
     CipherUnusableError,
     CloudApiError,
@@ -58,7 +59,8 @@ def restore_logging() -> Iterator[None]:
         (AuthenticationError("bad password"), "check the e-mail and password"),
         (CloudApiError(26006, "nope"), "eufy cloud error: cloud error 26006"),
         (CommandNotAppliedError(1224), "station owner's"),
-        (CommandRejectedError(1253, -104), "the station refused: command 1253 rejected"),
+        (CommandRejectedError(1253, -1), "the station refused: command 1253 rejected"),
+        (AccountRejectedError(1253, -104), "station is shared with this account"),
         (StationUnreachableError("no reply"), "--local-port"),
         (DeviceTimeoutError("slow"), "did not answer in time"),
         (CommunicationError("down"), "network error: down"),

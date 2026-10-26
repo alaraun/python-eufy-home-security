@@ -70,10 +70,12 @@ from ..p2p.messages import (
     ECB_CHANNEL_VALUE_CMDS,
     HISTORY_RECORD_COUNTER,
     HISTORY_RECORD_ID_MIN,
+    P2P_ERROR_CODES,
     PARAM_QUERY_ALL,
     RECEIPT_LEN,
     RECEIPT_NOT_HANDLED,
     RECEIPT_TAKEN,
+    RESULT_INVALID_ACCOUNT,
     STRING_CMDS,
     decode_json_payload,
     decode_string_command_body,
@@ -439,6 +441,8 @@ class FakeStation:
     """Name no device in the event-count items (``"device_sn": ""``), as a T8170 sometimes does."""
     event_count_queries: int = 0
     """Event-count (10013) queries received, answered or not."""
+    event_count_reply_code: int = 0
+    """``mIntRet`` of the event-count reply (non-zero: no items)."""
     clear_replies: bool = False
     """Send database and still replies as clear JSON under the ECB tag, as a T8170 does."""
     storage: dict[str, Any] = field(default_factory=synthetic_storage_body)
@@ -1252,9 +1256,11 @@ class FakeStation:
         self.event_count_queries += 1
         if self.event_count_queries <= self.event_count_ignored:
             return
+        code = self.event_count_reply_code
         items = [
             {"device_sn": "" if self.event_count_unnamed else sn, "payload": dict(payload)}
             for sn, payload in self.event_summaries.items()
+            if code == 0
         ]
         self._send_reply(
             FrameType.DB_SYNC,
@@ -1263,9 +1269,9 @@ class FakeStation:
                 "transaction": inner.get("transaction"),
                 "table": "history_record_info",
                 "cmd": 10013,
-                "mIntRet": 0,
+                "mIntRet": code,
                 "version": "1.3.0.1",
-                "msg": "SUCCESSFUL",
+                "msg": P2P_ERROR_CODES.get(code, ""),
             },
         )
 
@@ -1321,10 +1327,10 @@ class FakeStation:
         try:
             channel, value, account = decode_string_command_body(plain)
         except (ValueError, UnicodeDecodeError):
-            self.send_receipt(ftype, -104)
+            self.send_receipt(ftype, RESULT_INVALID_ACCOUNT)
             return
         self.string_commands_received.append((ftype, channel, value))
-        code = 0 if account == self.account_id else -104
+        code = 0 if account == self.account_id else RESULT_INVALID_ACCOUNT
         if code == 0 and self.apply_settings:
             self.params.setdefault(channel, {})[ftype] = value
         self.send_receipt(ftype, code)
@@ -1336,7 +1342,7 @@ class FakeStation:
         account = body[offset + 4 : offset + 132].split(b"\x00", 1)[0].decode()
         self.ecb_received.append((ftype, channel, value))
         self.ecb_encryptions.append(subheader[3])
-        code = 0 if account == self.account_id else -104
+        code = 0 if account == self.account_id else RESULT_INVALID_ACCOUNT
         code = self.refused_scalars.get(ftype, code)
         if self.ecb_apply_late and code == 0:
             self._late_writes.append((channel, ftype, value))

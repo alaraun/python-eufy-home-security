@@ -673,7 +673,8 @@ cloud and no push opt-in. What is covered:
   at once, `station.state` and a `GuardModeChanged` carry it, and a mode report that
   follows (or never comes: a standalone camera such as a T8414 sends none) only moves
   the mode again when it says otherwise. A non-zero code raises (`CommandUnsupportedError`
-  for −108 and −103, else `CommandRejectedError`), and an arm the station only
+  for −108 and −103, `AccountRejectedError` for −104, else `CommandRejectedError`), and an
+  arm the station only
   acknowledged or took off its queue (a receipt 0, which is no result) raises
   `CommandNotAppliedError`. The request takes the form the eufy app
   uses for the station's model (`commands.md` § Arming); nothing to choose in the
@@ -911,9 +912,10 @@ A closed session (`async_close`) never reconnects on its own — build a new
   a command of its own id) and returns the `CommandOutcome`: `APPLIED` when the station
   answered, `DELIVERED` when it only acknowledged. A rejection raises a typed
   `CommandError` (`CommandRejectedError`, `CommandNotAppliedError`): map it to your
-  write-failed error. A setting the library does not write raises `UnsupportedError`
-  with its `note`. Nothing is read back: the state shows the written value until the
-  next dump replaces it, so the entity follows the write at once and the next poll
+  write-failed error, and `AccountRejectedError` (code −104) to the account hint of the
+  errors table ([§ Errors map to HA control flow](#errors-map-to-ha-control-flow)). A
+  setting the library does not write raises `UnsupportedError` with its `note`.
+  Nothing is read back: the state shows the written value until the next dump replaces it, so the entity follows the write at once and the next poll
   settles it. A station setting the dump never reports keeps the written value until a
   later device-list fetch shows the cloud's value changed after the write. On a standalone camera (a T8170) address a setting with
   `device_sn=station.serial` (or no target): the library renders it for the camera's
@@ -2599,6 +2601,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `StationUnreachableError`, `DeviceTimeoutError` | `raise UpdateFailed` — the session's own supervisor is already reconnecting. A reply wait moves its deadline out by the time something else held the event loop (another integration's blocking setup at HA start; up to `p2p.session.LOOP_STALL_MAX`, 30 s), so a held loop alone does not raise `DeviceTimeoutError` |
 | `DeviceBusyError` (a `CommunicationError`, raised while an image capture holds the camera: by another capture, a default-preset write or a pan/tilt step) | not an outage: from a button or service action, `raise HomeAssistantError` ("capture in progress"); never `UpdateFailed` |
 | `CommandNotAppliedError` | surface to the user; usually a wrong owner id or an unpaired channel |
+| `AccountRejectedError` (a `CommandRejectedError`; `code` −104, `INVALID_ACCOUNT`) | the station refused the account the command was sent under, on any command path (arm, setting write, device alarm, preset edit, station action, storage or event read, media open). Retrying changes nothing: `raise HomeAssistantError` with the same hint as for `CommandNotAppliedError` ("check in the eufy app that the station is shared with this account"). Catch it before `CommandRejectedError` |
 | `LiveStreamLimitError` (a `CommunicationError`; `limit`) | the station's session budget (`station.max_sessions`) allows no further live stream; nothing was sent. From a live view answer 503 and log the limit; the station is fine |
 | `CameraWakeError` (a `CommandRejectedError` and a `CommunicationError`; `code` -204, -203 or -205) | the station could not wake the camera: not a station outage, no `UpdateFailed`. From a live view, answer 503 and let the session's wake backoff (`retry_after`) decide when the next attempt goes out; from a button or service action, `raise HomeAssistantError` ("the camera did not wake") |
 | `KeyRejectedError` (a `HandshakeError`; in `ConnectionChanged.error`, `Station.last_error` or the `async_start()` result) | the station rejected a key that was already fetched again once. Not a reauth: raise a fixable repair issue whose fix calls `eufy.async_reset_key_refresh(serial)`, which allows one more fetch. Without it the library tries one fetch a day by itself |

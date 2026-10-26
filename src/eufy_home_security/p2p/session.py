@@ -92,6 +92,7 @@ from ..events import (
     as_guard_mode,
 )
 from ..exceptions import (
+    AccountRejectedError,
     CameraWakeError,
     CipherUnusableError,
     CloudError,
@@ -189,6 +190,7 @@ from .messages import (
     RECEIPT_CODES,
     RECEIPT_NOT_HANDLED,
     RECEIPT_TAKEN,
+    RESULT_INVALID_ACCOUNT,
     RESULT_INVALID_COMMAND,
     app_ping_frame,
     arm_payload,
@@ -2093,8 +2095,9 @@ class StationSession:
           an RSA session the channel-0 result of the arm's own send, after every result
           owed to an earlier send) is final: the mode is filed as this library's write
           (:attr:`param_origins`) and returned, without waiting for a mode report;
-        - a non-zero code raises: -108 and -103 :class:`CommandUnsupportedError`, any
-          other :class:`CommandRejectedError`; on a GCM session a non-zero receipt too;
+        - a non-zero code raises: -108 and -103 :class:`CommandUnsupportedError`, -104
+          :class:`AccountRejectedError`, any other :class:`CommandRejectedError`; on a GCM
+          session a non-zero receipt too;
         - a GCM receipt 0 only says the station took the command off its queue: it stops
           the resend, and the arm waits on for its result, a report or the read-back;
         - a guard-mode report (0x047F) that comes first answers it, under any encryption
@@ -2279,11 +2282,12 @@ class StationSession:
 
         The station's command receipt decides two things. A receipt with code -108
         raises :class:`CommandUnsupportedError` (the firmware does not handle the
-        command), any other non-zero code :class:`CommandRejectedError`. The command
-        is resent once only when neither a receipt nor an ACK came back: resending
-        into the station's queue would queue a second copy. A command acknowledged
-        but without a receipt by ``timeout`` waits for it up to
-        :data:`COMMAND_RECEIPT_TIMEOUT` after sending, still holding the op lock.
+        command), -104 :class:`AccountRejectedError`, any other non-zero code
+        :class:`CommandRejectedError`. The command is resent once only when neither a
+        receipt nor an ACK came back: resending into the station's queue would queue a
+        second copy. A command acknowledged but without a receipt by ``timeout`` waits
+        for it up to :data:`COMMAND_RECEIPT_TIMEOUT` after sending, still holding the op
+        lock.
 
         Receipts carry no command id. One arriving while this command is in flight is
         taken as its receipt: commands are serialised, but a media open, still fetch,
@@ -2584,10 +2588,10 @@ class StationSession:
 
         The recipe's frame (:meth:`Recipe.plaintext`, of type ``recipe.cmd``) goes to
         ``channel``'s subheader. A receipt with code -108 raises
-        :class:`CommandUnsupportedError`, any other non-zero code
-        :class:`CommandRejectedError`. A notify-answered recipe returns the payload
-        of the 1351 notify naming its :attr:`~Recipe.answer_cmd` (``APPLIED``) and raises
-        :class:`DeviceTimeoutError` without one; any other recipe returns
+        :class:`CommandUnsupportedError`, -104 :class:`AccountRejectedError`, any other
+        non-zero code :class:`CommandRejectedError`. A notify-answered recipe returns the
+        payload of the 1351 notify naming its :attr:`~Recipe.answer_cmd` (``APPLIED``)
+        and raises :class:`DeviceTimeoutError` without one; any other recipe returns
         ``DELIVERED`` on its receipt, since nothing else confirms it.
 
         A 1350 recipe (:attr:`RecipeCommand.SET_PAYLOAD`) is a ``DeviceMsgBean`` of its
@@ -2657,8 +2661,9 @@ class StationSession:
 
         Raises :class:`CommandRejectedError` with the station's result code
         (:class:`CommandUnsupportedError` for -103, a command it takes in no scalar
-        form), or :class:`CommandNotAppliedError` / :class:`DeviceTimeoutError` when no
-        result came back. A ``channel`` or account id the frame cannot carry raises
+        form; :class:`AccountRejectedError` for -104), or
+        :class:`CommandNotAppliedError` / :class:`DeviceTimeoutError` when no result came
+        back. A ``channel`` or account id the frame cannot carry raises
         :class:`ValueError` before anything is sent, like any out-of-domain argument.
         """
         timeout = _or(timeout, COMMAND_TIMEOUT)
@@ -2960,7 +2965,7 @@ class StationSession:
                 return None
             code = json_int(obj.get("mIntRet"))
             if code is not None and code != 0:
-                raise CommandRejectedError(CMD_DATABASE, code, str(obj.get("msg", "")))
+                raise _rejection(CMD_DATABASE, code, str(obj.get("msg", "")))
             data = obj.get("data")
             items = [i for i in (data if isinstance(data, list) else ()) if isinstance(i, Mapping)]
             # A T8170 sometimes names no device ("device_sn": ""): its one item is its own.
@@ -4018,9 +4023,7 @@ class StationSession:
         )
         code = json_int(obj.get("code"))
         if code is not None and code != 0:
-            self._fail_media(
-                CommandRejectedError(stream.command, code, ECB_RESULT_CODES.get(code, ""))
-            )
+            self._fail_media(_rejection(stream.command, code, ECB_RESULT_CODES.get(code, "")))
         return True
 
     def _answers_live_open(self, stream: MediaStream, inbound: Inbound) -> bool:
@@ -5583,20 +5586,27 @@ def _scalar_result(inbound: Inbound, command: int) -> int | None:
     return decode_ecb_scalar_result(inbound.frame.payload)
 
 
-_UNSUPPORTED_CODES = frozenset({RECEIPT_NOT_HANDLED, RESULT_INVALID_COMMAND})
-"""Codes that refuse a command the station does not take at all, or not in this form."""
+def _rejection(command: int, code: int, message: str = "") -> CommandRejectedError:
+    """The error a non-zero result or receipt code raises on every command path: -104
+    :class:`AccountRejectedError`, -103 :class:`CommandUnsupportedError`, any other
+    :class:`CommandRejectedError`."""
+    if code == RESULT_INVALID_ACCOUNT:
+        return AccountRejectedError(command, code, message)
+    if code == RESULT_INVALID_COMMAND:
+        return CommandUnsupportedError(command, code, message)
+    return CommandRejectedError(command, code, message)
 
 
 def _receipt_error(command: int, code: int) -> CommandRejectedError:
-    """The error a non-zero command receipt or result raises: -108 and -103
+    """The error a non-zero command receipt or result raises: -108
     :class:`CommandUnsupportedError`, a camera wake failure :class:`CameraWakeError`,
-    any other :class:`CommandRejectedError`."""
+    any other code as :func:`_rejection` maps it."""
     name = RECEIPT_CODES.get(code, "")
-    if code in _UNSUPPORTED_CODES:
+    if code == RECEIPT_NOT_HANDLED:
         return CommandUnsupportedError(command, code, name)
     if code in CAMERA_WAKE_CODES:
         return CameraWakeError(command, code, f"the station could not wake the camera ({name})")
-    return CommandRejectedError(command, code, f"command receipt {name}".rstrip())
+    return _rejection(command, code, f"command receipt {name}".rstrip())
 
 
 def _lost_cause(exc: Exception, *, asleep: bool) -> DisconnectCause:
@@ -5676,12 +5686,9 @@ def _parse_day(text: str) -> date:
 
 
 def _raise_for_code(command: int, code: int) -> None:
-    """Raise for a non-zero result code: -103 :class:`CommandUnsupportedError`, any
-    other :class:`CommandRejectedError`."""
-    if code == RESULT_INVALID_COMMAND:
-        raise CommandUnsupportedError(command, code, ECB_RESULT_CODES[code])
+    """Raise the :func:`_rejection` of a non-zero result code."""
     if code != 0:
-        raise CommandRejectedError(command, code, ECB_RESULT_CODES.get(code, ""))
+        raise _rejection(command, code, ECB_RESULT_CODES.get(code, ""))
 
 
 def _raise_waiter_error(waiter: _Waiter) -> None:

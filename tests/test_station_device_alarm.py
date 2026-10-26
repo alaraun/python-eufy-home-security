@@ -18,6 +18,7 @@ from eufy_home_security.devices.recipes import ConnectType
 from eufy_home_security.devices.support import Evidence, Support
 from eufy_home_security.events import AlarmChanged, DeviceAlarmChanged, Event, EventSource
 from eufy_home_security.exceptions import (
+    AccountRejectedError,
     CommandNotAppliedError,
     CommandRejectedError,
     UnsupportedError,
@@ -174,14 +175,18 @@ async def test_a_siren_frame_that_sets_no_state_confirms_nothing(
         await call(CAMERA.device_sn, timeout=0.5)
 
 
+@pytest.mark.parametrize(
+    ("code", "kind"), [(-1, CommandRejectedError), (-104, AccountRejectedError)]
+)
 async def test_a_refused_siren_raises_the_stations_code(
-    station: Station, fake: FakeStation
+    station: Station, fake: FakeStation, code: int, kind: type[CommandRejectedError]
 ) -> None:
     fake.reply_to_settings = True
-    fake.reply_codes[1202] = -1
+    fake.reply_codes[1202] = code
     with pytest.raises(CommandRejectedError) as err:
         await station.async_trigger_device_alarm(CAMERA.device_sn)
-    assert (err.value.command, err.value.code) == (1202, -1)
+    assert type(err.value) is kind
+    assert (err.value.command, err.value.code) == (1202, code)
 
 
 async def test_a_choice_the_app_does_not_offer_there_is_refused_unsent(

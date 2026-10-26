@@ -123,6 +123,9 @@ RECEIPT_NOT_HANDLED = -108
 #: Result code ``INVALID_COMMAND``: the station takes no command of this form (a scalar
 #: for a command it takes only as a payload object, or the other way round).
 RESULT_INVALID_COMMAND = -103
+#: Result code ``INVALID_ACCOUNT``: the station does not take the account id the command
+#: carried (not its owner or a member it is shared with).
+RESULT_INVALID_ACCOUNT = -104
 #: Receipt code: the station tried to wake the camera and failed (the camera's Wi-Fi).
 RECEIPT_WAKE_FAILED = -204
 #: Receipt codes meaning the camera, not the station, could not be reached.
@@ -135,7 +138,7 @@ P2P_ERROR_CODES: dict[int, str] = {
     -101: "HAVE_CONNECT",
     -102: "MAX_HUB_CONNECT_NUM",
     RESULT_INVALID_COMMAND: "INVALID_COMMAND",
-    -104: "INVALID_ACCOUNT",
+    RESULT_INVALID_ACCOUNT: "INVALID_ACCOUNT",
     -105: "WRITE_FLASH",
     -106: "NOT_FIND_DEV",
     -107: "INVALID_PARAM_LEN",
@@ -516,7 +519,8 @@ _ECB_ACCOUNT_LEN = 128
 
 #: The result codes a station returns in an ECB scalar reply, with their eufy names.
 ECB_RESULT_CODES: dict[int, str] = {
-    code: P2P_ERROR_CODES[code] for code in (0, RESULT_INVALID_COMMAND, -104, -106, -110)
+    code: P2P_ERROR_CODES[code]
+    for code in (0, RESULT_INVALID_COMMAND, RESULT_INVALID_ACCOUNT, -106, -110)
 }
 
 

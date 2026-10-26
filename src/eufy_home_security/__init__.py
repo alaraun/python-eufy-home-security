@@ -82,6 +82,7 @@ if TYPE_CHECKING:
         ZoomChanged,
     )
     from .exceptions import (
+        AccountRejectedError,
         AuthenticationError,
         CameraWakeError,
         CaptureStoppedError,
@@ -272,6 +273,7 @@ _EXPORTS: dict[str, str] = {
     ),
     **dict.fromkeys(
         (
+            "AccountRejectedError",
             "AuthenticationError",
             "CameraWakeError",
             "CaptureStoppedError",
@@ -402,6 +404,7 @@ __all__ = [
     "SOUND_ALARM_SECONDS",
     "STATION_SESSION_LIMIT",
     "AccountMismatch",
+    "AccountRejectedError",
     "AccountReport",
     "AlarmChanged",
     "AlarmPhase",

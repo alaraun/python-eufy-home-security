@@ -284,8 +284,8 @@ reads it as the eufy app does:
   bytes 0..3. Nothing is decrypted: the encryption type (subheader byte 3) and the bytes
   after the code are ignored. A longer or shorter payload is no result.
 - Code 0 is done (for a recipe without a notify answer, the app's final result);
-  −108 and −103 raise `CommandUnsupportedError`, any other non-zero code
-  `CommandRejectedError`.
+  −108 and −103 raise `CommandUnsupportedError`, −104 `AccountRejectedError`, any other
+  non-zero code `CommandRejectedError`.
   The app retries codes 1 to 20 for up to 10 s; the library raises at once (a station
   call may retry, as a preset go-to on a busy camera does).
 - A result is never JSON: it is counted in `SessionStats.receipts_by_code`, never in
@@ -352,7 +352,7 @@ only 1215 this way (`p2p/messages.py` `STRING_CMDS`).
 |---|---|---|
 | 0 | SUCCESSFUL | applied: final, as the eufy app takes it ([commands.md](commands.md)) |
 | −103 | INVALID_COMMAND | the command is not a scalar on this path (`CommandUnsupportedError`) |
-| −104 | INVALID_ACCOUNT | missing or wrong owner id, **or a wrong body layout** (for example, a channel-prefixed command sent without its prefix, which puts the value where the account belongs) |
+| −104 | INVALID_ACCOUNT | missing or wrong owner id, **or a wrong body layout** (for example, a channel-prefixed command sent without its prefix, which puts the value where the account belongs) (`AccountRejectedError`) |
 | −106 | NOT_FIND_DEV | a camera command sent on a channel with no device |
 | −110 | INVALID_PARAM | header channel outside 0..50 and 255 |
 

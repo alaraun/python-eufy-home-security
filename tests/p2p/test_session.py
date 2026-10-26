@@ -38,6 +38,7 @@ from eufy_home_security.events import (
     StorageChanged,
 )
 from eufy_home_security.exceptions import (
+    AccountRejectedError,
     CameraWakeError,
     CipherUnavailableError,
     CipherUnusableError,
@@ -457,7 +458,7 @@ async def test_a_receipt_then_a_rejecting_result_rejects_the_arm(station: FakeSt
     try:
         await session.async_connect()
         reply_later(station, {"cmd": 1224, "code": -104})
-        with pytest.raises(CommandRejectedError) as rejected:
+        with pytest.raises(AccountRejectedError) as rejected:
             await session.async_set_guard_mode(GuardMode.HOME, timeout=2.0)
         receipts = session.stats().receipts_by_code
     finally:
@@ -700,7 +701,7 @@ async def test_send_takes_only_its_own_zero_code_reply_as_applied(station: FakeS
         asyncio.get_running_loop().call_later(0.2, station.push_camera_event)
         foreign = await session.async_send_command(1277, channel=0, payload=body, timeout=1.0)
         reply_later(station, {"cmd": 1277, "code": -104})
-        with pytest.raises(CommandRejectedError) as rejected:
+        with pytest.raises(AccountRejectedError) as rejected:
             await session.async_send_command(1277, channel=0, payload=body, timeout=3.0)
         reply_later(station, {"cmd": "1277", "mIntRet": 0})
         applied = await session.async_send_command(1277, channel=0, payload=body, timeout=3.0)
@@ -903,7 +904,7 @@ async def test_ecb_scalar_success_and_rejection(station: FakeStation) -> None:
 
     rejected = make_session(station, Provider(station, account_id="f" * 40))
     try:
-        with pytest.raises(CommandRejectedError) as info:
+        with pytest.raises(AccountRejectedError) as info:
             await rejected.async_send_ecb_scalar(1253, 1)
     finally:
         await rejected.async_close()
@@ -946,7 +947,7 @@ async def test_a_string_command_is_stored_on_its_channel_and_a_foreign_one_refus
 
     rejected = make_session(station, Provider(station, account_id="f" * 40))
     try:
-        with pytest.raises(CommandRejectedError) as info:
+        with pytest.raises(AccountRejectedError) as info:
             await rejected.async_send_string_command(1215, "GMT0|1.1000", channel=0)
     finally:
         await rejected.async_close()
@@ -1618,7 +1619,7 @@ async def test_storage_rejection_and_silence_are_typed_errors(station: FakeStati
     station.storage_reply_code = -104
     session = make_session(station, Provider(station))
     try:
-        with pytest.raises(CommandRejectedError) as rejected:
+        with pytest.raises(AccountRejectedError) as rejected:
             await session.async_get_storage()
         assert (rejected.value.command, rejected.value.code) == (1307, -104)
         station.storage_reply_code = 0
@@ -2152,14 +2153,14 @@ async def test_rejected_media_open_raises_the_code(station: FakeStation) -> None
     session = make_session(station, Provider(station))
     try:
         stream = await session.async_open_recording("/zx/clip.zxvideo", 0)
-        with pytest.raises(CommandRejectedError, match="-104"):
+        with pytest.raises(AccountRejectedError, match="-104"):
             await anext(stream)
     finally:
         await session.async_close()
     stats = session.stats()
     assert stats.media_opens == 1
-    assert stats.media_failures_by_type == {"CommandRejectedError": 1}
-    assert stats.media_failures_by_channel == {"0": {"CommandRejectedError": 1}}
+    assert stats.media_failures_by_type == {"AccountRejectedError": 1}
+    assert stats.media_failures_by_channel == {"0": {"AccountRejectedError": 1}}
 
 
 async def test_a_wake_failure_receipt_fails_the_live_open_at_once(
@@ -2251,6 +2252,8 @@ async def test_a_started_stream_clears_the_wake_backoff(
     ("code", "kind", "text"),
     [
         (-108, CommandUnsupportedError, "NOT_HANDLED"),
+        (-103, CommandUnsupportedError, "command receipt INVALID_COMMAND"),
+        (-104, AccountRejectedError, "command receipt INVALID_ACCOUNT"),
         (-204, CameraWakeError, "could not wake the camera (XM_WIFI_WAKEUP_FAIL)"),
         (-205, CameraWakeError, "(XM_WIFI_TIMEOUT)"),
         (-114, CommandRejectedError, "command receipt DEV_BUSY"),
@@ -2264,6 +2267,26 @@ def test_a_command_receipt_error_names_its_code(
     assert type(err) is kind
     assert (err.command, err.code) == (1234, code)
     assert str(err).endswith(text)
+
+
+@pytest.mark.parametrize(
+    ("code", "kind", "text"),
+    [
+        (-104, AccountRejectedError, "code -104: INVALID_ACCOUNT"),
+        (-103, CommandUnsupportedError, "code -103: INVALID_COMMAND"),
+        (-110, CommandRejectedError, "code -110: INVALID_PARAM"),
+        (-1, CommandRejectedError, "code -1"),
+    ],
+)
+def test_a_result_code_raises_its_error(
+    code: int, kind: type[CommandRejectedError], text: str
+) -> None:
+    with pytest.raises(CommandRejectedError) as err:
+        session_module._raise_for_code(1234, code)
+    assert type(err.value) is kind
+    assert (err.value.command, err.value.code) == (1234, code)
+    assert str(err.value).endswith(text)
+    session_module._raise_for_code(1234, 0)  # success raises nothing
 
 
 async def test_one_media_stream_per_session(station: FakeStation) -> None:
@@ -3609,6 +3632,18 @@ async def test_async_event_summary_returns_counts_and_path(station: FakeStation)
         await session.async_close()
 
 
+async def test_async_event_summary_rejection_raises_its_code(station: FakeStation) -> None:
+    station.event_count_reply_code = -104
+    session = make_session(station, Provider(station))
+    try:
+        with pytest.raises(AccountRejectedError) as rejected:
+            await session.async_event_summary(SYNTHETIC.camera_sn, timeout=2.0)
+    finally:
+        await session.async_close()
+    assert rejected.value.code == -104
+    assert str(rejected.value).endswith("INVALID_ACCOUNT")
+
+
 async def test_async_event_summary_unnamed_single_item(station: FakeStation) -> None:
     path = "/media/mmcblk0p1/Camera00/event/202609/20260917/20260917223859_snapshot.jpg"
     station.event_summaries = {
@@ -4350,9 +4385,15 @@ async def test_an_rsa_session_takes_command_results_in_clear(
     assert _messages(caplog, f"rx frame 0x06a4 ch0 v1 enc{encryption} (132 bytes)")
 
 
-@pytest.mark.parametrize("code", [-1, 5])
+@pytest.mark.parametrize(
+    ("code", "kind"),
+    [(-1, CommandRejectedError), (5, CommandRejectedError), (-104, AccountRejectedError)],
+)
 async def test_a_refused_recipe_raises_the_result_code(
-    station: FakeStation, code: int, monkeypatch: pytest.MonkeyPatch
+    station: FakeStation,
+    code: int,
+    kind: type[CommandRejectedError],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     station.answer_encryption = FRAME_STATIC_ECB
     station.answer_tail = _NOISE
@@ -4363,6 +4404,7 @@ async def test_a_refused_recipe_raises_the_result_code(
             await session.async_run_recipe(goto_preset(2), timeout=1.0)
     finally:
         await session.async_close()
+    assert type(err.value) is kind
     assert (err.value.code, station.preset_gotos) == (code, [])
 
 
@@ -4547,7 +4589,7 @@ async def test_a_scalar_arm_refused_raises_its_code(station: FakeStation) -> Non
             await session.async_set_guard_mode(GuardMode.HOME, timeout=3.0, scalar=True)
     finally:
         await session.async_close()
-    assert type(err.value) is CommandRejectedError
+    assert type(err.value) is AccountRejectedError
     assert (err.value.command, err.value.code) == (1224, -104)
     assert session.guard_mode != GuardMode.HOME
 
@@ -4568,6 +4610,7 @@ async def test_a_scalar_setting_refused_as_invalid_is_unsupported(station: FakeS
     [
         (RECEIPT_NOT_HANDLED, CommandUnsupportedError),
         (-103, CommandUnsupportedError),
+        (-104, AccountRejectedError),
         (-1, CommandRejectedError),
     ],
 )
