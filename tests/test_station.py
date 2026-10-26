@@ -3134,11 +3134,14 @@ def test_live_support_of_a_standalone_camera_follows_its_handler() -> None:
     assert "single_no_ext" in evidence.source
 
 
-def _station_of(serial: str, device_type: int) -> Station:
+def _station_of(
+    serial: str, device_type: int, sub_devices: tuple[CloudDevice, ...] = ()
+) -> Station:
     device = CloudDevice(
         device_sn=serial, device_type=device_type, name="HB", p2p_did=SYNTHETIC.did
     )
-    return Station(device, _unconnected_station(host=None, local_ip=None, local_port=0).session)
+    session = _unconnected_station(host=None, local_ip=None, local_port=0).session
+    return Station(device, session, sub_devices=sub_devices)
 
 
 def test_local_events_of_a_homebase_3_is_verified() -> None:
@@ -3163,6 +3166,84 @@ def test_local_events_of_a_model_without_a_profile_is_unknown() -> None:
     evidence = _station_of("T8002" + SYNTHETIC.station_sn[5:], 0).local_events
     assert evidence.support is Support.UNKNOWN
     assert evidence.source == "no profile for this model"
+
+
+_T8530_SN = "T8530P0000000001"
+_T8101_SN = "T8101P0000000001"
+
+
+def _sub(serial: str, device_type: int, channel: int) -> CloudDevice:
+    return CloudDevice(
+        device_sn=serial,
+        device_type=device_type,
+        name="sub",
+        station_sn=SYNTHETIC.station_sn,
+        channel=channel,
+    )
+
+
+def test_local_detections_of_a_measured_camera_behind_a_homebase_3_are_its_own() -> None:
+    evidence = _hub_with(CAMERA).local_detections_for(SYNTHETIC.camera_sn)
+    assert evidence.support is Support.VERIFIED
+    assert "person and vehicle detections" in evidence.source
+
+
+@pytest.mark.parametrize(("serial", "code"), [(_T8530_SN, "T8530"), (_T8101_SN, "T8101")])
+def test_local_detections_of_another_camera_behind_a_homebase_3_extend_the_stations(
+    serial: str, code: str
+) -> None:
+    hub = _hub_with(_sub(_T8530_SN, 0, 1), _sub(_T8101_SN, 0, 2))
+    station = hub.local_events
+    assert hub.local_detections_for(serial) == Evidence(
+        Support.VERIFIED,
+        f"{station.source}; extended to {code}, which the eufy app shows as a camera",
+        station.note,
+    )
+
+
+def test_a_homebase_3_has_no_local_detections_of_its_own() -> None:
+    evidence = _hub_with(CAMERA).local_detections_for(SYNTHETIC.station_sn)
+    assert evidence == Evidence(
+        Support.UNKNOWN,
+        "T8030 has no camera: no detections of its own",
+        "its alarm and guard-mode changes arrive as other P2P frames",
+    )
+
+
+def test_local_detections_of_a_motion_sensor_behind_a_homebase_3_need_cloud_push() -> None:
+    evidence = _hub_with(CAMERA, MOTION_SENSOR).local_detections_for(SENSOR_SN)
+    assert evidence == Evidence(
+        Support.UNKNOWN,
+        "no local detection push recorded for T8910",
+        "the station's local push is verified for camera detections only; this "
+        "device's detections arrive through cloud push",
+    )
+
+
+def test_local_detections_of_an_uncatalogued_device_are_unknown() -> None:
+    evidence = _hub_with(_sub("TZZZZP0000000001", 0, 3)).local_detections_for("TZZZZP0000000001")
+    assert evidence.support is Support.UNKNOWN
+    assert evidence.source == "no local detection push recorded for this model"
+
+
+def test_local_detections_of_an_unverified_stations_devices_are_the_stations() -> None:
+    hb2_sn = "T8010" + SYNTHETIC.station_sn[5:]
+    camera = dataclasses.replace(CAMERA, station_sn=hb2_sn)
+    sensor = dataclasses.replace(MOTION_SENSOR, station_sn=hb2_sn)
+    station = _station_of(hb2_sn, 0, sub_devices=(camera, sensor))
+    assert station.local_events.support is Support.UNKNOWN
+    for serial in (hb2_sn, SYNTHETIC.camera_sn, SENSOR_SN):
+        assert station.local_detections_for(serial) == station.local_events
+
+
+def test_local_detections_of_a_standalone_camera_are_its_own_entry() -> None:
+    station = _standalone_t8170()
+    assert station.local_detections_for(_T8170_SN) == station.local_events
+
+
+def test_local_detections_of_a_device_not_paired_here_are_unknown() -> None:
+    evidence = _hub_with(CAMERA).local_detections_for(SENSOR_SN)
+    assert evidence == Evidence(Support.UNKNOWN, "the device is not paired to this station")
 
 
 async def test_a_t8410_refuses_every_slot_call_before_sending(

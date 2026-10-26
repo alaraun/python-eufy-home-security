@@ -3168,8 +3168,8 @@ class Station:
         the :attr:`~.devices.capabilities.Capability.LOCAL_EVENTS` entry of the
         station's own model, else ``UNKNOWN`` with the reason.
 
-        The push is the station's, so every paired device follows it; a standalone
-        camera's is its own model's entry. Only ``VERIFIED`` means detections arrive
+        A standalone camera's is its own model's entry; :meth:`local_detections_for`
+        grades each device of the station. Only ``VERIFIED`` means detections arrive
         over the LAN; for any other grade a consumer needs cloud push
         (``EufySecurity.async_start(push=True)``) to receive them.
         """
@@ -3178,6 +3178,55 @@ class Station:
         return listed or Evidence(
             Support.UNKNOWN,
             f"no local event push recorded for {self._product_code(self.serial) or 'this model'}",
+        )
+
+    def local_detections_for(self, device_sn: str) -> Evidence:
+        """Whether this station pushes ``device_sn``'s detections over the P2P session:
+        the :class:`~.events.SecurityEvent` detections of that device, a motion
+        sensor's ``msg_type`` 14 motion included.
+
+        Not covered: a doorbell's ring, a lock's events, and the station's alarm
+        (``msg_type`` 10) and arming (``msg_type`` 9) pushes; a station sends no alarm
+        or arming push over P2P but reports the same facts in other frames (see
+        ``docs/protocol/events.md`` § Station pushes: arming and alarm, § Alarm over P2P).
+
+        :attr:`local_events` for every device of a station whose own grade is not
+        ``VERIFIED``. Behind a ``VERIFIED`` station, a model the eufy app shows as a
+        camera (:attr:`~.devices.types.DeviceModel.has_camera`: a video doorbell or
+        video lock too) takes its own model's ``VERIFIED`` entry (a standalone camera
+        itself: :attr:`local_events`), else the station's grade with a source naming the
+        extension; any other device (the station itself without a camera, a sensor, a
+        keypad, a lock without a camera, an uncatalogued model) is ``UNKNOWN``, so its
+        detections need cloud push. ``UNKNOWN`` for a device not paired here.
+        """
+        if not self._is_paired(device_sn):
+            return Evidence(Support.UNKNOWN, _NOT_PAIRED)
+        station = self.local_events
+        if station.support is not Support.VERIFIED:
+            return station
+        model = model_for_serial(device_sn)
+        if model is None or not model.has_camera:
+            code = self._product_code(device_sn) or "this model"
+            if device_sn == self.serial:
+                return Evidence(
+                    Support.UNKNOWN,
+                    f"{code} has no camera: no detections of its own",
+                    "its alarm and guard-mode changes arrive as other P2P frames",
+                )
+            return Evidence(
+                Support.UNKNOWN,
+                f"no local detection push recorded for {code}",
+                "the station's local push is verified for camera detections only; this "
+                "device's detections arrive through cloud push",
+            )
+        profile = own_profile(device_sn)
+        own = None if profile is None else profile.capabilities.get(Capability.LOCAL_EVENTS)
+        if own is not None and own.support is Support.VERIFIED:
+            return own
+        return Evidence(
+            station.support,
+            f"{station.source}; extended to {model.model}, which the eufy app shows as a camera",
+            station.note,
         )
 
     def _ptz_unsupported_reason(self, device_sn: str, actions: Sequence[str]) -> str:

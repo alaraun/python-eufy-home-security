@@ -169,6 +169,25 @@ def test_the_apps_category_decides_where_it_differs_from_the_name(
     assert MODELS[model].kind is kind
 
 
+@pytest.mark.parametrize(
+    ("model", "has_camera"),
+    [
+        ("T8160", True),
+        ("T8532", True),  # a video lock: the camera category, lock kind
+        ("T8101", True),  # under no category: camera kind
+        ("T8212", True),  # under no category: doorbell kind
+        ("T8910", False),
+        ("T8960", False),  # a keypad under the generic sensor category
+        ("T8520", False),  # a lock without a camera
+        ("T8030", False),
+    ],
+)
+def test_a_model_has_a_camera_by_the_apps_category_or_its_kind(
+    model: str, has_camera: bool
+) -> None:
+    assert MODELS[model].has_camera is has_camera
+
+
 def test_a_hand_written_entry_carries_the_apps_categories_and_kind() -> None:
     generated = {row[0]: row for row in APP_MODELS}
     hand = [m for m in MODELS.values() if not m.evidence.source.startswith("eufy app 6.1.10")]

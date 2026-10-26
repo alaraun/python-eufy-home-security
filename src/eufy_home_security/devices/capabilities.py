@@ -366,7 +366,7 @@ _T8161 = DeviceProfile(
             Capability.LOCAL_EVENTS: Evidence(
                 Support.UNKNOWN,
                 "no detection push over P2P observed from a T8161",
-                "the push is the station's: Station.local_events grades it",
+                "the push is the station's: Station.local_detections_for grades it per device",
             ),
             Capability.CLOUD_EVENTS: Evidence(
                 Support.DECLARED, "app code relays detections over FCM"

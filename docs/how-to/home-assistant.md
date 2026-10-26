@@ -470,7 +470,7 @@ What each reach gives:
 | state, guard mode | read at start and kept current | only from a push after it changes |
 | arm / disarm, settings | yes | **no** |
 | live view, snapshots, recordings | yes | **no** |
-| detections and other events | yes (station and push; camera detections from the station only where `station.local_events` is verified) | yes (push) |
+| detections and other events | yes (station and push; detections from the station only for a device whose `station.local_detections_for(device_sn)` is verified) | yes (push) |
 
 The library has no cloud command path, so a remote station is monitor-only. Say so in
 the flow before the user enables one.
@@ -634,11 +634,34 @@ A `DataUpdateCoordinator[StationState]` per station:
 - Push (FCM) is opt-in and needs the cloud; its start can take its whole deadline. If
   the user enabled it, start it after the platforms are forwarded, as a background task:
   `entry.async_create_background_task(hass, eufy.async_start(p2p=False, push=True), …)`.
-- **Which stations need push for detections:** `station.local_events` (an `Evidence`)
-  says whether the station pushes its cameras' detections over P2P; its paired devices
-  follow it. Only `Support.VERIFIED` (a HomeBase 3) delivers them locally; for any other
-  grade (a HomeBase 2, an uncatalogued station) the detections arrive by cloud push only,
-  so offer or require push for that station and show `local_events.source` as the reason.
+- **Which devices need push for their detections:**
+  `station.local_detections_for(device_sn)` (an `Evidence`) says whether the station
+  pushes that device's detections (`SecurityEvent.detection`, a motion sensor's
+  `msg_type` 14 motion included) over P2P. Only `Support.VERIFIED` delivers them
+  locally; for any other grade they arrive by cloud push only, so offer or require push
+  for that station, name the device, and show the evidence's `source` as the reason.
+  `station.local_events` is the station's own grade, for its cameras.
+
+  | device | `local_detections_for` |
+  |---|---|
+  | any device of a station whose `station.local_events` is not verified (a HomeBase 2, an uncatalogued station), and a standalone camera itself | `station.local_events` |
+  | behind a verified station (a HomeBase 3): a paired model the eufy app shows as a camera (`DeviceModel.has_camera`: video doorbells and video locks too) | verified: its own model's entry where it was measured, else the station's with the source naming the extension to that model |
+  | behind a verified station: the station itself (no camera, so no detections of its own), and any other paired device (motion, entry and other sensors, keypads, locks without a camera, uncatalogued models) | unknown: a sensor's motion (`msg_type` 14) has not been seen over P2P |
+  | a device not paired to the station | unknown |
+
+  It does not cover a doorbell's ring, a lock's events, or the station's alarm
+  (`msg_type` 10) and arming (`msg_type` 9) pushes: a station sends no alarm or arming
+  push over P2P and reports the alarm and the guard mode in other P2P frames
+  (`AlarmChanged`, the guard mode; see
+  [Station pushes: arming and alarm](../protocol/events.md#station-pushes-arming-and-alarm)
+  and [Alarm over P2P](../protocol/events.md#alarm-over-p2p)).
+
+  So with cloud push off, a HomeBase 3 delivers its cameras' detections but is not known
+  to deliver a motion sensor's motion: a sensor's motion entity needs push. A sensor push
+  that does arrive over P2P is decoded like the cloud one (`SecurityEvent.detection` is
+  `MOTION` for `msg_type` 14). `SubDeviceState.pir_event_ms` (param 1605, the sensor's
+  last PIR event time) changes only when a parameter dump carries a new value; the library
+  emits no motion event from it.
 - **Push status:** `PushChanged(running, error)` arrives on every change, and
   `eufy.push_running` / `eufy.push_error` give it on demand; `async_start` never raises for
   push. While push is enabled but not running, raise a "push is not running" repair

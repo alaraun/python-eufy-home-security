@@ -20,6 +20,9 @@ from .support import Evidence, Support
 
 SERIAL_PREFIX_LEN: Final = 5
 
+#: The eufy app's product category of every model it shows a camera card for.
+CAMERA_CATEGORY: Final = "Camera"
+
 
 class DeviceKind(StrEnum):
     """What role a device plays in a eufy Security system."""
@@ -33,6 +36,10 @@ class DeviceKind(StrEnum):
     OTHER = "other"
 
 
+#: The kinds :attr:`DeviceModel.has_camera` counts for a model filed under no category.
+_CAMERA_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class DeviceModel:
     """One hardware model.
@@ -41,7 +48,7 @@ class DeviceModel:
     the ``device_type`` the cloud device list reports, recorded only where a source
     states it. ``categories`` are the eufy app's product categories of the model,
     nearest first (``("VideoDoorbell", "Camera")``): the app shows a camera card and a
-    live view for every model under ``"Camera"``, a video doorbell and a video lock
+    live view for every model under :data:`CAMERA_CATEGORY`, a video doorbell and a video lock
     included. Empty where the app files the model under no category.
     """
 
@@ -51,6 +58,13 @@ class DeviceModel:
     cloud_device_type: int | None
     evidence: Evidence
     categories: tuple[str, ...] = ()
+
+    @property
+    def has_camera(self) -> bool:
+        """Whether the eufy app shows the model as a camera: filed under
+        :data:`CAMERA_CATEGORY` (a video doorbell or video lock too), or of camera or
+        doorbell kind (a model the app files under no category)."""
+        return CAMERA_CATEGORY in self.categories or self.kind in _CAMERA_KINDS
 
 
 def _register(registry: dict[str, DeviceModel], *models: DeviceModel) -> None:
