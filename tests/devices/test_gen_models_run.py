@@ -1,6 +1,7 @@
 """A settings-generator run (scripts/gen_models.py, ``_generate_all``) writes every model
-that builds, reports each one that fails, in model order, and exits 1 at the end; the
-same for one job in process and for several in worker processes."""
+that builds, reports each one that fails and what each printed, in model order whatever
+order the models finish in, and exits 1 at the end; the same for one job in process and
+for several in worker processes."""
 
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -32,6 +34,7 @@ def _load(name: str) -> ModuleType:
 
 gen_models = _load("gen_models")
 PNS = ["T9ZZ1", "T9ZZ2", "T9ZZ3", "T9ZZ4", "T9ZZ5"]  # product codes named nowhere
+ORDER_GATE: Path | None = None  # set: the first model finishes only after the last one
 
 # Several jobs fork worker processes: that runs in a fresh interpreter without the test
 # runner's threads, as on the command line.
@@ -44,6 +47,7 @@ spec.loader.exec_module(test)
 test.gen_models.generate = test._fake_generate
 test.gen_models.DRIVERS.close()  # as an earlier run leaves it
 tmp = Path(sys.argv[2])
+test.ORDER_GATE = tmp / "last-model-done"
 sys.exit(test.gen_models._generate_all(test._args(tmp, 3), tmp, tmp / "out", quiet=False))
 """
 
@@ -51,6 +55,15 @@ sys.exit(test.gen_models._generate_all(test._args(tmp, 3), tmp, tmp / "out", qui
 def _fake_generate(pn: str, *_: Any, **__: Any) -> tuple[dict[str, Any], dict[str, int]]:
     if gen_models.DRIVERS._closed:
         raise gen_models.GeneratorError(f"{pn}: driver pool closed")
+    if pn == PNS[0] and ORDER_GATE is not None:
+        deadline = time.monotonic() + 30
+        while not ORDER_GATE.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ORDER_GATE.exists()
+    if pn == PNS[-1]:
+        print(f"{pn}: a driver notice", file=sys.stderr)
+        if ORDER_GATE is not None:
+            ORDER_GATE.touch()
     if pn == "T9ZZ2":
         raise gen_models.CheckError(f"{pn} (SINGLE): 1 codec mismatches")
     if pn == "T9ZZ4":
@@ -91,6 +104,8 @@ def _check_run(rc: int, out_dir: Path, out: str, err: str) -> set[int]:
     assert lines[1] == "T9ZZ4: KeyError: 'eunmList'"
     assert lines[2] == "Traceback (most recent call last):"
     assert err.count("Traceback") == 1
+    assert lines[-2] == "T9ZZ5: a driver notice"
+    assert err.count("notice") == 1
     assert lines[-1] == "check failed, not written: T9ZZ2 T9ZZ4"
     return {int(p) for p in re.findall(r'"pid": (\d+)', out.split("total", maxsplit=1)[0])}
 

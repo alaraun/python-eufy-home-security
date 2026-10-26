@@ -36,8 +36,10 @@ from __future__ import annotations
 import argparse
 import atexit
 import base64
+import contextlib
 import copy
 import importlib.util
+import io
 import json
 import multiprocessing
 import os
@@ -1259,25 +1261,29 @@ type _Result = tuple[str, str | None, dict[str, int], str]
 
 
 def _build(task: _Task) -> _Result:
-    """``(product code, file text or None, counters, failure report)`` of one model. A
-    model that fails is reported, not raised, so the run goes on to the end."""
+    """``(product code, file text or None, counters, report)`` of one model; the report
+    holds what the model printed to stderr (driver notices) and, for a model that fails,
+    the failure. A failure is reported, not raised, so the run goes on to the end; the
+    report is returned, not printed, so the run prints the reports in model order."""
     pn = task.product_code
-    try:
-        doc, counts = generate(
-            pn,
-            task.cache,
-            task.labels,
-            task.tree,
-            task.app_version,
-            reference=task.reference,
-            titles=task.titles,
-            released=task.released,
-        )
-    except GeneratorError as err:
-        return pn, None, {}, f"{err}\n"
-    except Exception as err:  # a shape the generator does not handle
-        return pn, None, {}, f"{pn}: {type(err).__name__}: {err}\n{traceback.format_exc()}"
-    return pn, codec.dump(doc), counts, ""
+    with contextlib.redirect_stderr(io.StringIO()) as notes:
+        try:
+            doc, counts = generate(
+                pn,
+                task.cache,
+                task.labels,
+                task.tree,
+                task.app_version,
+                reference=task.reference,
+                titles=task.titles,
+                released=task.released,
+            )
+        except GeneratorError as err:
+            return pn, None, {}, f"{notes.getvalue()}{err}\n"
+        except Exception as err:  # a shape the generator does not handle
+            failure = f"{pn}: {type(err).__name__}: {err}\n{traceback.format_exc()}"
+            return pn, None, {}, notes.getvalue() + failure
+    return pn, codec.dump(doc), counts, notes.getvalue()
 
 
 def _open_drivers() -> None:
@@ -1343,8 +1349,8 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     total: dict[str, int] = {}
     failed: list[str] = []
     for pn, text, counts, report in _run_tasks(tasks, max(1, min(args.jobs, len(tasks)))):
+        print(report, end="", file=sys.stderr)
         if text is None:
-            print(report, end="", file=sys.stderr)
             failed.append(pn)
             continue
         (out / f"{pn}.json").write_text(text, encoding="utf-8")
