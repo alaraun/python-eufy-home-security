@@ -243,6 +243,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--check", action="store_true", help="compare with --out, write nothing")
     args = parser.parse_args(argv)
+    if (refused := _harness().node.node_refusal("gen_ptz")) is not None:
+        return refused
     text = render(generate(args.cache))
     if args.check:
         same = args.out.exists() and args.out.read_text(encoding="utf-8") == text

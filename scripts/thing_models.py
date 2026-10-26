@@ -13,8 +13,8 @@ derives the committed artefacts from it:
                holds the library's builders to them.
 ``inventory``  the generated part of ``docs/reference/thing-models.md``.
 
-Handlers run offline in Node (``scripts/gen_models_driver.js``); ``node`` must be
-on PATH. The cache holds vendor code: keep it out of the repository (``.work/``).
+Handlers run offline in Node (``scripts/gen_models_driver.js``); ``node`` of the major
+``scripts/package.json`` pins must be on PATH. The cache holds vendor code: keep it out of the repository (``.work/``).
 """
 
 from __future__ import annotations
@@ -320,8 +320,8 @@ def _load_node() -> ModuleType:
     return module
 
 
-_workers = _load_node()
-DRIVERS = _workers.DriverPool()  # one Node worker per thread that runs handlers
+node = _load_node()
+DRIVERS = node.DriverPool()  # one Node worker per thread that runs handlers
 
 
 def run_driver(handler: Path, requests: Sequence[Mapping[str, Any]]) -> list[Any]:
@@ -329,7 +329,7 @@ def run_driver(handler: Path, requests: Sequence[Mapping[str, Any]]) -> list[Any
     in one job on this thread's worker; HarnessError when the job fails."""
     try:
         return DRIVERS.run({"handler": str(handler), "requests": list(requests)})  # type: ignore[no-any-return]
-    except _workers.DriverError as err:
+    except node.DriverError as err:
         raise HarnessError(f"node failed on {handler.name}: {err}") from err
 
 

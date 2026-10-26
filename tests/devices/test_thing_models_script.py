@@ -1,4 +1,5 @@
-"""``scripts/thing_models.py``'s product-code resolution for ``fetch``."""
+"""``scripts/thing_models.py``: the product-code resolution for ``fetch``, and a driver
+failure as a HarnessError."""
 
 from __future__ import annotations
 
@@ -6,6 +7,8 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
+
+import pytest
 
 from eufy_home_security.testing import SYNTHETIC
 
@@ -36,3 +39,14 @@ def test_product_codes_fall_back_to_the_serials_model() -> None:
     assert _script().product_codes(devices) == sorted(
         {SYNTHETIC.station_sn[:5], SYNTHETIC.camera_sn[:5], "T8161"}
     )
+
+
+def test_a_driver_failure_is_a_harness_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    script = _script()
+    failing = script.node.DriverPool([sys.executable, "-c", "import sys; sys.exit(3)"], restarts=0)
+    monkeypatch.setattr(script, "DRIVERS", failing)
+    try:
+        with pytest.raises(script.HarnessError, match=r"^node failed on X\.js: driver exit 3 "):
+            script.run_driver(Path("X.js"), [])
+    finally:
+        failing.close()

@@ -285,6 +285,17 @@ class DriverPool:
         worker.stop()
 
 
+def node_refusal(prog: str) -> int | None:
+    """2 after printing ``<prog>: <why>`` when the driver cannot run here (the
+    ``node_problem``), for a generator to exit with before it starts; None when it can."""
+    try:
+        node_path()
+    except NodeError as err:
+        print(f"{prog}: {err}", file=sys.stderr)
+        return 2
+    return None
+
+
 @functools.cache
 def node_path() -> str:
     """The ``node`` on PATH, checked once against the pinned major; NodeError (the

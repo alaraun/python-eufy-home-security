@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -312,6 +313,28 @@ def test_the_default_worker_refuses_node_of_another_major(
     finally:
         drivers.close()
         node.node_path.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "script", ["gen_ptz", "gen_live_open", "gen_station_config", "gen_device_alarm"]
+)
+def test_a_generator_refuses_node_of_another_major_before_it_starts(
+    tmp_path: Path, script: str
+) -> None:
+    _node_script(tmp_path, "v22.11.0")
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / f"{script}.py"), "--check"],
+        env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}"},
+        capture_output=True,
+        text=True,
+        timeout=50,
+        check=False,
+    )
+    assert (result.returncode, result.stdout) == (2, "")
+    assert result.stderr == (
+        f"{script}: node v22.11.0 found; the generators need Node 24.x"
+        " (scripts/package.json engines.node)\n"
+    )
 
 
 # ── the real driver ─────────────────────────────────────────────────────────
