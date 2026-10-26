@@ -223,9 +223,9 @@ def test_close_fails_the_job_in_flight_without_a_rerun(
     assert "rerun" not in capsys.readouterr().err
 
 
-def _node_script(tmp_path: Path, version: str) -> str:
+def _node_script(tmp_path: Path, version: str, *, then: str = "") -> str:
     script = tmp_path / "node"
-    script.write_text(f"#!/bin/sh\necho {version}\n", encoding="utf-8")
+    script.write_text(f"#!/bin/sh\n{then}echo {version}\n", encoding="utf-8")
     script.chmod(0o755)
     return str(script)
 
@@ -243,17 +243,54 @@ def test_the_pinned_major_comes_from_package_json(tmp_path: Path) -> None:
         node.node_major(_package(tmp_path, ">=22"))
 
 
-def test_node_of_the_pinned_major_passes(tmp_path: Path) -> None:
+@pytest.mark.parametrize("version", ["v24.1.0", "v24.0.0-nightly20250101a1b2c3d4e5"])
+def test_node_of_the_pinned_major_passes(tmp_path: Path, version: str) -> None:
     package = _package(tmp_path, "24.x")
-    assert node.node_problem(_node_script(tmp_path, "v24.1.0"), package) is None
+    assert node.node_problem(_node_script(tmp_path, version), package) is None
 
 
-@pytest.mark.parametrize("version", ["v22.11.0", "v240.0.0", "garbage"])
+@pytest.mark.parametrize(
+    "version", ["v22.11.0", "v240.0.0", "v25.0.0-nightly20250101a1b2c3d4e5", "garbage"]
+)
 def test_node_of_another_major_is_named(tmp_path: Path, version: str) -> None:
     problem = node.node_problem(_node_script(tmp_path, version), _package(tmp_path, "24.x"))
     assert problem is not None
     assert "need Node 24.x" in problem
     assert version in problem
+
+
+def test_the_problem_names_the_pin_file_in_the_repository(tmp_path: Path) -> None:
+    problem = node.node_problem(_node_script(tmp_path, "v22.11.0"))
+    assert problem is not None
+    assert problem.endswith("(scripts/package.json engines.node)")
+
+
+def test_a_node_that_does_not_answer_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(node, "_VERSION_WAIT_S", 0.2)
+    script = _node_script(tmp_path, "v24.1.0", then="exec sleep 30\n")
+    assert node.node_problem(script, _package(tmp_path, "24.x")) == (
+        f"{script} --version: no answer within 0.2 s"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("{", "Expecting property name"),
+        ("[]", "not None"),
+        ('{"engines": "24.x"}', "not None"),
+        ('{"private": true}', "not None"),
+    ],
+)
+def test_a_package_json_without_a_pin_is_named(tmp_path: Path, text: str, message: str) -> None:
+    package = tmp_path / "package.json"
+    package.write_text(text, encoding="utf-8")
+    problem = node.node_problem(_node_script(tmp_path, "v24.1.0"), package)
+    assert problem is not None
+    assert problem.startswith(f"{package}: ")
+    assert message in problem
 
 
 def test_no_node_on_path_is_named(monkeypatch: pytest.MonkeyPatch) -> None:

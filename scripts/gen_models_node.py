@@ -33,6 +33,7 @@ PACKAGE = ROOT / "scripts" / "package.json"
 TIMEOUT_S = 600  # one job
 RESTARTS = 2  # reruns of a job whose worker died
 _STOP_WAIT_S = 5
+_VERSION_WAIT_S = 30
 
 
 class DriverError(RuntimeError):
@@ -40,34 +41,54 @@ class DriverError(RuntimeError):
 
 
 def node_major(package: Path = PACKAGE) -> int:
-    """The Node major ``package`` pins (``engines.node`` = ``"<major>.x"``)."""
-    pinned = json.loads(package.read_text(encoding="utf-8")).get("engines", {}).get("node")
+    """The Node major ``package`` pins (``engines.node`` = ``"<major>.x"``); DriverError
+    when the file does not pin one."""
+    try:
+        data = json.loads(package.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as err:  # unreadable, or not JSON
+        raise DriverError(f"{_shown(package)}: {err}") from err
+    engines = data.get("engines") if isinstance(data, dict) else None
+    pinned = engines.get("node") if isinstance(engines, dict) else None
     match = re.fullmatch(r"(\d+)\.x", pinned) if isinstance(pinned, str) else None
     if match is None:
-        raise DriverError(f"{package}: engines.node must be '<major>.x', not {pinned!r}")
+        raise DriverError(f"{_shown(package)}: engines.node must be '<major>.x', not {pinned!r}")
     return int(match[1])
 
 
 def node_problem(node: str | None = None, package: Path = PACKAGE) -> str | None:
-    """Why the driver cannot run: no ``node`` on PATH, or a major other than the pinned
-    one; None when it can."""
+    """Why the driver cannot run: no ``node`` on PATH, one that does not answer
+    ``--version``, a major other than the pinned one, or no pin; None when it can."""
     node = node or shutil.which("node")
     if node is None:
         return "node is not on PATH"
     try:
         found = subprocess.run(
-            [node, "--version"], capture_output=True, text=True, timeout=30, check=False
+            [node, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=_VERSION_WAIT_S,
+            check=False,
         ).stdout.strip()
+    except subprocess.TimeoutExpired:
+        return f"{node} --version: no answer within {_VERSION_WAIT_S} s"
     except OSError as err:
         return f"{node}: {err}"
-    want = node_major(package)
+    try:
+        want = node_major(package)
+    except DriverError as err:
+        return str(err)
     match = re.fullmatch(r"v(\d+)\.\d+\.\d+\S*", found)
     if match is None or int(match[1]) != want:
         return (
             f"node {found or '(no version)'} found; the generators need Node {want}.x "
-            f"({package.name} engines.node)"
+            f"({_shown(package)} engines.node)"
         )
     return None
+
+
+def _shown(path: Path) -> str:
+    """``path`` relative to the repository when inside it."""
+    return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
 
 
 class _WorkerDiedError(Exception):
