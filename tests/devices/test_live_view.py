@@ -38,9 +38,14 @@ def _entry(chn: int, index: int, sensor: int) -> dict[str, int]:
         ("", ()),
         ("[]", ()),
         ("not json", ()),
+        ("null", ()),
+        ("5", ()),
         ('{"type":1,"id":0}', ()),
-        ('[{"type":1}]', ()),
+        ('[{"type":1}]', (Lens(1, 0),)),
+        ('[{"id":1,"extra":2}]', (Lens(0, 1),)),
         ('[{"type":1,"id":0},3]', ()),
+        ('[{"type":1,"id":0},{"type":1,"id":null}]', ()),
+        ('[{"type":1,"id":0},{"type":"x","id":1}]', ()),
     ],
 )
 def test_the_lens_list_reads_as_the_app_reads_it(value: str | None, lenses: tuple[Lens]) -> None:

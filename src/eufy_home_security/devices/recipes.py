@@ -355,7 +355,7 @@ def open_live_stream_nvr(
         payload["station_video_type"] = json_int(player.get("station_video_type")) or 0
         if payload["station_video_type"] not in (0, 1) and player.get("pip_cord"):
             cord = json.loads(player["pip_cord"])
-            payload["pip_cord"] = {k: math.floor(1000 * cord[k] + 0.5) for k in _PIP_CORD_KEYS}
+            payload["pip_cord"] = {k: math.floor(1000 * cord[k] + 0.5) for k in PIP_CORD_KEYS}
     return Recipe(
         identifier="open_live_stream",
         cmd=RecipeCommand.SET_PAYLOAD,
@@ -386,7 +386,8 @@ class StitchMode(IntEnum):
     """One lens with another inset (picture in picture)."""
 
 
-_PIP_CORD_KEYS: Final = ("x1", "y1", "x2", "y2")
+PIP_CORD_KEYS: Final = ("x1", "y1", "x2", "y2")
+"""The keys of a picture-in-picture inset rectangle (``pip_cord``), in order."""
 
 
 def _coalesce(value: Any, default: Any) -> Any:

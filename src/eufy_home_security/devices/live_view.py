@@ -17,7 +17,7 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from ..p2p._json import json_int
-from .recipes import StitchMode
+from .recipes import PIP_CORD_KEYS, StitchMode
 
 LENS_LIST_PARAM: Final = 9240
 """The camera parameter that lists its lenses: a JSON list of ``{"type", "id"}``."""
@@ -39,8 +39,10 @@ class Lens:
 
 
 def parse_lenses(value: str | None) -> tuple[Lens, ...]:
-    """The lenses a :data:`LENS_LIST_PARAM` value lists, in its order; ``()`` for no
-    value, an empty one, ``"[]"`` or one that does not decode, as the app reads it."""
+    """The lenses a :data:`LENS_LIST_PARAM` value lists, in its order, as the app reads
+    it: a missing ``type`` or ``id`` is 0, other keys are ignored, and no value, an
+    empty one or one that does not decode as a whole (not a list, an entry not an
+    object, a field not an integer) lists none."""
     if not value:
         return ()
     try:
@@ -53,7 +55,7 @@ def parse_lenses(value: str | None) -> tuple[Lens, ...]:
     for entry in raw:
         if not isinstance(entry, Mapping):
             return ()
-        kind, ident = json_int(entry.get("type")), json_int(entry.get("id"))
+        kind, ident = json_int(entry.get("type", 0)), json_int(entry.get("id", 0))
         if kind is None or ident is None:
             return ()
         lenses.append(Lens(kind, ident))
@@ -153,7 +155,11 @@ def player_input(
     }
     if not station_fields:
         return out
-    cord = "" if view.pip_cord is None else _compact(dict(zip(_CORD, view.pip_cord, strict=True)))
+    cord = (
+        ""
+        if view.pip_cord is None
+        else _compact(dict(zip(PIP_CORD_KEYS, view.pip_cord, strict=True)))
+    )
     return out | {
         "extValue": 1000,
         "chn_list": _compact([dict(e) for e in view.chn_list]),
@@ -162,9 +168,6 @@ def player_input(
         "station_video_type": view.station_video_type,
         "pip_cord": cord,
     }
-
-
-_CORD: Final = ("x1", "y1", "x2", "y2")
 
 
 def _compact(value: Any) -> str:

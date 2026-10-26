@@ -2915,6 +2915,55 @@ async def test_a_two_lens_camera_behind_a_homebase_3_gets_the_multi_camera_open_
     assert fake.bare_stops == 0
 
 
+async def test_a_plain_multi_camera_product_names_no_camera_type_for_the_moving_lens(
+    station: Station, fake: FakeStation
+) -> None:
+    # A T8215 behind a HomeBase 3 below the firmware its WebRTC route starts at.
+    camera = dataclasses.replace(_two_lens_camera(), device_sn="T8215P2000067890")
+    hub_device = dataclasses.replace(station.device, main_sw_version="3.7.0.0")
+    hub = Station(hub_device, station.session, sub_devices=[camera])
+    assert not hub.app_uses_webrtc(camera.device_sn)
+    async with await hub.async_open_live(camera.device_sn, lens_view=LensView.SUB) as stream:
+        await anext(aiter(stream))
+    (payload,) = fake.live_open_payloads
+    assert (payload["stitch_mode"], payload["chn_list"]) == (1, [_entry(0, 1)])
+    assert payload["camera_type"] == 0
+    async with asyncio.timeout(3):
+        while fake.bare_stops == 0:
+            await asyncio.sleep(0.02)
+    assert fake.bare_stop_frames == [(3, (3).to_bytes(4, "little"))]
+
+
+async def test_a_standalone_multi_camera_product_gets_the_open_without_a_view(
+    fake: FakeStation,
+) -> None:
+    # A T8532 on its own below the firmware its WebRTC route starts at.
+    station = await _standalone(fake, "T8532P2000054321")
+    try:
+        assert not station.app_uses_webrtc(station.serial)
+        async with await station.async_open_live(
+            station.serial, lens_view=LensView.STACKED
+        ) as stream:
+            await anext(aiter(stream))
+        (payload,) = fake.live_open_payloads
+        assert (payload["stitch_mode"], payload["chn_list"]) == (1, [])
+        assert "extValue" not in payload
+        assert not fake.doorbell_payloads
+        async with asyncio.timeout(3):
+            while fake.bare_stops == 0:
+                await asyncio.sleep(0.02)
+        assert fake.bare_stop_frames == [(0, bytes(4))]
+    finally:
+        await station.async_close()
+
+
+def test_a_standalone_device_lists_its_own_lenses(station: Station) -> None:
+    device = dataclasses.replace(
+        station.device, raw={"params": [{"param_type": 9240, "param_value": _LENS_LIST}]}
+    )
+    assert Station(device, station.session).lenses(device.device_sn) == (Lens(1, 0), Lens(1, 1))
+
+
 def test_a_camera_lists_its_lenses_from_the_cloud_parameters(station: Station) -> None:
     camera = _two_lens_camera()
     hub = Station(station.device, station.session, sub_devices=[camera])

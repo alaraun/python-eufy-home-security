@@ -35,7 +35,9 @@ class LiveOpen(StrEnum):
     (:func:`~.recipes.open_live_stream_nvr`; the lenses and layout from
     :mod:`.live_view`)."""
     NVR_LENS = "nvr_lens"
-    """:attr:`NVR` whose ``camera_type`` names the moving lens of a one-lens view."""
+    """:attr:`NVR` whose ``camera_type`` names the moving lens of a one-lens view. Told
+    apart from :attr:`NVR` behind a HomeBase 3 only, where the view reaches the handler;
+    elsewhere the two send the same body and the table records :attr:`NVR`."""
 
 
 NVR_OPENS: Final = frozenset({LiveOpen.NVR, LiveOpen.NVR_LENS})

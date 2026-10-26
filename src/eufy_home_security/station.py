@@ -2946,7 +2946,8 @@ class Station:
         A camera whose handler sends the multi-camera open
         (:data:`~.devices.live_open.NVR_OPENS`) gets the layout ``lens_view`` of its
         lenses (:meth:`lenses`); without it the one the app's live page opens in
-        (:func:`~.devices.live_view.default_lens_view`). Other cameras ignore it.
+        (:func:`~.devices.live_view.default_lens_view`). Only a HomeBase 3 is sent the
+        layout, as the app does; other stations and cameras ignore it.
         """
         ch = self._media_channel(device_sn, channel)
         if preset is not None:

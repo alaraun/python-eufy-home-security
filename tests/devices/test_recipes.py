@@ -215,6 +215,23 @@ def test_the_multi_camera_open_takes_a_page_channel_from_the_player() -> None:
     params = open_live_stream_nvr(channel=3, player={"mChannel": 21}).params
     assert params is not None
     assert params["mChannel"] == 21
+    assert "mChannel" not in params["payload"]
+
+
+def test_the_multi_camera_open_keeps_the_players_other_keys_but_not_the_mapped_ones() -> None:
+    player = {
+        "userId": "u",
+        "streamType": 0,
+        "entryType": 0,
+        "chn_list": "",
+        "stitch_mode": 5,
+        "station_video_type": 0,
+        "key": "k",
+        "extValue": 1000,
+    }
+    payload = _nvr_payload(player)
+    assert {"userId", "streamType", "entryType", "station_video_type"}.isdisjoint(payload)
+    assert (payload["key"], payload["extValue"], payload["stitch_mode"]) == ("k", 1000, 5)
 
 
 @pytest.mark.parametrize(

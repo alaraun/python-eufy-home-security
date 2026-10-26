@@ -1533,11 +1533,13 @@ Capability.LIVE_STREAM)` is `DECLARED` when the library sends the handler's open
 `live_support`. Opening a stream the library cannot open raises `UnsupportedError`
 before anything is sent.
 
-A camera with several lenses (T8172 and others whose handler sends the multi-camera
-open) streams one picture in the layout the eufy app opens with: every lens stacked when
-the camera lists lenses (`station.lenses(device_sn)`), else the fixed lens. Pass
+A device whose handler sends the multi-camera open (the T8172 camera, the T8215
+doorbell, the T8532 and T85M1 video locks and others) streams one picture. Behind a
+HomeBase 3 it is in the layout the eufy app opens with: every lens stacked when the device
+lists lenses (`station.lenses(device_sn)`), else the fixed lens; pass
 `lens_view=LensView.MAIN` / `SUB` / `STACKED` / `PIP` to `async_open_live` for another
-layout; each layout is its own open (see `docs/protocol/media.md` § Multi-camera open).
+layout, each its own open. Behind a HomeBase 2 the app sends no layout, and the library
+ignores `lens_view` there (see `docs/protocol/media.md` § Multi-camera open).
 
 #### What the library gives you
 

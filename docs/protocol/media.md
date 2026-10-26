@@ -435,8 +435,9 @@ others; `nvr` / `nvr_lens` in `devices/_live_open_data.py`), the library builds 
 app does, in three steps (`devices.live_view`, `recipes.open_live_stream_nvr`):
 
 1. **Lenses.** The camera's parameter 9240 lists its lenses as JSON
-   (`[{"type":1,"id":0},{"type":1,"id":1}]`; id 0 the fixed lens, 1 the moving one). An
-   empty, absent or undecodable value lists none. The library reads it from the cloud's
+   (`[{"type":1,"id":0},{"type":1,"id":1}]`; id 0 the fixed lens, 1 the moving one; a
+   missing field reads 0, other keys are ignored). An empty or absent value, or one that
+   does not decode as a whole, lists none. The library reads it from the cloud's
    parameter snapshot of the device (`Station.lenses`).
 2. **View.** The app's live page opens with every lens stacked (`stitch_mode` 5) when the
    camera lists lenses, else on the fixed lens (`stitch_mode` 1); `Station.async_open_live`
@@ -454,6 +455,10 @@ app does, in three steps (`devices.live_view`, `recipes.open_live_stream_nvr`):
    outside picture in picture), as the app's player adds them there; elsewhere `stitch_mode`
    is 1 and `chn_list` empty. `camera_type` is 0, except for a one-lens view of the moving
    lens on products whose handler names it (`nvr_lens`: 1).
+
+Not sent: the `view_mode` -1 the app's player adds to this payload behind a HomeBase 3
+for a few products it lists in its own code (of the products this open reaches over P2P,
+the T8180).
 
 Media is one stream on the camera's channel, as for any HomeBase child: the station
 composes the layout. The stop is the handler's (`LIVE_STOP`): behind a HomeBase 3 a 1350
