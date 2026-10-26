@@ -1,3 +1,6 @@
+import json
+from collections.abc import Mapping
+
 import pytest
 
 from eufy_home_security.devices.recipes import (
@@ -14,6 +17,7 @@ from eufy_home_security.devices.recipes import (
     connect_type,
     free_preset_slot,
     goto_preset,
+    open_live_stream_nvr,
     parse_preset_positions,
     ptz_rotate,
     query_preset_positions,
@@ -173,3 +177,102 @@ def test_the_plain_preset_query_sends_no_data_and_names_its_notify() -> None:
     assert plain.as_handler_dict()["notifySubCmd"] == 6034
     assert plain.answer_cmd == query_preset_positions().answer_cmd == 6034
     assert b'"data":{"value":0}' in query_preset_positions().plaintext()
+
+
+def _nvr_payload(player: Mapping[str, object], **kwargs: bool) -> dict[str, object]:
+    params = open_live_stream_nvr(channel=3, player=player, **kwargs).params
+    assert params is not None
+    payload = params["payload"]
+    assert isinstance(payload, dict)
+    return payload
+
+
+def test_the_multi_camera_open_defaults_as_the_handler_does() -> None:
+    recipe = open_live_stream_nvr(channel=3, player={"userId": "u"})
+    assert recipe.as_handler_dict() == {
+        "cmd": 1350,
+        "subCmd": 1003,
+        "timeout": 15000,
+        "params": {
+            "cmd": 1003,
+            "mChannel": 3,
+            "account_id": "u",
+            "mValue3": 1003,
+            "mValue5": 0,
+            "payload": {
+                "accountId": "u",
+                "streamtype": 2,
+                "camera_type": 0,
+                "entrytype": 0,
+                "stitch_mode": 1,
+                "chn_list": [],
+            },
+        },
+    }
+
+
+def test_the_multi_camera_open_takes_a_page_channel_from_the_player() -> None:
+    params = open_live_stream_nvr(channel=3, player={"mChannel": 21}).params
+    assert params is not None
+    assert params["mChannel"] == 21
+    assert "mChannel" not in params["payload"]
+
+
+def test_the_multi_camera_open_keeps_the_players_other_keys_but_not_the_mapped_ones() -> None:
+    player = {
+        "userId": "u",
+        "streamType": 0,
+        "entryType": 0,
+        "chn_list": "",
+        "stitch_mode": 5,
+        "station_video_type": 0,
+        "key": "k",
+        "extValue": 1000,
+    }
+    payload = _nvr_payload(player)
+    assert {"userId", "streamType", "entryType", "station_video_type"}.isdisjoint(payload)
+    assert (payload["key"], payload["extValue"], payload["stitch_mode"]) == ("k", 1000, 5)
+
+
+@pytest.mark.parametrize(
+    ("entry", "from_lens", "camera_type"),
+    [
+        ({"cameraType": 0, "sensor": 1}, False, 0),
+        ({"cameraType": 0, "sensor": 1}, True, 1),
+        ({"cameraType": 0, "sensor": 0}, True, 0),
+        ({"sensor": 1}, False, 1),
+        ({"cameraType": 2, "sensor": 0}, True, 2),
+    ],
+)
+def test_the_multi_camera_open_names_the_camera_type_of_a_one_lens_view(
+    entry: dict[str, int], from_lens: bool, camera_type: int
+) -> None:
+    player = {"chn_list": json.dumps([entry])}
+    assert _nvr_payload(player, camera_type_from_lens=from_lens)["camera_type"] == camera_type
+
+
+def test_the_multi_camera_open_names_no_camera_type_for_several_lenses() -> None:
+    player = {"chn_list": json.dumps([{"cameraType": 0, "sensor": 1}] * 2)}
+    assert _nvr_payload(player, camera_type_from_lens=True)["camera_type"] == 0
+
+
+_CORD = json.dumps({"x1": 0.0005, "y1": 0.7, "x2": 0.9994, "y2": 0.9})
+
+
+def test_a_picture_in_picture_open_rounds_the_inset_to_thousandths() -> None:
+    payload = _nvr_payload({"stitch_mode": 7, "station_video_type": 9, "pip_cord": _CORD})
+    assert payload["station_video_type"] == 9
+    assert payload["pip_cord"] == {"x1": 1, "y1": 700, "x2": 999, "y2": 900}
+
+
+@pytest.mark.parametrize("video_type", [0, 1])
+def test_a_picture_in_picture_open_of_one_lens_keeps_the_inset_as_given(video_type: int) -> None:
+    payload = _nvr_payload({"stitch_mode": 7, "station_video_type": video_type, "pip_cord": _CORD})
+    assert payload["station_video_type"] == video_type
+    assert payload["pip_cord"] == _CORD
+
+
+def test_only_a_picture_in_picture_open_names_the_station_video_type() -> None:
+    payload = _nvr_payload({"stitch_mode": 5, "station_video_type": 9, "pip_cord": ""})
+    assert "station_video_type" not in payload
+    assert payload["pip_cord"] == ""

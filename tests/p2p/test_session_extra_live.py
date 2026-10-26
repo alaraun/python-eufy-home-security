@@ -9,6 +9,7 @@ import pytest
 
 import eufy_home_security.p2p.session as session_module
 from eufy_home_security.devices.live_open import LiveOpen, LiveStop
+from eufy_home_security.devices.live_view import Lens, LensView, live_view
 from eufy_home_security.exceptions import (
     CameraWakeError,
     CommunicationError,
@@ -92,6 +93,23 @@ async def test_an_extra_session_sends_the_open_it_was_asked_for(station: FakeSta
             assert [b["data"]["mChannel"] for b in station.doorbell_payloads] == [1]
             await second.aclose()
             await _until(lambda: 1004 in [o.get("cmd") for o in station.received])
+    finally:
+        await session.async_close()
+
+
+async def test_an_extra_session_sends_the_view_it_was_asked_for(station: FakeStation) -> None:
+    session = _session(station)
+    view = live_view(1, (Lens(1, 0), Lens(1, 1)), LensView.STACKED)
+    try:
+        async with await session.async_open_live(0) as first:
+            await _first_keyframe(first)
+            second = await session.async_open_live(
+                1, live_open=LiveOpen.NVR, live_stop=LiveStop.STATION, live_view=view
+            )
+            await _first_keyframe(second)
+            assert session.stats().extra_live_sessions_open == 1
+            assert [p["stitch_mode"] for p in station.live_open_payloads[1:]] == [5]
+            await second.aclose()
     finally:
         await session.async_close()
 

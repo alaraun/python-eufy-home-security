@@ -30,12 +30,21 @@ from .devices.device_alarm import DeviceAlarm, DeviceAlarms
 from .devices.device_alarm import device_alarms as alarms_for
 from .devices.device_alarm import render as render_alarm
 from .devices.live_open import (
+    NVR_OPENS,
     LiveOpen,
     has_live_open,
     library_live_open,
     live_stop,
 )
 from .devices.live_open import app_version as live_open_app_version
+from .devices.live_view import (
+    LENS_LIST_PARAM,
+    Lens,
+    LensView,
+    default_lens_view,
+    live_view,
+    parse_lenses,
+)
 from .devices.model_settings import (
     BATTERY_PROPERTY,
     PARENTLESS_ONLY,
@@ -2915,6 +2924,7 @@ class Station:
         channel: int | None = None,
         preset: int | None = None,
         wait: bool = False,
+        lens_view: LensView | None = None,
         **kwargs: Any,
     ) -> MediaStream:
         """Open a paired camera's live stream (by serial or channel). Wakes a battery camera.
@@ -2932,6 +2942,12 @@ class Station:
 
         The open offers the media key the app would (:meth:`media_key_type`); pass
         ``media_key`` to override it.
+
+        A camera whose handler sends the multi-camera open
+        (:data:`~.devices.live_open.NVR_OPENS`) gets the layout ``lens_view`` of its
+        lenses (:meth:`lenses`); without it the one the app's live page opens in
+        (:func:`~.devices.live_view.default_lens_view`). Only a HomeBase 3 is sent the
+        layout, as the app does; other stations and cameras ignore it.
         """
         ch = self._media_channel(device_sn, channel)
         if preset is not None:
@@ -2940,15 +2956,18 @@ class Station:
             slot_channel = self._stored_slot(device_sn, preset)
             self._refuse_while_capturing(device_sn)
             await self._ptz_recipe(goto_preset(preset), slot_channel)
-        return await self._session_live(ch, wait=wait, **kwargs)
+        return await self._session_live(ch, wait=wait, lens_view=lens_view, **kwargs)
 
-    async def _session_live(self, channel: int, **kwargs: Any) -> MediaStream:
+    async def _session_live(
+        self, channel: int, *, lens_view: LensView | None = None, **kwargs: Any
+    ) -> MediaStream:
         """The session's live open on ``channel``: the open the device's handler sends
-        (:meth:`live_open`) and the media key the app offers (:meth:`media_key_type`).
+        (:meth:`live_open`), the media key the app offers (:meth:`media_key_type`), and
+        for a multi-camera open the view (``lens_view``, see :meth:`async_open_live`).
         A device whose handler's open the library does not implement raises
         :class:`~.exceptions.UnsupportedError` before anything is sent."""
         device = self._device_on_channel(channel)
-        mode = stop = None
+        mode = stop = view = None
         if device is not None:
             mode = self._live_open_of(device.device_sn)
             if mode is None and has_live_open(self._product_code(device.device_sn)):
@@ -2956,8 +2975,26 @@ class Station:
             stop = live_stop(
                 self._product_code(device.device_sn), self._connect_type_of(device.device_sn)
             )
+            if mode in NVR_OPENS:
+                lenses = self.lenses(device.device_sn)
+                view = live_view(channel, lenses, lens_view or default_lens_view(lenses))
         kwargs.setdefault("media_key", self.media_key_type(channel))
-        return await self.session.async_open_live(channel, live_open=mode, live_stop=stop, **kwargs)
+        return await self.session.async_open_live(
+            channel, live_open=mode, live_stop=stop, live_view=view, **kwargs
+        )
+
+    def lenses(self, device_sn: str) -> tuple[Lens, ...]:
+        """The lenses ``device_sn`` lists in the cloud's parameter snapshot
+        (:data:`~.devices.live_view.LENS_LIST_PARAM`, as the app reads its device's
+        parameters); ``()`` for an unknown device, none listed, or a snapshot the cache
+        did not keep (a paired device's, until the next device-list fetch)."""
+        device = next(
+            (d for d in (self.device, *self.sub_devices) if d.device_sn == device_sn), None
+        )
+        if device is None:
+            return ()
+        value = next((p.value for p in device.cloud_params if p.param_id == LENS_LIST_PARAM), None)
+        return parse_lenses(value)
 
     def _device_on_channel(self, channel: int) -> CloudDevice | None:
         """The device addressed on ``channel`` (the station itself when standalone)."""
