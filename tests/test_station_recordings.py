@@ -346,16 +346,68 @@ async def test_a_cursor_before_the_window_lists_nothing(
     assert _asked(fake) == []
 
 
-async def test_a_full_page_ending_on_a_row_without_an_id_goes_on_from_the_day_before(
-    station: Station, fake: FakeStation, today: datetime
+@pytest.mark.parametrize("record_id", [0, -5])
+async def test_a_full_page_of_rows_without_an_id_goes_on_from_the_day_before(
+    station: Station, fake: FakeStation, today: datetime, record_id: int
 ) -> None:
-    fake.rows = [_row(today, 5, SYNTHETIC.camera_sn, record_id=0)]
+    """An id of 0 or below cannot be paged from: no row cursor names it."""
+    fake.rows = [_row(today, 5, SYNTHETIC.camera_sn, record_id=record_id)]
     day_before = (today - timedelta(days=1)).date()
     page = await station.async_list_recordings_page(SYNTHETIC.camera_sn, days=2, limit=1)
     assert page.next_cursor == _cursor(RecordingPosition(day_before))
     page = await station.async_list_recordings_page(SYNTHETIC.camera_sn, days=1, limit=1)
     assert len(page.rows) == 1
     assert page.next_cursor is None  # the day before lies outside the window
+
+
+async def test_a_full_page_ending_on_rows_without_an_id_goes_on_after_its_last_id(
+    station: Station, monkeypatch: pytest.MonkeyPatch, today: datetime
+) -> None:
+    """The rows after the page's last row with an id may come again; none of that day's
+    older rows is skipped."""
+    day = today.date()
+    ids = [int(_day(today)) * HISTORY_RECORD_COUNTER + n for n in (9, 8)]
+    listed = [(day, HistoryRecord(record_id=i)) for i in ids]
+    listed += [(day, HistoryRecord(record_id=0)), (day, HistoryRecord(record_id=-3))]
+
+    async def by_day(*_args: object, **_kwargs: object) -> list[tuple[date, HistoryRecord]]:
+        return listed
+
+    monkeypatch.setattr(station.session, "async_list_history_by_day", by_day)
+    page = await station.async_list_recordings_page(SYNTHETIC.camera_sn, limit=4)
+    assert page.rows == tuple(row for _day, row in listed)
+    assert page.next_cursor == _cursor(RecordingPosition(day, ids[1]))
+
+
+@pytest.fixture
+async def two_cameras(fake: FakeStation) -> AsyncIterator[Station]:
+    """A station with :data:`CAMERA` and a second camera (:data:`OTHER_SN`) paired."""
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    second = dataclasses.replace(CAMERA, device_sn=OTHER_SN, name="Back", channel=1)
+    st = Station(STATION, session, sub_devices=[CAMERA, second])
+    yield st
+    await st.async_close()
+
+
+async def test_a_camera_page_lists_only_that_camera_of_two_paired(
+    two_cameras: Station, fake: FakeStation, today: datetime
+) -> None:
+    sn = SYNTHETIC.camera_sn
+    fake.rows = [_row(today, n, sn if n % 2 else OTHER_SN) for n in range(10, 0, -1)]
+    page = await two_cameras.async_list_recordings_page(sn, days=1, limit=3)
+    assert _counters(list(page.rows)) == [9, 7, 5]
+    page = await two_cameras.async_list_recordings_page(
+        sn, days=1, limit=3, cursor=page.next_cursor
+    )
+    assert _counters(list(page.rows)) == [3, 1]
+    page = await two_cameras.async_list_recordings_page(days=1, limit=3)
+    assert _counters(list(page.rows)) == [10, 9, 8]  # both are paired
 
 
 @pytest.mark.parametrize(
@@ -368,7 +420,7 @@ async def test_a_full_page_ending_on_a_row_without_an_id_goes_on_from_the_day_be
         (_cursor(RecordingPosition(date(2026, 9, 16))), OTHER_SN),  # refused before pairing
     ],
 )
-async def test_a_page_cursor_not_issued_for_the_listing_is_refused_before_sending(
+async def test_a_page_cursor_that_does_not_check_out_is_refused_before_sending(
     station: Station, fake: FakeStation, cursor: str, device_sn: str | None
 ) -> None:
     with pytest.raises(RecordingCursorError):

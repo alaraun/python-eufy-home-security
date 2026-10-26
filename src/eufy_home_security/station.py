@@ -4618,14 +4618,16 @@ class Station:
         ``page_days`` bounds the days one page asks (None: the rest of the window).
 
         ``next_cursor`` is None when the window holds no more: a full page names its
-        last row (the next page may be empty); a short page that stopped at
-        ``page_days`` with window days left names the day before the ones it asked.
+        last row (the next page may be empty), or its last row with a ``record_id``
+        when rows without one end it (those may then come again); a short page that
+        stopped at ``page_days`` with window days left names the day before the ones it
+        asked.
         Positions are the station's own days (the day a row's id carries, else the day
         its query named), never the host's.
 
         Raises before anything is sent: :class:`~.exceptions.RecordingCursorError` (a
-        ``ValueError``) for a cursor this library did not issue for this listing or one
-        that does not parse; :class:`ValueError` for ``limit``, ``days`` or
+        ``ValueError``) for a cursor that does not check out for that station and camera
+        or one that does not parse; :class:`ValueError` for ``limit``, ``days`` or
         ``page_days`` below 1; ``UnsupportedError`` for a device not paired here. A
         standalone device lists none: an empty page without a cursor.
         """
@@ -4664,11 +4666,14 @@ class Station:
             timeout=timeout,
         )
         rows = tuple(row for _day, row in listed)
+        # rows without an id (none above 0) cannot be paged from: go on after the page's
+        # last row with one, so they may come again but none is skipped
+        paged = [(day, row.record_id) for day, row in listed if row.record_id > 0]
         if len(listed) < limit:  # the days asked hold no more: go on before them
             following = RecordingPosition(oldest - timedelta(days=1))
-        elif row_id := listed[-1][1].record_id:
-            following = RecordingPosition.after(row_id, listed[-1][0])
-        else:  # a row without an id cannot be paged from: go on with the day before it
+        elif paged:
+            following = RecordingPosition.after(paged[-1][1], paged[-1][0])
+        else:  # no row to page from: go on with the day before the last one
             following = RecordingPosition(listed[-1][0] - timedelta(days=1))
         if following.record_id is None and following.day < first:
             return RecordingsPage(rows, None)  # the window holds no more

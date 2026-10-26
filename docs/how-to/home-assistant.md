@@ -1831,11 +1831,13 @@ capture ended by its `stop` event; complete), `complete`, `content_type`.
   position of the same station and `device_sn`, so it can key a cache and cross a
   websocket to a card and back). It names either the page's last row (a full page; the
   next one may be empty) or, when a short page stopped at `page_days` with window days
-  left, the day before the ones it asked. Positions are the station's own days (the day
-  a row's id carries, else the day its query named; a HomeBase 2's ids carry none), so a
-  consumer never decodes record ids or picks a day in the host's zone. A cursor the
-  library did not issue for that station and `device_sn`, or one that no longer parses,
-  raises `RecordingCursorError` (a `ValueError`) before anything is sent: answer
+  left, the day before the ones it asked. A full page that ends on rows without a
+  `record_id` names its last row that has one, so those rows may come again on the next
+  page but are never skipped. Positions are the station's own days (the day a row's id
+  carries, else the day its query named; a HomeBase 2's ids carry none), so a consumer
+  never decodes record ids or picks a day in the host's zone. A cursor that does not
+  check out for that station and `device_sn`, or one that no longer parses, raises
+  `RecordingCursorError` (a `ValueError`) before anything is sent: answer
   "invalid format". `async_list_recordings(limit=…, before=<record_id>)` still pages
   as before, but only by ids that carry a day; `before` is deprecated in favour of the
   page call.
@@ -2618,7 +2620,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `RefreshCooldownError` (a `RateLimitedError`, `code` 0) | the library's own spacing of key fetches, not a eufy throttle: no repair, just wait |
 | `CipherUnavailableError` (an `EmptyResponseError`; `cipher_id`, `owner_source`, `retry_after`) | the cloud has no key for the cipher the station named in its handshake, under the owner id asked (`owner_source`: `"member.admin_user_id"` or `"own user id"`). Not a reauth and not an outage of the station: the share or the station's binding needs the owner. Raise one non-fixable repair issue naming the station and `cipher_id`; clear it on `ConnectionChanged(connected=True)`. The library asks the same station and cipher again only after `retry_after` (an hour) or once a refreshed device list names another owner id; until then every attempt raises this without a request. A reload of the entry asks once more |
 | `StillNotWrittenError` (a `RecordNotFoundError`; `offset`) | the device has not written the event's row or still yet: keep what is shown and ask once more later (about 20 s). A plain `RecordNotFoundError` is final for that event: no retry |
-| `RecordingCursorError` (a `ValueError`) | `async_list_recordings_page` got a `cursor` it did not issue for that station and camera, or one that no longer parses (garbled, another version); nothing was sent. Answer "invalid format" and let the client start again from the first page; never retry the same cursor |
+| `RecordingCursorError` (a `ValueError`) | `async_list_recordings_page` got a `cursor` that does not check out for that station and camera, or one that no longer parses (garbled, another version); nothing was sent. Answer "invalid format" and let the client start again from the first page; never retry the same cursor |
 | `CaptureStoppedError` | a live capture's `stop` was set before its first keyframe: nothing was recorded, nothing to store. Not an error for the user who pressed stop |
 | `ConfigChangedError` (`config`, `expected`) | a write's `expect_revision` is stale: the station's configuration changed elsewhere and nothing was sent. Show `err.config` and let the user redo the edit; not an outage |
 | `ModeInUseError` (an `UnsupportedError`; `reason`) | the mode is in use (current, or named by the schedule or its default); nothing was sent. `raise HomeAssistantError` with `reason` |

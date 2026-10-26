@@ -71,14 +71,17 @@ def encode_cursor(position: RecordingPosition, *, station_sn: str, device_sn: st
 
 def decode_cursor(text: object, *, station_sn: str, device_sn: str | None) -> RecordingPosition:
     """The position a cursor of :func:`encode_cursor` names; :class:`RecordingCursorError`
-    for anything else, a cursor of another listing included."""
+    for anything else, a cursor that does not check out for that station and camera
+    included."""
     if not isinstance(text, str) or (match := _CURSOR_RE.fullmatch(text)) is None:
         raise RecordingCursorError("not a recordings cursor")
     if match["version"] != CURSOR_VERSION:
         raise RecordingCursorError(f"a recordings cursor of another version ({match['version']})")
     body = text[: match.start("check") - 1]
     if match["check"] != _check(body, station_sn, device_sn):
-        raise RecordingCursorError("the recordings cursor was not issued for this listing")
+        raise RecordingCursorError(
+            "the recordings cursor does not check out for this station and camera"
+        )
     try:
         day = _parse_day(match["rday"] or match["dday"])
     except ValueError as err:

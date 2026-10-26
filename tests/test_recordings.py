@@ -80,16 +80,16 @@ def test_a_position_after_a_row_takes_its_ids_day() -> None:
         (_signed("v1.x.20260916"), "not a recordings cursor"),
         (_signed("v1.d.20260916").upper(), "not a recordings cursor"),
         (_signed("v2.d.20260916"), "another version"),
-        (_signed("v1.d.20260916")[:-1] + "0", "not issued for this listing"),
-        (_signed("v1.d.20260917")[:-8] + _signed("v1.d.20260916")[-8:], "not issued"),
-        (_signed("v1.d.20260916", device_sn=None), "not issued for this listing"),
-        (_signed("v1.d.20260916", device_sn=OTHER_CAMERA), "not issued"),
+        (_signed("v1.d.20260916")[:-1] + "0", "does not check out"),
+        (_signed("v1.d.20260917")[:-8] + _signed("v1.d.20260916")[-8:], "does not check out"),
+        (_signed("v1.d.20260916", device_sn=None), "does not check out"),
+        (_signed("v1.d.20260916", device_sn=OTHER_CAMERA), "does not check out"),
         (_signed("v1.d.20261332"), "no valid day"),
         (_signed("v1.d.00000101"), "no valid day"),
         (_signed(f"v1.r.20260915.{DAYED_ID}"), "not its record's"),
     ],
 )
-def test_a_cursor_not_issued_for_the_listing_is_refused(text: object, match: str) -> None:
+def test_a_cursor_that_does_not_parse_or_check_out_is_refused(text: object, match: str) -> None:
     with pytest.raises(RecordingCursorError, match=match) as caught:
         decode_cursor(text, **LISTING)
     assert isinstance(caught.value, ValueError)
@@ -97,7 +97,7 @@ def test_a_cursor_not_issued_for_the_listing_is_refused(text: object, match: str
 
 def test_a_cursor_of_another_station_is_refused() -> None:
     text = encode_cursor(RecordingPosition(DAY), **LISTING)
-    with pytest.raises(RecordingCursorError, match="not issued"):
+    with pytest.raises(RecordingCursorError, match="does not check out"):
         decode_cursor(text, station_sn=OTHER_STATION, device_sn=CAMERA)
 
 
