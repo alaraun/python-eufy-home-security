@@ -33,6 +33,7 @@ from eufy_home_security.events import (
     Event,
     EventSource,
     GuardModeChanged,
+    HistoryRecord,
     ParamChanged,
     SecurityEvent,
     StorageChanged,
@@ -96,7 +97,7 @@ from eufy_home_security.p2p.session import (
 )
 from eufy_home_security.p2p.transport import PPPPTransport
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
-from eufy_home_security.recordings import RecordingRef, decode_ref
+from eufy_home_security.recordings import RecordingRef, decode_ref, encode_ref
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import (
     MEDIA_AUDIO,
@@ -1494,11 +1495,22 @@ async def test_a_reference_whose_row_is_gone_raises_not_found(
     assert len(station.history_queries) == 1
 
 
+@pytest.mark.parametrize(
+    "ref",
+    [
+        pytest.param(
+            RecordingRef(date(2026, 9, 16), 2026091600004, SYNTHETIC.camera_sn), id="gone"
+        ),
+        pytest.param(
+            RecordingRef(date(2026, 9, 16), 2026091600005, _OTHER_CAMERA_SN),
+            id="id-names-another-camera",
+        ),
+    ],
+)
 async def test_a_homebase_3_reference_whose_row_is_gone_raises_not_found(
-    station: FakeStation,
+    station: FakeStation, ref: RecordingRef
 ) -> None:
     station.rows = [_history_row("20260916", 5)]
-    ref = RecordingRef(date(2026, 9, 16), 2026091600004, SYNTHETIC.camera_sn)
     session = make_session(station, Provider(station))
     try:
         with pytest.raises(RecordNotFoundError, match="no such recording"):
@@ -1506,6 +1518,117 @@ async def test_a_homebase_3_reference_whose_row_is_gone_raises_not_found(
     finally:
         await session.async_close()
     assert len(station.history_queries) == 1
+
+
+async def test_a_homebase_3_row_is_found_by_its_id_and_camera_whatever_its_start(
+    station: FakeStation,
+) -> None:
+    """The id names one row of its day: a start time other than the reference's does
+    not hide it, and the row comes back with the reference of the lookup."""
+    station.rows = [_history_row("20260916", 5)]
+    ref = RecordingRef(date(2026, 9, 16), 2026091600005, SYNTHETIC.camera_sn, "20260916110000")
+    session = make_session(station, Provider(station))
+    try:
+        found = await session.async_find_history_record(ref)
+    finally:
+        await session.async_close()
+    assert found.start_time == "2026-09-16 12:00:05"  # hygiene: ok
+    assert found.ref == encode_ref(ref, station_sn=SYNTHETIC.station_sn)
+    assert len(station.history_queries) == 1
+
+
+_TARGET = RecordingRef(date(2026, 9, 16), 1000, SYNTHETIC.camera_sn, "20260916120230")
+
+
+async def _find_on_hb2(
+    station: FakeStation, rows: list[dict[str, Any]], ref: RecordingRef = _TARGET
+) -> tuple[HistoryRecord | None, list[str]]:
+    """``ref`` looked up on a HomeBase 2 listing ``rows`` (None: RecordNotFoundError),
+    and the ``start_time`` cursor of every query sent."""
+    await station.start()
+    station.rows = rows
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        async with asyncio.timeout(10):
+            found: HistoryRecord | None = await session.async_find_history_record(ref)
+    except RecordNotFoundError:
+        found = None
+    finally:
+        await session.async_close()
+        station.stop()
+    return found, [q["start_time"] for q in station.history_queries]
+
+
+def _crowd(first_id: int, second: int, n: int) -> list[dict[str, Any]]:
+    """``n`` rows of the other camera started ``second`` s after noon, ids from ``first_id`` up."""
+    return [_hb2_row(first_id + i, second, _OTHER_CAMERA_SN) for i in range(n)]
+
+
+@pytest.mark.parametrize(
+    ("up_to", "next_second", "own_second", "asked"),
+    [
+        pytest.param(False, 22, 5, ["20260916120231"], id="before-cursor"),
+        pytest.param(
+            True, 22, 5, ["20260916120231", "20260916120230"], id="up-to-cursor-next-second-full"
+        ),
+        pytest.param(
+            True, 12, 12, ["20260916120231", "20260916120230"], id="up-to-cursor-both-seconds"
+        ),
+        pytest.param(True, 3, 5, ["20260916120231"], id="up-to-cursor-one-page"),
+    ],
+)
+async def test_a_homebase_2_row_behind_a_full_page_of_later_rows_is_found(
+    up_to: bool, next_second: int, own_second: int, asked: list[str]
+) -> None:
+    """Rows of the next second and of the row's own second ahead of it: a full first
+    page whose rows started no earlier than the row is followed by one page from the
+    row's start, under either reading of the cursor."""
+    rows = [
+        *_crowd(1100, 151, next_second),
+        *_crowd(1050, 150, own_second),
+        _hb2_row(1000, 150),
+        *_crowd(900, 149, 30),
+    ]
+    found, cursors = await _find_on_hb2(
+        FakeStation(serial=_HB2_SN, local_events_up_to_cursor=up_to), rows
+    )
+    assert found is not None
+    assert (found.record_id, found.ref) == (1000, encode_ref(_TARGET, station_sn=_HB2_SN))
+    assert cursors == asked
+
+
+@pytest.mark.parametrize("up_to", [False, True], ids=["before-cursor", "up-to-cursor"])
+async def test_a_homebase_2_row_behind_a_full_page_of_its_own_second_is_not_reached(
+    up_to: bool,
+) -> None:
+    """A start-time cursor cannot page within one second: after the page from the row's
+    start the lookup gives up."""
+    rows = [*_crowd(1050, 150, 20), _hb2_row(1000, 150)]
+    found, cursors = await _find_on_hb2(
+        FakeStation(serial=_HB2_SN, local_events_up_to_cursor=up_to), rows
+    )
+    assert (found, cursors) == (None, ["20260916120231", "20260916120230"])
+
+
+async def test_a_homebase_2_full_page_reaching_older_rows_ends_the_lookup() -> None:
+    found, cursors = await _find_on_hb2(FakeStation(serial=_HB2_SN), _crowd(900, 149, 30))
+    assert (found, cursors) == (None, ["20260916120231"])
+
+
+class _CursorIgnoringStation(FakeStation):
+    """A 10017 station answering every page as the first one of the day."""
+
+    def _answer_local_events(self, inner: dict[str, Any]) -> None:
+        super()._answer_local_events({**inner, "payload": {**inner["payload"], "start_time": "0"}})
+
+
+async def test_a_homebase_2_station_repeating_its_page_ends_the_lookup() -> None:
+    found, cursors = await _find_on_hb2(
+        _CursorIgnoringStation(serial=_HB2_SN), _crowd(1100, 160, 25)
+    )
+    assert (found, len(cursors)) == (None, 2)
 
 
 async def test_a_reference_without_a_start_is_refused_where_rows_page_by_start_time() -> None:

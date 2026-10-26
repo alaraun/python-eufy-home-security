@@ -125,12 +125,16 @@ class RecordingRef:
     device_sn: str
     started: str | None = None
 
-    def time_cursor(self) -> str | None:
-        """The ``start_time`` cursor (``YYYYMMDDHHMMSS``) one second after ``started``:
-        a page asked from it starts with the rows that started in that second, whether
-        the station lists the rows before the cursor or up to it. None without
-        ``started``."""
-        return None if self.started is None else _second_after(self.started)
+    def time_cursors(self) -> tuple[str, str] | None:
+        """The ``start_time`` cursors (``YYYYMMDDHHMMSS``) a lookup asks from, in order:
+        one second after ``started``, then ``started``; None without ``started``.
+
+        A station that lists the rows before the cursor starts the first page with the
+        rows of ``started``'s second; one that lists them up to the cursor starts it
+        with the rows of the next second, then those of ``started``'s, and starts the
+        second page with the rows of ``started``'s second. Neither reaches a row behind
+        a full page of rows that started in its own second."""
+        return None if self.started is None else (_second_after(self.started), self.started)
 
 
 def row_started(row: HistoryRecord) -> str | None:

@@ -196,10 +196,11 @@ def test_a_row_that_cannot_be_found_again_gets_no_reference(
         (None, None),
     ],
 )
-def test_a_reference_asks_from_the_second_after_its_start(
+def test_a_reference_asks_from_the_second_after_its_start_then_from_its_start(
     started: str | None, cursor: str | None
 ) -> None:
-    assert RecordingRef(DAY, 2818, CAMERA, started).time_cursor() == cursor
+    cursors = RecordingRef(DAY, 2818, CAMERA, started).time_cursors()
+    assert cursors == (None if cursor is None else (cursor, started))
 
 
 @pytest.mark.parametrize(

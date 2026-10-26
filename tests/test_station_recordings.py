@@ -612,6 +612,23 @@ async def test_a_homebase_3_recording_is_found_by_its_ref_or_its_id(
     assert [q["start_id"] for q in fake.history_queries] == [rows[1].record_id] * 2
 
 
+async def test_a_lookup_by_ref_passes_its_timeout_to_the_query(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake.rows = [_row(today, 3, SYNTHETIC.camera_sn)]
+    (row,) = await station.async_list_recordings()
+    find = station.session.async_find_history_record
+    timeouts: list[float | None] = []
+
+    async def spy(ref: RecordingRef, *, timeout: float | None = None) -> HistoryRecord:
+        timeouts.append(timeout)
+        return await find(ref, timeout=timeout)
+
+    monkeypatch.setattr(station.session, "async_find_history_record", spy)
+    await station.async_history_record_by_ref(row.ref or "", timeout=4.5)
+    assert timeouts == [4.5]
+
+
 async def test_a_station_row_of_the_station_itself_is_found_by_its_ref(
     station: Station, fake: FakeStation, today: datetime
 ) -> None:

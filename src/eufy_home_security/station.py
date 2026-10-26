@@ -4621,20 +4621,23 @@ class Station:
     async def async_history_record_by_ref(
         self, ref: str, *, device_sn: str | None = None, timeout: float | None = None
     ) -> HistoryRecord:
-        """The history row a listed row's :attr:`~.events.HistoryRecord.ref` names, with
-        one history query on every station (a HomeBase 2's ids carry no day: the ref
-        carries the station day and start time); the row carries the same ``ref``.
+        """The history row a listed row's :attr:`~.events.HistoryRecord.ref` names, on
+        every station (a HomeBase 2's ids carry no day: the ref carries the station day
+        and start time); the row carries the same ``ref``. One history query, or on a
+        station paged by start time at most two
+        (:meth:`~.p2p.session.StationSession.async_find_history_record`).
 
         ``ref`` is the text as the library gave it; with ``device_sn`` it must be a
-        row of that camera. ``timeout`` bounds the query (None:
-        :data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`); it is not resent.
+        row of that camera. ``timeout`` bounds each query (None:
+        :data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`); none is resent.
 
         Raises before anything is sent: :class:`~.exceptions.RecordingRefError` (a
         ``ValueError``) for a ref that does not check out for this station (and
         ``device_sn``) or one that does not parse; ``UnsupportedError`` for a
         ``device_sn`` not paired here and on a standalone device. Raises
         :class:`~.exceptions.RecordNotFoundError` when the station no longer lists
-        that row (deleted, or its id now names another recording).
+        that row (deleted, or its id now names another recording) and, on a station
+        paged by start time, for a row behind a full page of rows of its start second.
         """
         if device_sn is not None:
             self.channel_for(device_sn)  # raises for a device not paired here
