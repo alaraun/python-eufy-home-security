@@ -1091,7 +1091,8 @@ def _summary(counts: dict[str, int]) -> str:
 
 
 def _missing_inputs(cache: Path, pns: list[str]) -> str | None:
-    """Why a run cannot start (no node, no cache, a model not in the cache), or None."""
+    """Why a run cannot start (no node of the pinned major, no cache, a model not in the
+    cache), or None."""
     try:
         node.node_path()
     except node.DriverError as err:

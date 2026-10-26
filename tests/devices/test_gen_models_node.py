@@ -1,6 +1,6 @@
 """The generators' Node workers (scripts/gen_models_node.py): one long-lived driver per
 thread, a job rerun on a fresh worker when its worker dies, no worker left after
-``close``, and the driver's fresh sandbox per job.
+``close``, the pinned Node major, and the driver's fresh sandbox per job.
 
 The pool tests run a fake driver (a Python script); the driver tests need Node.
 """
@@ -8,6 +8,7 @@ The pool tests run a fake driver (a Python script); the driver tests need Node.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import shutil
 import sys
@@ -220,6 +221,60 @@ def test_close_fails_the_job_in_flight_without_a_rerun(
     assert [str(e) for e in errors] == ["worker stopped"]
     assert pool.started == 1
     assert "rerun" not in capsys.readouterr().err
+
+
+def _node_script(tmp_path: Path, version: str) -> str:
+    script = tmp_path / "node"
+    script.write_text(f"#!/bin/sh\necho {version}\n", encoding="utf-8")
+    script.chmod(0o755)
+    return str(script)
+
+
+def _package(tmp_path: Path, pin: Any) -> Path:
+    package = tmp_path / "package.json"
+    package.write_text(json.dumps({"engines": {"node": pin}}), encoding="utf-8")
+    return package
+
+
+def test_the_pinned_major_comes_from_package_json(tmp_path: Path) -> None:
+    assert node.node_major() == 24
+    assert node.node_major(_package(tmp_path, "22.x")) == 22
+    with pytest.raises(node.DriverError, match=r"'<major>\.x'"):
+        node.node_major(_package(tmp_path, ">=22"))
+
+
+def test_node_of_the_pinned_major_passes(tmp_path: Path) -> None:
+    package = _package(tmp_path, "24.x")
+    assert node.node_problem(_node_script(tmp_path, "v24.1.0"), package) is None
+
+
+@pytest.mark.parametrize("version", ["v22.11.0", "v240.0.0", "garbage"])
+def test_node_of_another_major_is_named(tmp_path: Path, version: str) -> None:
+    problem = node.node_problem(_node_script(tmp_path, version), _package(tmp_path, "24.x"))
+    assert problem is not None
+    assert "need Node 24.x" in problem
+    assert version in problem
+
+
+def test_no_node_on_path_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(node.shutil, "which", lambda _: None)
+    assert node.node_problem() == "node is not on PATH"
+
+
+def test_the_default_worker_refuses_node_of_another_major(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _node_script(tmp_path, "v22.11.0")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    node.node_path.cache_clear()
+    drivers = node.DriverPool()
+    try:
+        with pytest.raises(node.DriverError, match=r"node v22.11.0 found; .* Node 24.x"):
+            drivers.run({"handler": "x", "requests": []})
+        assert drivers.started == 0
+    finally:
+        drivers.close()
+        node.node_path.cache_clear()
 
 
 # ── the real driver ─────────────────────────────────────────────────────────

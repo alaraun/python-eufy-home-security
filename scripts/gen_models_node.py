@@ -6,13 +6,18 @@ handler sandbox, so a job's reply does not depend on the worker's earlier jobs. 
 that dies mid-job (Node can abort under heavy parallel load) is replaced and the job
 rerun as is. A worker exits when its stdin closes, so none outlives the generator;
 ``DriverPool.close`` ends them at once and fails the jobs in flight.
+
+The Node major the generators run on is pinned in ``scripts/package.json``
+(``engines.node``, ``"<major>.x"``); ``node_problem`` checks it.
 """
 
 from __future__ import annotations
 
 import atexit
 import contextlib
+import functools
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -24,13 +29,45 @@ from typing import IO, Any
 
 ROOT = Path(__file__).resolve().parent.parent
 DRIVER = ROOT / "scripts" / "gen_models_driver.js"
+PACKAGE = ROOT / "scripts" / "package.json"
 TIMEOUT_S = 600  # one job
 RESTARTS = 2  # reruns of a job whose worker died
 _STOP_WAIT_S = 5
 
 
 class DriverError(RuntimeError):
-    """Node is missing, or a job failed in the driver."""
+    """Node is missing or of another major, or a job failed in the driver."""
+
+
+def node_major(package: Path = PACKAGE) -> int:
+    """The Node major ``package`` pins (``engines.node`` = ``"<major>.x"``)."""
+    pinned = json.loads(package.read_text(encoding="utf-8")).get("engines", {}).get("node")
+    match = re.fullmatch(r"(\d+)\.x", pinned) if isinstance(pinned, str) else None
+    if match is None:
+        raise DriverError(f"{package}: engines.node must be '<major>.x', not {pinned!r}")
+    return int(match[1])
+
+
+def node_problem(node: str | None = None, package: Path = PACKAGE) -> str | None:
+    """Why the driver cannot run: no ``node`` on PATH, or a major other than the pinned
+    one; None when it can."""
+    node = node or shutil.which("node")
+    if node is None:
+        return "node is not on PATH"
+    try:
+        found = subprocess.run(
+            [node, "--version"], capture_output=True, text=True, timeout=30, check=False
+        ).stdout.strip()
+    except OSError as err:
+        return f"{node}: {err}"
+    want = node_major(package)
+    match = re.fullmatch(r"v(\d+)\.\d+\.\d+\S*", found)
+    if match is None or int(match[1]) != want:
+        return (
+            f"node {found or '(no version)'} found; the generators need Node {want}.x "
+            f"({package.name} engines.node)"
+        )
+    return None
 
 
 class _WorkerDiedError(Exception):
@@ -218,9 +255,12 @@ class DriverPool:
         worker.stop()
 
 
+@functools.cache
 def node_path() -> str:
-    """The ``node`` on PATH; DriverError when there is none."""
+    """The ``node`` on PATH, checked once against the pinned major; DriverError (the
+    ``node_problem``) when it does not run the driver."""
     node = shutil.which("node")
-    if node is None:
-        raise DriverError("node is not on PATH")
+    problem = node_problem(node)
+    if node is None or problem is not None:
+        raise DriverError(problem or "node is not on PATH")
     return node
