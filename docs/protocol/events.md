@@ -163,8 +163,8 @@ two side fields first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on har
 a `fetch_id`; the library keeps the `event_type` there, so a pushed 3102 stays a person.
 A camera paired to a HomeBase 2 is reported this way: a 3101 push with a face id is a
 person. `SecurityEvent.detection_evidence` names the grade of the kind an event reports.
-A doorbell press (3103) stays a press whatever `fetch_id` and `person_name` say: the app
-takes a doorbell's and a video lock's press from the `event_type` alone **[app]**.
+A doorbell press (3103) stays a press whatever `fetch_id` and `person_name` say, as the
+eufy app's lock and doorbell push paths take a press from the `event_type` alone **[app]**.
 
 A `msg_type` 14 (MOTION_SENSOR) push is motion whatever its `e` field says, as the eufy
 app shows it; `e` (opened / closed) is read only on a `msg_type` 3 entry-sensor push.

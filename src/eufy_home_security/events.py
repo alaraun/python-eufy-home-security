@@ -763,8 +763,8 @@ class SecurityEvent:
 
         A ``msg_type`` 14 (MOTION_SENSOR) push is MOTION whatever its ``e`` and
         ``event_type`` say, as the eufy app shows it. A doorbell press (3103) stays
-        DOORBELL_PRESS on any push: the eufy app takes a doorbell's and a video smart
-        lock's press from the ``event_type`` alone.
+        DOORBELL_PRESS on any push, as the eufy app's lock and doorbell push paths take a
+        press from the ``event_type`` alone.
         """
         if self.msg_type == PushMessageType.MOTION_SENSOR:
             return DetectionType.MOTION

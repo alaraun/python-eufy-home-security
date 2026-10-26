@@ -44,7 +44,7 @@ LOG_AREA: dict[Capability, str] = {
     Capability.BATTERY: "Parameter dump",
     Capability.RSSI: "Parameter dump",
     Capability.PIR_EVENT_TIME: "Motion sensor param 1605",
-    Capability.DOORBELL_RING: "Doorbell press (3103)",
+    Capability.DOORBELL_RING: "Cloud push (FCM)",  # a press arrives as a cloud push
 }
 # The hardware-verification row that traces each pan/tilt preset action.
 LOG_AREA_PTZ_ACTION: dict[PtzAction, str] = {
@@ -314,6 +314,32 @@ def test_a_video_lock_rings_and_a_lock_without_a_camera_does_not() -> None:
         assert VIDEO_SMART_LOCK_CATEGORY in evidence.source
         assert "DOORBELL_PRESS" in evidence.note
     assert all(ring_evidence(m) is None for m in plain)
+
+
+def test_the_video_locks_ring_and_a_plain_lock_and_a_camera_do_not() -> None:
+    assert VIDEO_SMART_LOCK_CATEGORY == "VideoSmartLock"
+    for model in ("T8530", "T8531", "T8532", "T853A", "T85M0", "T85M1", "T85M2", "T85V0"):
+        profile = profile_for_serial(_catalogued_serial(model))
+        assert profile is not None, model
+        assert profile.support(Capability.DOORBELL_RING) is Support.DECLARED, model
+    for model in ("T8500", "T8160"):
+        profile = profile_for_serial(_catalogued_serial(model))
+        assert profile is not None, model
+        assert profile.support(Capability.DOORBELL_RING) is Support.UNKNOWN, model
+
+
+def test_generated_grades_follow_the_serials_product_code() -> None:
+    # serial rule: a T8420 serial with 6 at index 6 is product T8420X, which streams live
+    t8420 = profile_for_serial("T8420P0000000000")
+    assert t8420 is not None
+    assert t8420.support(Capability.LIVE_STREAM) is Support.UNKNOWN
+    profile = profile_for_serial("T8420P6000000000")
+    assert profile is not None
+    assert profile.support(Capability.LIVE_STREAM) is Support.DECLARED
+    assert "T8420X handler" in profile.capabilities[Capability.LIVE_STREAM].source
+    t8210c = profile_for_serial("T8210P8000067890")
+    assert t8210c is not None
+    assert "T8210C handler" in t8210c.capabilities[Capability.LIVE_STREAM].source
 
 
 def test_a_doorbell_rings_by_its_kind() -> None:

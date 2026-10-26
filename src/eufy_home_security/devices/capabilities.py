@@ -3,6 +3,8 @@
 A :class:`DeviceProfile` is the per-model answer to "may the library offer this?".
 Hardware without a profile gets the generic profile for its kind, where every
 capability is ``UNKNOWN`` — it degrades to "not offered", never to a guess.
+:func:`profile_for_serial` adds only what the eufy app's own data declares for the
+model (live video, pan/tilt/zoom, the doorbell ring).
 """
 
 from __future__ import annotations
