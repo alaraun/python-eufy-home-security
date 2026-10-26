@@ -3,10 +3,14 @@
 import asyncio
 from datetime import date
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
+from eufy_home_security.events import HistoryRecord
+from eufy_home_security.models import STATION_CHANNEL
 from eufy_home_security.p2p import session as p2p_session
+from eufy_home_security.p2p.messages import DB_QUERY_HISTORY, DB_QUERY_LOCAL_EVENTS
 from eufy_home_security.p2p.session import StationSession
 from eufy_home_security.station import Station
 
@@ -33,13 +37,13 @@ async def test_only_homebase2_forwards_native_camera_filter(
     async def capture_day(*_args: object, **kwargs: object) -> None:
         observed.append(kwargs["device_sn"] if isinstance(kwargs["device_sn"], str) else None)
 
-    query_verb = (
-        p2p_session.DB_QUERY_LOCAL_EVENTS if verb == "local" else p2p_session.DB_QUERY_HISTORY
-    )
+    query_verb = DB_QUERY_LOCAL_EVENTS if verb == "local" else DB_QUERY_HISTORY
     monkeypatch.setattr(p2p_session, "history_query_verb", lambda _sn: query_verb)
     fake = SimpleNamespace(serial=station_sn, _history_day=capture_day)
 
-    rows = await StationSession.async_list_history(fake, "20261025", device_sn=CAMERA, page_size=50)
+    rows = await StationSession.async_list_history(
+        cast(StationSession, fake), "20261025", device_sn=CAMERA, page_size=50
+    )
 
     assert rows == []
     assert observed == [native_camera]
@@ -51,19 +55,19 @@ async def test_history_day_forwards_camera_to_every_page() -> None:
 
     async def page(
         _day: date, _cursor: int, _page_size: int, _timeout: float | None, **kwargs: object
-    ) -> tuple[list[object], None]:
+    ) -> tuple[list[HistoryRecord], None]:
         sn = kwargs["device_sn"]
         captured.append(sn if isinstance(sn, str) else None)
         return [], None
 
     fake = SimpleNamespace(_history_page=page, _log_name="test")
-    rows: list[object] = []
+    rows: list[HistoryRecord] = []
     await StationSession._history_day(
-        fake,
+        cast(StationSession, fake),
         date(2026, 10, 25),
         rows,
         set(),
-        verb=p2p_session.DB_QUERY_LOCAL_EVENTS,
+        verb=DB_QUERY_LOCAL_EVENTS,
         count=10,
         keep=None,
         device_sn=CAMERA,
@@ -84,7 +88,9 @@ async def test_native_request_includes_camera_only_when_requested(
     async def connected() -> None:
         return None
 
-    async def request(send: object, _match: object, **_kwargs: object) -> tuple[list[object], None]:
+    async def request(
+        send: object, _match: object, **_kwargs: object
+    ) -> tuple[list[HistoryRecord], None]:
         assert callable(send)
         send()
         return [], None
@@ -92,7 +98,7 @@ async def test_native_request_includes_camera_only_when_requested(
     def device_message(
         _account: str, _command: int, payload: dict[str, object], *, channel: int
     ) -> dict[str, object]:
-        assert channel == p2p_session.STATION_CHANNEL
+        assert channel == STATION_CHANNEL
         return payload
 
     monkeypatch.setattr(p2p_session, "device_msg", device_message)
@@ -107,18 +113,18 @@ async def test_native_request_includes_camera_only_when_requested(
     )
 
     await StationSession._history_page(
-        fake,
+        cast(StationSession, fake),
         date(2026, 10, 25),
         0,
         50,
         1.0,
-        verb=p2p_session.DB_QUERY_LOCAL_EVENTS,
+        verb=DB_QUERY_LOCAL_EVENTS,
         device_sn=camera,
     )
 
     assert len(sent) == 1
     payload = sent[0]
-    assert payload["cmd"] == p2p_session.DB_QUERY_LOCAL_EVENTS
+    assert payload["cmd"] == DB_QUERY_LOCAL_EVENTS
     nested = payload["payload"]
     assert isinstance(nested, dict)
     assert nested.get("device_info") == ([{"device_sn": CAMERA}] if camera else None)
@@ -129,7 +135,7 @@ async def test_native_request_includes_camera_only_when_requested(
 async def test_station_recording_listing_forwards_camera_and_keeps_local_filter() -> None:
     observed: list[str | None] = []
 
-    async def list_history(_start: str, _end: str, **kwargs: object) -> list[object]:
+    async def list_history(_start: str, _end: str, **kwargs: object) -> list[HistoryRecord]:
         sn = kwargs["device_sn"]
         observed.append(sn if isinstance(sn, str) else None)
         assert callable(kwargs["keep"])
@@ -141,6 +147,6 @@ async def test_station_recording_listing_forwards_camera_and_keeps_local_filter(
         devices=[SimpleNamespace(device_sn=CAMERA)],
         session=SimpleNamespace(async_list_history=list_history),
     )
-    rows = await Station.async_list_recordings(fake, CAMERA, days=1, limit=5)
+    rows = await Station.async_list_recordings(cast(Station, fake), CAMERA, days=1, limit=5)
     assert rows == []
     assert observed == [CAMERA]

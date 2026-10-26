@@ -2,9 +2,11 @@
 
 from datetime import date
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
+from eufy_home_security.events import HistoryRecord
 from eufy_home_security.p2p.session import StationSession
 from eufy_home_security.station import Station
 
@@ -18,11 +20,13 @@ async def test_session_opaque_id_resumes_on_explicit_day() -> None:
     seen: list[tuple[date, int | None]] = []
 
     async def capture(day: date, *_args: object, **kwargs: object) -> None:
-        seen.append((day, kwargs["start_id"]))
+        start_id = kwargs["start_id"]
+        assert start_id is None or isinstance(start_id, int)
+        seen.append((day, start_id))
 
     fake = SimpleNamespace(serial="T8010TESTSTATION", _history_day=capture)
     rows = await StationSession.async_list_history(
-        fake,
+        cast(StationSession, fake),
         "20261024",
         "20261026",
         count=10,
@@ -42,7 +46,7 @@ async def test_session_opaque_id_requires_day() -> None:
     fake = SimpleNamespace(serial="T8010TESTSTATION")
     with pytest.raises(ValueError, match="carries no day"):
         await StationSession.async_list_history(
-            fake,
+            cast(StationSession, fake),
             "20261025",
             count=10,
             before=OPAQUE_ID,
@@ -52,9 +56,9 @@ async def test_session_opaque_id_requires_day() -> None:
 
 @pytest.mark.asyncio
 async def test_station_forwards_opaque_id_and_real_day() -> None:
-    captured: list[object] = []
+    captured: list[dict[str, object]] = []
 
-    async def capture(_start: str, _end: str, **kwargs: object) -> list[object]:
+    async def capture(_start: str, _end: str, **kwargs: object) -> list[HistoryRecord]:
         captured.append(kwargs)
         return []
 
@@ -65,7 +69,7 @@ async def test_station_forwards_opaque_id_and_real_day() -> None:
         session=SimpleNamespace(async_list_history=capture),
     )
     rows = await Station.async_list_recordings(
-        fake,
+        cast(Station, fake),
         CAMERA,
         days=7,
         limit=10,
