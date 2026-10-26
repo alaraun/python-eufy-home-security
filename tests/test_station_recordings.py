@@ -16,13 +16,21 @@ from eufy_home_security.events import HistoryRecord
 from eufy_home_security.exceptions import (
     DeviceTimeoutError,
     RecordingCursorError,
+    RecordingRefError,
+    RecordNotFoundError,
     UnsupportedError,
 )
 from eufy_home_security.p2p.did import static_key
 from eufy_home_security.p2p.messages import HISTORY_RECORD_COUNTER
 from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
-from eufy_home_security.recordings import RecordingPosition, RecordingsPage, encode_cursor
+from eufy_home_security.recordings import (
+    RecordingPosition,
+    RecordingRef,
+    RecordingsPage,
+    encode_cursor,
+    encode_ref,
+)
 from eufy_home_security.station import RECORDING_QUIET, Station
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import FakeStation
@@ -502,6 +510,141 @@ async def test_a_homebase_2_pages_its_sequential_ids_by_their_station_day(
     assert [r.record_id for r in second.rows] == [4, 3]
     assert second.next_cursor is None
     assert _asked(fake) == [_day(day_before)]
+
+
+@pytest.fixture
+async def hb2(fake: FakeStation) -> AsyncIterator[Station]:
+    """A HomeBase 2 (ids without a day, paged by start time) with two cameras."""
+    fake.serial = HB2_SN
+    fake.static_key = static_key(HB2_SN, fake.did)
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(HB2_SN, credentials, host="127.0.0.1", port=fake.discovery_port)
+    st = Station(
+        dataclasses.replace(STATION, device_sn=HB2_SN),
+        session,
+        sub_devices=[
+            dataclasses.replace(CAMERA, station_sn=HB2_SN),
+            dataclasses.replace(CAMERA, device_sn=OTHER_SN, station_sn=HB2_SN, channel=1),
+        ],
+    )
+    yield st
+    await st.async_close()
+
+
+def _hb2_rows(today: datetime) -> list[dict[str, object]]:
+    day_before = today - timedelta(days=1)
+    rows = [_row(today, n, SYNTHETIC.camera_sn, record_id=n) for n in (9, 7)]
+    rows.append(_row(today, 8, OTHER_SN, record_id=8))
+    rows += [_row(day_before, n, SYNTHETIC.camera_sn, record_id=n) for n in (5, 4)]
+    return rows
+
+
+async def test_a_homebase_2_recording_is_found_by_its_ref_with_one_query_of_its_day(
+    hb2: Station, fake: FakeStation, today: datetime
+) -> None:
+    """Every listed row of both cameras comes back by its ref, each with one query of the
+    station day it was listed under, the row and its ref unchanged."""
+    fake.rows = _hb2_rows(today)
+    page = await hb2.async_list_recordings_page(days=2, limit=10)
+    fake.history_queries.clear()
+    assert [r.record_id for r in page.rows] == [9, 8, 7, 5, 4]
+    for row in page.rows:
+        assert row.ref is not None
+        found = await hb2.async_history_record_by_ref(row.ref)
+        assert (found, found.ref) == (row, row.ref)
+        listed_day = today if row.record_id > 5 else today - timedelta(days=1)
+        assert _asked(fake) == [_day(listed_day)]
+    camera_rows = await hb2.async_list_recordings(OTHER_SN)
+    assert camera_rows[0].ref == page.rows[1].ref
+    found = await hb2.async_history_record_by_ref(camera_rows[0].ref or "", device_sn=OTHER_SN)
+    assert found == camera_rows[0]
+
+
+async def test_a_ref_that_does_not_check_out_is_refused_before_sending(
+    hb2: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = _hb2_rows(today)
+    page = await hb2.async_list_recordings_page(days=1, limit=10)
+    fake.history_queries.clear()
+    other_camera = page.rows[1]
+    assert other_camera.device_sn == OTHER_SN
+    assert other_camera.ref is not None
+    with pytest.raises(RecordingRefError, match="does not check out"):
+        await hb2.async_history_record_by_ref(other_camera.ref, device_sn=SYNTHETIC.camera_sn)
+    another_station = encode_ref(
+        RecordingRef(today.date(), 9, SYNTHETIC.camera_sn, "20260916120900"),
+        station_sn=SYNTHETIC.station_sn,
+    )
+    for text in (another_station, page.next_cursor or "v1.d", "9", other_camera.ref[:-1] + "x"):
+        with pytest.raises(RecordingRefError):
+            await hb2.async_history_record_by_ref(text)
+    with pytest.raises(UnsupportedError, match="not paired"):
+        await hb2.async_history_record_by_ref(other_camera.ref, device_sn="T8160P2000011111")
+    assert fake.history_queries == []
+
+
+async def test_a_ref_whose_recording_is_gone_raises_not_found(
+    hb2: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = _hb2_rows(today)
+    page = await hb2.async_list_recordings_page(days=1, limit=10)
+    fake.rows = [row for row in fake.rows if row["record_id"] != 7]
+    fake.history_queries.clear()
+    with pytest.raises(RecordNotFoundError, match="no such recording"):
+        await hb2.async_history_record_by_ref(page.rows[2].ref or "")
+    assert len(fake.history_queries) == 1
+
+
+async def test_a_homebase_3_recording_is_found_by_its_ref_or_its_id(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = [_row(today, n, SYNTHETIC.camera_sn) for n in (3, 2, 1)]
+    rows = await station.async_list_recordings()
+    fake.history_queries.clear()
+    found = await station.async_history_record_by_ref(rows[1].ref or "")
+    by_id = await station.async_history_record(rows[1].record_id)
+    assert (found, found.ref) == (rows[1], rows[1].ref)
+    assert by_id is not None
+    assert by_id.ref == rows[1].ref
+    assert [q["start_id"] for q in fake.history_queries] == [rows[1].record_id] * 2
+
+
+async def test_a_station_row_of_the_station_itself_is_found_by_its_ref(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = [_row(today, 4, SYNTHETIC.station_sn, storage_path="")]  # an arming row
+    rows = await station.async_list_history(_day(today))
+    found = await station.async_history_record_by_ref(rows[0].ref or "")
+    assert (found, found.ref) == (rows[0], rows[0].ref)
+
+
+async def test_a_standalone_device_finds_no_recording_by_ref() -> None:
+    device = CloudDevice(
+        device_sn=SYNTHETIC.camera_sn,
+        station_sn=SYNTHETIC.camera_sn,
+        p2p_did=SYNTHETIC.did,
+        device_type=48,
+        channel=0,
+        name="standalone",
+    )
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        raise AssertionError("nothing connects")
+
+    session = StationSession(SYNTHETIC.camera_sn, credentials, host="127.0.0.1", port=9)
+    standalone = Station(device, session)
+    ref = encode_ref(
+        RecordingRef(NOW.date(), 7, SYNTHETIC.camera_sn, "20260916120000"),
+        station_sn=SYNTHETIC.camera_sn,
+    )
+    try:
+        with pytest.raises(UnsupportedError, match="standalone"):
+            await standalone.async_history_record_by_ref(ref)
+    finally:
+        await standalone.async_close()
 
 
 async def test_recordings_timeout_bounds_each_history_query(

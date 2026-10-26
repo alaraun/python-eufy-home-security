@@ -163,6 +163,15 @@ def test_history_record_tolerates_missing_and_bad_extra() -> None:
     assert rec.device_sn is None
 
 
+def test_a_history_record_compares_without_its_ref() -> None:
+    """The same row compares equal whether or not a listing set its reference."""
+    rec = HistoryRecord.from_row({"record_id": 2818, "device_sn": SYNTHETIC.camera_sn})
+    listed = dataclasses.replace(rec, ref="v1.k.20260916.2818.00000000")
+    assert rec.ref is None
+    assert listed == rec
+    assert hash(listed) == hash(rec)
+
+
 def _clip_row(**extra: object) -> dict[str, object]:
     return {
         "record_id": 2026100100010,

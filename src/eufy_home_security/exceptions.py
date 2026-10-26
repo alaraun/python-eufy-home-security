@@ -516,6 +516,12 @@ class RecordingCursorError(EufySecurityError, ValueError):
     a ``ValueError`` too, so an invalid argument either way."""
 
 
+class RecordingRefError(EufySecurityError, ValueError):
+    """A recording reference (:attr:`~.events.HistoryRecord.ref`) that does not check out
+    for that station and camera, or one that does not parse (garbled, another version).
+    Raised before anything is sent; a ``ValueError`` too."""
+
+
 class CaptureStoppedError(EufySecurityError):
     """A live capture was stopped on request before its first keyframe: nothing was written."""
 

@@ -886,6 +886,12 @@ class HistoryRecord:
     arm_mode: int | None = None
     user_name: str | None = None
     raw: Mapping[str, Any] = _raw_field()
+    ref: str | None = field(default=None, compare=False, hash=False)
+    """Opaque text that finds this row again on its station
+    (:meth:`~.station.Station.async_history_record_by_ref`), set on the rows a history
+    listing or lookup returns; None for a row it cannot find (no ``record_id``, no
+    camera, or on a station paged by start time, no start time). URL-path-safe and
+    JSON-safe; ignored by equality and hashing."""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "raw", _frozen_raw(self.raw))

@@ -52,6 +52,8 @@ from eufy_home_security.exceptions import (
     KeyRejectedError,
     ProtocolError,
     RateLimitedError,
+    RecordingRefError,
+    RecordNotFoundError,
     StationUnreachableError,
     UnsupportedError,
 )
@@ -94,6 +96,7 @@ from eufy_home_security.p2p.session import (
 )
 from eufy_home_security.p2p.transport import PPPPTransport
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
+from eufy_home_security.recordings import RecordingRef, decode_ref
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import (
     MEDIA_AUDIO,
@@ -1367,6 +1370,159 @@ async def test_a_record_id_without_a_day_pages_from_the_day_given_beside_it() ->
     assert [r.record_id for r in older] == [106, 105, 104, 103, 102, 101, 100]
     assert [r.record_id for r in oldest] == [102, 101, 100]
     assert asked == ["20260915"]
+
+
+_OTHER_CAMERA_SN = "T8160P2000099999"
+_CAMERAS = (SYNTHETIC.camera_sn, _OTHER_CAMERA_SN)
+
+
+def _hb2_row(record_id: int, second: int, device_sn: str = SYNTHETIC.camera_sn) -> dict[str, Any]:
+    """A HomeBase 2 row of 20260916: a sequential id, started ``second`` s after noon."""
+    return {
+        "record_id": record_id,
+        "device_sn": device_sn,
+        "start_time": f"2026-09-16 12:{second // 60:02d}:{second % 60:02d}",  # hygiene: ok
+        "storage_path": f"/zx/{record_id}.zxvideo",
+    }
+
+
+async def test_a_listed_row_is_found_again_by_its_reference_with_one_query(
+    station: FakeStation,
+) -> None:
+    """The HomeBase 3 family: the reference names the id's day, and the lookup asks one
+    page of 2 from the id; a lookup by id carries the same reference."""
+    station.rows = [_history_row("20260916", n) for n in range(1, 6)]
+    station.rows.append({**_history_row("20260916", 6), "start_time": ""})
+    session = make_session(station, Provider(station))
+    try:
+        listed = await session.async_list_history("20260916")
+        target = listed[3]
+        assert target.ref is not None
+        named = decode_ref(target.ref, station_sn=SYNTHETIC.station_sn, device_sns=_CAMERAS)
+        station.history_queries.clear()
+        found = await session.async_find_history_record(named)
+        by_id = await session.async_history_record(target.record_id)
+        assert listed[0].ref is not None
+        timeless = decode_ref(listed[0].ref, station_sn=SYNTHETIC.station_sn, device_sns=_CAMERAS)
+        found_timeless = await session.async_find_history_record(timeless)
+    finally:
+        await session.async_close()
+    assert named == RecordingRef(
+        date(2026, 9, 16), target.record_id, SYNTHETIC.camera_sn, "20260916120003"
+    )
+    assert (found, found.ref) == (target, target.ref)
+    assert by_id is not None
+    assert by_id.ref == target.ref
+    asked = [(q["start_date"], q["start_id"], q["count"]) for q in station.history_queries]
+    assert asked[:2] == [("20260916", target.record_id, 2)] * 2
+    # found by its id here: a row without a start time gets one too
+    assert (timeless.started, found_timeless) == (None, listed[0])
+
+
+async def test_a_homebase_2_row_is_found_by_its_day_and_start_second() -> None:
+    """Ids without a day, paged by start time: the reference carries the day its query
+    named and the row's start, and the lookup asks one page from the second after it,
+    which holds the row however many newer rows the day has; a row without a start time
+    gets no reference."""
+    station = FakeStation(serial=_HB2_SN)
+    await station.start()
+    station.rows = [_hb2_row(10 * n, n) for n in range(100, 140)]
+    station.rows.append(_hb2_row(1101, 110, _OTHER_CAMERA_SN))  # the same second
+    station.rows.append({**_hb2_row(990, 99), "start_time": ""})
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        listed = {r.record_id: r for r in await session.async_list_history("20260916")}
+        named = decode_ref(listed[1100].ref, station_sn=_HB2_SN, device_sns=_CAMERAS)
+        other = decode_ref(listed[1101].ref, station_sn=_HB2_SN, device_sns=_CAMERAS)
+        station.history_queries.clear()
+        found = await session.async_find_history_record(named)
+        found_other = await session.async_find_history_record(other)
+    finally:
+        await session.async_close()
+        station.stop()
+    assert named == RecordingRef(date(2026, 9, 16), 1100, SYNTHETIC.camera_sn, "20260916120150")
+    assert other == RecordingRef(date(2026, 9, 16), 1101, _OTHER_CAMERA_SN, "20260916120150")
+    assert listed[990].ref is None
+    assert (found, found.ref) == (listed[1100], listed[1100].ref)
+    assert (found_other, found_other.ref) == (listed[1101], listed[1101].ref)
+    asked = [(q["start_date"], q["start_time"], q["count"]) for q in station.history_queries]
+    assert asked == [("20260916", "20260916120151", 20)] * 2
+
+
+@pytest.mark.parametrize(
+    ("rows", "ref"),
+    [
+        pytest.param(
+            [_hb2_row(111, 111)],
+            RecordingRef(date(2026, 9, 16), 110, SYNTHETIC.camera_sn, "20260916120150"),
+            id="gone",
+        ),
+        pytest.param(
+            [_hb2_row(110, 105)],
+            RecordingRef(date(2026, 9, 16), 110, SYNTHETIC.camera_sn, "20260916120150"),
+            id="id-names-an-older-start",
+        ),
+        pytest.param(
+            [_hb2_row(110, 110, _OTHER_CAMERA_SN)],
+            RecordingRef(date(2026, 9, 16), 110, SYNTHETIC.camera_sn, "20260916120150"),
+            id="id-names-another-camera",
+        ),
+        pytest.param(
+            [_hb2_row(111, 110)],
+            RecordingRef(date(2026, 9, 16), 110, SYNTHETIC.camera_sn, "20260916120150"),
+            id="another-id-of-the-camera-in-that-second",
+        ),
+    ],
+)
+async def test_a_reference_whose_row_is_gone_raises_not_found(
+    rows: list[dict[str, Any]], ref: RecordingRef
+) -> None:
+    station = FakeStation(serial=_HB2_SN)
+    await station.start()
+    station.rows = rows
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        with pytest.raises(RecordNotFoundError, match="no such recording"):
+            await session.async_find_history_record(ref)
+    finally:
+        await session.async_close()
+        station.stop()
+    assert len(station.history_queries) == 1
+
+
+async def test_a_homebase_3_reference_whose_row_is_gone_raises_not_found(
+    station: FakeStation,
+) -> None:
+    station.rows = [_history_row("20260916", 5)]
+    ref = RecordingRef(date(2026, 9, 16), 2026091600004, SYNTHETIC.camera_sn)
+    session = make_session(station, Provider(station))
+    try:
+        with pytest.raises(RecordNotFoundError, match="no such recording"):
+            await session.async_find_history_record(ref)
+    finally:
+        await session.async_close()
+    assert len(station.history_queries) == 1
+
+
+async def test_a_reference_without_a_start_is_refused_where_rows_page_by_start_time() -> None:
+    station = FakeStation(serial=_HB2_SN)
+    await station.start()
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        with pytest.raises(RecordingRefError, match="no start time"):
+            await session.async_find_history_record(
+                RecordingRef(date(2026, 9, 16), 110, SYNTHETIC.camera_sn)
+            )
+    finally:
+        await session.async_close()
+        station.stop()
+    assert station.history_queries == []
 
 
 def _timeless_row(counter: int) -> dict[str, Any]:
