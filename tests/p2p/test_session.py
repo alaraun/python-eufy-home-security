@@ -2153,7 +2153,7 @@ async def test_rejected_media_open_raises_the_code(station: FakeStation) -> None
     session = make_session(station, Provider(station))
     try:
         stream = await session.async_open_recording("/zx/clip.zxvideo", 0)
-        with pytest.raises(AccountRejectedError, match="-104"):
+        with pytest.raises(AccountRejectedError, match=r"code -104: INVALID_ACCOUNT$"):
             await anext(stream)
     finally:
         await session.async_close()

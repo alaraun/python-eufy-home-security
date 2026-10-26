@@ -123,8 +123,8 @@ RECEIPT_NOT_HANDLED = -108
 #: Result code ``INVALID_COMMAND``: the station takes no command of this form (a scalar
 #: for a command it takes only as a payload object, or the other way round).
 RESULT_INVALID_COMMAND = -103
-#: Result code ``INVALID_ACCOUNT``: the station does not take the account id the command
-#: carried (not its owner or a member it is shared with).
+#: Result code ``INVALID_ACCOUNT``: the station does not accept the account id the
+#: command carried.
 RESULT_INVALID_ACCOUNT = -104
 #: Receipt code: the station tried to wake the camera and failed (the camera's Wi-Fi).
 RECEIPT_WAKE_FAILED = -204

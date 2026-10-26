@@ -15,7 +15,7 @@ branch maps onto one decision a caller (Home Assistant, in practice) has to make
   change worth reporting).
 * :class:`CommandError` — the station received a command and did not apply it;
   :class:`AccountRejectedError` when it refused the account the command carried
-  (check the station is shared with this account).
+  (check in the eufy app that the station is shared with this account).
 * :class:`RecordNotFoundError` — no such record or media; its subclass
   :class:`StillNotWrittenError` means not yet (ask again later).
 """
@@ -393,10 +393,10 @@ class AccountRejectedError(CommandRejectedError):
     """The station refused a command for the account it carried: code -104
     (``INVALID_ACCOUNT``) in its result or receipt, on any command path.
 
-    The station does not take the account id the command was sent under: this account is
-    not (or no longer) the station's owner or a member it is shared with. Retrying changes
-    nothing; a human checks in the eufy app that the station is shared with this account.
-    The eufy app tells this code apart from other refusals too. A
+    The station does not accept the account id the command was sent under. Retrying
+    changes nothing; a human checks in the eufy app that the station is shared with this
+    account, or removes it and adds it again. The eufy app tells this code apart from
+    other refusals too. A
     :class:`CommandRejectedError` with ``code`` -104, so handlers of that class still
     catch it.
     """

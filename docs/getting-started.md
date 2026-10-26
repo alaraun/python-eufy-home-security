@@ -85,7 +85,7 @@ datagram; the next parameter dump shows the value. Otherwise it raises:
 |---|---|
 | `CommandNotAppliedError` | The station received it and did nothing — usually not the owner's account id |
 | `CommandRejectedError` | The station answered with an error code (`.code`) |
-| `AccountRejectedError` | A `CommandRejectedError` with code −104: the station does not take this account; check in the eufy app that the station is shared with it |
+| `AccountRejectedError` | A `CommandRejectedError` with code −104. The station does not accept this account: check in the eufy app that it is shared with this account, or remove and add it again |
 | `DeviceTimeoutError` | No answer at all |
 | `UnsupportedError` | Unknown setting, not writable (its `note` says why), or the device is not paired to this station |
 

@@ -96,8 +96,8 @@ def describe_error(exc: EufySecurityError) -> str:
             )
         case AccountRejectedError():
             return (
-                f"the station refused this account: {exc}. Check in the eufy app that the "
-                "station is shared with this account"
+                f"the station does not accept this account: {exc}. Check in the eufy app "
+                "that it is shared with this account, or remove and add it again"
             )
         case CommandRejectedError():
             return f"the station refused: {exc}"

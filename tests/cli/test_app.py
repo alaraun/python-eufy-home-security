@@ -60,7 +60,7 @@ def restore_logging() -> Iterator[None]:
         (CloudApiError(26006, "nope"), "eufy cloud error: cloud error 26006"),
         (CommandNotAppliedError(1224), "station owner's"),
         (CommandRejectedError(1253, -1), "the station refused: command 1253 rejected"),
-        (AccountRejectedError(1253, -104), "station is shared with this account"),
+        (AccountRejectedError(1253, -104), "shared with this account, or remove and add it again"),
         (StationUnreachableError("no reply"), "--local-port"),
         (DeviceTimeoutError("slow"), "did not answer in time"),
         (CommunicationError("down"), "network error: down"),

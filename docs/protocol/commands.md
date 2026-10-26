@@ -169,9 +169,10 @@ that serves reads, and do not resend into a stall — each resend queues again.
   outside Schedule) as its own write and returns it, without waiting for a mode report.
   A non-zero code is a rejection: −108 and −103 `CommandUnsupportedError`, −104
   `AccountRejectedError`, any other `CommandRejectedError`. A decoded `0x047F` that
-  arrives before the result answers the arm, and another mode than asked fails it. With neither, the mode is read back: the
-  station is silent when asked for the mode it is in, and any other mode raises
-  `CommandNotAppliedError` (a transport ACK alone is no success).
+  arrives before the result answers the arm, and another mode than asked fails it. With
+  neither, the mode is read back: the station is silent when asked for the mode it is
+  in, and any other mode raises `CommandNotAppliedError` (a transport ACK alone is no
+  success).
 - The `0x047F` follows every change, whoever made it: a P2P client, the eufy app, or a
   schedule slot starting or ending, and every open session on the station receives it
   (fw 3.8.7.4; see [events.md](events.md#guard-mode-announcements)). Keypad changes are
