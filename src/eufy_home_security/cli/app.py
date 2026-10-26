@@ -11,6 +11,7 @@ from collections.abc import Mapping
 
 from .._logging import set_secret_logging, set_wire_logging
 from ..exceptions import (
+    AccountRejectedError,
     AuthenticationError,
     CipherUnusableError,
     CloudError,
@@ -92,6 +93,11 @@ def describe_error(exc: EufySecurityError) -> str:
                 f"{exc}. The station silently drops commands whose account id is not the "
                 "station owner's; a shared member must send the owner's id (the library "
                 "fetches it from the cloud — try again after `eufy-security devices`)"
+            )
+        case AccountRejectedError():
+            return (
+                f"the station does not accept this account: {exc}. Check in the eufy app "
+                "that it is shared with this account, or remove and add it again"
             )
         case CommandRejectedError():
             return f"the station refused: {exc}"

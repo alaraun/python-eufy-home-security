@@ -118,7 +118,7 @@ image = await station.async_preset_image(device_sn, preset=1)  # pan/tilt: turn,
   `CommandNotAppliedError` when the station acknowledged the open, the owner-id
   case, and `DeviceTimeoutError` when it did not. Frames that arrive without a
   keyframe that decodes raise `ProtocolError`. A reply with a non-zero code raises
-  `CommandRejectedError`.
+  `CommandRejectedError` (`AccountRejectedError` for −104).
 - A HomeBase live open answered with a wake-failure receipt (−204, below) raises
   `CameraWakeError` at once, and the session refuses further live opens of that
   channel for `WAKE_BACKOFF` (60 s, 300 s, 900 s), raising `CameraWakeError` with
@@ -792,7 +792,8 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
 - The **first keyframe is the trigger moment** at full resolution: it arrived 0.4 s
   after the request and decoded to a 3840×2160 JPEG of about 1.7 MB.
 - It does not wake the camera: the recording is on the station's storage.
-- A −104 (INVALID_ACCOUNT) reply means the `account_id` is not the owner's.
+- A −104 (INVALID_ACCOUNT) reply means the `account_id` is not the owner's
+  (`AccountRejectedError`).
 - **No stop command ends a playback [verified].** On HomeBase 3 fw 3.8.7.4:
   - `STOP_DOWNLOAD_VIDEO` (1051) is **rejected**: receipt −108 about 11–12 s after it was
     sent, and like any rejected command it holds the session's command queue until

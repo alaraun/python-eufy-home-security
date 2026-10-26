@@ -73,8 +73,12 @@ library takes both lengths (`RECEIPT_LENS`).
 `RECEIPT_CODES` names the other codes of the app's error table as well (−100 to −135,
 −203 to −205, spelled as in the app) **[declared]**; the app calls 0
 `SUCCESSFUL` and −108 `WAIT_TIMEOUT`; the library raises `CommandUnsupportedError` for −108
-and −103 (`INVALID_COMMAND`: no command of this form), `CameraWakeError` for −203, −204 and
-−205 and `CommandRejectedError` with the name for the rest.
+and −103 (`INVALID_COMMAND`: no command of this form), `AccountRejectedError` for −104
+(`INVALID_ACCOUNT`: the station does not take the account the command carried),
+`CameraWakeError` for −203, −204 and −205 and `CommandRejectedError` with the name for the
+rest. A result code (ECB scalar, JSON `code` / `mIntRet`, a media reply) maps the same way,
+−108 and the wake codes aside: one mapping on every command path, which tells −104 apart
+from other refusals as the eufy app does.
 
 The receipt carries no command id or transaction, so it can be attributed only
 while a single command is in flight.
@@ -100,9 +104,9 @@ that serves reads, and do not resend into a stall — each resend queues again.
   encryption type, payload length, code and whether its tail is zero.
 - `async_send_command` takes a `0x0546` receipt that arrives while it is in flight as
   its own. Code −108 or −103 raises `CommandUnsupportedError` (a `CommandRejectedError`
-  with that `code` and an `UnsupportedError`); any other non-zero code raises
-  `CommandRejectedError`. Code 0 only means taken: the outcome is still `APPLIED` on
-  a `0x0547` result, else `DELIVERED`.
+  with that `code` and an `UnsupportedError`), −104 `AccountRejectedError`; any other
+  non-zero code raises `CommandRejectedError`. Code 0 only means taken: the outcome is
+  still `APPLIED` on a `0x0547` result, else `DELIVERED`.
 - The command is resent once, after 1.5 s, only when neither a receipt nor a DRW ACK
   came back. A command that was acknowledged but has no receipt when its timeout
   runs out keeps the session's request lock until the receipt arrives, at most 20 s
@@ -163,11 +167,12 @@ that serves reads, and do not resend into a stall — each resend queues again.
   takes it: code 0 (a `0x0547` naming 1224, the scalar's reply, on an RSA session the
   channel-0 result of the arm's own send) means applied. The library files the mode (1224; 1151 the same
   outside Schedule) as its own write and returns it, without waiting for a mode report.
-  A non-zero code is a rejection: −108 and −103 `CommandUnsupportedError`, any other
-  `CommandRejectedError`. A decoded `0x047F` that arrives before the result answers the
-  arm, and another mode than asked fails it. With neither, the mode is read back: the
-  station is silent when asked for the mode it is in, and any other mode raises
-  `CommandNotAppliedError` (a transport ACK alone is no success).
+  A non-zero code is a rejection: −108 and −103 `CommandUnsupportedError`, −104
+  `AccountRejectedError`, any other `CommandRejectedError`. A decoded `0x047F` that
+  arrives before the result answers the arm, and another mode than asked fails it. With
+  neither, the mode is read back: the station is silent when asked for the mode it is
+  in, and any other mode raises `CommandNotAppliedError` (a transport ACK alone is no
+  success).
 - The `0x047F` follows every change, whoever made it: a P2P client, the eufy app, or a
   schedule slot starting or ending, and every open session on the station receives it
   (fw 3.8.7.4; see [events.md](events.md#guard-mode-announcements)). Keypad changes are
@@ -1100,5 +1105,5 @@ mean 1x **[verified, T8170]**:
 | 132-byte receipt | 0 / −108 | taken off the queue / command not handled ([receipt](#command-receipt-verified)). `1051` (`STOP_DOWNLOAD_VIDEO`, app enum `DOWNLOAD_CANCEL`) is −108 **[verified]**. |
 | 132-byte receipt | −204 | the station could not wake the camera (live open) **[verified]** |
 | 1700 receipt, preset commands | 1 | the camera is still moving; the same command succeeds once it stops **[verified, T8170]** |
-| media / download | −104 | INVALID_ACCOUNT: the owner-id gate |
+| media / download | −104 | INVALID_ACCOUNT: the owner-id gate (`AccountRejectedError`) |
 | (none) | — | silence after an ACK: wrong `account_id`, or a database query missing its paging fields |

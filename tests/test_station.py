@@ -62,6 +62,7 @@ from eufy_home_security.events import (
     ZoomChanged,
 )
 from eufy_home_security.exceptions import (
+    AccountRejectedError,
     CommandNotAppliedError,
     CommandRejectedError,
     CommandUnsupportedError,
@@ -1442,7 +1443,7 @@ async def test_a_mode_table_is_confirmed_by_read_back_not_the_receipt(
     ):
         await station.async_set_mode_action("away", "camera_siren", True, channel=0)
     fake.mode_table_receipt_code = -104
-    with pytest.raises(CommandRejectedError, match="code -104"):
+    with pytest.raises(AccountRejectedError, match="code -104"):
         await station.async_set_mode_action("away", "camera_siren", True, channel=0)
 
 
