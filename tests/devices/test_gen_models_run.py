@@ -41,7 +41,7 @@ ORDER_GATE: Path | None = None  # set: the first model finishes only after the l
 # Several jobs fork worker processes: that runs in a fresh interpreter without the test
 # runner's threads, as on the command line.
 SEVERAL_JOBS = """
-import importlib.util, os, sys
+import importlib.util, os, signal, sys
 from pathlib import Path
 spec = importlib.util.spec_from_file_location("test_gen_models_run", sys.argv[1])
 test = importlib.util.module_from_spec(spec)
@@ -51,7 +51,9 @@ test.gen_models.DRIVERS.close()  # as an earlier run leaves it
 tmp = Path(sys.argv[2])
 (tmp / "parent-pid").write_text(str(os.getpid()))
 test.ORDER_GATE = tmp / "last-model-done"
-sys.exit(test.gen_models._generate_all(test._args(tmp, 3), tmp, tmp / "out", quiet=False))
+rc = test.gen_models._generate_all(test._args(tmp, 3), tmp, tmp / "out", quiet=False)
+(tmp / "sigterm-after").write_text(str(signal.getsignal(signal.SIGTERM) is signal.SIG_DFL))
+sys.exit(rc)
 """
 
 
@@ -136,6 +138,7 @@ def test_several_jobs_build_in_worker_processes_and_report_each_failure(tmp_path
     pids = _check_run(result.returncode, tmp_path / "out", result.stdout, result.stderr)
     assert pids
     assert int((tmp_path / "parent-pid").read_text()) not in pids
+    assert (tmp_path / "sigterm-after").read_text() == "True"  # the run's handler is gone
 
 
 # Answers --version as Node of the given version; any other run fails at once.
@@ -196,7 +199,8 @@ def test_node_of_another_major_stops_the_run_before_it_starts(tmp_path: Path) ->
 
 
 # Killing the parent of a several-job run: each model runs one job on a fake driver that
-# records its pid and answers after 0.1 s; each generating process records its pid.
+# records its pid and answers after argv[3] seconds; each generating process records its
+# pid.
 PARENT_KILLED = """
 import importlib.util, sys
 from pathlib import Path
@@ -205,7 +209,7 @@ test = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(test)
 tmp = Path(sys.argv[2])
 test.gen_models.generate = test._driver_generate
-test.gen_models.DRIVERS = test.gen_models.node.DriverPool([sys.executable, "-c", test.SLOW_DRIVER, str(tmp)])
+test.gen_models.DRIVERS = test.gen_models.node.DriverPool([sys.executable, "-c", test.SLOW_DRIVER, str(tmp), sys.argv[3]])
 args = test._args(tmp, 3)
 args.product_codes = [f"T9Z{n:02d}" for n in range(300)]
 sys.exit(test.gen_models._generate_all(args, tmp, tmp / "out", quiet=True))
@@ -215,7 +219,7 @@ SLOW_DRIVER = """
 import os, sys, time
 open(os.path.join(sys.argv[1], f"driver-{os.getpid()}"), "w").close()
 for line in sys.stdin:
-    time.sleep(0.1)
+    time.sleep(float(sys.argv[2]))
     sys.stdout.write("[]\\n")
     sys.stdout.flush()
 """
@@ -249,14 +253,18 @@ def _until(condition: Any, seconds: float) -> bool:
 @pytest.mark.skipif(not Path("/proc/self/stat").exists(), reason="reads /proc")
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize(
-    ("sig", "rc"), [(signal.SIGTERM, 128 + signal.SIGTERM), (signal.SIGKILL, -signal.SIGKILL)]
+    ("sig", "rc", "job_s"),
+    [
+        (signal.SIGTERM, 128 + signal.SIGTERM, 0.1),  # the jobs in flight end first
+        (signal.SIGKILL, -signal.SIGKILL, 60),  # the busy workers are killed
+    ],
 )
 def test_killing_the_parent_ends_the_generating_processes_and_their_workers(
-    tmp_path: Path, sig: int, rc: int
+    tmp_path: Path, sig: int, rc: int, job_s: float
 ) -> None:
     with (tmp_path / "err").open("w") as err:
         proc = subprocess.Popen(
-            [sys.executable, "-c", PARENT_KILLED, __file__, str(tmp_path)],
+            [sys.executable, "-c", PARENT_KILLED, __file__, str(tmp_path), str(job_s)],
             stdout=subprocess.DEVNULL,
             stderr=err,
             start_new_session=True,
