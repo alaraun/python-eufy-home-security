@@ -140,6 +140,13 @@ An attached record that is merely unbound is not a rejection: its fields are Non
 3104 crying, 3105 sound, 3106 pet, **3107 vehicle** `*`, 3108–3110 dog / lick / poop,
 **3111 identified person** `*`, 3112 stranger.
 
+**Doorbell press.** A 3103 comes from a video doorbell or a video smart lock, with the
+pressed device's own serial as `device_sn`; the eufy app shows both as a ring (ring
+notification, live view on answer) **[app]**. Which models ring is
+`Capability.DOORBELL_RING` (see `devices/capabilities.py`): a doorbell by its kind, a video
+lock by its app product category `VideoSmartLock`. A video lock's press is not seen on
+hardware.
+
 **Detection kind** (`SecurityEvent.detection`). Most pushes use `event_type` as an
 enum. For a `msg_type` 1 (SECURITY_EVT) push, the eufy app takes the kind from
 two side fields first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on hardware):
