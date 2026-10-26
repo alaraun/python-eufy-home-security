@@ -328,28 +328,30 @@ DeviceMsgBean and subheader as above, with the payload
 The open is the device's own handler's (`open_live_stream` in its `<PN>Handle.mix.js`),
 and it depends on how the device is reached. `scripts/gen_live_open.py` runs every
 cached handler standalone and behind each station kind and records which library open
-reproduces it (`devices/_live_open_data.py`, `devices.live_open`). From the eufy app
-6.1.10 handlers (78 products with a live open):
+reproduces it (`devices/_live_open_data.py`, `devices.live_open`). From the eufy app's
+handlers (96 products with a live open):
 
 | handler's open | standalone | behind a HomeBase 2 / 3 |
 |---|---|---|
-| 1700/1000 with `extValue` (`single`) | 3 products | — / 2 |
-| 1700/1000 without `extValue` (`single_no_ext`) | 56 | 22 / 23 |
-| 1350/1003 `DeviceMsgBean`, plain payload (`station`) | 1 | 50 / 47 |
-| another open (dual-lens `stitch_mode`, bare 1003 `cryptoKey`, version-dependent) | 18 | 6 / 6 |
+| 1700/1000 with `extValue` (`single`) | 4 products | — / 2 |
+| 1700/1000 without `extValue` (`single_no_ext`) | 63 | 22 / 23 |
+| 1350/1003 `DeviceMsgBean`, plain payload (`station`) | 1 | 64 / 61 |
+| 1350/1003 multi-camera payload (`nvr`, `nvr_lens`) | 4 | 7 / 7 |
+| another open (bare 1003 `cryptoKey`, version-dependent) | 24 | 3 / 3 |
 
-Behind a NVR, a T9000, a T7000 or a HomeBase 4 the handlers send a 1350/1003 the library
-does not build (`stitch_mode`, `camera_type` from `chn_list`), or flag the request `webRtc`;
-none matches a library open.
+Behind a NVR, a T9000, a T7000 or a HomeBase 4 most handlers send the multi-camera open
+with fields the library does not build, or flag the request `webRtc`; the app streams
+every device there over WebRTC in any case.
 
-The library sends the recorded open: on the device's own session every one of the three;
-behind a station `station`, and a 1700 open behind a HomeBase 2 or 3 as described
-[below](#wi-fi-camera-behind-a-homebase-open-17001000-on-the-homebases-session) where the
-handler's stop is one the library sends. A device the eufy app streams over WebRTC
-([WebRTC or P2P](#webrtc-or-p2p-declared-eufy-app)) gets none, whatever its open. Any
-other open raises `UnsupportedError` before anything is sent, and `Station.live_support`
-grades it `UNKNOWN`. A product the table does not list gets the defaults: `single`
-standalone, `station` behind a station.
+The library sends the recorded open: on the device's own session every one; behind a
+station `station`, and a 1700 or multi-camera open behind a HomeBase 2 or 3 where the
+handler's stop is one the library sends (1700:
+[below](#wi-fi-camera-behind-a-homebase-open-17001000-on-the-homebases-session);
+multi-camera: [below](#multi-camera-open-13501003-with-the-view)). A device the eufy app
+streams over WebRTC ([WebRTC or P2P](#webrtc-or-p2p-declared-eufy-app)) gets none,
+whatever its open. Any other open raises `UnsupportedError` before anything is sent, and
+`Station.live_support` grades it `UNKNOWN`. A product the table does not list gets the
+defaults: `single` standalone, `station` behind a station.
 
 ### WebRTC or P2P **[declared: eufy app]**
 
@@ -425,6 +427,44 @@ standalone frame below, sent on the **HomeBase's** session:
 `0x0a`), the usual 1280×720 → 1920×1080 → 2880×1616 ramp — and stopped it on the
 1350/1004 stop with no record after. **[declared]** for each product whose handler sends
 it: none of them has been tested; a HomeBase 2 has not been tested.
+
+### Multi-camera open: 1350/1003 with the view
+
+Where a product's handler sends the multi-camera open (T8172, T8215, T8532, T85M1 and
+others; `nvr` / `nvr_lens` in `devices/_live_open_data.py`), the library builds it as the
+app does, in three steps (`devices.live_view`, `recipes.open_live_stream_nvr`):
+
+1. **Lenses.** The camera's parameter 9240 lists its lenses as JSON
+   (`[{"type":1,"id":0},{"type":1,"id":1}]`; id 0 the fixed lens, 1 the moving one). An
+   empty, absent or undecodable value lists none. The library reads it from the cloud's
+   parameter snapshot of the device (`Station.lenses`).
+2. **View.** The app's live page opens with every lens stacked (`stitch_mode` 5) when the
+   camera lists lenses, else on the fixed lens (`stitch_mode` 1); `Station.async_open_live`
+   takes another layout as `lens_view` (`LensView`: `main`, `sub`, `stacked`, `pip`).
+   `chn_list` names one entry per lens shown: `{"cameraType":0,"chn":<channel>,"index":<0
+   for the fixed lens, else 1>,"sensor":<lens id>}`; a one-lens view names that lens, a
+   layout of several without a lens list names the fixed lens alone. Picture in picture
+   (`stitch_mode` 7) adds `station_video_type` 9 and the inset `pip_cord`
+   `{"x1":650,"y1":700,"x2":950,"y2":900}` (thousandths of the picture, the app's default).
+3. **Body.** A `DeviceMsgBean` in a `0x0546` frame, subheader byte 4 `0x0a`:
+   `{cmd 1003, mChannel, account_id, mValue3 1003, mValue5 0, payload {accountId,
+   streamtype 0, camera_type, entrytype 0, stitch_mode, chn_list, key, ClientOS,
+   cameraType 0, …}}`, without `mValueStrSub` or `transaction`. To a HomeBase 3 the
+   payload also carries `extValue` 1000, `audio_chn` (the channel) and `pip_cord` (`""`
+   outside picture in picture), as the app's player adds them there; elsewhere `stitch_mode`
+   is 1 and `chn_list` empty. `camera_type` is 0, except for a one-lens view of the moving
+   lens on products whose handler names it (`nvr_lens`: 1).
+
+Media is one stream on the camera's channel, as for any HomeBase child: the station
+composes the layout. The stop is the handler's (`LIVE_STOP`): behind a HomeBase 3 a 1350
+`DeviceMsgBean` of cmd 1004 (the library sends its HomeBase 3 stop above) or a bare 1004,
+per product; behind a HomeBase 2 a bare 1004.
+
+**[verified]** for the body: a HomeBase 3 at 3.8.7.4 took it for its single-lens T8170
+(channel 2) and T8160 (channel 1) in layouts 1, 5 and 7, receipt 0 and video tagged with
+the channel from 1.4 to 3.6 s, the same picture in every layout, and stopped it on the
+1350/1004 `{channel}` stop. **[declared]** for every product that sends it: no camera with
+a lens list has been tested, and a HomeBase 2 has not been tested.
 
 ### Standalone device: open 1700/1000, stop bare 1004, ping 1139 **[verified]**
 

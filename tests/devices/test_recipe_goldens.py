@@ -26,6 +26,13 @@ type Case = dict[str, Any]
 
 def _open_live_stream(case: Case) -> Recipe:
     payload = case["payload"]
+    mode = _table_open(case)
+    if mode in live_open.NVR_OPENS:
+        return recipes.open_live_stream_nvr(
+            channel=case["device"]["device_channel"],
+            player=payload,
+            camera_type_from_lens=mode is live_open.LiveOpen.NVR_LENS,
+        )
     if _connect_type(case) is not ConnectType.SINGLE:
         return recipes.open_live_stream_station(
             channel=case["device"]["device_channel"],
@@ -82,9 +89,25 @@ def _connect_type(case: Case) -> ConnectType:
     return recipes.connect_type(case["device"]["parent_sn"], case["device"]["device_sn"])
 
 
+def _table_open(case: Case) -> live_open.LiveOpen | None:
+    """The open the generated table names for the case's product and connect type."""
+    code = product_code_of(None, case["device"]["device_sn"])
+    return live_open.live_open(code, _connect_type(case))
+
+
 def _is_homebase_live_open(case: Case) -> bool:
-    """The documented deviation: behind a HomeBase 3 the library keeps the app's T8030 open."""
-    return case["identifier"] == "open_live_stream" and _connect_type(case) is ConnectType.HB3
+    """The documented deviation: behind a HomeBase 3 the library keeps the app's T8030 open
+    where the handler sends the plain station open."""
+    return (
+        case["identifier"] == "open_live_stream"
+        and _connect_type(case) is ConnectType.HB3
+        and _table_open(case) not in live_open.NVR_OPENS
+    )
+
+
+def _is_homebase3_station_stop(case: Case) -> bool:
+    """The documented deviation: behind a HomeBase 3 the library sends its own 1350/1004."""
+    return bool(case["identifier"] == "close_live_stream" and case["p2p"]["cmd"] == 1350)
 
 
 def _golden_cases() -> Iterator[tuple[str, Case]]:
@@ -99,6 +122,8 @@ def _builder_params() -> Iterator[Any]:
         identifier = case["identifier"]
         if identifier not in BUILDERS or _is_homebase_live_open(case):
             continue
+        if _is_homebase3_station_stop(case):
+            continue
         yield pytest.param(product_code, case, id=f"{product_code}-{identifier}")
 
 
@@ -109,6 +134,8 @@ def test_the_golden_files_of_the_standalone_homebase3_and_homebase2_cameras_are_
         "T8142.json",
         "T8160.json",
         "T8170.json",
+        "T8172.json",
+        "T8215.json",
         "T8410.json",
         "T8410C.json",
         "T8425.json",

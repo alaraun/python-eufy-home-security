@@ -2,8 +2,8 @@
 
 ``_live_open_data.py`` is written by ``scripts/gen_live_open.py`` from the product
 handlers the eufy app runs: for each product and connect type, the library's open whose
-recipe equals the handler's, or none; and where that open is a 1700 open behind a
-station, the stop the handler sends. A product the table does not list (no cached
+recipe equals the handler's, or none; and where that open is a 1700 or multi-camera open
+behind a station, the stop the handler sends. A product the table does not list (no cached
 handler, or no ``open_live_stream`` action) has no recorded open. Pure lookups: no I/O.
 """
 
@@ -30,10 +30,21 @@ class LiveOpen(StrEnum):
     Behind a station it goes on the station's session with the camera's channel."""
     SINGLE_NO_EXT = "single_no_ext"
     """1700 with sub-command 1000, without ``extValue``."""
+    NVR = "nvr"
+    """1350/1003 ``DeviceMsgBean`` with the multi-camera payload that names the view
+    (:func:`~.recipes.open_live_stream_nvr`; the lenses and layout from
+    :mod:`.live_view`)."""
+    NVR_LENS = "nvr_lens"
+    """:attr:`NVR` whose ``camera_type`` names the moving lens of a one-lens view."""
+
+
+NVR_OPENS: Final = frozenset({LiveOpen.NVR, LiveOpen.NVR_LENS})
+"""The multi-camera opens."""
 
 
 class LiveStop(StrEnum):
-    """The stop a product's handler sends after its 1700 open behind a station."""
+    """The stop a product's handler sends after its 1700 or multi-camera open behind a
+    station."""
 
     BARE = "bare"
     """A bare 1004 frame whose body is the camera's channel (u32)."""
@@ -42,8 +53,8 @@ class LiveStop(StrEnum):
 
 
 SINGLE_BEHIND: Final = frozenset({ConnectType.HB2, ConnectType.HB3})
-"""Stations behind which the library sends a 1700 open: on the station's session, with
-the camera's channel in the frame header."""
+"""Stations behind which the library sends a 1700 or a multi-camera open: on the
+station's session, with the camera's channel in the frame header."""
 
 _TABLE: Final[Mapping[str, Mapping[ConnectType, LiveOpen | None]]] = MappingProxyType(
     {
@@ -90,9 +101,9 @@ def live_open(product_code: str | None, connect: ConnectType) -> LiveOpen | None
 
 
 def live_stop(product_code: str | None, connect: ConnectType) -> LiveStop | None:
-    """The stop the handler of ``product_code`` sends after its 1700 open behind a
-    ``connect`` station; None where it sends no 1700 open there, or a stop the library
-    does not implement."""
+    """The stop the handler of ``product_code`` sends after its 1700 or multi-camera open
+    behind a ``connect`` station; None where it sends neither there, or a stop the
+    library does not implement."""
     if product_code is None:
         return None
     return _STOPS.get(product_code.upper(), {}).get(connect)
@@ -105,7 +116,7 @@ def library_live_open(
     eufy app streams the device over WebRTC (``over_webrtc``, from
     :func:`~.webrtc.app_uses_webrtc`), else the handler's (:func:`live_open`) where the
     library can send it there. On its own session (``SINGLE``) every :class:`LiveOpen`;
-    behind a station :attr:`LiveOpen.STATION`, and a 1700 open behind a
+    behind a station :attr:`LiveOpen.STATION`, and a 1700 or multi-camera open behind a
     :data:`SINGLE_BEHIND` station when the library sends the handler's stop there
     (:func:`live_stop`). None otherwise."""
     if over_webrtc:

@@ -211,7 +211,8 @@ def test_ptz_presets_capabilities() -> None:
         ("T8113P2000067890", Support.DECLARED),  # behind a HomeBase: the station open
         ("T8400P2000067890", Support.DECLARED),  # standalone: 1700 without extValue
         ("T8170P0000054321", Support.VERIFIED),  # its profile's grade stands
-        ("T8172P2000067890", Support.UNKNOWN),  # dual lens: an open not implemented
+        ("T8172P2000067890", Support.DECLARED),  # two lenses: the multi-camera open
+        ("T8530P2000067890", Support.UNKNOWN),  # an open not implemented
         ("T8030P0000054321", Support.UNKNOWN),  # a station has no live open
     ],
 )

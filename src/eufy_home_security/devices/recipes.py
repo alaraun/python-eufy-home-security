@@ -304,6 +304,104 @@ def station_live_payload(account_id: str, key_hex: str) -> dict[str, Any]:
     }
 
 
+_NVR_INPUT_KEYS: Final = frozenset(
+    {
+        "streamType",
+        "userId",
+        "entryType",
+        "chn_list",
+        "mChannel",
+        "stitch_mode",
+        "station_video_type",
+    }
+)
+"""Live-player input keys the multi-camera open maps to its own fields; every other key
+is copied into its payload as given."""
+
+
+def open_live_stream_nvr(
+    *, channel: int, player: Mapping[str, Any], camera_type_from_lens: bool = False
+) -> Recipe:
+    """Open live video with the multi-camera payload (the handler's
+    ``OpenLiveStreamParser1350_NVR``): a ``DeviceMsgBean`` of cmd 1003 built from
+    ``player``, the input the app's live player hands the handler
+    (:func:`~.live_view.player_input`). ``channel`` is the camera's.
+
+    The payload names the view (``stitch_mode``, ``chn_list``, the picture-in-picture
+    fields) and keeps the player's other keys. ``camera_type`` is 0 unless ``chn_list``
+    has exactly one entry: then that entry's ``cameraType``, or with
+    ``camera_type_from_lens`` its ``sensor`` when that is 1 or more
+    (:attr:`~.live_open.LiveOpen.NVR_LENS`).
+    """
+    chn_list = _json_list(player.get("chn_list"))
+    camera_type: Any = 0
+    if len(chn_list) == 1 and isinstance(entry := chn_list[0], Mapping):
+        camera_type = _coalesce(entry.get("cameraType"), entry.get("sensor"))
+        if camera_type_from_lens:
+            sensor = entry.get("sensor")
+            lens = isinstance(sensor, int | float) and sensor >= 1
+            camera_type = sensor if lens else entry.get("cameraType")
+    stitch_mode = player.get("stitch_mode")
+    payload: dict[str, Any] = {
+        "accountId": player.get("userId"),
+        "streamtype": _coalesce(player.get("streamType"), 2),
+        "camera_type": camera_type,
+        "entrytype": _coalesce(player.get("entryType"), 0),
+        "stitch_mode": _coalesce(stitch_mode, 1),
+        "chn_list": chn_list,
+        **{k: v for k, v in player.items() if k not in _NVR_INPUT_KEYS},
+    }
+    if stitch_mode == StitchMode.PIP:
+        payload["station_video_type"] = json_int(player.get("station_video_type")) or 0
+        if payload["station_video_type"] not in (0, 1) and player.get("pip_cord"):
+            cord = json.loads(player["pip_cord"])
+            payload["pip_cord"] = {k: math.floor(1000 * cord[k] + 0.5) for k in _PIP_CORD_KEYS}
+    return Recipe(
+        identifier="open_live_stream",
+        cmd=RecipeCommand.SET_PAYLOAD,
+        sub_cmd=SubCommand.START_LIVE_STREAM,
+        timeout=LIVE_OPEN_TIMEOUT,
+        params=MappingProxyType(
+            {
+                "cmd": int(SubCommand.START_LIVE_STREAM),
+                "mChannel": _coalesce(player.get("mChannel"), channel),
+                "account_id": player.get("userId"),
+                "mValue3": int(SubCommand.START_LIVE_STREAM),
+                "mValue5": 0,
+                "payload": payload,
+            }
+        ),
+    )
+
+
+class StitchMode(IntEnum):
+    """How a live view lays out a camera's lenses (``stitch_mode``; the app's stitch
+    types a live view picks)."""
+
+    SINGLE = 1
+    """One lens."""
+    STACKED = 5
+    """Every lens, top to bottom."""
+    PIP = 7
+    """One lens with another inset (picture in picture)."""
+
+
+_PIP_CORD_KEYS: Final = ("x1", "y1", "x2", "y2")
+
+
+def _coalesce(value: Any, default: Any) -> Any:
+    """``value ?? default`` as the handler's JavaScript reads it."""
+    return default if value is None else value
+
+
+def _json_list(text: Any) -> list[Any]:
+    """A JSON list given as a string, or ``[]`` for an empty or ``"null"`` one."""
+    if not isinstance(text, str) or not text or text == "null":
+        return []
+    value = json.loads(text)
+    return value if isinstance(value, list) else []
+
+
 def close_live_stream() -> Recipe:
     """Stop live video: a bare 1004 (every connect type's handler recipe)."""
     return Recipe(identifier="close_live_stream", cmd=RecipeCommand.STOP_LIVE_STREAM)

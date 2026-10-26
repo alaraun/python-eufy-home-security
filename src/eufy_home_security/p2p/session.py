@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import time
@@ -62,7 +63,9 @@ from .._logging import (
 )
 from ..cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
 from ..devices.device_alarm import USER_NAME_SLOT
-from ..devices.live_open import LiveOpen, LiveStop
+from ..devices.live_open import NVR_OPENS, LiveOpen, LiveStop
+from ..devices.live_view import LensView, LiveView, player_input
+from ..devices.live_view import live_view as live_view_of
 from ..devices.param_info import ParamInfo, param_info
 from ..devices.recipes import (
     ConnectType,
@@ -71,6 +74,7 @@ from ..devices.recipes import (
     ResultFrom,
     close_live_stream,
     connect_type,
+    open_live_stream_nvr,
     open_live_stream_single,
 )
 from ..devices.settings import Scope
@@ -3501,6 +3505,7 @@ class StationSession:
         live_open: LiveOpen | None = None,
         live_stop: LiveStop | None = None,
         media_key: MediaKeyType = MediaKeyType.RSA,
+        live_view: LiveView | None = None,
     ) -> MediaStream:
         """Open a camera's live video and audio. This wakes a battery camera.
 
@@ -3533,6 +3538,11 @@ class StationSession:
         non-zero receipt to a 1700 open fails the stream at once
         (:class:`CommandRejectedError`, :class:`CameraWakeError` for a wake failure).
 
+        A multi-camera ``live_open`` (:data:`~..devices.live_open.NVR_OPENS`) sends the
+        handler's 1350/1003 for ``live_view`` (:mod:`~..devices.live_view`; default: the
+        fixed lens alone), with the view fields only to a HomeBase 3, as the app's
+        player does; behind a station its stop is ``live_stop``, as for a 1700 open.
+
         ``media_key`` is the key pair the open offers (its ``key`` field): RSA, or ECC,
         which the app offers a device whose param 1103 is 128 or more
         (:func:`~.media.media_key_type_for`; :meth:`~..station.Station.async_open_live`
@@ -3546,12 +3556,27 @@ class StationSession:
         homebase3 = self.homebase3
         bare_stop = standalone or not homebase3
         flag = LIVE_OPEN_SUBHEADER_FLAG
-        if single and not standalone:
-            if live_stop is not None:
-                bare_stop = live_stop is LiveStop.BARE
-            if live_open is LiveOpen.SINGLE_NO_EXT:
-                flag = 0  # subheader byte 4 (the stream id) is 0 without extValue
-        if single:
+        nvr = live_open in NVR_OPENS
+        if (single or nvr) and not standalone and live_stop is not None:
+            bare_stop = live_stop is LiveStop.BARE
+        if single and live_open is LiveOpen.SINGLE_NO_EXT:
+            flag = 0  # subheader byte 4 (the stream id) is 0 without extValue
+        if nvr:
+            view = live_view or live_view_of(channel, (), LensView.MAIN)
+
+            def open_frame(account_id: str, key_hex: str) -> tuple[int, bytes]:
+                player = player_input(
+                    account_id=account_id, key_hex=key_hex, view=view, station_fields=homebase3
+                )
+                recipe = open_live_stream_nvr(
+                    channel=channel,
+                    player=player,
+                    camera_type_from_lens=live_open is LiveOpen.NVR_LENS,
+                )
+                body = json.dumps(dict(recipe.params or {}), separators=(",", ":"))
+                return FrameType.CMD_TRANSFER, body.encode()
+
+        elif single:
 
             def open_frame(account_id: str, key_hex: str) -> tuple[int, bytes]:
                 recipe = open_live_stream_single(
@@ -3592,10 +3617,11 @@ class StationSession:
                     retry_after=left,
                 )
         _LOGGER.debug(
-            "%s: live open %s (%s) on channel %d, subheader flag 0x%02x, %s stop",
+            "%s: live open %s (%s%s) on channel %d, subheader flag 0x%02x, %s stop",
             self._log_name,
             (live_open or (LiveOpen.SINGLE if single else LiveOpen.STATION)).value,
             "1700/1000" if single else "1350/1003",
+            f", view {view.view.value}" if nvr else "",
             channel,
             flag,
             "bare 1004" if bare_stop else "1350/1004",
@@ -3625,6 +3651,7 @@ class StationSession:
                 media_key,
                 live_open=live_open,
                 live_stop=live_stop,
+                live_view=live_view,
             )
         try:
             return await self._open_media(
@@ -3755,6 +3782,7 @@ class StationSession:
         *,
         live_open: LiveOpen | None = None,
         live_stop: LiveStop | None = None,
+        live_view: LiveView | None = None,
     ) -> MediaStream:
         """Open live on ``extra`` (the same open as this session's); the stream's end
         closes the session (PPPP CLOSE)."""
@@ -3776,6 +3804,7 @@ class StationSession:
                 media_key=media_key,
                 live_open=live_open,
                 live_stop=live_stop,
+                live_view=live_view,
             )
         except BaseException:
             extra._end_extra_live()

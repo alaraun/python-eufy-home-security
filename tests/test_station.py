@@ -26,6 +26,7 @@ from eufy_home_security.devices.capabilities import (
     DeviceProfile,
 )
 from eufy_home_security.devices.live_open import LiveOpen, live_open
+from eufy_home_security.devices.live_view import Lens, LensView
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
     bundled_codes,
@@ -2858,12 +2859,82 @@ async def test_a_standalone_product_whose_handler_sends_the_station_open_gets_it
 async def test_a_camera_whose_handler_open_is_not_implemented_is_refused_before_sending(
     station: Station, fake: FakeStation
 ) -> None:
-    dual_lens = dataclasses.replace(CAMERA, device_sn="T8172P2000067890")
-    hub = Station(station.device, station.session, sub_devices=[dual_lens])
-    with pytest.raises(UnsupportedError, match="T8172 live stream behind a HB3 station"):
-        await hub.async_open_live(dual_lens.device_sn)
+    lock = dataclasses.replace(CAMERA, device_sn="T8530P2000067890")
+    hub = Station(station.device, station.session, sub_devices=[lock])
+    with pytest.raises(UnsupportedError, match="T8530 live stream behind a HB3 station"):
+        await hub.async_open_live(lock.device_sn)
     assert fake.live_opens == []
-    assert hub.live_support(dual_lens.device_sn).support is Support.UNKNOWN
+    assert hub.live_support(lock.device_sn).support is Support.UNKNOWN
+
+
+_LENS_LIST = '[{"type":1,"id":0},{"type":1,"id":1}]'
+
+
+def _two_lens_camera(lens_list: str | None = _LENS_LIST) -> CloudDevice:
+    params = [] if lens_list is None else [{"param_type": 9240, "param_value": lens_list}]
+    return dataclasses.replace(
+        CAMERA, device_sn="T8172P2000067890", channel=3, raw={"params": params}
+    )
+
+
+def _entry(index: int, sensor: int) -> dict[str, int]:
+    return {"cameraType": 0, "chn": 3, "index": index, "sensor": sensor}
+
+
+@pytest.mark.parametrize(
+    ("lens_list", "lens_view", "expected"),
+    [
+        (_LENS_LIST, None, (5, [_entry(0, 0), _entry(1, 1)], 0)),
+        (_LENS_LIST, LensView.SUB, (1, [_entry(0, 1)], 1)),
+        (_LENS_LIST, LensView.PIP, (7, [_entry(0, 0), _entry(1, 1)], 0)),
+        (None, None, (1, [_entry(0, 0)], 0)),
+        ("[]", LensView.STACKED, (5, [_entry(0, 0)], 0)),
+    ],
+)
+async def test_a_two_lens_camera_behind_a_homebase_3_gets_the_multi_camera_open_for_its_view(
+    station: Station,
+    fake: FakeStation,
+    lens_list: str | None,
+    lens_view: LensView | None,
+    expected: tuple[int, list[dict[str, int]], int],
+) -> None:
+    """``expected``: stitch mode, channel list, camera type."""
+    camera = _two_lens_camera(lens_list)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    assert not hub.app_uses_webrtc(camera.device_sn)
+    assert hub.live_support(camera.device_sn).support is Support.DECLARED
+    async with await hub.async_open_live(camera.device_sn, lens_view=lens_view) as stream:
+        await anext(aiter(stream))
+    (payload,) = fake.live_open_payloads
+    assert (payload["stitch_mode"], payload["chn_list"], payload["camera_type"]) == expected
+    assert fake.live_opens == [3]
+    assert fake.doorbell_payloads == []
+    async with asyncio.timeout(3):
+        while 1004 not in [o.get("cmd") for o in fake.received]:
+            await asyncio.sleep(0.02)
+    assert fake.bare_stops == 0
+
+
+def test_a_camera_lists_its_lenses_from_the_cloud_parameters(station: Station) -> None:
+    camera = _two_lens_camera()
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    assert hub.lenses(camera.device_sn) == (Lens(1, 0), Lens(1, 1))
+    assert (
+        Station(station.device, station.session, sub_devices=[_two_lens_camera(None)]).lenses(
+            camera.device_sn
+        )
+        == ()
+    )
+    assert hub.lenses("T9999P2000067890") == ()
+
+
+async def test_the_lens_view_changes_nothing_for_a_camera_with_the_station_open(
+    station: Station, fake: FakeStation
+) -> None:
+    async with await station.async_open_live(CAMERA.device_sn, lens_view=LensView.PIP) as stream:
+        await anext(aiter(stream))
+    (payload,) = fake.live_open_payloads
+    assert payload["stitch_mode"] == 1
 
 
 @pytest.mark.parametrize(

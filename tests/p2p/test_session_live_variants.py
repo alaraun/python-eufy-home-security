@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 import pytest
 
 from eufy_home_security.devices.live_open import LiveOpen, LiveStop
+from eufy_home_security.devices.live_view import Lens, LensView, live_view
 from eufy_home_security.exceptions import (
     CommandNotAppliedError,
     CommandRejectedError,
@@ -122,6 +123,119 @@ async def test_a_homebase3_keeps_its_t8030_open_and_1004_message(hb3: FakeStatio
         await stream.aclose()
         await _until(lambda: 1004 in [obj.get("cmd") for obj in hb3.received])
         assert hb3.bare_stops == 0
+    finally:
+        await session.async_close()
+
+
+TWO_LENSES = (Lens(1, 0), Lens(1, 1))
+KEY_FIELDS = {"key", "ClientOS", "cameraType"}
+
+
+def _spy_flags(session: StationSession, monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """The subheader flag (stream id) of each media open ``session`` sends."""
+    flags: list[int] = []
+    real = session._open_media
+
+    async def spy(*args: object, **kwargs: object) -> MediaStream:
+        flags.append(kwargs["flag"])  # type: ignore[arg-type]
+        return await real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(session, "_open_media", spy)
+    return flags
+
+
+async def test_a_multi_camera_open_behind_a_homebase3_is_the_handlers_body_for_the_view(
+    hb3: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = _session(hb3)
+    flags = _spy_flags(session, monkeypatch)
+    view = live_view(CAMERA, TWO_LENSES, LensView.SUB)
+    try:
+        stream = await session.async_open_live(
+            CAMERA, live_open=LiveOpen.NVR_LENS, live_stop=LiveStop.STATION, live_view=view
+        )
+        await _frames(stream, 1)
+        (obj,) = [o for o in hb3.received if o.get("cmd") == 1003]
+        payload = obj.pop("payload")
+        assert obj == {
+            "cmd": 1003,
+            "mChannel": CAMERA,
+            "account_id": SYNTHETIC.account_id,
+            "mValue3": 1003,
+            "mValue5": 0,
+        }
+        assert {k: v for k, v in payload.items() if k not in KEY_FIELDS} == {
+            "accountId": SYNTHETIC.account_id,
+            "streamtype": 0,
+            "camera_type": 1,
+            "entrytype": 0,
+            "stitch_mode": 1,
+            "chn_list": [{"cameraType": 0, "chn": CAMERA, "index": 0, "sensor": 1}],
+            "extValue": 1000,
+            "audio_chn": CAMERA,
+            "pip_cord": "",
+        }
+        assert flags == [0x0A]
+        assert hb3.live_opens == [CAMERA]
+        await stream.aclose()
+        await _until(lambda: 1004 in [o.get("cmd") for o in hb3.received])
+        assert hb3.bare_stops == 0
+    finally:
+        await session.async_close()
+
+
+async def test_a_multi_camera_open_defaults_to_the_fixed_lens(hb3: FakeStation) -> None:
+    session = _session(hb3)
+    try:
+        stream = await session.async_open_live(
+            CAMERA, live_open=LiveOpen.NVR, live_stop=LiveStop.STATION
+        )
+        await _frames(stream, 1)
+        (payload,) = hb3.live_open_payloads
+        assert payload["stitch_mode"] == 1
+        assert payload["chn_list"] == [{"cameraType": 0, "chn": CAMERA, "index": 0, "sensor": 0}]
+    finally:
+        await session.async_close()
+
+
+async def test_a_multi_camera_open_behind_a_homebase2_carries_no_view_and_stops_bare(
+    hb2: FakeStation,
+) -> None:
+    session = _session(hb2)
+    view = live_view(CAMERA, TWO_LENSES, LensView.PIP)
+    try:
+        stream = await session.async_open_live(
+            CAMERA, live_open=LiveOpen.NVR, live_stop=LiveStop.BARE, live_view=view
+        )
+        await _frames(stream, 1)
+        (payload,) = hb2.live_open_payloads
+        assert {k: v for k, v in payload.items() if k not in KEY_FIELDS} == {
+            "accountId": SYNTHETIC.account_id,
+            "streamtype": 0,
+            "camera_type": 0,
+            "entrytype": 0,
+            "stitch_mode": 1,
+            "chn_list": [],
+        }
+        await stream.aclose()
+        await _until(lambda: hb2.bare_stops == 1)
+        assert hb2.bare_stop_frames == [(CAMERA, struct.pack("<I", CAMERA))]
+    finally:
+        await session.async_close()
+
+
+async def test_a_multi_camera_open_behind_a_homebase3_stops_bare_when_its_handler_does(
+    hb3: FakeStation,
+) -> None:
+    session = _session(hb3)
+    try:
+        stream = await session.async_open_live(
+            CAMERA, live_open=LiveOpen.NVR, live_stop=LiveStop.BARE
+        )
+        await _frames(stream, 1)
+        await stream.aclose()
+        await _until(lambda: hb3.bare_stops == 1)
+        assert 1004 not in [obj.get("cmd") for obj in hb3.received]
     finally:
         await session.async_close()
 
