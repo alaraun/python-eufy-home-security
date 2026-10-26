@@ -745,9 +745,11 @@ async def test_settings_without_a_model_lists_the_per_mode_settings(
     out = capsys.readouterr().out
     row = next(line for line in out.splitlines() if line.strip().startswith("alarm_delay_away "))
     values = ["0,", "15,", "30,", "45,", "60,", "180,", "300"]
-    assert row.split()[1:] == [*values, "s", "cameras", "and", "sensors"]
+    assert row.split()[1:] == [*values, "s", "cameras,", "doorbells", "and", "sensors"]
     camera = next(line for line in out.splitlines() if "camera_action_home " in line)
     assert camera.split()[-1] == "cameras"
+    doorbell = next(line for line in out.splitlines() if "doorbell_action_home " in line)
+    assert doorbell.split()[-1] == "doorbells"
     assert "settings --model PN" in out
     assert "TIER" not in out
 

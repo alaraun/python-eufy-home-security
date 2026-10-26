@@ -227,8 +227,11 @@ async def cmd_settings(ctx: Context) -> int:
     if ctx.args.model is None:
         print(
             render.render_mode_table_settings(
-                model_settings.mode_table_settings(Scope.CAMERA),
-                model_settings.mode_table_settings(Scope.SENSOR),
+                {
+                    "cameras": model_settings.mode_table_settings(Scope.CAMERA),
+                    "doorbells": model_settings.mode_table_settings(Scope.DOORBELL),
+                    "sensors": model_settings.mode_table_settings(Scope.SENSOR),
+                }
             )
         )
         return 0

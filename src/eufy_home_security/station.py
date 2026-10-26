@@ -88,6 +88,7 @@ from .devices.recipes import (
 )
 from .devices.settings import (
     DUAL_VIEW,
+    MODE_ACTION_FLAGS,
     VIEW_MODE_PARAM,
     Scope,
     SettingDef,
@@ -2042,12 +2043,12 @@ class Station:
         tables (for ``changes``) or delays are *unknown* (:meth:`config_support`), for a
         mode without per-device actions (Schedule, Off, Disarmed, Geofence) or for which
         the station stores no table, a serial not paired to this station, a device of no
-        catalogued kind, a flag its kind does not have, a station with a device of no
-        known kind in the table (it may be a siren accessory, whose triggers a library
-        table clears) or delays the table cannot carry unchanged; ``ValueError`` for a
-        flag value that is not a bool, a flag turned on that a flag turned off in the
-        same edit clears, a delay that is not one of ``MODE_DELAY_CHOICES``, or a delay
-        change :meth:`with_count_down` refuses;
+        catalogued kind, a flag its kind does not have, a station with a device in the
+        table whose kind has no catalogued actions (it may be a siren accessory, whose
+        triggers a library table clears) or delays the table cannot carry unchanged;
+        ``ValueError`` for a flag value that is not a bool, a flag turned on that a flag
+        turned off in the same edit clears, a delay that is not one of
+        ``MODE_DELAY_CHOICES``, or a delay change :meth:`with_count_down` refuses;
         :class:`CommandNotAppliedError` when a device is missing from the fresh read or
         does not report its mask. After sending: :class:`CommandNotAppliedError` naming
         the device and flag (or delay) the read-back does not show, and the session's
@@ -2616,18 +2617,18 @@ class Station:
             if new.same_values(table):
                 return table, table
             # A channel with no known device (the station's own block can carry a
-            # per-mode action) is refused like one of an unknown kind.
+            # per-mode action) is refused like one of a kind without catalogued actions.
             unknown = sorted(
                 ch
                 for ch in new.actions
                 if ch not in state.devices
-                or state.devices[ch].kind not in (DeviceKind.CAMERA, DeviceKind.SENSOR)
+                or scope_for_kind(state.devices[ch].kind) not in MODE_ACTION_FLAGS
             )
             if unknown:
                 raise UnsupportedError(
-                    f"{mode.name.lower()} mode table: channels {unknown} are of no known "
-                    "device kind; a mode table always clears siren-accessory triggers, so it "
-                    "is not written",
+                    f"{mode.name.lower()} mode table: channels {unknown} are of a kind "
+                    "without catalogued actions; a mode table always clears siren-accessory "
+                    "triggers, so it is not written",
                     device_sns=self._serials_on(unknown),
                 )
             new.request("")  # refuses a delay the table cannot carry, before any traffic
@@ -2867,9 +2868,9 @@ class Station:
 
         Refuses (``UnsupportedError``, nothing sent) where :meth:`config_support` grades
         mode tables (an action) or mode delays (a delay) *unknown*, when the setting does not apply to
-        the device on ``target``, when a device of the table is of no known kind (it may
-        be a siren accessory, whose triggers a library table would clear), or when a
-        delay the table must carry unchanged differs between devices; and
+        the device on ``target``, when a device of the table is of a kind without catalogued
+        actions (it may be a siren accessory, whose triggers a library table would clear),
+        or when a delay the table must carry unchanged differs between devices; and
         (``CommandNotAppliedError``) when a paired device or the target is missing from
         the fresh read, since a table without it would drop it. A non-zero delay also
         moves the delay of every device that has it on (one value per mode). Returns
