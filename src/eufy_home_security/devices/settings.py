@@ -171,9 +171,8 @@ class SettingDef:
         """
         flags = self._flags()
         if name not in flags:
-            raise UnsupportedError(
-                f"{name!r} is not a flag of {self.key}; known flags: {', '.join(flags)}"
-            )
+            known = f"known flags: {', '.join(flags)}" if flags else "no catalogued actions"
+            raise UnsupportedError(f"{name!r} is not a flag of {self.key}; {known}")
         return mode_action_bits(name, _bitmask(self.key, current), on)
 
     def with_flags(self, current: int, changes: Mapping[str, bool]) -> int:
@@ -376,14 +375,24 @@ DOORBELL_TYPE_ACTIONS: Final[Mapping[int, frozenset[str]]] = MappingProxyType(
 """Per cloud device type, the per-mode actions the eufy app offers a doorbell of that type
 behind a station, besides the monitoring-centre report every device has (declared, eufy
 app). A doorbell of another type has the whole doorbell row when its product has an alarm
-of its own behind a station (a siren and light, :mod:`.device_alarm`), and no catalogued
-actions otherwise."""
+of its own behind a station (a siren and light, :mod:`.device_alarm`), and otherwise, as
+the eufy app reads and writes a device of a type it does not list,
+:data:`DOORBELL_DEFAULT_ACTIONS`."""
+
+DOORBELL_DEFAULT_ACTIONS: Final = frozenset({"notification", "station_alarm"})
+"""The per-mode actions of a doorbell whose cloud type is unknown or in no list
+(:data:`DOORBELL_TYPE_ACTIONS`, the device-alarm data), besides the monitoring-centre
+report: the eufy app's default for any device it does not list (declared, eufy app)."""
 
 _DOORBELL_TYPE_FLAGS: Final[Mapping[int, Mapping[str, int]]] = MappingProxyType(
     {
         device_type: _row(Scope.DOORBELL, names | {"report_monitor_center"})
         for device_type, names in DOORBELL_TYPE_ACTIONS.items()
     }
+)
+
+_DOORBELL_DEFAULT_FLAGS: Final = _row(
+    Scope.DOORBELL, DOORBELL_DEFAULT_ACTIONS | {"report_monitor_center"}
 )
 
 
@@ -406,21 +415,22 @@ _DEVICE_ALARM_DOORBELL_TYPES: Final = frozenset(
 def mode_action_flags(scope: Scope, device_type: int | None = None) -> Mapping[str, int]:
     """The named action bits of a device of ``scope`` with the cloud ``device_type``.
 
-    :data:`MODE_ACTION_FLAGS` of the scope, refined by a known type: without
-    ``motion_sensor_respond`` for a sensor that is not a motion sensor
-    (:data:`MOTION_SENSOR_DEVICE_TYPES`); for a doorbell, those of its type
+    :data:`MODE_ACTION_FLAGS` of the scope; for a sensor of a known type that is not a
+    motion sensor's (:data:`MOTION_SENSOR_DEVICE_TYPES`), without
+    ``motion_sensor_respond``. For a doorbell, those of its type
     (:data:`DOORBELL_TYPE_ACTIONS`), the whole row for a type whose catalogued doorbells
-    have an alarm of their own, else none. Empty for a scope without per-mode actions.
+    have an alarm of their own, else (an unknown or unlisted type)
+    :data:`DOORBELL_DEFAULT_ACTIONS`. Empty for a scope without per-mode actions.
     """
-    if device_type is None:
-        return MODE_ACTION_FLAGS.get(scope, _NO_FLAGS)
-    if scope is Scope.SENSOR and device_type not in MOTION_SENSOR_DEVICE_TYPES:
-        return _OTHER_SENSOR_FLAGS
     if scope is Scope.DOORBELL:
-        if device_type in _DOORBELL_TYPE_FLAGS:
+        if device_type is not None and device_type in _DOORBELL_TYPE_FLAGS:
             return _DOORBELL_TYPE_FLAGS[device_type]
-        if device_type not in _DEVICE_ALARM_DOORBELL_TYPES:
-            return _NO_FLAGS
+        if device_type in _DEVICE_ALARM_DOORBELL_TYPES:
+            return MODE_ACTION_FLAGS[scope]
+        return _DOORBELL_DEFAULT_FLAGS
+    known = device_type is not None
+    if scope is Scope.SENSOR and known and device_type not in MOTION_SENSOR_DEVICE_TYPES:
+        return _OTHER_SENSOR_FLAGS
     return MODE_ACTION_FLAGS.get(scope, _NO_FLAGS)
 
 

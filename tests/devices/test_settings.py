@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import base64
 import json
+from dataclasses import replace
+from types import MappingProxyType
 
 import pytest
 
+from eufy_home_security import devices
 from eufy_home_security.devices import settings
 from eufy_home_security.devices._device_alarm_data import DEVICE_ALARMS
 from eufy_home_security.devices.device_alarm import device_alarms
@@ -178,6 +181,7 @@ def test_only_a_motion_sensor_s_actions_name_respond(
     assert dict(mode_action_flags(Scope.SUB_DEVICE)) == {}
 
 
+_DEFAULT_DOORBELL = ["station_alarm", "notification", "report_monitor_center"]
 _FULL_DOORBELL = [
     "record",
     "camera_siren",
@@ -199,8 +203,10 @@ _FULL_DOORBELL = [
         ),
         (312, _FULL_DOORBELL),  # its product has a siren and light of its own
         (97, _FULL_DOORBELL),
-        (None, _FULL_DOORBELL),  # type unknown: the whole row
-        (1, []),  # a type no catalogued doorbell has
+        # type unknown, or one no list names: the app's default for an unlisted device
+        (None, _DEFAULT_DOORBELL),
+        (1, _DEFAULT_DOORBELL),
+        (98, _DEFAULT_DOORBELL),
     ],
 )
 def test_a_doorbell_s_actions_follow_its_cloud_type(
@@ -228,8 +234,8 @@ def test_an_untabled_doorbell_type_has_the_whole_row_iff_it_has_its_own_alarm() 
             continue
         seen.add(model.model)
         full = device_alarms(model.model, ConnectType.HB3) is not None
-        assert dict(mode_action_flags(Scope.DOORBELL, device_type)) == (
-            dict(MODE_ACTION_FLAGS[Scope.DOORBELL]) if full else {}
+        assert list(mode_action_flags(Scope.DOORBELL, device_type)) == (
+            _FULL_DOORBELL if full else _DEFAULT_DOORBELL
         )
     assert seen
 
@@ -251,6 +257,17 @@ def test_a_doorbell_refuses_an_action_its_type_does_not_have() -> None:
     assert action.decode_flags(4 | 8) == (frozenset({"notification"}), 4)
     with pytest.raises(UnsupportedError, match="known flags: record, notification"):
         action.with_flag(0, "station_alarm", True)
+
+
+def test_the_doorbell_rule_is_exported() -> None:
+    assert devices.DOORBELL_TYPE_ACTIONS is DOORBELL_TYPE_ACTIONS
+    assert {"notification", "station_alarm"} == devices.DOORBELL_DEFAULT_ACTIONS
+
+
+def test_a_mask_without_named_actions_says_so() -> None:
+    action = replace(mode_table_setting("doorbell_action_away"), flags=MappingProxyType({}))
+    with pytest.raises(UnsupportedError, match=r"record'.*; no catalogued actions$"):
+        action.with_flag(0, "record", True)
 
 
 def test_with_flag_keeps_every_other_bit() -> None:

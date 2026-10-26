@@ -1483,6 +1483,30 @@ async def test_a_doorbell_with_its_own_alarm_writes_its_siren_in_the_mode_table(
     ]
 
 
+async def test_a_camera_write_sends_an_untouched_doorbell_row_back_unchanged(
+    station: Station, fake: FakeStation
+) -> None:
+    _mode_table_blocks(fake)
+    doorbell = CloudDevice(
+        device_sn="T8200P0000000001",
+        device_type=5,
+        name="Door",
+        station_sn=SYNTHETIC.station_sn,
+        channel=16,
+    )
+    row = 1 | 4 | 32 | 512  # record plus bits the type-5 row does not name
+    fake.params[16] = {1239: str(row), 1167: "0", 1172: "0", 1225: "0", 1166: "30"}
+    hub = Station(STATION, station.session, sub_devices=[CAMERA, doorbell])
+    mask = await hub.async_set_mode_action(
+        "away", "camera_siren", True, device_sn=SYNTHETIC.camera_sn
+    )
+    assert mask == 11
+    assert fake.mode_tables_received[-1]["devices"] == [
+        {"device_channel": 16, "action": row},
+        {"device_channel": 0, "action": 11},
+    ]
+
+
 async def test_a_doorbell_without_its_own_alarm_has_no_siren_action() -> None:
     entry = CloudDevice(
         device_sn="T8210P0000000001",
@@ -1509,7 +1533,7 @@ async def test_a_listed_siren_accessory_blocks_a_mode_table_write(
     )
     fake.params[3] = {1239: "1"}
     hub = Station(STATION, station.session, sub_devices=[CAMERA, siren])
-    with pytest.raises(UnsupportedError, match="no known device kind") as err:
+    with pytest.raises(UnsupportedError, match="without catalogued actions") as err:
         await hub.async_set_mode_action("away", "camera_siren", True, channel=0)
     assert err.value.device_sns == ("T90R0P0000000001",)
     assert fake.mode_tables_received == []
@@ -1528,7 +1552,7 @@ async def test_mode_table_refusals_send_nothing(station: Station, fake: FakeStat
     with pytest.raises(UnsupportedError, match="differs between devices"):
         await station.async_set_setting("camera_action_away", 3, channel=0)
     fake.params[3] = {1239: "1"}  # a block of no known kind: maybe a siren accessory
-    with pytest.raises(UnsupportedError, match="no known device kind"):
+    with pytest.raises(UnsupportedError, match="without catalogued actions"):
         await station.async_set_setting("camera_action_away", 3, channel=0)
     with pytest.raises(ValueError, match="exactly one"):
         await station.async_set_mode_action("away", "record", True)
@@ -1706,7 +1730,7 @@ async def test_bulk_mode_table_refusals_send_nothing(station: Station, fake: Fak
     with pytest.raises(UnsupportedError, match="stores no custom_2 mode table"):
         await hub.async_set_mode_actions("custom_2", {cam: {"record": True}})
     fake.params[3] = {1239: "1"}  # a block of no known kind: maybe a siren accessory
-    with pytest.raises(UnsupportedError, match="no known device kind"):
+    with pytest.raises(UnsupportedError, match="without catalogued actions"):
         await hub.async_set_mode_actions("away", {cam: {"camera_siren": True}})
     assert fake.mode_tables_received == []
 

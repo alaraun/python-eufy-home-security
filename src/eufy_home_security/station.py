@@ -2617,9 +2617,9 @@ class Station:
             )
             if unknown:
                 raise UnsupportedError(
-                    f"{mode.name.lower()} mode table: channels {unknown} are of no known "
-                    "device kind; a mode table always clears siren-accessory triggers, so it "
-                    "is not written",
+                    f"{mode.name.lower()} mode table: channels {unknown} are of a kind "
+                    "without catalogued actions; a mode table always clears siren-accessory "
+                    "triggers, so it is not written",
                     device_sns=self._serials_on(unknown),
                 )
             new.request("")  # refuses a delay the table cannot carry, before any traffic
