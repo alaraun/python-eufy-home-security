@@ -19,7 +19,7 @@ zero payload bytes. The probe did not measure time from request to this error.
 These results verify native P2P stored-recording playback, **not** progressive
 browser playback or seeking through Home Assistant. Previous T8010 work also
 verified complete `1024` clip decoding and playback through HA Test.
-Both ordinary `CameraNN/YYYYMMDDHHMMSS.dat` and prefixed Doorbell paths
+Both ordinary `CameraNN/YYYYMMDDHHMMSS.dat` and prefixed recording paths
 are validated before any media command. Missing or invalid ECC owner cipher
 keys raise `CipherUnusableError` before a native media request is sent.
 

@@ -414,7 +414,7 @@ Names for every id: `src/eufy_home_security/devices/command_types.py`.
   "trigger_type": 0, "detection_type": 0, "flag": 0}}`. For a camera-specific
   query the app also supplies `"device_info": [{"device_sn": "..."}]`; a
   station-wide query omits the field. **Measured on T8010**: filtering retained
-  all 59 Doorbell recordings in order, reducing the two-day scan from 11 to 3
+  the same camera-specific recordings in order, reducing the two-day scan from 11 to 3
   page queries (13.47 s to 5.53 s). The next page
   passes the previous page's oldest `start_time` as `start_time`, separators stripped
   (`YYYYMMDDHHMMSS`); a page shorter than `count`, or one that starts with the row the
