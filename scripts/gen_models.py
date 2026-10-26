@@ -21,8 +21,11 @@ generator never reads ``--out`` to decide what to write. ``--update-released REF
 the setting keys of every model file bundled at git ``REF`` (a release tag) into the
 manifest and writes nothing else.
 
-Runs on a maintainer host only (needs Node and the private cache); nothing at runtime
-executes vendor code. See docs/reference/models-schema.md.
+``--jobs N`` generates N models at a time, each in its own process with one long-lived
+Node worker (``scripts/gen_models_node.py``); a model that fails is reported and the run
+goes on, exit 1 at the end. Node failing a job (no worker survives it, or none replies in
+time) stops the run at once: exit 2 and the cause. Runs on a maintainer host only (needs Node of the pinned major and the private
+cache); nothing at runtime executes vendor code. See docs/reference/models-schema.md.
 
     gen_models.py [PN ...] [--check] [--cache DIR] [--out DIR] [--jobs N]
                   [--labels FILE] [--trees FILE] [--titles FILE] [--app-version V]
@@ -32,18 +35,26 @@ executes vendor code. See docs/reference/models-schema.md.
 from __future__ import annotations
 
 import argparse
+import atexit
 import base64
+import contextlib
 import copy
 import importlib.util
+import io
 import json
+import multiprocessing
+import multiprocessing.connection
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
-from collections.abc import Collection, Mapping
-from concurrent.futures import ThreadPoolExecutor
+import threading
+import traceback
+from collections.abc import Collection, Iterator, Mapping
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -53,7 +64,6 @@ from eufy_home_security.devices.settings import DUAL_VIEW, VIEW_MODE_PARAM
 from eufy_home_security.devices.types import DeviceKind, model_for_serial
 
 ROOT = Path(__file__).resolve().parent.parent
-DRIVER = ROOT / "scripts" / "gen_models_driver.js"
 DEFAULT_CACHE = ROOT / ".work" / "cache" / "things_all"
 DEFAULT_OUT = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models"
 INDEX = "INDEX.json"  # {"schema_version", "codes"}: the bundled product codes, sorted
@@ -64,8 +74,6 @@ DEFAULT_TREES = ROOT / ".work" / "tools" / "data" / "settings_trees.json"
 DEFAULT_TITLES = ROOT / ".work" / "tools" / "data" / "app_setting_titles.json"
 REFERENCE = ROOT / "tests" / "fixtures" / "models_v1_reference.json"
 DEFAULT_APP_VERSION = "6.1.10"  # the app build the label and tree data come from
-NODE_TIMEOUT_S = 600
-SIGNAL_RETRIES = 2
 SCHEMA_VERSION = 3
 BASE = "SINGLE"  # the base context: a station child whose parent is no station kind
 STANDALONE = "standalone"
@@ -83,10 +91,12 @@ def _load(name: str) -> ModuleType:
 
 
 codec = _load("gen_models_codec")
+node = _load("gen_models_node")
 joiner = _load("gen_models_join")
 controls = _load("gen_models_controls")
 sections = _load("gen_models_sections")
 GeneratorError = codec.GeneratorError
+DRIVERS = node.DriverPool()  # one Node worker per generating thread
 RECIPE_FIELDS = ("cmd", "subCmd", "params")
 type LeafPath = tuple[str | int, ...]
 
@@ -192,31 +202,18 @@ def run_driver(
     requests: list[dict[str, Any]],
     wire: codec.WireValues | None = None,
 ) -> list[Any]:
-    """One node batch: a reply per request, in order. A value of ``wire`` is sent as the
-    value the app writes for it, and read back as that value."""
+    """One driver job on this thread's worker (``DRIVERS``): a reply per request, in
+    order. A value of ``wire`` is sent as the value the app writes for it, and read back
+    as that value. NodeError when Node fails the job, GeneratorError for any other
+    failure."""
     sent = [codec.to_wire(r, wire) for r in requests] if wire else requests
-    job = json.dumps({"handler": str(handler), "requests": sent})
-    for _ in range(SIGNAL_RETRIES + 1):
-        res = subprocess.run(
-            ["node", str(DRIVER)],
-            input=job,
-            capture_output=True,
-            text=True,
-            timeout=NODE_TIMEOUT_S,
-            check=False,
-        )
-        # Node occasionally aborts under heavy parallel load; the job is deterministic,
-        # so a run killed by a signal is repeated as is.
-        if res.returncode >= 0:
-            break
-        print(f"{product_code}: driver killed by signal {-res.returncode}, rerun", file=sys.stderr)
-    if res.returncode:
-        raise GeneratorError(f"{product_code}: driver exit {res.returncode}: {res.stderr[-400:]}")
     try:
-        replies = json.loads(res.stdout)
-    except json.JSONDecodeError as err:
-        raise GeneratorError(f"{product_code}: driver output is not JSON: {err}") from err
-    if not isinstance(replies, list) or len(replies) != len(requests):
+        replies = DRIVERS.run({"handler": str(handler), "requests": sent})
+    except node.NodeError as err:
+        raise node.NodeError(f"{product_code}: {err}") from None
+    except node.DriverError as err:
+        raise GeneratorError(f"{product_code}: {err}") from err
+    if len(replies) != len(requests):
         raise GeneratorError(f"{product_code}: driver returned {len(replies)} replies")
     if wire:
         return [codec.from_wire(r, rep, wire) for r, rep in zip(sent, replies, strict=True)]
@@ -333,8 +330,8 @@ def sweep(
     """setProperty over every writable property's domain in every context, on both of
     each context's channels: ``{context: {identifier: Sweep}}``.
 
-    Each context and channel runs in its own driver process: a handler can keep state
-    between requests, so one sweep must not see another's.
+    Each context and channel is its own driver job (a fresh handler sandbox): a handler
+    can keep state between requests, so one sweep must not see another's.
     """
     out: dict[str, dict[str, Sweep]] = {name: {} for name in contexts}
     writable = [p for p in props if "W" in (p.get("access_mode") or "")]
@@ -472,11 +469,13 @@ def param_slots(
     """
     asks: list[tuple[str, int, str]] = []
     requests: list[dict[str, Any]] = []
+    null_paths: dict[str, set[LeafPath]] = {}
     for ident, row in rows.items():
         recipes = [r for _, r in row.main if r is not None]
         if not recipes:
             continue
         nulls = set.intersection(*({p for p, x in codec.leaves(r) if x is None} for r in recipes))
+        null_paths[ident] = nulls
         for param, values in seen.items():
             for raw in values[:2] if len(values) > 1 and nulls else ():
                 device = context.device(product_code)
@@ -497,11 +496,7 @@ def param_slots(
         flat = dict(codec.leaves(codec.slot(recipe, context))) if recipe is not None else {}
         leaves.setdefault((ident, param), []).append((raw, flat))
     out: dict[str, dict[LeafPath, str]] = {}
-    for ident, row in rows.items():
-        recipes = [r for _, r in row.main if r is not None]
-        if not recipes:
-            continue
-        nulls = set.intersection(*({p for p, x in codec.leaves(r) if x is None} for r in recipes))
+    for ident, nulls in null_paths.items():
         for path in sorted(nulls, key=str):
             found = set()
             for param in seen:
@@ -1107,9 +1102,12 @@ def _summary(counts: dict[str, int]) -> str:
 
 
 def _missing_inputs(cache: Path, pns: list[str]) -> str | None:
-    """Why a run cannot start (no node, no cache, a model not in the cache), or None."""
-    if shutil.which("node") is None:
-        return "node is not on PATH"
+    """Why a run cannot start (no node of the pinned major, no cache, a model not in the
+    cache), or None."""
+    try:
+        node.node_path()  # checked once: the generating processes inherit the result
+    except node.DriverError as err:
+        return str(err)
     if not cache.is_dir():
         return f"no thing-model cache at {cache}"
     absent = [pn for pn in pns if not (cache / pn / "td.json").is_file()]
@@ -1188,17 +1186,21 @@ def main(argv: list[str] | None = None) -> int:
     if missing is not None:
         print(f"gen_models: {missing}", file=sys.stderr)
         return 2
-    if args.check:
+    try:
+        if not args.check:
+            return _generate_all(args, cache, args.out, quiet=False)
         with tempfile.TemporaryDirectory() as tmp:
             rc = _generate_all(args, cache, Path(tmp), quiet=True)
             if rc:
                 return rc
             differ = compare(Path(tmp), args.out, args.product_codes)
-        for name in differ:
-            print(f"differs: {name}")
-        print(f"check: {len(differ)} files differ")
-        return 1 if differ else 0
-    return _generate_all(args, cache, args.out, quiet=False)
+    except node.NodeError as err:
+        print(f"{err.notices}gen_models: {err}", file=sys.stderr)
+        return 2
+    for name in differ:
+        print(f"differs: {name}")
+    print(f"check: {len(differ)} files differ")
+    return 1 if differ else 0
 
 
 def released_text(released: Mapping[str, Collection[str]]) -> str:
@@ -1251,8 +1253,118 @@ def update_released(path: Path, bundled: Mapping[str, Collection[str]]) -> None:
     path.write_text(released_text(merge_released(current, bundled)), encoding="utf-8")
 
 
+@dataclass(frozen=True)
+class _Task:
+    """The inputs of one model's ``generate`` call (the model's slices of the input files)."""
+
+    product_code: str
+    cache: Path
+    labels: dict[str, Any] | None
+    tree: dict[str, Any] | None
+    app_version: str
+    reference: list[dict[str, Any]] | None
+    titles: dict[str, Any]
+    released: Collection[str]
+
+
+type _Result = tuple[str, str | None, dict[str, int], str]
+
+
+def _build(task: _Task) -> _Result:
+    """``(product code, file text or None, counters, report)`` of one model; the report
+    holds what the model printed to stderr (driver notices) and, for a model that fails,
+    the failure. A failure is reported, not raised, so the run goes on to the end; the
+    report is returned, not printed, so the run prints the reports in model order.
+    NodeError (the run stops) is raised, the model's notices in its ``notices``."""
+    pn = task.product_code
+    stop: node.NodeError | None = None
+    with contextlib.redirect_stderr(io.StringIO()) as notes:
+        try:
+            doc, counts = generate(
+                pn,
+                task.cache,
+                task.labels,
+                task.tree,
+                task.app_version,
+                reference=task.reference,
+                titles=task.titles,
+                released=task.released,
+            )
+        except node.NodeError as err:
+            stop = err
+        except GeneratorError as err:
+            return pn, None, {}, f"{notes.getvalue()}{err}\n"
+        except Exception as err:  # a shape the generator does not handle
+            failure = f"{pn}: {type(err).__name__}: {err}\n{traceback.format_exc()}"
+            return pn, None, {}, notes.getvalue() + failure
+    if stop is not None:
+        stop.notices = notes.getvalue()  # the earlier deaths' causes, printed with it
+        raise stop
+    return pn, codec.dump(doc), counts, notes.getvalue()
+
+
+def _open_drivers() -> None:
+    """Start a generating process: accept driver jobs, end the worker on exit (a forked
+    process runs only the exit handlers registered after the fork), and end with the
+    parent process. SIGTERM ends this process at once (the parent's handler is the run's)."""
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    DRIVERS.open()
+    atexit.register(DRIVERS.close)
+    parent = multiprocessing.parent_process()
+    if parent is not None:
+        threading.Thread(target=_exit_with_parent, args=(parent.sentinel,), daemon=True).start()
+
+
+def _exit_with_parent(sentinel: int) -> None:
+    """Once the parent process has ended without shutting the pool down (killed), end
+    this process and its worker."""
+    multiprocessing.connection.wait([sentinel])
+    DRIVERS.close()
+    os._exit(1)
+
+
+def _terminated(signum: int, _frame: object) -> None:
+    """SIGTERM ends a run as Ctrl-C does: the pool shuts down on the way out."""
+    raise SystemExit(128 + signum)
+
+
+def _run_tasks(tasks: list[_Task], jobs: int) -> Iterator[_Result]:
+    """``_build`` of every task, in task order: in this process for one job, else in
+    ``jobs`` processes, each with its own Node worker (the codec inference is Python and
+    would serialize on one interpreter).
+
+    On an interrupt or error no queued model starts. A SIGTERM to this process alone lets
+    the models in flight finish; one to the process group (or Ctrl-C) ends them too.
+    """
+    if jobs == 1:
+        DRIVERS.open()
+        try:
+            yield from map(_build, tasks)
+        finally:
+            DRIVERS.close()
+        return
+    # fork: the workers inherit the loaded generator modules, however this one was loaded;
+    # the caller must have no other threads (the command line has none).
+    method = "fork" if "fork" in multiprocessing.get_all_start_methods() else None
+    previous = signal.signal(signal.SIGTERM, _terminated)
+    try:
+        pool = ProcessPoolExecutor(
+            max_workers=jobs,
+            mp_context=multiprocessing.get_context(method),
+            initializer=_open_drivers,
+        )
+        try:
+            # map() yields in input order, so output and log do not depend on --jobs.
+            yield from pool.map(_build, tasks)
+        finally:
+            pool.shutdown(cancel_futures=True)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
 def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bool) -> int:
-    """Generate the requested models into ``out``; 1 when any model failed its check.
+    """Generate the requested models into ``out``; 1 when any model failed. NodeError
+    (from the first model that meets it) stops the run.
 
     Nothing in ``out`` is read: the same-codec variants kept are those the released-keys
     manifest (``args.released``) lists.
@@ -1264,37 +1376,31 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     reference = load_reference()
     pns = args.product_codes or sorted(d.name for d in cache.iterdir() if d.is_dir())
     out.mkdir(parents=True, exist_ok=True)
-
-    def build(pn: str) -> tuple[str, str | None, dict[str, int]]:
-        try:
-            doc, counts = generate(
-                pn,
-                cache,
-                labels.get(pn),
-                trees.get(pn),
-                args.app_version,
-                reference=reference.get(pn),
-                titles=titles,
-                released=released.get(pn, ()),
-            )
-        except CheckError as err:
-            print(err, file=sys.stderr)
-            return pn, None, {}
-        return pn, codec.dump(doc), counts
-
+    tasks = [
+        _Task(
+            pn,
+            cache,
+            labels.get(pn),
+            trees.get(pn),
+            args.app_version,
+            reference.get(pn),
+            titles,
+            released.get(pn, ()),
+        )
+        for pn in pns
+    ]
     total: dict[str, int] = {}
     failed: list[str] = []
-    with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-        # map() yields in input order, so output and log do not depend on --jobs.
-        for pn, text, counts in pool.map(build, pns):
-            if text is None:
-                failed.append(pn)
-                continue
-            (out / f"{pn}.json").write_text(text, encoding="utf-8")
-            if not quiet:
-                print(pn, _summary(counts))
-            for key, n in counts.items():
-                total[key] = total.get(key, 0) + n
+    for pn, text, counts, report in _run_tasks(tasks, max(1, min(args.jobs, len(tasks)))):
+        print(report, end="", file=sys.stderr)
+        if text is None:
+            failed.append(pn)
+            continue
+        (out / f"{pn}.json").write_text(text, encoding="utf-8")
+        if not quiet:
+            print(pn, _summary(counts))
+        for key, n in counts.items():
+            total[key] = total.get(key, 0) + n
     write_index(out)
     if not quiet:
         print(f"total {len(pns)} models", _summary(total))

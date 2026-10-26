@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -283,9 +282,10 @@ def test_custom_modes_and_restart() -> None:
     assert restart_command("T8023") is None
 
 
+@pytest.mark.needs_node
 @pytest.mark.skipif(
-    not CACHE.is_dir() or not DATA.is_dir() or shutil.which("node") is None,
-    reason="needs the private thing-model cache, the app data and Node",
+    not CACHE.is_dir() or not DATA.is_dir(),
+    reason="needs the private thing-model cache and the app data",
 )
 def test_the_table_is_what_the_generator_writes() -> None:
     result = subprocess.run(

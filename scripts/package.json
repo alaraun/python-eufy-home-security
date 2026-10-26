@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "The Node the generators run vendor handlers on (scripts/gen_models_driver.js).",
+  "engines": {
+    "node": "24.x"
+  }
+}
