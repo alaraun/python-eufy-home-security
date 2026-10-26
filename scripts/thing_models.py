@@ -22,14 +22,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import importlib.util
 import json
 import re
-import shutil
-import subprocess
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Final
 
 from eufy_home_security.devices import recipes
@@ -306,14 +306,31 @@ CASES: Final[tuple[Case, ...]] = (
 
 
 class HarnessError(RuntimeError):
-    """Node is missing, or a handler failed to produce a recipe."""
+    """Node is missing or of another major, or a handler failed to produce a recipe."""
 
 
-def node_executable() -> str:
-    node = shutil.which("node")
-    if node is None:
-        raise HarnessError("node not found on PATH: install Node.js to evaluate handlers")
-    return node
+def _load_node() -> ModuleType:
+    path = Path(__file__).resolve().parent / "gen_models_node.py"
+    spec = importlib.util.spec_from_file_location("gen_models_node", path)
+    if spec is None or spec.loader is None:
+        raise ImportError("scripts/gen_models_node.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_workers = _load_node()
+DRIVERS = _workers.DriverPool()  # one Node worker per thread that runs handlers
+
+
+def run_driver(handler: Path, requests: Sequence[Mapping[str, Any]]) -> list[Any]:
+    """The driver's reply to each request (``{"kind", "identifier", "payload", "device"}``),
+    in one job on this thread's worker; HarnessError when the job fails."""
+    try:
+        return DRIVERS.run({"handler": str(handler), "requests": list(requests)})  # type: ignore[no-any-return]
+    except _workers.DriverError as err:
+        raise HarnessError(f"node failed on {handler.name}: {err}") from err
 
 
 def run_handler(handler: Path, requests: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -321,19 +338,7 @@ def run_handler(handler: Path, requests: Sequence[Mapping[str, Any]]) -> list[di
 
     Each request is ``{"identifier", "payload", "device"}``.
     """
-    job = json.dumps(
-        {"handler": str(handler), "requests": [{"kind": "action", **r} for r in requests]}
-    )
-    proc = subprocess.run(
-        [node_executable(), str(DRIVER)],
-        input=job,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise HarnessError(f"node failed on {handler.name}: {proc.stderr.strip()}")
-    replies = json.loads(proc.stdout)
+    replies = run_driver(handler, [{"kind": "action", **r} for r in requests])
     return [
         recipe_from_reply(request["identifier"], reply)
         for request, reply in zip(requests, replies, strict=True)

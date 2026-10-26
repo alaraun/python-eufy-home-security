@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -193,22 +192,11 @@ def generate(cache: Path) -> dict[str, dict[str, dict[str, str | None]]]:
 
 
 def _run(tm: ModuleType, handler: Path, requests: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The handler's recipe per request, in one Node run; an empty recipe for a request
+    """The handler's recipe per request, in one driver job; an empty recipe for a request
     the handler does not build."""
-    job = json.dumps(
-        {"handler": str(handler), "requests": [{"kind": "action", **r} for r in requests]}
-    )
-    proc = subprocess.run(
-        [tm.node_executable(), str(tm.DRIVER)],
-        input=job,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise tm.HarnessError(f"node failed on {handler.name}: {proc.stderr.strip()}")
+    replies = tm.run_driver(handler, [{"kind": "action", **r} for r in requests])
     out: list[dict[str, Any]] = []
-    for request, reply in zip(requests, json.loads(proc.stdout), strict=True):
+    for request, reply in zip(requests, replies, strict=True):
         try:
             out.append(tm.recipe_from_reply(request["identifier"], reply))
         except tm.HarnessError:
