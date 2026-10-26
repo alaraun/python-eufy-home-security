@@ -2,18 +2,24 @@
 // code: it loads the handler file whose path it is given and calls its exported entry
 // points in a vm sandbox.
 //
-// stdin:  {"handler": "<path to <PN>Handle.mix.js>",
+// job:    {"handler": "<path to <PN>Handle.mix.js>",
 //          "requests": [{"kind": "set", "identifier", "payload", "device"}
 //                     | {"kind": "action", "identifier", "payload", "device"}
 //                     | {"kind": "get", "cmds", "device"}]}
 // "set" sends the action "setProperty"; "action" sends the identifier itself as the action.
-// stdout: a JSON array with one reply per request; a throwing request yields {"error": "..."}.
+// reply:  a JSON array with one reply per request; a throwing request yields {"error": "..."}.
 //
-// Math.random is reseeded before every request, so seeded fields (transaction ids) repeat
-// across runs and requests.
+// Without arguments: one job on stdin, its reply on stdout.
+// --serve: one job per stdin line, one reply line per job, until stdin ends; a job that
+// cannot run (unreadable handler, bad JSON) yields the line {"error": "..."}.
+//
+// Every job runs in a fresh sandbox, so a handler's state never crosses jobs; only the
+// compiled handler is reused. Math.random is reseeded before every request, so seeded
+// fields (transaction ids) repeat across runs and requests.
 "use strict";
 
 const fs = require("fs");
+const readline = require("readline");
 const vm = require("vm");
 
 function mulberry32(seed) {
@@ -27,28 +33,13 @@ function mulberry32(seed) {
   };
 }
 
-const job = JSON.parse(fs.readFileSync(0, "utf8"));
-
 const quiet = {};
 for (const name of ["log", "info", "warn", "error", "debug", "trace"]) quiet[name] = () => {};
 
-// The sandbox exposes only a CommonJS module stub, a silent console, Buffer and timers.
-const sandbox = { module: { exports: {} }, console: quiet, Buffer, setTimeout, clearTimeout };
-sandbox.exports = sandbox.module.exports;
-sandbox.self = sandbox;
-sandbox.global = sandbox;
-vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(job.handler, "utf8"), sandbox);
-const handler = sandbox.module.exports;
-
-const rng = { next: mulberry32(1) };
-sandbox.__rng = rng;
-vm.runInContext("Math.random = () => __rng.next();", sandbox);
-
+const SEEDED_RANDOM = new vm.Script("Math.random = () => __rng.next();");
 // A fixed clock: recipes that embed the current time (sequence numbers, timestamps)
 // repeat across runs. The same value is FIXED_CLOCK_MS in scripts/gen_models_codec.py.
-sandbox.__clock = 1700000000000;
-vm.runInContext(
+const FIXED_CLOCK = new vm.Script(
   `Date = (() => {
     const Real = Date;
     class Fixed extends Real {
@@ -57,10 +48,35 @@ vm.runInContext(
     }
     return Fixed;
   })();`,
-  sandbox,
 );
 
-function call(request) {
+// The last handler compiled: a worker serves one product's jobs in a row.
+let compiled = { path: null, script: null };
+
+function handlerScript(path) {
+  if (compiled.path !== path) {
+    compiled = { path, script: new vm.Script(fs.readFileSync(path, "utf8")) };
+  }
+  return compiled.script;
+}
+
+function load(path) {
+  // The sandbox exposes only a CommonJS module stub, a silent console, Buffer and timers.
+  const sandbox = { module: { exports: {} }, console: quiet, Buffer, setTimeout, clearTimeout };
+  sandbox.exports = sandbox.module.exports;
+  sandbox.self = sandbox;
+  sandbox.global = sandbox;
+  vm.createContext(sandbox);
+  handlerScript(path).runInContext(sandbox);
+  const rng = { next: mulberry32(1) };
+  sandbox.__rng = rng;
+  SEEDED_RANDOM.runInContext(sandbox);
+  sandbox.__clock = 1700000000000;
+  FIXED_CLOCK.runInContext(sandbox);
+  return { handler: sandbox.module.exports, rng };
+}
+
+function call(handler, request) {
   if (request.kind === "get") {
     const msg = {
       action: "getProperty",
@@ -82,14 +98,32 @@ function call(request) {
   return handler.controlDevice(JSON.stringify(msg) + "EOF;", 0);
 }
 
-const replies = job.requests.map((request) => {
-  rng.next = mulberry32(1);
-  try {
-    const out = call(request);
-    return typeof out === "string" ? JSON.parse(out) : out;
-  } catch (e) {
-    return { error: String(e) };
-  }
-});
+function run(job) {
+  const { handler, rng } = load(job.handler);
+  return job.requests.map((request) => {
+    rng.next = mulberry32(1);
+    try {
+      const out = call(handler, request);
+      return typeof out === "string" ? JSON.parse(out) : out;
+    } catch (e) {
+      return { error: String(e) };
+    }
+  });
+}
 
-process.stdout.write(JSON.stringify(replies));
+if (process.argv[2] === "--serve") {
+  const lines = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+  lines.on("line", (line) => {
+    let reply;
+    try {
+      reply = run(JSON.parse(line));
+    } catch (e) {
+      reply = { error: String(e) };
+    }
+    process.stdout.write(JSON.stringify(reply) + "\n");
+  });
+  // A handler's pending timers must not keep a worker alive once stdin ends.
+  lines.on("close", () => process.exit(0));
+} else {
+  process.stdout.write(JSON.stringify(run(JSON.parse(fs.readFileSync(0, "utf8")))));
+}

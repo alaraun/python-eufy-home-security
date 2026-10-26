@@ -53,7 +53,6 @@ from eufy_home_security.devices.settings import DUAL_VIEW, VIEW_MODE_PARAM
 from eufy_home_security.devices.types import DeviceKind, model_for_serial
 
 ROOT = Path(__file__).resolve().parent.parent
-DRIVER = ROOT / "scripts" / "gen_models_driver.js"
 DEFAULT_CACHE = ROOT / ".work" / "cache" / "things_all"
 DEFAULT_OUT = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models"
 INDEX = "INDEX.json"  # {"schema_version", "codes"}: the bundled product codes, sorted
@@ -64,8 +63,6 @@ DEFAULT_TREES = ROOT / ".work" / "tools" / "data" / "settings_trees.json"
 DEFAULT_TITLES = ROOT / ".work" / "tools" / "data" / "app_setting_titles.json"
 REFERENCE = ROOT / "tests" / "fixtures" / "models_v1_reference.json"
 DEFAULT_APP_VERSION = "6.1.10"  # the app build the label and tree data come from
-NODE_TIMEOUT_S = 600
-SIGNAL_RETRIES = 2
 SCHEMA_VERSION = 3
 BASE = "SINGLE"  # the base context: a station child whose parent is no station kind
 STANDALONE = "standalone"
@@ -83,10 +80,13 @@ def _load(name: str) -> ModuleType:
 
 
 codec = _load("gen_models_codec")
+node = _load("gen_models_node")
 joiner = _load("gen_models_join")
 controls = _load("gen_models_controls")
 sections = _load("gen_models_sections")
 GeneratorError = codec.GeneratorError
+DRIVER = node.DRIVER
+DRIVERS = node.DriverPool()  # one Node worker per generating thread
 RECIPE_FIELDS = ("cmd", "subCmd", "params")
 type LeafPath = tuple[str | int, ...]
 
@@ -192,31 +192,15 @@ def run_driver(
     requests: list[dict[str, Any]],
     wire: codec.WireValues | None = None,
 ) -> list[Any]:
-    """One node batch: a reply per request, in order. A value of ``wire`` is sent as the
-    value the app writes for it, and read back as that value."""
+    """One driver job on this thread's worker (``DRIVERS``): a reply per request, in
+    order. A value of ``wire`` is sent as the value the app writes for it, and read back
+    as that value."""
     sent = [codec.to_wire(r, wire) for r in requests] if wire else requests
-    job = json.dumps({"handler": str(handler), "requests": sent})
-    for _ in range(SIGNAL_RETRIES + 1):
-        res = subprocess.run(
-            ["node", str(DRIVER)],
-            input=job,
-            capture_output=True,
-            text=True,
-            timeout=NODE_TIMEOUT_S,
-            check=False,
-        )
-        # Node occasionally aborts under heavy parallel load; the job is deterministic,
-        # so a run killed by a signal is repeated as is.
-        if res.returncode >= 0:
-            break
-        print(f"{product_code}: driver killed by signal {-res.returncode}, rerun", file=sys.stderr)
-    if res.returncode:
-        raise GeneratorError(f"{product_code}: driver exit {res.returncode}: {res.stderr[-400:]}")
     try:
-        replies = json.loads(res.stdout)
-    except json.JSONDecodeError as err:
-        raise GeneratorError(f"{product_code}: driver output is not JSON: {err}") from err
-    if not isinstance(replies, list) or len(replies) != len(requests):
+        replies = DRIVERS.run({"handler": str(handler), "requests": sent})
+    except node.DriverError as err:
+        raise GeneratorError(f"{product_code}: {err}") from err
+    if len(replies) != len(requests):
         raise GeneratorError(f"{product_code}: driver returned {len(replies)} replies")
     if wire:
         return [codec.from_wire(r, rep, wire) for r, rep in zip(sent, replies, strict=True)]
@@ -333,8 +317,8 @@ def sweep(
     """setProperty over every writable property's domain in every context, on both of
     each context's channels: ``{context: {identifier: Sweep}}``.
 
-    Each context and channel runs in its own driver process: a handler can keep state
-    between requests, so one sweep must not see another's.
+    Each context and channel is its own driver job (a fresh handler sandbox): a handler
+    can keep state between requests, so one sweep must not see another's.
     """
     out: dict[str, dict[str, Sweep]] = {name: {} for name in contexts}
     writable = [p for p in props if "W" in (p.get("access_mode") or "")]
@@ -1108,8 +1092,10 @@ def _summary(counts: dict[str, int]) -> str:
 
 def _missing_inputs(cache: Path, pns: list[str]) -> str | None:
     """Why a run cannot start (no node, no cache, a model not in the cache), or None."""
-    if shutil.which("node") is None:
-        return "node is not on PATH"
+    try:
+        node.node_path()
+    except node.DriverError as err:
+        return str(err)
     if not cache.is_dir():
         return f"no thing-model cache at {cache}"
     absent = [pn for pn in pns if not (cache / pn / "td.json").is_file()]
