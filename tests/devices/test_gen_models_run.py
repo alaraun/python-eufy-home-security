@@ -6,10 +6,12 @@ for several in worker processes."""
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -190,3 +192,85 @@ def test_node_of_another_major_stops_the_run_before_it_starts(tmp_path: Path) ->
         " (scripts/package.json engines.node)\n"
     )
     assert not (tmp_path / "out").exists()
+
+
+# Killing the parent of a several-job run: each model runs one job on a fake driver that
+# records its pid and answers after 0.1 s; each generating process records its pid.
+PARENT_KILLED = """
+import importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("test_gen_models_run", sys.argv[1])
+test = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(test)
+tmp = Path(sys.argv[2])
+test.gen_models.generate = test._driver_generate
+test.gen_models.DRIVERS = test.gen_models.node.DriverPool([sys.executable, "-c", test.SLOW_DRIVER, str(tmp)])
+args = test._args(tmp, 3)
+args.product_codes = [f"T9Z{n:02d}" for n in range(300)]
+sys.exit(test.gen_models._generate_all(args, tmp, tmp / "out", quiet=True))
+"""
+
+SLOW_DRIVER = """
+import os, sys, time
+open(os.path.join(sys.argv[1], f"driver-{os.getpid()}"), "w").close()
+for line in sys.stdin:
+    time.sleep(0.1)
+    sys.stdout.write("[]\\n")
+    sys.stdout.flush()
+"""
+
+
+def _driver_generate(
+    pn: str, cache: Path, *_: Any, **__: Any
+) -> tuple[dict[str, Any], dict[str, int]]:
+    (cache / f"model-{os.getpid()}").touch()
+    gen_models.DRIVERS.run({"handler": pn, "requests": []})
+    return {"product_code": pn}, {}
+
+
+def _alive(pid: int) -> bool:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except FileNotFoundError:
+        return False
+    return stat.rsplit(")", 1)[1].split()[0] != "Z"
+
+
+def _until(condition: Any, seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while not condition():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.05)
+    return True
+
+
+@pytest.mark.skipif(not Path("/proc/self/stat").exists(), reason="reads /proc")
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    ("sig", "rc"), [(signal.SIGTERM, 128 + signal.SIGTERM), (signal.SIGKILL, -signal.SIGKILL)]
+)
+def test_killing_the_parent_ends_the_generating_processes_and_their_workers(
+    tmp_path: Path, sig: int, rc: int
+) -> None:
+    with (tmp_path / "err").open("w") as err:
+        proc = subprocess.Popen(
+            [sys.executable, "-c", PARENT_KILLED, __file__, str(tmp_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=err,
+            start_new_session=True,
+        )
+    try:
+
+        def pids(kind: str) -> list[int]:
+            return [int(p.name.split("-")[1]) for p in tmp_path.glob(f"{kind}-*")]
+
+        assert _until(lambda: len(pids("model")) == 3 and len(pids("driver")) == 3, 30)
+        os.kill(proc.pid, sig)
+        assert proc.wait(timeout=20) == rc
+        left = pids("model") + pids("driver")
+        assert _until(lambda: not any(_alive(p) for p in left), 15), [p for p in left if _alive(p)]
+        assert len(list((tmp_path / "out").glob("*.json"))) < 300  # stopped early
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)

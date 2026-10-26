@@ -52,7 +52,9 @@ uv run python scripts/gen_models.py T8160 T8170  # some models
 ```
 
 `--jobs N` (default: the CPU count) generates N models at a time, each in its own
-process with one long-lived Node worker; the output does not depend on it.
+process with one long-lived Node worker; the output does not depend on it. Ctrl-C or
+SIGTERM stops a run once the models in flight are done; when the run's own process is
+killed, its generating processes and Node workers end with it.
 
 A model is written only when every codec renders back each swept recipe and every row
 of `tests/fixtures/models_v1_reference.json` for that model renders to its recorded

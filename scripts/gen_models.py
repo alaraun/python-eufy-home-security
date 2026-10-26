@@ -43,12 +43,15 @@ import importlib.util
 import io
 import json
 import multiprocessing
+import multiprocessing.connection
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import traceback
 from collections.abc import Collection, Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor
@@ -1298,10 +1301,27 @@ def _build(task: _Task) -> _Result:
 
 
 def _open_drivers() -> None:
-    """Start a generating process: accept driver jobs, and end the worker on exit (a
-    forked process runs only the exit handlers registered after the fork)."""
+    """Start a generating process: accept driver jobs, end the worker on exit (a forked
+    process runs only the exit handlers registered after the fork), and end with the
+    parent process."""
     DRIVERS.open()
     atexit.register(DRIVERS.close)
+    parent = multiprocessing.parent_process()
+    if parent is not None:
+        threading.Thread(target=_exit_with_parent, args=(parent.sentinel,), daemon=True).start()
+
+
+def _exit_with_parent(sentinel: int) -> None:
+    """Once the parent process has ended without shutting the pool down (killed), end
+    this process and its worker."""
+    multiprocessing.connection.wait([sentinel])
+    DRIVERS.close()
+    os._exit(1)
+
+
+def _terminated(signum: int, _frame: object) -> None:
+    """SIGTERM ends a run as Ctrl-C does: the pool shuts down on the way out."""
+    raise SystemExit(128 + signum)
 
 
 def _run_tasks(tasks: list[_Task], jobs: int) -> Iterator[_Result]:
@@ -1309,7 +1329,8 @@ def _run_tasks(tasks: list[_Task], jobs: int) -> Iterator[_Result]:
     ``jobs`` processes, each with its own Node worker (the codec inference is Python and
     would serialize on one interpreter).
 
-    On an interrupt or error, the models in flight stop and no queued one starts.
+    On an interrupt (SIGINT, SIGTERM) or error no queued model starts, and the run ends
+    once the models in flight are done.
     """
     if jobs == 1:
         DRIVERS.open()
@@ -1324,11 +1345,13 @@ def _run_tasks(tasks: list[_Task], jobs: int) -> Iterator[_Result]:
     pool = ProcessPoolExecutor(
         max_workers=jobs, mp_context=multiprocessing.get_context(method), initializer=_open_drivers
     )
+    previous = signal.signal(signal.SIGTERM, _terminated)
     try:
         # map() yields in input order, so output and log do not depend on --jobs.
         yield from pool.map(_build, tasks)
     finally:
         pool.shutdown(cancel_futures=True)
+        signal.signal(signal.SIGTERM, previous)
 
 
 def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bool) -> int:
