@@ -877,6 +877,124 @@ def merge_contexts(per_context: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def apply_param_values(
+    product_code: str,
+    settings: dict[str, Any],
+    props: list[dict[str, Any]],
+    tree: Mapping[str, Any] | None,
+    titles: Mapping[str, Any] | None,
+) -> None:
+    """Apply explicitly sourced app direct-parameter values after handler inference.
+
+    The per-model ``param_values`` rule bypasses the handler's value conversion,
+    but keeps the command, update and channel fields that the handler discovered.
+    The read map inverts the raw values and accepts legacy public enum numbers.
+    """
+    rules = (titles or {}).get("param_values") or {}
+    if not isinstance(rules, dict):
+        raise CheckError(f"{product_code}: param_values must be an object")
+
+    by_identifier = {prop["identifier"]: prop for prop in props}
+
+    for ident, rule in rules.items():
+        if not isinstance(rule, dict) or not isinstance(rule.get("models"), dict):
+            raise CheckError(f"{product_code}: param_values {ident}: missing models")
+        if product_code not in rule["models"]:
+            continue
+        if not isinstance(rule.get("source"), str) or not rule["source"].strip():
+            raise CheckError(f"{product_code}: param_values {ident}: missing app source")
+        if tree is not None and tree.get("settings_ui") == joiner.RN_SETTINGS:
+            raise CheckError(f"{product_code}: param_values {ident}: RN settings")
+        if ident not in by_identifier or ident not in settings:
+            raise CheckError(f"{product_code}: param_values {ident}: unknown identifier")
+
+        kind, public = codec.domain(by_identifier[ident])
+        if kind != "enum":
+            raise CheckError(f"{product_code}: param_values {ident}: not an enum")
+
+        choices = rule["models"][product_code]
+        expected = [codec.value_key(value) for value in public]
+        if not isinstance(choices, dict) or set(choices) != set(expected):
+            raise CheckError(f"{product_code}: param_values {ident}: missing/unknown choices")
+        if any(type(value) is not int for value in choices.values()):
+            raise CheckError(f"{product_code}: param_values {ident}: values must be integers")
+        if len(set(choices.values())) != len(choices):
+            raise CheckError(f"{product_code}: param_values {ident}: duplicate raw values")
+
+        entry = settings[ident]
+        if entry.get("access") != "rw" or entry.get("write_table"):
+            raise CheckError(f"{product_code}: param_values {ident}: no single write recipe")
+
+        direct = {key: choices[key] for key in expected}
+        read_map = {str(direct[key]): value for key, value in zip(expected, public, strict=True)}
+
+        for key, value in zip(expected, public, strict=True):
+            if key in read_map and read_map[key] != value:
+                raise CheckError(f"{product_code}: param_values {ident}: legacy read conflict")
+            read_map[key] = value
+
+        def rewrite_write(write: Any, ident: str, direct: dict[str, int]) -> int:
+            if not isinstance(write, dict):
+                raise CheckError(f"{product_code}: param_values {ident}: missing write")
+
+            params = write.get("params")
+            update = write.get("update")
+            if not isinstance(params, dict) or not isinstance(update, dict):
+                raise CheckError(f"{product_code}: param_values {ident}: missing parameter slots")
+
+            mapped = [
+                key for key, item in params.items() if isinstance(item, dict) and "$map" in item
+            ]
+
+            if len(mapped) == 1:
+                leaf = mapped[0]
+            elif not mapped and "value" in params:
+                leaf = "value"
+            else:
+                raise CheckError(f"{product_code}: param_values {ident}: ambiguous value slot")
+
+            if "paramValue" not in update or not isinstance(update.get("cmd"), int):
+                raise CheckError(f"{product_code}: param_values {ident}: no update value slot")
+
+            params[leaf] = {"$map": direct.copy()}
+            update["paramValue"] = {"$map": {key: str(raw) for key, raw in direct.items()}}
+            return update["cmd"]
+
+        param = rewrite_write(entry.get("write"), ident, direct)
+        entry["read"] = {"param": param, "map": read_map}
+
+        note = entry.get("note")
+        if isinstance(note, str):
+            remaining = [part for part in note.split("; ") if part != codec.ROUND_TRIP_NOTE]
+            if remaining:
+                entry["note"] = "; ".join(remaining)
+            else:
+                entry.pop("note", None)
+
+        for group in entry.get("contexts") or ():
+            difference = group.get("entry")
+            if not isinstance(difference, dict):
+                raise CheckError(f"{product_code}: param_values {ident}: invalid context")
+            if difference.get("write_table"):
+                raise CheckError(f"{product_code}: param_values {ident}: context write table")
+            if (
+                "write" in difference
+                and difference["write"] is not None
+                and rewrite_write(difference["write"], ident, direct) != param
+            ):
+                raise CheckError(f"{product_code}: param_values {ident}: context parameter differs")
+            if "read" in difference:
+                difference["read"] = {"param": param, "map": read_map.copy()}
+            if isinstance(difference.get("note"), str):
+                parts = [
+                    part for part in difference["note"].split("; ") if part != codec.ROUND_TRIP_NOTE
+                ]
+                if parts:
+                    difference["note"] = "; ".join(parts)
+                else:
+                    difference.pop("note")
+
+
 def generate(
     product_code: str,
     cache: Path,
@@ -964,6 +1082,7 @@ def generate(
     if skipped:
         counts["skipped"] = skipped
     merged = merge_contexts(per_context)
+    apply_param_values(product_code, merged, props, tree, titles)
     model = model_for_serial(product_code)
     station = model is not None and model.kind is DeviceKind.STATION
     for key, n in sections.assign(merged, station=station).items():
