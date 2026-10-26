@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from eufy_home_security.devices.support import Support
+from eufy_home_security.devices.support import Evidence, Support
 from eufy_home_security.events import (
     ALARM_PUSH_MAX_AGE_SECONDS,
     GUARD_PUSH_MAX_AGE_SECONDS,
@@ -534,6 +534,29 @@ def test_a_security_push_is_classified_as_the_eufy_app_names_it(
     changed = detection is not None and detection != event_type
     expected = PUSH_KIND_EVIDENCE if changed else (detection.evidence if detection else None)
     assert event.detection_evidence == expected
+
+
+def test_a_motion_sensor_push_is_classified_as_the_eufy_app_names_it() -> None:
+    """Type 14 means motion without model or payload-field gating."""
+
+    event = SecurityEvent(
+        source=EventSource.CLOUD,
+        station_sn=SYNTHETIC.station_sn,
+        device_sn=SYNTHETIC.camera_sn,
+        msg_type=PushMessageType.MOTION_SENSOR,
+    )
+    assert event.detection is DetectionType.MOTION
+    assert event.detection_evidence == Evidence(
+        Support.DECLARED, "eufy app notification text of a msg_type 14 push"
+    )
+
+    other = SecurityEvent(
+        source=EventSource.CLOUD,
+        station_sn=SYNTHETIC.station_sn,
+        device_sn=SYNTHETIC.camera_sn,
+        msg_type=3,
+    )
+    assert other.detection is None
 
 
 def test_fetch_id_and_person_name_classify_only_a_security_push() -> None:

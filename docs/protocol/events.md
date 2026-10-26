@@ -140,9 +140,9 @@ An attached record that is merely unbound is not a rejection: its fields are Non
 3104 crying, 3105 sound, 3106 pet, **3107 vehicle** `*`, 3108–3110 dog / lick / poop,
 **3111 identified person** `*`, 3112 stranger.
 
-**Detection kind** (`SecurityEvent.detection`). The `event_type` as an enum, except on a
-`msg_type` 1 (SECURITY_EVT) push, whose kind the eufy app takes from two side fields
-first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on hardware):
+**Detection kind** (`SecurityEvent.detection`). Most pushes use `event_type` as an
+enum. For a `msg_type` 1 (SECURITY_EVT) push, the eufy app takes the kind from
+two side fields first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on hardware):
 
 | condition, in order | kind |
 |---|---|
@@ -156,6 +156,10 @@ first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on hardware):
 a `fetch_id`; the library keeps the `event_type` there, so a pushed 3102 stays a person.
 A camera paired to a HomeBase 2 is reported this way: a 3101 push with a face id is a
 person. `SecurityEvent.detection_evidence` names the grade of the kind an event reports.
+
+A `msg_type` 14 (MOTION_SENSOR) push is motion whatever its `e` field says, as the eufy
+app shows it; `e` (opened / closed) is read only on a `msg_type` 3 entry-sensor push.
+Like a camera detection, it has no cleared edge (see the notes above).
 
 **`notification_style`**: 1 text, 2 thumbnail, 3 both.
 

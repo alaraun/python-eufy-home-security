@@ -149,6 +149,12 @@ _DETECTION_EVIDENCE: Final[Mapping[DetectionType, Evidence]] = MappingProxyType(
 )
 
 
+_PIR_MOTION_PUSH_EVIDENCE: Final = Evidence(
+    Support.DECLARED,
+    "eufy app notification text of a msg_type 14 push",
+)
+
+
 PUSH_KIND_EVIDENCE: Final = Evidence(
     Support.DECLARED,
     "eufy app notification text of a msg_type 1 push",
@@ -743,9 +749,10 @@ class SecurityEvent:
 
     @property
     def detection(self) -> DetectionType | None:
-        """What the camera detected, as the eufy app names it; None when unknown.
+        """What was detected, as the eufy app names it; None when unknown.
 
-        ``event_type`` as an enum, except on a ``msg_type`` 1 (SECURITY) push, whose
+        ``event_type`` as an enum, except on a ``msg_type`` 14 (MOTION_SENSOR) push
+        (below) and on a ``msg_type`` 1 (SECURITY) push, whose
         kind the app takes from ``person_name`` and ``fetch_id`` first, in order:
         ``person_name`` → IDENTITY_PERSON; ``fetch_id`` ``3107`` or ``event_type``
         3107 → VEHICLE; ``fetch_id`` ``3106`` or 3106 → PET; any other ``fetch_id``
@@ -753,7 +760,12 @@ class SecurityEvent:
         (3102, 3111, 3112). Without either the ``event_type`` stands: a 3102 push without
         a face id stays PERSON. Graded :data:`PUSH_KIND_EVIDENCE`; see
         :attr:`detection_evidence`.
+
+        A ``msg_type`` 14 (MOTION_SENSOR) push is MOTION whatever its ``e`` and
+        ``event_type`` say, as the eufy app shows it.
         """
+        if self.msg_type == PushMessageType.MOTION_SENSOR:
+            return DetectionType.MOTION
         wire = _enum_or_none(DetectionType, self.event_type)
         if self.msg_type != PushMessageType.SECURITY:
             return wire
@@ -769,12 +781,15 @@ class SecurityEvent:
 
     @property
     def detection_evidence(self) -> Evidence | None:
-        """How :attr:`detection` is known: :data:`PUSH_KIND_EVIDENCE` when ``fetch_id`` or
-        ``person_name`` changed it from the ``event_type``, else the value's own
-        :attr:`DetectionType.evidence`; None without a detection."""
+        """How :attr:`detection` is known: declared from the eufy app on a ``msg_type`` 14
+        push; :data:`PUSH_KIND_EVIDENCE` when ``fetch_id`` or ``person_name`` changed it
+        from the ``event_type``; else the value's own :attr:`DetectionType.evidence`; None
+        without a detection."""
         detection = self.detection
         if detection is None:
             return None
+        if self.msg_type == PushMessageType.MOTION_SENSOR:
+            return _PIR_MOTION_PUSH_EVIDENCE
         if detection is not _enum_or_none(DetectionType, self.event_type):
             return PUSH_KIND_EVIDENCE
         return detection.evidence
