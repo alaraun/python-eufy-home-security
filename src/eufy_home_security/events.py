@@ -762,12 +762,14 @@ class SecurityEvent:
         :attr:`detection_evidence`.
 
         A ``msg_type`` 14 (MOTION_SENSOR) push is MOTION whatever its ``e`` and
-        ``event_type`` say, as the eufy app shows it.
+        ``event_type`` say, as the eufy app shows it. A doorbell press (3103) stays
+        DOORBELL_PRESS on any push: the eufy app takes a doorbell's and a video smart
+        lock's press from the ``event_type`` alone.
         """
         if self.msg_type == PushMessageType.MOTION_SENSOR:
             return DetectionType.MOTION
         wire = _enum_or_none(DetectionType, self.event_type)
-        if self.msg_type != PushMessageType.SECURITY:
+        if self.msg_type != PushMessageType.SECURITY or wire is DetectionType.DOORBELL_PRESS:
             return wire
         if self.person_name is not None:
             return DetectionType.IDENTITY_PERSON
