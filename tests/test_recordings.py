@@ -137,7 +137,8 @@ def _clip(record_id: int = DAYED_ID, **fields: object) -> HistoryRecord:
             True,
             RecordingRef(DAY, 2818, OTHER_CAMERA, STARTED),
         ),
-        # found by its id: a start time that is no wall-clock time is left out
+        # found by its id: named by day and id alone, whatever its start time
+        (_clip(), DAY, False, RecordingRef(DAY, DAYED_ID, CAMERA)),
         (_clip(start_time="1758024794"), DAY, False, RecordingRef(DAY, DAYED_ID, CAMERA)),
         (_clip(start_time=None), DAY, False, RecordingRef(DAY, DAYED_ID, CAMERA)),
     ],

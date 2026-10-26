@@ -1917,7 +1917,7 @@ capture ended by its `stop` event; complete), `complete`, `content_type`.
   does not parse raises `RecordingRefError` (a `ValueError`; a page cursor is never
   accepted as a ref, nor a ref as a cursor), a `device_sn` not paired here or a
   standalone device `UnsupportedError`. `RecordNotFoundError` means the station no longer lists that
-  row (deleted, or its id now names another recording); on a station paged by start
+  row (deleted, or that id now belongs to another camera); on a station paged by start
   time it also comes for a row behind a full page (20) of rows that started in its own
   second, which no start-time query reaches. No row is cached: keep rows as long
   as the view needs them and the ref for anything that outlives it. `ref` is None for a

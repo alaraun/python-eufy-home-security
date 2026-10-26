@@ -3,8 +3,9 @@
 A cursor names a position in one listing (a station and its camera filter): after a
 row, by the row's station day and ``record_id``, or at a day, by that day's rows and
 older ones. A reference names one row of one camera (:attr:`~.events.HistoryRecord.ref`):
-its station day, ``record_id`` and start time, enough to ask the station for that row
-with one query. Days are the station's own (the day a history query names), never the
+its station day and ``record_id``, plus its start time where the station pages by
+start time: enough to ask the station for that row with one query (two at most on a
+station paged by start time). Days are the station's own (the day a history query names), never the
 host's. Callers keep the text as it came and hand it back; its form is not API, and a
 cursor is never accepted as a reference or the other way round.
 See ``docs/how-to/home-assistant.md`` § The station's recordings.
@@ -155,12 +156,13 @@ def issue_ref(
     row: HistoryRecord, listed_day: date, *, station_sn: str, need_started: bool
 ) -> str | None:
     """The reference of ``row``, listed under the station day ``listed_day`` on
-    ``station_sn``; None for a row without a ``record_id`` or a camera, and with
-    ``need_started`` (a station whose lookup pages by start time) for one without a
-    start time."""
+    ``station_sn``; None for a row without a ``record_id`` or a camera. With
+    ``need_started`` (a station whose lookup pages by start time) it carries the row's
+    start time, and a row without one gets None; otherwise it names the row by its
+    day and id alone, so a later start time leaves the text as it is."""
     if row.record_id <= 0 or not row.device_sn:
         return None
-    started = row_started(row)
+    started = row_started(row) if need_started else None
     if need_started and started is None:
         return None
     day = record_id_day(row.record_id) or listed_day

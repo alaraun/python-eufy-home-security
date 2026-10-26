@@ -3148,7 +3148,7 @@ class StationSession:
         Raises :class:`RecordingRefError`, before sending, under
         ``DB_QUERY_LOCAL_EVENTS`` for a ref without a start time;
         :class:`RecordNotFoundError` when no page asked holds the row: the station no
-        longer lists it, or its id names another recording.
+        longer lists it (deleted), or lists that id for another camera.
         """
         if history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS:
             row = await self._find_local_event(ref, timeout)
@@ -3184,8 +3184,8 @@ class StationSession:
                 if (row.record_id, row.device_sn, row_started(row)) == names:
                     return row
             starts = [s for r in page if (s := row_started(r)) is not None]
-            # a full page of rows from the ref's second on may hide it: ask on once
-            if len(page) < HISTORY_LOCAL_PAGE_SIZE or min(starts, default="") < cursors[1]:
+            # a full page with no row started before the ref may hide it: ask on once
+            if len(page) < HISTORY_LOCAL_PAGE_SIZE or min(starts, default=cursors[1]) < cursors[1]:
                 return None
         return None
 

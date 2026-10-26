@@ -1408,9 +1408,8 @@ async def test_a_listed_row_is_found_again_by_its_reference_with_one_query(
         found_timeless = await session.async_find_history_record(timeless)
     finally:
         await session.async_close()
-    assert named == RecordingRef(
-        date(2026, 9, 16), target.record_id, SYNTHETIC.camera_sn, "20260916120003"
-    )
+    # named by day and id alone: a start time filled in later keeps the text
+    assert named == RecordingRef(date(2026, 9, 16), target.record_id, SYNTHETIC.camera_sn)
     assert (found, found.ref) == (target, target.ref)
     assert by_id is not None
     assert by_id.ref == target.ref
@@ -1615,6 +1614,13 @@ async def test_a_homebase_2_row_behind_a_full_page_of_its_own_second_is_not_reac
 async def test_a_homebase_2_full_page_reaching_older_rows_ends_the_lookup() -> None:
     found, cursors = await _find_on_hb2(FakeStation(serial=_HB2_SN), _crowd(900, 149, 30))
     assert (found, cursors) == (None, ["20260916120231"])
+
+
+async def test_a_homebase_2_full_page_without_start_times_asks_from_the_rows_start() -> None:
+    """A full page whose rows carry no start time shows no older row: one more page."""
+    rows = [{**_timeless_row(n), "device_sn": _OTHER_CAMERA_SN} for n in range(1, 26)]
+    found, cursors = await _find_on_hb2(FakeStation(serial=_HB2_SN), rows)
+    assert (found, cursors) == (None, ["20260916120231", "20260916120230"])
 
 
 class _CursorIgnoringStation(FakeStation):

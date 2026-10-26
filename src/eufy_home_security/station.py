@@ -4636,7 +4636,7 @@ class Station:
         ``device_sn``) or one that does not parse; ``UnsupportedError`` for a
         ``device_sn`` not paired here and on a standalone device. Raises
         :class:`~.exceptions.RecordNotFoundError` when the station no longer lists
-        that row (deleted, or its id now names another recording) and, on a station
+        that row (deleted, or that id now belongs to another camera) and, on a station
         paged by start time, for a row behind a full page of rows of its start second.
         """
         if device_sn is not None:
