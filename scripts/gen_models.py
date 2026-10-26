@@ -96,7 +96,6 @@ joiner = _load("gen_models_join")
 controls = _load("gen_models_controls")
 sections = _load("gen_models_sections")
 GeneratorError = codec.GeneratorError
-DRIVER = node.DRIVER
 DRIVERS = node.DriverPool()  # one Node worker per generating thread
 RECIPE_FIELDS = ("cmd", "subCmd", "params")
 type LeafPath = tuple[str | int, ...]

@@ -211,9 +211,8 @@ def test_close_fails_the_job_in_flight_without_a_rerun(
     thread = threading.Thread(target=work)
     thread.start()
     deadline = time.monotonic() + 10
-    while not pool._workers and time.monotonic() < deadline:
+    while not any(w._busy for w in pool._workers) and time.monotonic() < deadline:
         time.sleep(0.01)
-    time.sleep(0.2)
     start = time.monotonic()
     pool.close()
     assert time.monotonic() - start < 2  # killed, not waited for

@@ -36,7 +36,6 @@ from eufy_home_security.devices import recipes
 from eufy_home_security.testing import SYNTHETIC
 
 ROOT: Final = Path(__file__).resolve().parent.parent
-DRIVER: Final = Path(__file__).resolve().parent / "gen_models_driver.js"
 GOLDENS_DIR: Final = ROOT / "tests" / "fixtures" / "thing_models"
 DOC: Final = ROOT / "docs" / "reference" / "thing-models.md"
 

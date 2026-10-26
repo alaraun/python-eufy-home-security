@@ -41,7 +41,7 @@ ORDER_GATE: Path | None = None  # set: the first model finishes only after the l
 # Several jobs fork worker processes: that runs in a fresh interpreter without the test
 # runner's threads, as on the command line.
 SEVERAL_JOBS = """
-import importlib.util, sys
+import importlib.util, os, sys
 from pathlib import Path
 spec = importlib.util.spec_from_file_location("test_gen_models_run", sys.argv[1])
 test = importlib.util.module_from_spec(spec)
@@ -49,6 +49,7 @@ spec.loader.exec_module(test)
 test.gen_models.generate = test._fake_generate
 test.gen_models.DRIVERS.close()  # as an earlier run leaves it
 tmp = Path(sys.argv[2])
+(tmp / "parent-pid").write_text(str(os.getpid()))
 test.ORDER_GATE = tmp / "last-model-done"
 sys.exit(test.gen_models._generate_all(test._args(tmp, 3), tmp, tmp / "out", quiet=False))
 """
@@ -125,16 +126,16 @@ def test_one_job_builds_in_process_and_reports_each_failure(
 
 @pytest.mark.timeout(60)
 def test_several_jobs_build_in_worker_processes_and_report_each_failure(tmp_path: Path) -> None:
-    proc = subprocess.Popen(
+    result = subprocess.run(
         [sys.executable, "-c", SEVERAL_JOBS, __file__, str(tmp_path)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
+        timeout=50,
+        check=False,
     )
-    out, err = proc.communicate(timeout=50)
-    pids = _check_run(proc.returncode, tmp_path / "out", out, err)
+    pids = _check_run(result.returncode, tmp_path / "out", result.stdout, result.stderr)
     assert pids
-    assert proc.pid not in pids
+    assert int((tmp_path / "parent-pid").read_text()) not in pids
 
 
 # Answers --version as Node of the given version; any other run fails at once.
