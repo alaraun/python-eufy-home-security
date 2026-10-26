@@ -8,7 +8,7 @@ A station reports what happens at the house on two independent channels:
 | needs internet | no | yes |
 | latency | about 1 s **ahead** of the cloud, about 3 s behind the trigger **[verified]** | about 1 s behind local **[verified]** |
 | camera detections | HomeBase 3 **[verified]**, with on-disk video, thumbnail and crop paths; none seen from a HomeBase 2 (`Station.local_events`) | yes (same inner JSON), with `pic_url` |
-| sensor events (a motion sensor's `msg_type` 14) | not seen from any station (`Station.local_events_for`); a sensor's last PIR time (param 1605) is in the parameter dump | yes |
+| sensor events (a motion sensor's `msg_type` 14) | not seen from any station (`Station.local_detections_for`); a sensor's last PIR time (param 1605) is in the parameter dump | yes |
 | guard-mode changes | changes over P2P, from the app and from a schedule announced by `0x047F` **[verified, fw 3.8.7.4]**; keypad changes **[open]** (poll the parameter dump); no arming push (msg_type 9) over P2P | **pushed**, decoded within about 1 s **[verified]** |
 | parameter changes (battery, settings) | pushed as dumps, plus polling | no |
 | stills | 640×360 thumbnail, crop, 4K from the recording ([media.md](media.md)) | encrypted `pic_url` thumbnail **[app]** |

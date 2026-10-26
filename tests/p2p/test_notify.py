@@ -117,6 +117,17 @@ def test_decode_camera_push_reads_a_person_event() -> None:
     assert (ev.alarm_phase, ev.arming_source, ev.guard_mode) == (None, None, None)
 
 
+def test_a_motion_sensor_push_decodes_as_motion() -> None:
+    sensor_sn = "T8910P0000000001"
+    ev = _decode(
+        _payload(msg_type=14, event_type=0, device_sn=sensor_sn, rec_content=[], pic_content=[])
+    )
+    assert ev.source is EventSource.P2P
+    assert ev.message_type is PushMessageType.MOTION_SENSOR
+    assert ev.detection is DetectionType.MOTION
+    assert ev.device_sn == sensor_sn
+
+
 @pytest.mark.parametrize(
     ("cipher", "session_ecb", "authenticated"),
     [

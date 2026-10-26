@@ -2951,11 +2951,14 @@ def test_live_support_of_a_standalone_camera_follows_its_handler() -> None:
     assert "single_no_ext" in evidence.source
 
 
-def _station_of(serial: str, device_type: int) -> Station:
+def _station_of(
+    serial: str, device_type: int, sub_devices: tuple[CloudDevice, ...] = ()
+) -> Station:
     device = CloudDevice(
         device_sn=serial, device_type=device_type, name="HB", p2p_did=SYNTHETIC.did
     )
-    return Station(device, _unconnected_station(host=None, local_ip=None, local_port=0).session)
+    session = _unconnected_station(host=None, local_ip=None, local_port=0).session
+    return Station(device, session, sub_devices=sub_devices)
 
 
 def test_local_events_of_a_homebase_3_is_verified() -> None:
@@ -2996,50 +2999,67 @@ def _sub(serial: str, device_type: int, channel: int) -> CloudDevice:
     )
 
 
-def test_local_events_for_a_camera_behind_a_homebase_3_is_the_stations() -> None:
-    hub = _hub_with(CAMERA, _sub(_T8530_SN, 0, 1), _sub(_T8101_SN, 0, 2))
-    assert hub.local_events.support is Support.VERIFIED
-    for serial in (SYNTHETIC.camera_sn, _T8530_SN, _T8101_SN, SYNTHETIC.station_sn):
-        assert hub.local_events_for(serial) == hub.local_events
+def test_local_detections_of_a_measured_camera_behind_a_homebase_3_are_its_own() -> None:
+    evidence = _hub_with(CAMERA).local_detections_for(SYNTHETIC.camera_sn)
+    assert evidence.support is Support.VERIFIED
+    assert "person and vehicle detections" in evidence.source
 
 
-def test_local_events_for_a_motion_sensor_behind_a_homebase_3_needs_cloud_push() -> None:
-    evidence = _hub_with(CAMERA, MOTION_SENSOR).local_events_for(SENSOR_SN)
+@pytest.mark.parametrize(("serial", "code"), [(_T8530_SN, "T8530"), (_T8101_SN, "T8101")])
+def test_local_detections_of_another_camera_behind_a_homebase_3_extend_the_stations(
+    serial: str, code: str
+) -> None:
+    hub = _hub_with(_sub(_T8530_SN, 0, 1), _sub(_T8101_SN, 0, 2))
+    station = hub.local_events
+    assert hub.local_detections_for(serial) == Evidence(
+        Support.VERIFIED,
+        f"{station.source}; extended to {code}, which the eufy app shows as a camera",
+        station.note,
+    )
+
+
+def test_a_homebase_3_has_no_local_detections_of_its_own() -> None:
+    evidence = _hub_with(CAMERA).local_detections_for(SYNTHETIC.station_sn)
     assert evidence == Evidence(
         Support.UNKNOWN,
-        "no local event push recorded for T8910",
+        "T8030 has no camera: no detections of its own",
+        "its alarm and guard-mode changes arrive as other P2P frames",
+    )
+
+
+def test_local_detections_of_a_motion_sensor_behind_a_homebase_3_need_cloud_push() -> None:
+    evidence = _hub_with(CAMERA, MOTION_SENSOR).local_detections_for(SENSOR_SN)
+    assert evidence == Evidence(
+        Support.UNKNOWN,
+        "no local detection push recorded for T8910",
         "the station's local push is verified for camera detections only; this "
-        "device's events arrive through cloud push",
+        "device's detections arrive through cloud push",
     )
 
 
-def test_local_events_for_an_uncatalogued_device_is_unknown() -> None:
-    evidence = _hub_with(_sub("TZZZZP0000000001", 0, 3)).local_events_for("TZZZZP0000000001")
+def test_local_detections_of_an_uncatalogued_device_are_unknown() -> None:
+    evidence = _hub_with(_sub("TZZZZP0000000001", 0, 3)).local_detections_for("TZZZZP0000000001")
     assert evidence.support is Support.UNKNOWN
-    assert evidence.source == "no local event push recorded for this model"
+    assert evidence.source == "no local detection push recorded for this model"
 
 
-def test_local_events_for_a_device_of_an_unverified_station_is_the_stations() -> None:
-    hb2 = CloudDevice(
-        device_sn="T8010" + SYNTHETIC.station_sn[5:],
-        device_type=0,
-        name="HB",
-        p2p_did=SYNTHETIC.did,
-    )
-    sensor = dataclasses.replace(MOTION_SENSOR, station_sn=hb2.device_sn)
-    session = _unconnected_station(host=None, local_ip=None, local_port=0).session
-    station = Station(hb2, session, sub_devices=[sensor])
+def test_local_detections_of_an_unverified_stations_devices_are_the_stations() -> None:
+    hb2_sn = "T8010" + SYNTHETIC.station_sn[5:]
+    camera = dataclasses.replace(CAMERA, station_sn=hb2_sn)
+    sensor = dataclasses.replace(MOTION_SENSOR, station_sn=hb2_sn)
+    station = _station_of(hb2_sn, 0, sub_devices=(camera, sensor))
     assert station.local_events.support is Support.UNKNOWN
-    assert station.local_events_for(SENSOR_SN) == station.local_events
+    for serial in (hb2_sn, SYNTHETIC.camera_sn, SENSOR_SN):
+        assert station.local_detections_for(serial) == station.local_events
 
 
-def test_local_events_for_a_standalone_camera_is_its_own_entry() -> None:
+def test_local_detections_of_a_standalone_camera_are_its_own_entry() -> None:
     station = _standalone_t8170()
-    assert station.local_events_for(_T8170_SN) == station.local_events
+    assert station.local_detections_for(_T8170_SN) == station.local_events
 
 
-def test_local_events_for_a_device_not_paired_here_is_unknown() -> None:
-    evidence = _hub_with(CAMERA).local_events_for(SENSOR_SN)
+def test_local_detections_of_a_device_not_paired_here_are_unknown() -> None:
+    evidence = _hub_with(CAMERA).local_detections_for(SENSOR_SN)
     assert evidence == Evidence(Support.UNKNOWN, "the device is not paired to this station")
 
 

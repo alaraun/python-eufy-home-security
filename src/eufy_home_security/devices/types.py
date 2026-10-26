@@ -36,6 +36,7 @@ class DeviceKind(StrEnum):
     OTHER = "other"
 
 
+#: The kinds :attr:`DeviceModel.has_camera` counts for a model filed under no category.
 _CAMERA_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
 
 
