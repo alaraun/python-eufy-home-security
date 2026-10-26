@@ -746,6 +746,11 @@ push and across reconnects, so the integration never de-duplicates:
   detection differently is an enrichment, not a second detection.
 - Station pushes (arming, alarm) are never merged away; a stale guard-mode push is
   dropped (see live guard mode above).
+- **Which devices ring.** A doorbell press is `event.detection is
+  DetectionType.DOORBELL_PRESS` with the pressed device's serial in `device_sn`. Give a
+  device the ring event when `profile_for_serial(serial).support(Capability.DOORBELL_RING)`
+  is not `Support.UNKNOWN`, not by its kind: a video smart lock (kind `LOCK`) rings too,
+  as in the eufy app. A pure lookup, the same under every station.
 - For diagnostics, `eufy.deduplicator.dropped_duplicates` and `dropped_repeats`.
 - For diagnostics, count events by `frame_cipher`, alongside the session's
   `state_frames_by_encryption`.

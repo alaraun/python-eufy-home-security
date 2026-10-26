@@ -519,6 +519,9 @@ def _short(event_type: int | None = DetectionType.MOTION, **fields: Any) -> Secu
         (3112, "1a2b3c", None, DetectionType.STRANGER_PERSON),
         (3101, "1a2b3c", "Alice", DetectionType.IDENTITY_PERSON),
         (3101, None, "Alice", DetectionType.IDENTITY_PERSON),
+        # a doorbell press stays a press, as the app's doorbell and lock pushes show it
+        (3103, "1a2b3c", None, DetectionType.DOORBELL_PRESS),
+        (3103, "3107", "Alice", DetectionType.DOORBELL_PRESS),
         (None, None, None, None),
     ],
 )
