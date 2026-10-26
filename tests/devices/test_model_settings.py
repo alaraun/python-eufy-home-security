@@ -795,14 +795,6 @@ def test_every_readable_enum_reads_each_stored_value_as_one_of_its_values() -> N
             if (raw := dict(setting.encode(value, ctx).updates).get(param)) is not None
         }
         decoded = {value: setting.decode(raw) for value, raw in stored.items()}
-
-        if code == "T8910" and setting.key == "sensor_motion_detection_sensitivity_level":
-            # The app-derived write recipe stores 0/1/2/1/1, whereas
-            # hardware-verified param 1609 readback is 80/53/37/18/8.
-            # These writes have not been verified through the library.
-            # Dedicated T8910 tests check all five readable values.
-            assert stored == {0: "0", 1: "1", 2: "2", 3: "1", 4: "1"}
-            continue
         assert decoded == {value: value for value in stored}, (code, setting.key, stored)
         checked += len(stored)
     assert checked > 1000
