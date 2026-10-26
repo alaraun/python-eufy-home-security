@@ -1296,9 +1296,11 @@ async def test_a_station_outside_the_homebase_3_family_is_paged_by_start_time() 
         _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
     )
     try:
-        history = await session.async_list_history("20260915", "20260916")
+        history = await session.async_list_history("20260915", "20260916", page_size=20)
         pages = len(station.history_queries)
-        older = await session.async_list_history("20260916", before=today[10]["record_id"])
+        older = await session.async_list_history(
+            "20260916", before=today[10]["record_id"], page_size=20
+        )
     finally:
         await session.async_close()
         station.stop()
@@ -1405,7 +1407,7 @@ async def test_each_history_page_is_logged_with_its_counts_and_why_paging_stops(
     )
     try:
         with caplog.at_level(logging.DEBUG, logger="eufy_home_security.p2p.session"):
-            await session.async_list_history("20260916", **kwargs)
+            await session.async_list_history("20260916", **({"page_size": 20} | kwargs))
     finally:
         await session.async_close()
         station.stop()

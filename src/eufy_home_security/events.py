@@ -393,6 +393,48 @@ def is_station_media_path(value: object, suffix: str) -> TypeGuard[str]:
     )
 
 
+def is_station_recording_path(value: object) -> TypeGuard[str]:
+    """A validated station recording path, including HomeBase 2 camera ``.dat`` files.
+
+    HomeBase 2 records clips on its SD partition rather than under the newer
+    station ``/zx`` media prefix. Permit the two observed filename formats,
+    both with 14-digit timestamps, under two-digit camera directories only;
+    never accept arbitrary ``/media`` paths.
+    """
+    if is_station_media_path(value, RECORDING_SUFFIX):
+        return True
+    if not isinstance(value, str):
+        return False
+    if (
+        not value.startswith("/media/mmcblk0p1/Camera")
+        or len(value) > MEDIA_PATH_MAX
+        or not value.isascii()
+        or not value.isprintable()
+        or ".." in value
+    ):
+        return False
+    camera_and_name = value.removeprefix("/media/mmcblk0p1/Camera")
+    camera, separator, filename = camera_and_name.partition("/")
+    return (
+        separator == "/"
+        and len(camera) == 2
+        and camera.isdigit()
+        and (
+            # Standard camera clips: YYYYMMDDHHMMSS.dat
+            (len(filename) == 18 and filename[:14].isdigit() and filename[14:] == ".dat")
+            # HomeBase 2 Doorbell clips: A123_YYYYMMDDHHMMSS.dat
+            or (
+                len(filename) == 23
+                and filename[0].isalpha()  # ASCII checked on the full path above
+                and filename[1:4].isdigit()
+                and filename[4] == "_"
+                and filename[5:19].isdigit()
+                and filename[19:] == ".dat"
+            )
+        )
+    )
+
+
 def pic_url_kind(value: str | None) -> str | None:
     """Where a push's ``pic_url`` points: ``https`` (a cloud URL), ``station`` (a still
     on the station's disk, fetched like ``thumb_path``), ``other``; None when empty."""
@@ -895,10 +937,9 @@ class HistoryRecord:
 
     @property
     def video_path(self) -> str | None:
-        """The row's recording (``storage_path``) when it is a valid station media path
-        ending in ``.zxvideo`` (:func:`is_station_media_path`), else None."""
+        """The row's validated recording (``storage_path``), if any."""
         path = self.storage_path
-        return path if is_station_media_path(path, RECORDING_SUFFIX) else None
+        return path if is_station_recording_path(path) else None
 
     @property
     def started_at(self) -> datetime | None:

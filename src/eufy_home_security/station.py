@@ -4520,6 +4520,7 @@ class Station:
         since: datetime | None = None,
         limit: int | None = None,
         before: int | None = None,
+        before_day: date | None = None,
         until: date | None = None,
         timeout: float | None = None,
     ) -> list[HistoryRecord]:
@@ -4535,7 +4536,9 @@ class Station:
         Pages: ``limit`` stops the walk as soon as that many rows are found, so only
         the days (and pages) up to the last row are asked; ``before`` (the
         ``record_id`` of the previous page's last row) starts below that row, in its
-        day. A page shorter than ``limit`` means the window holds no more; a full page
+        day. For opaque HomeBase 2 IDs, pass ``before_day`` from that record's
+        timestamp; ordinary date-encoded IDs need no hint.
+        A page shorter than ``limit`` means the window holds no more; a full page
         may be followed by an empty one. ``until`` starts the walk at that day: its rows
         and older ones (a later day counts as today; a ``datetime`` as its host-local
         day). ``days`` still counts back from today, so an ``until`` before the window
@@ -4554,7 +4557,15 @@ class Station:
             raise ValueError("days must be at least 1")
         if limit is not None and limit < 1:
             raise ValueError("limit must be at least 1")
-        cursor_day = None if before is None else record_id_day(before)
+        if before is None and before_day is not None:
+            raise ValueError("before_day requires before")
+        cursor_day = (
+            None
+            if before is None
+            else before_day
+            if before_day is not None
+            else record_id_day(before)
+        )
         if before is not None and cursor_day is None:
             raise ValueError(f"before {before} carries no day")
         if device_sn is not None:
@@ -4593,7 +4604,9 @@ class Station:
             last.strftime("%Y%m%d"),
             count=limit,
             before=before if cursor_day is not None and cursor_day <= last else None,
+            before_day=cursor_day if before is not None else None,
             keep=wanted,
+            device_sn=device_sn,
             timeout=timeout,
         )
 
