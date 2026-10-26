@@ -21,8 +21,10 @@ generator never reads ``--out`` to decide what to write. ``--update-released REF
 the setting keys of every model file bundled at git ``REF`` (a release tag) into the
 manifest and writes nothing else.
 
-Runs on a maintainer host only (needs Node and the private cache); nothing at runtime
-executes vendor code. See docs/reference/models-schema.md.
+``--jobs N`` generates N models at a time, each in its own process with one long-lived
+Node worker (``scripts/gen_models_node.py``); a model that fails is reported and the run
+goes on. Runs on a maintainer host only (needs Node of the pinned major and the private
+cache); nothing at runtime executes vendor code. See docs/reference/models-schema.md.
 
     gen_models.py [PN ...] [--check] [--cache DIR] [--out DIR] [--jobs N]
                   [--labels FILE] [--trees FILE] [--titles FILE] [--app-version V]
@@ -32,18 +34,21 @@ executes vendor code. See docs/reference/models-schema.md.
 from __future__ import annotations
 
 import argparse
+import atexit
 import base64
 import copy
 import importlib.util
 import json
+import multiprocessing
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Collection, Mapping
-from concurrent.futures import ThreadPoolExecutor
+import traceback
+from collections.abc import Collection, Iterator, Mapping
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -1094,7 +1099,7 @@ def _missing_inputs(cache: Path, pns: list[str]) -> str | None:
     """Why a run cannot start (no node of the pinned major, no cache, a model not in the
     cache), or None."""
     try:
-        node.node_path()
+        node.node_path()  # checked once: the generating processes inherit the result
     except node.DriverError as err:
         return str(err)
     if not cache.is_dir():
@@ -1238,6 +1243,79 @@ def update_released(path: Path, bundled: Mapping[str, Collection[str]]) -> None:
     path.write_text(released_text(merge_released(current, bundled)), encoding="utf-8")
 
 
+@dataclass(frozen=True)
+class _Task:
+    """The inputs of one model's ``generate`` call (the model's slices of the input files)."""
+
+    product_code: str
+    cache: Path
+    labels: dict[str, Any] | None
+    tree: dict[str, Any] | None
+    app_version: str
+    reference: list[dict[str, Any]] | None
+    titles: dict[str, Any]
+    released: Collection[str]
+
+
+type _Result = tuple[str, str | None, dict[str, int], str]
+
+
+def _build(task: _Task) -> _Result:
+    """``(product code, file text or None, counters, failure report)`` of one model. A
+    model that fails is reported, not raised, so the run goes on to the end."""
+    pn = task.product_code
+    try:
+        doc, counts = generate(
+            pn,
+            task.cache,
+            task.labels,
+            task.tree,
+            task.app_version,
+            reference=task.reference,
+            titles=task.titles,
+            released=task.released,
+        )
+    except GeneratorError as err:
+        return pn, None, {}, f"{err}\n"
+    except Exception as err:  # a shape the generator does not handle
+        return pn, None, {}, f"{pn}: {type(err).__name__}: {err}\n{traceback.format_exc()}"
+    return pn, codec.dump(doc), counts, ""
+
+
+def _open_drivers() -> None:
+    """Start a generating process: accept driver jobs, and end the worker on exit (a
+    forked process runs only the exit handlers registered after the fork)."""
+    DRIVERS.open()
+    atexit.register(DRIVERS.close)
+
+
+def _run_tasks(tasks: list[_Task], jobs: int) -> Iterator[_Result]:
+    """``_build`` of every task, in task order: in this process for one job, else in
+    ``jobs`` processes, each with its own Node worker (the codec inference is Python and
+    would serialize on one interpreter).
+
+    On an interrupt or error, the models in flight stop and no queued one starts.
+    """
+    if jobs == 1:
+        DRIVERS.open()
+        try:
+            yield from map(_build, tasks)
+        finally:
+            DRIVERS.close()
+        return
+    # fork: the workers inherit the loaded generator modules, however this one was loaded;
+    # the caller must have no other threads (the command line has none).
+    method = "fork" if "fork" in multiprocessing.get_all_start_methods() else None
+    pool = ProcessPoolExecutor(
+        max_workers=jobs, mp_context=multiprocessing.get_context(method), initializer=_open_drivers
+    )
+    try:
+        # map() yields in input order, so output and log do not depend on --jobs.
+        yield from pool.map(_build, tasks)
+    finally:
+        pool.shutdown(cancel_futures=True)
+
+
 def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bool) -> int:
     """Generate the requested models into ``out``; 1 when any model failed its check.
 
@@ -1251,37 +1329,31 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     reference = load_reference()
     pns = args.product_codes or sorted(d.name for d in cache.iterdir() if d.is_dir())
     out.mkdir(parents=True, exist_ok=True)
-
-    def build(pn: str) -> tuple[str, str | None, dict[str, int]]:
-        try:
-            doc, counts = generate(
-                pn,
-                cache,
-                labels.get(pn),
-                trees.get(pn),
-                args.app_version,
-                reference=reference.get(pn),
-                titles=titles,
-                released=released.get(pn, ()),
-            )
-        except CheckError as err:
-            print(err, file=sys.stderr)
-            return pn, None, {}
-        return pn, codec.dump(doc), counts
-
+    tasks = [
+        _Task(
+            pn,
+            cache,
+            labels.get(pn),
+            trees.get(pn),
+            args.app_version,
+            reference.get(pn),
+            titles,
+            released.get(pn, ()),
+        )
+        for pn in pns
+    ]
     total: dict[str, int] = {}
     failed: list[str] = []
-    with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-        # map() yields in input order, so output and log do not depend on --jobs.
-        for pn, text, counts in pool.map(build, pns):
-            if text is None:
-                failed.append(pn)
-                continue
-            (out / f"{pn}.json").write_text(text, encoding="utf-8")
-            if not quiet:
-                print(pn, _summary(counts))
-            for key, n in counts.items():
-                total[key] = total.get(key, 0) + n
+    for pn, text, counts, report in _run_tasks(tasks, max(1, min(args.jobs, len(tasks)))):
+        if text is None:
+            print(report, end="", file=sys.stderr)
+            failed.append(pn)
+            continue
+        (out / f"{pn}.json").write_text(text, encoding="utf-8")
+        if not quiet:
+            print(pn, _summary(counts))
+        for key, n in counts.items():
+            total[key] = total.get(key, 0) + n
     write_index(out)
     if not quiet:
         print(f"total {len(pns)} models", _summary(total))
