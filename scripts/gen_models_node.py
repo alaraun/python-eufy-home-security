@@ -41,9 +41,11 @@ class DriverError(RuntimeError):
 
 
 class NodeError(DriverError):
-    """Node does not run the driver: missing or of another major, a worker dying on every
-    rerun of a job, or no reply in time. No later job would fare better, so a run that
-    meets it stops."""
+    """Node or the job's handler does not run: Node missing or of another major, a worker
+    that cannot start, dies on every rerun of the job or does not reply in time. A run
+    that meets it stops; ``notices`` holds what the job printed before (its reruns)."""
+
+    notices: str = ""
 
 
 def node_major(package: Path = PACKAGE) -> int:
@@ -108,9 +110,13 @@ class _Worker:
 
     def __init__(self, argv: Sequence[str]) -> None:
         self._stderr: IO[bytes] = tempfile.TemporaryFile()  # noqa: SIM115 - closed in _release
-        self.proc = subprocess.Popen(
-            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr
-        )
+        try:
+            self.proc = subprocess.Popen(
+                argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr
+            )
+        except OSError as err:
+            self._stderr.close()
+            raise NodeError(f"cannot start the driver: {err}") from err
         stdin, stdout = self.proc.stdin, self.proc.stdout
         if stdin is None or stdout is None:  # pragma: no cover - PIPE always yields both
             raise DriverError("no pipes to the driver")

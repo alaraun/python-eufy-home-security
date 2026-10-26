@@ -73,7 +73,8 @@ def _fake_generate(pn: str, *_: Any, **__: Any) -> tuple[dict[str, Any], dict[st
         raise gen_models.CheckError(f"{pn} (SINGLE): 1 codec mismatches")
     if pn == "T9ZZ4":
         raise KeyError("eunmList")
-    return {"product_code": pn}, {"rw": 1, "pid": os.getpid()}
+    sigterm_default = int(signal.getsignal(signal.SIGTERM) is signal.SIG_DFL)
+    return {"product_code": pn}, {"rw": 1, "pid": os.getpid(), "sigterm_default": sigterm_default}
 
 
 def _args(tmp_path: Path, jobs: int) -> argparse.Namespace:
@@ -139,6 +140,8 @@ def test_several_jobs_build_in_worker_processes_and_report_each_failure(tmp_path
     assert pids
     assert int((tmp_path / "parent-pid").read_text()) not in pids
     assert (tmp_path / "sigterm-after").read_text() == "True"  # the run's handler is gone
+    # a generating process does not take the run's SIGTERM handler
+    assert result.stdout.count('"sigterm_default": 1') == 3
 
 
 # Answers --version as Node of the given version; any other run fails at once.
@@ -181,9 +184,10 @@ def _cli(tmp_path: Path, node_version: str, jobs: int) -> subprocess.CompletedPr
 def test_a_node_that_fails_every_job_stops_the_run_with_exit_2(tmp_path: Path, jobs: int) -> None:
     result = _cli(tmp_path, "v24.1.0", jobs)
     assert result.returncode == 2
-    assert result.stderr.splitlines() == [
-        "gen_models: T9ZZ1: driver exit 1: fake node: broken (after 2 reruns)"
-    ]
+    *notices, cause = result.stderr.splitlines()
+    assert cause == "gen_models: T9ZZ1: driver exit 1: fake node: broken (after 2 reruns)"
+    assert len(notices) == 2  # the two earlier deaths, one notice each
+    assert all("fake node: broken" in line for line in notices)
     assert not (tmp_path / "out").exists() or not any((tmp_path / "out").glob("T9ZZ*.json"))
 
 

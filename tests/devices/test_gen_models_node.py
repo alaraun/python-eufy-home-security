@@ -153,6 +153,16 @@ def test_a_job_that_always_kills_its_worker_fails_after_the_reruns(
     assert capsys.readouterr().err.count("rerun on a fresh worker") == 1
 
 
+def test_a_worker_that_cannot_start_stops_the_job(tmp_path: Path) -> None:
+    drivers = node.DriverPool([str(tmp_path / "no-such-node")], timeout=20)
+    try:
+        with pytest.raises(node.NodeError, match="cannot start the driver"):
+            drivers.run({"handler": "x", "requests": []})
+        assert drivers.started == 0
+    finally:
+        drivers.close()
+
+
 def test_a_worker_exit_names_its_code_and_stderr(pool: Any) -> None:
     with pytest.raises(node.DriverError, match="driver exit 3: handler blew up"):
         pool.run({"handler": "exit3", "requests": []})

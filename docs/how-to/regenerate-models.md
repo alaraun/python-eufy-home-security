@@ -52,17 +52,19 @@ uv run python scripts/gen_models.py T8160 T8170  # some models
 ```
 
 `--jobs N` (default: the CPU count) generates N models at a time, each in its own
-process with one long-lived Node worker; the output does not depend on it. Ctrl-C or
-SIGTERM stops a run once the models in flight are done; when the run's own process is
-killed, its generating processes and Node workers end with it.
+process with one long-lived Node worker; the output does not depend on it. On Ctrl-C or
+SIGTERM no queued model starts: a SIGTERM to the run's process alone lets the models in
+flight finish, one to the process group (or Ctrl-C) ends them too. When the run's own
+process is killed, its generating processes and Node workers end with it.
 
 A model is written only when every codec renders back each swept recipe and every row
 of `tests/fixtures/models_v1_reference.json` for that model renders to its recorded
 `cmd`/`subCmd`/`params`. A model that fails (a check, or an input the generator does not
 handle, such as a unit without a mapping) is reported and not written; the run goes on
-with the other models and exits 1 at the end. Node failing a job (a worker that dies on
-every rerun, no reply within the job timeout) stops the run at once with exit 2 and the
-cause on one line: no other model would build either. A
+with the other models and exits 1 at the end. A job that Node or its handler does not
+run (a worker that cannot start, dies on every rerun of the job or does not reply within
+the job timeout) stops the run with exit 2: the model's driver notices, then the cause on
+one line. A
 reference row that is meant to change (the vendor changed the recipe) goes into
 `RELEASE_ACCEPTED` in `scripts/gen_models.py`, keyed `(PN, identifier)`, with the reason.
 `INDEX.json` lists every `<PN>.json` in the output directory, so a new product code is

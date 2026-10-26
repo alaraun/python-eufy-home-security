@@ -1195,7 +1195,7 @@ def main(argv: list[str] | None = None) -> int:
                 return rc
             differ = compare(Path(tmp), args.out, args.product_codes)
     except node.NodeError as err:
-        print(f"gen_models: {err}", file=sys.stderr)
+        print(f"{err.notices}gen_models: {err}", file=sys.stderr)
         return 2
     for name in differ:
         print(f"differs: {name}")
@@ -1275,8 +1275,9 @@ def _build(task: _Task) -> _Result:
     holds what the model printed to stderr (driver notices) and, for a model that fails,
     the failure. A failure is reported, not raised, so the run goes on to the end; the
     report is returned, not printed, so the run prints the reports in model order.
-    NodeError (no model can build) is raised."""
+    NodeError (the run stops) is raised, the model's notices in its ``notices``."""
     pn = task.product_code
+    stop: node.NodeError | None = None
     with contextlib.redirect_stderr(io.StringIO()) as notes:
         try:
             doc, counts = generate(
@@ -1289,20 +1290,24 @@ def _build(task: _Task) -> _Result:
                 titles=task.titles,
                 released=task.released,
             )
-        except node.NodeError:
-            raise
+        except node.NodeError as err:
+            stop = err
         except GeneratorError as err:
             return pn, None, {}, f"{notes.getvalue()}{err}\n"
         except Exception as err:  # a shape the generator does not handle
             failure = f"{pn}: {type(err).__name__}: {err}\n{traceback.format_exc()}"
             return pn, None, {}, notes.getvalue() + failure
+    if stop is not None:
+        stop.notices = notes.getvalue()  # the earlier deaths' causes, printed with it
+        raise stop
     return pn, codec.dump(doc), counts, notes.getvalue()
 
 
 def _open_drivers() -> None:
     """Start a generating process: accept driver jobs, end the worker on exit (a forked
     process runs only the exit handlers registered after the fork), and end with the
-    parent process."""
+    parent process. SIGTERM ends this process at once (the parent's handler is the run's)."""
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
     DRIVERS.open()
     atexit.register(DRIVERS.close)
     parent = multiprocessing.parent_process()
@@ -1328,8 +1333,8 @@ def _run_tasks(tasks: list[_Task], jobs: int) -> Iterator[_Result]:
     ``jobs`` processes, each with its own Node worker (the codec inference is Python and
     would serialize on one interpreter).
 
-    On an interrupt (SIGINT, SIGTERM) or error no queued model starts, and the run ends
-    once the models in flight are done.
+    On an interrupt or error no queued model starts. A SIGTERM to this process alone lets
+    the models in flight finish; one to the process group (or Ctrl-C) ends them too.
     """
     if jobs == 1:
         DRIVERS.open()
@@ -1341,15 +1346,19 @@ def _run_tasks(tasks: list[_Task], jobs: int) -> Iterator[_Result]:
     # fork: the workers inherit the loaded generator modules, however this one was loaded;
     # the caller must have no other threads (the command line has none).
     method = "fork" if "fork" in multiprocessing.get_all_start_methods() else None
-    pool = ProcessPoolExecutor(
-        max_workers=jobs, mp_context=multiprocessing.get_context(method), initializer=_open_drivers
-    )
     previous = signal.signal(signal.SIGTERM, _terminated)
     try:
-        # map() yields in input order, so output and log do not depend on --jobs.
-        yield from pool.map(_build, tasks)
+        pool = ProcessPoolExecutor(
+            max_workers=jobs,
+            mp_context=multiprocessing.get_context(method),
+            initializer=_open_drivers,
+        )
+        try:
+            # map() yields in input order, so output and log do not depend on --jobs.
+            yield from pool.map(_build, tasks)
+        finally:
+            pool.shutdown(cancel_futures=True)
     finally:
-        pool.shutdown(cancel_futures=True)
         signal.signal(signal.SIGTERM, previous)
 
 
