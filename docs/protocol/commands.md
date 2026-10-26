@@ -431,7 +431,10 @@ Names for every id: `src/eufy_home_security/devices/command_types.py`.
   open — the app's one-day window satisfies both. The library therefore asks one day at
   a time, newest day first, and pages each day: `async_list_history(start, end,
   count=None, page_size=50)` includes both dates and returns records newest first,
-  up to `count`.
+  up to `count`; `async_list_history_by_day` gives each row with the day its query
+  named. `before=<record_id>` pages from that row in its day: the day the id carries,
+  else `before_day` (a HomeBase 2's sequential ids carry none). Under 10017 the day is
+  then paged from its newest row and the rows from that id up are left out.
 - **Every page carries other tables** in `data` next to the `history_record_info`
   wrapper: the AI crops, relations and head positions of that page's records, and the
   whole `person_basic_info`, `face_feature_info` and `reid_feature_info` libraries

@@ -11,7 +11,7 @@ import struct
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, cast
 
 import pytest
@@ -1331,6 +1331,44 @@ async def test_a_station_outside_the_homebase_3_family_is_paged_by_start_time() 
     assert all(q["start_time"] == "0" for q in station.history_queries[pages : pages + 1])
 
 
+def _sequential_row(day: str, record_id: int) -> dict[str, Any]:
+    """A row as a HomeBase 2 keeps it: a sequential ``record_id`` without a day."""
+    return {**_history_row(day, record_id % 60), "record_id": record_id}
+
+
+async def test_a_record_id_without_a_day_pages_from_the_day_given_beside_it() -> None:
+    """Each row comes with the day its query named; ``before`` with ``before_day`` pages
+    a sequential id from that day, the later days not asked."""
+    station = FakeStation(serial=_HB2_SN)
+    await station.start()
+    station.rows = [_sequential_row("20260915", n) for n in range(100, 105)]
+    station.rows += [_sequential_row("20260916", n) for n in range(105, 110)]
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        listed = await session.async_list_history_by_day("20260915", "20260916")
+        station.history_queries.clear()
+        older = await session.async_list_history(
+            "20260915", "20260916", before=107, before_day=date(2026, 9, 16)
+        )
+        station.history_queries.clear()
+        oldest = await session.async_list_history(
+            "20260915", "20260916", before=103, before_day=date(2026, 9, 15)
+        )
+        asked = [q["start_date"] for q in station.history_queries]
+    finally:
+        await session.async_close()
+        station.stop()
+    assert [(d.isoformat(), r.record_id) for d, r in listed] == [
+        *(("2026-09-16", n) for n in range(109, 104, -1)),  # hygiene: ok
+        *(("2026-09-15", n) for n in range(104, 99, -1)),  # hygiene: ok
+    ]
+    assert [r.record_id for r in older] == [106, 105, 104, 103, 102, 101, 100]
+    assert [r.record_id for r in oldest] == [102, 101, 100]
+    assert asked == ["20260915"]
+
+
 def _timeless_row(counter: int) -> dict[str, Any]:
     return {**_history_row("20260916", counter), "start_time": ""}
 
@@ -1427,6 +1465,13 @@ async def test_each_history_page_is_logged_with_its_counts_and_why_paging_stops(
         ("20260915", None, {"page_size": 1}, "page_size"),
         ("20260915", None, {"count": 0}, "count"),
         ("20260915", None, {"before": 42}, "no day"),
+        ("20260915", None, {"before_day": date(2026, 9, 15)}, "before_day needs before"),
+        (
+            "20260915",
+            None,
+            {"before": 2026091500001, "before_day": date(2026, 9, 14)},
+            "not the day record_id",
+        ),
     ],
 )
 async def test_history_arguments_are_checked_before_sending(

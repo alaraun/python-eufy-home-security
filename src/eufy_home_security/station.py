@@ -249,6 +249,7 @@ from .p2p.station_config_codecs import (
 )
 from .p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
 from .p2p.xzyh import FrameType
+from .recordings import RecordingPosition, RecordingsPage, decode_cursor, encode_cursor
 from .station_config import (
     ModeInfo,
     StationConfig,
@@ -333,6 +334,16 @@ picture size to hold: a woken T8170 climbs 1280x720 -> 1920x1080 -> 2880x1616 at
 EPOCH_MS_RANGE = (1_420_070_400_000, 4_102_444_800_000)
 
 type SerialSource = Literal["cloud"]
+
+
+def _host_today() -> date:
+    """Today in the host's zone: the newest day of a recordings window."""
+    return datetime.now().astimezone().date()
+
+
+def _host_day(value: date) -> date:
+    """A day, or a ``datetime``'s host-local day."""
+    return value.astimezone().date() if isinstance(value, datetime) else value
 
 
 def _station_modes(
@@ -4619,16 +4630,18 @@ class Station:
         started at or after it, and days before its day are not asked. The camera is not
         woken. A standalone device lists no recordings: an empty list.
 
-        Pages: ``limit`` stops the walk as soon as that many rows are found, so only
-        the days (and pages) up to the last row are asked; ``before`` (the
-        ``record_id`` of the previous page's last row) starts below that row, in its
-        day. A page shorter than ``limit`` means the window holds no more; a full page
-        may be followed by an empty one. ``until`` starts the walk at that day: its rows
-        and older ones (a later day counts as today; a ``datetime`` as its host-local
-        day). ``days`` still counts back from today, so an ``until`` before the window
-        lists nothing. ``before`` wins over ``until``. Raises :class:`ValueError`,
-        before anything is sent, for ``days`` or ``limit`` below 1 and a ``before``
-        that carries no day (:func:`~.p2p.messages.record_id_day`).
+        Pages (for a list view, prefer :meth:`async_list_recordings_page`, whose cursor
+        works on every station): ``limit`` stops the walk as soon as that many rows are
+        found, so only the days (and pages) up to the last row are asked; ``before`` (the
+        ``record_id`` of the previous page's last row; deprecated in favour of that
+        cursor) starts below that row, in its day. A page shorter than ``limit`` means
+        the window holds no more; a full page may be followed by an empty one. ``until``
+        starts the walk at that day: its rows and older ones (a later day counts as
+        today; a ``datetime`` as its host-local day). ``days`` still counts back from
+        today, so an ``until`` before the window lists nothing. ``before`` wins over
+        ``until``. Raises :class:`ValueError`, before anything is sent, for ``days`` or
+        ``limit`` below 1 and a ``before`` that carries no day
+        (:func:`~.p2p.messages.record_id_day`).
 
         ``timeout`` bounds each history query (None:
         :data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`); an unanswered one is asked once
@@ -4648,20 +4661,118 @@ class Station:
             self.channel_for(device_sn)  # raises for a device not paired here
         if self.is_standalone:
             return []
-        paired = {d.device_sn for d in self.devices}
-        today = datetime.now().astimezone().date()
+        today = _host_today()
         first = today - timedelta(days=days - 1)
         if since is not None:
             first = max(first, since.astimezone().date())
         if cursor_day is not None:
             last = min(today, cursor_day)
         elif until is not None:
-            until_day = until.astimezone().date() if isinstance(until, datetime) else until
-            last = min(today, until_day)
+            last = min(today, _host_day(until))
         else:
             last = today
         if first > last:
             return []
+        return await self.session.async_list_history(
+            first.strftime("%Y%m%d"),
+            last.strftime("%Y%m%d"),
+            count=limit,
+            before=before if cursor_day is not None and cursor_day <= last else None,
+            keep=self._recording_filter(device_sn, since),
+            timeout=timeout,
+        )
+
+    async def async_list_recordings_page(
+        self,
+        device_sn: str | None = None,
+        *,
+        limit: int,
+        days: int = RECORDINGS_DAYS,
+        cursor: str | None = None,
+        until: date | None = None,
+        page_days: int | None = None,
+        timeout: float | None = None,
+    ) -> RecordingsPage:
+        """One page of :meth:`async_list_recordings` (the same rows, window and
+        ``timeout``): up to ``limit`` recordings, newest first, and the cursor of the
+        next page.
+
+        ``cursor`` (None: the first page) is a page's ``next_cursor`` handed back as it
+        came: opaque text, JSON-safe, the same for the same position of the same listing
+        (station and ``device_sn``). The page starts after the row it names, or at the
+        day it names when the last page ended on a day boundary; ``cursor`` wins over
+        ``until`` (the day the first page starts at, as in :meth:`async_list_recordings`).
+        ``page_days`` bounds the days one page asks (None: the rest of the window).
+
+        ``next_cursor`` is None when the window holds no more: a full page names its
+        last row (the next page may be empty), or its last row with a ``record_id``
+        when rows without one end it (those may then come again); a short page that
+        stopped at ``page_days`` with window days left names the day before the ones it
+        asked.
+        Positions are the station's own days (the day a row's id carries, else the day
+        its query named), never the host's.
+
+        Raises before anything is sent: :class:`~.exceptions.RecordingCursorError` (a
+        ``ValueError``) for a cursor that does not check out for that station and camera
+        or one that does not parse; :class:`ValueError` for ``limit``, ``days`` or
+        ``page_days`` below 1; ``UnsupportedError`` for a device not paired here. A
+        standalone device lists none: an empty page without a cursor.
+        """
+        if days < 1:
+            raise ValueError("days must be at least 1")
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
+        if page_days is not None and page_days < 1:
+            raise ValueError("page_days must be at least 1")
+        position = None
+        if cursor is not None:
+            position = decode_cursor(cursor, station_sn=self.serial, device_sn=device_sn)
+        if device_sn is not None:
+            self.channel_for(device_sn)  # raises for a device not paired here
+        if self.is_standalone:
+            return RecordingsPage((), None)
+        today = _host_today()
+        first = today - timedelta(days=days - 1)
+        if position is not None:
+            start = min(today, position.day)
+        elif until is not None:
+            start = min(today, _host_day(until))
+        else:
+            start = today
+        oldest = first if page_days is None else max(first, start - timedelta(days=page_days - 1))
+        if oldest > start:
+            return RecordingsPage((), None)
+        record_id = None if position is None else position.record_id
+        listed = await self.session.async_list_history_by_day(
+            oldest.strftime("%Y%m%d"),
+            start.strftime("%Y%m%d"),
+            count=limit,
+            before=record_id,  # the session pages it only on its own day
+            before_day=None if position is None or record_id is None else position.day,
+            keep=self._recording_filter(device_sn, None),
+            timeout=timeout,
+        )
+        rows = tuple(row for _day, row in listed)
+        # rows without an id (none above 0) cannot be paged from: go on after the page's
+        # last row with one, so they may come again but none is skipped
+        paged = [(day, row.record_id) for day, row in listed if row.record_id > 0]
+        if len(listed) < limit:  # the days asked hold no more: go on before them
+            following = RecordingPosition(oldest - timedelta(days=1))
+        elif paged:
+            following = RecordingPosition.after(paged[-1][1], paged[-1][0])
+        else:  # no row to page from: go on with the day before the last one
+            following = RecordingPosition(listed[-1][0] - timedelta(days=1))
+        if following.record_id is None and following.day < first:
+            return RecordingsPage(rows, None)  # the window holds no more
+        text = encode_cursor(following, station_sn=self.serial, device_sn=device_sn)
+        return RecordingsPage(rows, text)
+
+    def _recording_filter(
+        self, device_sn: str | None, since: datetime | None
+    ) -> Callable[[HistoryRecord], bool]:
+        """Which history rows are recordings of ``device_sn`` (None: of every camera
+        paired here) that started at or after ``since``."""
+        paired = {d.device_sn for d in self.devices}
 
         def wanted(row: HistoryRecord) -> bool:
             if row.video_path is None or row.device_sn is None:
@@ -4675,14 +4786,7 @@ class Station:
                 return started is not None and started >= since
             return True
 
-        return await self.session.async_list_history(
-            first.strftime("%Y%m%d"),
-            last.strftime("%Y%m%d"),
-            count=limit,
-            before=before if cursor_day is not None and cursor_day <= last else None,
-            keep=wanted,
-            timeout=timeout,
-        )
+        return wanted
 
     @staticmethod
     def recording_settled(
