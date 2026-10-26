@@ -133,3 +133,60 @@ def test_several_jobs_build_in_worker_processes_and_report_each_failure(tmp_path
     pids = _check_run(proc.returncode, tmp_path / "out", out, err)
     assert pids
     assert proc.pid not in pids
+
+
+# Answers --version as Node of the given version; any other run fails at once.
+FAKE_NODE = """#!/bin/sh
+if [ "$1" = "--version" ]; then echo @VERSION@; exit 0; fi
+echo "fake node: broken" >&2
+exit 1
+"""
+
+
+def _cli(tmp_path: Path, node_version: str, jobs: int) -> subprocess.CompletedProcess[str]:
+    """``gen_models.py`` on three synthetic models, with a fake ``node`` first on PATH."""
+    bin_dir, cache = tmp_path / "bin", tmp_path / "cache"
+    bin_dir.mkdir()
+    (bin_dir / "node").write_text(FAKE_NODE.replace("@VERSION@", node_version), encoding="utf-8")
+    (bin_dir / "node").chmod(0o755)
+    td = {
+        "properties": [{"identifier": "x_on", "access_mode": "RW", "data_type": {"type": "bool"}}]
+    }
+    for pn in PNS[:3]:
+        (cache / pn).mkdir(parents=True)
+        (cache / pn / "td.json").write_text(json.dumps(td), encoding="utf-8")
+    args = _args(tmp_path, jobs)
+    inputs = [
+        f"--{name}={getattr(args, name)}" for name in ("labels", "trees", "titles", "released")
+    ]
+    paths = [f"--cache={cache}", f"--out={tmp_path / 'out'}", f"--jobs={jobs}"]
+    return subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "gen_models.py"), *PNS[:3], *inputs, *paths],
+        env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        capture_output=True,
+        text=True,
+        timeout=50,
+        check=False,
+    )
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize("jobs", [1, 3])
+def test_a_node_that_fails_every_job_stops_the_run_with_exit_2(tmp_path: Path, jobs: int) -> None:
+    result = _cli(tmp_path, "v24.1.0", jobs)
+    assert result.returncode == 2
+    assert result.stderr.splitlines() == [
+        "gen_models: T9ZZ1: driver exit 1: fake node: broken (after 2 reruns)"
+    ]
+    assert not (tmp_path / "out").exists() or not any((tmp_path / "out").glob("T9ZZ*.json"))
+
+
+@pytest.mark.timeout(60)
+def test_node_of_another_major_stops_the_run_before_it_starts(tmp_path: Path) -> None:
+    result = _cli(tmp_path, "v22.11.0", 3)
+    assert result.returncode == 2
+    assert result.stderr == (
+        "gen_models: node v22.11.0 found; the generators need Node 24.x"
+        " (scripts/package.json engines.node)\n"
+    )
+    assert not (tmp_path / "out").exists()

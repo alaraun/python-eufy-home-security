@@ -40,6 +40,12 @@ class DriverError(RuntimeError):
     """Node is missing or of another major, or a job failed in the driver."""
 
 
+class NodeError(DriverError):
+    """Node does not run the driver: missing or of another major, a worker dying on every
+    rerun of a job, or no reply in time. No later job would fare better, so a run that
+    meets it stops."""
+
+
 def node_major(package: Path = PACKAGE) -> int:
     """The Node major ``package`` pins (``engines.node`` = ``"<major>.x"``); DriverError
     when the file does not pin one."""
@@ -208,8 +214,9 @@ class DriverPool:
     def run(self, job: Mapping[str, Any]) -> list[Any]:
         """The driver's replies to ``job`` (``{"handler", "requests"}``), one per request.
 
-        Raises DriverError when the pool is closed, the job does not fit the driver
-        (``{"error"}`` from it), times out, or its worker dies on every rerun.
+        Raises DriverError when the pool is closed or the job does not fit the driver
+        (``{"error"}`` from it); NodeError when it times out, its worker dies on every
+        rerun, or no worker can start.
         """
         line = (json.dumps(job) + "\n").encode()
         died: _WorkerDiedError | None = None
@@ -219,7 +226,9 @@ class DriverPool:
                 out = worker.call(line, self._timeout)
             except _WorkerDiedError as err:
                 self._discard(worker)
-                if err.timed_out or self._closed:
+                if err.timed_out:
+                    raise NodeError(str(err)) from None
+                if self._closed:
                     raise DriverError(str(err)) from None
                 died = err
                 if attempt < self._restarts:
@@ -235,7 +244,7 @@ class DriverPool:
             if not isinstance(replies, list):
                 raise DriverError(f"driver reply is no list: {type(replies).__name__}")
             return replies
-        raise DriverError(f"{died} (after {self._restarts} reruns)")
+        raise NodeError(f"{died} (after {self._restarts} reruns)")
 
     def open(self) -> None:
         """Accept jobs again after ``close``."""
@@ -278,10 +287,10 @@ class DriverPool:
 
 @functools.cache
 def node_path() -> str:
-    """The ``node`` on PATH, checked once against the pinned major; DriverError (the
+    """The ``node`` on PATH, checked once against the pinned major; NodeError (the
     ``node_problem``) when it does not run the driver."""
     node = shutil.which("node")
     problem = node_problem(node)
     if node is None or problem is not None:
-        raise DriverError(problem or "node is not on PATH")
+        raise NodeError(problem or "node is not on PATH")
     return node

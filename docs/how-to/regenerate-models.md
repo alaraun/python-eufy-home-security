@@ -58,7 +58,9 @@ A model is written only when every codec renders back each swept recipe and ever
 of `tests/fixtures/models_v1_reference.json` for that model renders to its recorded
 `cmd`/`subCmd`/`params`. A model that fails (a check, or an input the generator does not
 handle, such as a unit without a mapping) is reported and not written; the run goes on
-with the other models and exits 1 at the end. A
+with the other models and exits 1 at the end. Node failing a job (a worker that dies on
+every rerun, no reply within the job timeout) stops the run at once with exit 2 and the
+cause on one line: no other model would build either. A
 reference row that is meant to change (the vendor changed the recipe) goes into
 `RELEASE_ACCEPTED` in `scripts/gen_models.py`, keyed `(PN, identifier)`, with the reason.
 `INDEX.json` lists every `<PN>.json` in the output directory, so a new product code is

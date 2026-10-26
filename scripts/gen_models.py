@@ -23,7 +23,8 @@ manifest and writes nothing else.
 
 ``--jobs N`` generates N models at a time, each in its own process with one long-lived
 Node worker (``scripts/gen_models_node.py``); a model that fails is reported and the run
-goes on. Runs on a maintainer host only (needs Node of the pinned major and the private
+goes on, exit 1 at the end. Node failing a job (no worker survives it, or none replies in
+time) stops the run at once: exit 2 and the cause. Runs on a maintainer host only (needs Node of the pinned major and the private
 cache); nothing at runtime executes vendor code. See docs/reference/models-schema.md.
 
     gen_models.py [PN ...] [--check] [--cache DIR] [--out DIR] [--jobs N]
@@ -201,10 +202,13 @@ def run_driver(
 ) -> list[Any]:
     """One driver job on this thread's worker (``DRIVERS``): a reply per request, in
     order. A value of ``wire`` is sent as the value the app writes for it, and read back
-    as that value."""
+    as that value. NodeError when Node fails the job, GeneratorError for any other
+    failure."""
     sent = [codec.to_wire(r, wire) for r in requests] if wire else requests
     try:
         replies = DRIVERS.run({"handler": str(handler), "requests": sent})
+    except node.NodeError as err:
+        raise node.NodeError(f"{product_code}: {err}") from None
     except node.DriverError as err:
         raise GeneratorError(f"{product_code}: {err}") from err
     if len(replies) != len(requests):
@@ -1180,17 +1184,21 @@ def main(argv: list[str] | None = None) -> int:
     if missing is not None:
         print(f"gen_models: {missing}", file=sys.stderr)
         return 2
-    if args.check:
+    try:
+        if not args.check:
+            return _generate_all(args, cache, args.out, quiet=False)
         with tempfile.TemporaryDirectory() as tmp:
             rc = _generate_all(args, cache, Path(tmp), quiet=True)
             if rc:
                 return rc
             differ = compare(Path(tmp), args.out, args.product_codes)
-        for name in differ:
-            print(f"differs: {name}")
-        print(f"check: {len(differ)} files differ")
-        return 1 if differ else 0
-    return _generate_all(args, cache, args.out, quiet=False)
+    except node.NodeError as err:
+        print(f"gen_models: {err}", file=sys.stderr)
+        return 2
+    for name in differ:
+        print(f"differs: {name}")
+    print(f"check: {len(differ)} files differ")
+    return 1 if differ else 0
 
 
 def released_text(released: Mapping[str, Collection[str]]) -> str:
@@ -1264,7 +1272,8 @@ def _build(task: _Task) -> _Result:
     """``(product code, file text or None, counters, report)`` of one model; the report
     holds what the model printed to stderr (driver notices) and, for a model that fails,
     the failure. A failure is reported, not raised, so the run goes on to the end; the
-    report is returned, not printed, so the run prints the reports in model order."""
+    report is returned, not printed, so the run prints the reports in model order.
+    NodeError (no model can build) is raised."""
     pn = task.product_code
     with contextlib.redirect_stderr(io.StringIO()) as notes:
         try:
@@ -1278,6 +1287,8 @@ def _build(task: _Task) -> _Result:
                 titles=task.titles,
                 released=task.released,
             )
+        except node.NodeError:
+            raise
         except GeneratorError as err:
             return pn, None, {}, f"{notes.getvalue()}{err}\n"
         except Exception as err:  # a shape the generator does not handle
@@ -1321,7 +1332,8 @@ def _run_tasks(tasks: list[_Task], jobs: int) -> Iterator[_Result]:
 
 
 def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bool) -> int:
-    """Generate the requested models into ``out``; 1 when any model failed its check.
+    """Generate the requested models into ``out``; 1 when any model failed. NodeError
+    (from the first model that meets it) stops the run.
 
     Nothing in ``out`` is read: the same-codec variants kept are those the released-keys
     manifest (``args.released``) lists.

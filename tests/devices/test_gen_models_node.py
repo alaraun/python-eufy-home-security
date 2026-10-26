@@ -144,7 +144,7 @@ def test_a_job_that_always_kills_its_worker_fails_after_the_reruns(
 ) -> None:
     drivers = node.DriverPool(fake, timeout=20, restarts=1)
     try:
-        with pytest.raises(node.DriverError, match=r"signal 9 \(after 1 reruns\)"):
+        with pytest.raises(node.NodeError, match=r"signal 9 \(after 1 reruns\)"):
             drivers.run({"handler": "die", "requests": []})
         assert drivers.started == 2
     finally:
@@ -161,7 +161,7 @@ def test_a_slow_job_times_out_without_a_rerun(fake: list[str]) -> None:
     drivers = node.DriverPool(fake, timeout=0.5)
     try:
         start = time.monotonic()
-        with pytest.raises(node.DriverError, match=r"no reply within 0.5 s"):
+        with pytest.raises(node.NodeError, match=r"no reply within 0.5 s"):
             drivers.run({"handler": "sleep", "requests": []})
         assert time.monotonic() - start < 10
         assert drivers.started == 1
@@ -178,8 +178,9 @@ def test_a_slow_job_times_out_without_a_rerun(fake: list[str]) -> None:
     ],
 )
 def test_a_reply_that_is_no_reply_list_is_an_error(pool: Any, how: str, message: str) -> None:
-    with pytest.raises(node.DriverError, match=message):
+    with pytest.raises(node.DriverError, match=message) as raised:
         pool.run({"handler": how, "requests": []})
+    assert type(raised.value) is node.DriverError  # the job's failure, not Node's
     assert pool.started == 1
 
 
@@ -217,7 +218,7 @@ def test_close_fails_the_job_in_flight_without_a_rerun(
     assert time.monotonic() - start < 2  # killed, not waited for
     thread.join(timeout=10)
     assert not thread.is_alive()
-    assert [str(e) for e in errors] == ["worker stopped"]
+    assert [(type(e), str(e)) for e in errors] == [(node.DriverError, "worker stopped")]
     assert pool.started == 1
     assert "rerun" not in capsys.readouterr().err
 
@@ -305,7 +306,7 @@ def test_the_default_worker_refuses_node_of_another_major(
     node.node_path.cache_clear()
     drivers = node.DriverPool()
     try:
-        with pytest.raises(node.DriverError, match=r"node v22.11.0 found; .* Node 24.x"):
+        with pytest.raises(node.NodeError, match=r"node v22.11.0 found; .* Node 24.x"):
             drivers.run({"handler": "x", "requests": []})
         assert drivers.started == 0
     finally:
