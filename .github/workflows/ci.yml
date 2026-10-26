@@ -34,6 +34,10 @@ jobs:
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: ${{ matrix.python-version }}
+      # the Node major the generator tests run the driver on
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: scripts/package.json
       - run: uv sync --locked
       - run: uv run pytest -n auto --cov --cov-report=xml
 
