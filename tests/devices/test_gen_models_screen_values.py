@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import shutil
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -83,7 +82,7 @@ module.exports.deviceStatus = function (s) {
 };
 """
 
-pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+pytestmark = pytest.mark.needs_node
 
 
 def _cache(tmp_path: Path, handler: str, ident: str, data_type: dict[str, Any]) -> Path:

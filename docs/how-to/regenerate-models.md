@@ -142,7 +142,7 @@ uv run python scripts/gen_models.py --check      # regenerate to a temp dir, com
 files) and 2 when Node (of the pinned major), the cache, the labels, the layout or the
 title data are missing. Run it on the whole corpus after changing the generator;
 `tests/devices/test_gen_models_check.py` runs it on three models and skips without Node
-or the cache.
+of the pinned major or the cache, as every test that runs the driver does.
 
 Every generator's `--check` at once, in parallel (one line per generator, the output of
 each that fails; exit 1 when any fails):

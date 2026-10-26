@@ -10,7 +10,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-import shutil
 import sys
 import threading
 import time
@@ -325,14 +324,12 @@ module.exports.controlDevice = function () {
 };
 """
 
-needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
-
 
 def _set(n: int) -> dict[str, Any]:
     return {"kind": "set", "identifier": "x", "payload": n, "device": {}}
 
 
-@needs_node
+@pytest.mark.needs_node
 def test_every_job_gets_a_fresh_handler_sandbox(tmp_path: Path) -> None:
     handler = tmp_path / "TestHandle.mix.js"
     handler.write_text(COUNTING_HANDLER, encoding="utf-8")
@@ -350,7 +347,7 @@ def test_every_job_gets_a_fresh_handler_sandbox(tmp_path: Path) -> None:
     assert (p2p["t"], p2p["r"]) == (1700000000000, first[1]["data"]["p2p"]["r"])
 
 
-@needs_node
+@pytest.mark.needs_node
 def test_an_unreadable_handler_fails_its_job_and_keeps_the_worker(tmp_path: Path) -> None:
     handler = tmp_path / "TestHandle.mix.js"
     handler.write_text(COUNTING_HANDLER, encoding="utf-8")
@@ -364,7 +361,7 @@ def test_an_unreadable_handler_fails_its_job_and_keeps_the_worker(tmp_path: Path
     assert drivers.started == 1
 
 
-@needs_node
+@pytest.mark.needs_node
 def test_a_worker_ends_with_its_stdin_despite_pending_handler_timers(tmp_path: Path) -> None:
     handler = tmp_path / "TestHandle.mix.js"
     handler.write_text(COUNTING_HANDLER + "setTimeout(() => {}, 60000);\n", encoding="utf-8")

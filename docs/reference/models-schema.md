@@ -265,5 +265,6 @@ difference and 2 when Node, the cache, the labels, the layout or the title data 
 Run it on the full corpus after changing the generator.
 
 Tests that need only committed files check the schema of all 159 files and the v1
-reference. The `--check` test runs on two models and skips without Node or the cache.
+reference. The `--check` test runs on three models and skips without Node of the pinned major or
+the cache.
 When and how to regenerate: [how-to/regenerate-models.md](../how-to/regenerate-models.md).

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -125,10 +124,8 @@ def test_an_unlisted_product_has_no_recorded_open() -> None:
     assert live_open.app_version()
 
 
-@pytest.mark.skipif(
-    not CACHE.is_dir() or shutil.which("node") is None,
-    reason="needs the private thing-model cache and Node",
-)
+@pytest.mark.needs_node
+@pytest.mark.skipif(not CACHE.is_dir(), reason="needs the private thing-model cache")
 def test_the_table_is_what_the_generator_writes() -> None:
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "gen_live_open.py"), "--check"],
