@@ -238,9 +238,10 @@ names it (`cloud request`, `multi-command write`, `app-local`, `Bluetooth`, `MQT
 Station.async_set_guard_mode`).
 
 The per-mode delays and action masks (`alarm_delay_<mode>`, `leaving_delay_<mode>`,
-`camera_action_<mode>`, `sensor_action_<mode>`) are not in these files. They are the
-station's mode tables, defined in `devices/settings.py` and appended by
-`Station.settings_for` to every paired camera's or sensor's settings.
+`camera_action_<mode>`, `doorbell_action_<mode>`, `sensor_action_<mode>`) are not in
+these files. They are the station's mode tables, defined in `devices/settings.py` and
+appended by `Station.settings_for` to every paired camera's, doorbell's or sensor's
+settings.
 
 A product code with no file has no bundled settings. When the client's model scan
 finds the code's thing description in the cloud, `Station.settings_for` lists its

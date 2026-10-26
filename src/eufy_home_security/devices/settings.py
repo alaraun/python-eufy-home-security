@@ -3,7 +3,7 @@
 The per-model settings come from the bundled model files (:mod:`.model_settings`). This
 module holds what those files do not: which device a setting addresses
 (:class:`Scope`), the units a numeric setting reports (:class:`SettingUnit`), and the
-per-mode delays and action masks every paired camera or sensor carries
+per-mode delays and action masks every paired camera, doorbell or sensor carries
 (:data:`MODE_TABLE_SETTINGS`), written as a whole ``SET_ALL_ACTION`` table
 (see ``p2p.mode_actions``).
 """
@@ -31,7 +31,9 @@ from ..p2p.mode_actions import (
     mode_action_bits,
     mode_action_on,
 )
-from .types import DeviceKind
+from ._device_alarm_data import DEVICE_ALARMS
+from .recipes import ConnectType
+from .types import MODELS, DeviceKind
 
 
 class Scope(StrEnum):
@@ -40,8 +42,9 @@ class Scope(StrEnum):
     STATION = "station"
     CAMERA = "camera"
     SENSOR = "sensor"
+    DOORBELL = "doorbell"
     SUB_DEVICE = "sub_device"
-    """Every paired device (cameras and sensors alike), never the station itself."""
+    """Every paired device (cameras, doorbells and sensors alike), never the station itself."""
 
 
 _KIND_SCOPES: Final[Mapping[DeviceKind, Scope]] = MappingProxyType(
@@ -49,6 +52,7 @@ _KIND_SCOPES: Final[Mapping[DeviceKind, Scope]] = MappingProxyType(
         DeviceKind.STATION: Scope.STATION,
         DeviceKind.CAMERA: Scope.CAMERA,
         DeviceKind.SENSOR: Scope.SENSOR,
+        DeviceKind.DOORBELL: Scope.DOORBELL,
     }
 )
 
@@ -64,7 +68,13 @@ def scope_for_kind(kind: DeviceKind | None) -> Scope:
 
 
 SCOPE_DEFAULT_CHANNEL: Final[Mapping[Scope, int]] = MappingProxyType(
-    {Scope.STATION: STATION_CHANNEL, Scope.CAMERA: 0, Scope.SENSOR: 0, Scope.SUB_DEVICE: 0}
+    {
+        Scope.STATION: STATION_CHANNEL,
+        Scope.CAMERA: 0,
+        Scope.SENSOR: 0,
+        Scope.DOORBELL: 0,
+        Scope.SUB_DEVICE: 0,
+    }
 )
 """The channel used when the caller names none: the station addresses itself on
 255; a sub-device is addressed on its own slot (``device_channel``), 0 by default."""
@@ -259,24 +269,24 @@ _DELAY_DESCRIPTIONS: Final[Mapping[ModeTableField, str]] = MappingProxyType(
     }
 )
 
+_VIDEO_ACTIONS: Final = (
+    "record",
+    "camera_siren",
+    "station_alarm",
+    "notification",
+    "report_monitor_center",
+    "light_alarm",
+)
+
 MODE_ACTION_FLAGS: Final[Mapping[Scope, Mapping[str, int]]] = MappingProxyType(
     {
         # The app's per-mode actions of a camera (device_type 1, 8, 9, 14, 15, 19, 23 ...): record,
         # notification, its own siren, the HomeBase alarm and the light; plus the
         # monitoring-centre report every device gets. No privacy or respond bit.
-        Scope.CAMERA: MappingProxyType(
-            {
-                name: ACTION_FLAGS[name]
-                for name in (
-                    "record",
-                    "camera_siren",
-                    "station_alarm",
-                    "notification",
-                    "report_monitor_center",
-                    "light_alarm",
-                )
-            }
-        ),
+        Scope.CAMERA: MappingProxyType({name: ACTION_FLAGS[name] for name in _VIDEO_ACTIONS}),
+        # A doorbell's: the camera's actions at most; which of them the app offers depends
+        # on the doorbell's type (DOORBELL_TYPE_ACTIONS, see mode_action_flags).
+        Scope.DOORBELL: MappingProxyType({name: ACTION_FLAGS[name] for name in _VIDEO_ACTIONS}),
         # The app's per-mode actions of a sensor: notification and the HomeBase alarm, plus
         # the monitoring-centre report; "respond" on a motion sensor only
         # (MOTION_SENSOR_DEVICE_TYPES, see mode_action_flags).
@@ -344,22 +354,74 @@ def mode_action_label(flag: str) -> str:
 #: ``motion_sensor_respond`` action.
 MOTION_SENSOR_DEVICE_TYPES: Final = frozenset({10, 127})
 
-_OTHER_SENSOR_FLAGS: Final[Mapping[str, int]] = MappingProxyType(
-    {n: b for n, b in MODE_ACTION_FLAGS[Scope.SENSOR].items() if n != "motion_sensor_respond"}
+_NO_FLAGS: Final[Mapping[str, int]] = MappingProxyType({})
+
+
+def _row(scope: Scope, names: frozenset[str]) -> Mapping[str, int]:
+    return MappingProxyType({n: b for n, b in MODE_ACTION_FLAGS[scope].items() if n in names})
+
+
+_OTHER_SENSOR_FLAGS: Final = _row(
+    Scope.SENSOR, frozenset(MODE_ACTION_FLAGS[Scope.SENSOR]) - {"motion_sensor_respond"}
+)
+
+DOORBELL_TYPE_ACTIONS: Final[Mapping[int, frozenset[str]]] = MappingProxyType(
+    {
+        **dict.fromkeys((5, 93), frozenset({"record", "notification"})),
+        **dict.fromkeys(
+            (7, 16, 91, 94, 95, 96), frozenset({"record", "notification", "station_alarm"})
+        ),
+    }
+)
+"""Per cloud device type, the per-mode actions the eufy app offers a doorbell of that type
+behind a station, besides the monitoring-centre report every device has (declared, eufy
+app). A doorbell of another type has the whole doorbell row when its product has an alarm
+of its own behind a station (a siren and light, :mod:`.device_alarm`), and no catalogued
+actions otherwise."""
+
+_DOORBELL_TYPE_FLAGS: Final[Mapping[int, Mapping[str, int]]] = MappingProxyType(
+    {
+        device_type: _row(Scope.DOORBELL, names | {"report_monitor_center"})
+        for device_type, names in DOORBELL_TYPE_ACTIONS.items()
+    }
+)
+
+
+def _alarm_behind_station(product_code: str) -> bool:
+    """Whether the generated device-alarm table offers ``product_code`` an alarm of its
+    own under a station's connect type (any but ``SINGLE``)."""
+    groups = DEVICE_ALARMS.get(product_code.upper(), ())
+    return any(kind != ConnectType.SINGLE for kinds, _ in groups for kind in kinds)
+
+
+_DEVICE_ALARM_DOORBELL_TYPES: Final = frozenset(
+    model.cloud_device_type
+    for model in MODELS.values()
+    if model.kind is DeviceKind.DOORBELL
+    and model.cloud_device_type is not None
+    and _alarm_behind_station(model.model)
 )
 
 
 def mode_action_flags(scope: Scope, device_type: int | None = None) -> Mapping[str, int]:
     """The named action bits of a device of ``scope`` with the cloud ``device_type``.
 
-    :data:`MODE_ACTION_FLAGS` of the scope, without ``motion_sensor_respond`` for a sensor
-    whose type is known and not a motion sensor's (:data:`MOTION_SENSOR_DEVICE_TYPES`);
-    empty for a scope without per-mode actions.
+    :data:`MODE_ACTION_FLAGS` of the scope, refined by a known type: without
+    ``motion_sensor_respond`` for a sensor that is not a motion sensor
+    (:data:`MOTION_SENSOR_DEVICE_TYPES`); for a doorbell, those of its type
+    (:data:`DOORBELL_TYPE_ACTIONS`), the whole row for a type whose catalogued doorbells
+    have an alarm of their own, else none. Empty for a scope without per-mode actions.
     """
-    known = device_type is not None
-    if scope is Scope.SENSOR and known and device_type not in MOTION_SENSOR_DEVICE_TYPES:
+    if device_type is None:
+        return MODE_ACTION_FLAGS.get(scope, _NO_FLAGS)
+    if scope is Scope.SENSOR and device_type not in MOTION_SENSOR_DEVICE_TYPES:
         return _OTHER_SENSOR_FLAGS
-    return MODE_ACTION_FLAGS.get(scope, MappingProxyType({}))
+    if scope is Scope.DOORBELL:
+        if device_type in _DOORBELL_TYPE_FLAGS:
+            return _DOORBELL_TYPE_FLAGS[device_type]
+        if device_type not in _DEVICE_ALARM_DOORBELL_TYPES:
+            return _NO_FLAGS
+    return MODE_ACTION_FLAGS.get(scope, _NO_FLAGS)
 
 
 def _mode_suffix(mode: GuardMode) -> str:
@@ -425,7 +487,7 @@ MODE_TABLE_SETTINGS: Final[tuple[SettingDef, ...]] = (
     ),
 )
 """The per-mode delays and action masks: one value per guard mode in the station's
-mode table, carried by every paired camera or sensor."""
+mode table, carried by every paired camera, doorbell or sensor."""
 
 _BY_KEY: Final[Mapping[str, SettingDef]] = MappingProxyType(
     {spec.key: spec for spec in MODE_TABLE_SETTINGS}

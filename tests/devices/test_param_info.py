@@ -45,9 +45,9 @@ def _secrets_restored() -> Iterator[None]:
             None,
             1,
             2,
-            "camera_action_away|sensor_action_away (What this camera does when it triggers in Away mode): +camera_siren -record (1 → 2)",
-            "camera_action_away|sensor_action_away (What this camera does when it triggers in Away mode)",
-            "camera_action_away|sensor_action_away (What this camera does when it triggers in Away mode) = camera_siren",
+            "camera_action_away|doorbell_action_away|sensor_action_away (What this camera does when it triggers in Away mode): +camera_siren -record (1 → 2)",
+            "camera_action_away|doorbell_action_away|sensor_action_away (What this camera does when it triggers in Away mode)",
+            "camera_action_away|doorbell_action_away|sensor_action_away (What this camera does when it triggers in Away mode) = camera_siren",
         ),
         # single key with Scope.CAMERA
         (

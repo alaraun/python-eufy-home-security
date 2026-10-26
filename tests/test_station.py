@@ -1458,6 +1458,44 @@ async def test_a_non_motion_sensor_has_no_respond_action() -> None:
         await hub.async_set_mode_action("away", "motion_sensor_respond", True, channel=17)
 
 
+async def test_a_doorbell_with_its_own_alarm_writes_its_siren_in_the_mode_table(
+    station: Station, fake: FakeStation
+) -> None:
+    _mode_table_blocks(fake)
+    doorbell = CloudDevice(
+        device_sn="T8217P0000000001",
+        device_type=312,
+        name="Door",
+        station_sn=SYNTHETIC.station_sn,
+        channel=16,
+    )
+    hub = Station(STATION, station.session, sub_devices=[CAMERA, doorbell])
+    keys = {s.key for s in hub.settings_for(doorbell.device_sn)}
+    assert {"doorbell_action_away", "alarm_delay_away"} <= keys
+    assert "camera_action_away" not in keys
+    mask = await hub.async_set_mode_action(
+        "away", "camera_siren", True, device_sn=doorbell.device_sn
+    )
+    assert mask == 10
+    assert fake.mode_tables_received[-1]["devices"] == [
+        {"device_channel": 16, "action": 10},
+        {"device_channel": 0, "action": 9},
+    ]
+
+
+async def test_a_doorbell_without_its_own_alarm_has_no_siren_action() -> None:
+    entry = CloudDevice(
+        device_sn="T8210P0000000001",
+        device_type=7,
+        name="Door",
+        station_sn=SYNTHETIC.station_sn,
+        channel=17,
+    )
+    hub = _hub_with(CAMERA, entry)
+    with pytest.raises(UnsupportedError, match="known flags: record, station_alarm, notification"):
+        await hub.async_set_mode_action("away", "camera_siren", True, channel=17)
+
+
 async def test_a_listed_siren_accessory_blocks_a_mode_table_write(
     station: Station, fake: FakeStation
 ) -> None:

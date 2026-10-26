@@ -560,26 +560,16 @@ def _setting_rows(settings: Iterable[Setting]) -> list[str]:
     return _table(rows)
 
 
-def render_mode_table_settings(camera: Sequence[Setting], sensor: Sequence[Setting]) -> str:
+def render_mode_table_settings(by_kind: Mapping[str, Sequence[Setting]]) -> str:
     """The per-mode delays and actions (``settings`` without ``--model``): every
-    mode-table setting once, with the paired devices that carry it."""
-    on_camera = {s.key for s in camera}
-    on_sensor = {s.key for s in sensor}
-    merged = {s.key: s for s in (*camera, *sensor)}
+    mode-table setting once, with the paired devices that carry it (``by_kind``: the
+    plural device name, ``"cameras"``, to the settings those devices carry)."""
+    merged = {s.key: s for settings in by_kind.values() for s in settings}
     rows = [("KEY", "VALUES", "UNIT", "DEVICES")]
-    rows += [
-        (
-            key,
-            _domain(s),
-            s.unit.value if s.unit is not None else "-",
-            " and ".join(
-                kind
-                for kind, keys in (("cameras", on_camera), ("sensors", on_sensor))
-                if key in keys
-            ),
-        )
-        for key, s in merged.items()
-    ]
+    for key, s in merged.items():
+        kinds = [kind for kind, settings in by_kind.items() if key in {x.key for x in settings}]
+        devices = ", ".join(kinds[:-1]) + " and " + kinds[-1] if len(kinds) > 1 else kinds[0]
+        rows.append((key, _domain(s), s.unit.value if s.unit is not None else "-", devices))
     return "\n".join(
         [
             "per-mode settings of a station's paired devices (address: --device SN or --channel N)",

@@ -705,7 +705,7 @@ by a receipt (code 0) and no `0x0547`.
   and the library writes no table for it.
 
 **Library write path [verified].** A mode-table setting (the
-`camera_action_<mode>`, `sensor_action_<mode>`, `alarm_delay_<mode>` and
+`camera_action_<mode>`, `doorbell_action_<mode>`, `sensor_action_<mode>`, `alarm_delay_<mode>` and
 `leaving_delay_<mode>` settings) is written by `Station.async_set_setting` /
 `async_set_mode_action`, never as a frame of its own:
 
@@ -724,9 +724,9 @@ by a receipt (code 0) and no `0x0547`.
    writes the 0; otherwise the target is left out of the list, and the station writes 0
    into every device of the table that the list leaves out [verified].
 4. Refuse before sending (`UnsupportedError`) when the setting does not apply to the
-   target's device kind, when a device of the table is of no known kind (it may be a
-   siren accessory: the library always sends `siren_sensor_action` 0 and would clear
-   its triggers), or when the count-down the table must carry unchanged has devices
+   target's device kind, when a device of the table is of a kind without catalogued
+   actions (not a camera, doorbell or sensor; it may be a siren accessory: the library
+   always sends `siren_sensor_action` 0 and would clear its triggers), or when the count-down the table must carry unchanged has devices
    at different non-zero values (one table cannot carry two).
 5. Send it (`StationSession.async_set_mode_table`, frame type 1255, no resend). A
    non-zero receipt raises `CommandRejectedError`; a zero receipt is not success: every

@@ -921,12 +921,15 @@ A closed session (`async_close`) never reconnects on its own — build a new
 
   **Per-mode actions** — "sound the siren in Away", "notify in Home" — are bits of a
   per-mode action mask: each camera has `camera_action_away`, `camera_action_home` and
-  `camera_action_custom_1`…`_3`, each sensor `sensor_action_<mode>`, and
-  `mode_action_flags(scope, device.device_type)` names the bits that apply to that
-  device (camera: `record`, `camera_siren`, `station_alarm`, `notification`,
-  `light_alarm`, `report_monitor_center`; sensor: `notification`, `station_alarm`,
-  `report_monitor_center`, and `motion_sensor_respond` on a motion sensor only, cloud
-  `device_type` 10 or 127; `async_set_mode_action` refuses a flag the device does not
+  `camera_action_custom_1`…`_3`, each doorbell `doorbell_action_<mode>`, each sensor
+  `sensor_action_<mode>`, and `mode_action_flags(scope, device.device_type)` names the
+  bits that apply to that device (camera: `record`, `camera_siren`, `station_alarm`,
+  `notification`, `light_alarm`, `report_monitor_center`; doorbell, as the eufy app
+  offers them per cloud `device_type` (`DOORBELL_TYPE_ACTIONS`): `record`,
+  `notification` and `report_monitor_center`, plus `station_alarm` for types 7, 16, 91
+  and 94-96, and every camera flag for a doorbell with a siren and light of its own;
+  sensor: `notification`, `station_alarm`, `report_monitor_center`, and
+  `motion_sensor_respond` on a motion sensor only, cloud `device_type` 10 or 127; `async_set_mode_action` refuses a flag the device does not
   have). A flag is on as the app's checkbox is ticked: `motion_sensor_respond` is the
   app's "React to motion", on while its bit (32) is **clear** (`MODE_ACTION_INVERTED`);
   read a switch with `mode_action_on(flag, mask)`, never `mask & bit`. Turning it off
@@ -963,8 +966,8 @@ A closed session (`async_close`) never reconnects on its own — build a new
     off only that device. Refresh every delay entity after a write, and say so in the
     entity's description.
   - The write is refused (`UnsupportedError`, nothing sent) when the station has a
-    paired device of no known kind (it may be a siren accessory whose triggers the
-    table would clear), or when devices hold different values for a delay the table
+    paired device in the table that is not a camera, doorbell or sensor (it may be a
+    siren accessory whose triggers the table would clear), or when devices hold different values for a delay the table
     must carry unchanged; surface the message instead of retrying.
 
   **Bulk edits** (a matrix of devices × flags, and the delays, behind one Save) go in one
@@ -1114,7 +1117,7 @@ A closed session (`async_close`) never reconnects on its own — build a new
 ### Settings per model
 
 The settings of a model come from its file, as `settings_for` lists them before the
-per-mode settings; a paired camera or sensor adds 15 per-mode delays and actions:
+per-mode settings; a paired camera, doorbell or sensor adds 15 per-mode delays and actions:
 
 | model | settings | writable | read-only |
 |---|---|---|---|
@@ -1262,8 +1265,8 @@ for an unknown id). All are exported from the package root.
   placement where it has one (`page`, `group`, `order`), then the name. A variant
   (`variant_of`) shares its primary's section and follows it; an `advanced` setting stays
   in its section, hidden by default.
-- **Per-mode delays and actions** (`camera_action_*`, `sensor_action_*`, `alarm_delay_*`,
-  `leaving_delay_*`) are in `modes` (`MODES_SECTION`): a camera view skips that section
+- **Per-mode delays and actions** (`camera_action_*`, `doorbell_action_*`, `sensor_action_*`,
+  `alarm_delay_*`, `leaving_delay_*`) are in `modes` (`MODES_SECTION`): a camera view skips that section
   rather than matching key patterns.
 - **Confirm alarm-affecting settings.** `setting.alarm_affecting` is true for every
   setting of an alarm-affecting section (`alarm`, `modes`): a write sounds the HomeBase
