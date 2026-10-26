@@ -495,6 +495,12 @@ class RecordNotFoundError(EufySecurityError):
     """
 
 
+class RecordingCursorError(EufySecurityError, ValueError):
+    """A recordings page cursor this library did not issue for the listing, or one that no
+    longer parses (garbled, another version, another station or camera). Raised before
+    anything is sent; a ``ValueError`` too, so an invalid argument either way."""
+
+
 class CaptureStoppedError(EufySecurityError):
     """A live capture was stopped on request before its first keyframe: nothing was written."""
 

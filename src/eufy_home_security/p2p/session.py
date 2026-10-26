@@ -3004,6 +3004,7 @@ class StationSession:
         *,
         count: int | None = None,
         before: int | None = None,
+        before_day: date | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
         page_size: int | None = None,
         timeout: float | None = None,
@@ -3013,7 +3014,9 @@ class StationSession:
         Dates are ``YYYYMMDD`` and both days are included (``end_date`` None: only
         ``start_date``). ``count`` caps the number of records (None: all of them).
         ``before`` (a ``record_id``) keeps only older rows: the days after its day are
-        not asked and its day is paged from it. ``keep`` filters the rows as they
+        not asked and its day is paged from it. Its day is the one the id carries, else
+        ``before_day`` (the station day it was listed under, as
+        :meth:`async_list_history_by_day` gives it). ``keep`` filters the rows as they
         arrive, and ``count`` then counts the kept ones, so paging stops as soon as
         enough rows pass the filter.
 
@@ -3034,10 +3037,37 @@ class StationSession:
         :data:`HISTORY_QUERY_TIMEOUT`); a query left unanswered is sent once more with
         the same cursor, and :class:`DeviceTimeoutError` is raised when that one times
         out too. Raises :class:`ValueError`, before sending,
-        for a malformed date, a start after the end, a ``before`` that carries no day,
-        or a ``page_size`` below 2 (a page repeats the cursor row, so a page of 1
-        cannot move).
+        for a malformed date, a start after the end, a ``before`` without a day (none
+        carried, no ``before_day``), a ``before_day`` other than the day ``before``
+        carries or without ``before``, or a ``page_size`` below 2 (a page repeats the
+        cursor row, so a page of 1 cannot move).
         """
+        rows = await self.async_list_history_by_day(
+            start_date,
+            end_date,
+            count=count,
+            before=before,
+            before_day=before_day,
+            keep=keep,
+            page_size=page_size,
+            timeout=timeout,
+        )
+        return [row for _day, row in rows]
+
+    async def async_list_history_by_day(
+        self,
+        start_date: str,
+        end_date: str | None = None,
+        *,
+        count: int | None = None,
+        before: int | None = None,
+        before_day: date | None = None,
+        keep: Callable[[HistoryRecord], bool] | None = None,
+        page_size: int | None = None,
+        timeout: float | None = None,
+    ) -> list[tuple[date, HistoryRecord]]:
+        """:meth:`async_list_history`, each row with the station day its query named (the
+        day it belongs to on the station, whether or not its ``record_id`` carries one)."""
         verb = history_query_verb(self.serial)
         if page_size is None:
             page_size = HISTORY_PAGE_SIZE if verb == DB_QUERY_HISTORY else HISTORY_LOCAL_PAGE_SIZE
@@ -3049,8 +3079,8 @@ class StationSession:
         last = first if end_date is None else _parse_day(end_date)
         if first > last:
             raise ValueError(f"start date {start_date} is after end date {end_date}")
-        cursor_day = None if before is None else _record_day(before)
-        records: list[HistoryRecord] = []
+        cursor_day = _cursor_day(before, before_day)
+        records: list[tuple[date, HistoryRecord]] = []
         seen: set[int] = set()
         day = last if cursor_day is None else min(last, cursor_day)
         while day >= first:
@@ -3088,7 +3118,7 @@ class StationSession:
     async def _history_day(
         self,
         day: date,
-        records: list[HistoryRecord],
+        records: list[tuple[date, HistoryRecord]],
         seen: set[int],
         *,
         verb: int = DB_QUERY_HISTORY,
@@ -3125,7 +3155,7 @@ class StationSession:
             fresh = [r for r in wanted if not r.record_id or r.record_id not in seen]
             seen.update(r.record_id for r in fresh)
             kept = [r for r in fresh if keep is None or keep(r)]
-            records.extend(kept)
+            records.extend((day, r) for r in kept)
             stop: str | None = None
             if count is not None and len(records) >= count:
                 stop = "enough rows"
@@ -5666,6 +5696,23 @@ def _record_day(record_id: int) -> date:
     if day is None:
         raise ValueError(f"record_id {record_id} carries no day")
     return day
+
+
+def _cursor_day(before: int | None, before_day: date | None) -> date | None:
+    """The day a history cursor pages from: the day ``before`` carries, else
+    ``before_day``; ValueError for a cursor without a day or two that disagree."""
+    if before is None:
+        if before_day is not None:
+            raise ValueError("before_day needs before")
+        return None
+    own = record_id_day(before)
+    if own is None:
+        if before_day is None:
+            raise ValueError(f"record_id {before} carries no day")
+        return before_day
+    if before_day is not None and before_day != own:
+        raise ValueError(f"before_day {before_day} is not the day record_id {before} carries")
+    return own
 
 
 def _parse_day(text: str) -> date:

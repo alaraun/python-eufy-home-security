@@ -356,6 +356,12 @@ def _record_day(row: dict[str, Any]) -> str | None:
     )
 
 
+def _local_event_day(row: dict[str, Any]) -> str | None:
+    """``YYYYMMDD`` a 10017 query lists ``row`` under: its ``record_id``'s day, else its
+    ``start_time``'s; None (every day) without either."""
+    return _record_day(row) or (_cursor_time(row)[:8] or None)
+
+
 #: Subheader ``(media version, encrypted flag)`` of a keyframe and of a P-frame per
 #: :class:`VideoVariant`, as the app's receiver reads them (a HomeBase 3: RSA_PREFIX).
 _VIDEO_SUBHEADER_FLAGS: dict[VideoVariant, tuple[tuple[int, int], tuple[int, int]]] = {
@@ -1217,7 +1223,8 @@ class FakeStation:
 
     def _answer_local_events(self, inner: dict[str, Any]) -> None:
         """A history page under the app's verb for a station other than the HomeBase 3
-        family (10017), as declared from the app: rows of the ``start_date`` day,
+        family (10017), as declared from the app: rows of the ``start_date`` day (by
+        their ``start_time`` when the ``record_id`` carries no day, as on a HomeBase 2),
         newest first, at most ``count``, older than the ``start_time`` cursor
         (``YYYYMMDDHHMMSS``) when it is not ``"0"``. Unobserved on hardware: the
         reply is shaped like a 10011 page naming the verb."""
@@ -1226,7 +1233,7 @@ class FakeStation:
         day = str(query.get("start_date", ""))
         cursor = str(query.get("start_time") or "0")
         rows = sorted(
-            (row for row in self.rows if _record_day(row) in (None, day)),
+            (row for row in self.rows if _local_event_day(row) in (None, day)),
             key=lambda row: _record_id(row) or 0,
             reverse=True,
         )

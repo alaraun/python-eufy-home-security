@@ -1821,16 +1821,29 @@ capture ended by its `stop` event; complete), `complete`, `content_type`.
   recording, newest first, of one camera or of every camera paired here; one history
   query per day and page, the camera asleep. Pass `since` (the newest `started_at`
   already stored) for an incremental sync. A standalone camera lists none.
-- **A page for a list view:** `limit` stops the walk at that many rows, so only today
-  (and the days back to the page's last row) are asked, not the whole window;
-  `before=<the last row's record_id>` gives the next page, starting in that row's day.
-  A page shorter than `limit` means the window holds no more; a full page may be
-  followed by an empty one. Keep `days` as the window bound: no day before it is asked.
+- **A page for a list view:** `await station.async_list_recordings_page(device_sn=None,
+  *, limit, days=2, cursor=None, until=None, page_days=None, timeout=None)` returns a
+  `RecordingsPage(rows, next_cursor)`: up to `limit` rows (a tuple, newest first) and the
+  cursor of the next page, None when the window holds no more. Only today and the days
+  back to the page's last row are asked, at most `page_days` of them (None: the rest of
+  the window); no day before the window is asked. Pass `next_cursor` back as `cursor`
+  exactly as it came: it is opaque text (JSON-safe, hashable, the same for the same
+  position of the same station and `device_sn`, so it can key a cache and cross a
+  websocket to a card and back). It names either the page's last row (a full page; the
+  next one may be empty) or, when a short page stopped at `page_days` with window days
+  left, the day before the ones it asked. Positions are the station's own days (the day
+  a row's id carries, else the day its query named; a HomeBase 2's ids carry none), so a
+  consumer never decodes record ids or picks a day in the host's zone. A cursor the
+  library did not issue for that station and `device_sn`, or one that no longer parses,
+  raises `RecordingCursorError` (a `ValueError`) before anything is sent: answer
+  "invalid format". `async_list_recordings(limit=…, before=<record_id>)` still pages
+  as before, but only by ids that carry a day; `before` is deprecated in favour of the
+  page call.
 - **Go to a day:** `until=<date>` lists that day's rows and older ones (host-local days,
-  like the window), combinable with `limit`; the next page is `before=<last record_id>`
-  as usual, and `before` wins when both are given. `days` still counts back from
-  today: an `until` before the window lists nothing, a day after today lists from
-  today. Size `days` to reach the chosen day (`(today - until).days + n`).
+  like the window), combinable with `limit`; the next page is the page's `next_cursor`
+  as usual, and `cursor` (or `before`) wins when both are given. `days` still counts
+  back from today: an `until` before the window lists nothing, a day after today lists
+  from today. Size `days` to reach the chosen day (`(today - until).days + n`).
 - **Slow pages:** `timeout` bounds each history query (None:
   `p2p.session.HISTORY_QUERY_TIMEOUT`, 15 s). An idle HomeBase 3 answers a query of
   50 rows in 0.5-3 s (median 0.7 s); a busy one takes several seconds and sometimes
@@ -2605,6 +2618,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `RefreshCooldownError` (a `RateLimitedError`, `code` 0) | the library's own spacing of key fetches, not a eufy throttle: no repair, just wait |
 | `CipherUnavailableError` (an `EmptyResponseError`; `cipher_id`, `owner_source`, `retry_after`) | the cloud has no key for the cipher the station named in its handshake, under the owner id asked (`owner_source`: `"member.admin_user_id"` or `"own user id"`). Not a reauth and not an outage of the station: the share or the station's binding needs the owner. Raise one non-fixable repair issue naming the station and `cipher_id`; clear it on `ConnectionChanged(connected=True)`. The library asks the same station and cipher again only after `retry_after` (an hour) or once a refreshed device list names another owner id; until then every attempt raises this without a request. A reload of the entry asks once more |
 | `StillNotWrittenError` (a `RecordNotFoundError`; `offset`) | the device has not written the event's row or still yet: keep what is shown and ask once more later (about 20 s). A plain `RecordNotFoundError` is final for that event: no retry |
+| `RecordingCursorError` (a `ValueError`) | `async_list_recordings_page` got a `cursor` it did not issue for that station and camera, or one that no longer parses (garbled, another version); nothing was sent. Answer "invalid format" and let the client start again from the first page; never retry the same cursor |
 | `CaptureStoppedError` | a live capture's `stop` was set before its first keyframe: nothing was recorded, nothing to store. Not an error for the user who pressed stop |
 | `ConfigChangedError` (`config`, `expected`) | a write's `expect_revision` is stale: the station's configuration changed elsewhere and nothing was sent. Show `err.config` and let the user redo the edit; not an outage |
 | `ModeInUseError` (an `UnsupportedError`; `reason`) | the mode is in use (current, or named by the schedule or its default); nothing was sent. `raise HomeAssistantError` with `reason` |

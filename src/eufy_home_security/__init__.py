@@ -114,6 +114,7 @@ if TYPE_CHECKING:
         PtzActionUnsupportedError,
         RateLimitedError,
         RateLimitOrigin,
+        RecordingCursorError,
         RecordNotFoundError,
         RefreshCooldownError,
         SessionRejectedError,
@@ -154,6 +155,7 @@ if TYPE_CHECKING:
     )
     from .p2p.station_config_codecs import Schedule, ScheduleSlot, Weekday
     from .p2p.storage_info import DiskInfo, EmmcInfo, StorageInfo, StorageMedium
+    from .recordings import RecordingsPage
     from .station import RemoteStation, SettingsCoverage, Station, StationState, SubDeviceState
     from .station_config import (
         CrossCameraConfig,
@@ -304,6 +306,7 @@ _EXPORTS: dict[str, str] = {
             "PtzActionUnsupportedError",
             "RateLimitOrigin",
             "RateLimitedError",
+            "RecordingCursorError",
             "RecordNotFoundError",
             "RefreshCooldownError",
             "SessionRejectedError",
@@ -331,6 +334,7 @@ _EXPORTS: dict[str, str] = {
     ),
     "InstallState": "install",
     **dict.fromkeys(("Reach", "StationChoice"), "inclusion"),
+    "RecordingsPage": "recordings",
     **dict.fromkeys(("GUARD_MODE_LABELS", "FrameCipher", "GuardMode", "ValueSource"), "models"),
     **dict.fromkeys(("HostSource", "LanPath", "PathWarning", "suggest_local_ports"), "network"),
     **dict.fromkeys(
@@ -506,6 +510,8 @@ __all__ = [
     "RateLimitedError",
     "Reach",
     "RecordNotFoundError",
+    "RecordingCursorError",
+    "RecordingsPage",
     "RefreshCooldownError",
     "RegionStatus",
     "RemoteStation",
