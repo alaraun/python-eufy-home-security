@@ -207,14 +207,29 @@ def slot(recipe: Any, context: Context) -> Any:
 
 def leaves(x: Any, path: Path = ()) -> Iterator[tuple[Path, Any]]:
     """Every scalar leaf of a recipe with its path, in document order."""
+    items: Iterator[tuple[Any, Any]]
     if isinstance(x, dict):
-        for k, v in x.items():
-            yield from leaves(v, (*path, k))
+        items = iter(x.items())
     elif isinstance(x, list):
-        for i, v in enumerate(x):
-            yield from leaves(v, (*path, i))
+        items = enumerate(x)
     else:
         yield path, x
+        return
+    # An explicit stack: a generator per level costs a frame per leaf and depth.
+    stack = [(path, items)]
+    while stack:
+        base, items = stack[-1]
+        for k, v in items:
+            here = (*base, k)
+            if isinstance(v, dict):
+                stack.append((here, iter(v.items())))
+                break
+            if isinstance(v, list):
+                stack.append((here, enumerate(v)))
+                break
+            yield here, v
+        else:
+            stack.pop()
 
 
 def _replace(x: Any, subst: Mapping[Path, Any], path: Path = ()) -> Any:

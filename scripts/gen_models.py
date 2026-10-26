@@ -461,11 +461,13 @@ def param_slots(
     """
     asks: list[tuple[str, int, str]] = []
     requests: list[dict[str, Any]] = []
+    null_paths: dict[str, set[LeafPath]] = {}
     for ident, row in rows.items():
         recipes = [r for _, r in row.main if r is not None]
         if not recipes:
             continue
         nulls = set.intersection(*({p for p, x in codec.leaves(r) if x is None} for r in recipes))
+        null_paths[ident] = nulls
         for param, values in seen.items():
             for raw in values[:2] if len(values) > 1 and nulls else ():
                 device = context.device(product_code)
@@ -486,11 +488,7 @@ def param_slots(
         flat = dict(codec.leaves(codec.slot(recipe, context))) if recipe is not None else {}
         leaves.setdefault((ident, param), []).append((raw, flat))
     out: dict[str, dict[LeafPath, str]] = {}
-    for ident, row in rows.items():
-        recipes = [r for _, r in row.main if r is not None]
-        if not recipes:
-            continue
-        nulls = set.intersection(*({p for p, x in codec.leaves(r) if x is None} for r in recipes))
+    for ident, nulls in null_paths.items():
         for path in sorted(nulls, key=str):
             found = set()
             for param in seen:
