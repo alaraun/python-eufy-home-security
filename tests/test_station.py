@@ -2982,6 +2982,67 @@ def test_local_events_of_a_model_without_a_profile_is_unknown() -> None:
     assert evidence.source == "no profile for this model"
 
 
+_T8530_SN = "T8530P0000000001"
+_T8101_SN = "T8101P0000000001"
+
+
+def _sub(serial: str, device_type: int, channel: int) -> CloudDevice:
+    return CloudDevice(
+        device_sn=serial,
+        device_type=device_type,
+        name="sub",
+        station_sn=SYNTHETIC.station_sn,
+        channel=channel,
+    )
+
+
+def test_local_events_for_a_camera_behind_a_homebase_3_is_the_stations() -> None:
+    hub = _hub_with(CAMERA, _sub(_T8530_SN, 0, 1), _sub(_T8101_SN, 0, 2))
+    assert hub.local_events.support is Support.VERIFIED
+    for serial in (SYNTHETIC.camera_sn, _T8530_SN, _T8101_SN, SYNTHETIC.station_sn):
+        assert hub.local_events_for(serial) == hub.local_events
+
+
+def test_local_events_for_a_motion_sensor_behind_a_homebase_3_needs_cloud_push() -> None:
+    evidence = _hub_with(CAMERA, MOTION_SENSOR).local_events_for(SENSOR_SN)
+    assert evidence == Evidence(
+        Support.UNKNOWN,
+        "no local event push recorded for T8910",
+        "the station's local push is verified for camera detections only; this "
+        "device's events arrive through cloud push",
+    )
+
+
+def test_local_events_for_an_uncatalogued_device_is_unknown() -> None:
+    evidence = _hub_with(_sub("TZZZZP0000000001", 0, 3)).local_events_for("TZZZZP0000000001")
+    assert evidence.support is Support.UNKNOWN
+    assert evidence.source == "no local event push recorded for this model"
+
+
+def test_local_events_for_a_device_of_an_unverified_station_is_the_stations() -> None:
+    hb2 = CloudDevice(
+        device_sn="T8010" + SYNTHETIC.station_sn[5:],
+        device_type=0,
+        name="HB",
+        p2p_did=SYNTHETIC.did,
+    )
+    sensor = dataclasses.replace(MOTION_SENSOR, station_sn=hb2.device_sn)
+    session = _unconnected_station(host=None, local_ip=None, local_port=0).session
+    station = Station(hb2, session, sub_devices=[sensor])
+    assert station.local_events.support is Support.UNKNOWN
+    assert station.local_events_for(SENSOR_SN) == station.local_events
+
+
+def test_local_events_for_a_standalone_camera_is_its_own_entry() -> None:
+    station = _standalone_t8170()
+    assert station.local_events_for(_T8170_SN) == station.local_events
+
+
+def test_local_events_for_a_device_not_paired_here_is_unknown() -> None:
+    evidence = _hub_with(CAMERA).local_events_for(SENSOR_SN)
+    assert evidence == Evidence(Support.UNKNOWN, "the device is not paired to this station")
+
+
 async def test_a_t8410_refuses_every_slot_call_before_sending(
     t8410_station: Station, fake: FakeStation
 ) -> None:
