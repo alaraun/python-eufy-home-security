@@ -336,3 +336,65 @@ async def test_a_record_without_a_downloadable_clip_is_refused_before_sending(
     with pytest.raises(UnsupportedError, match=match):
         await station.async_download_recording(HistoryRecord.from_row(row), write)
     assert fake.sessions == 0
+
+
+@pytest.mark.asyncio
+async def test_future_cursor_is_not_forwarded_without_its_day(
+    station: Station, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A clock-ahead cursor must never pass a day hint without its ID."""
+    observed: list[dict[str, object]] = []
+
+    async def capture(_start: str, _end: str, **kwargs: object) -> list[HistoryRecord]:
+        observed.append(kwargs)
+        return []
+
+    monkeypatch.setattr(station.session, "async_list_history", capture)
+    future = (today + timedelta(days=2)).date()
+    rows = await station.async_list_recordings(
+        SYNTHETIC.camera_sn, days=3, before=90001, before_day=future
+    )
+    assert rows == []
+    assert observed[0]["before"] is None
+    assert observed[0]["before_day"] is None
+
+
+async def test_local_events_station_filters_camera_and_keeps_station_day(
+    today: datetime,
+) -> None:
+    local_sn = "T8010" + SYNTHETIC.station_sn[5:]
+    fake = FakeStation(serial=local_sn)
+    await fake.start()
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(local_sn, credentials, host="127.0.0.1", port=fake.discovery_port)
+    st = Station(
+        CloudDevice(
+            device_sn=local_sn,
+            device_type=18,
+            name="Local Home Base",
+            p2p_did=SYNTHETIC.did,
+            main_sw_version="1.0.0",
+        ),
+        session,
+        sub_devices=[CAMERA],
+    )
+    try:
+        fake.rows = [
+            {
+                "record_id": 47051,
+                "device_sn": SYNTHETIC.camera_sn,
+                "start_time": today.strftime(FORMAT),
+                "storage_path": "/media/mmcblk0p1/Camera05/20310203112233.dat",
+                "frame_num": 6,
+            }
+        ]
+        rows = await st.async_list_recordings(SYNTHETIC.camera_sn, days=1)
+        assert [r.record_id for r in rows] == [47051]
+        assert rows[0].station_day == today.date()
+        assert fake.history_queries[0]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]
+    finally:
+        await st.async_close()
+        fake.stop()

@@ -8,7 +8,8 @@ parameter dumps, arming, legacy ECB scalars, image
 and database requests, the storage record (asked for or pushed with
 :meth:`FakeStation.send_storage`), mode-table writes (``SET_ALL_ACTION``, 1255),
 mode-list and schedule writes (1256, 1254), unsolicited camera pushes, and media streams (live and recordings) with the
-RSA-wrapped keyframe cipher.
+RSA-wrapped keyframe cipher, plus native 10017-family ECB recording opens
+whose media is wrapped to the owner account ECC key.
 
 Where the real station is awkward, the fake is too: a guard-mode report is GCM (a
 u64-LE mode under the session key), every command gets a receipt of
@@ -65,6 +66,8 @@ from ..p2p.media import (
     v2_still_key,
 )
 from ..p2p.messages import (
+    CMD_DOWNLOAD_VIDEO,
+    CMD_RECORD_VIEW,
     CMD_SET_DEVS_TONE_FILE,
     CMD_SET_TONE_FILE,
     ECB_CHANNEL_VALUE_CMDS,
@@ -489,6 +492,8 @@ class FakeStation:
     parameter dump is asked for, as a T8160 does with a 1246 write: it applies it
     after the session has raised "acknowledged … but never acted on it"."""
     recording_frames: int = 6
+    native_recording_requests: list[tuple[int, int, str]] = field(default_factory=list)
+    """Successfully decoded native requests: (command, channel, station storage path)."""
     media_reply_code: int | None = None
     live_open_receipt_code: int = RECEIPT_TAKEN
     """The receipt a live open (1003) gets; non-zero streams nothing, as a HomeBase that
@@ -1330,6 +1335,23 @@ class FakeStation:
         self.send_receipt(ftype, code)
 
     def _on_ecb(self, ftype: int, subheader: bytes, body: bytes) -> None:
+        if ftype in (CMD_DOWNLOAD_VIDEO, CMD_RECORD_VIEW):
+            # Native 10017-station media: five zero bytes then two 128-byte strings.
+            # The static-key ECB frame carries NO per-open media key. The station
+            # wraps its stream key to the existing owner account's ECC public key.
+            if len(body) < 261 or body[:5] != bytes(5):
+                return
+            try:
+                path = body[5:133].split(b"\0", 1)[0].decode("ascii")
+                owner = body[133:261].split(b"\0", 1)[0].decode("ascii")
+            except UnicodeDecodeError:
+                return
+            if owner != self.account_id:
+                return
+            self.native_recording_requests.append((ftype, subheader[2], path))
+            numbers = self.ecc_private_key.public_key().public_numbers()
+            self._start_media(f"{numbers.x:064x}{numbers.y:064x}", live=False, camera=subheader[2])
+            return
         channel = subheader[2]
         offset = 4 if ftype in ECB_CHANNEL_VALUE_CMDS else 0  # [channel][value][account]
         value = struct.unpack_from("<I", body, offset)[0]

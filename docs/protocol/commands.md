@@ -411,7 +411,11 @@ Names for every id: `src/eufy_home_security/devices/command_types.py`.
   default 10017, for every other model: a HomeBase 2, a standalone camera) and sends
   `{"table": "history_record_info", "cmd": 10017, "payload": {"count": 20, "start_date",
   "end_date", "start_time": "0", "event_type": 0, "ai_type": 0, "storage_cloud": -1,
-  "trigger_type": 0, "detection_type": 0, "flag": 0}}`, no `device_info`. The next page
+  "trigger_type": 0, "detection_type": 0, "flag": 0}}`. For a camera-specific
+  query the app also supplies `"device_info": [{"device_sn": "..."}]`; a
+  station-wide query omits the field. **Measured on T8010**: filtering retained
+  all 59 Doorbell recordings in order, reducing the two-day scan from 11 to 3
+  page queries (13.47 s to 5.53 s). The next page
   passes the previous page's oldest `start_time` as `start_time`, separators stripped
   (`YYYYMMDDHHMMSS`); a page shorter than `count`, or one that starts with the row the
   last one started with, is the last. The app's per-query timeout is the thing

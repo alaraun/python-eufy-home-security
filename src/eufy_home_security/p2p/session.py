@@ -50,9 +50,6 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Protocol, cast
 
-from cryptography.hazmat.primitives import serialization as _hb2_serialization
-from cryptography.hazmat.primitives.asymmetric import ec as _hb2_ec
-
 from .._logging import (
     Address,
     LogThrottle,
@@ -129,13 +126,13 @@ from .crypto import (
     aes_key_from_conn_init,
     ecb_decrypt,
     ecb_encrypt,
+    ecc_private_key_from_hex,
     frame_encryption,
     gcm_decrypt_broadcast,
     gcm_encrypt_command,
     parse_conn_init,
     session_key_from_conn_init,
 )
-from .crypto import ecb_encrypt as _hb2_ecb_encrypt
 from .did import Did, static_key
 from .media import (
     ANNEX_B_STARTS,
@@ -216,6 +213,7 @@ from .messages import (
     history_query_verb,
     image_request_payload,
     local_events_query_payload,
+    native_recording_frame,
     record_id_day,
     string_command_body,
     tone_file_payload,
@@ -374,9 +372,9 @@ them without bound.
 """
 HISTORY_PAGE_SIZE = 50
 HISTORY_LOCAL_PAGE_SIZE = 20
-HISTORY_HOMEBASE2_PAGE_SIZE = 50
 """The page the app asks of a station queried with ``DB_QUERY_LOCAL_EVENTS``."""
-"""Records per history page (the app asks 30, then 50)."""
+# HISTORY_PAGE_SIZE is the separate DB_QUERY_HISTORY default.
+
 HISTORY_MAX_PAGES = 1000
 """Pages read for one day before giving up on a station that never runs out."""
 HISTORY_QUERY_TIMEOUT = 15.0
@@ -1284,48 +1282,6 @@ class MediaStream:
 class _Waiter:
     match: Matcher
     future: asyncio.Future[object]
-
-
-def _homebase2_private_key(
-    value: str | bytes | _hb2_ec.EllipticCurvePrivateKey | None,
-) -> _hb2_ec.EllipticCurvePrivateKey:
-    """The account's existing ECC key, used by HomeBase 2 stored media."""
-    if isinstance(value, _hb2_ec.EllipticCurvePrivateKey):
-        return value
-    if isinstance(value, bytes):
-        value = value.decode("ascii")
-    if not isinstance(value, str):
-        raise UnsupportedError("a HomeBase 2 recording needs an ECC account key")
-    value = value.strip()
-    if value.startswith("-----BEGIN"):
-        key = _hb2_serialization.load_pem_private_key(value.encode("ascii"), password=None)
-        if not isinstance(key, _hb2_ec.EllipticCurvePrivateKey):
-            raise UnsupportedError("HomeBase 2 key is not ECC")
-        return key
-    return _hb2_ec.derive_private_key(int(value.removeprefix("0x"), 16), _hb2_ec.SECP256R1())
-
-
-def _homebase2_recording_frame(path: str, account_id: str, channel: int, key: bytes) -> bytes:
-    """Native 1024 string-pair command of the HomeBase 2 recording protocol.
-
-    On the wire: five zero bytes, two 128-byte zero-padded ASCII strings,
-    AES-128-ECB under the station/DID static key, and an ECB-1 subheader.
-    This is independent of the negotiated session GCM cipher.
-    """
-    if not is_station_recording_path(path) or not path.endswith(".dat"):
-        raise ValueError("not a validated HomeBase 2 recording path")
-    if not 0 <= channel <= 255:
-        raise ValueError("invalid recording camera channel")
-    path_bytes = path.encode("ascii")
-    account_bytes = account_id.encode("ascii")
-    if len(path_bytes) >= 128 or len(account_bytes) >= 128:
-        raise ValueError("HomeBase 2 recording request string exceeds 127 bytes")
-    plaintext = bytes(5) + path_bytes.ljust(128, b"\0") + account_bytes.ljust(128, b"\0")
-    return encode_frame(
-        CMD_DOWNLOAD_VIDEO,
-        _hb2_ecb_encrypt(key, plaintext),
-        bytes([1, 0, channel, 1, 0, 0]),
-    )
 
 
 class StationSession:
@@ -3051,7 +3007,7 @@ class StationSession:
         end_date: str | None = None,
         *,
         count: int | None = None,
-        before: int | None = None,
+        before: int | HistoryRecord | None = None,
         before_day: date | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
         device_sn: str | None = None,
@@ -3068,9 +3024,9 @@ class StationSession:
         arrive, and ``count`` then counts the kept ones, so paging stops as soon as
         enough rows pass the filter.
 
-        ``device_sn`` filters records at the HomeBase on verified T8010 stations;
-        other station models retain station-wide queries. ``keep`` still filters
-        every received record on the client side.
+        ``device_sn`` is included in every local-events (10017) request, as the app
+        does; this was verified on T8010 hardware. ``keep`` still filters records
+        locally, and the 10011 history command remains station-wide.
 
         Uses the verb the app sends this station's model
         (:func:`~.messages.history_query_verb`) the way the app does: one day at a
@@ -3094,18 +3050,10 @@ class StationSession:
         cannot move).
         """
         verb = history_query_verb(self.serial)
-        # Hardware-verified on T8010: native DB_QUERY_LOCAL_EVENTS camera filtering.
-        # Other stations retain their current station-wide queries.
-        native_device_sn = (
-            device_sn if verb == DB_QUERY_LOCAL_EVENTS and self.serial.startswith("T8010") else None
-        )
+        # The app includes a device filter with every local-events query.
+        native_device_sn = device_sn if verb == DB_QUERY_LOCAL_EVENTS else None
         if page_size is None:
-            if verb == DB_QUERY_HISTORY:
-                page_size = HISTORY_PAGE_SIZE
-            elif self.serial.startswith("T8010"):
-                page_size = HISTORY_HOMEBASE2_PAGE_SIZE
-            else:
-                page_size = HISTORY_LOCAL_PAGE_SIZE
+            page_size = HISTORY_PAGE_SIZE if verb == DB_QUERY_HISTORY else HISTORY_LOCAL_PAGE_SIZE
         if page_size < 2:
             raise ValueError("page_size must be at least 2")
         if count is not None and count < 1:
@@ -3116,15 +3064,18 @@ class StationSession:
             raise ValueError(f"start date {start_date} is after end date {end_date}")
         if before is None and before_day is not None:
             raise ValueError("before_day requires before")
+        before_id = before.record_id if isinstance(before, HistoryRecord) else before
         cursor_day = (
-            None
-            if before is None
+            before.station_day
+            if isinstance(before, HistoryRecord)
             else before_day
             if before_day is not None
-            else _record_day(before)
+            else _record_day(before_id)
+            if before_id is not None
+            else None
         )
-        if before is not None and cursor_day is None:
-            raise ValueError(f"before {before} carries no day")
+        if before_id is not None and cursor_day is None:
+            raise ValueError(f"before {before_id} carries no day")
         records: list[HistoryRecord] = []
         seen: set[int] = set()
         day = last if cursor_day is None else min(last, cursor_day)
@@ -3135,7 +3086,7 @@ class StationSession:
                 seen,
                 verb=verb,
                 count=count,
-                start_id=before if day == cursor_day else None,
+                start_id=before_id if day == cursor_day else None,
                 keep=keep,
                 device_sn=native_device_sn,
                 page_size=page_size,
@@ -3276,10 +3227,12 @@ class StationSession:
             )
             if verb == DB_QUERY_LOCAL_EVENTS:
                 payload = local_events_query_payload(
-                    *dates, count=page_size, start_time=start_time, transaction=transaction
+                    *dates,
+                    count=page_size,
+                    start_time=start_time,
+                    device_sns=() if device_sn is None else (device_sn,),
+                    transaction=transaction,
                 )
-                if device_sn is not None:
-                    payload["payload"]["device_info"] = [{"device_sn": device_sn}]
             else:
                 payload = history_query_payload(
                     *dates, count=page_size, start_id=start_id, transaction=transaction
@@ -3788,8 +3741,9 @@ class StationSession:
         """Play a stored recording to its end and mux it into one MPEG-TS clip.
 
         The camera is not woken: the station serves the clip off its own disk, about
-        as fast as it was recorded or faster. The playback (1025) runs on an extra
-        session reserved from the budget a live stream on an extra session uses
+        as fast as it was recorded or faster. Native .dat paths on 10017
+        stations use download (1024); .zxvideo retains its JSON route. It runs
+        on an extra session reserved from the live-stream session budget
         (:attr:`max_sessions`), closed when the clip ends or this call is cancelled, so
         this session's slot, commands and trigger frames are never held up. Downloads
         queue: one at a time per station. Past the budget this raises
@@ -3811,7 +3765,13 @@ class StationSession:
             started = time.monotonic()
             try:
                 await extra.async_connect()
-                stream = await extra.async_open_recording(path, channel, first_frame_timeout=first)
+                stream = await extra.async_open_recording(
+                    path,
+                    channel,
+                    download=path.endswith(".dat")
+                    and history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS,
+                    first_frame_timeout=first,
+                )
                 async with stream:
                     muxer, _ = await mux_frames(aiter(stream), write)
             finally:
@@ -3881,9 +3841,21 @@ class StationSession:
             if not waiter.done():
                 waiter.set_result(None)
 
-    def _send_homebase2_recording(self, path: str, channel: int, account_id: str) -> int:
-        """Send native 1024 rather than the newer station's JSON-wrapped 1350."""
-        frame = _homebase2_recording_frame(path, account_id, channel, self._require_static_key())
+    def _send_native_recording(
+        self, path: str, channel: int, account_id: str, *, download: bool
+    ) -> int:
+        """Send native playback 1025 or download 1024 under the static ECB key."""
+        command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
+        frame = native_recording_frame(
+            path, account_id, channel, self._require_static_key(), command=command
+        )
+        if _WIRE.isEnabledFor(logging.DEBUG):
+            _WIRE.debug(
+                "%s: tx native recording cmd %d channel %d (path and account redacted)",
+                self._log_name,
+                command,
+                channel,
+            )
         return self._require_transport().send_drw(0, frame)
 
     async def async_open_recording(
@@ -3896,7 +3868,7 @@ class StationSession:
         idle_timeout: float | None = None,
         wait: bool = False,
     ) -> MediaStream:
-        """Play a stored recording (a ``.zxvideo`` path from an event) off the station's disk.
+        """Play a validated stored recording (``.zxvideo`` or native ``.dat``) off disk.
 
         Sends the app's playback command (1025), or the download command (1024)
         when ``download`` is set. Its first keyframe is the moment that triggered
@@ -3911,14 +3883,17 @@ class StationSession:
         frames without that, use :meth:`async_trigger_frame`, which plays the
         recording on a short-lived session and closes it.
         """
+        if not is_station_recording_path(path):
+            raise UnsupportedError("not a validated station recording path")
+        # Native .dat opens use the 10017 family; preserve JSON for .zxvideo.
         if path.endswith(".dat"):
-            if not self.serial.startswith("T8010") or not is_station_recording_path(path):
-                raise UnsupportedError("not a supported HomeBase 2 recording path")
-            # HomeBase 2 uses native download 1024 for playback as well as saving.
+            if history_query_verb(self.serial) != DB_QUERY_LOCAL_EVENTS:
+                raise UnsupportedError("a 10011 station cannot play a native .dat path")
+            command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
             return await self._open_media(
-                CMD_DOWNLOAD_VIDEO,
+                command,
                 channel,
-                lambda _account_id, _key_hex: (CMD_DOWNLOAD_VIDEO, b""),
+                lambda _account_id, _key_hex: (command, b""),
                 None,
                 first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
                 idle_timeout=_or(idle_timeout, MEDIA_IDLE_TIMEOUT),
@@ -3926,7 +3901,6 @@ class StationSession:
                 media_key=MediaKeyType.ECC,
                 native_recording_path=path,
             )
-
         command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
         build = download_video_payload if download else record_view_payload
         return await self._open_media(
@@ -3961,8 +3935,8 @@ class StationSession:
         if native_recording_path is not None:
             # HomeBase 2's recording key is the station owner account's ECC key;
             # the newer JSON media path creates a fresh per-open key instead.
-            decoder = MediaDecoder(ecc_private_key=_homebase2_private_key(creds.ecc_private_key))
-            frame_type, body = CMD_DOWNLOAD_VIDEO, b""
+            decoder = MediaDecoder(ecc_private_key=ecc_private_key_from_hex(creds.ecc_private_key))
+            frame_type, body = command, b""
         else:
             if media_key is MediaKeyType.ECC:
                 key_hex, ecc_key = generate_media_ecc_key()
@@ -4016,8 +3990,11 @@ class StationSession:
                 self._set_media(stream)
                 try:
                     if native_recording_path is not None:
-                        stream._open_index = self._send_homebase2_recording(
-                            native_recording_path, channel, creds.account_id
+                        stream._open_index = self._send_native_recording(
+                            native_recording_path,
+                            channel,
+                            creds.account_id,
+                            download=command == CMD_DOWNLOAD_VIDEO,
                         )
                     elif command == CMD_START_REALTIME_MEDIA:
                         # The station picks the live camera from the subheader, not the JSON.

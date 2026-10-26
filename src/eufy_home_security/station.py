@@ -122,6 +122,7 @@ from .events import (
     ZoomChanged,
     coerce_int,
     is_station_media_path,
+    is_station_recording_path,
 )
 from .exceptions import (
     CommandNotAppliedError,
@@ -183,9 +184,11 @@ from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
 from .p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
 from .p2p.messages import (
     CMD_SET_TONE_FILE,
+    DB_QUERY_HISTORY,
     RECEIPT_NOT_HANDLED,
     SOUND_ALARM_SECONDS,
     decode_preset_picture,
+    history_query_verb,
     record_id_day,
 )
 from .p2p.mode_actions import (
@@ -929,7 +932,11 @@ class _HistoryScan:
         self.camera += 1
         self.camera_fields |= carried
         path = getattr(row, self.path_field)
-        if is_station_media_path(path, self.suffix):
+        if (
+            is_station_recording_path(path)
+            if self.path_field == "storage_path"
+            else is_station_media_path(path, self.suffix)
+        ):
             return True
         if path is None:
             self.skipped[f"no {self.path_field}"] += 1
@@ -4519,7 +4526,7 @@ class Station:
         days: int = RECORDINGS_DAYS,
         since: datetime | None = None,
         limit: int | None = None,
-        before: int | None = None,
+        before: int | HistoryRecord | None = None,
         before_day: date | None = None,
         until: date | None = None,
         timeout: float | None = None,
@@ -4536,8 +4543,9 @@ class Station:
         Pages: ``limit`` stops the walk as soon as that many rows are found, so only
         the days (and pages) up to the last row are asked; ``before`` (the
         ``record_id`` of the previous page's last row) starts below that row, in its
-        day. For opaque HomeBase 2 IDs, pass ``before_day`` from that record's
-        timestamp; ordinary date-encoded IDs need no hint.
+        day. A previously returned ``HistoryRecord`` is an opaque cursor whose
+        station-local date is derived by the library. Integer cursors remain
+        supported for date-encoded IDs; ``before_day`` is a compatibility hint.
         A page shorter than ``limit`` means the window holds no more; a full page
         may be followed by an empty one. ``until`` starts the walk at that day: its rows
         and older ones (a later day counts as today; a ``datetime`` as its host-local
@@ -4559,15 +4567,18 @@ class Station:
             raise ValueError("limit must be at least 1")
         if before is None and before_day is not None:
             raise ValueError("before_day requires before")
+        before_id = before.record_id if isinstance(before, HistoryRecord) else before
         cursor_day = (
-            None
-            if before is None
+            before.station_day
+            if isinstance(before, HistoryRecord)
             else before_day
             if before_day is not None
-            else record_id_day(before)
+            else record_id_day(before_id)
+            if before_id is not None
+            else None
         )
-        if before is not None and cursor_day is None:
-            raise ValueError(f"before {before} carries no day")
+        if before_id is not None and cursor_day is None:
+            raise ValueError(f"before {before_id} carries no day")
         if device_sn is not None:
             self.channel_for(device_sn)  # raises for a device not paired here
         if self.is_standalone:
@@ -4590,6 +4601,11 @@ class Station:
         def wanted(row: HistoryRecord) -> bool:
             if row.video_path is None or row.device_sn is None:
                 return False
+            if (
+                row.video_path.endswith(".dat")
+                and history_query_verb(self.serial) == DB_QUERY_HISTORY
+            ):
+                return False
             if device_sn is not None and row.device_sn != device_sn:
                 return False
             if device_sn is None and row.device_sn not in paired:
@@ -4603,8 +4619,8 @@ class Station:
             first.strftime("%Y%m%d"),
             last.strftime("%Y%m%d"),
             count=limit,
-            before=before if cursor_day is not None and cursor_day <= last else None,
-            before_day=cursor_day if before is not None else None,
+            before=before_id if cursor_day is not None and cursor_day <= last else None,
+            before_day=cursor_day if cursor_day is not None and cursor_day <= last else None,
             keep=wanted,
             device_sn=device_sn,
             timeout=timeout,

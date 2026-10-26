@@ -11,7 +11,7 @@ import struct
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, cast
 
 import pytest
@@ -33,6 +33,7 @@ from eufy_home_security.events import (
     Event,
     EventSource,
     GuardModeChanged,
+    HistoryRecord,
     ParamChanged,
     SecurityEvent,
     StorageChanged,
@@ -67,6 +68,7 @@ from eufy_home_security.p2p.did import Did, static_key
 from eufy_home_security.p2p.media import (
     MediaDecoder,
     MediaFrame,
+    MediaKeyType,
     MediaKind,
     Still,
     StillFormat,
@@ -4831,3 +4833,203 @@ async def test_an_rsa_key_that_does_not_parse_leaves_the_static_key_unfetched(
         assert latch.retry_blocked_for() == 0.0
     finally:
         await session.async_close()
+
+
+# HomeBase 2 / local-events recording regression tests: real PPPP sessions with FakeStation.
+LOCAL_STATION_SN = "T8010" + SYNTHETIC.station_sn[5:]
+LOCAL_RECORDING_PATH = "/media/mmcblk0p1/Camera05/20310203112233.dat"
+
+
+@pytest.mark.parametrize("download", [False, True])
+async def test_native_local_events_recording_decodes_with_account_cipher(
+    download: bool,
+) -> None:
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    await fake.start()
+    session = StationSession(
+        LOCAL_STATION_SN, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        stream = await session.async_open_recording(
+            LOCAL_RECORDING_PATH, 5, download=download, idle_timeout=1.0
+        )
+        frames = [frame async for frame in stream]
+        assert len(_video(frames)) == fake.recording_frames
+        assert fake.native_recording_requests == [
+            (1024 if download else 1025, 5, LOCAL_RECORDING_PATH)
+        ]
+        assert MediaKind.AUDIO in {frame.kind for frame in frames}
+        assert fake.media_keys_offered == [MediaKeyType.ECC]
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+async def test_native_local_events_wrong_account_cipher_cannot_decrypt_media() -> None:
+    """The media must use the owner cipher, not a generated per-open ECC key."""
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    await fake.start()
+    session = StationSession(
+        LOCAL_STATION_SN, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_connect()
+        # A valid handshake took place with the real owner cipher. A wrong key
+        # for just the *media decoder* must not decode the wrapped AES key.
+        assert session._creds is not None
+        session._creds = replace(session._creds, ecc_private_key=FakeStation().ecc_private_key_hex)
+        stream = await session.async_open_recording(
+            LOCAL_RECORDING_PATH, 5, first_frame_timeout=0.4
+        )
+        with pytest.raises((CommandNotAppliedError, DeviceTimeoutError, ProtocolError)):
+            await anext(stream)
+        assert fake.native_recording_requests == [(1025, 5, LOCAL_RECORDING_PATH)]
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+@pytest.mark.parametrize(
+    ("local", "expected"),
+    [(True, 20), (False, 50)],
+)
+async def test_history_page_size_defaults_by_database_verb(local: bool, expected: int) -> None:
+    fake = FakeStation(serial=LOCAL_STATION_SN if local else SYNTHETIC.station_sn)
+    await fake.start()
+    session = StationSession(
+        fake.serial, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_list_history("20261025")
+        assert fake.history_queries[0]["count"] == expected
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+@pytest.mark.parametrize("serial", [LOCAL_STATION_SN, "T8410" + SYNTHETIC.station_sn[5:]])
+async def test_local_events_page_size_allows_explicit_override_and_device_filter(
+    serial: str,
+) -> None:
+    fake = FakeStation(serial=serial)
+    await fake.start()
+    session = StationSession(
+        fake.serial, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_list_history("20261025", page_size=50, device_sn=SYNTHETIC.camera_sn)
+        assert fake.history_queries[0]["count"] == 50
+        assert fake.history_queries[0]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+async def test_history_10011_remains_station_wide_when_device_is_requested() -> None:
+    fake = FakeStation()
+    await fake.start()
+    session = make_session(fake, Provider(fake))
+    try:
+        await session.async_list_history("20261025", device_sn=SYNTHETIC.camera_sn)
+        assert "device_info" not in fake.history_queries[0]
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+async def test_local_events_opaque_cursor_uses_history_records_station_day() -> None:
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    await fake.start()
+    fake.rows = [
+        {
+            "record_id": 47051,
+            "device_sn": SYNTHETIC.camera_sn,
+            "start_time": "2026-10-25 23:59:59",
+            "time_zone": "+1400",
+            "storage_path": LOCAL_RECORDING_PATH,
+        },
+        {
+            "record_id": 47050,
+            "device_sn": SYNTHETIC.camera_sn,
+            "start_time": "2026-10-25 23:58:59",
+            "storage_path": LOCAL_RECORDING_PATH,
+        },
+    ]
+    row = HistoryRecord.from_row(fake.rows[0])
+    assert row.station_day == date(2026, 10, 25)
+    session = StationSession(
+        fake.serial, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        rows = await session.async_list_history("20261024", "20261026", before=row, count=5)
+        assert [r.record_id for r in rows] == [47050]
+        assert fake.history_queries[0]["start_date"] == "20261025"
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+async def test_local_events_opaque_id_without_day_is_rejected() -> None:
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    session = StationSession(fake.serial, Provider(fake), host="127.0.0.1", port=1)
+    with pytest.raises(ValueError, match="carries no day"):
+        await session.async_list_history("20261025", before=48123)
+
+
+async def test_local_events_opaque_id_resumes_on_explicit_day() -> None:
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    await fake.start()
+    session = StationSession(
+        fake.serial, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_list_history(
+            "20261024",
+            "20261026",
+            count=5,
+            before=48123,
+            before_day=date(2026, 10, 25),
+        )
+        assert fake.history_queries[0]["start_date"] == "20261025"
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+async def test_native_recording_rejects_unparsable_cipher_before_wire_send() -> None:
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    await fake.start()
+    session = StationSession(
+        LOCAL_STATION_SN, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_connect()
+        assert session._creds is not None
+        session._creds = replace(session._creds, ecc_private_key="not hex")
+        with pytest.raises(CipherUnusableError):
+            await session.async_open_recording(LOCAL_RECORDING_PATH, 5)
+        assert not fake.native_recording_requests
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+@pytest.mark.parametrize("serial", [SYNTHETIC.station_sn, LOCAL_STATION_SN])
+async def test_existing_zxvideo_keeps_json_recording_route_for_both_families(
+    serial: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """10011 and 10017 stations must not send .zxvideo through native ECB."""
+    session = object.__new__(StationSession)
+    session.serial = serial
+    sentinel = object()
+
+    async def fake_open(
+        _session: StationSession, command: int, channel: int, *args: object, **kwargs: object
+    ) -> object:
+        assert command == 1025
+        assert channel == 5
+        assert "native_recording_path" not in kwargs
+        return sentinel
+
+    monkeypatch.setattr(StationSession, "_open_media", fake_open)
+    assert await session.async_open_recording("/zx/test.zxvideo", 5) is sentinel

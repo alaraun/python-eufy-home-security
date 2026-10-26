@@ -26,7 +26,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from enum import IntEnum, StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, TypeGuard
@@ -343,6 +343,8 @@ def coerce_str(value: object) -> str | None:
 
 #: Every station media path starts here.
 MEDIA_PATH_PREFIX: Final = "/zx/"
+#: Native SD-card recording directory prefix used by HomeBase 2.
+NATIVE_RECORDING_PREFIX: Final = "/media/mmcblk0p1/Camera"
 #: The longest media path accepted.
 MEDIA_PATH_MAX: Final = 256
 #: Suffix of a still (thumbnail, detection crop).
@@ -406,14 +408,14 @@ def is_station_recording_path(value: object) -> TypeGuard[str]:
     if not isinstance(value, str):
         return False
     if (
-        not value.startswith("/media/mmcblk0p1/Camera")
+        not value.startswith(NATIVE_RECORDING_PREFIX)
         or len(value) > MEDIA_PATH_MAX
         or not value.isascii()
         or not value.isprintable()
         or ".." in value
     ):
         return False
-    camera_and_name = value.removeprefix("/media/mmcblk0p1/Camera")
+    camera_and_name = value.removeprefix(NATIVE_RECORDING_PREFIX)
     camera, separator, filename = camera_and_name.partition("/")
     return (
         separator == "/"
@@ -493,7 +495,10 @@ class PushFieldReader:
         """A media path, or None (listed as rejected when present but invalid)."""
         if value is None or value == "":
             return None
-        if is_station_media_path(value, suffix):
+        if name == "video_path" and suffix == RECORDING_SUFFIX:
+            if is_station_recording_path(value):
+                return value
+        elif is_station_media_path(value, suffix):
             return value
         self.rejected.add(name)
         return None
@@ -940,6 +945,23 @@ class HistoryRecord:
         """The row's validated recording (``storage_path``), if any."""
         path = self.storage_path
         return path if is_station_recording_path(path) else None
+
+    @property
+    def station_day(self) -> date | None:
+        """Date on the station's calendar, independent of the host's time zone.
+
+        The local-event protocol sends ``start_time`` in the station's wall-clock
+        time. Use that date directly instead of converting to the host's timezone.
+        Epoch-form timestamps retain their UTC date.
+        """
+        value = self.start_time
+        if value is not None and len(value) >= 10:
+            try:
+                return date.fromisoformat(value[:10])
+            except ValueError:
+                pass
+        started = self.started_at
+        return started.date() if started is not None else None
 
     @property
     def started_at(self) -> datetime | None:

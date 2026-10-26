@@ -1,5 +1,29 @@
 # Media
 
+## Native recordings on non-10011 stations
+
+For the station family using `DB_QUERY_LOCAL_EVENTS` (10017), the eufy app
+opens a recording with a native static-key AES-128-ECB path/account string pair:
+**1025** for playback, **1024** for download. Both use a six-byte native
+subheader with the camera channel. The HomeBase 3 command family uses the
+existing JSON-wrapped playback/download requests instead.
+
+On a physical T8010 HomeBase 2 (firmware not recorded), both `1024` and `1025`
+returned H.264/AAC from **the same completed `.dat` recording** in two independent
+runs on 26 October 2026. Each request yielded 26 video frames, 22 audio frames and
+701,650 payload bytes. Time to first frame was 0.784 s and 0.308 s for `1024`,
+and 0.478 s and 0.337 s for `1025` respectively; the two samples do not establish
+a consistent speed advantage. A syntactically valid but nonexistent `.dat` path
+sent through `1025` raised `CommandNotAppliedError`, with zero media frames and
+zero payload bytes. The probe did not measure time from request to this error.
+These results verify native P2P stored-recording playback, **not** progressive
+browser playback or seeking through Home Assistant. Previous T8010 work also
+verified complete `1024` clip decoding and playback through HA Test.
+Both ordinary `CameraNN/YYYYMMDDHHMMSS.dat` and prefixed Doorbell paths
+are validated before any media command. Missing or invalid ECC owner cipher
+keys raise `CipherUnusableError` before a native media request is sent.
+
+
 Three ways to get pixels from a camera behind a HomeBase 3, cheapest first:
 
 | source | command | result | wakes a battery camera |
