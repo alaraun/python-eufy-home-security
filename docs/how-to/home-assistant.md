@@ -1900,13 +1900,38 @@ capture ended by its `stop` event; complete), `complete`, `content_type`.
   `async_history_record` lookup is not resent.
 - `HistoryRecord` carries what a media browser needs: `video_path` (the validated
   `.zxvideo` path, else None), `started_at`/`ended_at` (aware, in the row's own UTC
-  offset), `duration_s`, `frame_count`, `size_bytes`, `thumb_path`, `record_id`.
+  offset), `duration_s`, `frame_count`, `size_bytes`, `thumb_path`, `record_id`, `ref`.
+- **Finding a listed row again:** every row a listing or lookup returns carries `ref`,
+  opaque text that names that row of that camera on that station (URL-path-safe, so it
+  can be one segment of a thumbnail URL as it is, and JSON-safe; the same row always
+  gives the same text). `await station.async_history_record_by_ref(ref, *,
+  device_sn=None, timeout=None)` asks the station for that row on every station, a
+  HomeBase 2 included (its ids carry no day: the ref carries the station day and the
+  row's start time), and returns it with the same `ref`. A station paged by record id
+  (the HomeBase 3 family) gets one query and the row is matched by id and camera; a
+  station paged by start time (a HomeBase 2) gets one query from the second after the
+  row's start, and a second one from its start only when the first page is full and
+  holds no older row; there the start time must match too. No query is resent;
+  `timeout` bounds each. With `device_sn` the ref must be a row of that camera. Before
+  anything is sent, a ref that does not check out for the station (and `device_sn`) or
+  does not parse raises `RecordingRefError` (a `ValueError`; a page cursor is never
+  accepted as a ref, nor a ref as a cursor), a `device_sn` not paired here or a
+  standalone device `UnsupportedError`. `RecordNotFoundError` means the station no longer lists that
+  row (deleted, or that id now belongs to another camera); on a station paged by start
+  time it also comes for a row behind a full page (20) of rows that started in its own
+  second, which no start-time query reaches. No row is cached: keep rows as long
+  as the view needs them and the ref for anything that outlives it. `ref` is None for a
+  row that cannot be found again (no `record_id`, no camera, or a row without a start
+  time on a station paged by start time, such as a HomeBase 2). `record_id` stays
+  the row's id: files saved under it keep their names, and the ref of a row can always
+  be taken from a fresh listing.
 - `Station.recording_settled(record)`: the row's end lies `RECORDING_QUIET` (30 s) in
   the past. A detection's row exists while its clip still records, so download only
   settled rows. After a download the library reads the row again: a clip that grew
   meanwhile comes back with `complete` False; download it again later.
 - `await station.async_history_record(record_id)`: one row by id (None when the station
-  has none), for a detection's `record_id`.
+  has none), for a detection's `record_id`; an id that carries no day (a HomeBase 2's)
+  raises `UnsupportedError`: find a listed row by its `ref` instead.
 - Downloads run on an extra session from the same budget as live streams of other
   cameras (`max_sessions - 2`), one per station at a time; `wait=False` raises
   `LiveStreamLimitError` instead of queueing. The station session's commands, polls
@@ -2666,6 +2691,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `CipherUnavailableError` (an `EmptyResponseError`; `cipher_id`, `owner_source`, `retry_after`) | the cloud has no key for the cipher the station named in its handshake, under the owner id asked (`owner_source`: `"member.admin_user_id"` or `"own user id"`). Not a reauth and not an outage of the station: the share or the station's binding needs the owner. Raise one non-fixable repair issue naming the station and `cipher_id`; clear it on `ConnectionChanged(connected=True)`. The library asks the same station and cipher again only after `retry_after` (an hour) or once a refreshed device list names another owner id; until then every attempt raises this without a request. A reload of the entry asks once more |
 | `StillNotWrittenError` (a `RecordNotFoundError`; `offset`) | the device has not written the event's row or still yet: keep what is shown and ask once more later (about 20 s). A plain `RecordNotFoundError` is final for that event: no retry |
 | `RecordingCursorError` (a `ValueError`) | `async_list_recordings_page` got a `cursor` that does not check out for that station and camera, or one that no longer parses (garbled, another version); nothing was sent. Answer "invalid format" and let the client start again from the first page; never retry the same cursor |
+| `RecordingRefError` (a `ValueError`) | `async_history_record_by_ref` got a `ref` that does not check out for that station (and `device_sn`), or one that no longer parses; nothing was sent. Answer "not found" and let the client list again; never retry the same ref. A plain `RecordNotFoundError` from that call means the station no longer lists the row (on a station paged by start time, or that a full page of rows of its own start second hides it): answer "not found", let the client list again, and do not retry the same ref |
 | `CaptureStoppedError` | a live capture's `stop` was set before its first keyframe: nothing was recorded, nothing to store. Not an error for the user who pressed stop |
 | `ConfigChangedError` (`config`, `expected`) | a write's `expect_revision` is stale: the station's configuration changed elsewhere and nothing was sent. Show `err.config` and let the user redo the edit; not an outage |
 | `ModeInUseError` (an `UnsupportedError`; `reason`) | the mode is in use (current, or named by the schedule or its default); nothing was sent. `raise HomeAssistantError` with `reason` |

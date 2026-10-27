@@ -110,11 +110,14 @@ from ..exceptions import (
     KeyRejectedError,
     LiveStreamLimitError,
     ProtocolError,
+    RecordingRefError,
+    RecordNotFoundError,
     SessionReplacedError,
     StationUnreachableError,
     UnsupportedError,
 )
 from ..models import STATION_CHANNEL, GuardMode
+from ..recordings import RecordingRef, encode_ref, issue_ref, row_started
 from ._json import json_int
 from .alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
 from .clip import ClipWriter, MediaClip, mux_frames
@@ -3122,7 +3125,78 @@ class StationSession:
         """
         day = _record_day(record_id)
         page, _ = await self._history_page(day, record_id, 2, timeout)
-        return next((r for r in page if r.record_id == record_id), None)
+        row = next((r for r in page if r.record_id == record_id), None)
+        return None if row is None else self._with_ref(row, day, history_query_verb(self.serial))
+
+    async def async_find_history_record(
+        self, ref: RecordingRef, *, timeout: float | None = None
+    ) -> HistoryRecord:
+        """The history row ``ref`` names (as :func:`~..recordings.decode_ref` gives it),
+        carrying its :attr:`~..events.HistoryRecord.ref`.
+
+        Queries of the ref's day with the verb the app sends this station, none resent
+        (``timeout`` None: :data:`HISTORY_QUERY_TIMEOUT` each). Under
+        ``DB_QUERY_HISTORY`` one page of 2 from ``start_id`` = its ``record_id`` (the
+        page starts with that row), matched by ``record_id`` and camera. Under
+        ``DB_QUERY_LOCAL_EVENTS`` a page of :data:`HISTORY_LOCAL_PAGE_SIZE` from each
+        cursor of :meth:`~..recordings.RecordingRef.time_cursors`, matched by
+        ``record_id``, camera and start time: the second page is asked only when the
+        first is full, lacks the row and holds no row that started before it. That
+        finds the row whether the station lists the rows before the cursor or up to
+        it, unless a full page of rows that started in its own second comes before it.
+
+        Raises :class:`RecordingRefError`, before sending, under
+        ``DB_QUERY_LOCAL_EVENTS`` for a ref without a start time;
+        :class:`RecordNotFoundError` when no page asked holds the row: the station no
+        longer lists it (deleted), or lists that id for another camera.
+        """
+        if history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS:
+            row = await self._find_local_event(ref, timeout)
+        else:
+            page, _ = await self._history_page(ref.day, ref.record_id, 2, timeout)
+            names = (ref.record_id, ref.device_sn)
+            row = next((r for r in page if (r.record_id, r.device_sn) == names), None)
+        if row is None:
+            raise RecordNotFoundError(
+                f"{self._log_name}: the station lists no such recording", device_sn=ref.device_sn
+            )
+        return replace(row, ref=encode_ref(ref, station_sn=self.serial))
+
+    async def _find_local_event(
+        self, ref: RecordingRef, timeout: float | None
+    ) -> HistoryRecord | None:
+        """The row ``ref`` names under ``DB_QUERY_LOCAL_EVENTS``, or None (see
+        :meth:`async_find_history_record`)."""
+        cursors = ref.time_cursors()
+        if cursors is None:
+            raise RecordingRefError("the recording reference names no start time to ask by")
+        names = (ref.record_id, ref.device_sn, ref.started)
+        for cursor in cursors:
+            page, _ = await self._history_page(
+                ref.day,
+                0,
+                HISTORY_LOCAL_PAGE_SIZE,
+                timeout,
+                verb=DB_QUERY_LOCAL_EVENTS,
+                start_time=cursor,
+            )
+            for row in page:
+                if (row.record_id, row.device_sn, row_started(row)) == names:
+                    return row
+            starts = [s for r in page if (s := row_started(r)) is not None]
+            # a full page with no row started before the ref may hide it: ask on once
+            if len(page) < HISTORY_LOCAL_PAGE_SIZE or min(starts, default=cursors[1]) < cursors[1]:
+                return None
+        return None
+
+    def _with_ref(self, row: HistoryRecord, day: date, verb: int) -> HistoryRecord:
+        """``row`` listed under the station ``day`` with its reference (see
+        :func:`~..recordings.issue_ref`; under ``DB_QUERY_LOCAL_EVENTS`` a row is found
+        again by its start time)."""
+        ref = issue_ref(
+            row, day, station_sn=self.serial, need_started=verb == DB_QUERY_LOCAL_EVENTS
+        )
+        return row if ref is None else replace(row, ref=ref)
 
     async def _history_day(
         self,
@@ -3164,7 +3238,7 @@ class StationSession:
             fresh = [r for r in wanted if not r.record_id or r.record_id not in seen]
             seen.update(r.record_id for r in fresh)
             kept = [r for r in fresh if keep is None or keep(r)]
-            records.extend((day, r) for r in kept)
+            records.extend((day, self._with_ref(r, day, verb)) for r in kept)
             stop: str | None = None
             if count is not None and len(records) >= count:
                 stop = "enough rows"

@@ -438,6 +438,9 @@ class FakeStation:
     library), by ``table_name``."""
     history_queries: list[dict[str, Any]] = field(default_factory=list)
     """The inner ``payload`` of every history (10011 or 10017) query received."""
+    local_events_up_to_cursor: bool = False
+    """A 10017 page lists the rows up to its ``start_time`` cursor, not only those
+    before it (which reading the station follows is unobserved on hardware)."""
     event_summaries: dict[str, dict[str, Any]] = field(default_factory=dict)
     """The event-count (10013) item ``payload`` by device serial, as the T8170 answers:
     ``{"event_count": 11, "crop_hb3_path": "…_snapshot.jpg", "crop_cloud_path": ""}``."""
@@ -1230,7 +1233,8 @@ class FakeStation:
         family (10017), as declared from the app: rows of the ``start_date`` day (by
         their ``start_time`` when the ``record_id`` carries no day, as on a HomeBase 2),
         newest first, at most ``count``, older than the ``start_time`` cursor
-        (``YYYYMMDDHHMMSS``) when it is not ``"0"``. Unobserved on hardware: the
+        (``YYYYMMDDHHMMSS``; or up to it, :attr:`local_events_up_to_cursor`) when it
+        is not ``"0"``. Unobserved on hardware: the
         reply is shaped like a 10011 page naming the verb."""
         query = inner.get("payload") or {}
         self.history_queries.append(dict(query))
@@ -1242,7 +1246,12 @@ class FakeStation:
             reverse=True,
         )
         if cursor != "0":
-            rows = [row for row in rows if _cursor_time(row) < cursor]
+            up_to = self.local_events_up_to_cursor
+            rows = [
+                row
+                for row in rows
+                if _cursor_time(row) < cursor or (up_to and _cursor_time(row) == cursor)
+            ]
         page = rows[: int(query.get("count") or 20)]
         tables = [("history_record_info", page), *self.history_side_tables.items()]
         self.send_json(

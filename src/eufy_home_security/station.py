@@ -249,7 +249,13 @@ from .p2p.station_config_codecs import (
 )
 from .p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
 from .p2p.xzyh import FrameType
-from .recordings import RecordingPosition, RecordingsPage, decode_cursor, encode_cursor
+from .recordings import (
+    RecordingPosition,
+    RecordingsPage,
+    decode_cursor,
+    decode_ref,
+    encode_cursor,
+)
 from .station_config import (
     ModeInfo,
     StationConfig,
@@ -4603,12 +4609,45 @@ class Station:
     async def async_history_record(self, record_id: int) -> HistoryRecord | None:
         """The history row of one ``record_id`` (one query), or None when the station has
         none. Raises :class:`~.exceptions.UnsupportedError`, before sending, on a
-        standalone device (it lists no history) and for an id that carries no day."""
+        standalone device (it lists no history) and for an id that carries no day; on
+        every station a listed row is looked up by its
+        :attr:`~.events.HistoryRecord.ref` (:meth:`async_history_record_by_ref`)."""
         if self.is_standalone:
             raise UnsupportedError("a standalone device lists no history")
         if record_id_day(record_id) is None:
             raise UnsupportedError(f"record_id {record_id} carries no day")
         return await self.session.async_history_record(record_id)
+
+    async def async_history_record_by_ref(
+        self, ref: str, *, device_sn: str | None = None, timeout: float | None = None
+    ) -> HistoryRecord:
+        """The history row a listed row's :attr:`~.events.HistoryRecord.ref` names, on
+        every station (a HomeBase 2's ids carry no day: the ref carries the station day
+        and start time); the row carries the same ``ref``. One history query, or on a
+        station paged by start time at most two
+        (:meth:`~.p2p.session.StationSession.async_find_history_record`).
+
+        ``ref`` is the text as the library gave it; with ``device_sn`` it must be a
+        row of that camera. ``timeout`` bounds each query (None:
+        :data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`); none is resent.
+
+        Raises before anything is sent: :class:`~.exceptions.RecordingRefError` (a
+        ``ValueError``) for a ref that does not check out for this station (and
+        ``device_sn``) or one that does not parse; ``UnsupportedError`` for a
+        ``device_sn`` not paired here and on a standalone device. Raises
+        :class:`~.exceptions.RecordNotFoundError` when the station no longer lists
+        that row (deleted, or that id now belongs to another camera) and, on a station
+        paged by start time, for a row behind a full page of rows of its start second.
+        """
+        if device_sn is not None:
+            self.channel_for(device_sn)  # raises for a device not paired here
+            cameras: tuple[str, ...] = (device_sn,)
+        else:
+            cameras = (self.serial, *(d.device_sn for d in self.devices))
+        found = decode_ref(ref, station_sn=self.serial, device_sns=cameras)
+        if self.is_standalone:
+            raise UnsupportedError("a standalone device lists no history")
+        return await self.session.async_find_history_record(found, timeout=timeout)
 
     async def async_list_recordings(
         self,
