@@ -19,41 +19,12 @@ before), **restore** (written back to the start value and read back), **app disp
 (the eufy app's screen read with the value in place), **live capture of the wire**
 (the traffic on the LAN or Wi-Fi recorded and decoded).
 
-## HomeBase 2 (T8010), main firmware 3.4.2.6h, with T8910 motion sensor (fw 2.0.1.1)
-
-### Connected device models and firmware (Home Assistant Test inventory)
-
-This inventory is from the Eufy integration's device registry, not a separate
-proof of every capability or a per-device protocol capture. Only product model
-names, model IDs, firmware and counts are recorded; no serial numbers, MACs,
-user-assigned names or physical locations.
-
-| product model name | model ID | reported firmware | units | evidence / limits |
-|---|---|---|---:|---|
-| Battery Doorbell 8210 | T8210 | 2.2.4.6 | 1 | Paired camera; camera, image, event and settings entities exposed. |
-| eufyCam 2C (Camera 2C) | T8113 | 1.7.4 | 1 | Paired camera; camera, image, event and settings entities exposed. |
-| eufyCam 2C (Camera 2C) | T8113 | 3.0.7.8 | 2 | Same model, separate firmware cohort. |
-| eufyCam 2C (Camera 2C) | T8113 | 3.3.8 | 1 | Same model, separate firmware cohort. |
-| eufyCam 2C (Camera 2C) | T8113 | 5.4.7 | 2 | Same model, separate firmware cohort. |
-| HomeBase 2 | T8010 | 3.4.2.6h | 1 | Station used for the 10017/1025/1024 hardware probes below. |
-| Motion sensor | T8910 | 2.0.1.1 | 4 | Motion events observed; sensitivity write/read-back evidence below. |
-
-The HomeBase 2 serves **recordings** for the paired cameras. Its two observed
-native file-name shapes differ: standard camera clips use
-`/media/mmcblk0p1/CameraNN/YYYYMMDDHHMMSS.dat`; doorbell clips can use
-`/media/mmcblk0p1/CameraNN/A123_YYYYMMDDHHMMSS.dat` (synthetic prefix and
-stamp). The `NN` is a two-digit camera-directory index, **not** a camera model
-number or a serial. The full file paths and real per-device indexes are excluded.
-Both formats are accepted by the library's recording-path validation. Newer
-stations can report `.zxvideo` paths instead; selection of 1025 playback and
-1024 download commands depends on the station family (10017), **not** on the
-recording suffix. This inventory alone cannot prove which exact T8113 firmware
-emits which filename or validate live streams, image retrieval and setting
-writes on each listed camera individually. The station-level playback, history
-and download observations are documented in the rows below.
+## HomeBase 2 (T8010), main firmware 3.4.2.6h, with eufyCam 2C (T8113), Battery Doorbell 8210 (T8210) and T8910 motion sensors
 
 | area | verified | notes |
 |---|---|---|
+| Paired device models and firmware (inventory) | – | Home Assistant's Eufy device registry reported six eufyCam 2C (T8113): one on firmware 1.7.4, two on 3.0.7.8, one on 3.3.8 and two on 5.4.7; one Battery Doorbell 8210 (T8210) on 2.2.4.6; four motion sensors (T8910) on 2.0.1.1; and the HomeBase 2 (T8010) on 3.4.2.6h. This establishes model, reported firmware and counts, not separate protocol verification of every camera or setting. No serials, MACs, user-assigned names or locations are retained. |
+| Camera and doorbell recording path shapes | – | On the 10017 station, standard camera recordings use a path shaped like `/media/mmcblk0p1/CameraNN/YYYYMMDDHHMMSS.dat`; doorbell recordings may use `/media/mmcblk0p1/CameraNN/A123_YYYYMMDDHHMMSS.dat`. `NN`, the `A123` prefix and the timestamp are synthetic placeholders, not device identifiers. Both shapes pass library path validation; the station family, **not** the `.dat` or `.zxvideo` suffix, determines native 1025 playback and 1024 download routing. This does not establish which T8113 firmware emits each shape or verify individual live streams, snapshots or setting writes. |
 | Motion-sensor cloud push (FCM, `msg_type` 14) | ✓ | Four physical T8910 motion sensors paired to a HomeBase 2 were tested with Library (this change) through Home Assistant. Each produced motion notifications and working native motion binary sensors and detection events. A captured type-14 payload carried `e` = `"1"` and was decoded as `DetectionType.MOTION`. No type-14 payload with `e` = `0` or missing `e` was observed; those classification cases follow the eufy app's rule, not direct hardware evidence. No separate motion-cleared notification was established; Home Assistant resets the binary motion state using its detection hold timeout. Firmware 2.0.1.1 is reported for all four T8910 devices by the integration's inventory; the protocol-level motion test did not independently read every sensor's firmware. |
 | HomeBase 2 history (10017) and camera filter | ✓ | T8010, firmware 3.4.2.6h; Library read-only query: an unfiltered two-day scan took 11 pages / 13.47 s; filtering by `device_info` returned the same camera-specific recordings in the same order in 3 pages / 5.53 s. The station accepted 50 rows per page; the library uses the app default of 20 for 10017. |
 | HomeBase 2 playback (1025) and download (1024) | ✓ | T8010, firmware 3.4.2.6h; Library protocol probe: both native commands on the same completed recording returned 26 H.264 video frames, 22 audio frames and 701,650 payload bytes. Two runs gave first-frame times 0.784/0.308 s (1024) and 0.478/0.337 s (1025). A valid-shaped nonexistent recording path got no reply or media frames; `CommandNotAppliedError` was raised at the first-frame timeout (response latency not independently measured). This proves native P2P playback, not progressive browser streaming or seeking. |
