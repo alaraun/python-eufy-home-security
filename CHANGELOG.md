@@ -4,6 +4,31 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.8](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.7...v0.4.8) (2026-10-27)
+
+
+### Features
+
+* **devices:** grade a doorbell ring per model as Capability.DOORBELL_RING ([#151](https://github.com/alaraun/python-eufy-home-security/issues/151)) ([508708f](https://github.com/alaraun/python-eufy-home-security/commit/508708fe201cf7bd92f432943d887e4e5d3d511b))
+* **live:** open cameras with several lenses as the eufy app does ([#148](https://github.com/alaraun/python-eufy-home-security/issues/148)) ([f1cb2f8](https://github.com/alaraun/python-eufy-home-security/commit/f1cb2f806fc0d3b91695a8068a9708575c55ef06))
+* **push:** every motion-sensor push (msg_type 14) is a motion detection, as the eufy app shows it, by [@screamerbg](https://github.com/screamerbg) in [#141](https://github.com/alaraun/python-eufy-home-security/issues/141) ([6b3f1dd](https://github.com/alaraun/python-eufy-home-security/commit/6b3f1dd6cbf57ebbebffe024265a9d269bdcb2f4))
+* raise AccountRejectedError for the station's -104 answer ([#149](https://github.com/alaraun/python-eufy-home-security/issues/149)) ([6aa9cfe](https://github.com/alaraun/python-eufy-home-security/commit/6aa9cfe94a8931407463d632d38a91a6bc1f273f))
+* **station:** find a listed recording again by its reference ([#154](https://github.com/alaraun/python-eufy-home-security/issues/154)) ([9826fae](https://github.com/alaraun/python-eufy-home-security/commit/9826fae574ef86edda7e194ae79abf3d820b4ed0))
+* **station:** grade local detection delivery per device ([#152](https://github.com/alaraun/python-eufy-home-security/issues/152)) ([3629c43](https://github.com/alaraun/python-eufy-home-security/commit/3629c43c07cad8653f04ccd80f6023440a030fc8))
+* **station:** HomeBase 2 local recording history, playback and download, by [@screamerbg](https://github.com/screamerbg) in [#146](https://github.com/alaraun/python-eufy-home-security/issues/146) ([b3ea2b3](https://github.com/alaraun/python-eufy-home-security/commit/b3ea2b3d322a430ea9960b7f9c373db0a7b06c30))
+* **station:** recordings pages with a library-owned opaque cursor ([#153](https://github.com/alaraun/python-eufy-home-security/issues/153)) ([00fdfd6](https://github.com/alaraun/python-eufy-home-security/commit/00fdfd61f0cf19a486adaaa603478c1ee5f91511))
+
+
+### Bug Fixes
+
+* decode T8910 PIR sensitivity from HomeBase parameters ([#142](https://github.com/alaraun/python-eufy-home-security/issues/142)) ([5459692](https://github.com/alaraun/python-eufy-home-security/commit/54596923c6c6cab5370bb00328a1294b41f4e8d3))
+* **devices:** give doorbells behind a station their per-mode actions ([#150](https://github.com/alaraun/python-eufy-home-security/issues/150)) ([57defe6](https://github.com/alaraun/python-eufy-home-security/commit/57defe6b9e071fc44518ab4c37087696dc8e66b5))
+
+
+### Performance Improvements
+
+* **scripts:** generate settings files on long-lived Node workers in parallel processes, with identical output ([a2ec7ad](https://github.com/alaraun/python-eufy-home-security/commit/a2ec7ad5e585a23b99e7f409c6f6e49ba9d0068f))
+
 ## [0.4.7](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.6...v0.4.7) (2026-10-23)
 
 
