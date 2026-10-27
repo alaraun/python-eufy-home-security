@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +10,7 @@ import pytest
 
 from eufy_home_security.devices import live_open
 from eufy_home_security.devices.live_open import (
+    NVR_OPENS,
     LiveOpen,
     LiveStop,
     has_live_open,
@@ -46,8 +46,12 @@ def test_every_product_lists_every_connect_type() -> None:
         ("T8213", ConnectType.SINGLE, LiveOpen.STATION),
         # a Wi-Fi camera whose handler keeps its 1700 open behind a station
         ("T8400", ConnectType.HB2, LiveOpen.SINGLE_NO_EXT),
-        # dual-lens: an open the library does not implement
-        ("T8172", ConnectType.HB3, None),
+        # the multi-camera open; behind a HomeBase 3 the form naming the moving lens
+        ("T8172", ConnectType.HB3, LiveOpen.NVR_LENS),
+        ("T8172", ConnectType.HB2, LiveOpen.NVR),
+        ("T8215", ConnectType.HB3, LiveOpen.NVR),
+        # an open the library does not implement (the handler's own standalone open)
+        ("T8172", ConnectType.SINGLE, None),
     ],
 )
 def test_the_handlers_open(code: str, connect: ConnectType, mode: LiveOpen | None) -> None:
@@ -64,6 +68,18 @@ def test_the_library_sends_a_1700_open_on_its_own_session_and_behind_a_homebase(
     assert library_live_open("T8600", ConnectType.HB3, over_webrtc=False) is LiveOpen.SINGLE_NO_EXT
     assert library_live_open("T8113", ConnectType.HB2, over_webrtc=False) is LiveOpen.STATION
     assert library_live_open("T8213", ConnectType.SINGLE, over_webrtc=False) is LiveOpen.STATION
+
+
+def test_the_library_sends_the_multi_camera_open_behind_a_homebase() -> None:
+    assert library_live_open("T8172", ConnectType.HB3, over_webrtc=False) is LiveOpen.NVR_LENS
+    assert library_live_open("T8172", ConnectType.HB2, over_webrtc=False) is LiveOpen.NVR
+    assert library_live_open("T8172", ConnectType.HB3, over_webrtc=True) is None
+
+
+def test_no_multi_camera_open_behind_another_station_kind() -> None:
+    assert live_open.live_open("T8172", ConnectType.M8025) is LiveOpen.NVR
+    assert live_stop("T8172", ConnectType.M8025) is LiveStop.STATION
+    assert library_live_open("T8172", ConnectType.M8025, over_webrtc=False) is None
 
 
 def test_no_1700_open_behind_a_station_without_the_handlers_stop(
@@ -98,23 +114,27 @@ def test_no_open_where_the_app_streams_over_webrtc(code: str, connect: ConnectTy
         ("T8400", ConnectType.HB3, LiveStop.STATION),
         ("T8200X", ConnectType.HB3, LiveStop.BARE),
         ("T8400", ConnectType.HB2, LiveStop.BARE),
-        ("T8160", ConnectType.HB3, None),  # the station open: no 1700 stop recorded
+        ("T8172", ConnectType.HB3, LiveStop.STATION),
+        ("T8172", ConnectType.HB2, LiveStop.BARE),
+        ("T8215", ConnectType.HB3, LiveStop.BARE),
+        ("T8160", ConnectType.HB3, None),  # the station open: no stop recorded
         ("T8400", ConnectType.SINGLE, None),
         (None, ConnectType.HB3, None),
     ],
 )
-def test_the_handlers_stop_after_a_1700_open_behind_a_station(
+def test_the_handlers_stop_after_its_open_behind_a_station(
     code: str | None, connect: ConnectType, stop: LiveStop | None
 ) -> None:
     assert live_stop(code, connect) is stop
 
 
-def test_a_stop_is_recorded_only_for_a_1700_open_behind_a_station() -> None:
+def test_a_stop_is_recorded_only_for_a_1700_or_multi_camera_open_behind_a_station() -> None:
     assert live_open._STOPS
+    recorded = {LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT, *NVR_OPENS}
     for code, stops in live_open._STOPS.items():
         for connect in stops:
             assert connect is not ConnectType.SINGLE, code
-            assert live_open.live_open(code, connect) in (LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT)
+            assert live_open.live_open(code, connect) in recorded
 
 
 def test_an_unlisted_product_has_no_recorded_open() -> None:
@@ -125,10 +145,8 @@ def test_an_unlisted_product_has_no_recorded_open() -> None:
     assert live_open.app_version()
 
 
-@pytest.mark.skipif(
-    not CACHE.is_dir() or shutil.which("node") is None,
-    reason="needs the private thing-model cache and Node",
-)
+@pytest.mark.needs_node
+@pytest.mark.skipif(not CACHE.is_dir(), reason="needs the private thing-model cache")
 def test_the_table_is_what_the_generator_writes() -> None:
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "gen_live_open.py"), "--check"],

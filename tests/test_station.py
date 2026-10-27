@@ -26,6 +26,7 @@ from eufy_home_security.devices.capabilities import (
     DeviceProfile,
 )
 from eufy_home_security.devices.live_open import LiveOpen, live_open
+from eufy_home_security.devices.live_view import Lens, LensView
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
     bundled_codes,
@@ -61,6 +62,7 @@ from eufy_home_security.events import (
     ZoomChanged,
 )
 from eufy_home_security.exceptions import (
+    AccountRejectedError,
     CommandNotAppliedError,
     CommandRejectedError,
     CommandUnsupportedError,
@@ -1441,7 +1443,7 @@ async def test_a_mode_table_is_confirmed_by_read_back_not_the_receipt(
     ):
         await station.async_set_mode_action("away", "camera_siren", True, channel=0)
     fake.mode_table_receipt_code = -104
-    with pytest.raises(CommandRejectedError, match="code -104"):
+    with pytest.raises(AccountRejectedError, match="code -104"):
         await station.async_set_mode_action("away", "camera_siren", True, channel=0)
 
 
@@ -1458,6 +1460,68 @@ async def test_a_non_motion_sensor_has_no_respond_action() -> None:
         await hub.async_set_mode_action("away", "motion_sensor_respond", True, channel=17)
 
 
+async def test_a_doorbell_with_its_own_alarm_writes_its_siren_in_the_mode_table(
+    station: Station, fake: FakeStation
+) -> None:
+    _mode_table_blocks(fake)
+    doorbell = CloudDevice(
+        device_sn="T8217P0000000001",
+        device_type=312,
+        name="Door",
+        station_sn=SYNTHETIC.station_sn,
+        channel=16,
+    )
+    hub = Station(STATION, station.session, sub_devices=[CAMERA, doorbell])
+    keys = {s.key for s in hub.settings_for(doorbell.device_sn)}
+    assert {"doorbell_action_away", "alarm_delay_away"} <= keys
+    assert "camera_action_away" not in keys
+    mask = await hub.async_set_mode_action(
+        "away", "camera_siren", True, device_sn=doorbell.device_sn
+    )
+    assert mask == 10
+    assert fake.mode_tables_received[-1]["devices"] == [
+        {"device_channel": 16, "action": 10},
+        {"device_channel": 0, "action": 9},
+    ]
+
+
+async def test_a_camera_write_sends_an_untouched_doorbell_row_back_unchanged(
+    station: Station, fake: FakeStation
+) -> None:
+    _mode_table_blocks(fake)
+    doorbell = CloudDevice(
+        device_sn="T8200P0000000001",
+        device_type=5,
+        name="Door",
+        station_sn=SYNTHETIC.station_sn,
+        channel=16,
+    )
+    row = 1 | 4 | 32 | 512  # record plus bits the type-5 row does not name
+    fake.params[16] = {1239: str(row), 1167: "0", 1172: "0", 1225: "0", 1166: "30"}
+    hub = Station(STATION, station.session, sub_devices=[CAMERA, doorbell])
+    mask = await hub.async_set_mode_action(
+        "away", "camera_siren", True, device_sn=SYNTHETIC.camera_sn
+    )
+    assert mask == 11
+    assert fake.mode_tables_received[-1]["devices"] == [
+        {"device_channel": 16, "action": row},
+        {"device_channel": 0, "action": 11},
+    ]
+
+
+async def test_a_doorbell_without_its_own_alarm_has_no_siren_action() -> None:
+    entry = CloudDevice(
+        device_sn="T8210P0000000001",
+        device_type=7,
+        name="Door",
+        station_sn=SYNTHETIC.station_sn,
+        channel=17,
+    )
+    hub = _hub_with(CAMERA, entry)
+    with pytest.raises(UnsupportedError, match="known flags: record, station_alarm, notification"):
+        await hub.async_set_mode_action("away", "camera_siren", True, channel=17)
+
+
 async def test_a_listed_siren_accessory_blocks_a_mode_table_write(
     station: Station, fake: FakeStation
 ) -> None:
@@ -1471,7 +1535,7 @@ async def test_a_listed_siren_accessory_blocks_a_mode_table_write(
     )
     fake.params[3] = {1239: "1"}
     hub = Station(STATION, station.session, sub_devices=[CAMERA, siren])
-    with pytest.raises(UnsupportedError, match="no known device kind") as err:
+    with pytest.raises(UnsupportedError, match="without catalogued actions") as err:
         await hub.async_set_mode_action("away", "camera_siren", True, channel=0)
     assert err.value.device_sns == ("T90R0P0000000001",)
     assert fake.mode_tables_received == []
@@ -1490,7 +1554,7 @@ async def test_mode_table_refusals_send_nothing(station: Station, fake: FakeStat
     with pytest.raises(UnsupportedError, match="differs between devices"):
         await station.async_set_setting("camera_action_away", 3, channel=0)
     fake.params[3] = {1239: "1"}  # a block of no known kind: maybe a siren accessory
-    with pytest.raises(UnsupportedError, match="no known device kind"):
+    with pytest.raises(UnsupportedError, match="without catalogued actions"):
         await station.async_set_setting("camera_action_away", 3, channel=0)
     with pytest.raises(ValueError, match="exactly one"):
         await station.async_set_mode_action("away", "record", True)
@@ -1668,7 +1732,7 @@ async def test_bulk_mode_table_refusals_send_nothing(station: Station, fake: Fak
     with pytest.raises(UnsupportedError, match="stores no custom_2 mode table"):
         await hub.async_set_mode_actions("custom_2", {cam: {"record": True}})
     fake.params[3] = {1239: "1"}  # a block of no known kind: maybe a siren accessory
-    with pytest.raises(UnsupportedError, match="no known device kind"):
+    with pytest.raises(UnsupportedError, match="without catalogued actions"):
         await hub.async_set_mode_actions("away", {cam: {"camera_siren": True}})
     assert fake.mode_tables_received == []
 
@@ -2858,12 +2922,131 @@ async def test_a_standalone_product_whose_handler_sends_the_station_open_gets_it
 async def test_a_camera_whose_handler_open_is_not_implemented_is_refused_before_sending(
     station: Station, fake: FakeStation
 ) -> None:
-    dual_lens = dataclasses.replace(CAMERA, device_sn="T8172P2000067890")
-    hub = Station(station.device, station.session, sub_devices=[dual_lens])
-    with pytest.raises(UnsupportedError, match="T8172 live stream behind a HB3 station"):
-        await hub.async_open_live(dual_lens.device_sn)
+    lock = dataclasses.replace(CAMERA, device_sn="T8530P2000067890")
+    hub = Station(station.device, station.session, sub_devices=[lock])
+    with pytest.raises(UnsupportedError, match="T8530 live stream behind a HB3 station"):
+        await hub.async_open_live(lock.device_sn)
     assert fake.live_opens == []
-    assert hub.live_support(dual_lens.device_sn).support is Support.UNKNOWN
+    assert hub.live_support(lock.device_sn).support is Support.UNKNOWN
+
+
+_LENS_LIST = '[{"type":1,"id":0},{"type":1,"id":1}]'
+
+
+def _two_lens_camera(lens_list: str | None = _LENS_LIST) -> CloudDevice:
+    params = [] if lens_list is None else [{"param_type": 9240, "param_value": lens_list}]
+    return dataclasses.replace(
+        CAMERA, device_sn="T8172P2000067890", channel=3, raw={"params": params}
+    )
+
+
+def _entry(index: int, sensor: int) -> dict[str, int]:
+    return {"cameraType": 0, "chn": 3, "index": index, "sensor": sensor}
+
+
+@pytest.mark.parametrize(
+    ("lens_list", "lens_view", "expected"),
+    [
+        (_LENS_LIST, None, (5, [_entry(0, 0), _entry(1, 1)], 0)),
+        (_LENS_LIST, LensView.SUB, (1, [_entry(0, 1)], 1)),
+        (_LENS_LIST, LensView.PIP, (7, [_entry(0, 0), _entry(1, 1)], 0)),
+        (None, None, (1, [_entry(0, 0)], 0)),
+        ("[]", LensView.STACKED, (5, [_entry(0, 0)], 0)),
+    ],
+)
+async def test_a_two_lens_camera_behind_a_homebase_3_gets_the_multi_camera_open_for_its_view(
+    station: Station,
+    fake: FakeStation,
+    lens_list: str | None,
+    lens_view: LensView | None,
+    expected: tuple[int, list[dict[str, int]], int],
+) -> None:
+    """``expected``: stitch mode, channel list, camera type."""
+    camera = _two_lens_camera(lens_list)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    assert not hub.app_uses_webrtc(camera.device_sn)
+    assert hub.live_support(camera.device_sn).support is Support.DECLARED
+    async with await hub.async_open_live(camera.device_sn, lens_view=lens_view) as stream:
+        await anext(aiter(stream))
+    (payload,) = fake.live_open_payloads
+    assert (payload["stitch_mode"], payload["chn_list"], payload["camera_type"]) == expected
+    assert fake.live_opens == [3]
+    assert fake.doorbell_payloads == []
+    async with asyncio.timeout(3):
+        while 1004 not in [o.get("cmd") for o in fake.received]:
+            await asyncio.sleep(0.02)
+    assert fake.bare_stops == 0
+
+
+async def test_a_plain_multi_camera_product_names_no_camera_type_for_the_moving_lens(
+    station: Station, fake: FakeStation
+) -> None:
+    # A T8215 behind a HomeBase 3 below the firmware its WebRTC route starts at.
+    camera = dataclasses.replace(_two_lens_camera(), device_sn="T8215P2000067890")
+    hub_device = dataclasses.replace(station.device, main_sw_version="3.7.0.0")
+    hub = Station(hub_device, station.session, sub_devices=[camera])
+    assert not hub.app_uses_webrtc(camera.device_sn)
+    async with await hub.async_open_live(camera.device_sn, lens_view=LensView.SUB) as stream:
+        await anext(aiter(stream))
+    (payload,) = fake.live_open_payloads
+    assert (payload["stitch_mode"], payload["chn_list"]) == (1, [_entry(0, 1)])
+    assert payload["camera_type"] == 0
+    async with asyncio.timeout(3):
+        while fake.bare_stops == 0:
+            await asyncio.sleep(0.02)
+    assert fake.bare_stop_frames == [(3, (3).to_bytes(4, "little"))]
+
+
+async def test_a_standalone_multi_camera_product_gets_the_open_without_a_view(
+    fake: FakeStation,
+) -> None:
+    # A T8532 on its own below the firmware its WebRTC route starts at.
+    station = await _standalone(fake, "T8532P2000054321")
+    try:
+        assert not station.app_uses_webrtc(station.serial)
+        async with await station.async_open_live(
+            station.serial, lens_view=LensView.STACKED
+        ) as stream:
+            await anext(aiter(stream))
+        (payload,) = fake.live_open_payloads
+        assert (payload["stitch_mode"], payload["chn_list"]) == (1, [])
+        assert "extValue" not in payload
+        assert not fake.doorbell_payloads
+        async with asyncio.timeout(3):
+            while fake.bare_stops == 0:
+                await asyncio.sleep(0.02)
+        assert fake.bare_stop_frames == [(0, bytes(4))]
+    finally:
+        await station.async_close()
+
+
+def test_a_standalone_device_lists_its_own_lenses(station: Station) -> None:
+    device = dataclasses.replace(
+        station.device, raw={"params": [{"param_type": 9240, "param_value": _LENS_LIST}]}
+    )
+    assert Station(device, station.session).lenses(device.device_sn) == (Lens(1, 0), Lens(1, 1))
+
+
+def test_a_camera_lists_its_lenses_from_the_cloud_parameters(station: Station) -> None:
+    camera = _two_lens_camera()
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    assert hub.lenses(camera.device_sn) == (Lens(1, 0), Lens(1, 1))
+    assert (
+        Station(station.device, station.session, sub_devices=[_two_lens_camera(None)]).lenses(
+            camera.device_sn
+        )
+        == ()
+    )
+    assert hub.lenses("T9999P2000067890") == ()
+
+
+async def test_the_lens_view_changes_nothing_for_a_camera_with_the_station_open(
+    station: Station, fake: FakeStation
+) -> None:
+    async with await station.async_open_live(CAMERA.device_sn, lens_view=LensView.PIP) as stream:
+        await anext(aiter(stream))
+    (payload,) = fake.live_open_payloads
+    assert payload["stitch_mode"] == 1
 
 
 @pytest.mark.parametrize(
@@ -2951,11 +3134,14 @@ def test_live_support_of_a_standalone_camera_follows_its_handler() -> None:
     assert "single_no_ext" in evidence.source
 
 
-def _station_of(serial: str, device_type: int) -> Station:
+def _station_of(
+    serial: str, device_type: int, sub_devices: tuple[CloudDevice, ...] = ()
+) -> Station:
     device = CloudDevice(
         device_sn=serial, device_type=device_type, name="HB", p2p_did=SYNTHETIC.did
     )
-    return Station(device, _unconnected_station(host=None, local_ip=None, local_port=0).session)
+    session = _unconnected_station(host=None, local_ip=None, local_port=0).session
+    return Station(device, session, sub_devices=sub_devices)
 
 
 def test_local_events_of_a_homebase_3_is_verified() -> None:
@@ -2980,6 +3166,84 @@ def test_local_events_of_a_model_without_a_profile_is_unknown() -> None:
     evidence = _station_of("T8002" + SYNTHETIC.station_sn[5:], 0).local_events
     assert evidence.support is Support.UNKNOWN
     assert evidence.source == "no profile for this model"
+
+
+_T8530_SN = "T8530P0000000001"
+_T8101_SN = "T8101P0000000001"
+
+
+def _sub(serial: str, device_type: int, channel: int) -> CloudDevice:
+    return CloudDevice(
+        device_sn=serial,
+        device_type=device_type,
+        name="sub",
+        station_sn=SYNTHETIC.station_sn,
+        channel=channel,
+    )
+
+
+def test_local_detections_of_a_measured_camera_behind_a_homebase_3_are_its_own() -> None:
+    evidence = _hub_with(CAMERA).local_detections_for(SYNTHETIC.camera_sn)
+    assert evidence.support is Support.VERIFIED
+    assert "person and vehicle detections" in evidence.source
+
+
+@pytest.mark.parametrize(("serial", "code"), [(_T8530_SN, "T8530"), (_T8101_SN, "T8101")])
+def test_local_detections_of_another_camera_behind_a_homebase_3_extend_the_stations(
+    serial: str, code: str
+) -> None:
+    hub = _hub_with(_sub(_T8530_SN, 0, 1), _sub(_T8101_SN, 0, 2))
+    station = hub.local_events
+    assert hub.local_detections_for(serial) == Evidence(
+        Support.VERIFIED,
+        f"{station.source}; extended to {code}, which the eufy app shows as a camera",
+        station.note,
+    )
+
+
+def test_a_homebase_3_has_no_local_detections_of_its_own() -> None:
+    evidence = _hub_with(CAMERA).local_detections_for(SYNTHETIC.station_sn)
+    assert evidence == Evidence(
+        Support.UNKNOWN,
+        "T8030 has no camera: no detections of its own",
+        "its alarm and guard-mode changes arrive as other P2P frames",
+    )
+
+
+def test_local_detections_of_a_motion_sensor_behind_a_homebase_3_need_cloud_push() -> None:
+    evidence = _hub_with(CAMERA, MOTION_SENSOR).local_detections_for(SENSOR_SN)
+    assert evidence == Evidence(
+        Support.UNKNOWN,
+        "no local detection push recorded for T8910",
+        "the station's local push is verified for camera detections only; this "
+        "device's detections arrive through cloud push",
+    )
+
+
+def test_local_detections_of_an_uncatalogued_device_are_unknown() -> None:
+    evidence = _hub_with(_sub("TZZZZP0000000001", 0, 3)).local_detections_for("TZZZZP0000000001")
+    assert evidence.support is Support.UNKNOWN
+    assert evidence.source == "no local detection push recorded for this model"
+
+
+def test_local_detections_of_an_unverified_stations_devices_are_the_stations() -> None:
+    hb2_sn = "T8010" + SYNTHETIC.station_sn[5:]
+    camera = dataclasses.replace(CAMERA, station_sn=hb2_sn)
+    sensor = dataclasses.replace(MOTION_SENSOR, station_sn=hb2_sn)
+    station = _station_of(hb2_sn, 0, sub_devices=(camera, sensor))
+    assert station.local_events.support is Support.UNKNOWN
+    for serial in (hb2_sn, SYNTHETIC.camera_sn, SENSOR_SN):
+        assert station.local_detections_for(serial) == station.local_events
+
+
+def test_local_detections_of_a_standalone_camera_are_its_own_entry() -> None:
+    station = _standalone_t8170()
+    assert station.local_detections_for(_T8170_SN) == station.local_events
+
+
+def test_local_detections_of_a_device_not_paired_here_are_unknown() -> None:
+    evidence = _hub_with(CAMERA).local_detections_for(SENSOR_SN)
+    assert evidence == Evidence(Support.UNKNOWN, "the device is not paired to this station")
 
 
 async def test_a_t8410_refuses_every_slot_call_before_sending(

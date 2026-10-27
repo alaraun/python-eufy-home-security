@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime, timedelta, tzinfo
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Any
 
 import pytest
@@ -12,10 +13,24 @@ import pytest
 import eufy_home_security.station as station_mod
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.events import HistoryRecord
-from eufy_home_security.exceptions import DeviceTimeoutError, UnsupportedError
+from eufy_home_security.exceptions import (
+    DeviceTimeoutError,
+    RecordingCursorError,
+    RecordingRefError,
+    RecordNotFoundError,
+    UnsupportedError,
+)
+from eufy_home_security.p2p.did import static_key
 from eufy_home_security.p2p.messages import HISTORY_RECORD_COUNTER
 from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
+from eufy_home_security.recordings import (
+    RecordingPosition,
+    RecordingRef,
+    RecordingsPage,
+    encode_cursor,
+    encode_ref,
+)
 from eufy_home_security.station import RECORDING_QUIET, Station
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import FakeStation
@@ -248,6 +263,411 @@ async def test_recordings_until_outside_the_window(
     assert _asked(fake) == [four_days[0].strftime("%Y%m%d")]
 
 
+def _cursor(position: RecordingPosition, device_sn: str | None = SYNTHETIC.camera_sn) -> str:
+    return encode_cursor(position, station_sn=SYNTHETIC.station_sn, device_sn=device_sn)
+
+
+def _day(day: datetime) -> str:
+    return day.strftime("%Y%m%d")
+
+
+async def test_recordings_pages_go_on_from_the_last_row_within_page_days(
+    station: Station, fake: FakeStation, four_days: list[datetime]
+) -> None:
+    sn = SYNTHETIC.camera_sn
+    page = await station.async_list_recordings_page(sn, days=4, limit=3, page_days=2)
+    assert _counters(list(page.rows)) == [20, 19, 18]
+    assert _asked(fake) == [_day(four_days[0]), _day(four_days[1])]
+    assert page.next_cursor == _cursor(
+        RecordingPosition(four_days[1].date(), page.rows[-1].record_id)
+    )
+
+    page = await station.async_list_recordings_page(
+        sn, days=4, limit=3, page_days=2, cursor=page.next_cursor
+    )
+    assert _counters(list(page.rows)) == [17, 16, 15]  # from its row, two days at most
+    assert _asked(fake) == [_day(four_days[1]), _day(four_days[2])]
+    assert fake.history_queries == []
+
+    page = await station.async_list_recordings_page(
+        sn, days=4, limit=3, page_days=2, cursor=page.next_cursor
+    )
+    assert _counters(list(page.rows)) == [14, 13]
+    assert page.next_cursor is None  # short, and the window ends with it
+    assert _asked(fake) == [_day(four_days[2]), _day(four_days[3])]
+
+
+async def test_a_short_page_with_window_days_left_names_the_next_day(
+    station: Station, fake: FakeStation, four_days: list[datetime]
+) -> None:
+    cursor = None
+    pages: list[list[int]] = []
+    cursors: list[str | None] = []
+    for _ in range(4):
+        page = await station.async_list_recordings_page(days=4, limit=5, page_days=1, cursor=cursor)
+        pages.append(_counters(list(page.rows)))
+        cursors.append(cursor := page.next_cursor)
+    assert pages == [[20, 19], [18, 17], [16, 15], [14, 13]]
+    assert cursors == [
+        *(_cursor(RecordingPosition(d.date()), None) for d in four_days[1:]),
+        None,
+    ]
+    assert _asked(fake) == [_day(d) for d in four_days]
+
+
+async def test_a_page_without_page_days_asks_the_whole_window_and_until_starts_it(
+    station: Station, fake: FakeStation, four_days: list[datetime]
+) -> None:
+    page = await station.async_list_recordings_page(days=4, limit=10, until=four_days[1])
+    assert page == RecordingsPage(tuple(page.rows), None)
+    assert _counters(list(page.rows)) == [18, 17, 16, 15, 14, 13]
+    assert _asked(fake) == [_day(d) for d in four_days[1:]]
+    cursor = _cursor(RecordingPosition(four_days[2].date()), None)
+    page = await station.async_list_recordings_page(
+        days=4, limit=10, until=four_days[0].date(), cursor=cursor
+    )
+    assert _counters(list(page.rows)) == [16, 15, 14, 13]  # the cursor wins over until
+    assert _asked(fake) == [_day(d) for d in four_days[2:]]
+
+
+async def test_a_cursor_after_today_lists_from_today(
+    station: Station, fake: FakeStation, four_days: list[datetime]
+) -> None:
+    """A row of a later station day than the host's today: the walk starts at today."""
+    later = four_days[0] + timedelta(days=1)
+    cursor = _cursor(
+        RecordingPosition.after(int(_day(later)) * HISTORY_RECORD_COUNTER + 5, date.min)
+    )
+    page = await station.async_list_recordings_page(
+        SYNTHETIC.camera_sn, days=1, limit=5, cursor=cursor
+    )
+    assert _counters(list(page.rows)) == [20, 19]
+    assert _asked(fake) == [_day(four_days[0])]
+
+
+async def test_a_cursor_before_the_window_lists_nothing(
+    station: Station, fake: FakeStation, four_days: list[datetime]
+) -> None:
+    cursor = _cursor(RecordingPosition(four_days[2].date()), None)
+    page = await station.async_list_recordings_page(days=2, limit=5, cursor=cursor)
+    assert page == RecordingsPage((), None)
+    assert _asked(fake) == []
+
+
+@pytest.mark.parametrize("record_id", [0, -5])
+async def test_a_full_page_of_rows_without_an_id_goes_on_from_the_day_before(
+    station: Station, fake: FakeStation, today: datetime, record_id: int
+) -> None:
+    """An id of 0 or below cannot be paged from: no row cursor names it."""
+    fake.rows = [_row(today, 5, SYNTHETIC.camera_sn, record_id=record_id)]
+    day_before = (today - timedelta(days=1)).date()
+    page = await station.async_list_recordings_page(SYNTHETIC.camera_sn, days=2, limit=1)
+    assert page.next_cursor == _cursor(RecordingPosition(day_before))
+    page = await station.async_list_recordings_page(SYNTHETIC.camera_sn, days=1, limit=1)
+    assert len(page.rows) == 1
+    assert page.next_cursor is None  # the day before lies outside the window
+
+
+async def test_a_full_page_ending_on_rows_without_an_id_goes_on_after_its_last_id(
+    station: Station, monkeypatch: pytest.MonkeyPatch, today: datetime
+) -> None:
+    """The rows after the page's last row with an id may come again; none of that day's
+    older rows is skipped."""
+    day = today.date()
+    ids = [int(_day(today)) * HISTORY_RECORD_COUNTER + n for n in (9, 8)]
+    listed = [(day, HistoryRecord(record_id=i)) for i in ids]
+    listed += [(day, HistoryRecord(record_id=0)), (day, HistoryRecord(record_id=-3))]
+
+    async def by_day(*_args: object, **_kwargs: object) -> list[tuple[date, HistoryRecord]]:
+        return listed
+
+    monkeypatch.setattr(station.session, "async_list_history_by_day", by_day)
+    page = await station.async_list_recordings_page(SYNTHETIC.camera_sn, limit=4)
+    assert page.rows == tuple(row for _day, row in listed)
+    assert page.next_cursor == _cursor(RecordingPosition(day, ids[1]))
+
+
+@pytest.fixture
+async def two_cameras(fake: FakeStation) -> AsyncIterator[Station]:
+    """A station with :data:`CAMERA` and a second camera (:data:`OTHER_SN`) paired."""
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
+    )
+    second = dataclasses.replace(CAMERA, device_sn=OTHER_SN, name="Back", channel=1)
+    st = Station(STATION, session, sub_devices=[CAMERA, second])
+    yield st
+    await st.async_close()
+
+
+async def test_a_camera_page_lists_only_that_camera_of_two_paired(
+    two_cameras: Station, fake: FakeStation, today: datetime
+) -> None:
+    sn = SYNTHETIC.camera_sn
+    fake.rows = [_row(today, n, sn if n % 2 else OTHER_SN) for n in range(10, 0, -1)]
+    page = await two_cameras.async_list_recordings_page(sn, days=1, limit=3)
+    assert _counters(list(page.rows)) == [9, 7, 5]
+    page = await two_cameras.async_list_recordings_page(
+        sn, days=1, limit=3, cursor=page.next_cursor
+    )
+    assert _counters(list(page.rows)) == [3, 1]
+    page = await two_cameras.async_list_recordings_page(days=1, limit=3)
+    assert _counters(list(page.rows)) == [10, 9, 8]  # both are paired
+
+
+@pytest.mark.parametrize(
+    ("cursor", "device_sn"),
+    [
+        ("garbled", SYNTHETIC.camera_sn),
+        (str(20260916 * HISTORY_RECORD_COUNTER + 3), SYNTHETIC.camera_sn),  # a bare record id
+        (_cursor(RecordingPosition(date(2026, 9, 16)), None), SYNTHETIC.camera_sn),
+        (_cursor(RecordingPosition(date(2026, 9, 16))), None),
+        (_cursor(RecordingPosition(date(2026, 9, 16))), OTHER_SN),  # refused before pairing
+    ],
+)
+async def test_a_page_cursor_that_does_not_check_out_is_refused_before_sending(
+    station: Station, fake: FakeStation, cursor: str, device_sn: str | None
+) -> None:
+    with pytest.raises(RecordingCursorError):
+        await station.async_list_recordings_page(device_sn, limit=5, cursor=cursor)
+    assert fake.sessions == 0
+    assert not fake.history_queries
+
+
+@pytest.mark.parametrize(
+    ("args", "match"),
+    [((0, 1, None), "limit"), ((5, 0, None), "days"), ((5, 1, 0), "page_days")],
+)
+async def test_a_page_refuses_bad_arguments_before_sending(
+    station: Station, fake: FakeStation, args: tuple[int, int, int | None], match: str
+) -> None:
+    limit, days, page_days = args
+    with pytest.raises(ValueError, match=match):
+        await station.async_list_recordings_page(limit=limit, days=days, page_days=page_days)
+    assert fake.sessions == 0
+
+
+async def test_a_standalone_device_pages_no_recordings() -> None:
+    device = CloudDevice(
+        device_sn=SYNTHETIC.camera_sn,
+        station_sn=SYNTHETIC.camera_sn,
+        p2p_did=SYNTHETIC.did,
+        device_type=48,
+        channel=0,
+        name="standalone",
+    )
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        raise AssertionError("nothing connects")
+
+    session = StationSession(SYNTHETIC.camera_sn, credentials, host="127.0.0.1", port=9)
+    standalone = Station(device, session)
+    try:
+        page = await standalone.async_list_recordings_page(limit=5)
+    finally:
+        await standalone.async_close()
+    assert page == RecordingsPage((), None)
+
+
+HB2_SN = "T8010P2000054321"
+
+
+async def test_a_homebase_2_pages_its_sequential_ids_by_their_station_day(
+    fake: FakeStation, today: datetime
+) -> None:
+    """Ids without a day: the cursor carries the day its query named, so the next page
+    starts in that day below the row, without repeating or skipping rows."""
+    fake.serial = HB2_SN
+    fake.static_key = static_key(HB2_SN, fake.did)
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    day_before = today - timedelta(days=1)
+    sn = SYNTHETIC.camera_sn
+    fake.rows = [_row(today, n, sn, record_id=n) for n in (7, 6)]
+    fake.rows += [_row(day_before, n, sn, record_id=n) for n in (5, 4, 3)]
+    session = StationSession(HB2_SN, credentials, host="127.0.0.1", port=fake.discovery_port)
+    hb2 = Station(
+        dataclasses.replace(STATION, device_sn=HB2_SN),
+        session,
+        sub_devices=[dataclasses.replace(CAMERA, station_sn=HB2_SN)],
+    )
+    try:
+        first = await hb2.async_list_recordings_page(sn, days=2, limit=3)
+        asked_first = _asked(fake)
+        second = await hb2.async_list_recordings_page(sn, days=2, limit=3, cursor=first.next_cursor)
+    finally:
+        await hb2.async_close()
+    assert [r.record_id for r in first.rows] == [7, 6, 5]
+    assert asked_first == [_day(today), _day(day_before)]
+    assert first.next_cursor == encode_cursor(
+        RecordingPosition(day_before.date(), 5), station_sn=HB2_SN, device_sn=sn
+    )
+    assert [r.record_id for r in second.rows] == [4, 3]
+    assert second.next_cursor is None
+    assert _asked(fake) == [_day(day_before)]
+
+
+@pytest.fixture
+async def hb2(fake: FakeStation) -> AsyncIterator[Station]:
+    """A HomeBase 2 (ids without a day, paged by start time) with two cameras."""
+    fake.serial = HB2_SN
+    fake.static_key = static_key(HB2_SN, fake.did)
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(HB2_SN, credentials, host="127.0.0.1", port=fake.discovery_port)
+    st = Station(
+        dataclasses.replace(STATION, device_sn=HB2_SN),
+        session,
+        sub_devices=[
+            dataclasses.replace(CAMERA, station_sn=HB2_SN),
+            dataclasses.replace(CAMERA, device_sn=OTHER_SN, station_sn=HB2_SN, channel=1),
+        ],
+    )
+    yield st
+    await st.async_close()
+
+
+def _hb2_rows(today: datetime) -> list[dict[str, object]]:
+    day_before = today - timedelta(days=1)
+    rows = [_row(today, n, SYNTHETIC.camera_sn, record_id=n) for n in (9, 7)]
+    rows.append(_row(today, 8, OTHER_SN, record_id=8))
+    rows += [_row(day_before, n, SYNTHETIC.camera_sn, record_id=n) for n in (5, 4)]
+    return rows
+
+
+async def test_a_homebase_2_recording_is_found_by_its_ref_with_one_query_of_its_day(
+    hb2: Station, fake: FakeStation, today: datetime
+) -> None:
+    """Every listed row of both cameras comes back by its ref, each with one query of the
+    station day it was listed under, the row and its ref unchanged."""
+    fake.rows = _hb2_rows(today)
+    page = await hb2.async_list_recordings_page(days=2, limit=10)
+    fake.history_queries.clear()
+    assert [r.record_id for r in page.rows] == [9, 8, 7, 5, 4]
+    for row in page.rows:
+        assert row.ref is not None
+        found = await hb2.async_history_record_by_ref(row.ref)
+        assert (found, found.ref) == (row, row.ref)
+        assert fake.history_queries[-1]["device_info"] == [{"device_sn": row.device_sn}]
+        listed_day = today if row.record_id > 5 else today - timedelta(days=1)
+        assert _asked(fake) == [_day(listed_day)]
+    fake.history_queries.clear()
+    camera_rows = await hb2.async_list_recordings(OTHER_SN)
+    assert fake.history_queries
+    assert all(q["device_info"] == [{"device_sn": OTHER_SN}] for q in fake.history_queries)
+    assert camera_rows[0].ref == page.rows[1].ref
+    found = await hb2.async_history_record_by_ref(camera_rows[0].ref or "", device_sn=OTHER_SN)
+    assert found == camera_rows[0]
+
+
+async def test_a_ref_that_does_not_check_out_is_refused_before_sending(
+    hb2: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = _hb2_rows(today)
+    page = await hb2.async_list_recordings_page(days=1, limit=10)
+    fake.history_queries.clear()
+    other_camera = page.rows[1]
+    assert other_camera.device_sn == OTHER_SN
+    assert other_camera.ref is not None
+    with pytest.raises(RecordingRefError, match="does not check out"):
+        await hb2.async_history_record_by_ref(other_camera.ref, device_sn=SYNTHETIC.camera_sn)
+    another_station = encode_ref(
+        RecordingRef(today.date(), 9, SYNTHETIC.camera_sn, "20260916120900"),
+        station_sn=SYNTHETIC.station_sn,
+    )
+    for text in (another_station, page.next_cursor or "v1.d", "9", other_camera.ref[:-1] + "x"):
+        with pytest.raises(RecordingRefError):
+            await hb2.async_history_record_by_ref(text)
+    with pytest.raises(UnsupportedError, match="not paired"):
+        await hb2.async_history_record_by_ref(other_camera.ref, device_sn="T8160P2000011111")
+    assert fake.history_queries == []
+
+
+async def test_a_ref_whose_recording_is_gone_raises_not_found(
+    hb2: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = _hb2_rows(today)
+    page = await hb2.async_list_recordings_page(days=1, limit=10)
+    fake.rows = [row for row in fake.rows if row["record_id"] != 7]
+    fake.history_queries.clear()
+    with pytest.raises(RecordNotFoundError, match="no such recording"):
+        await hb2.async_history_record_by_ref(page.rows[2].ref or "")
+    assert len(fake.history_queries) == 1
+
+
+async def test_a_homebase_3_recording_is_found_by_its_ref_or_its_id(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = [_row(today, n, SYNTHETIC.camera_sn) for n in (3, 2, 1)]
+    rows = await station.async_list_recordings()
+    fake.history_queries.clear()
+    found = await station.async_history_record_by_ref(rows[1].ref or "")
+    by_id = await station.async_history_record(rows[1].record_id)
+    assert (found, found.ref) == (rows[1], rows[1].ref)
+    assert by_id is not None
+    assert by_id.ref == rows[1].ref
+    assert [q["start_id"] for q in fake.history_queries] == [rows[1].record_id] * 2
+
+
+async def test_a_lookup_by_ref_passes_its_timeout_to_the_query(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake.rows = [_row(today, 3, SYNTHETIC.camera_sn)]
+    (row,) = await station.async_list_recordings()
+    find = station.session.async_find_history_record
+    timeouts: list[float | None] = []
+
+    async def spy(ref: RecordingRef, *, timeout: float | None = None) -> HistoryRecord:
+        timeouts.append(timeout)
+        return await find(ref, timeout=timeout)
+
+    monkeypatch.setattr(station.session, "async_find_history_record", spy)
+    await station.async_history_record_by_ref(row.ref or "", timeout=4.5)
+    assert timeouts == [4.5]
+
+
+async def test_a_station_row_of_the_station_itself_is_found_by_its_ref(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = [_row(today, 4, SYNTHETIC.station_sn, storage_path="")]  # an arming row
+    rows = await station.async_list_history(_day(today))
+    found = await station.async_history_record_by_ref(rows[0].ref or "")
+    assert (found, found.ref) == (rows[0], rows[0].ref)
+
+
+async def test_a_standalone_device_finds_no_recording_by_ref() -> None:
+    device = CloudDevice(
+        device_sn=SYNTHETIC.camera_sn,
+        station_sn=SYNTHETIC.camera_sn,
+        p2p_did=SYNTHETIC.did,
+        device_type=48,
+        channel=0,
+        name="standalone",
+    )
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        raise AssertionError("nothing connects")
+
+    session = StationSession(SYNTHETIC.camera_sn, credentials, host="127.0.0.1", port=9)
+    standalone = Station(device, session)
+    ref = encode_ref(
+        RecordingRef(NOW.date(), 7, SYNTHETIC.camera_sn, "20260916120000"),
+        station_sn=SYNTHETIC.camera_sn,
+    )
+    try:
+        with pytest.raises(UnsupportedError, match="standalone"):
+            await standalone.async_history_record_by_ref(ref)
+    finally:
+        await standalone.async_close()
+
+
 async def test_recordings_timeout_bounds_each_history_query(
     station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -338,28 +758,26 @@ async def test_a_record_without_a_downloadable_clip_is_refused_before_sending(
     assert fake.sessions == 0
 
 
-@pytest.mark.asyncio
-async def test_future_cursor_is_not_forwarded_without_its_day(
-    station: Station, today: datetime, monkeypatch: pytest.MonkeyPatch
+async def test_a_10011_station_does_not_offer_native_dat_clips(
+    station: Station, fake: FakeStation, today: datetime
 ) -> None:
-    """A clock-ahead cursor must never pass a day hint without its ID."""
-    observed: list[dict[str, object]] = []
+    fake.rows = [
+        _row(
+            today,
+            8,
+            SYNTHETIC.camera_sn,
+            storage_path="/media/mmcblk0p1/Camera05/20310203112233.dat",
+        ),
+        _row(today, 7, SYNTHETIC.camera_sn),
+    ]
+    rows = await station.async_list_recordings(SYNTHETIC.camera_sn, days=1)
+    assert len(rows) == 1
+    assert rows[0].record_id == int(today.strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + 7
+    page = await station.async_list_recordings_page(SYNTHETIC.camera_sn, days=1, limit=10)
+    assert [r.record_id for r in page.rows] == [rows[0].record_id]
 
-    async def capture(_start: str, _end: str, **kwargs: object) -> list[HistoryRecord]:
-        observed.append(kwargs)
-        return []
 
-    monkeypatch.setattr(station.session, "async_list_history", capture)
-    future = (today + timedelta(days=2)).date()
-    rows = await station.async_list_recordings(
-        SYNTHETIC.camera_sn, days=3, before=90001, before_day=future
-    )
-    assert rows == []
-    assert observed[0]["before"] is None
-    assert observed[0]["before_day"] is None
-
-
-async def test_local_events_station_filters_camera_and_keeps_station_day(
+async def test_local_events_station_filters_camera(
     today: datetime,
 ) -> None:
     local_sn = "T8010" + SYNTHETIC.station_sn[5:]
@@ -393,7 +811,6 @@ async def test_local_events_station_filters_camera_and_keeps_station_day(
         ]
         rows = await st.async_list_recordings(SYNTHETIC.camera_sn, days=1)
         assert [r.record_id for r in rows] == [47051]
-        assert rows[0].station_day == today.date()
         assert fake.history_queries[0]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]
     finally:
         await st.async_close()

@@ -26,7 +26,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from enum import IntEnum, StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, TypeGuard
@@ -495,10 +495,7 @@ class PushFieldReader:
         """A media path, or None (listed as rejected when present but invalid)."""
         if value is None or value == "":
             return None
-        if name == "video_path" and suffix == RECORDING_SUFFIX:
-            if is_station_recording_path(value):
-                return value
-        elif is_station_media_path(value, suffix):
+        if is_station_media_path(value, suffix):
             return value
         self.rejected.add(name)
         return None
@@ -809,12 +806,14 @@ class SecurityEvent:
         :attr:`detection_evidence`.
 
         A ``msg_type`` 14 (MOTION_SENSOR) push is MOTION whatever its ``e`` and
-        ``event_type`` say, as the eufy app shows it.
+        ``event_type`` say, as the eufy app shows it. A doorbell press (3103) stays
+        DOORBELL_PRESS on any push, as the eufy app's lock and doorbell push paths take a
+        press from the ``event_type`` alone.
         """
         if self.msg_type == PushMessageType.MOTION_SENSOR:
             return DetectionType.MOTION
         wire = _enum_or_none(DetectionType, self.event_type)
-        if self.msg_type != PushMessageType.SECURITY:
+        if self.msg_type != PushMessageType.SECURITY or wire is DetectionType.DOORBELL_PRESS:
             return wire
         if self.person_name is not None:
             return DetectionType.IDENTITY_PERSON
@@ -931,6 +930,12 @@ class HistoryRecord:
     arm_mode: int | None = None
     user_name: str | None = None
     raw: Mapping[str, Any] = _raw_field()
+    ref: str | None = field(default=None, compare=False, hash=False)
+    """Opaque text that finds this row again on its station
+    (:meth:`~.station.Station.async_history_record_by_ref`), set on the rows a history
+    listing or lookup returns; None for a row it cannot find (no ``record_id``, no
+    camera, or on a station paged by start time, no start time). URL-path-safe and
+    JSON-safe; ignored by equality and hashing."""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "raw", _frozen_raw(self.raw))
@@ -945,23 +950,6 @@ class HistoryRecord:
         """The row's validated recording (``storage_path``), if any."""
         path = self.storage_path
         return path if is_station_recording_path(path) else None
-
-    @property
-    def station_day(self) -> date | None:
-        """Date on the station's calendar, independent of the host's time zone.
-
-        The local-event protocol sends ``start_time`` in the station's wall-clock
-        time. Use that date directly instead of converting to the host's timezone.
-        Epoch-form timestamps retain their UTC date.
-        """
-        value = self.start_time
-        if value is not None and len(value) >= 10:
-            try:
-                return date.fromisoformat(value[:10])
-            except ValueError:
-                pass
-        started = self.started_at
-        return started.date() if started is not None else None
 
     @property
     def started_at(self) -> datetime | None:

@@ -13,8 +13,8 @@ derives the committed artefacts from it:
                holds the library's builders to them.
 ``inventory``  the generated part of ``docs/reference/thing-models.md``.
 
-Handlers run offline in Node (``scripts/gen_models_driver.js``); ``node`` must be
-on PATH. The cache holds vendor code: keep it out of the repository (``.work/``).
+Handlers run offline in Node (``scripts/gen_models_driver.js``); ``node`` of the major
+``scripts/package.json`` pins must be on PATH. The cache holds vendor code: keep it out of the repository (``.work/``).
 """
 
 from __future__ import annotations
@@ -22,21 +22,20 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import importlib.util
 import json
 import re
-import shutil
-import subprocess
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Final
 
 from eufy_home_security.devices import recipes
 from eufy_home_security.testing import SYNTHETIC
 
 ROOT: Final = Path(__file__).resolve().parent.parent
-DRIVER: Final = Path(__file__).resolve().parent / "gen_models_driver.js"
 GOLDENS_DIR: Final = ROOT / "tests" / "fixtures" / "thing_models"
 DOC: Final = ROOT / "docs" / "reference" / "thing-models.md"
 
@@ -100,6 +99,53 @@ LIVE_OPEN_PAYLOAD: Final[Mapping[str, Any]] = {
 }
 HOMEBASE2_LIVE_OPEN_PAYLOAD: Final[Mapping[str, Any]] = {**LIVE_OPEN_PAYLOAD, "ClientOS": "ANDROID"}
 """The app's live-open input for a camera behind a station: it adds the client OS."""
+HOMEBASE3_T8172: Final[Mapping[str, Any]] = {
+    "device_sn": "T8172P2000067890",
+    "parent_sn": SYNTHETIC.station_sn,
+    "device_channel": 3,
+    "main_sw_version": "1.1.1.2",
+}
+"""A two-lens camera behind a HomeBase 3 (synthetic serial)."""
+HOMEBASE2_T8172: Final[Mapping[str, Any]] = {**HOMEBASE3_T8172, "parent_sn": HOMEBASE2_SN}
+HOMEBASE3_T8215: Final[Mapping[str, Any]] = {
+    **HOMEBASE3_T8172,
+    "device_sn": "T8215P2000067890",
+    "main_sw_version": "1.0.0.0",
+}
+_LENS_0: Final = '{"cameraType":0,"chn":3,"index":0,"sensor":0}'
+_LENS_1_ALONE: Final = '{"cameraType":0,"chn":3,"index":0,"sensor":1}'
+_LENS_1: Final = '{"cameraType":0,"chn":3,"index":1,"sensor":1}'
+
+
+def _homebase3_view(
+    chn_list: str, stitch_mode: int, station_video_type: int, pip_cord: str = ""
+) -> dict[str, Any]:
+    """The app's P2P live player input behind a HomeBase 3 (it adds the view fields)."""
+    return {
+        "key": FAKE_STREAM_KEY,
+        "userId": SYNTHETIC.account_id,
+        "ClientOS": "ANDROID",
+        "streamType": 0,
+        "cameraType": 0,
+        "entryType": 0,
+        "extValue": 1000,
+        "chn_list": chn_list,
+        "audio_chn": 3,
+        "stitch_mode": stitch_mode,
+        "station_video_type": station_video_type,
+        "pip_cord": pip_cord,
+    }
+
+
+HOMEBASE3_VIEWS: Final[Mapping[str, Mapping[str, Any]]] = {
+    "main": _homebase3_view(f"[{_LENS_0}]", 1, 0),
+    "sub": _homebase3_view(f"[{_LENS_1_ALONE}]", 1, 1),
+    "stacked": _homebase3_view(f"[{_LENS_0},{_LENS_1}]", 5, 0),
+    "pip": _homebase3_view(
+        f"[{_LENS_0},{_LENS_1}]", 7, 9, '{"x1":0.65,"y1":0.7,"x2":0.95,"y2":0.9}'
+    ),
+}
+"""The player input per layout of a two-lens camera on channel 3."""
 HOMEBASE_T8425: Final[Mapping[str, Any]] = {
     "device_sn": "T8425P2000067890",
     "parent_sn": SYNTHETIC.station_sn,
@@ -299,6 +345,48 @@ CASES: Final[tuple[Case, ...]] = (
         payload={"dstZoom": 2.5, "orgZoom": 0},
         builder="set_picture_zoom",
     ),
+    *(
+        Case(
+            product_code="T8172",
+            identifier="open_live_stream",
+            device=HOMEBASE3_T8172,
+            payload=payload,
+            builder="open_live_stream_nvr",
+            note=f"Multi-camera open, layout `{view}`.",
+        )
+        for view, payload in HOMEBASE3_VIEWS.items()
+    ),
+    Case(
+        product_code="T8172",
+        identifier="close_live_stream",
+        device=HOMEBASE3_T8172,
+        payload=0,
+        builder=None,
+        note="1350/1004 naming the channel; the library sends its HomeBase 3 stop.",
+    ),
+    Case(
+        product_code="T8172",
+        identifier="open_live_stream",
+        device=HOMEBASE2_T8172,
+        payload=HOMEBASE2_LIVE_OPEN_PAYLOAD,
+        builder="open_live_stream_nvr",
+        note="Multi-camera open without the view fields.",
+    ),
+    Case(
+        product_code="T8172",
+        identifier="close_live_stream",
+        device=HOMEBASE2_T8172,
+        payload=0,
+        builder="close_live_stream",
+    ),
+    Case(
+        product_code="T8215",
+        identifier="open_live_stream",
+        device=HOMEBASE3_T8215,
+        payload=HOMEBASE3_VIEWS["sub"],
+        builder="open_live_stream_nvr",
+        note="`camera_type` stays 0 for the moving lens alone.",
+    ),
 )
 
 
@@ -306,14 +394,31 @@ CASES: Final[tuple[Case, ...]] = (
 
 
 class HarnessError(RuntimeError):
-    """Node is missing, or a handler failed to produce a recipe."""
+    """Node is missing or of another major, or a handler failed to produce a recipe."""
 
 
-def node_executable() -> str:
-    node = shutil.which("node")
-    if node is None:
-        raise HarnessError("node not found on PATH: install Node.js to evaluate handlers")
-    return node
+def _load_node() -> ModuleType:
+    path = Path(__file__).resolve().parent / "gen_models_node.py"
+    spec = importlib.util.spec_from_file_location("gen_models_node", path)
+    if spec is None or spec.loader is None:
+        raise ImportError("scripts/gen_models_node.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+node = _load_node()
+DRIVERS = node.DriverPool()  # one Node worker per thread that runs handlers
+
+
+def run_driver(handler: Path, requests: Sequence[Mapping[str, Any]]) -> list[Any]:
+    """The driver's reply to each request (``{"kind", "identifier", "payload", "device"}``),
+    in one job on this thread's worker; HarnessError when the job fails."""
+    try:
+        return DRIVERS.run({"handler": str(handler), "requests": list(requests)})  # type: ignore[no-any-return]
+    except node.DriverError as err:
+        raise HarnessError(f"node failed on {handler.name}: {err}") from err
 
 
 def run_handler(handler: Path, requests: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -321,19 +426,7 @@ def run_handler(handler: Path, requests: Sequence[Mapping[str, Any]]) -> list[di
 
     Each request is ``{"identifier", "payload", "device"}``.
     """
-    job = json.dumps(
-        {"handler": str(handler), "requests": [{"kind": "action", **r} for r in requests]}
-    )
-    proc = subprocess.run(
-        [node_executable(), str(DRIVER)],
-        input=job,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise HarnessError(f"node failed on {handler.name}: {proc.stderr.strip()}")
-    replies = json.loads(proc.stdout)
+    replies = run_driver(handler, [{"kind": "action", **r} for r in requests])
     return [
         recipe_from_reply(request["identifier"], reply)
         for request, reply in zip(requests, replies, strict=True)

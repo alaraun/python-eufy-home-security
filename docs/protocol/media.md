@@ -1,29 +1,5 @@
 # Media
 
-## Native recordings on non-10011 stations
-
-For the station family using `DB_QUERY_LOCAL_EVENTS` (10017), the eufy app
-opens a recording with a native static-key AES-128-ECB path/account string pair:
-**1025** for playback, **1024** for download. Both use a six-byte native
-subheader with the camera channel. The HomeBase 3 command family uses the
-existing JSON-wrapped playback/download requests instead.
-
-On a physical T8010 HomeBase 2 (firmware not recorded), both `1024` and `1025`
-returned H.264/AAC from **the same completed `.dat` recording** in two independent
-runs on 26 October 2026. Each request yielded 26 video frames, 22 audio frames and
-701,650 payload bytes. Time to first frame was 0.784 s and 0.308 s for `1024`,
-and 0.478 s and 0.337 s for `1025` respectively; the two samples do not establish
-a consistent speed advantage. A syntactically valid but nonexistent `.dat` path
-sent through `1025` raised `CommandNotAppliedError`, with zero media frames and
-zero payload bytes. The probe did not measure time from request to this error.
-These results verify native P2P stored-recording playback, **not** progressive
-browser playback or seeking through Home Assistant. Previous T8010 work also
-verified complete `1024` clip decoding and playback through HA Test.
-Both ordinary `CameraNN/YYYYMMDDHHMMSS.dat` and prefixed recording paths
-are validated before any media command. Missing or invalid ECC owner cipher
-keys raise `CipherUnusableError` before a native media request is sent.
-
-
 Three ways to get pixels from a camera behind a HomeBase 3, cheapest first:
 
 | source | command | result | wakes a battery camera |
@@ -142,7 +118,7 @@ image = await station.async_preset_image(device_sn, preset=1)  # pan/tilt: turn,
   `CommandNotAppliedError` when the station acknowledged the open, the owner-id
   case, and `DeviceTimeoutError` when it did not. Frames that arrive without a
   keyframe that decodes raise `ProtocolError`. A reply with a non-zero code raises
-  `CommandRejectedError`.
+  `CommandRejectedError` (`AccountRejectedError` for −104).
 - A HomeBase live open answered with a wake-failure receipt (−204, below) raises
   `CameraWakeError` at once, and the session refuses further live opens of that
   channel for `WAKE_BACKOFF` (60 s, 300 s, 900 s), raising `CameraWakeError` with
@@ -352,28 +328,30 @@ DeviceMsgBean and subheader as above, with the payload
 The open is the device's own handler's (`open_live_stream` in its `<PN>Handle.mix.js`),
 and it depends on how the device is reached. `scripts/gen_live_open.py` runs every
 cached handler standalone and behind each station kind and records which library open
-reproduces it (`devices/_live_open_data.py`, `devices.live_open`). From the eufy app
-6.1.10 handlers (78 products with a live open):
+reproduces it (`devices/_live_open_data.py`, `devices.live_open`). From the eufy app's
+handlers (96 products with a live open):
 
 | handler's open | standalone | behind a HomeBase 2 / 3 |
 |---|---|---|
-| 1700/1000 with `extValue` (`single`) | 3 products | — / 2 |
-| 1700/1000 without `extValue` (`single_no_ext`) | 56 | 22 / 23 |
-| 1350/1003 `DeviceMsgBean`, plain payload (`station`) | 1 | 50 / 47 |
-| another open (dual-lens `stitch_mode`, bare 1003 `cryptoKey`, version-dependent) | 18 | 6 / 6 |
+| 1700/1000 with `extValue` (`single`) | 4 products | — / 2 |
+| 1700/1000 without `extValue` (`single_no_ext`) | 63 | 22 / 23 |
+| 1350/1003 `DeviceMsgBean`, plain payload (`station`) | 1 | 64 / 61 |
+| 1350/1003 multi-camera payload (`nvr`, `nvr_lens`) | 4 | 7 / 7 |
+| another open (bare 1003 `cryptoKey`, version-dependent) | 24 | 3 / 3 |
 
-Behind a NVR, a T9000, a T7000 or a HomeBase 4 the handlers send a 1350/1003 the library
-does not build (`stitch_mode`, `camera_type` from `chn_list`), or flag the request `webRtc`;
-none matches a library open.
+Behind a NVR, a T9000, a T7000 or a HomeBase 4 most handlers send the multi-camera open
+with fields the library does not build, or flag the request `webRtc`; the app streams
+every device there over WebRTC in any case.
 
-The library sends the recorded open: on the device's own session every one of the three;
-behind a station `station`, and a 1700 open behind a HomeBase 2 or 3 as described
-[below](#wi-fi-camera-behind-a-homebase-open-17001000-on-the-homebases-session) where the
-handler's stop is one the library sends. A device the eufy app streams over WebRTC
-([WebRTC or P2P](#webrtc-or-p2p-declared-eufy-app)) gets none, whatever its open. Any
-other open raises `UnsupportedError` before anything is sent, and `Station.live_support`
-grades it `UNKNOWN`. A product the table does not list gets the defaults: `single`
-standalone, `station` behind a station.
+The library sends the recorded open: on the device's own session every one; behind a
+station `station`, and a 1700 or multi-camera open behind a HomeBase 2 or 3 where the
+handler's stop is one the library sends (1700:
+[below](#wi-fi-camera-behind-a-homebase-open-17001000-on-the-homebases-session);
+multi-camera: [below](#multi-camera-open-13501003-with-the-view)). A device the eufy app
+streams over WebRTC ([WebRTC or P2P](#webrtc-or-p2p-declared-eufy-app)) gets none,
+whatever its open. Any other open raises `UnsupportedError` before anything is sent, and
+`Station.live_support` grades it `UNKNOWN`. A product the table does not list gets the
+defaults: `single` standalone, `station` behind a station.
 
 ### WebRTC or P2P **[declared: eufy app]**
 
@@ -449,6 +427,49 @@ standalone frame below, sent on the **HomeBase's** session:
 `0x0a`), the usual 1280×720 → 1920×1080 → 2880×1616 ramp — and stopped it on the
 1350/1004 stop with no record after. **[declared]** for each product whose handler sends
 it: none of them has been tested; a HomeBase 2 has not been tested.
+
+### Multi-camera open: 1350/1003 with the view
+
+Where a product's handler sends the multi-camera open (T8172, T8215, T8532, T85M1 and
+others; `nvr` / `nvr_lens` in `devices/_live_open_data.py`), the library builds it as the
+app does, in three steps (`devices.live_view`, `recipes.open_live_stream_nvr`):
+
+1. **Lenses.** The camera's parameter 9240 lists its lenses as JSON
+   (`[{"type":1,"id":0},{"type":1,"id":1}]`; id 0 the fixed lens, 1 the moving one; a
+   missing field reads 0, other keys are ignored). An empty or absent value, or one that
+   does not decode as a whole, lists none. The library reads it from the cloud's
+   parameter snapshot of the device (`Station.lenses`).
+2. **View.** The app's live page opens with every lens stacked (`stitch_mode` 5) when the
+   camera lists lenses, else on the fixed lens (`stitch_mode` 1); `Station.async_open_live`
+   takes another layout as `lens_view` (`LensView`: `main`, `sub`, `stacked`, `pip`).
+   `chn_list` names one entry per lens shown: `{"cameraType":0,"chn":<channel>,"index":<0
+   for the fixed lens, else 1>,"sensor":<lens id>}`; a one-lens view names that lens, a
+   layout of several without a lens list names the fixed lens alone. Picture in picture
+   (`stitch_mode` 7) adds `station_video_type` 9 and the inset `pip_cord`
+   `{"x1":650,"y1":700,"x2":950,"y2":900}` (thousandths of the picture, the app's default).
+3. **Body.** A `DeviceMsgBean` in a `0x0546` frame, subheader byte 4 `0x0a`:
+   `{cmd 1003, mChannel, account_id, mValue3 1003, mValue5 0, payload {accountId,
+   streamtype 0, camera_type, entrytype 0, stitch_mode, chn_list, key, ClientOS,
+   cameraType 0, …}}`, without `mValueStrSub` or `transaction`. To a HomeBase 3 the
+   payload also carries `extValue` 1000, `audio_chn` (the channel) and `pip_cord` (`""`
+   outside picture in picture), as the app's player adds them there; elsewhere `stitch_mode`
+   is 1 and `chn_list` empty. `camera_type` is 0, except for a one-lens view of the moving
+   lens on products whose handler names it (`nvr_lens`: 1).
+
+Not sent: the `view_mode` -1 the app's player adds to this payload behind a HomeBase 3
+for a few products it lists in its own code (of the products this open reaches over P2P,
+the T8180).
+
+Media is one stream on the camera's channel, as for any HomeBase child: the station
+composes the layout. The stop is the handler's (`LIVE_STOP`): behind a HomeBase 3 a 1350
+`DeviceMsgBean` of cmd 1004 (the library sends its HomeBase 3 stop above) or a bare 1004,
+per product; behind a HomeBase 2 a bare 1004.
+
+**[verified]** for the body: a HomeBase 3 at 3.8.7.4 took it for its single-lens T8170
+(channel 2) and T8160 (channel 1) in layouts 1, 5 and 7, receipt 0 and video tagged with
+the channel from 1.4 to 3.6 s, the same picture in every layout, and stopped it on the
+1350/1004 `{channel}` stop. **[declared]** for every product that sends it: no camera with
+a lens list has been tested, and a HomeBase 2 has not been tested.
 
 ### Standalone device: open 1700/1000, stop bare 1004, ping 1139 **[verified]**
 
@@ -742,6 +763,8 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
 
 ## Recording playback (1025) and download (1024) **[verified]**
 
+### JSON recording commands on the 10011 family
+
 ```json
 {"account_id": "<owner user id>", "cmd": 1024, "mChannel": <event channel>,
  "mValue3": 1024,
@@ -771,7 +794,8 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
 - The **first keyframe is the trigger moment** at full resolution: it arrived 0.4 s
   after the request and decoded to a 3840×2160 JPEG of about 1.7 MB.
 - It does not wake the camera: the recording is on the station's storage.
-- A −104 (INVALID_ACCOUNT) reply means the `account_id` is not the owner's.
+- A −104 (INVALID_ACCOUNT) reply means the `account_id` is not the owner's
+  (`AccountRejectedError`).
 - **No stop command ends a playback [verified].** On HomeBase 3 fw 3.8.7.4:
   - `STOP_DOWNLOAD_VIDEO` (1051) is **rejected**: receipt −108 about 11–12 s after it was
     sent, and like any rejected command it holds the session's command queue until
@@ -792,6 +816,25 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
 - What makes the station record a clip in the first place (detection mask, automation
   rules, and no direct record command) is in
   [commands.md](commands.md#recording-triggers).
+
+### Native recording commands on 10017 stations
+
+For stations whose history query is `DB_QUERY_LOCAL_EVENTS` (10017), the
+app selects native `RECORD_VIEW` (1025) to play or `DOWNLOAD_VIDEO` (1024)
+to download, based on the station family rather than the filename. The
+ECB command body is five zero bytes, followed by the recording path and
+owner account ID, each encoded as printable ASCII and NUL-padded to 128
+bytes. It is encrypted using AES-128-ECB under the station's static key;
+the six-byte subheader is `[01, 00, channel, 01, 00, 00]`. No new
+per-open media key is offered: the station wraps its stream key to the
+owner account's ECC key, which must be valid before sending.
+
+Two HomeBase 2 path shapes were observed under
+`/media/mmcblk0p1/CameraNN/`: `YYYYMMDDHHMMSS.dat` and a prefixed
+`A123_YYYYMMDDHHMMSS.dat` variant. Both paths are validated. For a
+syntactically valid path that is no longer on the station, the station
+sent no media frames or rejection; the open reached the first-frame
+timeout with `CommandNotAppliedError`.
 
 ## Proven and not proven
 

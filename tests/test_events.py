@@ -166,6 +166,15 @@ def test_history_record_tolerates_missing_and_bad_extra() -> None:
     assert rec.device_sn is None
 
 
+def test_a_history_record_compares_without_its_ref() -> None:
+    """The same row compares equal whether or not a listing set its reference."""
+    rec = HistoryRecord.from_row({"record_id": 2818, "device_sn": SYNTHETIC.camera_sn})
+    listed = dataclasses.replace(rec, ref="v1.k.20260916.2818.00000000")
+    assert rec.ref is None
+    assert listed == rec
+    assert hash(listed) == hash(rec)
+
+
 def _clip_row(**extra: object) -> dict[str, object]:
     return {
         "record_id": 2026100100010,
@@ -178,6 +187,14 @@ def _clip_row(**extra: object) -> dict[str, object]:
         "folder_size": 1717081,
         **extra,
     }
+
+
+def test_a_homebase2_row_exposes_native_dat_recording_path() -> None:
+    """The trigger-frame/media path scan must recognise validated native clips."""
+    path = "/media/mmcblk0p1/Camera05/A123_20310203112233.dat"
+    record = HistoryRecord.from_row(_clip_row(storage_path=path))
+    assert record.video_path == path
+    assert record.frame_count == 90
 
 
 def test_a_history_record_names_its_recording_times_and_size() -> None:
@@ -522,6 +539,9 @@ def _short(event_type: int | None = DetectionType.MOTION, **fields: Any) -> Secu
         (3112, "1a2b3c", None, DetectionType.STRANGER_PERSON),
         (3101, "1a2b3c", "Alice", DetectionType.IDENTITY_PERSON),
         (3101, None, "Alice", DetectionType.IDENTITY_PERSON),
+        # a doorbell press stays a press, as the app's doorbell and lock pushes show it
+        (3103, "1a2b3c", None, DetectionType.DOORBELL_PRESS),
+        (3103, "3107", "Alice", DetectionType.DOORBELL_PRESS),
         (None, None, None, None),
     ],
 )

@@ -26,7 +26,9 @@ All inputs are private and stay out of the repository:
 | app setting titles | `.work/tools/data/app_setting_titles.json` (`--titles`) | the app's setting titles (per identifier, per model where the app branches), control units and legacy identifier pairs, plus app behaviour read by hand: defaults the app shows, read-only statuses, option titles, settings behind a warning, held flags members, excluded actions, the string properties the app shows as an on/off switch with the text it writes for each state (`switches`: such a property is generated as a bool, swept with those texts, its write and read polarity taken from the handler) and the enum choices whose app screen writes another value than the thing description lists (`screen_values`: continuous recording time writes 0 for `default:00`; the handler is swept with the screen's value, the public value stays the description's); from the same build |
 
 Node is needed for generating and for `--check`, and nowhere else: the handler runs in
-a `vm` sandbox (`scripts/gen_models_driver.js`).
+a `vm` sandbox (`scripts/gen_models_driver.js`), a fresh one per batch of requests. The
+generators need the Node major that `scripts/package.json` pins (`engines.node`) and
+refuse any other major with an error that names the version in use.
 
 ## Fetch
 
@@ -49,9 +51,20 @@ uv run python scripts/gen_models.py              # every model in the cache
 uv run python scripts/gen_models.py T8160 T8170  # some models
 ```
 
+`--jobs N` (default: the CPU count) generates N models at a time, each in its own
+process with one long-lived Node worker; the output does not depend on it. On Ctrl-C or
+SIGTERM no queued model starts: a SIGTERM to the run's process alone lets the models in
+flight finish, one to the process group (or Ctrl-C) ends them too. When the run's own
+process is killed, its generating processes and Node workers end with it.
+
 A model is written only when every codec renders back each swept recipe and every row
 of `tests/fixtures/models_v1_reference.json` for that model renders to its recorded
-`cmd`/`subCmd`/`params`. A model that fails is not written, and the run exits 1. A
+`cmd`/`subCmd`/`params`. A model that fails (a check, or an input the generator does not
+handle, such as a unit without a mapping) is reported and not written; the run goes on
+with the other models and exits 1 at the end. A job that Node or its handler does not
+run (a worker that cannot start, dies on every rerun of the job or does not reply within
+the job timeout) stops the run with exit 2: the model's driver notices, then the cause on
+one line. A
 reference row that is meant to change (the vendor changed the recipe) goes into
 `RELEASE_ACCEPTED` in `scripts/gen_models.py`, keyed `(PN, identifier)`, with the reason.
 `INDEX.json` lists every `<PN>.json` in the output directory, so a new product code is
@@ -132,10 +145,22 @@ uv run python scripts/gen_models.py --check      # regenerate to a temp dir, com
 ```
 
 `--check` exits 0 when every file is byte-identical, 1 on any difference (it names the
-files) and 2 when Node, the cache, the labels, the layout or the title data are missing.
-Run it on the whole corpus after changing the generator;
-`tests/devices/test_gen_models_check.py` runs it on two models and skips without Node or
-the cache.
+files) and 2 when Node (of the pinned major), the cache, the labels, the layout or the
+title data are missing. Run it on the whole corpus after changing the generator;
+`tests/devices/test_gen_models_check.py` runs it on three models and skips without Node
+of the pinned major or the cache, as every test that runs the driver does.
+
+Every generator's `--check` at once, in parallel (one line per generator, the output of
+each that fails; exit 1 when any fails):
+
+```
+uv run python scripts/check_generated.py                   # all of them
+uv run python scripts/check_generated.py --skip gen_models # all but the settings files
+uv run python scripts/check_generated.py gen_ptz gen_live_open
+```
+
+The model list (`gen_app_models.py`) takes the app's input files as arguments and is
+checked on its own.
 
 ## The model list
 
@@ -150,7 +175,8 @@ settings files, then the support matrix.
 1. Generate, then `--check` on the whole corpus: `check: 0 files differ`. Regenerate
    the model list (`gen_app_models.py`, `--check` to compare).
 2. Regenerate the support matrix, which lists every model's settings:
-   `uv run python scripts/gen_device_matrix.py`.
+   `uv run python scripts/gen_device_matrix.py`. Then `scripts/check_generated.py`:
+   every generated table up to date.
 3. Update the settings counts in [home-assistant.md](home-assistant.md#settings-per-model)
    if a listed model changed; `tests/devices/test_docs_home_assistant.py` recomputes them.
 4. Run `uv run pytest tests/devices tests/test_package_data_models.py`: the schema of

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import shutil
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -83,7 +82,7 @@ module.exports.deviceStatus = function (s) {
 };
 """
 
-pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+pytestmark = pytest.mark.needs_node
 
 
 def _cache(tmp_path: Path, handler: str, ident: str, data_type: dict[str, Any]) -> Path:
@@ -294,3 +293,59 @@ def test_a_per_view_read_takes_precedence_over_the_inverse_of_the_write(tmp_path
         "map": {},
         "view": {"by": None, "map": {"3": 0, "5": 1, "7": 2}},
     }
+
+
+DIRECT_PARAM_HANDLER = """
+function parse(s) { return JSON.parse(s.slice(0, s.lastIndexOf("EOF;"))); }
+module.exports.controlDevice = function(s) {
+  const m = parse(s);
+  if (m.action !== "setProperty") return JSON.stringify({ data: {} });
+  const ident = Object.keys(m.input)[0];
+  const v = Number(JSON.parse(m.input[ident])["payload-value"]);
+  const w = v < 3 ? v : 1;
+  return JSON.stringify({ data: { p2p: {
+    cmd: 1609, params: {value: w},
+    update: {needUpdate: true, cmd: 1609, paramValue: String(w)}
+  } } });
+};
+module.exports.deviceStatus = function(s) {
+  const m = parse(s);
+  const p = (m.device.params || []).find(x => x.param_type === 1609);
+  if (!p) return JSON.stringify({ data: { p2p: {} } });
+  return JSON.stringify({ data: { p2p: { @IDENT@: Number(p.param_value) } } });
+};
+"""
+
+
+@pytest.mark.timeout(120)
+def test_a_direct_parameter_value_rule_bypasses_the_handler(tmp_path: Path) -> None:
+    """Placeholder associated values and a handler fallback do not override app data."""
+    raw = {"0": 80, "1": 53, "2": 37, "3": 18, "4": 8}
+    td = {
+        "type": "ienum",
+        "specs": {"eunmList": [{"value": str(i), "associatedValue": 999} for i in range(5)]},
+    }
+    titles = {
+        "param_values": {
+            IDENT: {
+                "source": "synthetic app direct parameter write",
+                "models": {PN: raw},
+            }
+        }
+    }
+    doc, _ = gen_models.generate(
+        PN, _cache(tmp_path, DIRECT_PARAM_HANDLER, IDENT, td), titles=titles
+    )
+    entry = doc["settings"][IDENT]
+
+    assert entry["write"]["cmd"] == 1609
+    assert entry["write"]["params"]["value"] == {"$map": raw}
+    assert entry["write"]["update"]["paramValue"] == {"$map": {k: str(v) for k, v in raw.items()}}
+    assert entry["read"] == {
+        "param": 1609,
+        "map": {
+            **{str(v): int(k) for k, v in raw.items()},
+            **{str(i): i for i in range(5)},
+        },
+    }
+    assert "note" not in entry

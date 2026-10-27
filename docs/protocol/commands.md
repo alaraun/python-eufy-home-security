@@ -73,8 +73,12 @@ library takes both lengths (`RECEIPT_LENS`).
 `RECEIPT_CODES` names the other codes of the app's error table as well (−100 to −135,
 −203 to −205, spelled as in the app) **[declared]**; the app calls 0
 `SUCCESSFUL` and −108 `WAIT_TIMEOUT`; the library raises `CommandUnsupportedError` for −108
-and −103 (`INVALID_COMMAND`: no command of this form), `CameraWakeError` for −203, −204 and
-−205 and `CommandRejectedError` with the name for the rest.
+and −103 (`INVALID_COMMAND`: no command of this form), `AccountRejectedError` for −104
+(`INVALID_ACCOUNT`: the station does not take the account the command carried),
+`CameraWakeError` for −203, −204 and −205 and `CommandRejectedError` with the name for the
+rest. A result code (ECB scalar, JSON `code` / `mIntRet`, a media reply) maps the same way,
+−108 and the wake codes aside: one mapping on every command path, which tells −104 apart
+from other refusals as the eufy app does.
 
 The receipt carries no command id or transaction, so it can be attributed only
 while a single command is in flight.
@@ -100,9 +104,9 @@ that serves reads, and do not resend into a stall — each resend queues again.
   encryption type, payload length, code and whether its tail is zero.
 - `async_send_command` takes a `0x0546` receipt that arrives while it is in flight as
   its own. Code −108 or −103 raises `CommandUnsupportedError` (a `CommandRejectedError`
-  with that `code` and an `UnsupportedError`); any other non-zero code raises
-  `CommandRejectedError`. Code 0 only means taken: the outcome is still `APPLIED` on
-  a `0x0547` result, else `DELIVERED`.
+  with that `code` and an `UnsupportedError`), −104 `AccountRejectedError`; any other
+  non-zero code raises `CommandRejectedError`. Code 0 only means taken: the outcome is
+  still `APPLIED` on a `0x0547` result, else `DELIVERED`.
 - The command is resent once, after 1.5 s, only when neither a receipt nor a DRW ACK
   came back. A command that was acknowledged but has no receipt when its timeout
   runs out keeps the session's request lock until the receipt arrives, at most 20 s
@@ -163,11 +167,12 @@ that serves reads, and do not resend into a stall — each resend queues again.
   takes it: code 0 (a `0x0547` naming 1224, the scalar's reply, on an RSA session the
   channel-0 result of the arm's own send) means applied. The library files the mode (1224; 1151 the same
   outside Schedule) as its own write and returns it, without waiting for a mode report.
-  A non-zero code is a rejection: −108 and −103 `CommandUnsupportedError`, any other
-  `CommandRejectedError`. A decoded `0x047F` that arrives before the result answers the
-  arm, and another mode than asked fails it. With neither, the mode is read back: the
-  station is silent when asked for the mode it is in, and any other mode raises
-  `CommandNotAppliedError` (a transport ACK alone is no success).
+  A non-zero code is a rejection: −108 and −103 `CommandUnsupportedError`, −104
+  `AccountRejectedError`, any other `CommandRejectedError`. A decoded `0x047F` that
+  arrives before the result answers the arm, and another mode than asked fails it. With
+  neither, the mode is read back: the station is silent when asked for the mode it is
+  in, and any other mode raises `CommandNotAppliedError` (a transport ACK alone is no
+  success).
 - The `0x047F` follows every change, whoever made it: a P2P client, the eufy app, or a
   schedule slot starting or ending, and every open session on the station receives it
   (fw 3.8.7.4; see [events.md](events.md#guard-mode-announcements)). Keypad changes are
@@ -413,10 +418,10 @@ Names for every id: `src/eufy_home_security/devices/command_types.py`.
   "end_date", "start_time": "0", "event_type": 0, "ai_type": 0, "storage_cloud": -1,
   "trigger_type": 0, "detection_type": 0, "flag": 0}}`. For a camera-specific
   query the app also supplies `"device_info": [{"device_sn": "..."}]`; a
-  station-wide query omits the field. **Measured on T8010**: filtering retained
-  the same camera-specific recordings in order, reducing the two-day scan from 11 to 3
-  page queries (13.47 s to 5.53 s). The next page
-  passes the previous page's oldest `start_time` as `start_time`, separators stripped
+  station-wide query omits the field. A camera-specific filter reduces
+  the pages sent by the station; measured results are in
+  [hardware verification](../reference/hardware-verification.md#homebase-2-t8010-main-firmware-3426h-with-t8910-motion-sensor-fw-2011).
+  The next page passes the previous page's oldest `start_time` as `start_time`, separators stripped
   (`YYYYMMDDHHMMSS`); a page shorter than `count`, or one that starts with the row the
   last one started with, is the last. The app's per-query timeout is the thing
   property `device_query_event_timeout` (default 13 s), `device_query_event_retry_time`
@@ -430,7 +435,10 @@ Names for every id: `src/eufy_home_security/devices/command_types.py`.
   open — the app's one-day window satisfies both. The library therefore asks one day at
   a time, newest day first, and pages each day: `async_list_history(start, end,
   count=None, page_size=50)` includes both dates and returns records newest first,
-  up to `count`.
+  up to `count`; `async_list_history_by_day` gives each row with the day its query
+  named. `before=<record_id>` pages from that row in its day: the day the id carries,
+  else `before_day` (a HomeBase 2's sequential ids carry none). Under 10017 the day is
+  then paged from its newest row and the rows from that id up are left out.
 - **Every page carries other tables** in `data` next to the `history_record_info`
   wrapper: the AI crops, relations and head positions of that page's records, and the
   whole `person_basic_info`, `face_feature_info` and `reid_feature_info` libraries
@@ -709,9 +717,9 @@ by a receipt (code 0) and no `0x0547`.
   and the library writes no table for it.
 
 **Library write path [verified].** A mode-table setting (the
-`camera_action_<mode>`, `sensor_action_<mode>`, `alarm_delay_<mode>` and
-`leaving_delay_<mode>` settings) is written by `Station.async_set_setting` /
-`async_set_mode_action`, never as a frame of its own:
+`camera_action_<mode>`, `doorbell_action_<mode>`, `sensor_action_<mode>`,
+`alarm_delay_<mode>` and `leaving_delay_<mode>` settings) is written by
+`Station.async_set_setting` / `async_set_mode_action`, never as a frame of its own:
 
 1. Read a fresh parameter dump that includes every paired channel; a paired channel
    missing from it refuses the write (a table without it would drop it).
@@ -728,10 +736,11 @@ by a receipt (code 0) and no `0x0547`.
    writes the 0; otherwise the target is left out of the list, and the station writes 0
    into every device of the table that the list leaves out [verified].
 4. Refuse before sending (`UnsupportedError`) when the setting does not apply to the
-   target's device kind, when a device of the table is of no known kind (it may be a
-   siren accessory: the library always sends `siren_sensor_action` 0 and would clear
-   its triggers), or when the count-down the table must carry unchanged has devices
-   at different non-zero values (one table cannot carry two).
+   target's device kind, when a device of the table is of a kind without catalogued
+   actions (not a camera, doorbell or sensor; it may be a siren accessory: the library
+   always sends `siren_sensor_action` 0 and would clear its triggers), or when the
+   count-down the table must carry unchanged has devices at different non-zero values
+   (one table cannot carry two).
 5. Send it (`StationSession.async_set_mode_table`, frame type 1255, no resend). A
    non-zero receipt raises `CommandRejectedError`; a zero receipt is not success: every
    action and every listed or turned-off delay is read back, and a value that does not
@@ -1104,5 +1113,5 @@ mean 1x **[verified, T8170]**:
 | 132-byte receipt | 0 / −108 | taken off the queue / command not handled ([receipt](#command-receipt-verified)). `1051` (`STOP_DOWNLOAD_VIDEO`, app enum `DOWNLOAD_CANCEL`) is −108 **[verified]**. |
 | 132-byte receipt | −204 | the station could not wake the camera (live open) **[verified]** |
 | 1700 receipt, preset commands | 1 | the camera is still moving; the same command succeeds once it stops **[verified, T8170]** |
-| media / download | −104 | INVALID_ACCOUNT: the owner-id gate |
+| media / download | −104 | INVALID_ACCOUNT: the owner-id gate (`AccountRejectedError`) |
 | (none) | — | silence after an ACK: wrong `account_id`, or a database query missing its paging fields |

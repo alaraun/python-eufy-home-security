@@ -30,12 +30,21 @@ from .devices.device_alarm import DeviceAlarm, DeviceAlarms
 from .devices.device_alarm import device_alarms as alarms_for
 from .devices.device_alarm import render as render_alarm
 from .devices.live_open import (
+    NVR_OPENS,
     LiveOpen,
     has_live_open,
     library_live_open,
     live_stop,
 )
 from .devices.live_open import app_version as live_open_app_version
+from .devices.live_view import (
+    LENS_LIST_PARAM,
+    Lens,
+    LensView,
+    default_lens_view,
+    live_view,
+    parse_lenses,
+)
 from .devices.model_settings import (
     BATTERY_PROPERTY,
     PARENTLESS_ONLY,
@@ -79,6 +88,7 @@ from .devices.recipes import (
 )
 from .devices.settings import (
     DUAL_VIEW,
+    MODE_ACTION_FLAGS,
     VIEW_MODE_PARAM,
     Scope,
     SettingDef,
@@ -242,6 +252,13 @@ from .p2p.station_config_codecs import (
 )
 from .p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
 from .p2p.xzyh import FrameType
+from .recordings import (
+    RecordingPosition,
+    RecordingsPage,
+    decode_cursor,
+    decode_ref,
+    encode_cursor,
+)
 from .station_config import (
     ModeInfo,
     StationConfig,
@@ -326,6 +343,16 @@ picture size to hold: a woken T8170 climbs 1280x720 -> 1920x1080 -> 2880x1616 at
 EPOCH_MS_RANGE = (1_420_070_400_000, 4_102_444_800_000)
 
 type SerialSource = Literal["cloud"]
+
+
+def _host_today() -> date:
+    """Today in the host's zone: the newest day of a recordings window."""
+    return datetime.now().astimezone().date()
+
+
+def _host_day(value: date) -> date:
+    """A day, or a ``datetime``'s host-local day."""
+    return value.astimezone().date() if isinstance(value, datetime) else value
 
 
 def _station_modes(
@@ -2040,12 +2067,12 @@ class Station:
         tables (for ``changes``) or delays are *unknown* (:meth:`config_support`), for a
         mode without per-device actions (Schedule, Off, Disarmed, Geofence) or for which
         the station stores no table, a serial not paired to this station, a device of no
-        catalogued kind, a flag its kind does not have, a station with a device of no
-        known kind in the table (it may be a siren accessory, whose triggers a library
-        table clears) or delays the table cannot carry unchanged; ``ValueError`` for a
-        flag value that is not a bool, a flag turned on that a flag turned off in the
-        same edit clears, a delay that is not one of ``MODE_DELAY_CHOICES``, or a delay
-        change :meth:`with_count_down` refuses;
+        catalogued kind, a flag its kind does not have, a station with a device in the
+        table whose kind has no catalogued actions (it may be a siren accessory, whose
+        triggers a library table clears) or delays the table cannot carry unchanged;
+        ``ValueError`` for a flag value that is not a bool, a flag turned on that a flag
+        turned off in the same edit clears, a delay that is not one of
+        ``MODE_DELAY_CHOICES``, or a delay change :meth:`with_count_down` refuses;
         :class:`CommandNotAppliedError` when a device is missing from the fresh read or
         does not report its mask. After sending: :class:`CommandNotAppliedError` naming
         the device and flag (or delay) the read-back does not show, and the session's
@@ -2614,18 +2641,18 @@ class Station:
             if new.same_values(table):
                 return table, table
             # A channel with no known device (the station's own block can carry a
-            # per-mode action) is refused like one of an unknown kind.
+            # per-mode action) is refused like one of a kind without catalogued actions.
             unknown = sorted(
                 ch
                 for ch in new.actions
                 if ch not in state.devices
-                or state.devices[ch].kind not in (DeviceKind.CAMERA, DeviceKind.SENSOR)
+                or scope_for_kind(state.devices[ch].kind) not in MODE_ACTION_FLAGS
             )
             if unknown:
                 raise UnsupportedError(
-                    f"{mode.name.lower()} mode table: channels {unknown} are of no known "
-                    "device kind; a mode table always clears siren-accessory triggers, so it "
-                    "is not written",
+                    f"{mode.name.lower()} mode table: channels {unknown} are of a kind "
+                    "without catalogued actions; a mode table always clears siren-accessory "
+                    "triggers, so it is not written",
                     device_sns=self._serials_on(unknown),
                 )
             new.request("")  # refuses a delay the table cannot carry, before any traffic
@@ -2865,9 +2892,9 @@ class Station:
 
         Refuses (``UnsupportedError``, nothing sent) where :meth:`config_support` grades
         mode tables (an action) or mode delays (a delay) *unknown*, when the setting does not apply to
-        the device on ``target``, when a device of the table is of no known kind (it may
-        be a siren accessory, whose triggers a library table would clear), or when a
-        delay the table must carry unchanged differs between devices; and
+        the device on ``target``, when a device of the table is of a kind without catalogued
+        actions (it may be a siren accessory, whose triggers a library table would clear),
+        or when a delay the table must carry unchanged differs between devices; and
         (``CommandNotAppliedError``) when a paired device or the target is missing from
         the fresh read, since a table without it would drop it. A non-zero delay also
         moves the delay of every device that has it on (one value per mode). Returns
@@ -2922,6 +2949,7 @@ class Station:
         channel: int | None = None,
         preset: int | None = None,
         wait: bool = False,
+        lens_view: LensView | None = None,
         **kwargs: Any,
     ) -> MediaStream:
         """Open a paired camera's live stream (by serial or channel). Wakes a battery camera.
@@ -2939,6 +2967,12 @@ class Station:
 
         The open offers the media key the app would (:meth:`media_key_type`); pass
         ``media_key`` to override it.
+
+        A camera whose handler sends the multi-camera open
+        (:data:`~.devices.live_open.NVR_OPENS`) gets the layout ``lens_view`` of its
+        lenses (:meth:`lenses`); without it the one the app's live page opens in
+        (:func:`~.devices.live_view.default_lens_view`). Only a HomeBase 3 is sent the
+        layout, as the app does; other stations and cameras ignore it.
         """
         ch = self._media_channel(device_sn, channel)
         if preset is not None:
@@ -2947,15 +2981,18 @@ class Station:
             slot_channel = self._stored_slot(device_sn, preset)
             self._refuse_while_capturing(device_sn)
             await self._ptz_recipe(goto_preset(preset), slot_channel)
-        return await self._session_live(ch, wait=wait, **kwargs)
+        return await self._session_live(ch, wait=wait, lens_view=lens_view, **kwargs)
 
-    async def _session_live(self, channel: int, **kwargs: Any) -> MediaStream:
+    async def _session_live(
+        self, channel: int, *, lens_view: LensView | None = None, **kwargs: Any
+    ) -> MediaStream:
         """The session's live open on ``channel``: the open the device's handler sends
-        (:meth:`live_open`) and the media key the app offers (:meth:`media_key_type`).
+        (:meth:`live_open`), the media key the app offers (:meth:`media_key_type`), and
+        for a multi-camera open the view (``lens_view``, see :meth:`async_open_live`).
         A device whose handler's open the library does not implement raises
         :class:`~.exceptions.UnsupportedError` before anything is sent."""
         device = self._device_on_channel(channel)
-        mode = stop = None
+        mode = stop = view = None
         if device is not None:
             mode = self._live_open_of(device.device_sn)
             if mode is None and has_live_open(self._product_code(device.device_sn)):
@@ -2963,8 +3000,26 @@ class Station:
             stop = live_stop(
                 self._product_code(device.device_sn), self._connect_type_of(device.device_sn)
             )
+            if mode in NVR_OPENS:
+                lenses = self.lenses(device.device_sn)
+                view = live_view(channel, lenses, lens_view or default_lens_view(lenses))
         kwargs.setdefault("media_key", self.media_key_type(channel))
-        return await self.session.async_open_live(channel, live_open=mode, live_stop=stop, **kwargs)
+        return await self.session.async_open_live(
+            channel, live_open=mode, live_stop=stop, live_view=view, **kwargs
+        )
+
+    def lenses(self, device_sn: str) -> tuple[Lens, ...]:
+        """The lenses ``device_sn`` lists in the cloud's parameter snapshot
+        (:data:`~.devices.live_view.LENS_LIST_PARAM`, as the app reads its device's
+        parameters); ``()`` for an unknown device, none listed, or a snapshot the cache
+        did not keep (a paired device's, until the next device-list fetch)."""
+        device = next(
+            (d for d in (self.device, *self.sub_devices) if d.device_sn == device_sn), None
+        )
+        if device is None:
+            return ()
+        value = next((p.value for p in device.cloud_params if p.param_id == LENS_LIST_PARAM), None)
+        return parse_lenses(value)
 
     def _device_on_channel(self, channel: int) -> CloudDevice | None:
         """The device addressed on ``channel`` (the station itself when standalone)."""
@@ -3137,8 +3192,8 @@ class Station:
         the :attr:`~.devices.capabilities.Capability.LOCAL_EVENTS` entry of the
         station's own model, else ``UNKNOWN`` with the reason.
 
-        The push is the station's, so every paired device follows it; a standalone
-        camera's is its own model's entry. Only ``VERIFIED`` means detections arrive
+        A standalone camera's is its own model's entry; :meth:`local_detections_for`
+        grades each device of the station. Only ``VERIFIED`` means detections arrive
         over the LAN; for any other grade a consumer needs cloud push
         (``EufySecurity.async_start(push=True)``) to receive them.
         """
@@ -3147,6 +3202,55 @@ class Station:
         return listed or Evidence(
             Support.UNKNOWN,
             f"no local event push recorded for {self._product_code(self.serial) or 'this model'}",
+        )
+
+    def local_detections_for(self, device_sn: str) -> Evidence:
+        """Whether this station pushes ``device_sn``'s detections over the P2P session:
+        the :class:`~.events.SecurityEvent` detections of that device, a motion
+        sensor's ``msg_type`` 14 motion included.
+
+        Not covered: a doorbell's ring, a lock's events, and the station's alarm
+        (``msg_type`` 10) and arming (``msg_type`` 9) pushes; a station sends no alarm
+        or arming push over P2P but reports the same facts in other frames (see
+        ``docs/protocol/events.md`` § Station pushes: arming and alarm, § Alarm over P2P).
+
+        :attr:`local_events` for every device of a station whose own grade is not
+        ``VERIFIED``. Behind a ``VERIFIED`` station, a model the eufy app shows as a
+        camera (:attr:`~.devices.types.DeviceModel.has_camera`: a video doorbell or
+        video lock too) takes its own model's ``VERIFIED`` entry (a standalone camera
+        itself: :attr:`local_events`), else the station's grade with a source naming the
+        extension; any other device (the station itself without a camera, a sensor, a
+        keypad, a lock without a camera, an uncatalogued model) is ``UNKNOWN``, so its
+        detections need cloud push. ``UNKNOWN`` for a device not paired here.
+        """
+        if not self._is_paired(device_sn):
+            return Evidence(Support.UNKNOWN, _NOT_PAIRED)
+        station = self.local_events
+        if station.support is not Support.VERIFIED:
+            return station
+        model = model_for_serial(device_sn)
+        if model is None or not model.has_camera:
+            code = self._product_code(device_sn) or "this model"
+            if device_sn == self.serial:
+                return Evidence(
+                    Support.UNKNOWN,
+                    f"{code} has no camera: no detections of its own",
+                    "its alarm and guard-mode changes arrive as other P2P frames",
+                )
+            return Evidence(
+                Support.UNKNOWN,
+                f"no local detection push recorded for {code}",
+                "the station's local push is verified for camera detections only; this "
+                "device's detections arrive through cloud push",
+            )
+        profile = own_profile(device_sn)
+        own = None if profile is None else profile.capabilities.get(Capability.LOCAL_EVENTS)
+        if own is not None and own.support is Support.VERIFIED:
+            return own
+        return Evidence(
+            station.support,
+            f"{station.source}; extended to {model.model}, which the eufy app shows as a camera",
+            station.note,
         )
 
     def _ptz_unsupported_reason(self, device_sn: str, actions: Sequence[str]) -> str:
@@ -4512,12 +4616,45 @@ class Station:
     async def async_history_record(self, record_id: int) -> HistoryRecord | None:
         """The history row of one ``record_id`` (one query), or None when the station has
         none. Raises :class:`~.exceptions.UnsupportedError`, before sending, on a
-        standalone device (it lists no history) and for an id that carries no day."""
+        standalone device (it lists no history) and for an id that carries no day; on
+        every station a listed row is looked up by its
+        :attr:`~.events.HistoryRecord.ref` (:meth:`async_history_record_by_ref`)."""
         if self.is_standalone:
             raise UnsupportedError("a standalone device lists no history")
         if record_id_day(record_id) is None:
             raise UnsupportedError(f"record_id {record_id} carries no day")
         return await self.session.async_history_record(record_id)
+
+    async def async_history_record_by_ref(
+        self, ref: str, *, device_sn: str | None = None, timeout: float | None = None
+    ) -> HistoryRecord:
+        """The history row a listed row's :attr:`~.events.HistoryRecord.ref` names, on
+        every station (a HomeBase 2's ids carry no day: the ref carries the station day
+        and start time); the row carries the same ``ref``. One history query, or on a
+        station paged by start time at most two
+        (:meth:`~.p2p.session.StationSession.async_find_history_record`).
+
+        ``ref`` is the text as the library gave it; with ``device_sn`` it must be a
+        row of that camera. ``timeout`` bounds each query (None:
+        :data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`); none is resent.
+
+        Raises before anything is sent: :class:`~.exceptions.RecordingRefError` (a
+        ``ValueError``) for a ref that does not check out for this station (and
+        ``device_sn``) or one that does not parse; ``UnsupportedError`` for a
+        ``device_sn`` not paired here and on a standalone device. Raises
+        :class:`~.exceptions.RecordNotFoundError` when the station no longer lists
+        that row (deleted, or that id now belongs to another camera) and, on a station
+        paged by start time, for a row behind a full page of rows of its start second.
+        """
+        if device_sn is not None:
+            self.channel_for(device_sn)  # raises for a device not paired here
+            cameras: tuple[str, ...] = (device_sn,)
+        else:
+            cameras = (self.serial, *(d.device_sn for d in self.devices))
+        found = decode_ref(ref, station_sn=self.serial, device_sns=cameras)
+        if self.is_standalone:
+            raise UnsupportedError("a standalone device lists no history")
+        return await self.session.async_find_history_record(found, timeout=timeout)
 
     async def async_list_recordings(
         self,
@@ -4526,8 +4663,7 @@ class Station:
         days: int = RECORDINGS_DAYS,
         since: datetime | None = None,
         limit: int | None = None,
-        before: int | HistoryRecord | None = None,
-        before_day: date | None = None,
+        before: int | None = None,
         until: date | None = None,
         timeout: float | None = None,
     ) -> list[HistoryRecord]:
@@ -4540,19 +4676,18 @@ class Station:
         started at or after it, and days before its day are not asked. The camera is not
         woken. A standalone device lists no recordings: an empty list.
 
-        Pages: ``limit`` stops the walk as soon as that many rows are found, so only
-        the days (and pages) up to the last row are asked; ``before`` (the
-        ``record_id`` of the previous page's last row) starts below that row, in its
-        day. A previously returned ``HistoryRecord`` is an opaque cursor whose
-        station-local date is derived by the library. Integer cursors remain
-        supported for date-encoded IDs; ``before_day`` is a compatibility hint.
-        A page shorter than ``limit`` means the window holds no more; a full page
-        may be followed by an empty one. ``until`` starts the walk at that day: its rows
-        and older ones (a later day counts as today; a ``datetime`` as its host-local
-        day). ``days`` still counts back from today, so an ``until`` before the window
-        lists nothing. ``before`` wins over ``until``. Raises :class:`ValueError`,
-        before anything is sent, for ``days`` or ``limit`` below 1 and a ``before``
-        that carries no day (:func:`~.p2p.messages.record_id_day`).
+        Pages (for a list view, prefer :meth:`async_list_recordings_page`, whose cursor
+        works on every station): ``limit`` stops the walk as soon as that many rows are
+        found, so only the days (and pages) up to the last row are asked; ``before`` (the
+        ``record_id`` of the previous page's last row; deprecated in favour of that
+        cursor) starts below that row, in its day. A page shorter than ``limit`` means
+        the window holds no more; a full page may be followed by an empty one. ``until``
+        starts the walk at that day: its rows and older ones (a later day counts as
+        today; a ``datetime`` as its host-local day). ``days`` still counts back from
+        today, so an ``until`` before the window lists nothing. ``before`` wins over
+        ``until``. Raises :class:`ValueError`, before anything is sent, for ``days`` or
+        ``limit`` below 1 and a ``before`` that carries no day
+        (:func:`~.p2p.messages.record_id_day`).
 
         ``timeout`` bounds each history query (None:
         :data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`); an unanswered one is asked once
@@ -4565,38 +4700,127 @@ class Station:
             raise ValueError("days must be at least 1")
         if limit is not None and limit < 1:
             raise ValueError("limit must be at least 1")
-        if before is None and before_day is not None:
-            raise ValueError("before_day requires before")
-        before_id = before.record_id if isinstance(before, HistoryRecord) else before
-        cursor_day = (
-            before.station_day
-            if isinstance(before, HistoryRecord)
-            else before_day
-            if before_day is not None
-            else record_id_day(before_id)
-            if before_id is not None
-            else None
-        )
-        if before_id is not None and cursor_day is None:
-            raise ValueError(f"before {before_id} carries no day")
+        cursor_day = None if before is None else record_id_day(before)
+        if before is not None and cursor_day is None:
+            raise ValueError(f"before {before} carries no day")
         if device_sn is not None:
             self.channel_for(device_sn)  # raises for a device not paired here
         if self.is_standalone:
             return []
-        paired = {d.device_sn for d in self.devices}
-        today = datetime.now().astimezone().date()
+        today = _host_today()
         first = today - timedelta(days=days - 1)
         if since is not None:
             first = max(first, since.astimezone().date())
         if cursor_day is not None:
             last = min(today, cursor_day)
         elif until is not None:
-            until_day = until.astimezone().date() if isinstance(until, datetime) else until
-            last = min(today, until_day)
+            last = min(today, _host_day(until))
         else:
             last = today
         if first > last:
             return []
+        return await self.session.async_list_history(
+            first.strftime("%Y%m%d"),
+            last.strftime("%Y%m%d"),
+            count=limit,
+            before=before if cursor_day is not None and cursor_day <= last else None,
+            keep=self._recording_filter(device_sn, since),
+            device_sn=device_sn,
+            timeout=timeout,
+        )
+
+    async def async_list_recordings_page(
+        self,
+        device_sn: str | None = None,
+        *,
+        limit: int,
+        days: int = RECORDINGS_DAYS,
+        cursor: str | None = None,
+        until: date | None = None,
+        page_days: int | None = None,
+        timeout: float | None = None,
+    ) -> RecordingsPage:
+        """One page of :meth:`async_list_recordings` (the same rows, window and
+        ``timeout``): up to ``limit`` recordings, newest first, and the cursor of the
+        next page.
+
+        ``cursor`` (None: the first page) is a page's ``next_cursor`` handed back as it
+        came: opaque text, JSON-safe, the same for the same position of the same listing
+        (station and ``device_sn``). The page starts after the row it names, or at the
+        day it names when the last page ended on a day boundary; ``cursor`` wins over
+        ``until`` (the day the first page starts at, as in :meth:`async_list_recordings`).
+        ``page_days`` bounds the days one page asks (None: the rest of the window).
+
+        ``next_cursor`` is None when the window holds no more: a full page names its
+        last row (the next page may be empty), or its last row with a ``record_id``
+        when rows without one end it (those may then come again); a short page that
+        stopped at ``page_days`` with window days left names the day before the ones it
+        asked.
+        Positions are the station's own days (the day a row's id carries, else the day
+        its query named), never the host's.
+
+        Raises before anything is sent: :class:`~.exceptions.RecordingCursorError` (a
+        ``ValueError``) for a cursor that does not check out for that station and camera
+        or one that does not parse; :class:`ValueError` for ``limit``, ``days`` or
+        ``page_days`` below 1; ``UnsupportedError`` for a device not paired here. A
+        standalone device lists none: an empty page without a cursor.
+        """
+        if days < 1:
+            raise ValueError("days must be at least 1")
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
+        if page_days is not None and page_days < 1:
+            raise ValueError("page_days must be at least 1")
+        position = None
+        if cursor is not None:
+            position = decode_cursor(cursor, station_sn=self.serial, device_sn=device_sn)
+        if device_sn is not None:
+            self.channel_for(device_sn)  # raises for a device not paired here
+        if self.is_standalone:
+            return RecordingsPage((), None)
+        today = _host_today()
+        first = today - timedelta(days=days - 1)
+        if position is not None:
+            start = min(today, position.day)
+        elif until is not None:
+            start = min(today, _host_day(until))
+        else:
+            start = today
+        oldest = first if page_days is None else max(first, start - timedelta(days=page_days - 1))
+        if oldest > start:
+            return RecordingsPage((), None)
+        record_id = None if position is None else position.record_id
+        listed = await self.session.async_list_history_by_day(
+            oldest.strftime("%Y%m%d"),
+            start.strftime("%Y%m%d"),
+            count=limit,
+            before=record_id,  # the session pages it only on its own day
+            before_day=None if position is None or record_id is None else position.day,
+            keep=self._recording_filter(device_sn, None),
+            device_sn=device_sn,
+            timeout=timeout,
+        )
+        rows = tuple(row for _day, row in listed)
+        # rows without an id (none above 0) cannot be paged from: go on after the page's
+        # last row with one, so they may come again but none is skipped
+        paged = [(day, row.record_id) for day, row in listed if row.record_id > 0]
+        if len(listed) < limit:  # the days asked hold no more: go on before them
+            following = RecordingPosition(oldest - timedelta(days=1))
+        elif paged:
+            following = RecordingPosition.after(paged[-1][1], paged[-1][0])
+        else:  # no row to page from: go on with the day before the last one
+            following = RecordingPosition(listed[-1][0] - timedelta(days=1))
+        if following.record_id is None and following.day < first:
+            return RecordingsPage(rows, None)  # the window holds no more
+        text = encode_cursor(following, station_sn=self.serial, device_sn=device_sn)
+        return RecordingsPage(rows, text)
+
+    def _recording_filter(
+        self, device_sn: str | None, since: datetime | None
+    ) -> Callable[[HistoryRecord], bool]:
+        """Which history rows are recordings of ``device_sn`` (None: of every camera
+        paired here) that started at or after ``since``."""
+        paired = {d.device_sn for d in self.devices}
 
         def wanted(row: HistoryRecord) -> bool:
             if row.video_path is None or row.device_sn is None:
@@ -4615,16 +4839,7 @@ class Station:
                 return started is not None and started >= since
             return True
 
-        return await self.session.async_list_history(
-            first.strftime("%Y%m%d"),
-            last.strftime("%Y%m%d"),
-            count=limit,
-            before=before_id if cursor_day is not None and cursor_day <= last else None,
-            before_day=cursor_day if cursor_day is not None and cursor_day <= last else None,
-            keep=wanted,
-            device_sn=device_sn,
-            timeout=timeout,
-        )
+        return wanted
 
     @staticmethod
     def recording_settled(

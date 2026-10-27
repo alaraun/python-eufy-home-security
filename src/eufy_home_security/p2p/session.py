@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import time
@@ -62,7 +63,9 @@ from .._logging import (
 )
 from ..cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
 from ..devices.device_alarm import USER_NAME_SLOT
-from ..devices.live_open import LiveOpen, LiveStop
+from ..devices.live_open import NVR_OPENS, LiveOpen, LiveStop
+from ..devices.live_view import LensView, LiveView, player_input
+from ..devices.live_view import live_view as live_view_of
 from ..devices.param_info import ParamInfo, param_info
 from ..devices.recipes import (
     ConnectType,
@@ -71,6 +74,7 @@ from ..devices.recipes import (
     ResultFrom,
     close_live_stream,
     connect_type,
+    open_live_stream_nvr,
     open_live_stream_single,
 )
 from ..devices.settings import Scope
@@ -93,6 +97,7 @@ from ..events import (
     is_station_recording_path,
 )
 from ..exceptions import (
+    AccountRejectedError,
     CameraWakeError,
     CipherUnusableError,
     CloudError,
@@ -106,11 +111,14 @@ from ..exceptions import (
     KeyRejectedError,
     LiveStreamLimitError,
     ProtocolError,
+    RecordingRefError,
+    RecordNotFoundError,
     SessionReplacedError,
     StationUnreachableError,
     UnsupportedError,
 )
 from ..models import STATION_CHANNEL, GuardMode
+from ..recordings import RecordingRef, encode_ref, issue_ref, row_started
 from ._json import json_int
 from .alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
 from .clip import ClipWriter, MediaClip, mux_frames
@@ -191,6 +199,7 @@ from .messages import (
     RECEIPT_CODES,
     RECEIPT_NOT_HANDLED,
     RECEIPT_TAKEN,
+    RESULT_INVALID_ACCOUNT,
     RESULT_INVALID_COMMAND,
     app_ping_frame,
     arm_payload,
@@ -371,9 +380,9 @@ cap a station with odd firmware — or anything on the LAN able to inject pushes
 them without bound.
 """
 HISTORY_PAGE_SIZE = 50
+"""Default history page size for a ``DB_QUERY_HISTORY`` station."""
 HISTORY_LOCAL_PAGE_SIZE = 20
 """The page the app asks of a station queried with ``DB_QUERY_LOCAL_EVENTS``."""
-# HISTORY_PAGE_SIZE is the separate DB_QUERY_HISTORY default.
 
 HISTORY_MAX_PAGES = 1000
 """Pages read for one day before giving up on a station that never runs out."""
@@ -2097,8 +2106,9 @@ class StationSession:
           an RSA session the channel-0 result of the arm's own send, after every result
           owed to an earlier send) is final: the mode is filed as this library's write
           (:attr:`param_origins`) and returned, without waiting for a mode report;
-        - a non-zero code raises: -108 and -103 :class:`CommandUnsupportedError`, any
-          other :class:`CommandRejectedError`; on a GCM session a non-zero receipt too;
+        - a non-zero code raises: -108 and -103 :class:`CommandUnsupportedError`, -104
+          :class:`AccountRejectedError`, any other :class:`CommandRejectedError`; on a GCM
+          session a non-zero receipt too;
         - a GCM receipt 0 only says the station took the command off its queue: it stops
           the resend, and the arm waits on for its result, a report or the read-back;
         - a guard-mode report (0x047F) that comes first answers it, under any encryption
@@ -2283,11 +2293,12 @@ class StationSession:
 
         The station's command receipt decides two things. A receipt with code -108
         raises :class:`CommandUnsupportedError` (the firmware does not handle the
-        command), any other non-zero code :class:`CommandRejectedError`. The command
-        is resent once only when neither a receipt nor an ACK came back: resending
-        into the station's queue would queue a second copy. A command acknowledged
-        but without a receipt by ``timeout`` waits for it up to
-        :data:`COMMAND_RECEIPT_TIMEOUT` after sending, still holding the op lock.
+        command), -104 :class:`AccountRejectedError`, any other non-zero code
+        :class:`CommandRejectedError`. The command is resent once only when neither a
+        receipt nor an ACK came back: resending into the station's queue would queue a
+        second copy. A command acknowledged but without a receipt by ``timeout`` waits
+        for it up to :data:`COMMAND_RECEIPT_TIMEOUT` after sending, still holding the op
+        lock.
 
         Receipts carry no command id. One arriving while this command is in flight is
         taken as its receipt: commands are serialised, but a media open, still fetch,
@@ -2588,10 +2599,10 @@ class StationSession:
 
         The recipe's frame (:meth:`Recipe.plaintext`, of type ``recipe.cmd``) goes to
         ``channel``'s subheader. A receipt with code -108 raises
-        :class:`CommandUnsupportedError`, any other non-zero code
-        :class:`CommandRejectedError`. A notify-answered recipe returns the payload
-        of the 1351 notify naming its :attr:`~Recipe.answer_cmd` (``APPLIED``) and raises
-        :class:`DeviceTimeoutError` without one; any other recipe returns
+        :class:`CommandUnsupportedError`, -104 :class:`AccountRejectedError`, any other
+        non-zero code :class:`CommandRejectedError`. A notify-answered recipe returns the
+        payload of the 1351 notify naming its :attr:`~Recipe.answer_cmd` (``APPLIED``)
+        and raises :class:`DeviceTimeoutError` without one; any other recipe returns
         ``DELIVERED`` on its receipt, since nothing else confirms it.
 
         A 1350 recipe (:attr:`RecipeCommand.SET_PAYLOAD`) is a ``DeviceMsgBean`` of its
@@ -2661,8 +2672,9 @@ class StationSession:
 
         Raises :class:`CommandRejectedError` with the station's result code
         (:class:`CommandUnsupportedError` for -103, a command it takes in no scalar
-        form), or :class:`CommandNotAppliedError` / :class:`DeviceTimeoutError` when no
-        result came back. A ``channel`` or account id the frame cannot carry raises
+        form; :class:`AccountRejectedError` for -104), or
+        :class:`CommandNotAppliedError` / :class:`DeviceTimeoutError` when no result came
+        back. A ``channel`` or account id the frame cannot carry raises
         :class:`ValueError` before anything is sent, like any out-of-domain argument.
         """
         timeout = _or(timeout, COMMAND_TIMEOUT)
@@ -2964,7 +2976,7 @@ class StationSession:
                 return None
             code = json_int(obj.get("mIntRet"))
             if code is not None and code != 0:
-                raise CommandRejectedError(CMD_DATABASE, code, str(obj.get("msg", "")))
+                raise _rejection(CMD_DATABASE, code, str(obj.get("msg", "")))
             data = obj.get("data")
             items = [i for i in (data if isinstance(data, list) else ()) if isinstance(i, Mapping)]
             # A T8170 sometimes names no device ("device_sn": ""): its one item is its own.
@@ -3007,7 +3019,7 @@ class StationSession:
         end_date: str | None = None,
         *,
         count: int | None = None,
-        before: int | HistoryRecord | None = None,
+        before: int | None = None,
         before_day: date | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
         device_sn: str | None = None,
@@ -3018,9 +3030,10 @@ class StationSession:
 
         Dates are ``YYYYMMDD`` and both days are included (``end_date`` None: only
         ``start_date``). ``count`` caps the number of records (None: all of them).
-        ``before`` (a ``record_id``) keeps only older rows; ``before_day`` supplies
-        the calendar date for an opaque HomeBase 2 ID: the days after its day are
-        not asked and its day is paged from it. ``keep`` filters the rows as they
+        ``before`` (a ``record_id``) keeps only older rows: the days after its day are
+        not asked and its day is paged from it. Its day is the one the id carries, else
+        ``before_day`` (the station day it was listed under, as
+        :meth:`async_list_history_by_day` gives it). ``keep`` filters the rows as they
         arrive, and ``count`` then counts the kept ones, so paging stops as soon as
         enough rows pass the filter.
 
@@ -3045,10 +3058,39 @@ class StationSession:
         :data:`HISTORY_QUERY_TIMEOUT`); a query left unanswered is sent once more with
         the same cursor, and :class:`DeviceTimeoutError` is raised when that one times
         out too. Raises :class:`ValueError`, before sending,
-        for a malformed date, a start after the end, a ``before`` that carries no day,
-        or a ``page_size`` below 2 (a page repeats the cursor row, so a page of 1
-        cannot move).
+        for a malformed date, a start after the end, a ``before`` without a day (none
+        carried, no ``before_day``), a ``before_day`` other than the day ``before``
+        carries or without ``before``, or a ``page_size`` below 2 (a page repeats the
+        cursor row, so a page of 1 cannot move).
         """
+        rows = await self.async_list_history_by_day(
+            start_date,
+            end_date,
+            count=count,
+            before=before,
+            before_day=before_day,
+            keep=keep,
+            device_sn=device_sn,
+            page_size=page_size,
+            timeout=timeout,
+        )
+        return [row for _day, row in rows]
+
+    async def async_list_history_by_day(
+        self,
+        start_date: str,
+        end_date: str | None = None,
+        *,
+        count: int | None = None,
+        before: int | None = None,
+        before_day: date | None = None,
+        keep: Callable[[HistoryRecord], bool] | None = None,
+        device_sn: str | None = None,
+        page_size: int | None = None,
+        timeout: float | None = None,
+    ) -> list[tuple[date, HistoryRecord]]:
+        """:meth:`async_list_history`, each row with the station day its query named (the
+        day it belongs to on the station, whether or not its ``record_id`` carries one)."""
         verb = history_query_verb(self.serial)
         # The app includes a device filter with every local-events query.
         native_device_sn = device_sn if verb == DB_QUERY_LOCAL_EVENTS else None
@@ -3062,21 +3104,8 @@ class StationSession:
         last = first if end_date is None else _parse_day(end_date)
         if first > last:
             raise ValueError(f"start date {start_date} is after end date {end_date}")
-        if before is None and before_day is not None:
-            raise ValueError("before_day requires before")
-        before_id = before.record_id if isinstance(before, HistoryRecord) else before
-        cursor_day = (
-            before.station_day
-            if isinstance(before, HistoryRecord)
-            else before_day
-            if before_day is not None
-            else _record_day(before_id)
-            if before_id is not None
-            else None
-        )
-        if before_id is not None and cursor_day is None:
-            raise ValueError(f"before {before_id} carries no day")
-        records: list[HistoryRecord] = []
+        cursor_day = _cursor_day(before, before_day)
+        records: list[tuple[date, HistoryRecord]] = []
         seen: set[int] = set()
         day = last if cursor_day is None else min(last, cursor_day)
         while day >= first:
@@ -3086,7 +3115,7 @@ class StationSession:
                 seen,
                 verb=verb,
                 count=count,
-                start_id=before_id if day == cursor_day else None,
+                start_id=before if day == cursor_day else None,
                 keep=keep,
                 device_sn=native_device_sn,
                 page_size=page_size,
@@ -3110,12 +3139,84 @@ class StationSession:
         """
         day = _record_day(record_id)
         page, _ = await self._history_page(day, record_id, 2, timeout)
-        return next((r for r in page if r.record_id == record_id), None)
+        row = next((r for r in page if r.record_id == record_id), None)
+        return None if row is None else self._with_ref(row, day, history_query_verb(self.serial))
+
+    async def async_find_history_record(
+        self, ref: RecordingRef, *, timeout: float | None = None
+    ) -> HistoryRecord:
+        """The history row ``ref`` names (as :func:`~..recordings.decode_ref` gives it),
+        carrying its :attr:`~..events.HistoryRecord.ref`.
+
+        Queries of the ref's day with the verb the app sends this station, none resent
+        (``timeout`` None: :data:`HISTORY_QUERY_TIMEOUT` each). Under
+        ``DB_QUERY_HISTORY`` one page of 2 from ``start_id`` = its ``record_id`` (the
+        page starts with that row), matched by ``record_id`` and camera. Under
+        ``DB_QUERY_LOCAL_EVENTS`` a page of :data:`HISTORY_LOCAL_PAGE_SIZE` from each
+        cursor of :meth:`~..recordings.RecordingRef.time_cursors`, matched by
+        ``record_id``, camera and start time: the second page is asked only when the
+        first is full, lacks the row and holds no row that started before it. That
+        finds the row whether the station lists the rows before the cursor or up to
+        it, unless a full page of rows that started in its own second comes before it.
+
+        Raises :class:`RecordingRefError`, before sending, under
+        ``DB_QUERY_LOCAL_EVENTS`` for a ref without a start time;
+        :class:`RecordNotFoundError` when no page asked holds the row: the station no
+        longer lists it (deleted), or lists that id for another camera.
+        """
+        if history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS:
+            row = await self._find_local_event(ref, timeout)
+        else:
+            page, _ = await self._history_page(ref.day, ref.record_id, 2, timeout)
+            names = (ref.record_id, ref.device_sn)
+            row = next((r for r in page if (r.record_id, r.device_sn) == names), None)
+        if row is None:
+            raise RecordNotFoundError(
+                f"{self._log_name}: the station lists no such recording", device_sn=ref.device_sn
+            )
+        return replace(row, ref=encode_ref(ref, station_sn=self.serial))
+
+    async def _find_local_event(
+        self, ref: RecordingRef, timeout: float | None
+    ) -> HistoryRecord | None:
+        """The row ``ref`` names under ``DB_QUERY_LOCAL_EVENTS``, or None (see
+        :meth:`async_find_history_record`)."""
+        cursors = ref.time_cursors()
+        if cursors is None:
+            raise RecordingRefError("the recording reference names no start time to ask by")
+        names = (ref.record_id, ref.device_sn, ref.started)
+        for cursor in cursors:
+            page, _ = await self._history_page(
+                ref.day,
+                0,
+                HISTORY_LOCAL_PAGE_SIZE,
+                timeout,
+                verb=DB_QUERY_LOCAL_EVENTS,
+                start_time=cursor,
+                device_sn=ref.device_sn,
+            )
+            for row in page:
+                if (row.record_id, row.device_sn, row_started(row)) == names:
+                    return row
+            starts = [s for r in page if (s := row_started(r)) is not None]
+            # a full page with no row started before the ref may hide it: ask on once
+            if len(page) < HISTORY_LOCAL_PAGE_SIZE or min(starts, default=cursors[1]) < cursors[1]:
+                return None
+        return None
+
+    def _with_ref(self, row: HistoryRecord, day: date, verb: int) -> HistoryRecord:
+        """``row`` listed under the station ``day`` with its reference (see
+        :func:`~..recordings.issue_ref`; under ``DB_QUERY_LOCAL_EVENTS`` a row is found
+        again by its start time)."""
+        ref = issue_ref(
+            row, day, station_sn=self.serial, need_started=verb == DB_QUERY_LOCAL_EVENTS
+        )
+        return row if ref is None else replace(row, ref=ref)
 
     async def _history_day(
         self,
         day: date,
-        records: list[HistoryRecord],
+        records: list[tuple[date, HistoryRecord]],
         seen: set[int],
         *,
         verb: int = DB_QUERY_HISTORY,
@@ -3154,7 +3255,7 @@ class StationSession:
             fresh = [r for r in wanted if not r.record_id or r.record_id not in seen]
             seen.update(r.record_id for r in fresh)
             kept = [r for r in fresh if keep is None or keep(r)]
-            records.extend(kept)
+            records.extend((day, self._with_ref(r, day, verb)) for r in kept)
             stop: str | None = None
             if count is not None and len(records) >= count:
                 stop = "enough rows"
@@ -3535,6 +3636,7 @@ class StationSession:
         live_open: LiveOpen | None = None,
         live_stop: LiveStop | None = None,
         media_key: MediaKeyType = MediaKeyType.RSA,
+        live_view: LiveView | None = None,
     ) -> MediaStream:
         """Open a camera's live video and audio. This wakes a battery camera.
 
@@ -3567,6 +3669,11 @@ class StationSession:
         non-zero receipt to a 1700 open fails the stream at once
         (:class:`CommandRejectedError`, :class:`CameraWakeError` for a wake failure).
 
+        A multi-camera ``live_open`` (:data:`~..devices.live_open.NVR_OPENS`) sends the
+        handler's 1350/1003 for ``live_view`` (:mod:`~..devices.live_view`; default: the
+        fixed lens alone), with the view fields only to a HomeBase 3, as the app's
+        player does; behind a station its stop is ``live_stop``, as for a 1700 open.
+
         ``media_key`` is the key pair the open offers (its ``key`` field): RSA, or ECC,
         which the app offers a device whose param 1103 is 128 or more
         (:func:`~.media.media_key_type_for`; :meth:`~..station.Station.async_open_live`
@@ -3580,12 +3687,27 @@ class StationSession:
         homebase3 = self.homebase3
         bare_stop = standalone or not homebase3
         flag = LIVE_OPEN_SUBHEADER_FLAG
-        if single and not standalone:
-            if live_stop is not None:
-                bare_stop = live_stop is LiveStop.BARE
-            if live_open is LiveOpen.SINGLE_NO_EXT:
-                flag = 0  # subheader byte 4 (the stream id) is 0 without extValue
-        if single:
+        nvr = live_open in NVR_OPENS
+        if (single or nvr) and not standalone and live_stop is not None:
+            bare_stop = live_stop is LiveStop.BARE
+        if single and live_open is LiveOpen.SINGLE_NO_EXT:
+            flag = 0  # subheader byte 4 (the stream id) is 0 without extValue
+        if nvr:
+            view = live_view or live_view_of(channel, (), LensView.MAIN)
+
+            def open_frame(account_id: str, key_hex: str) -> tuple[int, bytes]:
+                player = player_input(
+                    account_id=account_id, key_hex=key_hex, view=view, station_fields=homebase3
+                )
+                recipe = open_live_stream_nvr(
+                    channel=channel,
+                    player=player,
+                    camera_type_from_lens=live_open is LiveOpen.NVR_LENS,
+                )
+                body = json.dumps(dict(recipe.params or {}), separators=(",", ":"))
+                return FrameType.CMD_TRANSFER, body.encode()
+
+        elif single:
 
             def open_frame(account_id: str, key_hex: str) -> tuple[int, bytes]:
                 recipe = open_live_stream_single(
@@ -3626,10 +3748,11 @@ class StationSession:
                     retry_after=left,
                 )
         _LOGGER.debug(
-            "%s: live open %s (%s) on channel %d, subheader flag 0x%02x, %s stop",
+            "%s: live open %s (%s%s) on channel %d, subheader flag 0x%02x, %s stop",
             self._log_name,
             (live_open or (LiveOpen.SINGLE if single else LiveOpen.STATION)).value,
             "1700/1000" if single else "1350/1003",
+            f", view {view.view.value}" if nvr else "",
             channel,
             flag,
             "bare 1004" if bare_stop else "1350/1004",
@@ -3659,6 +3782,7 @@ class StationSession:
                 media_key,
                 live_open=live_open,
                 live_stop=live_stop,
+                live_view=live_view,
             )
         try:
             return await self._open_media(
@@ -3741,8 +3865,8 @@ class StationSession:
         """Play a stored recording to its end and mux it into one MPEG-TS clip.
 
         The camera is not woken: the station serves the clip off its own disk, about
-        as fast as it was recorded or faster. Native .dat paths on 10017
-        stations use download (1024); .zxvideo retains its JSON route. It runs
+        as fast as it was recorded or faster. Stations using local events
+        (10017) use native download (1024); HomeBase 3 retains JSON media. It runs
         on an extra session reserved from the live-stream session budget
         (:attr:`max_sessions`), closed when the clip ends or this call is cancelled, so
         this session's slot, commands and trigger frames are never held up. Downloads
@@ -3768,8 +3892,7 @@ class StationSession:
                 stream = await extra.async_open_recording(
                     path,
                     channel,
-                    download=path.endswith(".dat")
-                    and history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS,
+                    download=history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS,
                     first_frame_timeout=first,
                 )
                 async with stream:
@@ -3796,6 +3919,7 @@ class StationSession:
         *,
         live_open: LiveOpen | None = None,
         live_stop: LiveStop | None = None,
+        live_view: LiveView | None = None,
     ) -> MediaStream:
         """Open live on ``extra`` (the same open as this session's); the stream's end
         closes the session (PPPP CLOSE)."""
@@ -3817,6 +3941,7 @@ class StationSession:
                 media_key=media_key,
                 live_open=live_open,
                 live_stop=live_stop,
+                live_view=live_view,
             )
         except BaseException:
             extra._end_extra_live()
@@ -3885,10 +4010,8 @@ class StationSession:
         """
         if not is_station_recording_path(path):
             raise UnsupportedError("not a validated station recording path")
-        # Native .dat opens use the 10017 family; preserve JSON for .zxvideo.
-        if path.endswith(".dat"):
-            if history_query_verb(self.serial) != DB_QUERY_LOCAL_EVENTS:
-                raise UnsupportedError("a 10011 station cannot play a native .dat path")
+        # The app chooses native or JSON playback by station family, not filename.
+        if history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS:
             command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
             return await self._open_media(
                 command,
@@ -3901,6 +4024,8 @@ class StationSession:
                 media_key=MediaKeyType.ECC,
                 native_recording_path=path,
             )
+        if path.endswith(".dat"):
+            raise UnsupportedError("a 10011 station cannot play a native .dat path")
         command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
         build = download_video_payload if download else record_view_payload
         return await self._open_media(
@@ -4108,9 +4233,7 @@ class StationSession:
         )
         code = json_int(obj.get("code"))
         if code is not None and code != 0:
-            self._fail_media(
-                CommandRejectedError(stream.command, code, ECB_RESULT_CODES.get(code, ""))
-            )
+            self._fail_media(_rejection(stream.command, code, ECB_RESULT_CODES.get(code, "")))
         return True
 
     def _answers_live_open(self, stream: MediaStream, inbound: Inbound) -> bool:
@@ -5673,20 +5796,27 @@ def _scalar_result(inbound: Inbound, command: int) -> int | None:
     return decode_ecb_scalar_result(inbound.frame.payload)
 
 
-_UNSUPPORTED_CODES = frozenset({RECEIPT_NOT_HANDLED, RESULT_INVALID_COMMAND})
-"""Codes that refuse a command the station does not take at all, or not in this form."""
+def _rejection(command: int, code: int, message: str = "") -> CommandRejectedError:
+    """The error a non-zero result or receipt code raises on every command path: -104
+    :class:`AccountRejectedError`, -103 :class:`CommandUnsupportedError`, any other
+    :class:`CommandRejectedError`."""
+    if code == RESULT_INVALID_ACCOUNT:
+        return AccountRejectedError(command, code, message)
+    if code == RESULT_INVALID_COMMAND:
+        return CommandUnsupportedError(command, code, message)
+    return CommandRejectedError(command, code, message)
 
 
 def _receipt_error(command: int, code: int) -> CommandRejectedError:
-    """The error a non-zero command receipt or result raises: -108 and -103
+    """The error a non-zero command receipt or result raises: -108
     :class:`CommandUnsupportedError`, a camera wake failure :class:`CameraWakeError`,
-    any other :class:`CommandRejectedError`."""
+    any other code as :func:`_rejection` maps it."""
     name = RECEIPT_CODES.get(code, "")
-    if code in _UNSUPPORTED_CODES:
+    if code == RECEIPT_NOT_HANDLED:
         return CommandUnsupportedError(command, code, name)
     if code in CAMERA_WAKE_CODES:
         return CameraWakeError(command, code, f"the station could not wake the camera ({name})")
-    return CommandRejectedError(command, code, f"command receipt {name}".rstrip())
+    return _rejection(command, code, f"command receipt {name}".rstrip())
 
 
 def _lost_cause(exc: Exception, *, asleep: bool) -> DisconnectCause:
@@ -5758,6 +5888,23 @@ def _record_day(record_id: int) -> date:
     return day
 
 
+def _cursor_day(before: int | None, before_day: date | None) -> date | None:
+    """The day a history cursor pages from: the day ``before`` carries, else
+    ``before_day``; ValueError for a cursor without a day or two that disagree."""
+    if before is None:
+        if before_day is not None:
+            raise ValueError("before_day needs before")
+        return None
+    own = record_id_day(before)
+    if own is None:
+        if before_day is None:
+            raise ValueError(f"record_id {before} carries no day")
+        return before_day
+    if before_day is not None and before_day != own:
+        raise ValueError(f"before_day {before_day} is not the day record_id {before} carries")
+    return own
+
+
 def _parse_day(text: str) -> date:
     """A ``YYYYMMDD`` date; ValueError for anything else."""
     if len(text) != 8 or not text.isascii() or not text.isdigit():
@@ -5766,12 +5913,9 @@ def _parse_day(text: str) -> date:
 
 
 def _raise_for_code(command: int, code: int) -> None:
-    """Raise for a non-zero result code: -103 :class:`CommandUnsupportedError`, any
-    other :class:`CommandRejectedError`."""
-    if code == RESULT_INVALID_COMMAND:
-        raise CommandUnsupportedError(command, code, ECB_RESULT_CODES[code])
+    """Raise the :func:`_rejection` of a non-zero result code."""
     if code != 0:
-        raise CommandRejectedError(command, code, ECB_RESULT_CODES.get(code, ""))
+        raise _rejection(command, code, ECB_RESULT_CODES.get(code, ""))
 
 
 def _raise_waiter_error(waiter: _Waiter) -> None:

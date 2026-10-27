@@ -10,6 +10,8 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -471,3 +473,36 @@ def test_coerce_turns_int_payloads_of_bool_settings_into_bools() -> None:
     assert codec.coerce({"kind": "enum"}, 1) == 1
     with pytest.raises(ValueError, match="not a bool payload"):
         codec.coerce({"kind": "bool"}, 2)
+
+
+def _leaves_by_recursion(x: Any, path: tuple[Any, ...] = ()) -> list[tuple[Any, Any]]:
+    if isinstance(x, dict):
+        return [leaf for k, v in x.items() for leaf in _leaves_by_recursion(v, (*path, k))]
+    if isinstance(x, list):
+        return [leaf for i, v in enumerate(x) for leaf in _leaves_by_recursion(v, (*path, i))]
+    return [(path, x)]
+
+
+_JSON = st.recursive(
+    st.none() | st.booleans() | st.integers() | st.text(max_size=3),
+    lambda inner: (
+        st.lists(inner, max_size=4) | st.dictionaries(st.text(max_size=2), inner, max_size=4)
+    ),
+    max_leaves=30,
+)
+
+
+@given(_JSON)
+def test_leaves_lists_every_scalar_with_its_path_in_document_order(x: Any) -> None:
+    assert list(codec.leaves(x)) == _leaves_by_recursion(x)
+
+
+def test_leaves_skips_empty_containers_and_keeps_a_scalar_whole() -> None:
+    recipe = {"a": {}, "b": [[], {"c": None}], "d": [1, [2]], "e": "x"}
+    assert list(codec.leaves(recipe)) == [
+        (("b", 1, "c"), None),
+        (("d", 0), 1),
+        (("d", 1, 0), 2),
+        (("e",), "x"),
+    ]
+    assert list(codec.leaves(5, ("p",))) == [(("p",), 5)]

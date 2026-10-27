@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import MappingProxyType
+
 import pytest
 
 from eufy_home_security.devices.capabilities import (
@@ -8,9 +10,13 @@ from eufy_home_security.devices.capabilities import (
     PROFILES,
     PTZ_ACTION_NEEDS,
     PTZ_ACTIONS,
+    VIDEO_SMART_LOCK_CATEGORY,
     Capability,
+    DeviceProfile,
+    _build_with_ring,
     kind_from_params,
     profile_for_serial,
+    ring_evidence,
 )
 from eufy_home_security.devices.ptz import PTZ_IDENTIFIERS
 from eufy_home_security.devices.recipes import PtzAction
@@ -38,6 +44,7 @@ LOG_AREA: dict[Capability, str] = {
     Capability.BATTERY: "Parameter dump",
     Capability.RSSI: "Parameter dump",
     Capability.PIR_EVENT_TIME: "Motion sensor param 1605",
+    Capability.DOORBELL_RING: "Cloud push (FCM)",  # a press arrives as a cloud push
 }
 # The hardware-verification row that traces each pan/tilt preset action.
 LOG_AREA_PTZ_ACTION: dict[PtzAction, str] = {
@@ -211,7 +218,8 @@ def test_ptz_presets_capabilities() -> None:
         ("T8113P2000067890", Support.DECLARED),  # behind a HomeBase: the station open
         ("T8400P2000067890", Support.DECLARED),  # standalone: 1700 without extValue
         ("T8170P0000054321", Support.VERIFIED),  # its profile's grade stands
-        ("T8172P2000067890", Support.UNKNOWN),  # dual lens: an open not implemented
+        ("T8172P2000067890", Support.DECLARED),  # two lenses: the multi-camera open
+        ("T8530P2000067890", Support.UNKNOWN),  # an open not implemented
         ("T8030P0000054321", Support.UNKNOWN),  # a station has no live open
     ],
 )
@@ -278,3 +286,80 @@ def test_ptz_actions_cover_the_three_capabilities() -> None:
         Capability.PTZ_ZOOM,
     }
     assert set().union(*PTZ_ACTIONS.values()) <= set(PTZ_IDENTIFIERS)
+
+
+def _catalogued_serial(model: str) -> str:
+    return model + "P" + "0" * 10
+
+
+def test_a_model_rings_when_the_app_files_it_as_a_doorbell_or_a_video_lock() -> None:
+    for model in MODELS.values():
+        profile = profile_for_serial(_catalogued_serial(model.model))
+        assert profile is not None, model.model
+        rings = model.kind is DeviceKind.DOORBELL or VIDEO_SMART_LOCK_CATEGORY in model.categories
+        expected = Support.DECLARED if rings else Support.UNKNOWN
+        assert profile.support(Capability.DOORBELL_RING) is expected, model.model
+        assert (ring_evidence(model) is not None) is rings, model.model
+
+
+def test_a_video_lock_rings_and_a_lock_without_a_camera_does_not() -> None:
+    video = [m for m in MODELS.values() if VIDEO_SMART_LOCK_CATEGORY in m.categories]
+    plain = [m for m in MODELS.values() if m.kind is DeviceKind.LOCK and m not in video]
+    assert video
+    assert plain
+    for model in video:
+        assert model.kind is DeviceKind.LOCK
+        evidence = ring_evidence(model)
+        assert evidence is not None
+        assert evidence.support is Support.DECLARED
+        assert VIDEO_SMART_LOCK_CATEGORY in evidence.source
+        assert "DOORBELL_PRESS" in evidence.note
+    assert all(ring_evidence(m) is None for m in plain)
+
+
+def test_the_video_locks_ring_and_a_plain_lock_and_a_camera_do_not() -> None:
+    assert VIDEO_SMART_LOCK_CATEGORY == "VideoSmartLock"
+    for model in ("T8530", "T8531", "T8532", "T853A", "T85M0", "T85M1", "T85M2", "T85V0"):
+        profile = profile_for_serial(_catalogued_serial(model))
+        assert profile is not None, model
+        assert profile.support(Capability.DOORBELL_RING) is Support.DECLARED, model
+    for model in ("T8500", "T8160"):
+        profile = profile_for_serial(_catalogued_serial(model))
+        assert profile is not None, model
+        assert profile.support(Capability.DOORBELL_RING) is Support.UNKNOWN, model
+
+
+def test_generated_grades_follow_the_serials_product_code() -> None:
+    # serial rule: a T8420 serial with 6 at index 6 is product T8420X, which streams live
+    t8420 = profile_for_serial("T8420P0000000000")
+    assert t8420 is not None
+    assert t8420.support(Capability.LIVE_STREAM) is Support.UNKNOWN
+    profile = profile_for_serial("T8420P6000000000")
+    assert profile is not None
+    assert profile.support(Capability.LIVE_STREAM) is Support.DECLARED
+    assert "T8420X handler" in profile.capabilities[Capability.LIVE_STREAM].source
+    t8210c = profile_for_serial("T8210P8000067890")
+    assert t8210c is not None
+    assert "T8210C handler" in t8210c.capabilities[Capability.LIVE_STREAM].source
+
+
+def test_a_doorbell_rings_by_its_kind() -> None:
+    evidence = ring_evidence(MODELS["T8214"])
+    assert evidence is not None
+    assert "video doorbell" in evidence.source
+    profile = profile_for_serial("T8210P8000067890")  # serial rule: product T8210C
+    assert profile is not None
+    assert profile.support(Capability.DOORBELL_RING) is Support.DECLARED
+    assert profile_for_serial("T8210P8000067890") is profile
+
+
+def test_a_profiles_own_ring_grade_stands() -> None:
+    own = Evidence(Support.VERIFIED, "live")
+    profile = DeviceProfile(
+        model="T8214",
+        capabilities=MappingProxyType({Capability.DOORBELL_RING: own}),
+        params=MappingProxyType({}),
+    )
+    assert _build_with_ring(profile, MODELS["T8214"]) is profile
+    generic = FALLBACK_PROFILES[DeviceKind.CAMERA]
+    assert _build_with_ring(generic, MODELS["T8160"]) is generic

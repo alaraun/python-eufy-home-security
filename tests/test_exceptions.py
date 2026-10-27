@@ -7,10 +7,13 @@ from pathlib import Path
 
 import pytest
 
+import eufy_home_security
 from eufy_home_security.exceptions import (
+    AccountRejectedError,
     CipherUnavailableError,
     CloudApiError,
     CommandNotAppliedError,
+    CommandRejectedError,
     DeviceBusyError,
     DeviceTimeoutError,
     EmptyResponseError,
@@ -63,6 +66,17 @@ def test_an_error_names_no_device_by_default() -> None:
 )
 def test_an_error_carries_the_serial_it_names(err: EufySecurityError) -> None:
     assert err.device_sn == SN
+
+
+def test_an_account_refusal_is_a_rejection_with_its_code() -> None:
+    """-104 keeps the :class:`CommandRejectedError` contract and is public."""
+    err = AccountRejectedError(1224, -104, "INVALID_ACCOUNT")
+    assert isinstance(err, CommandRejectedError)
+    assert not isinstance(err, UnsupportedError)
+    assert (err.command, err.code) == (1224, -104)
+    assert str(err) == "command 1224 rejected with code -104: INVALID_ACCOUNT"
+    assert eufy_home_security.AccountRejectedError is AccountRejectedError
+    assert "AccountRejectedError" in eufy_home_security.__all__
 
 
 def test_an_error_lists_every_device_it_names() -> None:

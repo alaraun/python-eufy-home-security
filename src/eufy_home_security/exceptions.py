@@ -13,7 +13,9 @@ branch maps onto one decision a caller (Home Assistant, in practice) has to make
   (retry later / mark unavailable).
 * :class:`ProtocolError` — bytes arrived that do not decode (a bug, or a firmware
   change worth reporting).
-* :class:`CommandError` — the station received a command and did not apply it.
+* :class:`CommandError` — the station received a command and did not apply it;
+  :class:`AccountRejectedError` when it refused the account the command carried
+  (check in the eufy app that the station is shared with this account).
 * :class:`RecordNotFoundError` — no such record or media; its subclass
   :class:`StillNotWrittenError` means not yet (ask again later).
 """
@@ -387,6 +389,19 @@ class CommandRejectedError(CommandError):
         )
 
 
+class AccountRejectedError(CommandRejectedError):
+    """The station refused a command for the account it carried: code -104
+    (``INVALID_ACCOUNT``) in its result or receipt, on any command path.
+
+    The station does not accept the account id the command was sent under. Retrying
+    changes nothing; a human checks in the eufy app that the station is shared with this
+    account, or removes it and adds it again. The eufy app tells this code apart from
+    other refusals too. A
+    :class:`CommandRejectedError` with ``code`` -104, so handlers of that class still
+    catch it.
+    """
+
+
 class CommandNotAppliedError(CommandError):
     """The station acknowledged the datagram but never acted on it.
 
@@ -493,6 +508,18 @@ class RecordNotFoundError(EufySecurityError):
     Final for the request as made (a later event's still replaced the event's, another
     camera's row, nothing in the window) unless it is a :class:`StillNotWrittenError`.
     """
+
+
+class RecordingCursorError(EufySecurityError, ValueError):
+    """A recordings page cursor that does not check out for that station and camera, or
+    one that no longer parses (garbled, another version). Raised before anything is sent;
+    a ``ValueError`` too, so an invalid argument either way."""
+
+
+class RecordingRefError(EufySecurityError, ValueError):
+    """A recording reference (:attr:`~.events.HistoryRecord.ref`) that does not check out
+    for that station and camera, or one that does not parse (garbled, another version).
+    Raised before anything is sent; a ``ValueError`` too."""
 
 
 class CaptureStoppedError(EufySecurityError):

@@ -1,0 +1,329 @@
+{
+  "cases": [
+    {
+      "identifier": "open_live_stream",
+      "payload": {
+        "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+        "userId": "0123456789abcdef0123456789abcdef01234567",
+        "ClientOS": "ANDROID",
+        "streamType": 0,
+        "cameraType": 0,
+        "entryType": 0,
+        "extValue": 1000,
+        "chn_list": "[{\"cameraType\":0,\"chn\":3,\"index\":0,\"sensor\":0}]",
+        "audio_chn": 3,
+        "stitch_mode": 1,
+        "station_video_type": 0,
+        "pip_cord": ""
+      },
+      "device": {
+        "device_sn": "T8172P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 3,
+        "main_sw_version": "1.1.1.2"
+      },
+      "p2p": {
+        "cmd": 1350,
+        "subCmd": 1003,
+        "timeout": 15000,
+        "params": {
+          "cmd": 1003,
+          "mChannel": 3,
+          "account_id": "0123456789abcdef0123456789abcdef01234567",
+          "mValue3": 1003,
+          "mValue5": 0,
+          "payload": {
+            "accountId": "0123456789abcdef0123456789abcdef01234567",
+            "streamtype": 0,
+            "camera_type": 0,
+            "entrytype": 0,
+            "stitch_mode": 1,
+            "chn_list": [
+              {
+                "cameraType": 0,
+                "chn": 3,
+                "index": 0,
+                "sensor": 0
+              }
+            ],
+            "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+            "ClientOS": "ANDROID",
+            "cameraType": 0,
+            "extValue": 1000,
+            "audio_chn": 3,
+            "pip_cord": ""
+          }
+        },
+        "rtcSendRoute": 0
+      }
+    },
+    {
+      "identifier": "open_live_stream",
+      "payload": {
+        "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+        "userId": "0123456789abcdef0123456789abcdef01234567",
+        "ClientOS": "ANDROID",
+        "streamType": 0,
+        "cameraType": 0,
+        "entryType": 0,
+        "extValue": 1000,
+        "chn_list": "[{\"cameraType\":0,\"chn\":3,\"index\":0,\"sensor\":1}]",
+        "audio_chn": 3,
+        "stitch_mode": 1,
+        "station_video_type": 1,
+        "pip_cord": ""
+      },
+      "device": {
+        "device_sn": "T8172P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 3,
+        "main_sw_version": "1.1.1.2"
+      },
+      "p2p": {
+        "cmd": 1350,
+        "subCmd": 1003,
+        "timeout": 15000,
+        "params": {
+          "cmd": 1003,
+          "mChannel": 3,
+          "account_id": "0123456789abcdef0123456789abcdef01234567",
+          "mValue3": 1003,
+          "mValue5": 0,
+          "payload": {
+            "accountId": "0123456789abcdef0123456789abcdef01234567",
+            "streamtype": 0,
+            "camera_type": 1,
+            "entrytype": 0,
+            "stitch_mode": 1,
+            "chn_list": [
+              {
+                "cameraType": 0,
+                "chn": 3,
+                "index": 0,
+                "sensor": 1
+              }
+            ],
+            "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+            "ClientOS": "ANDROID",
+            "cameraType": 0,
+            "extValue": 1000,
+            "audio_chn": 3,
+            "pip_cord": ""
+          }
+        },
+        "rtcSendRoute": 0
+      }
+    },
+    {
+      "identifier": "open_live_stream",
+      "payload": {
+        "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+        "userId": "0123456789abcdef0123456789abcdef01234567",
+        "ClientOS": "ANDROID",
+        "streamType": 0,
+        "cameraType": 0,
+        "entryType": 0,
+        "extValue": 1000,
+        "chn_list": "[{\"cameraType\":0,\"chn\":3,\"index\":0,\"sensor\":0},{\"cameraType\":0,\"chn\":3,\"index\":1,\"sensor\":1}]",
+        "audio_chn": 3,
+        "stitch_mode": 5,
+        "station_video_type": 0,
+        "pip_cord": ""
+      },
+      "device": {
+        "device_sn": "T8172P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 3,
+        "main_sw_version": "1.1.1.2"
+      },
+      "p2p": {
+        "cmd": 1350,
+        "subCmd": 1003,
+        "timeout": 15000,
+        "params": {
+          "cmd": 1003,
+          "mChannel": 3,
+          "account_id": "0123456789abcdef0123456789abcdef01234567",
+          "mValue3": 1003,
+          "mValue5": 0,
+          "payload": {
+            "accountId": "0123456789abcdef0123456789abcdef01234567",
+            "streamtype": 0,
+            "camera_type": 0,
+            "entrytype": 0,
+            "stitch_mode": 5,
+            "chn_list": [
+              {
+                "cameraType": 0,
+                "chn": 3,
+                "index": 0,
+                "sensor": 0
+              },
+              {
+                "cameraType": 0,
+                "chn": 3,
+                "index": 1,
+                "sensor": 1
+              }
+            ],
+            "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+            "ClientOS": "ANDROID",
+            "cameraType": 0,
+            "extValue": 1000,
+            "audio_chn": 3,
+            "pip_cord": ""
+          }
+        },
+        "rtcSendRoute": 0
+      }
+    },
+    {
+      "identifier": "open_live_stream",
+      "payload": {
+        "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+        "userId": "0123456789abcdef0123456789abcdef01234567",
+        "ClientOS": "ANDROID",
+        "streamType": 0,
+        "cameraType": 0,
+        "entryType": 0,
+        "extValue": 1000,
+        "chn_list": "[{\"cameraType\":0,\"chn\":3,\"index\":0,\"sensor\":0},{\"cameraType\":0,\"chn\":3,\"index\":1,\"sensor\":1}]",
+        "audio_chn": 3,
+        "stitch_mode": 7,
+        "station_video_type": 9,
+        "pip_cord": "{\"x1\":0.65,\"y1\":0.7,\"x2\":0.95,\"y2\":0.9}"
+      },
+      "device": {
+        "device_sn": "T8172P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 3,
+        "main_sw_version": "1.1.1.2"
+      },
+      "p2p": {
+        "cmd": 1350,
+        "subCmd": 1003,
+        "timeout": 15000,
+        "params": {
+          "cmd": 1003,
+          "mChannel": 3,
+          "account_id": "0123456789abcdef0123456789abcdef01234567",
+          "mValue3": 1003,
+          "mValue5": 0,
+          "payload": {
+            "accountId": "0123456789abcdef0123456789abcdef01234567",
+            "streamtype": 0,
+            "camera_type": 0,
+            "entrytype": 0,
+            "stitch_mode": 7,
+            "chn_list": [
+              {
+                "cameraType": 0,
+                "chn": 3,
+                "index": 0,
+                "sensor": 0
+              },
+              {
+                "cameraType": 0,
+                "chn": 3,
+                "index": 1,
+                "sensor": 1
+              }
+            ],
+            "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+            "ClientOS": "ANDROID",
+            "cameraType": 0,
+            "extValue": 1000,
+            "audio_chn": 3,
+            "pip_cord": {
+              "x1": 650,
+              "y1": 700,
+              "x2": 950,
+              "y2": 900
+            },
+            "station_video_type": 9
+          }
+        },
+        "rtcSendRoute": 0
+      }
+    },
+    {
+      "identifier": "close_live_stream",
+      "payload": 0,
+      "device": {
+        "device_sn": "T8172P2000067890",
+        "parent_sn": "T8030P2000012345",
+        "device_channel": 3,
+        "main_sw_version": "1.1.1.2"
+      },
+      "p2p": {
+        "cmd": 1350,
+        "subCmd": 1004,
+        "params": {
+          "channel": 3
+        },
+        "rtcSendRoute": 1
+      }
+    },
+    {
+      "identifier": "open_live_stream",
+      "payload": {
+        "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+        "userId": "0123456789abcdef0123456789abcdef01234567",
+        "entryType": 0,
+        "cameraType": 0,
+        "streamType": 0,
+        "ClientOS": "ANDROID"
+      },
+      "device": {
+        "device_sn": "T8172P2000067890",
+        "parent_sn": "T8010P2000054321",
+        "device_channel": 3,
+        "main_sw_version": "1.1.1.2"
+      },
+      "p2p": {
+        "cmd": 1350,
+        "subCmd": 1003,
+        "timeout": 15000,
+        "params": {
+          "cmd": 1003,
+          "mChannel": 3,
+          "account_id": "0123456789abcdef0123456789abcdef01234567",
+          "mValue3": 1003,
+          "mValue5": 0,
+          "payload": {
+            "accountId": "0123456789abcdef0123456789abcdef01234567",
+            "streamtype": 0,
+            "camera_type": 0,
+            "entrytype": 0,
+            "stitch_mode": 1,
+            "chn_list": [],
+            "key": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+            "cameraType": 0,
+            "ClientOS": "ANDROID"
+          }
+        },
+        "rtcSendRoute": 1
+      }
+    },
+    {
+      "identifier": "close_live_stream",
+      "payload": 0,
+      "device": {
+        "device_sn": "T8172P2000067890",
+        "parent_sn": "T8010P2000054321",
+        "device_channel": 3,
+        "main_sw_version": "1.1.1.2"
+      },
+      "p2p": {
+        "cmd": 1004,
+        "rtcSendRoute": 1
+      }
+    }
+  ],
+  "handler": {
+    "large_version": 292,
+    "plugin_path_date": "2026/09/10",
+    "sha256": "b0191082507f1a5797e8fb1ee7bd59d06f16f5db4041c81fb161398546aad6e5"
+  },
+  "product_code": "T8172"
+}

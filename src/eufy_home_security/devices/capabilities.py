@@ -3,6 +3,8 @@
 A :class:`DeviceProfile` is the per-model answer to "may the library offer this?".
 Hardware without a profile gets the generic profile for its kind, where every
 capability is ``UNKNOWN`` — it degrades to "not offered", never to a guess.
+:func:`profile_for_serial` adds only what the eufy app's own data declares for the
+model (live video, pan/tilt/zoom, the doorbell ring).
 """
 
 from __future__ import annotations
@@ -31,7 +33,7 @@ from .ptz import app_version as ptz_app_version
 from .ptz import ptz_form
 from .recipes import PARENT_CONNECT_TYPES, ConnectType, PtzAction
 from .support import Evidence, Support
-from .types import MODELS, DeviceKind, model_for_serial, serial_product_code
+from .types import MODELS, DeviceKind, DeviceModel, model_for_serial, serial_product_code
 
 
 class Capability(StrEnum):
@@ -63,6 +65,10 @@ class Capability(StrEnum):
     delete a slot (6032/6033)."""
     PTZ_ZOOM = "ptz_zoom"
     """Zoom the picture (6203) and follow the zoom the camera reports."""
+    DOORBELL_RING = "doorbell_ring"
+    """A doorbell button: its press arrives as
+    :attr:`~..events.DetectionType.DOORBELL_PRESS` with the device's own serial, and the
+    eufy app shows it as a ring (see :func:`ring_evidence`)."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -360,7 +366,7 @@ _T8161 = DeviceProfile(
             Capability.LOCAL_EVENTS: Evidence(
                 Support.UNKNOWN,
                 "no detection push over P2P observed from a T8161",
-                "the push is the station's: Station.local_events grades it",
+                "the push is the station's: Station.local_detections_for grades it per device",
             ),
             Capability.CLOUD_EVENTS: Evidence(
                 Support.DECLARED, "app code relays detections over FCM"
@@ -542,16 +548,16 @@ PTZ_ACTION_NEEDS: Final[Mapping[PtzAction, tuple[Capability, ...]]] = MappingPro
 each preset slot edit."""
 
 
-_GENERATED_PROFILES: dict[tuple[int, str], DeviceProfile] = {}
+_GENERATED_PROFILES: dict[tuple[int, str, str], DeviceProfile] = {}
 
 
-def _with_generated(profile: DeviceProfile, product_code: str) -> DeviceProfile:
-    """Memoised :func:`_build_with_ptz` of :func:`_build_with_live`, keyed by the
-    (module-level, immortal) profile."""
-    key = (id(profile), product_code)
+def _with_generated(profile: DeviceProfile, product_code: str, model: DeviceModel) -> DeviceProfile:
+    """Memoised :func:`_build_with_ring` of :func:`_build_with_ptz` of
+    :func:`_build_with_live`, keyed by the (module-level, immortal) profile."""
+    key = (id(profile), product_code, model.model)
     if key not in _GENERATED_PROFILES:
-        _GENERATED_PROFILES[key] = _build_with_ptz(
-            _build_with_live(profile, product_code), product_code
+        _GENERATED_PROFILES[key] = _build_with_ring(
+            _build_with_ptz(_build_with_live(profile, product_code), product_code), model
         )
     return _GENERATED_PROFILES[key]
 
@@ -612,6 +618,50 @@ def _build_with_ptz(profile: DeviceProfile, product_code: str) -> DeviceProfile:
     return replace(profile, capabilities=MappingProxyType({**profile.capabilities, **graded}))
 
 
+#: The eufy app's product category of its video smart locks
+#: (:attr:`~.types.DeviceModel.categories`).
+VIDEO_SMART_LOCK_CATEGORY: Final = "VideoSmartLock"
+
+
+def ring_evidence(model: DeviceModel) -> Evidence | None:
+    """How a doorbell press of ``model`` is known to ring; ``None`` when the eufy app names
+    no doorbell button for it.
+
+    The eufy app shows a press (``event_type`` 3103) as a ring for a video doorbell (the
+    model's kind, :attr:`DeviceKind.DOORBELL`) and, the same way, for a video smart lock
+    (product category ``VideoSmartLock``): ring notification, live view on answer.
+    """
+    if model.kind is DeviceKind.DOORBELL:
+        source = "eufy app: a video doorbell's press (event 3103) is a ring"
+    elif VIDEO_SMART_LOCK_CATEGORY in model.categories:
+        source = (
+            f"eufy app product category {VIDEO_SMART_LOCK_CATEGORY}: the lock's doorbell press "
+            "(event 3103) is a ring, as a video doorbell's"
+        )
+    else:
+        return None
+    return Evidence(
+        Support.DECLARED,
+        source,
+        "the press arrives as DetectionType.DOORBELL_PRESS with the device's own serial",
+    )
+
+
+def _build_with_ring(profile: DeviceProfile, model: DeviceModel) -> DeviceProfile:
+    """``profile`` with :attr:`Capability.DOORBELL_RING` graded by :func:`ring_evidence`;
+    an entry the profile grades itself (other than ``UNKNOWN``) stands. ``profile``
+    itself when nothing changes."""
+    if profile.support(Capability.DOORBELL_RING) is not Support.UNKNOWN:
+        return profile
+    evidence = ring_evidence(model)
+    if evidence is None:
+        return profile
+    return replace(
+        profile,
+        capabilities=MappingProxyType({**profile.capabilities, Capability.DOORBELL_RING: evidence}),
+    )
+
+
 def profile_for_serial(serial: str) -> DeviceProfile | None:
     """The profile for a serial's model.
 
@@ -624,10 +674,11 @@ def profile_for_serial(serial: str) -> DeviceProfile | None:
     :meth:`~..station.Station.live_support`. Pan/tilt, presets and zoom the profile does
     not grade are ``DECLARED`` the same way from the handler's actions
     (:data:`PTZ_ACTIONS`); under one station: :meth:`~..station.Station.ptz_support`.
+    :attr:`Capability.DOORBELL_RING` is ``DECLARED`` for every model that rings
+    (:func:`ring_evidence`), whatever the station.
     """
     profile = own_profile(serial)
-    if profile is None:
-        return None
     model = model_for_serial(serial)
-    code = serial_product_code(serial) or (model.model if model is not None else None)
-    return profile if code is None else _with_generated(profile, code)
+    if profile is None or model is None:
+        return None
+    return _with_generated(profile, serial_product_code(serial) or model.model, model)

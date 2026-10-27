@@ -21,6 +21,7 @@ from eufy_home_security.devices.station_config_support import (
 from eufy_home_security.devices.support import Support
 from eufy_home_security.events import AlarmChanged, AlarmStopSource, Event
 from eufy_home_security.exceptions import (
+    AccountRejectedError,
     CommandNotAppliedError,
     CommandRejectedError,
     UnsupportedError,
@@ -108,7 +109,7 @@ async def test_restart_sends_the_models_restart_request(fake: FakeStation, pn: s
 
 async def test_a_rejected_restart_raises(station: Station, fake: FakeStation) -> None:
     fake.account_id = "another-account"  # the ECB result code is then -104
-    with pytest.raises(CommandRejectedError) as err:
+    with pytest.raises(AccountRejectedError) as err:
         await station.async_restart()
     assert (err.value.command, err.value.code) == (1034, -104)
 

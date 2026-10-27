@@ -73,10 +73,12 @@ from ..p2p.messages import (
     ECB_CHANNEL_VALUE_CMDS,
     HISTORY_RECORD_COUNTER,
     HISTORY_RECORD_ID_MIN,
+    P2P_ERROR_CODES,
     PARAM_QUERY_ALL,
     RECEIPT_LEN,
     RECEIPT_NOT_HANDLED,
     RECEIPT_TAKEN,
+    RESULT_INVALID_ACCOUNT,
     STRING_CMDS,
     decode_json_payload,
     decode_string_command_body,
@@ -359,6 +361,12 @@ def _record_day(row: dict[str, Any]) -> str | None:
     )
 
 
+def _local_event_day(row: dict[str, Any]) -> str | None:
+    """``YYYYMMDD`` a 10017 query lists ``row`` under: its ``record_id``'s day, else its
+    ``start_time``'s; None (every day) without either."""
+    return _record_day(row) or (_cursor_time(row)[:8] or None)
+
+
 #: Subheader ``(media version, encrypted flag)`` of a keyframe and of a P-frame per
 #: :class:`VideoVariant`, as the app's receiver reads them (a HomeBase 3: RSA_PREFIX).
 _VIDEO_SUBHEADER_FLAGS: dict[VideoVariant, tuple[tuple[int, int], tuple[int, int]]] = {
@@ -433,6 +441,9 @@ class FakeStation:
     library), by ``table_name``."""
     history_queries: list[dict[str, Any]] = field(default_factory=list)
     """The inner ``payload`` of every history (10011 or 10017) query received."""
+    local_events_up_to_cursor: bool = False
+    """A 10017 page lists the rows up to its ``start_time`` cursor, not only those
+    before it (which reading the station follows is unobserved on hardware)."""
     event_summaries: dict[str, dict[str, Any]] = field(default_factory=dict)
     """The event-count (10013) item ``payload`` by device serial, as the T8170 answers:
     ``{"event_count": 11, "crop_hb3_path": "…_snapshot.jpg", "crop_cloud_path": ""}``."""
@@ -442,6 +453,8 @@ class FakeStation:
     """Name no device in the event-count items (``"device_sn": ""``), as a T8170 sometimes does."""
     event_count_queries: int = 0
     """Event-count (10013) queries received, answered or not."""
+    event_count_reply_code: int = 0
+    """``mIntRet`` of the event-count reply (non-zero: no items)."""
     clear_replies: bool = False
     """Send database and still replies as clear JSON under the ECB tag, as a T8170 does."""
     storage: dict[str, Any] = field(default_factory=synthetic_storage_body)
@@ -1222,21 +1235,28 @@ class FakeStation:
 
     def _answer_local_events(self, inner: dict[str, Any]) -> None:
         """A history page under the app's verb for a station other than the HomeBase 3
-        family (10017), as declared from the app: rows of the ``start_date`` day,
+        family (10017), as declared from the app: rows of the ``start_date`` day (by
+        their ``start_time`` when the ``record_id`` carries no day, as on a HomeBase 2),
         newest first, at most ``count``, older than the ``start_time`` cursor
-        (``YYYYMMDDHHMMSS``) when it is not ``"0"``. Unobserved on hardware: the
+        (``YYYYMMDDHHMMSS``; or up to it, :attr:`local_events_up_to_cursor`) when it
+        is not ``"0"``. Unobserved on hardware: the
         reply is shaped like a 10011 page naming the verb."""
         query = inner.get("payload") or {}
         self.history_queries.append(dict(query))
         day = str(query.get("start_date", ""))
         cursor = str(query.get("start_time") or "0")
         rows = sorted(
-            (row for row in self.rows if _record_day(row) in (None, day)),
+            (row for row in self.rows if _local_event_day(row) in (None, day)),
             key=lambda row: _record_id(row) or 0,
             reverse=True,
         )
         if cursor != "0":
-            rows = [row for row in rows if _cursor_time(row) < cursor]
+            up_to = self.local_events_up_to_cursor
+            rows = [
+                row
+                for row in rows
+                if _cursor_time(row) < cursor or (up_to and _cursor_time(row) == cursor)
+            ]
         page = rows[: int(query.get("count") or 20)]
         tables = [("history_record_info", page), *self.history_side_tables.items()]
         self.send_json(
@@ -1257,9 +1277,11 @@ class FakeStation:
         self.event_count_queries += 1
         if self.event_count_queries <= self.event_count_ignored:
             return
+        code = self.event_count_reply_code
         items = [
             {"device_sn": "" if self.event_count_unnamed else sn, "payload": dict(payload)}
             for sn, payload in self.event_summaries.items()
+            if code == 0
         ]
         self._send_reply(
             FrameType.DB_SYNC,
@@ -1268,9 +1290,9 @@ class FakeStation:
                 "transaction": inner.get("transaction"),
                 "table": "history_record_info",
                 "cmd": 10013,
-                "mIntRet": 0,
+                "mIntRet": code,
                 "version": "1.3.0.1",
-                "msg": "SUCCESSFUL",
+                "msg": P2P_ERROR_CODES.get(code, ""),
             },
         )
 
@@ -1326,10 +1348,10 @@ class FakeStation:
         try:
             channel, value, account = decode_string_command_body(plain)
         except (ValueError, UnicodeDecodeError):
-            self.send_receipt(ftype, -104)
+            self.send_receipt(ftype, RESULT_INVALID_ACCOUNT)
             return
         self.string_commands_received.append((ftype, channel, value))
-        code = 0 if account == self.account_id else -104
+        code = 0 if account == self.account_id else RESULT_INVALID_ACCOUNT
         if code == 0 and self.apply_settings:
             self.params.setdefault(channel, {})[ftype] = value
         self.send_receipt(ftype, code)
@@ -1358,7 +1380,7 @@ class FakeStation:
         account = body[offset + 4 : offset + 132].split(b"\x00", 1)[0].decode()
         self.ecb_received.append((ftype, channel, value))
         self.ecb_encryptions.append(subheader[3])
-        code = 0 if account == self.account_id else -104
+        code = 0 if account == self.account_id else RESULT_INVALID_ACCOUNT
         code = self.refused_scalars.get(ftype, code)
         if self.ecb_apply_late and code == 0:
             self._late_writes.append((channel, ftype, value))

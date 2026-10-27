@@ -92,6 +92,8 @@ Generated from the cached TDs and `CASES`; do not edit by hand.
 | T8142 | 123 | 2026/08/19 | 35 | 98 | 4 |
 | T8160 | 119 | 2026/07/15 | 34 | 98 | 4 |
 | T8170 | 283 | 2026/08/31 | 70 | 148 | 7 |
+| T8172 | 292 | 2026/09/10 | 71 | 170 | 11 |
+| T8215 | 244 | 2026/09/11 | 56 | 180 | 2 |
 | T8410 | 159 | 2026/09/07 | 62 | 130 | 3 |
 | T8410C | 146 | 2026/09/29 | 65 | 133 | 3 |
 | T8425 | 141 | 2026/07/02 | 58 | 126 | 7 |
@@ -124,5 +126,13 @@ Generated from the cached TDs and `CASES`; do not edit by hand.
 | T8425 | HB3 | `query_preset_positions` | `query_preset_positions` | declared | The plain form: no `value`; the notify's sub-command named. |
 | T8425 | HB3 | `set_ptz_cruise_preview` | `goto_preset` | declared |  |
 | T8425 | HB3 | `set_picture_zoom` | `set_picture_zoom` | declared |  |
+| T8172 | HB3 | `open_live_stream` | `open_live_stream_nvr` | declared | Multi-camera open, layout `main`. |
+| T8172 | HB3 | `open_live_stream` | `open_live_stream_nvr` | declared | Multi-camera open, layout `sub`. |
+| T8172 | HB3 | `open_live_stream` | `open_live_stream_nvr` | declared | Multi-camera open, layout `stacked`. |
+| T8172 | HB3 | `open_live_stream` | `open_live_stream_nvr` | declared | Multi-camera open, layout `pip`. |
+| T8172 | HB3 | `close_live_stream` | — | declared | 1350/1004 naming the channel; the library sends its HomeBase 3 stop. |
+| T8172 | HB2 | `open_live_stream` | `open_live_stream_nvr` | declared | Multi-camera open without the view fields. |
+| T8172 | HB2 | `close_live_stream` | `close_live_stream` | declared |  |
+| T8215 | HB3 | `open_live_stream` | `open_live_stream_nvr` | declared | `camera_type` stays 0 for the moving lens alone. |
 
 <!-- END GENERATED: scripts/thing_models.py inventory -->

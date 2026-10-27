@@ -470,7 +470,7 @@ What each reach gives:
 | state, guard mode | read at start and kept current | only from a push after it changes |
 | arm / disarm, settings | yes | **no** |
 | live view, snapshots, recordings | yes | **no** |
-| detections and other events | yes (station and push; camera detections from the station only where `station.local_events` is verified) | yes (push) |
+| detections and other events | yes (station and push; detections from the station only for a device whose `station.local_detections_for(device_sn)` is verified) | yes (push) |
 
 The library has no cloud command path, so a remote station is monitor-only. Say so in
 the flow before the user enables one.
@@ -634,11 +634,34 @@ A `DataUpdateCoordinator[StationState]` per station:
 - Push (FCM) is opt-in and needs the cloud; its start can take its whole deadline. If
   the user enabled it, start it after the platforms are forwarded, as a background task:
   `entry.async_create_background_task(hass, eufy.async_start(p2p=False, push=True), …)`.
-- **Which stations need push for detections:** `station.local_events` (an `Evidence`)
-  says whether the station pushes its cameras' detections over P2P; its paired devices
-  follow it. Only `Support.VERIFIED` (a HomeBase 3) delivers them locally; for any other
-  grade (a HomeBase 2, an uncatalogued station) the detections arrive by cloud push only,
-  so offer or require push for that station and show `local_events.source` as the reason.
+- **Which devices need push for their detections:**
+  `station.local_detections_for(device_sn)` (an `Evidence`) says whether the station
+  pushes that device's detections (`SecurityEvent.detection`, a motion sensor's
+  `msg_type` 14 motion included) over P2P. Only `Support.VERIFIED` delivers them
+  locally; for any other grade they arrive by cloud push only, so offer or require push
+  for that station, name the device, and show the evidence's `source` as the reason.
+  `station.local_events` is the station's own grade, for its cameras.
+
+  | device | `local_detections_for` |
+  |---|---|
+  | any device of a station whose `station.local_events` is not verified (a HomeBase 2, an uncatalogued station), and a standalone camera itself | `station.local_events` |
+  | behind a verified station (a HomeBase 3): a paired model the eufy app shows as a camera (`DeviceModel.has_camera`: video doorbells and video locks too) | verified: its own model's entry where it was measured, else the station's with the source naming the extension to that model |
+  | behind a verified station: the station itself (no camera, so no detections of its own), and any other paired device (motion, entry and other sensors, keypads, locks without a camera, uncatalogued models) | unknown: a sensor's motion (`msg_type` 14) has not been seen over P2P |
+  | a device not paired to the station | unknown |
+
+  It does not cover a doorbell's ring, a lock's events, or the station's alarm
+  (`msg_type` 10) and arming (`msg_type` 9) pushes: a station sends no alarm or arming
+  push over P2P and reports the alarm and the guard mode in other P2P frames
+  (`AlarmChanged`, the guard mode; see
+  [Station pushes: arming and alarm](../protocol/events.md#station-pushes-arming-and-alarm)
+  and [Alarm over P2P](../protocol/events.md#alarm-over-p2p)).
+
+  So with cloud push off, a HomeBase 3 delivers its cameras' detections but is not known
+  to deliver a motion sensor's motion: a sensor's motion entity needs push. A sensor push
+  that does arrive over P2P is decoded like the cloud one (`SecurityEvent.detection` is
+  `MOTION` for `msg_type` 14). `SubDeviceState.pir_event_ms` (param 1605, the sensor's
+  last PIR event time) changes only when a parameter dump carries a new value; the library
+  emits no motion event from it.
 - **Push status:** `PushChanged(running, error)` arrives on every change, and
   `eufy.push_running` / `eufy.push_error` give it on demand; `async_start` never raises for
   push. While push is enabled but not running, raise a "push is not running" repair
@@ -673,11 +696,10 @@ cloud and no push opt-in. What is covered:
   at once, `station.state` and a `GuardModeChanged` carry it, and a mode report that
   follows (or never comes: a standalone camera such as a T8414 sends none) only moves
   the mode again when it says otherwise. A non-zero code raises (`CommandUnsupportedError`
-  for −108 and −103, else `CommandRejectedError`), and an arm the station only
-  acknowledged or took off its queue (a receipt 0, which is no result) raises
-  `CommandNotAppliedError`. The request takes the form the eufy app
-  uses for the station's model (`commands.md` § Arming); nothing to choose in the
-  integration.
+  for −108 and −103, `AccountRejectedError` for −104, else `CommandRejectedError`), and an
+  arm the station only acknowledged or took off its queue (a receipt 0, which is no
+  result) raises `CommandNotAppliedError`. The request takes the form the eufy app uses
+  for the station's model (`commands.md` § Arming); nothing to choose in the integration.
 - A mode set to the one already in force sends no report; its result settles it (a
   station that sends no result is read back), so `async_set_guard_mode` still returns
   the applied mode.
@@ -747,6 +769,11 @@ push and across reconnects, so the integration never de-duplicates:
   detection differently is an enrichment, not a second detection.
 - Station pushes (arming, alarm) are never merged away; a stale guard-mode push is
   dropped (see live guard mode above).
+- **Which devices ring.** A doorbell press is `event.detection is
+  DetectionType.DOORBELL_PRESS` with the pressed device's serial in `device_sn`. Give a
+  device the ring event when `profile_for_serial(serial).support(Capability.DOORBELL_RING)`
+  is not `Support.UNKNOWN`, not by its kind: a video smart lock (kind `LOCK`) rings too,
+  as in the eufy app. A pure lookup, the same under every station.
 - For diagnostics, `eufy.deduplicator.dropped_duplicates` and `dropped_repeats`.
 - For diagnostics, count events by `frame_cipher`, alongside the session's
   `state_frames_by_encryption`.
@@ -911,25 +938,33 @@ A closed session (`async_close`) never reconnects on its own — build a new
   a command of its own id) and returns the `CommandOutcome`: `APPLIED` when the station
   answered, `DELIVERED` when it only acknowledged. A rejection raises a typed
   `CommandError` (`CommandRejectedError`, `CommandNotAppliedError`): map it to your
-  write-failed error. A setting the library does not write raises `UnsupportedError`
-  with its `note`. Nothing is read back: the state shows the written value until the
-  next dump replaces it, so the entity follows the write at once and the next poll
-  settles it. A station setting the dump never reports keeps the written value until a
-  later device-list fetch shows the cloud's value changed after the write. On a standalone camera (a T8170) address a setting with
-  `device_sn=station.serial` (or no target): the library renders it for the camera's
-  own channel.
+  write-failed error, and `AccountRejectedError` (code −104) to the account hint of the
+  errors table ([§ Errors map to HA control flow](#errors-map-to-ha-control-flow)). A
+  setting the library does not write raises `UnsupportedError` with its `note`.
+  Nothing is read back: the state shows the written value until the next dump replaces
+  it, so the entity follows the write at once and the next poll settles it. A station
+  setting the dump never reports keeps the written value until a later device-list fetch
+  shows the cloud's value changed after the write. On a standalone camera (a T8170)
+  address a setting with `device_sn=station.serial` (or no target): the library renders
+  it for the camera's own channel.
 
   **Per-mode actions** — "sound the siren in Away", "notify in Home" — are bits of a
   per-mode action mask: each camera has `camera_action_away`, `camera_action_home` and
-  `camera_action_custom_1`…`_3`, each sensor `sensor_action_<mode>`, and
-  `mode_action_flags(scope, device.device_type)` names the bits that apply to that
-  device (camera: `record`, `camera_siren`, `station_alarm`, `notification`,
-  `light_alarm`, `report_monitor_center`; sensor: `notification`, `station_alarm`,
-  `report_monitor_center`, and `motion_sensor_respond` on a motion sensor only, cloud
-  `device_type` 10 or 127; `async_set_mode_action` refuses a flag the device does not
-  have). A flag is on as the app's checkbox is ticked: `motion_sensor_respond` is the
-  app's "React to motion", on while its bit (32) is **clear** (`MODE_ACTION_INVERTED`);
-  read a switch with `mode_action_on(flag, mask)`, never `mask & bit`. Turning it off
+  `camera_action_custom_1`…`_3`, each doorbell `doorbell_action_<mode>`, each sensor
+  `sensor_action_<mode>`, and `mode_action_flags(scope, device.device_type)` names the
+  bits that apply to that device (camera: `record`, `camera_siren`, `station_alarm`,
+  `notification`, `light_alarm`, `report_monitor_center`; doorbell, as the eufy app
+  offers them per cloud `device_type` (`DOORBELL_TYPE_ACTIONS`): `record`,
+  `notification` and `report_monitor_center`, plus `station_alarm` for types 7, 16, 91
+  and 94-96, every camera flag for a doorbell with a siren and light of its own, and
+  `notification`, `station_alarm` and `report_monitor_center` for a type that is
+  unknown or in no list (`DOORBELL_DEFAULT_ACTIONS`); sensor: `notification`,
+  `station_alarm`, `report_monitor_center`, and `motion_sensor_respond` on a motion
+  sensor only, cloud `device_type` 10 or 127; `async_set_mode_action` refuses a flag
+  the device does not have). A flag is on as the app's checkbox is ticked:
+  `motion_sensor_respond` is the app's "React to motion", on while its bit (32) is
+  **clear** (`MODE_ACTION_INVERTED`); read a switch with `mode_action_on(flag, mask)`,
+  never `mask & bit`. Turning it off
   sets the bit and, as the app does, also turns that sensor's `notification` and
   `station_alarm` off in the same write (`MODE_ACTION_CLEARS`); turning it on again
   restores neither, so refresh those switches after a write. `MODE_ACTION_ALARM_AFFECTING`
@@ -963,9 +998,10 @@ A closed session (`async_close`) never reconnects on its own — build a new
     off only that device. Refresh every delay entity after a write, and say so in the
     entity's description.
   - The write is refused (`UnsupportedError`, nothing sent) when the station has a
-    paired device of no known kind (it may be a siren accessory whose triggers the
-    table would clear), or when devices hold different values for a delay the table
-    must carry unchanged; surface the message instead of retrying.
+    paired device in the table that is not a camera, doorbell or sensor (it may be a
+    siren accessory whose triggers the table would clear), or when devices hold
+    different values for a delay the table must carry unchanged; surface the message
+    instead of retrying.
 
   **Bulk edits** (a matrix of devices × flags, and the delays, behind one Save) go in one
   call per mode, which reads the mode once, writes one table and confirms it by read-back:
@@ -1114,7 +1150,7 @@ A closed session (`async_close`) never reconnects on its own — build a new
 ### Settings per model
 
 The settings of a model come from its file, as `settings_for` lists them before the
-per-mode settings; a paired camera or sensor adds 15 per-mode delays and actions:
+per-mode settings; a paired camera, doorbell or sensor adds 15 per-mode delays and actions:
 
 | model | settings | writable | read-only |
 |---|---|---|---|
@@ -1262,9 +1298,9 @@ for an unknown id). All are exported from the package root.
   placement where it has one (`page`, `group`, `order`), then the name. A variant
   (`variant_of`) shares its primary's section and follows it; an `advanced` setting stays
   in its section, hidden by default.
-- **Per-mode delays and actions** (`camera_action_*`, `sensor_action_*`, `alarm_delay_*`,
-  `leaving_delay_*`) are in `modes` (`MODES_SECTION`): a camera view skips that section
-  rather than matching key patterns.
+- **Per-mode delays and actions** (`camera_action_*`, `doorbell_action_*`,
+  `sensor_action_*`, `alarm_delay_*`, `leaving_delay_*`) are in `modes`
+  (`MODES_SECTION`): a camera view skips that section rather than matching key patterns.
 - **Confirm alarm-affecting settings.** `setting.alarm_affecting` is true for every
   setting of an alarm-affecting section (`alarm`, `modes`): a write sounds the HomeBase
   or camera (the alarm volume and tone play at once) or changes when and how the alarm
@@ -1532,6 +1568,14 @@ Capability.LIVE_STREAM)` is `DECLARED` when the library sends the handler's open
 *some* station, so it can say yes for a camera this station cannot stream; prefer
 `live_support`. Opening a stream the library cannot open raises `UnsupportedError`
 before anything is sent.
+
+A device whose handler sends the multi-camera open (the T8172 camera, the T8215
+doorbell, the T8532 and T85M1 video locks and others) streams one picture. Behind a
+HomeBase 3 it is in the layout the eufy app opens with: every lens stacked when the device
+lists lenses (`station.lenses(device_sn)`), else the fixed lens; pass
+`lens_view=LensView.MAIN` / `SUB` / `STACKED` / `PIP` to `async_open_live` for another
+layout, each its own open. Behind a HomeBase 2 the app sends no layout, and the library
+ignores `lens_view` there (see `docs/protocol/media.md` § Multi-camera open).
 
 #### What the library gives you
 
@@ -1821,16 +1865,31 @@ capture ended by its `stop` event; complete), `complete`, `content_type`.
   recording, newest first, of one camera or of every camera paired here; one history
   query per day and page, the camera asleep. Pass `since` (the newest `started_at`
   already stored) for an incremental sync. A standalone camera lists none.
-- **A page for a list view:** `limit` stops the walk at that many rows, so only today
-  (and the days back to the page's last row) are asked, not the whole window;
-  `before=<the last row's record_id>` gives the next page, starting in that row's day.
-  A page shorter than `limit` means the window holds no more; a full page may be
-  followed by an empty one. Keep `days` as the window bound: no day before it is asked.
+- **A page for a list view:** `await station.async_list_recordings_page(device_sn=None,
+  *, limit, days=2, cursor=None, until=None, page_days=None, timeout=None)` returns a
+  `RecordingsPage(rows, next_cursor)`: up to `limit` rows (a tuple, newest first) and the
+  cursor of the next page, None when the window holds no more. Only today and the days
+  back to the page's last row are asked, at most `page_days` of them (None: the rest of
+  the window); no day before the window is asked. Pass `next_cursor` back as `cursor`
+  exactly as it came: it is opaque text (JSON-safe, hashable, the same for the same
+  position of the same station and `device_sn`, so it can key a cache and cross a
+  websocket to a card and back). It names either the page's last row (a full page; the
+  next one may be empty) or, when a short page stopped at `page_days` with window days
+  left, the day before the ones it asked. A full page that ends on rows without a
+  `record_id` names its last row that has one, so those rows may come again on the next
+  page but are never skipped. Positions are the station's own days (the day a row's id
+  carries, else the day its query named; a HomeBase 2's ids carry none), so a consumer
+  never decodes record ids or picks a day in the host's zone. A cursor that does not
+  check out for that station and `device_sn`, or one that no longer parses, raises
+  `RecordingCursorError` (a `ValueError`) before anything is sent: answer
+  "invalid format". `async_list_recordings(limit=…, before=<record_id>)` still pages
+  as before, but only by ids that carry a day; `before` is deprecated in favour of the
+  page call.
 - **Go to a day:** `until=<date>` lists that day's rows and older ones (host-local days,
-  like the window), combinable with `limit`; the next page is `before=<last record_id>`
-  as usual, and `before` wins when both are given. `days` still counts back from
-  today: an `until` before the window lists nothing, a day after today lists from
-  today. Size `days` to reach the chosen day (`(today - until).days + n`).
+  like the window), combinable with `limit`; the next page is the page's `next_cursor`
+  as usual, and `cursor` (or `before`) wins when both are given. `days` still counts
+  back from today: an `until` before the window lists nothing, a day after today lists
+  from today. Size `days` to reach the chosen day (`(today - until).days + n`).
 - **Slow pages:** `timeout` bounds each history query (None:
   `p2p.session.HISTORY_QUERY_TIMEOUT`, 15 s). An idle HomeBase 3 answers a query of
   50 rows in 0.5-3 s (median 0.7 s); a busy one takes several seconds and sometimes
@@ -1841,13 +1900,38 @@ capture ended by its `stop` event; complete), `complete`, `content_type`.
   `async_history_record` lookup is not resent.
 - `HistoryRecord` carries what a media browser needs: `video_path` (the validated
   `.zxvideo` path, else None), `started_at`/`ended_at` (aware, in the row's own UTC
-  offset), `duration_s`, `frame_count`, `size_bytes`, `thumb_path`, `record_id`.
+  offset), `duration_s`, `frame_count`, `size_bytes`, `thumb_path`, `record_id`, `ref`.
+- **Finding a listed row again:** every row a listing or lookup returns carries `ref`,
+  opaque text that names that row of that camera on that station (URL-path-safe, so it
+  can be one segment of a thumbnail URL as it is, and JSON-safe; the same row always
+  gives the same text). `await station.async_history_record_by_ref(ref, *,
+  device_sn=None, timeout=None)` asks the station for that row on every station, a
+  HomeBase 2 included (its ids carry no day: the ref carries the station day and the
+  row's start time), and returns it with the same `ref`. A station paged by record id
+  (the HomeBase 3 family) gets one query and the row is matched by id and camera; a
+  station paged by start time (a HomeBase 2) gets one query from the second after the
+  row's start, and a second one from its start only when the first page is full and
+  holds no older row; there the start time must match too. No query is resent;
+  `timeout` bounds each. With `device_sn` the ref must be a row of that camera. Before
+  anything is sent, a ref that does not check out for the station (and `device_sn`) or
+  does not parse raises `RecordingRefError` (a `ValueError`; a page cursor is never
+  accepted as a ref, nor a ref as a cursor), a `device_sn` not paired here or a
+  standalone device `UnsupportedError`. `RecordNotFoundError` means the station no longer lists that
+  row (deleted, or that id now belongs to another camera); on a station paged by start
+  time it also comes for a row behind a full page (20) of rows that started in its own
+  second, which no start-time query reaches. No row is cached: keep rows as long
+  as the view needs them and the ref for anything that outlives it. `ref` is None for a
+  row that cannot be found again (no `record_id`, no camera, or a row without a start
+  time on a station paged by start time, such as a HomeBase 2). `record_id` stays
+  the row's id: files saved under it keep their names, and the ref of a row can always
+  be taken from a fresh listing.
 - `Station.recording_settled(record)`: the row's end lies `RECORDING_QUIET` (30 s) in
   the past. A detection's row exists while its clip still records, so download only
   settled rows. After a download the library reads the row again: a clip that grew
   meanwhile comes back with `complete` False; download it again later.
 - `await station.async_history_record(record_id)`: one row by id (None when the station
-  has none), for a detection's `record_id`.
+  has none), for a detection's `record_id`; an id that carries no day (a HomeBase 2's)
+  raises `UnsupportedError`: find a listed row by its `ref` instead.
 - Downloads run on an extra session from the same budget as live streams of other
   cameras (`max_sessions - 2`), one per station at a time; `wait=False` raises
   `LiveStreamLimitError` instead of queueing. The station session's commands, polls
@@ -2599,12 +2683,15 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `StationUnreachableError`, `DeviceTimeoutError` | `raise UpdateFailed` — the session's own supervisor is already reconnecting. A reply wait moves its deadline out by the time something else held the event loop (another integration's blocking setup at HA start; up to `p2p.session.LOOP_STALL_MAX`, 30 s), so a held loop alone does not raise `DeviceTimeoutError` |
 | `DeviceBusyError` (a `CommunicationError`, raised while an image capture holds the camera: by another capture, a default-preset write or a pan/tilt step) | not an outage: from a button or service action, `raise HomeAssistantError` ("capture in progress"); never `UpdateFailed` |
 | `CommandNotAppliedError` | surface to the user; usually a wrong owner id or an unpaired channel |
+| `AccountRejectedError` (a `CommandRejectedError`; `code` −104, `INVALID_ACCOUNT`) | the station refused the account the command was sent under, on any command path (arm, setting write, device alarm, preset edit, station action, storage or event read, media open). Retrying changes nothing: `raise HomeAssistantError` with the account hint ("the station does not accept this account: check in the eufy app that it is shared with this account, or remove and add it again"). Catch it before `CommandRejectedError` |
 | `LiveStreamLimitError` (a `CommunicationError`; `limit`) | the station's session budget (`station.max_sessions`) allows no further live stream; nothing was sent. From a live view answer 503 and log the limit; the station is fine |
 | `CameraWakeError` (a `CommandRejectedError` and a `CommunicationError`; `code` -204, -203 or -205) | the station could not wake the camera: not a station outage, no `UpdateFailed`. From a live view, answer 503 and let the session's wake backoff (`retry_after`) decide when the next attempt goes out; from a button or service action, `raise HomeAssistantError` ("the camera did not wake") |
 | `KeyRejectedError` (a `HandshakeError`; in `ConnectionChanged.error`, `Station.last_error` or the `async_start()` result) | the station rejected a key that was already fetched again once. Not a reauth: raise a fixable repair issue whose fix calls `eufy.async_reset_key_refresh(serial)`, which allows one more fetch. Without it the library tries one fetch a day by itself |
 | `RefreshCooldownError` (a `RateLimitedError`, `code` 0) | the library's own spacing of key fetches, not a eufy throttle: no repair, just wait |
 | `CipherUnavailableError` (an `EmptyResponseError`; `cipher_id`, `owner_source`, `retry_after`) | the cloud has no key for the cipher the station named in its handshake, under the owner id asked (`owner_source`: `"member.admin_user_id"` or `"own user id"`). Not a reauth and not an outage of the station: the share or the station's binding needs the owner. Raise one non-fixable repair issue naming the station and `cipher_id`; clear it on `ConnectionChanged(connected=True)`. The library asks the same station and cipher again only after `retry_after` (an hour) or once a refreshed device list names another owner id; until then every attempt raises this without a request. A reload of the entry asks once more |
 | `StillNotWrittenError` (a `RecordNotFoundError`; `offset`) | the device has not written the event's row or still yet: keep what is shown and ask once more later (about 20 s). A plain `RecordNotFoundError` is final for that event: no retry |
+| `RecordingCursorError` (a `ValueError`) | `async_list_recordings_page` got a `cursor` that does not check out for that station and camera, or one that no longer parses (garbled, another version); nothing was sent. Answer "invalid format" and let the client start again from the first page; never retry the same cursor |
+| `RecordingRefError` (a `ValueError`) | `async_history_record_by_ref` got a `ref` that does not check out for that station (and `device_sn`), or one that no longer parses; nothing was sent. Answer "not found" and let the client list again; never retry the same ref. A plain `RecordNotFoundError` from that call means the station no longer lists the row (on a station paged by start time, or that a full page of rows of its own start second hides it): answer "not found", let the client list again, and do not retry the same ref |
 | `CaptureStoppedError` | a live capture's `stop` was set before its first keyframe: nothing was recorded, nothing to store. Not an error for the user who pressed stop |
 | `ConfigChangedError` (`config`, `expected`) | a write's `expect_revision` is stale: the station's configuration changed elsewhere and nothing was sent. Show `err.config` and let the user redo the edit; not an outage |
 | `ModeInUseError` (an `UnsupportedError`; `reason`) | the mode is in use (current, or named by the schedule or its default); nothing was sent. `raise HomeAssistantError` with `reason` |

@@ -230,7 +230,7 @@ Support legend (models, capabilities and guard modes):
 | T9149 | T9149 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
 | T9150 | T9150 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
 
-Models without a profile below offer no capability (all *unknown*).
+Each table below is a model's own profile. For every catalogued model, with or without one, `profile_for_serial` adds `live_stream`, `live_keyframe` and the pan/tilt/zoom capabilities as *declared* where the model's handler sends what the library sends (per station: `Station.live_support`, `Station.ptz_support`), and `doorbell_ring` as *declared* for a video doorbell or a video smart lock (`ring_evidence`). Any other capability of a model without a profile is *unknown*.
 
 ## T8010 HomeBase 2
 
@@ -295,7 +295,7 @@ Kind markers (a block without a known serial): 1400, 1401
 
 | capability | support | source |
 |---|---|---|
-| local_events | unknown | no detection push over P2P observed from a T8161 (the push is the station's: Station.local_events grades it) |
+| local_events | unknown | no detection push over P2P observed from a T8161 (the push is the station's: Station.local_detections_for grades it per device) |
 | cloud_events | declared | app code relays detections over FCM |
 | snapshot_fetch | declared | the HomeBase's IMAGE_NOTIFY 1308 fetch, a station command, not per model |
 | live_keyframe | declared | T8161 handler open/close recipes equal the T8160's (1350/1003, 1350/1004); the live open is the HomeBase's 1003 (wakes a battery camera) |

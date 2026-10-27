@@ -10,7 +10,6 @@ Runs only on a maintainer host with Node and the private thing-model cache; the 
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -25,7 +24,7 @@ PN = "T8170"
 KEY = "detection_sensitivity_test_mode"  # released, duplicates detection_sensitivity
 
 pytestmark = [
-    pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed"),
+    pytest.mark.needs_node,
     pytest.mark.skipif(
         not (CACHE / "T8160" / "td.json").is_file(), reason="no private thing-model cache"
     ),

@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import base64
 import json
+from dataclasses import replace
+from types import MappingProxyType
 
 import pytest
 
+from eufy_home_security import devices
+from eufy_home_security.devices import settings
+from eufy_home_security.devices._device_alarm_data import DEVICE_ALARMS
+from eufy_home_security.devices.device_alarm import device_alarms
+from eufy_home_security.devices.recipes import ConnectType
 from eufy_home_security.devices.settings import (
+    DOORBELL_TYPE_ACTIONS,
     DUAL_VIEW,
     MODE_ACTION_ALARM_AFFECTING,
     MODE_ACTION_FLAGS,
@@ -23,7 +31,7 @@ from eufy_home_security.devices.settings import (
     report_value,
     scope_for_kind,
 )
-from eufy_home_security.devices.types import DeviceKind
+from eufy_home_security.devices.types import MODELS, DeviceKind
 from eufy_home_security.exceptions import UnsupportedError
 from eufy_home_security.models import GuardMode
 from eufy_home_security.p2p.mode_actions import (
@@ -40,7 +48,9 @@ from eufy_home_security.p2p.mode_actions import (
 
 MODES = ("home", "away", "custom_1", "custom_2", "custom_3")
 DELAY_KEYS = {f"{kind}_delay_{mode}" for kind in ("alarm", "leaving") for mode in MODES}
-ACTION_KEYS = {f"{kind}_action_{mode}" for kind in ("camera", "sensor") for mode in MODES}
+ACTION_KEYS = {
+    f"{kind}_action_{mode}" for kind in ("camera", "doorbell", "sensor") for mode in MODES
+}
 
 
 def test_the_mode_table_settings_are_every_mode_table_param() -> None:
@@ -71,6 +81,7 @@ def test_mode_table_names() -> None:
     assert mode_table_setting("leaving_delay_away").name == "Leaving delay (Away)"
     assert mode_table_setting("camera_action_away").name == "Camera actions (Away)"
     assert mode_table_setting("sensor_action_home").name == "Sensor actions (Home)"
+    assert mode_table_setting("doorbell_action_away").name == "Doorbell actions (Away)"
 
 
 def test_action_flags_per_kind_are_the_apk_bits() -> None:
@@ -82,6 +93,7 @@ def test_action_flags_per_kind_are_the_apk_bits() -> None:
         "report_monitor_center": 64,
         "light_alarm": 128,
     }
+    assert MODE_ACTION_FLAGS[Scope.DOORBELL] == MODE_ACTION_FLAGS[Scope.CAMERA]
     assert dict(MODE_ACTION_FLAGS[Scope.SENSOR]) == {
         "station_alarm": 4,
         "notification": 8,
@@ -147,6 +159,7 @@ def test_scope_default_channel() -> None:
         Scope.STATION: 255,
         Scope.CAMERA: 0,
         Scope.SENSOR: 0,
+        Scope.DOORBELL: 0,
         Scope.SUB_DEVICE: 0,
     }
 
@@ -166,6 +179,95 @@ def test_only_a_motion_sensor_s_actions_name_respond(
     assert camera.for_device_type(2) is camera
     assert mode_action_flags(Scope.CAMERA, 2) == MODE_ACTION_FLAGS[Scope.CAMERA]
     assert dict(mode_action_flags(Scope.SUB_DEVICE)) == {}
+
+
+_DEFAULT_DOORBELL = ["station_alarm", "notification", "report_monitor_center"]
+_FULL_DOORBELL = [
+    "record",
+    "camera_siren",
+    "station_alarm",
+    "notification",
+    "report_monitor_center",
+    "light_alarm",
+]
+
+
+@pytest.mark.parametrize(
+    ("device_type", "flags"),
+    [
+        (5, ["record", "notification", "report_monitor_center"]),
+        (93, ["record", "notification", "report_monitor_center"]),
+        *(
+            (t, ["record", "station_alarm", "notification", "report_monitor_center"])
+            for t in (7, 16, 91, 94, 95, 96)
+        ),
+        (312, _FULL_DOORBELL),  # its product has a siren and light of its own
+        (97, _FULL_DOORBELL),
+        # type unknown, or one no list names: the app's default for an unlisted device
+        (None, _DEFAULT_DOORBELL),
+        (1, _DEFAULT_DOORBELL),
+        (98, _DEFAULT_DOORBELL),
+    ],
+)
+def test_a_doorbell_s_actions_follow_its_cloud_type(
+    device_type: int | None, flags: list[str]
+) -> None:
+    assert list(mode_action_flags(Scope.DOORBELL, device_type)) == flags
+    action = mode_table_setting("doorbell_action_home").for_device_type(device_type)
+    assert list(action.flags or {}) == flags
+
+
+def test_an_untabled_doorbell_type_has_the_whole_row_iff_it_has_its_own_alarm() -> None:
+    """Decided from the generated device-alarm data, per catalogued doorbell."""
+    assert {
+        model.cloud_device_type
+        for model in MODELS.values()
+        if model.kind is DeviceKind.DOORBELL
+        and device_alarms(model.model, ConnectType.HB3) is not None
+    } == settings._DEVICE_ALARM_DOORBELL_TYPES
+    seen = set()
+    for model in MODELS.values():
+        device_type = model.cloud_device_type
+        if model.kind is not DeviceKind.DOORBELL or device_type is None:
+            continue
+        if device_type in DOORBELL_TYPE_ACTIONS:
+            continue
+        seen.add(model.model)
+        full = device_alarms(model.model, ConnectType.HB3) is not None
+        assert list(mode_action_flags(Scope.DOORBELL, device_type)) == (
+            _FULL_DOORBELL if full else _DEFAULT_DOORBELL
+        )
+    assert seen
+
+
+def test_an_alarm_only_without_a_station_is_no_alarm_behind_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    single = DEVICE_ALARMS["T8217"][0]
+    assert single[0] == ("SINGLE",)
+    monkeypatch.setitem(DEVICE_ALARMS, "T0001", [single])
+    assert not settings._alarm_behind_station("T0001")
+    assert settings._alarm_behind_station("t8217")
+    assert not settings._alarm_behind_station("T8210")  # no alarm of its own
+
+
+def test_a_doorbell_refuses_an_action_its_type_does_not_have() -> None:
+    action = mode_table_setting("doorbell_action_away").for_device_type(93)
+    assert action.with_flag(0, "record", True) == 1
+    assert action.decode_flags(4 | 8) == (frozenset({"notification"}), 4)
+    with pytest.raises(UnsupportedError, match="known flags: record, notification"):
+        action.with_flag(0, "station_alarm", True)
+
+
+def test_the_doorbell_rule_is_exported() -> None:
+    assert devices.DOORBELL_TYPE_ACTIONS is DOORBELL_TYPE_ACTIONS
+    assert {"notification", "station_alarm"} == devices.DOORBELL_DEFAULT_ACTIONS
+
+
+def test_a_mask_without_named_actions_says_so() -> None:
+    action = replace(mode_table_setting("doorbell_action_away"), flags=MappingProxyType({}))
+    with pytest.raises(UnsupportedError, match=r"record'.*; no catalogued actions$"):
+        action.with_flag(0, "record", True)
 
 
 def test_with_flag_keeps_every_other_bit() -> None:
@@ -240,6 +342,7 @@ def test_scope_for_kind() -> None:
     assert scope_for_kind(DeviceKind.STATION) is Scope.STATION
     assert scope_for_kind(DeviceKind.CAMERA) is Scope.CAMERA
     assert scope_for_kind(DeviceKind.SENSOR) is Scope.SENSOR
+    assert scope_for_kind(DeviceKind.DOORBELL) is Scope.DOORBELL
     # Only known to be some sub-device: just the settings every sub-device carries.
     assert scope_for_kind(DeviceKind.KEYPAD) is Scope.SUB_DEVICE
     assert scope_for_kind(None) is Scope.SUB_DEVICE

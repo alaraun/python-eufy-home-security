@@ -830,3 +830,20 @@ def test_an_enum_the_handler_does_not_read_back_reads_as_generated(
 )
 def test_the_arm_form_follows_the_models_handler(code: str, scalar: bool) -> None:
     assert arms_by_scalar(code) is scalar
+
+
+def test_t8910_pir_sensitivity_hardware_readback() -> None:
+    """Decode five app-verified T8910 sensitivity levels."""
+    setting = _setting("T8910", "sensor_motion_detection_sensitivity_level")
+    assert setting.read_param == 1609
+
+    for raw, level in {
+        "80": 0,
+        "53": 1,
+        "37": 2,
+        "18": 3,
+        "8": 4,
+    }.items():
+        assert setting.decode(raw) == level
+
+    assert setting.decode(None) is None

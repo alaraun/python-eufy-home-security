@@ -39,6 +39,7 @@ from eufy_home_security.events import (
     StorageChanged,
 )
 from eufy_home_security.exceptions import (
+    AccountRejectedError,
     CameraWakeError,
     CipherUnavailableError,
     CipherUnusableError,
@@ -52,6 +53,8 @@ from eufy_home_security.exceptions import (
     KeyRejectedError,
     ProtocolError,
     RateLimitedError,
+    RecordingRefError,
+    RecordNotFoundError,
     StationUnreachableError,
     UnsupportedError,
 )
@@ -95,6 +98,7 @@ from eufy_home_security.p2p.session import (
 )
 from eufy_home_security.p2p.transport import PPPPTransport
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
+from eufy_home_security.recordings import RecordingRef, decode_ref, encode_ref
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import (
     MEDIA_AUDIO,
@@ -459,7 +463,7 @@ async def test_a_receipt_then_a_rejecting_result_rejects_the_arm(station: FakeSt
     try:
         await session.async_connect()
         reply_later(station, {"cmd": 1224, "code": -104})
-        with pytest.raises(CommandRejectedError) as rejected:
+        with pytest.raises(AccountRejectedError) as rejected:
             await session.async_set_guard_mode(GuardMode.HOME, timeout=2.0)
         receipts = session.stats().receipts_by_code
     finally:
@@ -702,7 +706,7 @@ async def test_send_takes_only_its_own_zero_code_reply_as_applied(station: FakeS
         asyncio.get_running_loop().call_later(0.2, station.push_camera_event)
         foreign = await session.async_send_command(1277, channel=0, payload=body, timeout=1.0)
         reply_later(station, {"cmd": 1277, "code": -104})
-        with pytest.raises(CommandRejectedError) as rejected:
+        with pytest.raises(AccountRejectedError) as rejected:
             await session.async_send_command(1277, channel=0, payload=body, timeout=3.0)
         reply_later(station, {"cmd": "1277", "mIntRet": 0})
         applied = await session.async_send_command(1277, channel=0, payload=body, timeout=3.0)
@@ -905,7 +909,7 @@ async def test_ecb_scalar_success_and_rejection(station: FakeStation) -> None:
 
     rejected = make_session(station, Provider(station, account_id="f" * 40))
     try:
-        with pytest.raises(CommandRejectedError) as info:
+        with pytest.raises(AccountRejectedError) as info:
             await rejected.async_send_ecb_scalar(1253, 1)
     finally:
         await rejected.async_close()
@@ -948,7 +952,7 @@ async def test_a_string_command_is_stored_on_its_channel_and_a_foreign_one_refus
 
     rejected = make_session(station, Provider(station, account_id="f" * 40))
     try:
-        with pytest.raises(CommandRejectedError) as info:
+        with pytest.raises(AccountRejectedError) as info:
             await rejected.async_send_string_command(1215, "GMT0|1.1000", channel=0)
     finally:
         await rejected.async_close()
@@ -1334,6 +1338,325 @@ async def test_a_station_outside_the_homebase_3_family_is_paged_by_start_time() 
     assert all(q["start_time"] == "0" for q in station.history_queries[pages : pages + 1])
 
 
+def _sequential_row(day: str, record_id: int) -> dict[str, Any]:
+    """A row as a HomeBase 2 keeps it: a sequential ``record_id`` without a day."""
+    return {**_history_row(day, record_id % 60), "record_id": record_id}
+
+
+async def test_a_record_id_without_a_day_pages_from_the_day_given_beside_it() -> None:
+    """Each row comes with the day its query named; ``before`` with ``before_day`` pages
+    a sequential id from that day, the later days not asked."""
+    station = FakeStation(serial=_HB2_SN)
+    await station.start()
+    station.rows = [_sequential_row("20260915", n) for n in range(100, 105)]
+    station.rows += [_sequential_row("20260916", n) for n in range(105, 110)]
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        listed = await session.async_list_history_by_day("20260915", "20260916")
+        station.history_queries.clear()
+        older = await session.async_list_history(
+            "20260915", "20260916", before=107, before_day=date(2026, 9, 16)
+        )
+        station.history_queries.clear()
+        oldest = await session.async_list_history(
+            "20260915", "20260916", before=103, before_day=date(2026, 9, 15)
+        )
+        asked = [q["start_date"] for q in station.history_queries]
+    finally:
+        await session.async_close()
+        station.stop()
+    assert [(d.isoformat(), r.record_id) for d, r in listed] == [
+        *(("2026-09-16", n) for n in range(109, 104, -1)),  # hygiene: ok
+        *(("2026-09-15", n) for n in range(104, 99, -1)),  # hygiene: ok
+    ]
+    assert [r.record_id for r in older] == [106, 105, 104, 103, 102, 101, 100]
+    assert [r.record_id for r in oldest] == [102, 101, 100]
+    assert asked == ["20260915"]
+
+
+_OTHER_CAMERA_SN = "T8160P2000099999"
+_CAMERAS = (SYNTHETIC.camera_sn, _OTHER_CAMERA_SN)
+
+
+def _hb2_row(record_id: int, second: int, device_sn: str = SYNTHETIC.camera_sn) -> dict[str, Any]:
+    """A HomeBase 2 row of 20260916: a sequential id, started ``second`` s after noon."""
+    return {
+        "record_id": record_id,
+        "device_sn": device_sn,
+        "start_time": f"2026-09-16 12:{second // 60:02d}:{second % 60:02d}",  # hygiene: ok
+        "storage_path": f"/zx/{record_id}.zxvideo",
+    }
+
+
+async def test_a_listed_row_is_found_again_by_its_reference_with_one_query(
+    station: FakeStation,
+) -> None:
+    """The HomeBase 3 family: the reference names the id's day, and the lookup asks one
+    page of 2 from the id; a lookup by id carries the same reference."""
+    station.rows = [_history_row("20260916", n) for n in range(1, 6)]
+    station.rows.append({**_history_row("20260916", 6), "start_time": ""})
+    session = make_session(station, Provider(station))
+    try:
+        listed = await session.async_list_history("20260916")
+        target = listed[3]
+        assert target.ref is not None
+        named = decode_ref(target.ref, station_sn=SYNTHETIC.station_sn, device_sns=_CAMERAS)
+        station.history_queries.clear()
+        found = await session.async_find_history_record(named)
+        by_id = await session.async_history_record(target.record_id)
+        assert listed[0].ref is not None
+        timeless = decode_ref(listed[0].ref, station_sn=SYNTHETIC.station_sn, device_sns=_CAMERAS)
+        found_timeless = await session.async_find_history_record(timeless)
+    finally:
+        await session.async_close()
+    # named by day and id alone: a start time filled in later keeps the text
+    assert named == RecordingRef(date(2026, 9, 16), target.record_id, SYNTHETIC.camera_sn)
+    assert (found, found.ref) == (target, target.ref)
+    assert by_id is not None
+    assert by_id.ref == target.ref
+    asked = [(q["start_date"], q["start_id"], q["count"]) for q in station.history_queries]
+    assert asked[:2] == [("20260916", target.record_id, 2)] * 2
+    # found by its id here: a row without a start time gets one too
+    assert (timeless.started, found_timeless) == (None, listed[0])
+
+
+async def test_a_homebase_2_row_is_found_by_its_day_and_start_second() -> None:
+    """Ids without a day, paged by start time: the reference carries the day its query
+    named and the row's start, and the lookup asks one page from the second after it,
+    which holds the row however many newer rows the day has; a row without a start time
+    gets no reference."""
+    station = FakeStation(serial=_HB2_SN)
+    await station.start()
+    station.rows = [_hb2_row(10 * n, n) for n in range(100, 140)]
+    station.rows.append(_hb2_row(1101, 110, _OTHER_CAMERA_SN))  # the same second
+    station.rows.append({**_hb2_row(990, 99), "start_time": ""})
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        listed = {r.record_id: r for r in await session.async_list_history("20260916")}
+        named = decode_ref(listed[1100].ref, station_sn=_HB2_SN, device_sns=_CAMERAS)
+        other = decode_ref(listed[1101].ref, station_sn=_HB2_SN, device_sns=_CAMERAS)
+        station.history_queries.clear()
+        found = await session.async_find_history_record(named)
+        found_other = await session.async_find_history_record(other)
+    finally:
+        await session.async_close()
+        station.stop()
+    assert named == RecordingRef(date(2026, 9, 16), 1100, SYNTHETIC.camera_sn, "20260916120150")
+    assert other == RecordingRef(date(2026, 9, 16), 1101, _OTHER_CAMERA_SN, "20260916120150")
+    assert listed[990].ref is None
+    assert (found, found.ref) == (listed[1100], listed[1100].ref)
+    assert (found_other, found_other.ref) == (listed[1101], listed[1101].ref)
+    asked = [(q["start_date"], q["start_time"], q["count"]) for q in station.history_queries]
+    assert asked == [("20260916", "20260916120151", 20)] * 2
+
+
+@pytest.mark.parametrize(
+    ("rows", "ref"),
+    [
+        pytest.param(
+            [_hb2_row(111, 111)],
+            RecordingRef(date(2026, 9, 16), 110, SYNTHETIC.camera_sn, "20260916120150"),
+            id="gone",
+        ),
+        pytest.param(
+            [_hb2_row(110, 105)],
+            RecordingRef(date(2026, 9, 16), 110, SYNTHETIC.camera_sn, "20260916120150"),
+            id="id-names-an-older-start",
+        ),
+        pytest.param(
+            [_hb2_row(110, 110, _OTHER_CAMERA_SN)],
+            RecordingRef(date(2026, 9, 16), 110, SYNTHETIC.camera_sn, "20260916120150"),
+            id="id-names-another-camera",
+        ),
+        pytest.param(
+            [_hb2_row(111, 110)],
+            RecordingRef(date(2026, 9, 16), 110, SYNTHETIC.camera_sn, "20260916120150"),
+            id="another-id-of-the-camera-in-that-second",
+        ),
+    ],
+)
+async def test_a_reference_whose_row_is_gone_raises_not_found(
+    rows: list[dict[str, Any]], ref: RecordingRef
+) -> None:
+    station = FakeStation(serial=_HB2_SN)
+    await station.start()
+    station.rows = rows
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        with pytest.raises(RecordNotFoundError, match="no such recording"):
+            await session.async_find_history_record(ref)
+    finally:
+        await session.async_close()
+        station.stop()
+    assert len(station.history_queries) == 1
+
+
+@pytest.mark.parametrize(
+    "ref",
+    [
+        pytest.param(
+            RecordingRef(date(2026, 9, 16), 2026091600004, SYNTHETIC.camera_sn), id="gone"
+        ),
+        pytest.param(
+            RecordingRef(date(2026, 9, 16), 2026091600005, _OTHER_CAMERA_SN),
+            id="id-names-another-camera",
+        ),
+    ],
+)
+async def test_a_homebase_3_reference_whose_row_is_gone_raises_not_found(
+    station: FakeStation, ref: RecordingRef
+) -> None:
+    station.rows = [_history_row("20260916", 5)]
+    session = make_session(station, Provider(station))
+    try:
+        with pytest.raises(RecordNotFoundError, match="no such recording"):
+            await session.async_find_history_record(ref)
+    finally:
+        await session.async_close()
+    assert len(station.history_queries) == 1
+
+
+async def test_a_homebase_3_row_is_found_by_its_id_and_camera_whatever_its_start(
+    station: FakeStation,
+) -> None:
+    """The id names one row of its day: a start time other than the reference's does
+    not hide it, and the row comes back with the reference of the lookup."""
+    station.rows = [_history_row("20260916", 5)]
+    ref = RecordingRef(date(2026, 9, 16), 2026091600005, SYNTHETIC.camera_sn, "20260916110000")
+    session = make_session(station, Provider(station))
+    try:
+        found = await session.async_find_history_record(ref)
+    finally:
+        await session.async_close()
+    assert found.start_time == "2026-09-16 12:00:05"  # hygiene: ok
+    assert found.ref == encode_ref(ref, station_sn=SYNTHETIC.station_sn)
+    assert len(station.history_queries) == 1
+
+
+_TARGET = RecordingRef(date(2026, 9, 16), 1000, SYNTHETIC.camera_sn, "20260916120230")
+
+
+async def _find_on_hb2(
+    station: FakeStation, rows: list[dict[str, Any]], ref: RecordingRef = _TARGET
+) -> tuple[HistoryRecord | None, list[str]]:
+    """``ref`` looked up on a HomeBase 2 listing ``rows`` (None: RecordNotFoundError),
+    and the ``start_time`` cursor of every query sent."""
+    await station.start()
+    station.rows = rows
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        async with asyncio.timeout(10):
+            found: HistoryRecord | None = await session.async_find_history_record(ref)
+    except RecordNotFoundError:
+        found = None
+    finally:
+        await session.async_close()
+        station.stop()
+    return found, [q["start_time"] for q in station.history_queries]
+
+
+def _crowd(first_id: int, second: int, n: int) -> list[dict[str, Any]]:
+    """``n`` rows of the other camera started ``second`` s after noon, ids from ``first_id`` up."""
+    return [_hb2_row(first_id + i, second, _OTHER_CAMERA_SN) for i in range(n)]
+
+
+@pytest.mark.parametrize(
+    ("up_to", "next_second", "own_second", "asked"),
+    [
+        pytest.param(False, 22, 5, ["20260916120231"], id="before-cursor"),
+        pytest.param(
+            True, 22, 5, ["20260916120231", "20260916120230"], id="up-to-cursor-next-second-full"
+        ),
+        pytest.param(
+            True, 12, 12, ["20260916120231", "20260916120230"], id="up-to-cursor-both-seconds"
+        ),
+        pytest.param(True, 3, 5, ["20260916120231"], id="up-to-cursor-one-page"),
+    ],
+)
+async def test_a_homebase_2_row_behind_a_full_page_of_later_rows_is_found(
+    up_to: bool, next_second: int, own_second: int, asked: list[str]
+) -> None:
+    """Rows of the next second and of the row's own second ahead of it: a full first
+    page whose rows started no earlier than the row is followed by one page from the
+    row's start, under either reading of the cursor."""
+    rows = [
+        *_crowd(1100, 151, next_second),
+        *_crowd(1050, 150, own_second),
+        _hb2_row(1000, 150),
+        *_crowd(900, 149, 30),
+    ]
+    found, cursors = await _find_on_hb2(
+        FakeStation(serial=_HB2_SN, local_events_up_to_cursor=up_to), rows
+    )
+    assert found is not None
+    assert (found.record_id, found.ref) == (1000, encode_ref(_TARGET, station_sn=_HB2_SN))
+    assert cursors == asked
+
+
+@pytest.mark.parametrize("up_to", [False, True], ids=["before-cursor", "up-to-cursor"])
+async def test_a_homebase_2_row_behind_a_full_page_of_its_own_second_is_not_reached(
+    up_to: bool,
+) -> None:
+    """A start-time cursor cannot page within one second: after the page from the row's
+    start the lookup gives up."""
+    rows = [*_crowd(1050, 150, 20), _hb2_row(1000, 150)]
+    found, cursors = await _find_on_hb2(
+        FakeStation(serial=_HB2_SN, local_events_up_to_cursor=up_to), rows
+    )
+    assert (found, cursors) == (None, ["20260916120231", "20260916120230"])
+
+
+async def test_a_homebase_2_full_page_reaching_older_rows_ends_the_lookup() -> None:
+    found, cursors = await _find_on_hb2(FakeStation(serial=_HB2_SN), _crowd(900, 149, 30))
+    assert (found, cursors) == (None, ["20260916120231"])
+
+
+async def test_a_homebase_2_full_page_without_start_times_asks_from_the_rows_start() -> None:
+    """A full page whose rows carry no start time shows no older row: one more page."""
+    rows = [{**_timeless_row(n), "device_sn": _OTHER_CAMERA_SN} for n in range(1, 26)]
+    found, cursors = await _find_on_hb2(FakeStation(serial=_HB2_SN), rows)
+    assert (found, cursors) == (None, ["20260916120231", "20260916120230"])
+
+
+class _CursorIgnoringStation(FakeStation):
+    """A 10017 station answering every page as the first one of the day."""
+
+    def _answer_local_events(self, inner: dict[str, Any]) -> None:
+        super()._answer_local_events({**inner, "payload": {**inner["payload"], "start_time": "0"}})
+
+
+async def test_a_homebase_2_station_repeating_its_page_ends_the_lookup() -> None:
+    found, cursors = await _find_on_hb2(
+        _CursorIgnoringStation(serial=_HB2_SN), _crowd(1100, 160, 25)
+    )
+    assert (found, len(cursors)) == (None, 2)
+
+
+async def test_a_reference_without_a_start_is_refused_where_rows_page_by_start_time() -> None:
+    station = FakeStation(serial=_HB2_SN)
+    await station.start()
+    session = StationSession(
+        _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        with pytest.raises(RecordingRefError, match="no start time"):
+            await session.async_find_history_record(
+                RecordingRef(date(2026, 9, 16), 110, SYNTHETIC.camera_sn)
+            )
+    finally:
+        await session.async_close()
+        station.stop()
+    assert station.history_queries == []
+
+
 def _timeless_row(counter: int) -> dict[str, Any]:
     return {**_history_row("20260916", counter), "start_time": ""}
 
@@ -1430,6 +1753,13 @@ async def test_each_history_page_is_logged_with_its_counts_and_why_paging_stops(
         ("20260915", None, {"page_size": 1}, "page_size"),
         ("20260915", None, {"count": 0}, "count"),
         ("20260915", None, {"before": 42}, "no day"),
+        ("20260915", None, {"before_day": date(2026, 9, 15)}, "before_day needs before"),
+        (
+            "20260915",
+            None,
+            {"before": 2026091500001, "before_day": date(2026, 9, 14)},
+            "not the day record_id",
+        ),
     ],
 )
 async def test_history_arguments_are_checked_before_sending(
@@ -1622,7 +1952,7 @@ async def test_storage_rejection_and_silence_are_typed_errors(station: FakeStati
     station.storage_reply_code = -104
     session = make_session(station, Provider(station))
     try:
-        with pytest.raises(CommandRejectedError) as rejected:
+        with pytest.raises(AccountRejectedError) as rejected:
             await session.async_get_storage()
         assert (rejected.value.command, rejected.value.code) == (1307, -104)
         station.storage_reply_code = 0
@@ -2156,14 +2486,14 @@ async def test_rejected_media_open_raises_the_code(station: FakeStation) -> None
     session = make_session(station, Provider(station))
     try:
         stream = await session.async_open_recording("/zx/clip.zxvideo", 0)
-        with pytest.raises(CommandRejectedError, match="-104"):
+        with pytest.raises(AccountRejectedError, match=r"code -104: INVALID_ACCOUNT$"):
             await anext(stream)
     finally:
         await session.async_close()
     stats = session.stats()
     assert stats.media_opens == 1
-    assert stats.media_failures_by_type == {"CommandRejectedError": 1}
-    assert stats.media_failures_by_channel == {"0": {"CommandRejectedError": 1}}
+    assert stats.media_failures_by_type == {"AccountRejectedError": 1}
+    assert stats.media_failures_by_channel == {"0": {"AccountRejectedError": 1}}
 
 
 async def test_a_wake_failure_receipt_fails_the_live_open_at_once(
@@ -2255,6 +2585,8 @@ async def test_a_started_stream_clears_the_wake_backoff(
     ("code", "kind", "text"),
     [
         (-108, CommandUnsupportedError, "NOT_HANDLED"),
+        (-103, CommandUnsupportedError, "command receipt INVALID_COMMAND"),
+        (-104, AccountRejectedError, "command receipt INVALID_ACCOUNT"),
         (-204, CameraWakeError, "could not wake the camera (XM_WIFI_WAKEUP_FAIL)"),
         (-205, CameraWakeError, "(XM_WIFI_TIMEOUT)"),
         (-114, CommandRejectedError, "command receipt DEV_BUSY"),
@@ -2268,6 +2600,26 @@ def test_a_command_receipt_error_names_its_code(
     assert type(err) is kind
     assert (err.command, err.code) == (1234, code)
     assert str(err).endswith(text)
+
+
+@pytest.mark.parametrize(
+    ("code", "kind", "text"),
+    [
+        (-104, AccountRejectedError, "code -104: INVALID_ACCOUNT"),
+        (-103, CommandUnsupportedError, "code -103: INVALID_COMMAND"),
+        (-110, CommandRejectedError, "code -110: INVALID_PARAM"),
+        (-1, CommandRejectedError, "code -1"),
+    ],
+)
+def test_a_result_code_raises_its_error(
+    code: int, kind: type[CommandRejectedError], text: str
+) -> None:
+    with pytest.raises(CommandRejectedError) as err:
+        session_module._raise_for_code(1234, code)
+    assert type(err.value) is kind
+    assert (err.value.command, err.value.code) == (1234, code)
+    assert str(err.value).endswith(text)
+    session_module._raise_for_code(1234, 0)  # success raises nothing
 
 
 async def test_one_media_stream_per_session(station: FakeStation) -> None:
@@ -3613,6 +3965,18 @@ async def test_async_event_summary_returns_counts_and_path(station: FakeStation)
         await session.async_close()
 
 
+async def test_async_event_summary_rejection_raises_its_code(station: FakeStation) -> None:
+    station.event_count_reply_code = -104
+    session = make_session(station, Provider(station))
+    try:
+        with pytest.raises(AccountRejectedError) as rejected:
+            await session.async_event_summary(SYNTHETIC.camera_sn, timeout=2.0)
+    finally:
+        await session.async_close()
+    assert rejected.value.code == -104
+    assert str(rejected.value).endswith("INVALID_ACCOUNT")
+
+
 async def test_async_event_summary_unnamed_single_item(station: FakeStation) -> None:
     path = "/media/mmcblk0p1/Camera00/event/202609/20260917/20260917223859_snapshot.jpg"
     station.event_summaries = {
@@ -4354,9 +4718,15 @@ async def test_an_rsa_session_takes_command_results_in_clear(
     assert _messages(caplog, f"rx frame 0x06a4 ch0 v1 enc{encryption} (132 bytes)")
 
 
-@pytest.mark.parametrize("code", [-1, 5])
+@pytest.mark.parametrize(
+    ("code", "kind"),
+    [(-1, CommandRejectedError), (5, CommandRejectedError), (-104, AccountRejectedError)],
+)
 async def test_a_refused_recipe_raises_the_result_code(
-    station: FakeStation, code: int, monkeypatch: pytest.MonkeyPatch
+    station: FakeStation,
+    code: int,
+    kind: type[CommandRejectedError],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     station.answer_encryption = FRAME_STATIC_ECB
     station.answer_tail = _NOISE
@@ -4367,6 +4737,7 @@ async def test_a_refused_recipe_raises_the_result_code(
             await session.async_run_recipe(goto_preset(2), timeout=1.0)
     finally:
         await session.async_close()
+    assert type(err.value) is kind
     assert (err.value.code, station.preset_gotos) == (code, [])
 
 
@@ -4551,7 +4922,7 @@ async def test_a_scalar_arm_refused_raises_its_code(station: FakeStation) -> Non
             await session.async_set_guard_mode(GuardMode.HOME, timeout=3.0, scalar=True)
     finally:
         await session.async_close()
-    assert type(err.value) is CommandRejectedError
+    assert type(err.value) is AccountRejectedError
     assert (err.value.command, err.value.code) == (1224, -104)
     assert session.guard_mode != GuardMode.HOME
 
@@ -4572,6 +4943,7 @@ async def test_a_scalar_setting_refused_as_invalid_is_unsupported(station: FakeS
     [
         (RECEIPT_NOT_HANDLED, CommandUnsupportedError),
         (-103, CommandUnsupportedError),
+        (-104, AccountRejectedError),
         (-1, CommandRejectedError),
     ],
 )
@@ -4865,6 +5237,43 @@ async def test_native_local_events_recording_decodes_with_account_cipher(
         fake.stop()
 
 
+async def test_native_dat_trigger_frame_uses_local_recording_protocol() -> None:
+    """Trigger-frame extraction from a .dat recording must use native 1025."""
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    fake.recording_frames = 6
+    await fake.start()
+    session = StationSession(
+        LOCAL_STATION_SN, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_connect()
+        picture = await session.async_trigger_frame(LOCAL_RECORDING_PATH, 5)
+        assert picture == MEDIA_KEYFRAME
+        assert fake.native_recording_requests == [(1025, 5, LOCAL_RECORDING_PATH)]
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+@pytest.mark.parametrize("serial", [SYNTHETIC.station_sn, LOCAL_STATION_SN])
+@pytest.mark.parametrize("path", ["/zx/../clip.zxvideo", "/media/../clip.dat"])
+async def test_recording_open_refuses_invalid_path_before_connect(serial: str, path: str) -> None:
+    """All station families validate a recording path before sending anything."""
+    fake = FakeStation(serial=serial)
+    session = StationSession(serial, Provider(fake), host="127.0.0.1", port=1)
+    with pytest.raises(UnsupportedError, match="not a validated station recording path"):
+        await session.async_open_recording(path, 5)
+    assert fake.sessions == 0
+
+
+async def test_a_10011_station_refuses_native_dat_before_connect() -> None:
+    fake = FakeStation(serial=SYNTHETIC.station_sn)
+    session = StationSession(fake.serial, Provider(fake), host="127.0.0.1", port=1)
+    with pytest.raises(UnsupportedError, match=r"cannot play a native \.dat"):
+        await session.async_open_recording(LOCAL_RECORDING_PATH, 5)
+    assert fake.sessions == 0
+
+
 async def test_native_local_events_wrong_account_cipher_cannot_decrypt_media() -> None:
     """The media must use the owner cipher, not a generated per-open ECC key."""
     fake = FakeStation(serial=LOCAL_STATION_SN)
@@ -4881,7 +5290,7 @@ async def test_native_local_events_wrong_account_cipher_cannot_decrypt_media() -
         stream = await session.async_open_recording(
             LOCAL_RECORDING_PATH, 5, first_frame_timeout=0.4
         )
-        with pytest.raises((CommandNotAppliedError, DeviceTimeoutError, ProtocolError)):
+        with pytest.raises(ProtocolError, match="no keyframe decoded"):
             await anext(stream)
         assert fake.native_recording_requests == [(1025, 5, LOCAL_RECORDING_PATH)]
     finally:
@@ -4920,50 +5329,6 @@ async def test_local_events_page_size_allows_explicit_override_and_device_filter
         await session.async_list_history("20261025", page_size=50, device_sn=SYNTHETIC.camera_sn)
         assert fake.history_queries[0]["count"] == 50
         assert fake.history_queries[0]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]
-    finally:
-        await session.async_close()
-        fake.stop()
-
-
-async def test_history_10011_remains_station_wide_when_device_is_requested() -> None:
-    fake = FakeStation()
-    await fake.start()
-    session = make_session(fake, Provider(fake))
-    try:
-        await session.async_list_history("20261025", device_sn=SYNTHETIC.camera_sn)
-        assert "device_info" not in fake.history_queries[0]
-    finally:
-        await session.async_close()
-        fake.stop()
-
-
-async def test_local_events_opaque_cursor_uses_history_records_station_day() -> None:
-    fake = FakeStation(serial=LOCAL_STATION_SN)
-    await fake.start()
-    fake.rows = [
-        {
-            "record_id": 47051,
-            "device_sn": SYNTHETIC.camera_sn,
-            "start_time": "2026-10-25 23:59:59",
-            "time_zone": "+1400",
-            "storage_path": LOCAL_RECORDING_PATH,
-        },
-        {
-            "record_id": 47050,
-            "device_sn": SYNTHETIC.camera_sn,
-            "start_time": "2026-10-25 23:58:59",
-            "storage_path": LOCAL_RECORDING_PATH,
-        },
-    ]
-    row = HistoryRecord.from_row(fake.rows[0])
-    assert row.station_day == date(2026, 10, 25)
-    session = StationSession(
-        fake.serial, Provider(fake), host="127.0.0.1", port=fake.discovery_port
-    )
-    try:
-        rows = await session.async_list_history("20261024", "20261026", before=row, count=5)
-        assert [r.record_id for r in rows] == [47050]
-        assert fake.history_queries[0]["start_date"] == "20261025"
     finally:
         await session.async_close()
         fake.stop()
@@ -5015,21 +5380,27 @@ async def test_native_recording_rejects_unparsable_cipher_before_wire_send() -> 
 
 
 @pytest.mark.parametrize("serial", [SYNTHETIC.station_sn, LOCAL_STATION_SN])
-async def test_existing_zxvideo_keeps_json_recording_route_for_both_families(
-    serial: str, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("download", [False, True])
+async def test_station_family_selects_recording_route_even_for_zxvideo(
+    serial: str, download: bool
 ) -> None:
-    """10011 and 10017 stations must not send .zxvideo through native ECB."""
-    session = object.__new__(StationSession)
-    session.serial = serial
-    sentinel = object()
-
-    async def fake_open(
-        _session: StationSession, command: int, channel: int, *args: object, **kwargs: object
-    ) -> object:
-        assert command == 1025
-        assert channel == 5
-        assert "native_recording_path" not in kwargs
-        return sentinel
-
-    monkeypatch.setattr(StationSession, "_open_media", fake_open)
-    assert await session.async_open_recording("/zx/test.zxvideo", 5) is sentinel
+    """10017 stations use native 1025/1024 even for .zxvideo paths."""
+    fake = FakeStation(serial=serial)
+    await fake.start()
+    session = StationSession(serial, Provider(fake), host="127.0.0.1", port=fake.discovery_port)
+    try:
+        stream = await session.async_open_recording(
+            "/zx/test.zxvideo", 5, download=download, idle_timeout=1.0
+        )
+        async with stream:
+            frames = [frame async for frame in stream]
+        assert _video(frames)
+        if serial == LOCAL_STATION_SN:
+            assert fake.native_recording_requests == [
+                (1024 if download else 1025, 5, "/zx/test.zxvideo")
+            ]
+        else:
+            assert not fake.native_recording_requests
+    finally:
+        await session.async_close()
+        fake.stop()

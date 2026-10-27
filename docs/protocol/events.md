@@ -8,6 +8,7 @@ A station reports what happens at the house on two independent channels:
 | needs internet | no | yes |
 | latency | about 1 s **ahead** of the cloud, about 3 s behind the trigger **[verified]** | about 1 s behind local **[verified]** |
 | camera detections | HomeBase 3 **[verified]**, with on-disk video, thumbnail and crop paths; none seen from a HomeBase 2 (`Station.local_events`) | yes (same inner JSON), with `pic_url` |
+| sensor events (a motion sensor's `msg_type` 14) | not seen from any station (`Station.local_detections_for`); a sensor's last PIR time (param 1605) is in the parameter dump | yes |
 | guard-mode changes | changes over P2P, from the app and from a schedule announced by `0x047F` **[verified, fw 3.8.7.4]**; keypad changes **[open]** (poll the parameter dump); no arming push (msg_type 9) over P2P | **pushed**, decoded within about 1 s **[verified]** |
 | parameter changes (battery, settings) | pushed as dumps, plus polling | no |
 | stills | 640×360 thumbnail, crop, 4K from the recording ([media.md](media.md)) | encrypted `pic_url` thumbnail **[app]** |
@@ -140,6 +141,13 @@ An attached record that is merely unbound is not a rejection: its fields are Non
 3104 crying, 3105 sound, 3106 pet, **3107 vehicle** `*`, 3108–3110 dog / lick / poop,
 **3111 identified person** `*`, 3112 stranger.
 
+**Doorbell press.** A 3103 comes from a video doorbell or a video smart lock, with the
+pressed device's own serial as `device_sn`; the eufy app shows both as a ring (ring
+notification, live view on answer) **[app]**. Which models ring is
+`Capability.DOORBELL_RING` (see `devices/capabilities.py`): a doorbell by its kind, a video
+lock by its app product category `VideoSmartLock`. A video lock's press is not seen on
+hardware.
+
 **Detection kind** (`SecurityEvent.detection`). Most pushes use `event_type` as an
 enum. For a `msg_type` 1 (SECURITY_EVT) push, the eufy app takes the kind from
 two side fields first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on hardware):
@@ -156,6 +164,8 @@ two side fields first **[app]** (`PUSH_KIND_EVIDENCE`, declared; not seen on har
 a `fetch_id`; the library keeps the `event_type` there, so a pushed 3102 stays a person.
 A camera paired to a HomeBase 2 is reported this way: a 3101 push with a face id is a
 person. `SecurityEvent.detection_evidence` names the grade of the kind an event reports.
+A doorbell press (3103) stays a press whatever `fetch_id` and `person_name` say, as the
+eufy app's lock and doorbell push paths take a press from the `event_type` alone **[app]**.
 
 A `msg_type` 14 (MOTION_SENSOR) push is motion whatever its `e` field says, as the eufy
 app shows it; `e` (opened / closed) is read only on a `msg_type` 3 entry-sensor push.

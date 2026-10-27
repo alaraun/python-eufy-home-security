@@ -6,8 +6,10 @@ behind each station kind of ``PARENT_CONNECT_TYPES``, with the input the app's l
 gives it. Each recipe is compared with the library's builders; the file records, per
 product and connect type, the :class:`~eufy_home_security.devices.live_open.LiveOpen`
 whose recipe equals the handler's (the keys of ``HANDLER_UNUSED_KEYS`` aside), or null
-when none does. Where that open is a 1700 open behind a station, the handler's
-``close_live_stream`` is recorded too, as the
+when none does. A multi-camera open behind a HomeBase 3 must also match with the view
+fields the app's player adds there, for every layout of a two-lens camera; that run
+decides between its two forms. Where the open is a 1700 or multi-camera open behind a
+station, the handler's ``close_live_stream`` is recorded too, as the
 :class:`~eufy_home_security.devices.live_open.LiveStop` it is, or null. Runs on a
 maintainer host only; nothing at runtime executes vendor code.
 
@@ -28,7 +30,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from eufy_home_security.devices.live_open import LiveOpen, LiveStop
+from eufy_home_security.devices.live_open import NVR_OPENS, LiveOpen, LiveStop
+from eufy_home_security.devices.live_view import Lens, LensView, live_view, player_input
 from eufy_home_security.devices.model_settings import product_code_of
 from eufy_home_security.devices.recipes import (
     HANDLER_UNUSED_KEYS,
@@ -36,6 +39,7 @@ from eufy_home_security.devices.recipes import (
     ConnectType,
     RecipeCommand,
     close_live_stream,
+    open_live_stream_nvr,
     open_live_stream_single,
     open_live_stream_station,
 )
@@ -56,6 +60,10 @@ PLAYER_INPUT: Mapping[str, Any] = {
     "cameraType": 0,
     "entryType": 0,
 }
+
+
+TWO_LENSES = (Lens(1, 0), Lens(1, 1))
+"""The lens list the multi-camera runs give the player (a fixed and a moving lens)."""
 
 
 def _harness() -> ModuleType:
@@ -102,8 +110,43 @@ def _library_recipes(channel: int) -> dict[LiveOpen, dict[str, Any]]:
         LiveOpen.SINGLE_NO_EXT: open_live_stream_single(
             channel=channel, account_id=ACCOUNT, key_hex=KEY, ext_value=False
         ),
+        **_nvr_recipes(channel, PLAYER_INPUT),
     }
     return {mode: recipe.as_handler_dict() for mode, recipe in built.items()}
+
+
+def _nvr_recipes(channel: int, player: Mapping[str, Any]) -> dict[LiveOpen, Any]:
+    return {
+        mode: open_live_stream_nvr(
+            channel=channel, player=player, camera_type_from_lens=mode is LiveOpen.NVR_LENS
+        )
+        for mode in (LiveOpen.NVR, LiveOpen.NVR_LENS)
+    }
+
+
+def view_inputs(channel: int) -> list[dict[str, Any]]:
+    """The player's input under a HomeBase 3 for each layout of a two-lens camera."""
+    return [
+        player_input(
+            account_id=ACCOUNT,
+            key_hex=KEY,
+            view=live_view(channel, TWO_LENSES, view),
+            station_fields=True,
+        )
+        for view in LensView
+    ]
+
+
+def classify_views(handler_p2ps: list[Mapping[str, Any]], channel: int) -> LiveOpen | None:
+    """The multi-camera open whose recipe equals the handler's for every input of
+    :func:`view_inputs` (in that order), or None."""
+    for mode in (LiveOpen.NVR, LiveOpen.NVR_LENS):
+        if all(
+            classify(p2p, {mode: _nvr_recipes(channel, player)[mode].as_handler_dict()}) is mode
+            for p2p, player in zip(handler_p2ps, view_inputs(channel), strict=True)
+        ):
+            return mode
+    return None
 
 
 def classify(
@@ -141,7 +184,7 @@ def _one(values: list[Any]) -> Any:
 
 def generate(cache: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     """Per product: the open per connect type, and the stop per connect type where the
-    open is a 1700 open behind a station."""
+    open is a 1700 or multi-camera open behind a station."""
     tm = _harness()
     libraries = {channel: _library_recipes(channel) for channel in (0, CHANNEL)}
     ctxs = contexts()
@@ -179,16 +222,50 @@ def generate(cache: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             kind: _one(list(found))
             for kind, found in zip(ctxs, zip(*opens, strict=True), strict=True)
         }
+        if modes.get(ConnectType.HB3) in NVR_OPENS:
+            modes[ConnectType.HB3] = _homebase3_views(tm, cache, code, serial, ctxs)
         products[code] = {kind.value: None if m is None else m.value for kind, m in modes.items()}
         behind = {
             kind.value: (None if (stop := _one(list(found))) is None else stop.value)
             for kind, found in zip(ctxs, zip(*closes, strict=True), strict=True)
-            if kind is not ConnectType.SINGLE
-            and modes[kind] in (LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT)
+            if kind is not ConnectType.SINGLE and modes[kind] in _STOP_RECORDED
         }
         if behind:
             stops[code] = behind
     return products, stops
+
+
+_STOP_RECORDED = frozenset({LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT, *NVR_OPENS})
+"""The opens behind a station whose stop the table records."""
+
+
+def _homebase3_views(
+    tm: ModuleType, cache: Path, code: str, serial: str, ctxs: Mapping[ConnectType, str | None]
+) -> LiveOpen | None:
+    """The multi-camera open the handler of ``code`` sends behind a HomeBase 3 for
+    every layout and firmware version, or None."""
+    parent = ctxs[ConnectType.HB3]
+    requests = [
+        {
+            "identifier": "open_live_stream",
+            "payload": player,
+            "device": {
+                "device_sn": serial,
+                "parent_sn": parent,
+                "device_channel": CHANNEL,
+                "main_sw_version": version,
+            },
+        }
+        for version in VERSIONS
+        for player in view_inputs(CHANNEL)
+    ]
+    p2ps = tm.run_handler(tm.handler_file(cache, code), requests)
+    per_version = len(LensView)
+    found = [
+        classify_views(p2ps[i * per_version : (i + 1) * per_version], CHANNEL)
+        for i in range(len(VERSIONS))
+    ]
+    return _one(found)
 
 
 def _table(name: str, rows: Mapping[str, Mapping[str, str | None]]) -> list[str]:
@@ -213,8 +290,8 @@ def render(
         '"""Generated by scripts/gen_live_open.py from the eufy app\'s product handlers; do not',
         "edit. Per product code and connect type, the library open (``LiveOpen`` value) that",
         "reproduces the handler's ``open_live_stream``, or None; and where that open is a",
-        "1700 open behind a station, the library stop (``LiveStop`` value) its",
-        '``close_live_stream`` is, or None."""',
+        "1700 or multi-camera open behind a station, the library stop (``LiveStop`` value)",
+        'its ``close_live_stream`` is, or None."""',
         "",
         "from typing import Final",
         "",
@@ -233,6 +310,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--check", action="store_true", help="compare with --out, write nothing")
     args = parser.parse_args(argv)
+    if (refused := _harness().node.node_refusal("gen_live_open")) is not None:
+        return refused
     text = render(*generate(args.cache))
     if args.check:
         same = args.out.exists() and args.out.read_text(encoding="utf-8") == text

@@ -561,10 +561,10 @@ def test_native_recording_frame_wire_format(command: int) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["/zx/test.zxvideo", "/media/mmcblk0p1/Camera05/../x.dat", "/not-a-homebase/x.dat"],
+    ["/media/mmcblk0p1/Camera05/../x.dat", "/not-a-homebase/x.dat"],
 )
 def test_native_recording_rejects_invalid_paths(path: str) -> None:
-    with pytest.raises(ValueError, match=r"not a validated native \.dat recording path"):
+    with pytest.raises(ValueError, match=r"not a validated station recording path"):
         messages.native_recording_frame(path, SYNTHETIC.account_id, 5, SYNTHETIC.static_key)
 
 
@@ -577,6 +577,41 @@ def test_native_recording_rejects_bad_channels(channel: int) -> None:
             channel,
             SYNTHETIC.static_key,
         )
+
+
+def test_native_recording_accepts_validated_zxvideo_path() -> None:
+    frame = messages.native_recording_frame(
+        "/zx/clip.zxvideo",
+        SYNTHETIC.account_id,
+        5,
+        SYNTHETIC.static_key,
+        command=messages.CMD_RECORD_VIEW,
+    )
+    assert frame.startswith(MAGIC)
+
+
+@pytest.mark.parametrize("command", [0, 10011, 1306])
+def test_native_recording_rejects_unrelated_command(command: int) -> None:
+    with pytest.raises(ValueError, match="invalid native recording command"):
+        messages.native_recording_frame(
+            "/zx/clip.zxvideo",
+            SYNTHETIC.account_id,
+            5,
+            SYNTHETIC.static_key,
+            command=command,
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "account_id"),
+    [
+        ("/zx/" + "a" * 120 + ".zxvideo", SYNTHETIC.account_id),
+        ("/zx/clip.zxvideo", "a" * 128),
+    ],
+)
+def test_native_recording_rejects_unbounded_strings(path: str, account_id: str) -> None:
+    with pytest.raises(ValueError, match="exceeds 127 bytes"):
+        messages.native_recording_frame(path, account_id, 5, SYNTHETIC.static_key)
 
 
 def test_native_recording_accepts_prefixed_doorbell_path() -> None:

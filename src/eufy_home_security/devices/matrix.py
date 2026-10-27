@@ -187,7 +187,14 @@ def render_support_matrix() -> str:
         ),
     )
     out.append("")
-    out.append("Models without a profile below offer no capability (all *unknown*).")
+    out += [
+        "Each table below is a model's own profile. For every catalogued model, with or"
+        " without one, `profile_for_serial` adds `live_stream`, `live_keyframe` and the"
+        " pan/tilt/zoom capabilities as *declared* where the model's handler sends what the"
+        " library sends (per station: `Station.live_support`, `Station.ptz_support`), and"
+        " `doorbell_ring` as *declared* for a video doorbell or a video smart lock"
+        " (`ring_evidence`). Any other capability of a model without a profile is *unknown*.",
+    ]
     for model in sorted(PROFILES):
         profile = PROFILES[model]
         out += ["", f"## {model} {MODELS[model].name}", ""]
