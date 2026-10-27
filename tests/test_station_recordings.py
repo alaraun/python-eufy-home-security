@@ -472,7 +472,7 @@ async def test_a_standalone_device_pages_no_recordings() -> None:
     assert page == RecordingsPage((), None)
 
 
-HB2_SN = "T8010P2000054321"
+HB2_SN = SYNTHETIC.homebase2_station_sn
 
 
 async def test_a_homebase_2_pages_its_sequential_ids_by_their_station_day(
@@ -500,6 +500,10 @@ async def test_a_homebase_2_pages_its_sequential_ids_by_their_station_day(
         first = await hb2.async_list_recordings_page(sn, days=2, limit=3)
         asked_first = _asked(fake)
         second = await hb2.async_list_recordings_page(sn, days=2, limit=3, cursor=first.next_cursor)
+        assert fake.history_queries
+        assert all(q["device_info"] == [{"device_sn": sn}] for q in fake.history_queries), (
+            "both pages must filter at the station for this camera"
+        )
     finally:
         await hb2.async_close()
     assert [r.record_id for r in first.rows] == [7, 6, 5]

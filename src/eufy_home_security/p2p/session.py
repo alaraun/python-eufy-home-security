@@ -3037,9 +3037,10 @@ class StationSession:
         arrive, and ``count`` then counts the kept ones, so paging stops as soon as
         enough rows pass the filter.
 
-        ``device_sn`` is included in every local-events (10017) request, as the app
-        does; this was verified on T8010 hardware. ``keep`` still filters records
-        locally, and the 10011 history command remains station-wide.
+        ``device_sn`` (a camera) filters a ``DB_QUERY_LOCAL_EVENTS`` (10017) query at
+        the station with ``device_info``, as the eufy app does **[declared: app]**,
+        measured on a HomeBase 2; ``keep`` still filters the rows, and a
+        ``DB_QUERY_HISTORY`` (10011) query stays station-wide.
 
         Uses the verb the app sends this station's model
         (:func:`~.messages.history_query_verb`) the way the app does: one day at a
@@ -3092,7 +3093,7 @@ class StationSession:
         """:meth:`async_list_history`, each row with the station day its query named (the
         day it belongs to on the station, whether or not its ``record_id`` carries one)."""
         verb = history_query_verb(self.serial)
-        # The app includes a device filter with every local-events query.
+        # A camera's own list is filtered at the station (device_info), as the app does.
         native_device_sn = device_sn if verb == DB_QUERY_LOCAL_EVENTS else None
         if page_size is None:
             page_size = HISTORY_PAGE_SIZE if verb == DB_QUERY_HISTORY else HISTORY_LOCAL_PAGE_SIZE
@@ -3866,7 +3867,7 @@ class StationSession:
 
         The camera is not woken: the station serves the clip off its own disk, about
         as fast as it was recorded or faster. Stations using local events
-        (10017) use native download (1024); HomeBase 3 retains JSON media. It runs
+        (10017) use native download (1024); the 10011 family keeps the JSON commands. It runs
         on an extra session reserved from the live-stream session budget
         (:attr:`max_sessions`), closed when the clip ends or this call is cancelled, so
         this session's slot, commands and trigger frames are never held up. Downloads

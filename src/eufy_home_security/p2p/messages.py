@@ -26,6 +26,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
 
+from ..events import is_station_recording_path
 from ..exceptions import ProtocolError, UnsupportedError
 from ..models import STATION_CHANNEL, GuardMode
 from . import crypto
@@ -208,8 +209,6 @@ def native_recording_frame(
     path: str, account_id: str, channel: int, key: bytes, *, command: int = CMD_DOWNLOAD_VIDEO
 ) -> bytes:
     """Native 1025 playback / 1024 download: ECB path + account string pair."""
-    from ..events import is_station_recording_path  # noqa: PLC0415 - avoid import cycle
-
     if command not in (CMD_DOWNLOAD_VIDEO, CMD_RECORD_VIEW):
         raise ValueError("invalid native recording command")
     if not is_station_recording_path(path):

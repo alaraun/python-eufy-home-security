@@ -910,6 +910,8 @@ def test_homebase2_recording_path(camera: str) -> None:
         "/media/mmcblk0p1/Camera005/20310203112233.dat",
         "/media/mmcblk0p1/Camera05/2031020311223.dat",
         "/media/mmcblk0p1/Camera05/20310203112233.mp4",
+        "/media/mmcblk0p1/CameraAB/20310203112233.dat",
+        "/media/mmcblk0p1/Camera05/203102031122334.dat",
         "/media/mmcblk0p1/video/20310203112233.dat",
         "/media/mmcblk0p1/Camera05/2031020311223é.dat",
         "/media/mmcblk0p1/Camera05/20310203112233.dat\n",

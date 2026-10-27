@@ -213,8 +213,9 @@ camera, whether it needs a recording, typical time, verification status).
 - `Station.async_camera_image(device_sn, source, days=7)` → `CameraImage`: without an
   event. For `THUMBNAIL` / `TRIGGER_FRAME` it lists the history one day at a time, today
   first (the host's local date), takes the newest row of that camera whose `thumb_path`
-  (`.jpg`) or `storage_path` (`.zxvideo`) passes the media-path rules, and fetches or
-  plays it; `record_id` and `recorded_at` (the row's `start_time`) identify the event.
+  (`.jpg`) or `storage_path` (`.zxvideo`, or HomeBase 2's validated `.dat`
+  recording paths) passes the media-path rules, and fetches or plays it;
+  `record_id` and `recorded_at` (the row's `start_time`) identify the event.
   No such row in `days` days raises `RecordNotFoundError`, whose message counts the
   rows read, the camera's and why the camera's were skipped (a DEBUG line adds the
   devices, path shapes and fields; see `docs/how-to/debug-logging.md`). `LIVE` takes a

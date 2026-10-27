@@ -1946,6 +1946,51 @@ async def test_async_camera_image_trigger_frame_plays_newest_recording(
     assert "wanted.zxvideo" in str(opens[0]["payload"])
 
 
+async def test_homebase2_camera_image_trigger_frame_plays_native_dat_recording(
+    fake: FakeStation,
+) -> None:
+    """The camera-image scan must accept a HomeBase 2 .dat row, not only .zxvideo."""
+    hb2_sn = SYNTHETIC.homebase2_station_sn
+    fake.serial = hb2_sn
+    fake.static_key = static_key(hb2_sn, fake.did)
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(hb2_sn, credentials, host="127.0.0.1", port=fake.discovery_port)
+    hb2 = Station(
+        dataclasses.replace(STATION, device_sn=hb2_sn),
+        session,
+        sub_devices=[dataclasses.replace(CAMERA, station_sn=hb2_sn)],
+    )
+    recorded_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    native = "/media/mmcblk0p1/Camera00/20310203112233.dat"
+    fake.rows = [
+        {
+            "record_id": 12,
+            "device_sn": SYNTHETIC.camera_sn,
+            "storage_path": "/media/mmcblk0p1/Camera00/invalid.dat",
+            "start_time": recorded_at,
+        },
+        {
+            "record_id": 11,
+            "device_sn": SYNTHETIC.camera_sn,
+            "storage_path": native,
+            "start_time": recorded_at,
+        },
+    ]
+    try:
+        image = await hb2.async_camera_image(
+            SYNTHETIC.camera_sn, source=ImageSource.TRIGGER_FRAME, days=1
+        )
+        assert image.source is ImageSource.TRIGGER_FRAME
+        assert image.data == MEDIA_KEYFRAME
+        assert image.record_id == 11
+        assert fake.native_recording_requests == [(1025, 0, native)]
+    finally:
+        await hb2.async_close()
+
+
 async def test_async_camera_image_thumbnail_returns_newest_thumbnail(
     station: Station, fake: FakeStation
 ) -> None:

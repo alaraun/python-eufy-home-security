@@ -142,7 +142,7 @@ async def test_a_standalone_device_downloads_nothing(station: FakeStation) -> No
 
 async def test_native_local_events_download_uses_1024_and_decodes_mpegts() -> None:
     """The public download API, not only the raw open, must select native 1024."""
-    local_sn = "T8010" + SYNTHETIC.station_sn[5:]
+    local_sn = SYNTHETIC.homebase2_station_sn
     native_path = "/media/mmcblk0p1/Camera05/20310203112233.dat"
     fake = FakeStation(serial=local_sn)
     await fake.start()

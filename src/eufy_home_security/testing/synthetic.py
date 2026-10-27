@@ -34,6 +34,11 @@ class Synthetic:
     disk_label: str
     """The file-system label in the fake station's storage record."""
 
+    @property
+    def homebase2_station_sn(self) -> str:
+        """Synthetic T8010 serial, reusing the same fictitious test identity."""
+        return "T8010" + self.station_sn[5:]
+
 
 SYNTHETIC: Final = Synthetic(
     station_sn="T8030P2000012345",

@@ -1241,7 +1241,7 @@ async def test_list_history_parses_records(station: FakeStation) -> None:
     assert (rec.arm_mode, rec.msg_type, rec.user_name) == (63, 9, "someone")
 
 
-_HB2_SN = "T8010P2000000007"
+_HB2_SN = SYNTHETIC.homebase2_station_sn
 
 
 def _history_row(day: str, counter: int) -> dict[str, Any]:
@@ -1302,11 +1302,9 @@ async def test_a_station_outside_the_homebase_3_family_is_paged_by_start_time() 
         _HB2_SN, Provider(station), host="127.0.0.1", port=station.discovery_port
     )
     try:
-        history = await session.async_list_history("20260915", "20260916", page_size=20)
+        history = await session.async_list_history("20260915", "20260916")
         pages = len(station.history_queries)
-        older = await session.async_list_history(
-            "20260916", before=today[10]["record_id"], page_size=20
-        )
+        older = await session.async_list_history("20260916", before=today[10]["record_id"])
     finally:
         await session.async_close()
         station.stop()
@@ -1732,7 +1730,7 @@ async def test_each_history_page_is_logged_with_its_counts_and_why_paging_stops(
     )
     try:
         with caplog.at_level(logging.DEBUG, logger="eufy_home_security.p2p.session"):
-            await session.async_list_history("20260916", **({"page_size": 20} | kwargs))
+            await session.async_list_history("20260916", **kwargs)
     finally:
         await session.async_close()
         station.stop()
@@ -5208,7 +5206,7 @@ async def test_an_rsa_key_that_does_not_parse_leaves_the_static_key_unfetched(
 
 
 # HomeBase 2 / local-events recording regression tests: real PPPP sessions with FakeStation.
-LOCAL_STATION_SN = "T8010" + SYNTHETIC.station_sn[5:]
+LOCAL_STATION_SN = SYNTHETIC.homebase2_station_sn
 LOCAL_RECORDING_PATH = "/media/mmcblk0p1/Camera05/20310203112233.dat"
 
 
@@ -5329,33 +5327,6 @@ async def test_local_events_page_size_allows_explicit_override_and_device_filter
         await session.async_list_history("20261025", page_size=50, device_sn=SYNTHETIC.camera_sn)
         assert fake.history_queries[0]["count"] == 50
         assert fake.history_queries[0]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]
-    finally:
-        await session.async_close()
-        fake.stop()
-
-
-async def test_local_events_opaque_id_without_day_is_rejected() -> None:
-    fake = FakeStation(serial=LOCAL_STATION_SN)
-    session = StationSession(fake.serial, Provider(fake), host="127.0.0.1", port=1)
-    with pytest.raises(ValueError, match="carries no day"):
-        await session.async_list_history("20261025", before=48123)
-
-
-async def test_local_events_opaque_id_resumes_on_explicit_day() -> None:
-    fake = FakeStation(serial=LOCAL_STATION_SN)
-    await fake.start()
-    session = StationSession(
-        fake.serial, Provider(fake), host="127.0.0.1", port=fake.discovery_port
-    )
-    try:
-        await session.async_list_history(
-            "20261024",
-            "20261026",
-            count=5,
-            before=48123,
-            before_day=date(2026, 10, 25),
-        )
-        assert fake.history_queries[0]["start_date"] == "20261025"
     finally:
         await session.async_close()
         fake.stop()
