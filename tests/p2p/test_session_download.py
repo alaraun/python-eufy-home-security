@@ -138,3 +138,27 @@ async def test_a_standalone_device_downloads_nothing(station: FakeStation) -> No
     with pytest.raises(UnsupportedError):
         await session.async_download_recording(CLIP, 0, write)
     assert station.sessions == 0
+
+
+async def test_native_local_events_download_uses_1024_and_decodes_mpegts() -> None:
+    """The public download API, not only the raw open, must select native 1024."""
+    local_sn = SYNTHETIC.homebase2_station_sn
+    native_path = "/media/mmcblk0p1/Camera05/20310203112233.dat"
+    fake = FakeStation(serial=local_sn)
+    await fake.start()
+    session = _session(fake, serial=local_sn)
+    chunks: list[bytes] = []
+
+    async def write(chunk: bytes) -> None:
+        chunks.append(chunk)
+
+    try:
+        clip = await session.async_download_recording(native_path, 5, write)
+        data = b"".join(chunks)
+        assert clip.video_frames == fake.recording_frames
+        assert data.startswith(b"\x47")
+        assert len(data) % TS_PACKET_LEN == 0
+        assert fake.native_recording_requests == [(1024, 5, native_path)]
+    finally:
+        await session.async_close()
+        fake.stop()

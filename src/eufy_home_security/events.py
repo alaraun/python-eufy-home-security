@@ -343,6 +343,8 @@ def coerce_str(value: object) -> str | None:
 
 #: Every station media path starts here.
 MEDIA_PATH_PREFIX: Final = "/zx/"
+#: Native SD-card recording directory prefix used by HomeBase 2.
+NATIVE_RECORDING_PREFIX: Final = "/media/mmcblk0p1/Camera"
 #: The longest media path accepted.
 MEDIA_PATH_MAX: Final = 256
 #: Suffix of a still (thumbnail, detection crop).
@@ -390,6 +392,48 @@ def is_station_media_path(value: object, suffix: str) -> TypeGuard[str]:
         and value.isascii()
         and value.isprintable()
         and ".." not in value
+    )
+
+
+def is_station_recording_path(value: object) -> TypeGuard[str]:
+    """A validated station recording path, including HomeBase 2 camera ``.dat`` files.
+
+    HomeBase 2 records clips on its SD partition rather than under the newer
+    station ``/zx`` media prefix. Permit the two observed filename formats,
+    both with 14-digit timestamps, under two-digit camera directories only;
+    never accept arbitrary ``/media`` paths.
+    """
+    if is_station_media_path(value, RECORDING_SUFFIX):
+        return True
+    if not isinstance(value, str):
+        return False
+    if (
+        not value.startswith(NATIVE_RECORDING_PREFIX)
+        or len(value) > MEDIA_PATH_MAX
+        or not value.isascii()
+        or not value.isprintable()
+        or ".." in value
+    ):
+        return False
+    camera_and_name = value.removeprefix(NATIVE_RECORDING_PREFIX)
+    camera, separator, filename = camera_and_name.partition("/")
+    return (
+        separator == "/"
+        and len(camera) == 2
+        and camera.isdigit()
+        and (
+            # Standard camera clips: YYYYMMDDHHMMSS.dat
+            (len(filename) == 18 and filename[:14].isdigit() and filename[14:] == ".dat")
+            # HomeBase 2 Doorbell clips: A123_YYYYMMDDHHMMSS.dat
+            or (
+                len(filename) == 23
+                and filename[0].isalpha()  # ASCII checked on the full path above
+                and filename[1:4].isdigit()
+                and filename[4] == "_"
+                and filename[5:19].isdigit()
+                and filename[19:] == ".dat"
+            )
+        )
     )
 
 
@@ -903,10 +947,9 @@ class HistoryRecord:
 
     @property
     def video_path(self) -> str | None:
-        """The row's recording (``storage_path``) when it is a valid station media path
-        ending in ``.zxvideo`` (:func:`is_station_media_path`), else None."""
+        """The row's validated recording (``storage_path``), if any."""
         path = self.storage_path
-        return path if is_station_media_path(path, RECORDING_SUFFIX) else None
+        return path if is_station_recording_path(path) else None
 
     @property
     def started_at(self) -> datetime | None:

@@ -11,7 +11,9 @@ from eufy_home_security.events import (
     ALARM_PUSH_MAX_AGE_SECONDS,
     GUARD_PUSH_MAX_AGE_SECONDS,
     GUARD_REPORT_SLACK_SECONDS,
+    MEDIA_PATH_PREFIX,
     PUSH_KIND_EVIDENCE,
+    RECORDING_SUFFIX,
     AlarmChanged,
     AlarmStopSource,
     AlarmTracker,
@@ -32,6 +34,7 @@ from eufy_home_security.events import (
     SecurityEvent,
     coerce_int,
     coerce_str,
+    is_station_recording_path,
 )
 from eufy_home_security.exceptions import (
     AuthenticationError,
@@ -184,6 +187,14 @@ def _clip_row(**extra: object) -> dict[str, object]:
         "folder_size": 1717081,
         **extra,
     }
+
+
+def test_a_homebase2_row_exposes_native_dat_recording_path() -> None:
+    """The trigger-frame/media path scan must recognise validated native clips."""
+    path = "/media/mmcblk0p1/Camera05/A123_20310203112233.dat"
+    record = HistoryRecord.from_row(_clip_row(storage_path=path))
+    assert record.video_path == path
+    assert record.frame_count == 90
 
 
 def test_a_history_record_names_its_recording_times_and_size() -> None:
@@ -873,3 +884,65 @@ def test_a_key_is_forgotten_after_max_age_or_when_the_ring_is_full() -> None:
 def test_the_ring_limits_must_be_positive(limits: dict[str, Any]) -> None:
     with pytest.raises(ValueError, match="positive"):
         EventDeduplicator(**limits)
+
+
+# HomeBase 2 native .dat paths used by history rows and push trigger frames.
+
+
+def test_existing_zxvideo_path_is_preserved() -> None:
+    assert is_station_recording_path(f"{MEDIA_PATH_PREFIX}record{RECORDING_SUFFIX}")
+
+
+@pytest.mark.parametrize("camera", ["00", "03", "05", "99"])
+def test_homebase2_recording_path(camera: str) -> None:
+    assert is_station_recording_path(f"/media/mmcblk0p1/Camera{camera}/20310203112233.dat")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        None,
+        9,
+        "",
+        "/media/mmcblk0p1/Camera05/../20310203112233.dat",
+        "/media/mmcblk0p1/Camera05/20310203112233.dat/another",
+        "/media/mmcblk0p1/Camera5/20310203112233.dat",
+        "/media/mmcblk0p1/Camera005/20310203112233.dat",
+        "/media/mmcblk0p1/Camera05/2031020311223.dat",
+        "/media/mmcblk0p1/Camera05/20310203112233.mp4",
+        "/media/mmcblk0p1/CameraAB/20310203112233.dat",
+        "/media/mmcblk0p1/Camera05/203102031122334.dat",
+        "/media/mmcblk0p1/video/20310203112233.dat",
+        "/media/mmcblk0p1/Camera05/2031020311223é.dat",
+        "/media/mmcblk0p1/Camera05/20310203112233.dat\n",
+        "/media/sda1/Camera05/20310203112233.dat",
+    ],
+)
+def test_reject_other_homebase2_shapes(path: object) -> None:
+    assert not is_station_recording_path(path)
+
+
+@pytest.mark.parametrize("camera", ["00", "05", "12", "99"])
+@pytest.mark.parametrize("prefix", ["A123", "F001", "z987"])
+def test_homebase2_doorbell_prefixed_recording_path(camera: str, prefix: str) -> None:
+    assert is_station_recording_path(f"/media/mmcblk0p1/Camera{camera}/{prefix}_20310203112233.dat")
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "1234_20310203112233.dat",  # prefix must start with a letter
+        "A12_20310203112233.dat",
+        "A1234_20310203112233.dat",
+        "A123-20310203112233.dat",
+        "A123_2031020311223.dat",
+        "A123_203102031122332.dat",
+        "A123_20310203112233.mp4",
+        "A123_20310203112233.dat/extra",
+        "../A123_20310203112233.dat",
+        "A123_20310203112233.dat\n",
+        "A12é_20310203112233.dat",
+    ],
+)
+def test_reject_bad_doorbell_recording_filename(filename: str) -> None:
+    assert not is_station_recording_path(f"/media/mmcblk0p1/Camera05/{filename}")

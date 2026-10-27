@@ -10,6 +10,7 @@ from datetime import date
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -522,3 +523,102 @@ def test_the_tone_file_body_byte_for_byte() -> None:
         b'"payload":{"time_out":30,"user_name":"user"}}'
     )
     assert messages.SOUND_ALARM_SECONDS == (30,)
+
+
+def test_local_history_device_filter_is_optional() -> None:
+    all_rows = messages.local_events_query_payload("20261025", "20261026", transaction="synthetic")
+    assert "device_info" not in all_rows["payload"]
+    filtered = messages.local_events_query_payload(
+        "20261025", "20261026", device_sns=(SYNTHETIC.camera_sn,), transaction="synthetic"
+    )
+    assert filtered["payload"]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]
+    assert filtered["payload"]["count"] == 20
+
+
+# 10017 station-family native recording frames, encrypted with the station static key.
+
+
+@pytest.mark.parametrize("command", [messages.CMD_DOWNLOAD_VIDEO, messages.CMD_RECORD_VIEW])
+def test_native_recording_frame_wire_format(command: int) -> None:
+    path = "/media/mmcblk0p1/Camera05/20310203112233.dat"
+    frame = messages.native_recording_frame(
+        path, SYNTHETIC.account_id, 5, SYNTHETIC.static_key, command=command
+    )
+    assert frame.startswith(MAGIC)
+    pos = len(MAGIC)
+    assert frame[pos : pos + 2] == command.to_bytes(2, "little")
+    assert frame[pos + 2 : pos + 6] == (272).to_bytes(4, "little")
+    assert frame[pos + 6 : pos + 12] == bytes([1, 0, 5, 1, 0, 0])
+    ciphertext = frame[pos + 12 :]
+    assert len(ciphertext) == 272
+    cipher = Cipher(algorithms.AES(SYNTHETIC.static_key), modes.ECB())  # noqa: S305
+    plaintext = cipher.decryptor().update(ciphertext)
+    assert plaintext[:5] == bytes(5)
+    assert plaintext[5:133].rstrip(b"\0") == path.encode()
+    assert plaintext[133:261].rstrip(b"\0") == SYNTHETIC.account_id.encode()
+    assert plaintext[261:] == bytes(11)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/media/mmcblk0p1/Camera05/../x.dat", "/not-a-homebase/x.dat"],
+)
+def test_native_recording_rejects_invalid_paths(path: str) -> None:
+    with pytest.raises(ValueError, match=r"not a validated station recording path"):
+        messages.native_recording_frame(path, SYNTHETIC.account_id, 5, SYNTHETIC.static_key)
+
+
+@pytest.mark.parametrize("channel", [-1, 256])
+def test_native_recording_rejects_bad_channels(channel: int) -> None:
+    with pytest.raises(ValueError, match="invalid recording camera channel"):
+        messages.native_recording_frame(
+            "/media/mmcblk0p1/Camera05/20310203112233.dat",
+            SYNTHETIC.account_id,
+            channel,
+            SYNTHETIC.static_key,
+        )
+
+
+def test_native_recording_accepts_validated_zxvideo_path() -> None:
+    frame = messages.native_recording_frame(
+        "/zx/clip.zxvideo",
+        SYNTHETIC.account_id,
+        5,
+        SYNTHETIC.static_key,
+        command=messages.CMD_RECORD_VIEW,
+    )
+    assert frame.startswith(MAGIC)
+
+
+@pytest.mark.parametrize("command", [0, 10011, 1306])
+def test_native_recording_rejects_unrelated_command(command: int) -> None:
+    with pytest.raises(ValueError, match="invalid native recording command"):
+        messages.native_recording_frame(
+            "/zx/clip.zxvideo",
+            SYNTHETIC.account_id,
+            5,
+            SYNTHETIC.static_key,
+            command=command,
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "account_id"),
+    [
+        ("/zx/" + "a" * 120 + ".zxvideo", SYNTHETIC.account_id),
+        ("/zx/clip.zxvideo", "a" * 128),
+    ],
+)
+def test_native_recording_rejects_unbounded_strings(path: str, account_id: str) -> None:
+    with pytest.raises(ValueError, match="exceeds 127 bytes"):
+        messages.native_recording_frame(path, account_id, 5, SYNTHETIC.static_key)
+
+
+def test_native_recording_accepts_prefixed_doorbell_path() -> None:
+    frame = messages.native_recording_frame(
+        "/media/mmcblk0p1/Camera05/A123_20310203112233.dat",
+        SYNTHETIC.account_id,
+        5,
+        SYNTHETIC.static_key,
+    )
+    assert frame.startswith(MAGIC)

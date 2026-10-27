@@ -94,6 +94,7 @@ from ..events import (
     StorageChanged,
     Unsubscribe,
     as_guard_mode,
+    is_station_recording_path,
 )
 from ..exceptions import (
     AccountRejectedError,
@@ -133,6 +134,7 @@ from .crypto import (
     aes_key_from_conn_init,
     ecb_decrypt,
     ecb_encrypt,
+    ecc_private_key_from_hex,
     frame_encryption,
     gcm_decrypt_broadcast,
     gcm_encrypt_command,
@@ -220,6 +222,7 @@ from .messages import (
     history_query_verb,
     image_request_payload,
     local_events_query_payload,
+    native_recording_frame,
     record_id_day,
     string_command_body,
     tone_file_payload,
@@ -377,9 +380,10 @@ cap a station with odd firmware — or anything on the LAN able to inject pushes
 them without bound.
 """
 HISTORY_PAGE_SIZE = 50
+"""Default history page size for a ``DB_QUERY_HISTORY`` station."""
 HISTORY_LOCAL_PAGE_SIZE = 20
 """The page the app asks of a station queried with ``DB_QUERY_LOCAL_EVENTS``."""
-"""Records per history page (the app asks 30, then 50)."""
+
 HISTORY_MAX_PAGES = 1000
 """Pages read for one day before giving up on a station that never runs out."""
 HISTORY_QUERY_TIMEOUT = 15.0
@@ -3018,6 +3022,7 @@ class StationSession:
         before: int | None = None,
         before_day: date | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
+        device_sn: str | None = None,
         page_size: int | None = None,
         timeout: float | None = None,
     ) -> list[HistoryRecord]:
@@ -3031,6 +3036,11 @@ class StationSession:
         :meth:`async_list_history_by_day` gives it). ``keep`` filters the rows as they
         arrive, and ``count`` then counts the kept ones, so paging stops as soon as
         enough rows pass the filter.
+
+        ``device_sn`` (a camera) filters a ``DB_QUERY_LOCAL_EVENTS`` (10017) query at
+        the station with ``device_info``, as the eufy app does **[declared: app]**,
+        measured on a HomeBase 2; ``keep`` still filters the rows, and a
+        ``DB_QUERY_HISTORY`` (10011) query stays station-wide.
 
         Uses the verb the app sends this station's model
         (:func:`~.messages.history_query_verb`) the way the app does: one day at a
@@ -3061,6 +3071,7 @@ class StationSession:
             before=before,
             before_day=before_day,
             keep=keep,
+            device_sn=device_sn,
             page_size=page_size,
             timeout=timeout,
         )
@@ -3075,12 +3086,15 @@ class StationSession:
         before: int | None = None,
         before_day: date | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
+        device_sn: str | None = None,
         page_size: int | None = None,
         timeout: float | None = None,
     ) -> list[tuple[date, HistoryRecord]]:
         """:meth:`async_list_history`, each row with the station day its query named (the
         day it belongs to on the station, whether or not its ``record_id`` carries one)."""
         verb = history_query_verb(self.serial)
+        # A camera's own list is filtered at the station (device_info), as the app does.
+        native_device_sn = device_sn if verb == DB_QUERY_LOCAL_EVENTS else None
         if page_size is None:
             page_size = HISTORY_PAGE_SIZE if verb == DB_QUERY_HISTORY else HISTORY_LOCAL_PAGE_SIZE
         if page_size < 2:
@@ -3104,6 +3118,7 @@ class StationSession:
                 count=count,
                 start_id=before if day == cursor_day else None,
                 keep=keep,
+                device_sn=native_device_sn,
                 page_size=page_size,
                 timeout=timeout,
             )
@@ -3179,6 +3194,7 @@ class StationSession:
                 timeout,
                 verb=DB_QUERY_LOCAL_EVENTS,
                 start_time=cursor,
+                device_sn=ref.device_sn,
             )
             for row in page:
                 if (row.record_id, row.device_sn, row_started(row)) == names:
@@ -3208,6 +3224,7 @@ class StationSession:
         count: int | None,
         start_id: int | None = None,
         keep: Callable[[HistoryRecord], bool] | None = None,
+        device_sn: str | None = None,
         page_size: int,
         timeout: float | None,
     ) -> None:
@@ -3231,6 +3248,7 @@ class StationSession:
                 resend=True,
                 verb=verb,
                 start_time=time_cursor,
+                device_sn=device_sn,
             )
             wanted = page
             if local and start_id:
@@ -3288,6 +3306,7 @@ class StationSession:
         resend: bool = False,
         verb: int = DB_QUERY_HISTORY,
         start_time: str = "0",
+        device_sn: str | None = None,
     ) -> tuple[list[HistoryRecord], int | None]:
         """One page of a day's history and the cursor for the next (its oldest ``record_id``).
 
@@ -3310,7 +3329,11 @@ class StationSession:
             )
             if verb == DB_QUERY_LOCAL_EVENTS:
                 payload = local_events_query_payload(
-                    *dates, count=page_size, start_time=start_time, transaction=transaction
+                    *dates,
+                    count=page_size,
+                    start_time=start_time,
+                    device_sns=() if device_sn is None else (device_sn,),
+                    transaction=transaction,
                 )
             else:
                 payload = history_query_payload(
@@ -3843,8 +3866,9 @@ class StationSession:
         """Play a stored recording to its end and mux it into one MPEG-TS clip.
 
         The camera is not woken: the station serves the clip off its own disk, about
-        as fast as it was recorded or faster. The playback (1025) runs on an extra
-        session reserved from the budget a live stream on an extra session uses
+        as fast as it was recorded or faster. Stations using local events
+        (10017) use native download (1024); the 10011 family keeps the JSON commands. It runs
+        on an extra session reserved from the live-stream session budget
         (:attr:`max_sessions`), closed when the clip ends or this call is cancelled, so
         this session's slot, commands and trigger frames are never held up. Downloads
         queue: one at a time per station. Past the budget this raises
@@ -3866,7 +3890,12 @@ class StationSession:
             started = time.monotonic()
             try:
                 await extra.async_connect()
-                stream = await extra.async_open_recording(path, channel, first_frame_timeout=first)
+                stream = await extra.async_open_recording(
+                    path,
+                    channel,
+                    download=history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS,
+                    first_frame_timeout=first,
+                )
                 async with stream:
                     muxer, _ = await mux_frames(aiter(stream), write)
             finally:
@@ -3938,6 +3967,23 @@ class StationSession:
             if not waiter.done():
                 waiter.set_result(None)
 
+    def _send_native_recording(
+        self, path: str, channel: int, account_id: str, *, download: bool
+    ) -> int:
+        """Send native playback 1025 or download 1024 under the static ECB key."""
+        command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
+        frame = native_recording_frame(
+            path, account_id, channel, self._require_static_key(), command=command
+        )
+        if _WIRE.isEnabledFor(logging.DEBUG):
+            _WIRE.debug(
+                "%s: tx native recording cmd %d channel %d (path and account redacted)",
+                self._log_name,
+                command,
+                channel,
+            )
+        return self._require_transport().send_drw(0, frame)
+
     async def async_open_recording(
         self,
         path: str,
@@ -3948,7 +3994,7 @@ class StationSession:
         idle_timeout: float | None = None,
         wait: bool = False,
     ) -> MediaStream:
-        """Play a stored recording (a ``.zxvideo`` path from an event) off the station's disk.
+        """Play a validated stored recording (``.zxvideo`` or native ``.dat``) off disk.
 
         Sends the app's playback command (1025), or the download command (1024)
         when ``download`` is set. Its first keyframe is the moment that triggered
@@ -3963,6 +4009,24 @@ class StationSession:
         frames without that, use :meth:`async_trigger_frame`, which plays the
         recording on a short-lived session and closes it.
         """
+        if not is_station_recording_path(path):
+            raise UnsupportedError("not a validated station recording path")
+        # The app chooses native or JSON playback by station family, not filename.
+        if history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS:
+            command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
+            return await self._open_media(
+                command,
+                channel,
+                lambda _account_id, _key_hex: (command, b""),
+                None,
+                first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
+                idle_timeout=_or(idle_timeout, MEDIA_IDLE_TIMEOUT),
+                wait=wait,
+                media_key=MediaKeyType.ECC,
+                native_recording_path=path,
+            )
+        if path.endswith(".dat"):
+            raise UnsupportedError("a 10011 station cannot play a native .dat path")
         command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
         build = download_video_payload if download else record_view_payload
         return await self._open_media(
@@ -3990,17 +4054,24 @@ class StationSession:
         wait: bool,
         media_key: MediaKeyType = MediaKeyType.RSA,
         flag: int = LIVE_OPEN_SUBHEADER_FLAG,
+        native_recording_path: str | None = None,
     ) -> MediaStream:
         await self.async_connect()
         creds = self._require_creds()
-        if media_key is MediaKeyType.ECC:
-            key_hex, ecc_key = generate_media_ecc_key()
-            decoder = MediaDecoder(ecc_private_key=ecc_key)
+        if native_recording_path is not None:
+            # HomeBase 2's recording key is the station owner account's ECC key;
+            # the newer JSON media path creates a fresh per-open key instead.
+            decoder = MediaDecoder(ecc_private_key=ecc_private_key_from_hex(creds.ecc_private_key))
+            frame_type, body = command, b""
         else:
-            # RSA key generation takes tens of milliseconds: keep it off the event loop.
-            key_hex, rsa_key = await asyncio.to_thread(generate_media_rsa_key)
-            decoder = MediaDecoder(rsa_key)
-        frame_type, body = open_frame(creds.account_id, key_hex)
+            if media_key is MediaKeyType.ECC:
+                key_hex, ecc_key = generate_media_ecc_key()
+                decoder = MediaDecoder(ecc_private_key=ecc_key)
+            else:
+                # RSA key generation takes tens of milliseconds: keep it off the event loop.
+                key_hex, rsa_key = await asyncio.to_thread(generate_media_rsa_key)
+                decoder = MediaDecoder(rsa_key)
+            frame_type, body = open_frame(creds.account_id, key_hex)
         slot_deadline = time.monotonic() + first_frame_timeout
         # The slot wait and the drain run without the op lock, so commands are not
         # queued behind them; the lock is taken only to open, after re-checking both.
@@ -4044,7 +4115,14 @@ class StationSession:
                 stream._open_frame_type = frame_type
                 self._set_media(stream)
                 try:
-                    if command == CMD_START_REALTIME_MEDIA:
+                    if native_recording_path is not None:
+                        stream._open_index = self._send_native_recording(
+                            native_recording_path,
+                            channel,
+                            creds.account_id,
+                            download=command == CMD_DOWNLOAD_VIDEO,
+                        )
+                    elif command == CMD_START_REALTIME_MEDIA:
                         # The station picks the live camera from the subheader, not the JSON.
                         stream._open_index = self._send_secure(
                             body, frame_type=frame_type, dev_type=channel, flag=flag

@@ -472,7 +472,7 @@ async def test_a_standalone_device_pages_no_recordings() -> None:
     assert page == RecordingsPage((), None)
 
 
-HB2_SN = "T8010P2000054321"
+HB2_SN = SYNTHETIC.homebase2_station_sn
 
 
 async def test_a_homebase_2_pages_its_sequential_ids_by_their_station_day(
@@ -500,6 +500,10 @@ async def test_a_homebase_2_pages_its_sequential_ids_by_their_station_day(
         first = await hb2.async_list_recordings_page(sn, days=2, limit=3)
         asked_first = _asked(fake)
         second = await hb2.async_list_recordings_page(sn, days=2, limit=3, cursor=first.next_cursor)
+        assert fake.history_queries
+        assert all(q["device_info"] == [{"device_sn": sn}] for q in fake.history_queries), (
+            "both pages must filter at the station for this camera"
+        )
     finally:
         await hb2.async_close()
     assert [r.record_id for r in first.rows] == [7, 6, 5]
@@ -555,9 +559,13 @@ async def test_a_homebase_2_recording_is_found_by_its_ref_with_one_query_of_its_
         assert row.ref is not None
         found = await hb2.async_history_record_by_ref(row.ref)
         assert (found, found.ref) == (row, row.ref)
+        assert fake.history_queries[-1]["device_info"] == [{"device_sn": row.device_sn}]
         listed_day = today if row.record_id > 5 else today - timedelta(days=1)
         assert _asked(fake) == [_day(listed_day)]
+    fake.history_queries.clear()
     camera_rows = await hb2.async_list_recordings(OTHER_SN)
+    assert fake.history_queries
+    assert all(q["device_info"] == [{"device_sn": OTHER_SN}] for q in fake.history_queries)
     assert camera_rows[0].ref == page.rows[1].ref
     found = await hb2.async_history_record_by_ref(camera_rows[0].ref or "", device_sn=OTHER_SN)
     assert found == camera_rows[0]
@@ -752,3 +760,39 @@ async def test_a_record_without_a_downloadable_clip_is_refused_before_sending(
     with pytest.raises(UnsupportedError, match=match):
         await station.async_download_recording(HistoryRecord.from_row(row), write)
     assert fake.sessions == 0
+
+
+async def test_a_10011_station_does_not_offer_native_dat_clips(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = [
+        _row(
+            today,
+            8,
+            SYNTHETIC.camera_sn,
+            storage_path="/media/mmcblk0p1/Camera05/20310203112233.dat",
+        ),
+        _row(today, 7, SYNTHETIC.camera_sn),
+    ]
+    rows = await station.async_list_recordings(SYNTHETIC.camera_sn, days=1)
+    assert len(rows) == 1
+    assert rows[0].record_id == int(today.strftime("%Y%m%d")) * HISTORY_RECORD_COUNTER + 7
+    page = await station.async_list_recordings_page(SYNTHETIC.camera_sn, days=1, limit=10)
+    assert [r.record_id for r in page.rows] == [rows[0].record_id]
+
+
+async def test_local_events_station_filters_camera(
+    hb2: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = [
+        {
+            "record_id": 47051,
+            "device_sn": SYNTHETIC.camera_sn,
+            "start_time": today.strftime(FORMAT),
+            "storage_path": "/media/mmcblk0p1/Camera05/20310203112233.dat",
+            "frame_num": 6,
+        }
+    ]
+    rows = await hb2.async_list_recordings(SYNTHETIC.camera_sn, days=1)
+    assert [r.record_id for r in rows] == [47051]
+    assert fake.history_queries[0]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]

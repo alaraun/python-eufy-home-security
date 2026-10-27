@@ -71,6 +71,7 @@ from eufy_home_security.p2p.did import Did, static_key
 from eufy_home_security.p2p.media import (
     MediaDecoder,
     MediaFrame,
+    MediaKeyType,
     MediaKind,
     Still,
     StillFormat,
@@ -1240,7 +1241,7 @@ async def test_list_history_parses_records(station: FakeStation) -> None:
     assert (rec.arm_mode, rec.msg_type, rec.user_name) == (63, 9, "someone")
 
 
-_HB2_SN = "T8010P2000000007"
+_HB2_SN = SYNTHETIC.homebase2_station_sn
 
 
 def _history_row(day: str, counter: int) -> dict[str, Any]:
@@ -5202,3 +5203,175 @@ async def test_an_rsa_key_that_does_not_parse_leaves_the_static_key_unfetched(
         assert latch.retry_blocked_for() == 0.0
     finally:
         await session.async_close()
+
+
+# HomeBase 2 / local-events recording regression tests: real PPPP sessions with FakeStation.
+LOCAL_STATION_SN = SYNTHETIC.homebase2_station_sn
+LOCAL_RECORDING_PATH = "/media/mmcblk0p1/Camera05/20310203112233.dat"
+
+
+@pytest.mark.parametrize("download", [False, True])
+async def test_native_local_events_recording_decodes_with_account_cipher(
+    download: bool,
+) -> None:
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    await fake.start()
+    session = StationSession(
+        LOCAL_STATION_SN, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        stream = await session.async_open_recording(
+            LOCAL_RECORDING_PATH, 5, download=download, idle_timeout=1.0
+        )
+        frames = [frame async for frame in stream]
+        assert len(_video(frames)) == fake.recording_frames
+        assert fake.native_recording_requests == [
+            (1024 if download else 1025, 5, LOCAL_RECORDING_PATH)
+        ]
+        assert MediaKind.AUDIO in {frame.kind for frame in frames}
+        assert fake.media_keys_offered == [MediaKeyType.ECC]
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+async def test_native_dat_trigger_frame_uses_local_recording_protocol() -> None:
+    """Trigger-frame extraction from a .dat recording must use native 1025."""
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    fake.recording_frames = 6
+    await fake.start()
+    session = StationSession(
+        LOCAL_STATION_SN, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_connect()
+        picture = await session.async_trigger_frame(LOCAL_RECORDING_PATH, 5)
+        assert picture == MEDIA_KEYFRAME
+        assert fake.native_recording_requests == [(1025, 5, LOCAL_RECORDING_PATH)]
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+@pytest.mark.parametrize("serial", [SYNTHETIC.station_sn, LOCAL_STATION_SN])
+@pytest.mark.parametrize("path", ["/zx/../clip.zxvideo", "/media/../clip.dat"])
+async def test_recording_open_refuses_invalid_path_before_connect(serial: str, path: str) -> None:
+    """All station families validate a recording path before sending anything."""
+    fake = FakeStation(serial=serial)
+    session = StationSession(serial, Provider(fake), host="127.0.0.1", port=1)
+    with pytest.raises(UnsupportedError, match="not a validated station recording path"):
+        await session.async_open_recording(path, 5)
+    assert fake.sessions == 0
+
+
+async def test_a_10011_station_refuses_native_dat_before_connect() -> None:
+    fake = FakeStation(serial=SYNTHETIC.station_sn)
+    session = StationSession(fake.serial, Provider(fake), host="127.0.0.1", port=1)
+    with pytest.raises(UnsupportedError, match=r"cannot play a native \.dat"):
+        await session.async_open_recording(LOCAL_RECORDING_PATH, 5)
+    assert fake.sessions == 0
+
+
+async def test_native_local_events_wrong_account_cipher_cannot_decrypt_media() -> None:
+    """The media must use the owner cipher, not a generated per-open ECC key."""
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    await fake.start()
+    session = StationSession(
+        LOCAL_STATION_SN, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_connect()
+        # A valid handshake took place with the real owner cipher. A wrong key
+        # for just the *media decoder* must not decode the wrapped AES key.
+        assert session._creds is not None
+        session._creds = replace(session._creds, ecc_private_key=FakeStation().ecc_private_key_hex)
+        stream = await session.async_open_recording(
+            LOCAL_RECORDING_PATH, 5, first_frame_timeout=0.4
+        )
+        with pytest.raises(ProtocolError, match="no keyframe decoded"):
+            await anext(stream)
+        assert fake.native_recording_requests == [(1025, 5, LOCAL_RECORDING_PATH)]
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+@pytest.mark.parametrize(
+    ("local", "expected"),
+    [(True, 20), (False, 50)],
+)
+async def test_history_page_size_defaults_by_database_verb(local: bool, expected: int) -> None:
+    fake = FakeStation(serial=LOCAL_STATION_SN if local else SYNTHETIC.station_sn)
+    await fake.start()
+    session = StationSession(
+        fake.serial, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_list_history("20261025")
+        assert fake.history_queries[0]["count"] == expected
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+@pytest.mark.parametrize("serial", [LOCAL_STATION_SN, "T8410" + SYNTHETIC.station_sn[5:]])
+async def test_local_events_page_size_allows_explicit_override_and_device_filter(
+    serial: str,
+) -> None:
+    fake = FakeStation(serial=serial)
+    await fake.start()
+    session = StationSession(
+        fake.serial, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_list_history("20261025", page_size=50, device_sn=SYNTHETIC.camera_sn)
+        assert fake.history_queries[0]["count"] == 50
+        assert fake.history_queries[0]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+async def test_native_recording_rejects_unparsable_cipher_before_wire_send() -> None:
+    fake = FakeStation(serial=LOCAL_STATION_SN)
+    await fake.start()
+    session = StationSession(
+        LOCAL_STATION_SN, Provider(fake), host="127.0.0.1", port=fake.discovery_port
+    )
+    try:
+        await session.async_connect()
+        assert session._creds is not None
+        session._creds = replace(session._creds, ecc_private_key="not hex")
+        with pytest.raises(CipherUnusableError):
+            await session.async_open_recording(LOCAL_RECORDING_PATH, 5)
+        assert not fake.native_recording_requests
+    finally:
+        await session.async_close()
+        fake.stop()
+
+
+@pytest.mark.parametrize("serial", [SYNTHETIC.station_sn, LOCAL_STATION_SN])
+@pytest.mark.parametrize("download", [False, True])
+async def test_station_family_selects_recording_route_even_for_zxvideo(
+    serial: str, download: bool
+) -> None:
+    """10017 stations use native 1025/1024 even for .zxvideo paths."""
+    fake = FakeStation(serial=serial)
+    await fake.start()
+    session = StationSession(serial, Provider(fake), host="127.0.0.1", port=fake.discovery_port)
+    try:
+        stream = await session.async_open_recording(
+            "/zx/test.zxvideo", 5, download=download, idle_timeout=1.0
+        )
+        async with stream:
+            frames = [frame async for frame in stream]
+        assert _video(frames)
+        if serial == LOCAL_STATION_SN:
+            assert fake.native_recording_requests == [
+                (1024 if download else 1025, 5, "/zx/test.zxvideo")
+            ]
+        else:
+            assert not fake.native_recording_requests
+    finally:
+        await session.async_close()
+        fake.stop()

@@ -319,3 +319,10 @@ def test_decoders_only_raise_protocol_error(data: bytes) -> None:
             fn(_KEY32, data)
     with contextlib.suppress(ProtocolError):
         crypto.ecies_decrypt(data, "ab" * 32)
+
+
+def test_account_ecc_private_key_is_validated_before_native_media_send() -> None:
+    assert isinstance(crypto.ecc_private_key_from_hex("1" * 64), ec.EllipticCurvePrivateKey)
+    for value in ("", "not hex", "0x", "  "):
+        with pytest.raises(CipherUnusableError):
+            crypto.ecc_private_key_from_hex(value)

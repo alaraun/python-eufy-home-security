@@ -416,8 +416,12 @@ Names for every id: `src/eufy_home_security/devices/command_types.py`.
   default 10017, for every other model: a HomeBase 2, a standalone camera) and sends
   `{"table": "history_record_info", "cmd": 10017, "payload": {"count": 20, "start_date",
   "end_date", "start_time": "0", "event_type": 0, "ai_type": 0, "storage_cloud": -1,
-  "trigger_type": 0, "detection_type": 0, "flag": 0}}`, no `device_info`. The next page
-  passes the previous page's oldest `start_time` as `start_time`, separators stripped
+  "trigger_type": 0, "detection_type": 0, "flag": 0}}`. For a camera-specific
+  query the app also supplies `"device_info": [{"device_sn": "..."}]`; a
+  station-wide query omits the field. A camera-specific filter reduces
+  the pages sent by the station; measured results are in
+  [hardware verification](../reference/hardware-verification.md#homebase-2-t8010-main-firmware-3426h-with-t8910-motion-sensor-fw-2011).
+  The next page passes the previous page's oldest `start_time` as `start_time`, separators stripped
   (`YYYYMMDDHHMMSS`); a page shorter than `count`, or one that starts with the row the
   last one started with, is the last. The app's per-query timeout is the thing
   property `device_query_event_timeout` (default 13 s), `device_query_event_retry_time`

@@ -282,7 +282,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     recording = command("recording", "save a stored recording off the station's disk")
-    recording.add_argument("path", help="the recording's .zxvideo path (from an event)")
+    recording.add_argument(
+        "path", help="the recording's .zxvideo or native .dat path (from an event)"
+    )
     media_target(recording)
     recording.add_argument(
         "--download", action="store_true", help="use the download command (1024), not playback"

@@ -149,6 +149,17 @@ def _pkcs7_pad(data: bytes) -> bytes:
     return data + bytes([pad]) * pad
 
 
+def ecc_private_key_from_hex(value: str) -> ec.EllipticCurvePrivateKey:
+    """Owner cipher's P-256 private key, or a typed error before a media request."""
+    text = value.strip().removeprefix("0x")
+    if not text:
+        raise CipherUnusableError("recording media requires a non-empty ECC cipher key")
+    try:
+        return ec.derive_private_key(int(text, 16), ec.SECP256R1())
+    except (ValueError, TypeError) as exc:
+        raise CipherUnusableError("recording media requires a valid ECC cipher key") from exc
+
+
 def ecies_decrypt(blob: bytes, ecc_private_key_hex: str, blob_len: int | None = None) -> bytes:
     """Unwrap an ECIES blob to its plaintext.
 

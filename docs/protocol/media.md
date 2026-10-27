@@ -213,8 +213,9 @@ camera, whether it needs a recording, typical time, verification status).
 - `Station.async_camera_image(device_sn, source, days=7)` → `CameraImage`: without an
   event. For `THUMBNAIL` / `TRIGGER_FRAME` it lists the history one day at a time, today
   first (the host's local date), takes the newest row of that camera whose `thumb_path`
-  (`.jpg`) or `storage_path` (`.zxvideo`) passes the media-path rules, and fetches or
-  plays it; `record_id` and `recorded_at` (the row's `start_time`) identify the event.
+  (`.jpg`) or `storage_path` (`.zxvideo`, or HomeBase 2's validated `.dat`
+  recording paths) passes the media-path rules, and fetches or plays it;
+  `record_id` and `recorded_at` (the row's `start_time`) identify the event.
   No such row in `days` days raises `RecordNotFoundError`, whose message counts the
   rows read, the camera's and why the camera's were skipped (a DEBUG line adds the
   devices, path shapes and fields; see `docs/how-to/debug-logging.md`). `LIVE` takes a
@@ -763,6 +764,8 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
 
 ## Recording playback (1025) and download (1024) **[verified]**
 
+### JSON recording commands on the 10011 family
+
 ```json
 {"account_id": "<owner user id>", "cmd": 1024, "mChannel": <event channel>,
  "mValue3": 1024,
@@ -814,6 +817,25 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
 - What makes the station record a clip in the first place (detection mask, automation
   rules, and no direct record command) is in
   [commands.md](commands.md#recording-triggers).
+
+### Native recording commands on 10017 stations
+
+For stations whose history query is `DB_QUERY_LOCAL_EVENTS` (10017), the
+app selects native `RECORD_VIEW` (1025) to play or `DOWNLOAD_VIDEO` (1024)
+to download, based on the station family rather than the filename. The
+ECB command body is five zero bytes, followed by the recording path and
+owner account ID, each encoded as printable ASCII and NUL-padded to 128
+bytes. It is encrypted using AES-128-ECB under the station's static key;
+the six-byte subheader is `[01, 00, channel, 01, 00, 00]`. No new
+per-open media key is offered: the station wraps its stream key to the
+owner account's ECC key, which must be valid before sending.
+
+Two HomeBase 2 path shapes were observed under
+`/media/mmcblk0p1/CameraNN/`: `YYYYMMDDHHMMSS.dat` and a prefixed
+`A123_YYYYMMDDHHMMSS.dat` variant. Both paths are validated. For a
+syntactically valid path that is no longer on the station, the station
+sent no media frames or rejection; the open reached the first-frame
+timeout with `CommandNotAppliedError`.
 
 ## Proven and not proven
 

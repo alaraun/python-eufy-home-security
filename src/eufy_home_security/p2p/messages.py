@@ -26,6 +26,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
 
+from ..events import is_station_recording_path
 from ..exceptions import ProtocolError, UnsupportedError
 from ..models import STATION_CHANNEL, GuardMode
 from . import crypto
@@ -197,6 +198,32 @@ def gcm_subheader(counter: int, dev_type: int = 0, *, flag: int = 0) -> bytes:
     return bytes([tag, counter & 0xFF, dev_type & 0xFF, tag, flag & 0xFF, 0x00])
 
 
+def native_recording_subheader(channel: int) -> bytes:
+    """Six-byte static-ECB native recording subheader for the target camera."""
+    if not 0 <= channel <= 255:
+        raise ValueError("invalid recording camera channel")
+    return bytes([1, 0, channel, 1, 0, 0])
+
+
+def native_recording_frame(
+    path: str, account_id: str, channel: int, key: bytes, *, command: int = CMD_DOWNLOAD_VIDEO
+) -> bytes:
+    """Native 1025 playback / 1024 download: ECB path + account string pair."""
+    if command not in (CMD_DOWNLOAD_VIDEO, CMD_RECORD_VIEW):
+        raise ValueError("invalid native recording command")
+    if not is_station_recording_path(path):
+        raise ValueError("not a validated station recording path")
+    subheader = native_recording_subheader(channel)
+    try:
+        path_bytes, account_bytes = path.encode("ascii"), account_id.encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise ValueError("native recording strings must be ASCII") from exc
+    if len(path_bytes) >= 128 or len(account_bytes) >= 128:
+        raise ValueError("native recording request string exceeds 127 bytes")
+    plaintext = bytes(5) + path_bytes.ljust(128, b"\0") + account_bytes.ljust(128, b"\0")
+    return encode_frame(command, crypto.ecb_encrypt(key, plaintext), subheader)
+
+
 def app_ping_frame(counter: int) -> bytes:
     """The app's 1139 PING: an empty frame, subheader ``[01, counter, FF, 0, 0, 0]``.
 
@@ -351,13 +378,14 @@ def local_events_query_payload(
     *,
     count: int = 20,
     start_time: str = "0",
+    device_sns: Sequence[str] = (),
     table: str = "history_record_info",
     transaction: str,
 ) -> dict[str, Any]:
     """The inner CMD_DATABASE (1306) object for a history list, verb
     ``DB_QUERY_LOCAL_EVENTS`` (10017), with the field set the eufy app sends for
-    a station other than the HomeBase 3 family: every filter at its "all" value and
-    no ``device_info`` (all devices at once). Dates are ``YYYYMMDD``; the app asks
+    a station other than the HomeBase 3 family. ``device_info`` selects devices
+    when provided, otherwise the request is station-wide. Dates are ``YYYYMMDD``; the app asks
     for one day as ``start_date`` = that day, ``end_date`` = the next, ``count`` 20.
     ``start_time`` ``"0"`` asks for the newest rows; a later page passes the previous
     page's oldest ``start_time`` as :func:`history_cursor_time` renders it.
@@ -366,6 +394,7 @@ def local_events_query_payload(
         "cmd": DB_QUERY_LOCAL_EVENTS,
         "payload": {
             "count": count,
+            **({"device_info": [{"device_sn": sn} for sn in device_sns]} if device_sns else {}),
             "start_date": start_date,
             "end_date": end_date,
             "start_time": start_time,

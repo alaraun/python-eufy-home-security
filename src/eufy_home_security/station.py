@@ -132,6 +132,7 @@ from .events import (
     ZoomChanged,
     coerce_int,
     is_station_media_path,
+    is_station_recording_path,
 )
 from .exceptions import (
     CommandNotAppliedError,
@@ -193,9 +194,11 @@ from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
 from .p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
 from .p2p.messages import (
     CMD_SET_TONE_FILE,
+    DB_QUERY_HISTORY,
     RECEIPT_NOT_HANDLED,
     SOUND_ALARM_SECONDS,
     decode_preset_picture,
+    history_query_verb,
     record_id_day,
 )
 from .p2p.mode_actions import (
@@ -956,7 +959,11 @@ class _HistoryScan:
         self.camera += 1
         self.camera_fields |= carried
         path = getattr(row, self.path_field)
-        if is_station_media_path(path, self.suffix):
+        if (
+            is_station_recording_path(path)
+            if self.path_field == "storage_path"
+            else is_station_media_path(path, self.suffix)
+        ):
             return True
         if path is None:
             self.skipped[f"no {self.path_field}"] += 1
@@ -4718,6 +4725,7 @@ class Station:
             count=limit,
             before=before if cursor_day is not None and cursor_day <= last else None,
             keep=self._recording_filter(device_sn, since),
+            device_sn=device_sn,
             timeout=timeout,
         )
 
@@ -4789,6 +4797,7 @@ class Station:
             before=record_id,  # the session pages it only on its own day
             before_day=None if position is None or record_id is None else position.day,
             keep=self._recording_filter(device_sn, None),
+            device_sn=device_sn,
             timeout=timeout,
         )
         rows = tuple(row for _day, row in listed)
@@ -4815,6 +4824,11 @@ class Station:
 
         def wanted(row: HistoryRecord) -> bool:
             if row.video_path is None or row.device_sn is None:
+                return False
+            if (
+                row.video_path.endswith(".dat")
+                and history_query_verb(self.serial) == DB_QUERY_HISTORY
+            ):
                 return False
             if device_sn is not None and row.device_sn != device_sn:
                 return False
