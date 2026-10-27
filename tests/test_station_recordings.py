@@ -782,40 +782,17 @@ async def test_a_10011_station_does_not_offer_native_dat_clips(
 
 
 async def test_local_events_station_filters_camera(
-    today: datetime,
+    hb2: Station, fake: FakeStation, today: datetime
 ) -> None:
-    local_sn = "T8010" + SYNTHETIC.station_sn[5:]
-    fake = FakeStation(serial=local_sn)
-    await fake.start()
-
-    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
-        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
-
-    session = StationSession(local_sn, credentials, host="127.0.0.1", port=fake.discovery_port)
-    st = Station(
-        CloudDevice(
-            device_sn=local_sn,
-            device_type=18,
-            name="Local Home Base",
-            p2p_did=SYNTHETIC.did,
-            main_sw_version="1.0.0",
-        ),
-        session,
-        sub_devices=[CAMERA],
-    )
-    try:
-        fake.rows = [
-            {
-                "record_id": 47051,
-                "device_sn": SYNTHETIC.camera_sn,
-                "start_time": today.strftime(FORMAT),
-                "storage_path": "/media/mmcblk0p1/Camera05/20310203112233.dat",
-                "frame_num": 6,
-            }
-        ]
-        rows = await st.async_list_recordings(SYNTHETIC.camera_sn, days=1)
-        assert [r.record_id for r in rows] == [47051]
-        assert fake.history_queries[0]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]
-    finally:
-        await st.async_close()
-        fake.stop()
+    fake.rows = [
+        {
+            "record_id": 47051,
+            "device_sn": SYNTHETIC.camera_sn,
+            "start_time": today.strftime(FORMAT),
+            "storage_path": "/media/mmcblk0p1/Camera05/20310203112233.dat",
+            "frame_num": 6,
+        }
+    ]
+    rows = await hb2.async_list_recordings(SYNTHETIC.camera_sn, days=1)
+    assert [r.record_id for r in rows] == [47051]
+    assert fake.history_queries[0]["device_info"] == [{"device_sn": SYNTHETIC.camera_sn}]
