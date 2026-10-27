@@ -48,7 +48,7 @@ Node.js bridge, no add-on, no threads.
 | HomeBase 3 (T8030) with eufyCam 3 (T8160) | the primary target. Login, local session, status, guard mode, camera settings, live stream, recordings, stills, local and push events are verified on hardware |
 | Battery SoloCam (T8170), standalone | guard mode, status, live stream, pan/tilt presets and control, zoom, and settings (write + read-back) verified. The camera sleeps, so each call first wakes it (seconds) |
 | Motion sensor (T8910) | battery and signal read through the station; of its settings, only the per-mode delays and actions were written |
-| HomeBase 2 (T8010) | local session reported working by users (version-8 handshake); its cameras (eufyCam 2 / 2C / 2 Pro / 2C Pro) are *declared*, live view through it not yet confirmed |
+| HomeBase 2 (T8010)  | Local P2P session and live view verified on physical HomeBase 2 (firmware 3.4.2.6h), with eufyCam 2C (T8113) and Battery Doorbell 8210 (T8210). Recording history (`10017`), camera-specific filtering, pagination, native playback (`1025`) and downloads (`1024`) also verified. Other eufyCam 2-series variants remain declared but not hardware-verified. |
 | other HomeBases and cameras | *declared* only: known from the app, never tested. Every product the app names is in the model list; settings files for 159 products ship with the library, generated from eufy's own code; a product without one is listed read-only from the cloud |
 | per-mode actions and delays | readable and writable; the Home, Away and Custom 1 delays are verified by write + read-back, the action flags' names are not checked against the app |
 | firmware updates | reported, never installed |
