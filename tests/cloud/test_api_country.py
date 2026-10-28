@@ -16,9 +16,11 @@ from eufy_home_security.cloud import const
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.models import LoginCountry
 from eufy_home_security.exceptions import (
+    CloudApiError,
     CommunicationError,
     LoginChallengeError,
     LoginLimitedError,
+    NoCachedSessionError,
     RateLimitedError,
 )
 from eufy_home_security.storage import MemoryStore, SessionCache
@@ -670,6 +672,40 @@ async def test_a_refused_extra_scope_keeps_the_devices_it_listed_last(
         _EXTRA_STATION_SN: "eu:CH",
     }
     assert api.refused_regions() == ["eu:CH"]
+
+
+async def test_a_call_on_a_refused_extra_scope_raises_without_a_login(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    _with_an_extra_country(fake_mega)
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country=["EE", "CH"])
+        await api.async_get_devices()
+        cache.cloud_session("eu:CH")["expires_at"] = time.time() - 10
+        fake_mega.code_once["login"] = _PLAIN_REFUSAL
+        api = _api(http, cache, country=["EE", "CH"])
+        await api.async_get_devices(refresh=True)
+        assert api.refused_regions() == ["eu:CH"]
+        cache.section("throttle")["logins"] = {}  # the budget is not under test here
+        logins = fake_mega.login_calls
+        with pytest.raises(CloudApiError, match="not asked again until a rescan") as caught:
+            await api.async_list_houses("eu:CH")
+    assert (caught.value.code, caught.value.endpoint) == (_PLAIN_REFUSAL, const.LOGIN_PATH)
+    assert fake_mega.login_calls == logins
+
+
+async def test_a_call_on_a_region_that_is_no_login_scope_raises_without_a_login(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    fake_mega.country_regions = {"EE": "eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        api = _api(http, cache, country="EE")
+        await api.async_login()
+        with pytest.raises(NoCachedSessionError, match="us is no login scope"):
+            await api.async_list_houses("us")
+    assert fake_mega.logins_in("us") == 0
 
 
 async def test_a_challenge_from_an_extra_scope_is_answered_there_after_a_restart(

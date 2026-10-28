@@ -1546,6 +1546,57 @@ async def test_malformed_bodies_are_protocol_errors(
                 await api.async_get_cipher_key(SYNTHETIC.station_sn)
 
 
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        (lambda shared: "not json", "was not JSON"),
+        (lambda shared: json.dumps([0]), "was not an object"),
+    ],
+    ids=["not-json", "not-an-object"],
+)
+async def test_an_unreadable_envelope_is_a_communication_error(
+    fake_mega: FakeMega, cache: SessionCache, body: Callable[[str], str], match: str
+) -> None:
+    fake_mega.devices = [_STATION_OF_OWNER]
+    fake_mega.body_once["devices"] = body
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(CommunicationError, match=match):
+                await api.async_get_devices()
+
+
+async def test_a_response_that_is_not_text_is_a_protocol_error(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.devices = [_STATION_OF_OWNER]
+    with aioresponses() as mock:
+        # Registered first, so it answers the first device list in place of the fake.
+        mock.post(_devices_url(fake_mega), status=200, body=b"\xff\xfe")
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(ProtocolError, match="was not text"):
+                await api.async_get_devices()
+
+
+async def test_a_login_success_without_data_is_an_empty_response_error(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.body_once["login"] = lambda shared: json.dumps({"code": 0})
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(EmptyResponseError, match="login returned no data") as caught:
+                await _api(session, cache).async_login()
+    assert caught.value.endpoint == const.LOGIN_PATH
+    assert fake_mega.login_calls == 1
+    assert cache.cloud_sessions() == {}
+
+
 async def test_device_success_without_devices_keeps_the_cache(
     fake_mega: FakeMega, cache: SessionCache
 ) -> None:
