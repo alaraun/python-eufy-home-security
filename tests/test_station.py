@@ -351,10 +351,12 @@ async def test_a_shared_bit_write_without_the_current_mask_sends_nothing(
     child: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(station_mod, "READBACK_DELAY", 0.0)
+    monkeypatch.setattr(session_mod, "PARAM_SETTLE", 0.05)  # each read is quick
     fake.params[STATION_CHANNEL].pop(1283, None)
     sent = len(fake.received)
-    with pytest.raises(CommandNotAppliedError, match="blind"):
-        await child.async_set_setting("notification_ignore_switch", True)
+    async with asyncio.timeout(1):  # the real delay would wait 0.8 s between reads
+        with pytest.raises(CommandNotAppliedError, match="blind"):
+            await child.async_set_setting("notification_ignore_switch", True)
     assert all(r["cmd"] != 1283 for r in fake.received[sent:])
 
 
@@ -4288,7 +4290,8 @@ async def test_preset_command_retries_while_the_camera_moves(
     codes = iter([1, 1, 0])
     monkeypatch.setattr(fake, "doorbell_receipt_code", lambda: next(codes, 0))
 
-    slots = await standalone_station.async_refresh_presets("T8170P2000054321")
+    async with asyncio.timeout(2):  # the real delay would wait 3 s per re-send
+        slots = await standalone_station.async_refresh_presets("T8170P2000054321")
 
     assert len(slots) == 10
     assert len([b for b in fake.doorbell_payloads if b.get("commandType") == 6034]) == 3
@@ -4444,12 +4447,32 @@ async def test_a_live_image_carries_its_size_and_full_resolution_waits_for_it(
     first = await standalone_station.async_camera_image(sn, ImageSource.LIVE)
     assert first.width is not None
     assert (first.width, first.height) != (2880, 1616)  # a rung of the climb
-    full = await standalone_station.async_camera_image(sn, ImageSource.LIVE, full_resolution=True)
-    assert (full.width, full.height) == (2880, 1616)
-    assert full.data == MEDIA_KEYFRAME
-    event = _standalone_detection(datetime.now().astimezone())
-    hd = await standalone_station.async_event_image(event, ImageSource.LIVE, full_resolution=True)
+    async with asyncio.timeout(5):  # the real settle would wait 6 s per image
+        full = await standalone_station.async_camera_image(
+            sn, ImageSource.LIVE, full_resolution=True
+        )
+        assert (full.width, full.height) == (2880, 1616)
+        assert full.data == MEDIA_KEYFRAME
+        event = _standalone_detection(datetime.now().astimezone())
+        hd = await standalone_station.async_event_image(
+            event, ImageSource.LIVE, full_resolution=True
+        )
     assert (hd.source, hd.width, hd.height) == (ImageSource.LIVE, 2880, 1616)
+
+
+async def test_full_resolution_waits_at_most_the_patched_bound(
+    standalone_station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A size that changed and has not held for the settle window yet ends the wait at
+    ``FULL_RESOLUTION_TIMEOUT`` as patched on ``station`` when called."""
+    monkeypatch.setattr(station_mod, "SETTLE_STANDALONE", 30.0)
+    monkeypatch.setattr(station_mod, "FULL_RESOLUTION_TIMEOUT", 0.3)
+    fake.live_keyframe_sizes = [(1280, 720), (1920, 1080), (2880, 1616)]
+    async with asyncio.timeout(3):
+        image = await standalone_station.async_camera_image(
+            "T8170P2000054321", ImageSource.LIVE, full_resolution=True
+        )
+    assert (image.width, image.height) == (2880, 1616)
 
 
 async def test_a_standalone_detection_has_no_trigger_frame(
