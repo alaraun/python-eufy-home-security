@@ -165,6 +165,22 @@ def test_every_event_type_has_a_monitor_line() -> None:
         render.render_event(object(), now=NOW, show_serials=False)  # type: ignore[arg-type]
 
 
+def test_an_event_subclass_renders_as_its_base() -> None:
+    class _Zoom(ZoomChanged):
+        __slots__ = ()
+
+    base = ZoomChanged(station_sn=SYNTHETIC.station_sn, device_sn=SYNTHETIC.camera_sn, zoom=2.5)
+    sub = _Zoom(station_sn=SYNTHETIC.station_sn, device_sn=SYNTHETIC.camera_sn, zoom=2.5)
+    assert render.render_event(sub, now=NOW, show_serials=False) == render.render_event(
+        base, now=NOW, show_serials=False
+    )
+
+
+def test_a_second_renderer_for_one_event_type_is_refused() -> None:
+    with pytest.raises(ValueError, match="ZoomChanged already has a monitor renderer"):
+        render._renders(ZoomChanged)(lambda event, show: "")
+
+
 def test_serials_are_redacted_unless_asked() -> None:
     assert render.fmt_serial(SYNTHETIC.station_sn, False) == "T8030***2345"
     assert render.fmt_serial(SYNTHETIC.station_sn, True) == SYNTHETIC.station_sn

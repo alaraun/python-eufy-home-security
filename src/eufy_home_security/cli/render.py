@@ -790,6 +790,8 @@ def _renders[E](cls: type[E]) -> Callable[[_Renderer[E]], _Renderer[E]]:
     """Register the decorated function as the monitor renderer of ``cls``."""
 
     def register(renderer: _Renderer[E]) -> _Renderer[E]:
+        if cls in _RENDERERS:
+            raise ValueError(f"{cls.__name__} already has a monitor renderer")
         _RENDERERS[cls] = renderer
         return renderer
 
@@ -802,6 +804,7 @@ def render_event(event: Event, *, now: datetime, show_serials: bool) -> str:
     # The first registered class in the MRO, so a subclass renders as its base.
     renderer = next((_RENDERERS[cls] for cls in type(event).__mro__ if cls in _RENDERERS), None)
     if renderer is None:
+        # Every Event type has a renderer: test_every_event_type_has_a_monitor_line.
         assert_never(cast("Never", event))
     return f"[{stamp}] {renderer(event, show_serials)}"
 
