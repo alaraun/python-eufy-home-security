@@ -19,6 +19,10 @@ uv run prek run --all-files     # everything the hooks run
 `-n auto` runs the tests on parallel workers (pytest-xdist, work-stealing). Leave it
 out for a single test, `--pdb`, or the live tests.
 
+`ruff check` fails a function whose McCabe complexity exceeds 20 (C901); split it
+rather than add a `# noqa: C901`. The existing `# noqa: C901` marks are functions
+still to split.
+
 Live tests talk to a real station or the eufy cloud and are opt-in:
 `EUFY_LIVE=1 uv run pytest -m live`, without `-n`: they share one real station.
 

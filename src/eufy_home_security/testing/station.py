@@ -896,7 +896,7 @@ class FakeStation:
             FrameType.CONN_INIT, body, cipher=subheader[0], channel=2, subheader=subheader
         )
 
-    def _on_session_frame(self, ftype: int, subheader: bytes, plain: bytes) -> None:
+    def _on_session_frame(self, ftype: int, subheader: bytes, plain: bytes) -> None:  # noqa: C901
         """A client frame under the session's cipher (GCM, or an RSA session's ECB)."""
         if ftype == FrameType.PARAM_NOTIFY and plain[: len(PARAM_QUERY_ALL)] == PARAM_QUERY_ALL:
             self.param_queries += 1
@@ -1086,7 +1086,7 @@ class FakeStation:
             self.send_alarm_mode(active, cipher=self.state_cipher)  # channel 2
         return True
 
-    def _on_command(self, obj: dict[str, Any], subheader: bytes) -> None:
+    def _on_command(self, obj: dict[str, Any], subheader: bytes) -> None:  # noqa: C901
         if obj.get("account_id") != self.account_id:
             return  # the real station drops these without a word
         cmd = obj["cmd"]

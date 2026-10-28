@@ -289,7 +289,7 @@ class MediaStream:
                 previous_outcome=previous,
             )
 
-    def _take(
+    def _take(  # noqa: C901
         self,
         frame_type: int,
         payload: bytes,

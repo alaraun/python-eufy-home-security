@@ -1129,7 +1129,7 @@ class StationSession:
                 self._probe_ended_at = time.monotonic()
         return dump
 
-    async def async_set_guard_mode(
+    async def async_set_guard_mode(  # noqa: C901
         self, mode: GuardMode, *, timeout: float | None = None, scalar: bool = False
     ) -> GuardMode | int:
         """Arm or disarm; returns the mode the station applied.
@@ -3627,7 +3627,7 @@ class StationSession:
         for frame in frames:
             self._dispatch(Inbound(chunk.channel, frame, self))
 
-    def _dispatch(self, inbound: Inbound) -> None:
+    def _dispatch(self, inbound: Inbound) -> None:  # noqa: C901
         stream = self._media
         if inbound.type in _MEDIA_FRAME_TYPES:
             self._media_rx_at = time.monotonic()

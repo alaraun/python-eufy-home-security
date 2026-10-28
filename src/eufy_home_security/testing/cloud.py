@@ -497,7 +497,7 @@ class FakeCloud:
         """The device list ``region``'s cluster answers."""
         return self.devices if region == self.region else self.region_devices.get(region, [])
 
-    async def _answer(self, path: str, payload: Mapping[str, Any]) -> Any:
+    async def _answer(self, path: str, payload: Mapping[str, Any]) -> Any:  # noqa: C901
         region = _request_region.get()
 
         def note(call: str) -> None:
