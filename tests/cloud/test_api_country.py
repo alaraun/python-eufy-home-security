@@ -13,7 +13,7 @@ import pytest
 from aioresponses import aioresponses
 
 from eufy_home_security.cloud import const
-from eufy_home_security.cloud.api import EufyCloudApi
+from eufy_home_security.cloud.api import EufyCloudApi, _ScopeRefusedError
 from eufy_home_security.cloud.models import LoginCountry
 from eufy_home_security.exceptions import (
     CloudApiError,
@@ -691,8 +691,75 @@ async def test_a_call_on_a_refused_extra_scope_raises_without_a_login(
         logins = fake_mega.login_calls
         with pytest.raises(CloudApiError, match="not asked again until a rescan") as caught:
             await api.async_list_houses("eu:CH")
+    assert type(caught.value) is _ScopeRefusedError  # the refusal async_login skips
     assert (caught.value.code, caught.value.endpoint) == (_PLAIN_REFUSAL, const.LOGIN_PATH)
     assert fake_mega.login_calls == logins
+
+
+async def test_a_scope_that_logs_in_again_forgets_its_refusal(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """A login under another country list clears the refusal record, so the earlier
+    list does not refuse the scope again."""
+    _with_an_extra_country(fake_mega)
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache, country="EE").async_get_devices()
+        fake_mega.code_once["login"] = _PLAIN_REFUSAL
+        await _api(http, cache, country=["EE", "CH"]).async_login()
+        assert _api(http, cache, country=["EE", "CH"]).refused_regions() == ["eu:CH"]
+        await _api(http, cache, country=["EE", "CH", "AQ"]).async_get_devices(refresh=True)
+    assert _login_abs(fake_mega)[-1] == "CH"
+    assert _api(http, cache, country=["EE", "CH"]).refused_regions() == []
+
+
+async def test_an_unattended_re_login_refused_for_an_extra_scope_does_not_refuse_it(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """The re-login of a session made with another ``ab`` keeps that session when
+    refused; the scope is not recorded as refused."""
+    _with_an_extra_country(fake_mega)
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache, country=["EE", "CH"]).async_login()
+        cache.cloud_session("eu:CH").update({"ab": "eu", "ab_wanted": "eu"})
+        fake_mega.calls.clear()
+        fake_mega.code_once["login"] = _PLAIN_REFUSAL
+        api = _api(http, cache, country=["EE", "CH"])
+        await api.async_login()
+    assert _login_abs(fake_mega) == ["CH"]
+    assert api.refused_regions() == []
+    assert cache.cloud_session("eu:CH")["ab_wanted"] == "CH"
+
+
+async def test_a_typed_refusal_of_a_country_login_is_not_sent_again_with_the_region(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """Only a plain body-code refusal falls back to the region as ``ab``."""
+    fake_mega.country_regions = {"EE": "eu"}
+    rekey = int(const.CloudCode.NEED_NEGOTIATE_KEY)
+    fake_mega.error_bodies["login"] = [(463, {"code": rekey, "msg": "get identity error"})]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        with pytest.raises(CloudApiError) as caught:
+            await _api(http, cache, country="EE").async_login()
+    assert caught.value.code == rekey
+    assert _login_abs(fake_mega) == ["EE"]
+
+
+async def test_a_spent_budget_stops_the_region_fallback_of_a_refused_country_login(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.code_once["login"] = _PLAIN_REFUSAL
+    for _ in range(const.LOGIN_BUDGET - 1):
+        cache.note_login(const.LOGIN_BUDGET_WINDOW_SECONDS, "eu")
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        with pytest.raises(LoginLimitedError) as caught:
+            await _api(http, cache, country="EE").async_login()
+    assert caught.value.origin == "budget"
+    assert _login_abs(fake_mega) == ["EE"]
 
 
 async def test_a_call_on_a_region_that_is_no_login_scope_raises_without_a_login(

@@ -149,6 +149,24 @@ async def test_house_and_invitation_answers_are_logged_as_counts(
         assert summary in logged
 
 
+async def test_a_summarised_list_is_written_whole_to_the_wire_dump(
+    fake_mega: FakeMega, cache: SessionCache, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The debug log shows the list as a count; the wire dump has its entries."""
+    fake_mega.houses = [{"house_id": "house-1", "house_name": "Cottage"}]
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.wire.cloud")
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            await api.async_list_houses("eu")
+    wire = [r.getMessage() for r in caplog.records if r.name == "eufy_home_security.wire.cloud"]
+    dumped = [line for line in wire if line.startswith(f"← {const.HOUSES_PATH} data ")]
+    assert len(dumped) == 1
+    assert '"house_infos": [{"house_id": ' in dumped[0]
+
+
 @pytest.mark.parametrize("data", [None, {"house_invite_records": None}, {}])
 async def test_no_invitation_list_is_no_invitations(
     fake_mega: FakeMega, cache: SessionCache, data: object
