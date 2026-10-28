@@ -9,8 +9,8 @@ Three ways to get pixels from a camera behind a HomeBase 3, cheapest first:
 | live stream | 1003 start / 1004 stop | live HEVC 3840×2160 at 25 fps + AAC | yes |
 
 Code: `src/eufy_home_security/p2p/media.py` (payload builders, frame parsing,
-keyframe decrypt, `MediaDecoder`), `p2p/session/` (open, stop; `MediaStream` in
-`media_stream.py`: receive), `p2p/messages.py` (image request and decode).
+keyframe decrypt, `MediaDecoder`), `p2p/session/` (open, stop in `media_slot.py`;
+`MediaStream` in `media_stream.py`: receive), `p2p/messages.py` (image request and decode).
 
 ## Library API
 

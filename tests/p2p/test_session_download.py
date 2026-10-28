@@ -162,3 +162,22 @@ async def test_native_local_events_download_uses_1024_and_decodes_mpegts() -> No
     finally:
         await session.async_close()
         fake.stop()
+
+
+async def test_a_download_failing_before_its_stream_returns_the_extra_session(
+    station: FakeStation,
+) -> None:
+    """A download refused before its stream exists releases the extra session it reserved."""
+    session = _session(station)
+
+    async def write(chunk: bytes) -> None:
+        pass
+
+    try:
+        await session.async_connect()
+        with pytest.raises(UnsupportedError):
+            await session.async_download_recording("/not/a/recording", 0, write)
+        await asyncio.sleep(0.1)
+        assert session.stats().extra_live_sessions_open == 0
+    finally:
+        await session.async_close()
