@@ -1726,6 +1726,10 @@ async def test_login_logs_the_auth_flow_with_secrets_only_when_enabled(
         assert "logging in to the eufy cloud" in text
         assert const.LOGIN_PATH in text
         assert "shared_key" in text
+        posts = [line for line in text.splitlines() if "→ POST" in line]
+        exchanges = [line for line in posts if const.KEY_EXCHANGE_PATH in line]
+        assert exchanges
+        assert all('body={"client_public_key": ' in line for line in exchanges)
         assert FAKE_AUTH_TOKEN not in text
         assert SYNTHETIC.password not in text
         assert "login: password ***," in text  # no tail, no length: either leaks part of it

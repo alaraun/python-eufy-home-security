@@ -443,6 +443,42 @@ async def test_a_refused_country_is_not_sent_again_when_the_session_lapses(
     assert (cache.cloud_session("eu")["ab"], cache.cloud_session("eu")["ab_wanted"]) == ("eu", "EE")
 
 
+async def test_a_refused_settled_region_ab_is_not_sent_twice_when_the_session_lapses(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """A refusal of the settled region ``ab`` raises without a second login with it."""
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    fake_mega.code_once["login"] = _PLAIN_REFUSAL
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache).async_login()
+        cache.cloud_session("eu")["expires_at"] = time.time() - 10
+        fake_mega.calls.clear()
+        fake_mega.code_once["login"] = _PLAIN_REFUSAL
+        with pytest.raises(CloudApiError) as exc:
+            await _api(http, cache).async_login()
+    assert type(exc.value) is CloudApiError
+    assert _login_abs(fake_mega) == ["eu"]
+
+
+async def test_a_cached_session_with_no_settled_ab_logs_in_with_the_country(
+    fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
+) -> None:
+    """A cached session holding ``ab_wanted`` but no ``ab`` sends the wanted ``ab``."""
+    fake_mega.client_country = "EE"
+    fake_mega.country_regions = {"EE": "eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        await _api(http, cache).async_login()
+        session = cache.cloud_session("eu")
+        del session["ab"]
+        session["expires_at"] = time.time() - 10
+        fake_mega.calls.clear()
+        await _api(http, cache).async_login()
+    assert _login_abs(fake_mega) == ["EE"]
+
+
 async def test_the_last_login_code_and_the_ip_country_are_read_on_a_session(
     fake_mega: FakeMega, cache: SessionCache, http: aiohttp.ClientSession
 ) -> None:
