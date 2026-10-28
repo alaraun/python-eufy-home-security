@@ -194,11 +194,9 @@ from ..p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
 from ..p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
 from ..p2p.messages import (
     CMD_SET_TONE_FILE,
-    DB_QUERY_HISTORY,
     RECEIPT_NOT_HANDLED,
     SOUND_ALARM_SECONDS,
     decode_preset_picture,
-    history_query_verb,
     record_id_day,
 )
 from ..p2p.mode_actions import (
@@ -252,13 +250,7 @@ from ..p2p.station_config_codecs import (
 )
 from ..p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
 from ..p2p.xzyh import FrameType
-from ..recordings import (
-    RecordingPosition,
-    RecordingsPage,
-    decode_cursor,
-    decode_ref,
-    encode_cursor,
-)
+from ..recordings import RecordingsPage
 from ..station_config import (
     ModeInfo,
     StationConfig,
@@ -268,6 +260,7 @@ from ..station_config import (
     stored_device_params,
     stored_mode_table,
 )
+from .history import StationHistory
 
 if TYPE_CHECKING:
     from ..storage import SessionCache
@@ -343,16 +336,6 @@ picture size to hold: a woken T8170 climbs 1280x720 -> 1920x1080 -> 2880x1616 at
 EPOCH_MS_RANGE = (1_420_070_400_000, 4_102_444_800_000)
 
 type SerialSource = Literal["cloud"]
-
-
-def _host_today() -> date:
-    """Today in the host's zone: the newest day of a recordings window."""
-    return datetime.now().astimezone().date()
-
-
-def _host_day(value: date) -> date:
-    """A day, or a ``datetime``'s host-local day."""
-    return value.astimezone().date() if isinstance(value, datetime) else value
 
 
 def _station_modes(
@@ -1154,6 +1137,7 @@ class Station:
         session.add_alarm_listener(self._on_alarm_frame)
         session.add_notify_listener(self._on_notify)
         session.subscribe(self._on_session_event)
+        self._history = StationHistory(self)
 
     # ── identity ─────────────────────────────────────────────────────────────
 
@@ -4611,7 +4595,7 @@ class Station:
         """History records across all devices from ``start_date`` to ``end_date``
         (``YYYYMMDD``, both included), newest first; paged like the app (see
         :meth:`~..p2p.session.StationSession.async_list_history`)."""
-        return await self.session.async_list_history(start_date, end_date, **kwargs)
+        return await self._history.list_history(start_date, end_date, **kwargs)
 
     async def async_history_record(self, record_id: int) -> HistoryRecord | None:
         """The history row of one ``record_id`` (one query), or None when the station has
@@ -4619,11 +4603,7 @@ class Station:
         standalone device (it lists no history) and for an id that carries no day; on
         every station a listed row is looked up by its
         :attr:`~..events.HistoryRecord.ref` (:meth:`async_history_record_by_ref`)."""
-        if self.is_standalone:
-            raise UnsupportedError("a standalone device lists no history")
-        if record_id_day(record_id) is None:
-            raise UnsupportedError(f"record_id {record_id} carries no day")
-        return await self.session.async_history_record(record_id)
+        return await self._history.history_record(record_id)
 
     async def async_history_record_by_ref(
         self, ref: str, *, device_sn: str | None = None, timeout: float | None = None
@@ -4646,15 +4626,7 @@ class Station:
         that row (deleted, or that id now belongs to another camera) and, on a station
         paged by start time, for a row behind a full page of rows of its start second.
         """
-        if device_sn is not None:
-            self.channel_for(device_sn)  # raises for a device not paired here
-            cameras: tuple[str, ...] = (device_sn,)
-        else:
-            cameras = (self.serial, *(d.device_sn for d in self.devices))
-        found = decode_ref(ref, station_sn=self.serial, device_sns=cameras)
-        if self.is_standalone:
-            raise UnsupportedError("a standalone device lists no history")
-        return await self.session.async_find_history_record(found, timeout=timeout)
+        return await self._history.history_record_by_ref(ref, device_sn=device_sn, timeout=timeout)
 
     async def async_list_recordings(
         self,
@@ -4696,36 +4668,13 @@ class Station:
         A detection's row exists while its clip still records: download a row once
         :meth:`recording_settled` says so.
         """
-        if days < 1:
-            raise ValueError("days must be at least 1")
-        if limit is not None and limit < 1:
-            raise ValueError("limit must be at least 1")
-        cursor_day = None if before is None else record_id_day(before)
-        if before is not None and cursor_day is None:
-            raise ValueError(f"before {before} carries no day")
-        if device_sn is not None:
-            self.channel_for(device_sn)  # raises for a device not paired here
-        if self.is_standalone:
-            return []
-        today = _host_today()
-        first = today - timedelta(days=days - 1)
-        if since is not None:
-            first = max(first, since.astimezone().date())
-        if cursor_day is not None:
-            last = min(today, cursor_day)
-        elif until is not None:
-            last = min(today, _host_day(until))
-        else:
-            last = today
-        if first > last:
-            return []
-        return await self.session.async_list_history(
-            first.strftime("%Y%m%d"),
-            last.strftime("%Y%m%d"),
-            count=limit,
-            before=before if cursor_day is not None and cursor_day <= last else None,
-            keep=self._recording_filter(device_sn, since),
-            device_sn=device_sn,
+        return await self._history.list_recordings(
+            device_sn,
+            days=days,
+            since=since,
+            limit=limit,
+            before=before,
+            until=until,
             timeout=timeout,
         )
 
@@ -4765,81 +4714,15 @@ class Station:
         ``page_days`` below 1; ``UnsupportedError`` for a device not paired here. A
         standalone device lists none: an empty page without a cursor.
         """
-        if days < 1:
-            raise ValueError("days must be at least 1")
-        if limit < 1:
-            raise ValueError("limit must be at least 1")
-        if page_days is not None and page_days < 1:
-            raise ValueError("page_days must be at least 1")
-        position = None
-        if cursor is not None:
-            position = decode_cursor(cursor, station_sn=self.serial, device_sn=device_sn)
-        if device_sn is not None:
-            self.channel_for(device_sn)  # raises for a device not paired here
-        if self.is_standalone:
-            return RecordingsPage((), None)
-        today = _host_today()
-        first = today - timedelta(days=days - 1)
-        if position is not None:
-            start = min(today, position.day)
-        elif until is not None:
-            start = min(today, _host_day(until))
-        else:
-            start = today
-        oldest = first if page_days is None else max(first, start - timedelta(days=page_days - 1))
-        if oldest > start:
-            return RecordingsPage((), None)
-        record_id = None if position is None else position.record_id
-        listed = await self.session.async_list_history_by_day(
-            oldest.strftime("%Y%m%d"),
-            start.strftime("%Y%m%d"),
-            count=limit,
-            before=record_id,  # the session pages it only on its own day
-            before_day=None if position is None or record_id is None else position.day,
-            keep=self._recording_filter(device_sn, None),
-            device_sn=device_sn,
+        return await self._history.list_recordings_page(
+            device_sn,
+            limit=limit,
+            days=days,
+            cursor=cursor,
+            until=until,
+            page_days=page_days,
             timeout=timeout,
         )
-        rows = tuple(row for _day, row in listed)
-        # rows without an id (none above 0) cannot be paged from: go on after the page's
-        # last row with one, so they may come again but none is skipped
-        paged = [(day, row.record_id) for day, row in listed if row.record_id > 0]
-        if len(listed) < limit:  # the days asked hold no more: go on before them
-            following = RecordingPosition(oldest - timedelta(days=1))
-        elif paged:
-            following = RecordingPosition.after(paged[-1][1], paged[-1][0])
-        else:  # no row to page from: go on with the day before the last one
-            following = RecordingPosition(listed[-1][0] - timedelta(days=1))
-        if following.record_id is None and following.day < first:
-            return RecordingsPage(rows, None)  # the window holds no more
-        text = encode_cursor(following, station_sn=self.serial, device_sn=device_sn)
-        return RecordingsPage(rows, text)
-
-    def _recording_filter(
-        self, device_sn: str | None, since: datetime | None
-    ) -> Callable[[HistoryRecord], bool]:
-        """Which history rows are recordings of ``device_sn`` (None: of every camera
-        paired here) that started at or after ``since``."""
-        paired = {d.device_sn for d in self.devices}
-
-        def wanted(row: HistoryRecord) -> bool:
-            if row.video_path is None or row.device_sn is None:
-                return False
-            if (
-                row.video_path.endswith(".dat")
-                and history_query_verb(self.serial) == DB_QUERY_HISTORY
-            ):
-                return False
-            if device_sn is not None and row.device_sn != device_sn:
-                return False
-            if device_sn is None and row.device_sn not in paired:
-                return False
-            if since is not None:
-                started = row.started_at
-                return started is not None and started >= since
-            return True
-
-        return wanted
 
     @staticmethod
     def recording_settled(
@@ -4852,11 +4735,7 @@ class Station:
         rows; :meth:`async_download_recording` reads the row again afterwards and
         :attr:`~..p2p.clip.MediaClip.complete` is False when it gained frames meanwhile.
         """
-        ended = record.ended_at
-        if ended is None:
-            return False
-        current = now if now is not None else datetime.now(ended.tzinfo)
-        return (current - ended).total_seconds() >= quiet
+        return StationHistory.recording_settled(record, now=now, quiet=quiet)
 
     async def async_download_recording(
         self, record: HistoryRecord, write: ClipWriter, *, wait: bool = True
@@ -4875,25 +4754,4 @@ class Station:
         budget (with ``wait``, after waiting for a stream to end); otherwise what the
         playback raises.
         """
-        path = record.video_path
-        if path is None:
-            raise UnsupportedError("the record carries no recording")
-        if record.device_sn is None:
-            raise UnsupportedError("the record names no camera")
-        channel = self.channel_for(record.device_sn)
-        clip = await self.session.async_download_recording(path, channel, write, wait=wait)
-        # Read the row again: a clip still recording when the download began has more
-        # frames now than were delivered, and then the clip is not complete.
-        expected = record.frame_count
-        if record.record_id and record_id_day(record.record_id) is not None:
-            with contextlib.suppress(EufySecurityError):
-                fresh = await self.session.async_history_record(record.record_id)
-                if fresh is not None and fresh.frame_count is not None:
-                    expected = max(expected or 0, fresh.frame_count)
-        return replace(
-            clip,
-            started_at=record.started_at,
-            device_sn=record.device_sn,
-            record_id=record.record_id or None,
-            expected_frames=expected,
-        )
+        return await self._history.download_recording(record, write, wait=wait)
