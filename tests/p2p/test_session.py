@@ -4890,7 +4890,7 @@ async def test_an_arm_as_the_station_scalar(
         with pytest.raises(CommandUnsupportedError) as refused:
             await session.async_set_guard_mode(GuardMode.AWAY, timeout=3.0)
         # An RSA session sends every command under its own key, the scalar included.
-        encryption = session._session_encryption if rsa else FRAME_STATIC_ECB
+        encryption = session._keys.session_encryption if rsa else FRAME_STATIC_ECB
     finally:
         await session.async_close()
     assert (armed, disarmed) == (GuardMode.HOME, GuardMode.DISARMED)
