@@ -1648,16 +1648,30 @@ async def test_a_flag_the_ignore_bit_clears_cannot_be_turned_on_with_it(
     assert fake.mode_tables_received == []
 
 
-async def test_mode_delays_alone_are_one_table_write(station: Station, fake: FakeStation) -> None:
+@pytest.mark.parametrize("bulk", [False, True])
+async def test_mode_delays_alone_are_one_table_write(
+    station: Station, fake: FakeStation, bulk: bool
+) -> None:
+    """Through ``async_set_mode_delays``, or ``async_set_mode_actions`` without flags."""
     _mode_table_blocks(fake)  # Home alarm delay 30 s on both
     hub = _matrix_hub(station)
-    table = await hub.async_set_mode_delays(
-        "home",
-        entry_s=45,
-        entry_devices={SENSOR_SN: False},
-        exit_s=15,
-        exit_devices={SYNTHETIC.camera_sn: True},
-    )
+    if bulk:
+        table = await hub.async_set_mode_actions(
+            "home",
+            {},
+            entry_s=45,
+            entry_devices={SENSOR_SN: False},
+            exit_s=15,
+            exit_devices={SYNTHETIC.camera_sn: True},
+        )
+    else:
+        table = await hub.async_set_mode_delays(
+            "home",
+            entry_s=45,
+            entry_devices={SENSOR_SN: False},
+            exit_s=15,
+            exit_devices={SYNTHETIC.camera_sn: True},
+        )
     assert fake.mode_tables_received[-1]["count_down_alarm"] == {
         "channel_list": [0],
         "delay_time": 45,
@@ -1669,6 +1683,25 @@ async def test_mode_delays_alone_are_one_table_write(station: Station, fake: Fak
     assert (table.alarm_delays, table.leaving_delays) == ({0: 45, 16: 0}, {0: 15, 16: 0})
     assert (fake.params[0][1166], fake.params[16][1166], fake.params[0][1171]) == ("45", "0", "15")
     assert len(fake.mode_tables_received) == 1
+
+
+async def test_mode_delays_go_through_the_bulk_write_a_consumer_patches(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``async_set_mode_delays`` writes through :meth:`Station.async_set_mode_actions`, so
+    a patch of it on :class:`Station` applies."""
+    _mode_table_blocks(fake)
+    hub = _matrix_hub(station)
+    real = Station.async_set_mode_actions
+    calls: list[tuple[Any, ...]] = []
+
+    async def spy(self: Station, *args: Any, **kw: Any) -> Any:
+        calls.append(args)
+        return await real(self, *args, **kw)
+
+    monkeypatch.setattr(Station, "async_set_mode_actions", spy)
+    await hub.async_set_mode_delays("home", entry_s=45)
+    assert calls == [("home", {})]
 
 
 @pytest.mark.parametrize("seconds", [20, 301, -15, 600, True])
