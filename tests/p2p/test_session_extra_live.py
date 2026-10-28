@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 import pytest
 
 import eufy_home_security.p2p.session as session_module
+import eufy_home_security.p2p.session.media_slot as media_slot_module
 from eufy_home_security.devices.live_open import LiveOpen, LiveStop
 from eufy_home_security.devices.live_view import Lens, LensView, live_view
 from eufy_home_security.exceptions import (
@@ -295,3 +296,25 @@ async def test_raising_the_budget_serves_a_waiting_open(station: FakeStation) ->
 def test_a_budget_outside_the_station_range_is_refused(value: object) -> None:
     with pytest.raises(ValueError, match="max_sessions must be an int from 2 to 9"):
         session_module._session_budget(value)
+
+
+async def test_an_extra_open_failing_before_its_stream_returns_the_extra_session(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A live open that fails on an extra session before its stream exists releases it."""
+    session = _session(station)
+    try:
+        first = await session.async_open_live(0)
+        await _first_keyframe(first)
+
+        def fail() -> object:
+            raise RuntimeError("key generation failed")
+
+        monkeypatch.setattr(media_slot_module, "generate_media_rsa_key", fail)
+        with pytest.raises(RuntimeError):
+            await session.async_open_live(1)
+        await asyncio.sleep(0.1)
+        assert session.stats().extra_live_sessions_open == 0
+        await first.aclose()
+    finally:
+        await session.async_close()

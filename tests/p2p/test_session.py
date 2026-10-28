@@ -94,7 +94,7 @@ from eufy_home_security.p2p.session import (
     StationSession,
     _scalar_result,
 )
-from eufy_home_security.p2p.session.core import Inbound
+from eufy_home_security.p2p.session.core import Inbound, _receipt_error
 from eufy_home_security.p2p.session.media_stream import MediaStream
 from eufy_home_security.p2p.session.param_state import ParamOrigin
 from eufy_home_security.p2p.transport import PPPPTransport
@@ -1146,12 +1146,12 @@ async def test_an_abandoned_media_stream_is_reclaimed(station: FakeStation) -> N
         stream = await session.async_open_live(0, first_frame_timeout=3.0, idle_timeout=0.3)
         async for _frame in stream:
             break  # abandoned: no aclose(), no __aexit__
-        assert session._media is not None, "held while the stream is still fresh"
+        assert session._media_slot.stream is not None, "held while the stream is still fresh"
 
         # The station keeps sending, so the queue fills and every frame is dropped:
         # the deadlines never fire, and that is what marks the stream abandoned.
         async with asyncio.timeout(8):
-            while not session._media._expired(time.monotonic()):
+            while not session._media_slot.stream._expired(time.monotonic()):
                 await asyncio.sleep(0.05)
 
         again = await session.async_open_live(0, first_frame_timeout=3.0, idle_timeout=0.3)
@@ -1170,9 +1170,9 @@ async def test_the_supervisor_reclaims_an_abandoned_media_stream(
         stream = await session.async_open_live(0, first_frame_timeout=3.0, idle_timeout=0.3)
         async for _frame in stream:
             break
-        assert session._media is not None
+        assert session._media_slot.stream is not None
         async with asyncio.timeout(8):
-            while session._media is not None:
+            while session._media_slot.stream is not None:
                 await asyncio.sleep(0.05)
     finally:
         await session.async_close()
@@ -2426,6 +2426,55 @@ async def test_recording_plays_to_its_end(
         await session.async_close()
 
 
+@pytest.mark.parametrize("kind", ["live", "recording", "download"])
+async def test_an_unanswered_open_fails_after_the_default_first_frame_wait(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """With no ``first_frame_timeout`` an open waits the default patched on p2p.session."""
+    monkeypatch.setattr(session_mod, "MEDIA_LIVE_FIRST_FRAME_TIMEOUT", 0.3)
+    monkeypatch.setattr(session_mod, "MEDIA_RECORDING_FIRST_FRAME_TIMEOUT", 0.3)
+    session = make_session(station, Provider(station, account_id="f" * 40))
+
+    async def write(chunk: bytes) -> None:
+        pass
+
+    async def open_and_read() -> None:
+        if kind == "download":
+            await session.async_download_recording("/zx/clip.zxvideo", 1, write)
+            return
+        stream = (
+            await session.async_open_live(0)
+            if kind == "live"
+            else await session.async_open_recording("/zx/clip.zxvideo", 1)
+        )
+        await anext(stream)
+
+    try:
+        with pytest.raises(EufySecurityError):
+            await asyncio.wait_for(open_and_read(), 5.0)
+    finally:
+        await session.async_close()
+
+
+async def test_a_recording_without_an_end_frame_ends_after_the_default_idle_wait(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no ``idle_timeout`` a playback ends on the idle default patched on p2p.session."""
+    monkeypatch.setattr(session_mod, "MEDIA_IDLE_TIMEOUT", 0.2)
+    station.playback_end_delay = None
+    session = make_session(station, Provider(station))
+    try:
+        stream = await session.async_open_recording("/zx/clip.zxvideo", 1)
+
+        async def drain() -> list[Any]:
+            return [frame async for frame in stream]
+
+        frames = await asyncio.wait_for(drain(), 3.0)
+        assert len(_video(frames)) == station.recording_frames
+    finally:
+        await session.async_close()
+
+
 async def test_an_rsa_recording_ends_on_its_clear_end_of_playback_frame(
     station: FakeStation,
 ) -> None:
@@ -2465,7 +2514,7 @@ async def test_a_playback_end_before_the_first_keyframe_belongs_to_an_earlier_st
         first_frame_timeout=1.0,
         idle_timeout=1.0,
     )
-    session._set_media(stream)
+    session._media_slot.set_stream(stream)
     end = Frame(
         type=FrameType.RECORD_PLAY_CTRL,
         subheader=bytes([FrameCipher.GCM, 0, 0, 0, 0, 0]),
@@ -2479,7 +2528,7 @@ async def test_a_playback_end_before_the_first_keyframe_belongs_to_an_earlier_st
     )
     session._dispatch(Inbound(2, end, session))
     frames = [frame.data async for frame in stream]
-    assert (stream.closed, session._media) == (True, None)
+    assert (stream.closed, session._media_slot.stream) == (True, None)
     assert frames == [MEDIA_KEYFRAME]  # queued frames first
 
 
@@ -2512,7 +2561,7 @@ async def test_a_wake_failure_receipt_fails_the_live_open_at_once(
         with pytest.raises(CameraWakeError) as caught:
             await anext(stream)
         elapsed = time.monotonic() - started
-        assert session._media is None  # the slot is free again
+        assert session._media_slot.stream is None  # the slot is free again
         await session.async_get_params()  # the session itself is fine
     finally:
         await session.async_close()
@@ -2578,7 +2627,7 @@ async def test_a_started_stream_clears_the_wake_backoff(
         station.live_open_receipt_code = 0
         async with await session.async_open_live(0, wait=True) as stream:
             assert (await anext(stream)).is_keyframe
-        assert session._wake_failures == {}
+        assert session._wake_backoff.failures == {}
     finally:
         await session.async_close()
 
@@ -2598,7 +2647,7 @@ async def test_a_started_stream_clears_the_wake_backoff(
 def test_a_command_receipt_error_names_its_code(
     code: int, kind: type[CommandRejectedError], text: str
 ) -> None:
-    err = session_module._receipt_error(1234, code)
+    err = _receipt_error(1234, code)
     assert type(err) is kind
     assert (err.command, err.code) == (1234, code)
     assert str(err).endswith(text)
@@ -3914,7 +3963,12 @@ async def test_session_live_ends_early(
     try:
         await session.async_start()
         stream = await session.async_open_live(channel=0)
-        frames = [frame async for frame in stream]
+
+        async def drain() -> list[Any]:
+            return [frame async for frame in stream]
+
+        # The default idle timeout is the one patched on p2p.session.
+        frames = await asyncio.wait_for(drain(), 3.0)
         assert len(frames) < 30
     finally:
         await session.async_close()
@@ -4177,10 +4231,10 @@ async def test_probably_asleep_is_false_while_media_stream_is_open(station: Fake
     session._last_used = time.monotonic() - (session_module.ON_DEMAND_ASLEEP_AFTER + 1)
     assert session._probably_asleep() is True
 
-    session._media = cast("MediaStream", object())
+    session._media_slot.stream = cast("MediaStream", object())
     assert session._probably_asleep() is False
 
-    session._media = None
+    session._media_slot.stream = None
     await session.async_close()
 
 

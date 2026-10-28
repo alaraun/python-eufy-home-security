@@ -135,13 +135,13 @@ KEY_FIELDS = {"key", "ClientOS", "cameraType"}
 def _spy_flags(session: StationSession, monkeypatch: pytest.MonkeyPatch) -> list[int]:
     """The subheader flag (stream id) of each media open ``session`` sends."""
     flags: list[int] = []
-    real = session._open_media
+    real = session._media_slot.open_stream
 
     async def spy(*args: object, **kwargs: object) -> MediaStream:
         flags.append(kwargs["flag"])  # type: ignore[arg-type]
         return await real(*args, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(session, "_open_media", spy)
+    monkeypatch.setattr(session._media_slot, "open_stream", spy)
     return flags
 
 
