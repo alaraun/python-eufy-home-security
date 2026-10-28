@@ -4430,6 +4430,18 @@ async def test_a_held_size_keyframe_is_bounded_and_keeps_the_largest() -> None:
     assert (frame.width, frame.height) == (1920, 1080)
 
 
+@pytest.mark.parametrize(("settle", "bound"), [(0.1, 5.0), (5.0, 0.1)])
+async def test_a_held_size_keyframe_ends_on_time_when_the_stream_goes_quiet(
+    settle: float, bound: float
+) -> None:
+    """No frame after the first keyframes: the wait ends at the earlier of settle and bound."""
+    quiet = [(0.0, _key(b"stale", 1280, 720)), (0.0, _key(b"720", 1280, 720)), (2.0, _p(1, 1))]
+    started = time.monotonic()
+    frame = await station_mod._held_size_keyframe(_TimedStream(quiet), settle, bound)  # type: ignore[arg-type]
+    assert time.monotonic() - started < 1.0
+    assert frame.data == b"720"
+
+
 async def test_a_held_size_keyframe_returns_what_it_has_when_the_stream_ends() -> None:
     frames = [(0.0, _key(b"720", 1280, 720)), (0.0, _key(b"1080", 1920, 1080))]
     frame = await station_mod._held_size_keyframe(_TimedStream(frames), 5.0, 30.0)  # type: ignore[arg-type]

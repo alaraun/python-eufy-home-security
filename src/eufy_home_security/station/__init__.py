@@ -906,7 +906,7 @@ async def _held_size_keyframe(stream: MediaStream, settle: float, bound: float) 
         return frame.width * frame.height
 
     try:
-        async with asyncio.timeout(min(run_since + settle, deadline)) as scope:
+        async with asyncio.timeout_at(min(run_since + settle, deadline)) as scope:
             async for frame in stream:
                 now = loop.time()
                 if now - run_since >= settle:
