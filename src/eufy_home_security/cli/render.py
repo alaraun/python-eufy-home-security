@@ -5,11 +5,11 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import fields, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, assert_never
+from typing import TYPE_CHECKING, Any, Never, assert_never, cast
 
 from .._logging import redact, redact_serial
 from ..devices.capabilities import profile_for_serial
@@ -780,163 +780,253 @@ def _event_name(event: SecurityEvent) -> str:
     return "event"
 
 
+type _Renderer[E] = Callable[[E, bool], str]
+"""Renders one event type's monitor line after its time stamp; the bool is ``show_serials``."""
+
+_RENDERERS: dict[type[Any], _Renderer[Any]] = {}
+
+
+def _renders[E](cls: type[E]) -> Callable[[_Renderer[E]], _Renderer[E]]:
+    """Register the decorated function as the monitor renderer of ``cls``."""
+
+    def register(renderer: _Renderer[E]) -> _Renderer[E]:
+        if cls in _RENDERERS:
+            raise ValueError(f"{cls.__name__} already has a monitor renderer")
+        _RENDERERS[cls] = renderer
+        return renderer
+
+    return register
+
+
 def render_event(event: Event, *, now: datetime, show_serials: bool) -> str:
     """One monitor line per event."""
     stamp = now.strftime("%H:%M:%S")
-    match event:
-        case SecurityEvent():
-            who = f'"{event.device_name}"' if event.device_name else ""
-            sn = event.device_sn or event.station_sn
-            bits = [f"[{stamp}] {event.source}: {_event_name(event)}"]
-            if not event.authenticated:
-                bits.append("unauthenticated (ECB)")
-            if who or sn:
-                bits.append(" ".join(b for b in (who, fmt_serial(sn, show_serials)) if b))
-            if event.channel is not None:
-                bits.append(f"ch {event.channel}")
-            if event.person_name:
-                bits.append(f"person {event.person_name}")
-            if event.guard_mode is not None:
-                bits.append(f"guard mode {guard_mode_label(_as_mode(event.guard_mode))}")
-            if event.arming_source is not None:
-                bits.append(f"by {event.arming_source}")
-            if event.alarm_phase is not None:
-                bits.append(f"alarm {event.alarm_phase}")
-            if event.thumb_path:
-                bits.append(f"thumb {event.thumb_path}")
-            if event.rejected_fields:
-                bits.append(f"rejected {','.join(sorted(event.rejected_fields))}")
-            if event.enriches:
-                bits.append("(adds media to an event already shown)")
-            return "  ".join(bits)
-        case AccountMismatch():
-            return (
-                f"[{stamp}] {fmt_serial(event.station_sn, show_serials)} account mismatch: "
-                "the station stamps another account id than commands carry; "
-                "commands may be ignored"
-            )
-        case GuardModeChanged():
-            in_force = (
-                f" (in force {guard_mode_label(event.active_mode)})"
-                if event.active_mode is not None and event.active_mode != event.mode
-                else ""
-            )
-            return (
-                f"[{stamp}] {event.source}: guard mode {guard_mode_label(event.mode)}{in_force}"
-                f"  {fmt_serial(event.station_sn, show_serials)}"
-            )
-        case AlarmChanged():
-            state = "alarm started" if event.alarming else "alarm ended"
-            details = [
-                f"{label} {value}"
-                for label, value in (
-                    ("ch", event.channel),
-                    ("type", event.event_type),
-                    ("for", None if event.duration_s is None else f"{event.duration_s}s"),
-                    (
-                        "stopped from",
-                        None if event.stop_source is None else event.stop_source.name.lower(),
-                    ),
-                )
-                if value is not None
-            ]
-            return "  ".join(
-                [
-                    f"[{stamp}] {event.source}: {state}",
-                    *details,
-                    fmt_serial(event.station_sn, show_serials),
-                ]
-            )
-        case ParamChanged():
-            where = "station" if event.channel == STATION_CHANNEL else f"ch {event.channel}"
-            return (
-                f"[{stamp}] param {where} {event.param_id} {command_name(event.param_id)}: "
-                f"{_truncate(event.old)} → {_truncate(event.new)}"
-            )
-        case ConnectionChanged():
-            state = "connected" if event.connected else "disconnected"
-            reason = f" ({event.reason})" if event.reason else ""
-            return f"[{stamp}] {fmt_serial(event.station_sn, show_serials)} {state}{reason}"
-        case CloudProblem():
-            where = f"  {fmt_serial(event.station_sn, show_serials)}" if event.station_sn else ""
-            return f"[{stamp}] cloud problem: {type(event.error).__name__}: {event.error}{where}"
-        case PushChanged():
-            if event.running:
-                return f"[{stamp}] cloud push listening"
-            cause = f": {type(event.error).__name__}: {event.error}" if event.error else ""
-            return f"[{stamp}] cloud push not listening{cause}"
-        case CredentialsRefreshed():
-            fetched = [
-                name
-                for name, done in (
-                    ("cipher", event.cipher),
-                    ("owner id", event.owner_id),
-                    ("login", event.login),
-                )
-                if done
-            ]
-            return (
-                f"[{stamp}] {fmt_serial(event.station_sn, show_serials)} credentials "
-                f"refreshed ({', '.join(fetched) or 'nothing fetched'})"
-            )
-        case DevicesChanged():
-            changes = [
-                f"{label} {', '.join(fmt_serial(sn, show_serials) for sn in serials)}"
-                for label, serials in (
-                    ("added", event.added),
-                    ("removed", event.removed),
-                    ("moved", event.moved),
-                )
-                if serials
-            ]
-            return (
-                f"[{stamp}] {fmt_serial(event.station_sn, show_serials)} paired devices "
-                f"changed: {'; '.join(changes) or 'nothing'}"
-            )
-        case StationsChanged():
-            changes = [
-                f"{label} {', '.join(fmt_serial(sn, show_serials) for sn in serials)}"
-                for label, serials in (("added", event.added), ("removed", event.removed))
-                if serials
-            ]
-            return (
-                f"[{stamp}] stations changed ({event.source or 'unknown'} list): "
-                f"{'; '.join(changes) or 'nothing'}"
-            )
-        case StationStateChanged():
-            return (
-                f"[{stamp}] {fmt_serial(event.station_sn, show_serials)} state: guard mode "
-                f"{guard_mode_label(event.state.guard_mode)}, "
-                f"{len(event.state.devices)} device(s)"
-            )
-        case StationConfigChanged():
-            return (
-                f"[{stamp}] {fmt_serial(event.station_sn, show_serials)} configuration "
-                f"revision {event.revision}: {', '.join(sorted(event.fields))}"
-            )
-        case StorageChanged():
-            disk = event.storage.disk
-            used = "no disk" if disk is None else f"disk {_gb(disk.used_gib)} used"
-            if disk is not None:
-                used += f" of {_gb(disk.size_gib)}" + (" FORMATTING" if disk.formatting else "")
-            return f"[{stamp}] {fmt_serial(event.station_sn, show_serials)} storage: {used}"
-        case CameraBusyChanged():
-            state = "capturing" if event.busy else "free"
-            return f"[{stamp}] {fmt_serial(event.device_sn, show_serials)} {state}"
-        case PresetsChanged():
-            enabled = [str(slot.index) for slot in event.presets if slot.enabled]
-            return (
-                f"[{stamp}] {fmt_serial(event.device_sn, show_serials)} presets: "
-                f"{', '.join(enabled) or 'none set'}"
-            )
-        case DeviceAlarmChanged():
-            state = "alarm on" if event.on else "alarm off"
-            kind = "" if event.alarm is None else f" ({event.alarm.name.lower()})"
-            return f"[{stamp}] {fmt_serial(event.device_sn, show_serials)} {state}{kind}"
-        case ZoomChanged():
-            return f"[{stamp}] {fmt_serial(event.device_sn, show_serials)} zoom: {event.zoom:g}x"
-        case _:
-            assert_never(event)
+    # The first registered class in the MRO, so a subclass renders as its base.
+    renderer = next((_RENDERERS[cls] for cls in type(event).__mro__ if cls in _RENDERERS), None)
+    if renderer is None:
+        # Every Event type has a renderer: test_every_event_type_has_a_monitor_line.
+        assert_never(cast("Never", event))
+    return f"[{stamp}] {renderer(event, show_serials)}"
+
+
+def _on_serial(serial: str | None, show: bool, text: str) -> str:
+    """``text`` after the serial it is about."""
+    return f"{fmt_serial(serial, show)} {text}"
+
+
+def _error_text(error: BaseException) -> str:
+    return f"{type(error).__name__}: {error}"
+
+
+def _serial_changes(changes: Iterable[tuple[str, Sequence[str]]], show: bool) -> str:
+    """``added A, B; removed C`` for the non-empty lists, or ``nothing``."""
+    parts = [
+        f"{label} {', '.join(fmt_serial(sn, show) for sn in serials)}"
+        for label, serials in changes
+        if serials
+    ]
+    return "; ".join(parts) or "nothing"
+
+
+@_renders(SecurityEvent)
+def _security_line(event: SecurityEvent, show: bool) -> str:
+    return "  ".join(
+        [
+            f"{event.source}: {_event_name(event)}",
+            *_security_subject(event, show),
+            *_security_details(event),
+        ]
+    )
+
+
+def _security_subject(event: SecurityEvent, show: bool) -> list[str]:
+    """Origin and target of a security event: trust, device, channel, person."""
+    bits = []
+    if not event.authenticated:
+        bits.append("unauthenticated (ECB)")
+    who = f'"{event.device_name}"' if event.device_name else ""
+    sn = event.device_sn or event.station_sn
+    if who or sn:
+        bits.append(" ".join(b for b in (who, fmt_serial(sn, show)) if b))
+    if event.channel is not None:
+        bits.append(f"ch {event.channel}")
+    if event.person_name:
+        bits.append(f"person {event.person_name}")
+    return bits
+
+
+def _security_details(event: SecurityEvent) -> list[str]:
+    """Station state, media and decoding notes of a security event."""
+    bits = []
+    if event.guard_mode is not None:
+        bits.append(f"guard mode {guard_mode_label(_as_mode(event.guard_mode))}")
+    if event.arming_source is not None:
+        bits.append(f"by {event.arming_source}")
+    if event.alarm_phase is not None:
+        bits.append(f"alarm {event.alarm_phase}")
+    if event.thumb_path:
+        bits.append(f"thumb {event.thumb_path}")
+    if event.rejected_fields:
+        bits.append(f"rejected {','.join(sorted(event.rejected_fields))}")
+    if event.enriches:
+        bits.append("(adds media to an event already shown)")
+    return bits
+
+
+@_renders(AccountMismatch)
+def _account_mismatch_line(event: AccountMismatch, show: bool) -> str:
+    return _on_serial(
+        event.station_sn,
+        show,
+        "account mismatch: the station stamps another account id than commands carry; "
+        "commands may be ignored",
+    )
+
+
+@_renders(GuardModeChanged)
+def _guard_mode_line(event: GuardModeChanged, show: bool) -> str:
+    in_force = (
+        f" (in force {guard_mode_label(event.active_mode)})"
+        if event.active_mode is not None and event.active_mode != event.mode
+        else ""
+    )
+    return (
+        f"{event.source}: guard mode {guard_mode_label(event.mode)}{in_force}"
+        f"  {fmt_serial(event.station_sn, show)}"
+    )
+
+
+@_renders(AlarmChanged)
+def _alarm_line(event: AlarmChanged, show: bool) -> str:
+    state = "alarm started" if event.alarming else "alarm ended"
+    details = [
+        f"{label} {value}"
+        for label, value in (
+            ("ch", event.channel),
+            ("type", event.event_type),
+            ("for", None if event.duration_s is None else f"{event.duration_s}s"),
+            (
+                "stopped from",
+                None if event.stop_source is None else event.stop_source.name.lower(),
+            ),
+        )
+        if value is not None
+    ]
+    return "  ".join([f"{event.source}: {state}", *details, fmt_serial(event.station_sn, show)])
+
+
+@_renders(ParamChanged)
+def _param_line(event: ParamChanged, show: bool) -> str:
+    where = "station" if event.channel == STATION_CHANNEL else f"ch {event.channel}"
+    return (
+        f"param {where} {event.param_id} {command_name(event.param_id)}: "
+        f"{_truncate(event.old)} → {_truncate(event.new)}"
+    )
+
+
+@_renders(ConnectionChanged)
+def _connection_line(event: ConnectionChanged, show: bool) -> str:
+    state = "connected" if event.connected else "disconnected"
+    reason = f" ({event.reason})" if event.reason else ""
+    return _on_serial(event.station_sn, show, f"{state}{reason}")
+
+
+@_renders(CloudProblem)
+def _cloud_problem_line(event: CloudProblem, show: bool) -> str:
+    where = f"  {fmt_serial(event.station_sn, show)}" if event.station_sn else ""
+    return f"cloud problem: {_error_text(event.error)}{where}"
+
+
+@_renders(PushChanged)
+def _push_line(event: PushChanged, show: bool) -> str:
+    if event.running:
+        return "cloud push listening"
+    cause = f": {_error_text(event.error)}" if event.error else ""
+    return f"cloud push not listening{cause}"
+
+
+@_renders(CredentialsRefreshed)
+def _credentials_line(event: CredentialsRefreshed, show: bool) -> str:
+    fetched = [
+        name
+        for name, done in (
+            ("cipher", event.cipher),
+            ("owner id", event.owner_id),
+            ("login", event.login),
+        )
+        if done
+    ]
+    return _on_serial(
+        event.station_sn, show, f"credentials refreshed ({', '.join(fetched) or 'nothing fetched'})"
+    )
+
+
+@_renders(DevicesChanged)
+def _devices_line(event: DevicesChanged, show: bool) -> str:
+    changes = _serial_changes(
+        (("added", event.added), ("removed", event.removed), ("moved", event.moved)), show
+    )
+    return _on_serial(event.station_sn, show, f"paired devices changed: {changes}")
+
+
+@_renders(StationsChanged)
+def _stations_line(event: StationsChanged, show: bool) -> str:
+    changes = _serial_changes((("added", event.added), ("removed", event.removed)), show)
+    return f"stations changed ({event.source or 'unknown'} list): {changes}"
+
+
+@_renders(StationStateChanged)
+def _station_state_line(event: StationStateChanged, show: bool) -> str:
+    return _on_serial(
+        event.station_sn,
+        show,
+        f"state: guard mode {guard_mode_label(event.state.guard_mode)}, "
+        f"{len(event.state.devices)} device(s)",
+    )
+
+
+@_renders(StationConfigChanged)
+def _station_config_line(event: StationConfigChanged, show: bool) -> str:
+    return _on_serial(
+        event.station_sn,
+        show,
+        f"configuration revision {event.revision}: {', '.join(sorted(event.fields))}",
+    )
+
+
+@_renders(StorageChanged)
+def _storage_line(event: StorageChanged, show: bool) -> str:
+    disk = event.storage.disk
+    if disk is None:
+        used = "no disk"
+    else:
+        used = f"disk {_gb(disk.used_gib)} used of {_gb(disk.size_gib)}" + (
+            " FORMATTING" if disk.formatting else ""
+        )
+    return _on_serial(event.station_sn, show, f"storage: {used}")
+
+
+@_renders(CameraBusyChanged)
+def _camera_busy_line(event: CameraBusyChanged, show: bool) -> str:
+    return _on_serial(event.device_sn, show, "capturing" if event.busy else "free")
+
+
+@_renders(PresetsChanged)
+def _presets_line(event: PresetsChanged, show: bool) -> str:
+    enabled = [str(slot.index) for slot in event.presets if slot.enabled]
+    return _on_serial(event.device_sn, show, f"presets: {', '.join(enabled) or 'none set'}")
+
+
+@_renders(DeviceAlarmChanged)
+def _device_alarm_line(event: DeviceAlarmChanged, show: bool) -> str:
+    state = "alarm on" if event.on else "alarm off"
+    kind = "" if event.alarm is None else f" ({event.alarm.name.lower()})"
+    return _on_serial(event.device_sn, show, f"{state}{kind}")
+
+
+@_renders(ZoomChanged)
+def _zoom_line(event: ZoomChanged, show: bool) -> str:
+    return _on_serial(event.device_sn, show, f"zoom: {event.zoom:g}x")
 
 
 def _as_mode(code: int) -> GuardMode | int:
