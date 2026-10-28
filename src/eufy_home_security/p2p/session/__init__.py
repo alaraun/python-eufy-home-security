@@ -44,7 +44,7 @@ import logging
 import os
 import time
 from collections import Counter, deque
-from collections.abc import AsyncIterator, Callable, Collection, Iterable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -86,10 +86,7 @@ from ...events import (
     DisconnectCause,
     EventBus,
     EventCallback,
-    EventSource,
-    GuardModeChanged,
     HistoryRecord,
-    ParamChanged,
     SecurityEvent,
     StorageChanged,
     Unsubscribe,
@@ -213,7 +210,7 @@ from ..messages import (
 )
 from ..mode_actions import CMD_SET_ALL_ACTION, ModeTable
 from ..notify import decode_camera_push, stamped_accounts
-from ..params import ACTIVE_MODE_PARAM, GUARD_MODE_PARAM, ParamDump
+from ..params import ParamDump
 from ..pppp import DISCOVERY_PORT, DrwChunk
 from ..storage_info import (
     CMD_HUB_STORAGE,
@@ -231,6 +228,7 @@ from ..storage_info import (
 from ..transport import PPPPTransport, SilentLinkError, StationClosedLinkError, Wake
 from ..xzyh import Frame, FrameCipher, FrameType, StreamDecoder, encode_frame
 from .media_stream import MediaStream
+from .param_state import ParamOrigin, ParamState
 from .stats import MediaCounters, SessionStats, count_capped
 
 _LOGGER = logging.getLogger(__name__)
@@ -473,16 +471,6 @@ class CommandOutcome(StrEnum):
     """The station acknowledged the datagram but sent no result (confirm by read-back)."""
 
 
-class ParamOrigin(StrEnum):
-    """Where a held parameter value came from when no dump delivered it."""
-
-    CLOUD = "cloud"
-    """A cloud snapshot (:meth:`StationSession.ingest_cloud_params`)."""
-    LOCAL_WRITE = "local_write"
-    """This library's own write (:meth:`StationSession.apply_local_params`, an applied
-    arm), or a guard mode the station reported outside a dump."""
-
-
 @dataclass(frozen=True, slots=True)
 class EventSummary:
     """One device's event count and the path of its newest event's still (10013)."""
@@ -598,16 +586,6 @@ class StationSession:
         # ConnectionChanged carries only their cause.
         self.serial = serial.strip()
         self._max_sessions = _session_budget(max_sessions)
-        self._expect_channels = frozenset(expect_channels)
-        self._block_aliases = dict(block_aliases or {})
-        # Values filed under a second alias are the same parameter: log their change once.
-        self._alias_copies = frozenset(
-            ch for targets in self._block_aliases.values() for ch in targets[1:]
-        )
-        self._station_blocks = next(
-            (tuple(t) for t in self._block_aliases.values() if STATION_CHANNEL in t),
-            (STATION_CHANNEL,),
-        )
         self.on_demand = on_demand
         self._idle_close = idle_close
         self._wake_provider = wake_provider
@@ -662,26 +640,8 @@ class StationSession:
         every standalone-device recipe shares type 1700, so two in flight would each be
         able to complete or fail on the other's receipt."""
         self._bus = EventBus()
-        self._params: dict[tuple[int, int], str | None] = {}
-        self._param_at: dict[tuple[int, int], float] = {}
-        """Epoch seconds each parameter's value dates from: its arrival over P2P, or the
-        cloud snapshot's ``update_time`` (an older snapshot never overwrites it)."""
-        self._param_origin: dict[tuple[int, int], ParamOrigin] = {}
-        """Where each parameter's value came from when not a dump (:attr:`param_origins`)."""
-        self._meta: dict[str, Any] = {}
-        """The dump's frame-level fields (firmware versions), latest value of each."""
-        self._unread_dump_keys: set[str] = set()
-        """Top-level dump keys the parser does not read, each logged once."""
-        self._dump_listeners: list[Callable[[], None]] = []
         self._notify_listeners: list[Callable[[Mapping[str, Any], FrameCipher], None]] = []
         self._alarm_listeners: list[Callable[[AlarmFrame], None]] = []
-        self._push_channels: set[int] = set()
-        """Blocks of the unsolicited dump in progress (see :meth:`_note_pushed_blocks`)."""
-        self._push_timer: asyncio.TimerHandle | None = None
-        self._guard_mode: GuardMode | int | None = None
-        """The selected guard mode (param 1224)."""
-        self._active_mode: GuardMode | int | None = None
-        """The effective guard mode (param 1151, the 0x047F report)."""
         self._alarming = False
         """Whether the last alarm-tone frame started the alarm (see :meth:`_handle_alarm`)."""
         self._tone_waiters: list[tuple[bool, asyncio.Future[AlarmChanged]]] = []
@@ -766,6 +726,15 @@ class StationSession:
         self._media: MediaStream | None = None
         self._throttle = LogThrottle()
         self._log_name = redact_serial(self.serial)
+        self._param_state = ParamState(
+            self.serial,
+            bus=self._bus,
+            log_name=self._log_name,
+            throttle=self._throttle,
+            param=self._param,
+            block_aliases=block_aliases,
+            expect_channels=expect_channels,
+        )
 
     # ── state ────────────────────────────────────────────────────────────────
 
@@ -884,13 +853,13 @@ class StationSession:
     def guard_mode(self) -> GuardMode | int | None:
         """The last selected guard mode known (param 1224; :attr:`GuardMode.SCHEDULE`
         while a schedule runs): observed over P2P, or noted from a push."""
-        return self._guard_mode
+        return self._param_state.guard_mode
 
     @property
     def active_mode(self) -> GuardMode | int | None:
         """The last effective guard mode known: the mode in force (param 1151, the
         ``0x047F`` report), which differs from :attr:`guard_mode` only under Schedule."""
-        return self._active_mode
+        return self._param_state.active_mode
 
     @property
     def media_slot_channel(self) -> int | None:
@@ -920,32 +889,12 @@ class StationSession:
         report that moves the mode back. ``active_mode`` None: ``mode`` outside Schedule,
         else the effective mode stays as it was.
         """
-        self._apply_modes(mode, active_mode)
-        if not self.on_demand or self._guard_mode is None:
+        self._param_state.apply_modes(mode, active_mode)
+        if not self.on_demand or self._param_state.guard_mode is None:
             return
         # A station reached on demand has no dump to follow the push: file the modes as
         # parameters, so its state (and a later, older cloud snapshot) sees them.
-        self._file_modes("push")
-
-    def _file_modes(self, origin: str, *, origin_kind: ParamOrigin | None = None) -> None:
-        """File the known modes as the station's own parameters (1224, 1151), dated now.
-
-        The station's state is built from the held parameters, so a mode learned without
-        a dump (a push, an arm's result or report) is filed there; a cloud snapshot dated
-        before it then no longer overwrites it (:meth:`ingest_cloud_params`).
-        ``origin_kind`` marks the values as no dump's (:attr:`param_origins`).
-        """
-        values = {GUARD_MODE_PARAM: self._guard_mode, ACTIVE_MODE_PARAM: self._active_mode}
-        dump = ParamDump()
-        for param_id, value in values.items():
-            if value is None:
-                continue
-            for block in self._station_blocks:
-                dump.devices.setdefault(block, {})[param_id] = str(int(value))
-        if not dump.devices:
-            return
-        self._merge_dump(dump, origin, time.time(), origin_kind=origin_kind)
-        self._complete_dump(None)
+        self._param_state.file_modes("push")
 
     def _scalar_cipher(self) -> tuple[bytes, int]:
         """Key and encryption type of an ECB scalar frame: the session key on an RSA
@@ -954,11 +903,6 @@ class StationSession:
         if self._aes_key is not None:
             return self._aes_key, self._session_encryption
         return key, FRAME_STATIC_ECB
-
-    def _dump_carries_mode(self) -> bool:
-        """Whether a dump delivered the station's selected mode (1224) that is held."""
-        key = (self._station_blocks[0], GUARD_MODE_PARAM)
-        return key in self._params and key not in self._param_origin
 
     def ingest_cloud_params(
         self, dev_type: int, params: Iterable[tuple[int, str, float | None]]
@@ -972,33 +916,7 @@ class StationSession:
         emits ``ParamChanged`` (and ``GuardModeChanged``, as a cloud report) and completes
         a dump, so the station's state follows.
         """
-        targets = tuple(self._block_aliases.get(dev_type, (dev_type,)))
-        fresh: list[dict[str, Any]] = []
-        stamps: dict[int, float] = {}
-        for param_id, value, updated_at in params:
-            keys = [(block, param_id) for block in targets]
-            if updated_at is None:
-                if any(key in self._params for key in keys):
-                    continue
-            elif updated_at <= max((self._param_at.get(key, 0.0) for key in keys), default=0.0):
-                continue
-            fresh.append({"dev_type": dev_type, "param_type": param_id, "param_value": value})
-            if updated_at is not None:
-                stamps[param_id] = updated_at
-        if not fresh:
-            return 0
-        dump = ParamDump()
-        dump.ingest({"params": fresh}, aliases=self._block_aliases)
-        self._merge_dump(
-            dump,
-            "cloud snapshot",
-            time.time(),
-            stamps,
-            source=EventSource.CLOUD,
-            origin_kind=ParamOrigin.CLOUD,
-        )
-        self._complete_dump(None)
-        return len(fresh)
+        return self._param_state.ingest_cloud_params(dev_type, params)
 
     def apply_local_params(self, channel: int, values: Mapping[int, str]) -> None:
         """Merge parameter values a successful write just set on ``channel``, as one dump.
@@ -1007,23 +925,7 @@ class StationSession:
         A standalone device's values are filed under every alias of its block. Emits
         ``ParamChanged`` for each change and notifies the dump listeners.
         """
-        if not values:
-            return
-        block = next(
-            (dev for dev, targets in self._block_aliases.items() if channel in targets), channel
-        )
-        dump = ParamDump()
-        dump.ingest(
-            {
-                "params": [
-                    {"dev_type": block, "param_type": pid, "param_value": value}
-                    for pid, value in values.items()
-                ]
-            },
-            aliases=self._block_aliases,
-        )
-        self._merge_dump(dump, "local write", time.time(), origin_kind=ParamOrigin.LOCAL_WRITE)
-        self._notify_dump_listeners()
+        self._param_state.apply_local_params(channel, values)
 
     @property
     def storage(self) -> StorageInfo | None:
@@ -1034,42 +936,37 @@ class StationSession:
     def params(self) -> Mapping[tuple[int, int], str | None]:
         """Every parameter held, keyed by ``(dev_type, param_id)``: the latest value of
         each, minus the blocks a full read no longer carries (see :meth:`add_dump_listener`)."""
-        return self._params
+        return self._param_state.params
 
     @property
     def param_origins(self) -> Mapping[tuple[int, int], ParamOrigin]:
         """The :attr:`params` keys whose value no dump delivered: a cloud snapshot's
         (:meth:`ingest_cloud_params`) or this library's own write
         (:meth:`apply_local_params`), until a dump carries the key again."""
-        return MappingProxyType(self._param_origin)
+        return self._param_state.param_origins
 
     def param_time(self, key: tuple[int, int]) -> float | None:
         """Epoch seconds :attr:`params` ``[key]`` dates from (see :meth:`ingest_cloud_params`);
         None when the key is not held."""
-        return self._param_at.get(key)
+        return self._param_state.param_time(key)
 
     @property
     def expect_channels(self) -> frozenset[int]:
         """The paired sub-devices' channels every read without its own list waits for."""
-        return self._expect_channels
+        return self._param_state.expect_channels
 
     @expect_channels.setter
     def expect_channels(self, channels: Iterable[int]) -> None:
-        self._expect_channels = frozenset(channels)
+        self._param_state.expect_channels = channels
 
     @property
     def unread_dump_keys(self) -> frozenset[str]:
         """Top-level keys of this session's parameter dumps that the library does not read."""
-        return frozenset(self._unread_dump_keys)
+        return self._param_state.unread_dump_keys
 
     def merged_params(self) -> ParamDump:
         """A copy of :attr:`params` and the latest frame-level fields, as one dump."""
-        dump = ParamDump()
-        for (dev, pid), value in self._params.items():
-            if value is not None:
-                dump.devices.setdefault(dev, {})[pid] = value
-        dump.meta.update(self._meta)
-        return dump
+        return self._param_state.merged_params()
 
     def add_dump_listener(self, callback: Callable[[], None]) -> Unsubscribe:
         """Call ``callback`` once per completed parameter dump; returns the unsubscribe.
@@ -1087,13 +984,7 @@ class StationSession:
 
         A failing read signals nothing. A failing callback is logged, never raised.
         """
-        self._dump_listeners.append(callback)
-
-        def unsubscribe() -> None:
-            with contextlib.suppress(ValueError):
-                self._dump_listeners.remove(callback)
-
-        return unsubscribe
+        return self._param_state.add_dump_listener(callback)
 
     def add_notify_listener(
         self, callback: Callable[[Mapping[str, Any], FrameCipher], None]
@@ -1290,7 +1181,7 @@ class StationSession:
     async def async_close(self) -> None:
         """Stop supervising and close the session for good."""
         self._closed = True
-        self._cancel_push_timer()
+        self._param_state.cancel_push_timer()
         if self._supervisor is not None:
             self._supervisor.cancel()
             # A supervisor that died on an unexpected error holds it here; closing must
@@ -1320,7 +1211,7 @@ class StationSession:
         timeout = _or(timeout, PARAM_QUERY_TIMEOUT)
         await self.async_connect()
         dump = ParamDump()
-        channels = self._expect_channels if expect_channels is None else expect_channels
+        channels = self._param_state.expect_channels if expect_channels is None else expect_channels
         expected = {STATION_CHANNEL, *channels}
 
         def complete() -> bool:
@@ -1329,7 +1220,7 @@ class StationSession:
 
         def collect(inbound: Inbound) -> None:
             if inbound.type == FrameType.PARAM_NOTIFY and (obj := inbound.json()) is not None:
-                self._ingest_dump(dump, obj)
+                self._param_state.ingest_dump(dump, obj)
 
         def done(inbound: Inbound) -> ParamDump | None:
             collect(inbound)
@@ -1355,8 +1246,8 @@ class StationSession:
                 self._announce_connected()
                 if not complete():
                     await self._listen(collect, PARAM_SETTLE, until=complete)
-                full = self._expect_channels <= expected
-                self._complete_dump(dump.devices.keys() if full else None)
+                full = self._param_state.expect_channels <= expected
+                self._param_state.complete_dump(dump.devices.keys() if full else None)
             finally:
                 self._probing = False
                 self._probe_ended_at = time.monotonic()
@@ -1502,17 +1393,17 @@ class StationSession:
         _raise_waiter_error(waiter)  # the session was lost, or the station rejected it
 
         if applied:
-            self._set_modes(mode, None if schedule else mode)
-            self._file_modes("arm", origin_kind=ParamOrigin.LOCAL_WRITE)
+            self._param_state.set_modes(mode, None if schedule else mode)
+            self._param_state.file_modes("arm", origin_kind=ParamOrigin.LOCAL_WRITE)
             return mode
         if reported and not schedule:
             result = as_guard_mode(reported[-1])
-            self._set_modes(result, result)
+            self._param_state.set_modes(result, result)
             # The report is the station's word on its mode: file it as its parameters,
             # so the state follows it on a station no dump follows (one reached on
             # demand, one whose dump lacks the mode) until a newer dump or cloud
             # snapshot says otherwise.
-            self._file_modes("arm", origin_kind=ParamOrigin.LOCAL_WRITE)
+            self._param_state.file_modes("arm", origin_kind=ParamOrigin.LOCAL_WRITE)
             if result != mode:
                 raise CommandRejectedError(
                     CMD_SET_ARMING, int(result), f"station applied {result!r}"
@@ -3891,7 +3782,7 @@ class StationSession:
         self._still_owed.clear()  # a late reply cannot cross into a new connection
         # A pending settle timer would otherwise fire _complete_dump on a dead link and
         # announce a completed dump assembled from whatever arrived before the drop.
-        self._cancel_push_timer()
+        self._param_state.cancel_push_timer()
         self._fail_waiters(StationUnreachableError(reason))
         if cause is not None and was_announced:
             self._emit_down(cause, error, reason)
@@ -4258,26 +4149,13 @@ class StationSession:
         )
         self._bus.emit(AccountMismatch(station_sn=self.serial))
 
-    def _ingest_dump(self, dump: ParamDump, obj: Mapping[str, Any]) -> None:
-        """Merge a station's 0x044F object; a standalone device's lone block under an
-        unknown label is filed as its own (:meth:`~..params.ParamDump.ingest` ``other``)."""
-        other = self._station_blocks if self._block_aliases else None
-        dump.ingest(obj, aliases=self._block_aliases, other=other)
-        for label in dump.relabelled:
-            if self._throttle.should_log(("relabelled-block", label)):
-                _LOGGER.debug(
-                    "%s: parameter block labelled %d filed as the device's own",
-                    self._log_name,
-                    label,
-                )
-
     def _handle_params(self, inbound: Inbound) -> None:
         obj = inbound.json()
         if obj is None:
             return
         dump = ParamDump()
-        self._ingest_dump(dump, obj)
-        self._merge_dump(dump, "read" if self._probing else "unsolicited", time.time())
+        self._param_state.ingest_dump(dump, obj)
+        self._param_state.merge_dump(dump, "read" if self._probing else "unsolicited", time.time())
         now = time.monotonic()
         straggler = self._probe_ended_at is not None and now - self._probe_ended_at < PARAM_SETTLE
         if not self._probing and not straggler and self._reprobe_at is None:
@@ -4286,73 +4164,7 @@ class StationSession:
             # A block right after this session's own read is that read's late sub-device block.
             self._reprobe_at = now + UNSOLICITED_REPROBE_DELAY
         if not self._probing:
-            self._note_pushed_blocks(dump.devices)
-
-    def _merge_dump(
-        self,
-        dump: ParamDump,
-        origin: str,
-        now: float,
-        stamps: Mapping[int, float] | None = None,
-        *,
-        source: EventSource = EventSource.P2P,
-        origin_kind: ParamOrigin | None = None,
-    ) -> None:
-        """Merge ``dump`` into the held parameters: emit each change, then the guard modes.
-
-        ``stamps`` date values by parameter id (a cloud snapshot); others date from ``now``.
-        ``origin_kind`` marks the values as not a dump's (:attr:`param_origins`).
-        """
-        self._meta.update(dump.meta)
-        for unread in sorted(dump.unread.keys() - self._unread_dump_keys):
-            self._unread_dump_keys.add(unread)
-            _LOGGER.info(
-                "%s: parameter dump carries key %r (%s), which the library does not read",
-                self._log_name,
-                unread,
-                type(dump.unread[unread]).__name__,
-            )
-        flat = dump.flatten()
-        changed = sum(
-            1 for key, new in flat.items() if key in self._params and self._params[key] != new
-        )
-        _LOGGER.debug(
-            "%s: parameter dump (%s): channels %s, %d value(s), %d changed",
-            self._log_name,
-            origin,
-            sorted(dump.devices),
-            len(flat),
-            changed,
-        )
-        for key, new in flat.items():
-            known = key in self._params
-            old = self._params.get(key)
-            self._params[key] = new
-            self._param_at[key] = stamps.get(key[1], now) if stamps else now
-            if origin_kind is None:
-                self._param_origin.pop(key, None)
-            else:
-                self._param_origin[key] = origin_kind
-            if known and old != new:
-                if key[0] not in self._alias_copies and _LOGGER.isEnabledFor(logging.DEBUG):
-                    info = self._param(key[1], key[0])
-                    _LOGGER.debug(
-                        "%s: param ch%d/%d: %s → %s / %s",
-                        self._log_name,
-                        key[0],
-                        key[1],
-                        info.raw(old),
-                        info.raw(new),
-                        info.change(old, new),
-                    )
-                self._bus.emit(
-                    ParamChanged(
-                        station_sn=self.serial, channel=key[0], param_id=key[1], old=old, new=new
-                    )
-                )
-        mode, active = dump.guard_mode, dump.active_mode
-        if mode is not None or active is not None:
-            self._set_modes(mode, active, source=source)
+            self._param_state.note_pushed_blocks(dump.devices, PARAM_SETTLE)
 
     def _handle_alarm(self, frame: Frame) -> None:
         """An alarm frame (tone, siren, light): cache its value per channel, emit
@@ -4375,20 +4187,7 @@ class StationSession:
             alarm.values,
             self._param(alarm.param_id, alarm.channel).describe(),
         )
-        key = (alarm.channel, alarm.param_id)
-        old, new = self._params.get(key), alarm.value
-        self._param_origin.pop(key, None)
-        if old != new:
-            self._params[key] = new
-            self._bus.emit(
-                ParamChanged(
-                    station_sn=self.serial,
-                    channel=alarm.channel,
-                    param_id=alarm.param_id,
-                    old=old,
-                    new=new,
-                )
-            )
+        self._param_state.take_alarm_value(alarm.channel, alarm.param_id, alarm.value)
         for listener in list(self._alarm_listeners):
             try:
                 listener(alarm)
@@ -4408,54 +4207,6 @@ class StationSession:
             _LOGGER.debug("%s: alarm %s", self._log_name, "on" if change.alarming else "off")
             self._bus.emit(change)
 
-    def _note_pushed_blocks(self, channels: Iterable[int]) -> None:
-        """Track a frame of an unsolicited dump; signal its completion (see
-        :meth:`add_dump_listener`) at once when the station block and every expected
-        channel are in, else :data:`PARAM_SETTLE` seconds after its last frame."""
-        self._push_channels.update(channels)
-        self._cancel_push_timer()
-        expected = {STATION_CHANNEL, *self._expect_channels}
-        if len(expected) > 1 and expected <= self._push_channels:
-            self._complete_dump(None)
-        else:
-            self._push_timer = asyncio.get_running_loop().call_later(
-                PARAM_SETTLE, self._complete_dump, None
-            )
-
-    def _cancel_push_timer(self) -> None:
-        if self._push_timer is not None:
-            self._push_timer.cancel()
-            self._push_timer = None
-
-    def _complete_dump(self, carried: Collection[int] | None) -> None:
-        """A dump completed; ``carried``: the blocks of a full read (others are dropped).
-
-        Only pass ``carried`` for a read that waited for every expected channel — then a
-        block that is absent really has departed. A read that gave up waiting must pass
-        ``None``: dropping a block that was merely late erases the device's whole
-        parameter set, and a camera would vanish from the caller's state, battery and
-        signal entities with it, until the next complete dump.
-        """
-        self._cancel_push_timer()
-        self._push_channels.clear()
-        if carried is not None:
-            for key in [key for key in self._params if key[0] not in carried]:
-                del self._params[key]
-                self._param_origin.pop(key, None)
-                # The freshness stamp is only meaningful with the value it describes.
-                # Leaving it behind leaks a key per departed device, and a re-paired
-                # device's fresh cloud value would be rejected as older than a stamp
-                # that outlived the value.
-                self._param_at.pop(key, None)
-        self._notify_dump_listeners()
-
-    def _notify_dump_listeners(self) -> None:
-        for listener in list(self._dump_listeners):
-            try:
-                listener()
-            except Exception:
-                _LOGGER.exception("%s: parameter dump listener failed", self._log_name)
-
     def _note_mode_report(self, value: GuardMode | int) -> None:
         """A ``0x047F`` report: the effective mode.
 
@@ -4469,54 +4220,16 @@ class StationSession:
         """
         arming = self._arming_to
         if arming is GuardMode.SCHEDULE:
-            self._set_modes(GuardMode.SCHEDULE, value)
-        elif self._guard_mode != GuardMode.SCHEDULE or value == arming:
-            self._set_modes(value, value)
+            self._param_state.set_modes(GuardMode.SCHEDULE, value)
+        elif self._param_state.guard_mode != GuardMode.SCHEDULE or value == arming:
+            self._param_state.set_modes(value, value)
         else:
-            self._set_modes(None, value)
+            self._param_state.set_modes(None, value)
             if self._reprobe_at is None:
                 self._reprobe_at = time.monotonic() + UNSOLICITED_REPROBE_DELAY
-        if not self._dump_carries_mode():
+        if not self._param_state.dump_carries_mode():
             # A station whose dump lacks the mode: the report is its only local word.
-            self._file_modes("mode report", origin_kind=ParamOrigin.LOCAL_WRITE)
-
-    def _apply_modes(self, mode: GuardMode | int | None, active: GuardMode | int | None) -> bool:
-        """Update the selected and effective mode; whether either changed.
-
-        None leaves a value as it is, except that a selected mode other than Schedule
-        without an effective one is its own effective mode.
-        """
-        before = (self._guard_mode, self._active_mode)
-        if mode is not None:
-            self._guard_mode = mode
-        if active is not None:
-            self._active_mode = active
-        elif mode is not None and mode != GuardMode.SCHEDULE:
-            self._active_mode = mode
-        return (self._guard_mode, self._active_mode) != before
-
-    def _set_modes(
-        self,
-        mode: GuardMode | int | None,
-        active: GuardMode | int | None,
-        *,
-        source: EventSource = EventSource.P2P,
-    ) -> None:
-        """Apply the modes the station reported; emit :class:`GuardModeChanged` on a change."""
-        before = (self._guard_mode, self._active_mode)
-        if not self._apply_modes(mode, active) or self._guard_mode is None:
-            return
-        _LOGGER.debug(
-            "%s: guard mode %r → %r", self._log_name, before, (self._guard_mode, self._active_mode)
-        )
-        self._bus.emit(
-            GuardModeChanged(
-                station_sn=self.serial,
-                mode=self._guard_mode,
-                active_mode=self._active_mode,
-                source=source,
-            )
-        )
+            self._param_state.file_modes("mode report", origin_kind=ParamOrigin.LOCAL_WRITE)
 
     def _state_encryption(self, frame: Frame) -> str:
         """A state frame's label in :attr:`SessionStats.state_frames_by_encryption`."""

@@ -92,11 +92,11 @@ from eufy_home_security.p2p.session import (
     Inbound,
     MemoryKeyRefreshLatch,
     P2PCredentials,
-    ParamOrigin,
     StationSession,
     _scalar_result,
 )
 from eufy_home_security.p2p.session.media_stream import MediaStream
+from eufy_home_security.p2p.session.param_state import ParamOrigin
 from eufy_home_security.p2p.transport import PPPPTransport
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
 from eufy_home_security.recordings import RecordingRef, decode_ref, encode_ref
@@ -3591,11 +3591,11 @@ async def test_note_guard_mode_on_demand(station: FakeStation) -> None:
         on_demand=True,
         block_aliases={48: (255, 0)},
     )
-    session._params[(255, 1224)] = "0"
-    session._param_at[(255, 1224)] = 10.0
+    session._param_state._params[(255, 1224)] = "0"
+    session._param_state._param_at[(255, 1224)] = 10.0
     session.note_guard_mode(GuardMode.HOME)
-    assert session._params[(255, 1224)] == "1"
-    assert session._param_at[(255, 1224)] > 10.0
+    assert session._param_state._params[(255, 1224)] == "1"
+    assert session._param_state._param_at[(255, 1224)] > 10.0
 
 
 async def test_ingest_cloud_params_block_aliases_and_events(station: FakeStation) -> None:
@@ -3612,7 +3612,7 @@ async def test_ingest_cloud_params_block_aliases_and_events(station: FakeStation
     assert session.params[(255, 1224)] == "1"
     assert session.params[(0, 1101)] == "87"
 
-    session._param_at[(255, 1224)] = 20.0
+    session._param_state._param_at[(255, 1224)] = 20.0
     count_old = session.ingest_cloud_params(48, [(1224, "0", 15.0)])
     assert count_old == 0
     assert session.params[(255, 1224)] == "1"
@@ -3639,7 +3639,7 @@ async def test_apply_local_params_merges_written_values_as_a_dump(
         block_aliases=aliases,
     )
     for block in blocks:
-        session._params[(block, 1246)] = "1"
+        session._param_state._params[(block, 1246)] = "1"
     events: list[Event] = []
     session.subscribe(events.append)
     dumps: list[None] = []

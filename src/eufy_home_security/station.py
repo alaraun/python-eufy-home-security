@@ -220,11 +220,11 @@ from .p2p.params import (
 )
 from .p2p.session import (
     CommandOutcome,
-    ParamOrigin,
     RecipeReply,
     StationSession,
 )
 from .p2p.session.media_stream import MediaStream
+from .p2p.session.param_state import ParamOrigin
 from .p2p.session.stats import SessionStats
 from .p2p.station_config_codecs import (
     CMD_CUSTOM_MODES,
