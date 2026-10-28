@@ -27,7 +27,7 @@ import math
 import secrets
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, NoReturn
 from urllib.parse import urlsplit
@@ -217,6 +217,24 @@ _PENDING_TEXT_FIELDS: Final = (
     "ab",
 )
 """The string fields every ``cloud.pending_logins`` entry needs, in :meth:`_PendingLogin.from_cache` order."""
+
+
+@dataclass(frozen=True, slots=True)
+class _LoginRequest:
+    """One ``passport/login`` to send (:meth:`EufyCloudApi._send_login`)."""
+
+    identity: _Identity
+    """The key-exchange identity the login is sent under."""
+    wrapped: crypto.LoginPassword
+    """The password wrap."""
+    ab: str
+    """The ``ab`` sent."""
+    answer: Mapping[str, str]
+    """The challenge answer fields."""
+
+
+type _LoginAnswer = tuple[int, dict[str, Any], Any]
+"""A login's ``(code, full response, decrypted data)`` (:meth:`EufyCloudApi._call`)."""
 
 
 def _pending_token(data: object) -> tuple[str | None, str | None]:
@@ -1284,6 +1302,46 @@ class EufyCloudApi:
             (password, "reauthenticating") if password else await self._login_password()
         )
         await self._resolve_login_country()
+        self._raise_unless_login_scope(region)
+        wanted = self.login_ab(region)
+        self._log_login_start(region, password, source, wanted)
+        pending = self._pending_login(region) if verify_code else None
+        request = (
+            self._answer_in_pending_login(
+                region, pending, password, verify_code=verify_code, login_id=login_id
+            )
+            if pending is not None
+            else await self._new_login_request(
+                region,
+                password,
+                wanted,
+                verify_code=verify_code,
+                captcha_id=captcha_id,
+                captcha_answer=captcha_answer,
+                login_id=login_id,
+            )
+        )
+        try:
+            if pending is not None:
+                answer = await self._send_login_request(request)
+            else:
+                request, answer = await self._send_new_login(
+                    region, request, fallback=fallback, interactive=interactive
+                )
+        except (AuthenticationError, _RekeyRequiredError) as err:
+            await self._handle_login_refusal(region, err, password, answering=bool(verify_code))
+            raise
+        await self._raise_if_login_challenged(
+            region, request, answer, answered=pending, interactive=interactive
+        )
+        await self._finish_login(region, request, answer, wanted=wanted, password=password)
+
+    def _raise_unless_login_scope(self, region: str) -> None:
+        """Refuse a login to ``region`` before anything is sent: a region scope while
+        the login country lookup did not answer (:meth:`_raise_if_country_unknown`),
+        :class:`NoCachedSessionError` for a ``region`` that is no login scope, and the
+        recorded refusal (``_ScopeRefusedError``) of a scope in :meth:`refused_regions`.
+        """
         self._raise_if_country_unknown(region)
         if region not in self.login_scopes():
             raise NoCachedSessionError(
@@ -1297,7 +1355,9 @@ class EufyCloudApi:
                 f"the cloud refused the {region} login; not asked again until a rescan",
                 endpoint=const.LOGIN_PATH,
             )
-        wanted = self.login_ab(region)
+
+    def _log_login_start(self, region: str, password: str, source: str, wanted: str) -> None:
+        """Log the login about to be sent (the password redacted, the e-mail a secret)."""
         _LOGGER.info(
             "logging in to the eufy cloud as %s (password %s, region %s, ab %s)",
             Secret(self._email),
@@ -1315,108 +1375,179 @@ class EufyCloudApi:
                 )
             ),
         )
-        pending = self._pending_login(region) if verify_code else None
-        if pending is not None:
-            # The app answers inside the pending login: its key identity and token, the
-            # same password wrap, and no captcha fields.
-            identity = pending.identity
-            wrapped = crypto.rewrap_login_password(
+
+    @staticmethod
+    def _answer_in_pending_login(
+        region: str,
+        pending: _PendingLogin,
+        password: str,
+        *,
+        verify_code: str | None,
+        login_id: str | None,
+    ) -> _LoginRequest:
+        """The verification code answer sent inside ``pending``, as the app answers:
+        its key identity and token, the same password wrap and ``ab``, no captcha
+        fields."""
+        request = _LoginRequest(
+            identity=pending.identity,
+            wrapped=crypto.rewrap_login_password(
                 password, pending.client_public_key, pending.secret
-            )
-            ab = pending.ab
-            answer = {"verify_code": verify_code or "", "login_id": login_id or ""}
-            _LOGGER.info("%s answering the verification code inside the pending login", region)
-        else:
-            if verify_code:
-                _LOGGER.info("%s has no pending login kept; answering with a new login", region)
-            identity = await self._key_exchange(
-                self._host("openapi", region),
-                const.KEY_EXCHANGE_PATH,
-                const.MEGA_PRESET_KEY,
-                region=region,
-            )
-            wrapped = crypto.encrypt_login_password(password)
-            answer = {
-                "answer": captcha_answer or "",
-                "captcha_id": captcha_id or "",
-                "verify_code": verify_code or "",
-                "login_id": login_id or "",
-            }
-            ab = wanted
-            settled = self._cache.cloud_sessions().get(region, {})
-            if settled.get(_AB_WANTED_KEY) == wanted and settled.get(_AB_KEY) not in (None, wanted):
-                # The cloud refused this country for the scope before: send the ab it took.
-                ab = str(settled[_AB_KEY])
-                _LOGGER.info(
-                    "%s login with ab %s, as the refused ab %s settled", region, ab, wanted
-                )
+            ),
+            ab=pending.ab,
+            answer={"verify_code": verify_code or "", "login_id": login_id or ""},
+        )
+        _LOGGER.info("%s answering the verification code inside the pending login", region)
+        return request
+
+    async def _new_login_request(
+        self,
+        region: str,
+        password: str,
+        wanted: str,
+        *,
+        verify_code: str | None,
+        captcha_id: str | None,
+        captcha_answer: str | None,
+        login_id: str | None,
+    ) -> _LoginRequest:
+        """A new login to ``region``: a key exchange, the password wrapped for it, the
+        challenge answer fields (blank when absent) and the ``ab`` of
+        :meth:`_settled_ab`."""
+        if verify_code:
+            _LOGGER.info("%s has no pending login kept; answering with a new login", region)
+        identity = await self._key_exchange(
+            self._host("openapi", region),
+            const.KEY_EXCHANGE_PATH,
+            const.MEGA_PRESET_KEY,
+            region=region,
+        )
+        wrapped = crypto.encrypt_login_password(password)
+        answer = {
+            "answer": captcha_answer or "",
+            "captcha_id": captcha_id or "",
+            "verify_code": verify_code or "",
+            "login_id": login_id or "",
+        }
+        return _LoginRequest(identity, wrapped, self._settled_ab(region, wanted), answer)
+
+    def _settled_ab(self, region: str, wanted: str) -> str:
+        """The ``ab`` a new login to ``region`` sends: ``wanted``, or the ``ab`` the
+        scope's cached session settled on after the cloud refused ``wanted`` there."""
+        settled = self._cache.cloud_sessions().get(region, {})
+        if settled.get(_AB_WANTED_KEY) == wanted and settled.get(_AB_KEY) not in (None, wanted):
+            # The cloud refused this country for the scope before: send the ab it took.
+            ab = str(settled[_AB_KEY])
+            _LOGGER.info("%s login with ab %s, as the refused ab %s settled", region, ab, wanted)
+            return ab
+        return wanted
+
+    async def _send_new_login(
+        self, region: str, request: _LoginRequest, *, fallback: bool, interactive: bool
+    ) -> tuple[_LoginRequest, _LoginAnswer]:
+        """Send a new login; returns the request as last sent and its answer.
+
+        A refusal with a plain body code (a :class:`CloudApiError` of no subclass) of
+        an extra country's scope is recorded and raised as ``_ScopeRefusedError`` when
+        ``interactive``. Of a region scope, with ``fallback``, it is sent once more
+        with the region as ``ab`` (after the hold-off check), unless that was the
+        ``ab`` already. Every other refusal propagates.
+        """
         try:
-            if pending is not None:
-                code, resp, data = await self._send_login(identity, wrapped, ab, answer)
-            else:
-                try:
-                    code, resp, data = await self._send_login(identity, wrapped, ab, answer)
-                except CloudApiError as err:
-                    if (
-                        interactive
-                        and type(err) is CloudApiError
-                        and const.scope_country(region) is not None
-                    ):
-                        await self._refuse_scope(region, err)
-                    fallback_ab = region if const.scope_country(region) is None else None
-                    if not (
-                        fallback
-                        and fallback_ab
-                        and ab != fallback_ab
-                        and type(err) is CloudApiError
-                    ):
-                        raise
-                    _LOGGER.warning(
-                        "%s login with ab %s refused (%s); logging in with ab %s",
-                        region,
-                        ab,
-                        err,
-                        fallback_ab,
-                    )
-                    self._raise_if_held_off(login=True, region=region)
-                    ab = fallback_ab
-                    code, resp, data = await self._send_login(identity, wrapped, ab, answer)
-        except (AuthenticationError, _RekeyRequiredError) as err:
-            if verify_code:
-                # The challenge's login accepted this password: the answer failed, not it.
-                await self._drop_pending_login(region)
-                _LOGGER.warning(
-                    "%s cloud refused the verification code answer (%s); the password is kept",
-                    region,
-                    err,
-                )
-                raise LoginVerificationError(
-                    f"the cloud refused the {region} verification code answer: {err}",
-                    code=getattr(err, "code", 0),
-                    region=region,
-                ) from err
-            if not isinstance(err, AuthenticationError):
+            return request, await self._send_login_request(request)
+        except CloudApiError as err:
+            if (
+                interactive
+                and type(err) is CloudApiError
+                and const.scope_country(region) is not None
+            ):
+                await self._refuse_scope(region, err)
+            fallback_ab = region if const.scope_country(region) is None else None
+            if not (
+                fallback
+                and fallback_ab
+                and request.ab != fallback_ab
+                and type(err) is CloudApiError
+            ):
                 raise
-            if not isinstance(err, _SessionExpiredError) and self._cache.password == password:
-                # A rejected cached password is never tried again: each failure
-                # counts toward the account lock.
-                _LOGGER.warning("the cloud rejected the cached password; forgetting it")
-                self._cache.drop_password()
-                await self._cache.async_save()
-            raise
+            _LOGGER.warning(
+                "%s login with ab %s refused (%s); logging in with ab %s",
+                region,
+                request.ab,
+                err,
+                fallback_ab,
+            )
+            self._raise_if_held_off(login=True, region=region)
+            request = replace(request, ab=fallback_ab)
+            return request, await self._send_login_request(request)
+
+    async def _send_login_request(self, request: _LoginRequest) -> _LoginAnswer:
+        """Send ``request`` as one ``passport/login`` (:meth:`_send_login`)."""
+        return await self._send_login(request.identity, request.wrapped, request.ab, request.answer)
+
+    async def _handle_login_refusal(
+        self,
+        region: str,
+        err: AuthenticationError | _RekeyRequiredError,
+        password: str,
+        *,
+        answering: bool,
+    ) -> None:
+        """Act on a login's credential or re-key refusal ``err``; the caller re-raises it.
+
+        A refused verification code answer (``answering``) drops the scope's pending
+        login and raises :class:`LoginVerificationError`, the password kept. Else a
+        credential rejection of the cached password (not an expired session) forgets
+        that password.
+        """
+        if answering:
+            # The challenge's login accepted this password: the answer failed, not it.
+            await self._drop_pending_login(region)
+            _LOGGER.warning(
+                "%s cloud refused the verification code answer (%s); the password is kept",
+                region,
+                err,
+            )
+            raise LoginVerificationError(
+                f"the cloud refused the {region} verification code answer: {err}",
+                code=getattr(err, "code", 0),
+                region=region,
+            ) from err
+        if not isinstance(err, AuthenticationError):
+            return
+        if not isinstance(err, _SessionExpiredError) and self._cache.password == password:
+            # A rejected cached password is never tried again: each failure
+            # counts toward the account lock.
+            _LOGGER.warning("the cloud rejected the cached password; forgetting it")
+            self._cache.drop_password()
+            await self._cache.async_save()
+
+    async def _raise_if_login_challenged(
+        self,
+        region: str,
+        request: _LoginRequest,
+        answer: _LoginAnswer,
+        *,
+        answered: _PendingLogin | None,
+        interactive: bool,
+    ) -> None:
+        """Raise what a login ``answer`` asks instead of a session: a captcha or an
+        e-mailed code (a challenge code, or code 0 with a pending two-step
+        ``fa_info.step``) as :class:`LoginChallengeError`, no data as
+        :class:`EmptyResponseError`. ``answered`` is the pending login an answer was
+        sent inside."""
+        code, resp, data = answer
         if code in const.CAPTCHA_CODES or code in const.VERIFY_CODE_CODES:
             await self._note_challenge(region, resp, data, interactive=interactive)
         if code in const.CAPTCHA_CODES:
             _LOGGER.info("%s login needs a captcha (code %s)", region, code)
             await self._raise_captcha_challenge(
-                identity, code, self._extract_login_id(resp, data), request=interactive
+                request.identity, code, self._extract_login_id(resp, data), request=interactive
             )
         if code in const.VERIFY_CODE_CODES:
             _LOGGER.info("%s login needs an e-mailed verification code (code %s)", region, code)
-            await self._keep_pending_login(
-                region, identity, wrapped, ab, data, answered=pending, interactive=interactive
+            await self._raise_verify_code_kept(
+                region, request, code, answer, answered=answered, interactive=interactive
             )
-            await self._raise_verify_code_challenge(identity, code, resp, data, request=interactive)
         if not data:
             raise EmptyResponseError(code, "login returned no data", endpoint=const.LOGIN_PATH)
         step = _two_step(data)
@@ -1427,16 +1558,57 @@ class EufyCloudApi:
             _LOGGER.info(
                 "%s login needs an e-mailed verification code (fa_info step %s)", region, step
             )
-            await self._keep_pending_login(
-                region, identity, wrapped, ab, data, answered=pending, interactive=interactive
+            await self._raise_verify_code_kept(
+                region, request, step, answer, answered=answered, interactive=interactive
             )
-            await self._raise_verify_code_challenge(identity, step, resp, data, request=interactive)
+
+    async def _raise_verify_code_kept(
+        self,
+        region: str,
+        request: _LoginRequest,
+        code: int,
+        answer: _LoginAnswer,
+        *,
+        answered: _PendingLogin | None,
+        interactive: bool,
+    ) -> NoReturn:
+        """Keep the pending login of a verify-code challenge (:meth:`_keep_pending_login`),
+        then raise the challenge with ``code`` (:meth:`_raise_verify_code_challenge`)."""
+        _code, resp, data = answer
+        await self._keep_pending_login(
+            region,
+            request.identity,
+            request.wrapped,
+            request.ab,
+            data,
+            answered=answered,
+            interactive=interactive,
+        )
+        await self._raise_verify_code_challenge(
+            request.identity, code, resp, data, request=interactive
+        )
+
+    async def _finish_login(
+        self,
+        region: str,
+        request: _LoginRequest,
+        answer: _LoginAnswer,
+        *,
+        wanted: str,
+        password: str,
+    ) -> None:
+        """Make a successful login ``answer`` ``region``'s session: clear its challenge,
+        pending login and refusal, store the session with the ``ab`` sent and
+        ``wanted``, cache ``password`` and save."""
+        _code, _resp, data = answer
         if self._challenge_region == region:
             self._challenge_region = None
         for key in (_CHALLENGES_KEY, _PENDING_KEY, _REFUSED_KEY):
             if isinstance(entries := self._cache.section("cloud").get(key), dict):
                 entries.pop(region, None)
-        self._store_session(identity, _mapping(data, const.LOGIN_PATH), ab=ab, ab_wanted=wanted)
+        self._store_session(
+            request.identity, _mapping(data, const.LOGIN_PATH), ab=request.ab, ab_wanted=wanted
+        )
         self._cache.set_password(password)
         await self._cache.async_save()
 
@@ -3099,6 +3271,54 @@ class EufyCloudApi:
         Nothing is sent while a hold-off runs.
         """
         self._raise_if_held_off(login=False)
+        body, headers = self._signed_request(
+            identity,
+            payload,
+            category=category,
+            bootstrap=bootstrap,
+            preset_key=preset_key,
+            auth=auth,
+        )
+        status, retry_after, text, started = await self._post(
+            f"https://{host}{path}",
+            path,
+            headers,
+            body,
+            shown=(
+                {"client_public_key": bootstrap.client_public_key}
+                if bootstrap is not None
+                else dict(payload or {})
+            ),
+        )
+        await self._raise_for_status(
+            status, text, path, retry_after=retry_after, started=started, region=identity.region
+        )
+        parsed = _envelope_object(text, path)
+        code = _body_code(parsed.get("code", _SUCCESS), path)
+        if code == _SUCCESS or code in tolerate:
+            return code, parsed, self._accepted_data(parsed, code, path, identity, started)
+        await self._raise_for_answer_code(
+            code, parsed, path, started=started, region=identity.region
+        )
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def _signed_request(
+        self,
+        identity: _Identity,
+        payload: Mapping[str, Any] | None,
+        *,
+        category: bool,
+        bootstrap: crypto.KeyExchange | None,
+        preset_key: str | None,
+        auth: _Identity | None,
+    ) -> tuple[str, dict[str, str]]:
+        """The body and headers of one call, stamped and signed now.
+
+        A key exchange (``bootstrap`` with ``preset_key``) sends the client public key
+        in plain, signed with the preset and authenticated by ``auth``; any other call
+        sends ``payload`` encrypted under ``identity``'s shared key and signed with its
+        signing key, authenticated by ``identity``'s token.
+        """
         ts = str(int(time.time()))
         nonce = crypto.new_key_ident()
 
@@ -3129,19 +3349,20 @@ class EufyCloudApi:
             auth_token=auth_token,
             auth_user_id=auth_user_id,
         )
+        return body, headers
+
+    async def _post(
+        self, url: str, path: str, headers: dict[str, str], body: str, *, shown: Mapping[str, Any]
+    ) -> tuple[int, float | None, str, float]:
+        """POST ``body`` to ``url`` (``shown`` is what the debug log prints of it).
+
+        Returns ``(HTTP status, Retry-After seconds, response text, monotonic start)``.
+        Raises :class:`CommunicationError` when no answer arrives (a client error or the
+        timeout) and :class:`ProtocolError` for an answer that is not text.
+        """
         import aiohttp  # noqa: PLC0415 - deferred so a cache-only run never imports it
 
-        url = f"https://{host}{path}"
-        _LOGGER.debug(
-            "→ POST %s headers=%s body=%s",
-            url,
-            Payload(headers),
-            Payload(
-                {"client_public_key": bootstrap.client_public_key}
-                if bootstrap is not None
-                else dict(payload or {})
-            ),
-        )
+        _LOGGER.debug("→ POST %s headers=%s body=%s", url, Payload(headers), Payload(shown))
         _WIRE.debug("POST %s body %s", url, body)
         timeout = aiohttp.ClientTimeout(total=const.HTTP_TIMEOUT_SECONDS)
         started = time.monotonic()
@@ -3156,6 +3377,22 @@ class EufyCloudApi:
         except UnicodeDecodeError as exc:
             raise ProtocolError(f"cloud response to {path} was not text: {exc}") from exc
         _WIRE.debug("← %s HTTP %s body %s", path, status, text)
+        return status, retry_after, text, started
+
+    async def _raise_for_status(
+        self,
+        status: int,
+        text: str,
+        path: str,
+        *,
+        retry_after: float | None,
+        started: float,
+        region: str,
+    ) -> None:
+        """Raise the typed error of an HTTP status other than 200: HTTP 429 starts a
+        hold-off (:meth:`_hold_off`), HTTP 401 is :class:`SessionReplacedError` for a
+        replaced-session body code and ``_SessionExpiredError`` otherwise, any other
+        status :func:`classify_refusal`'s error."""
         if status != 200:
             _LOGGER.debug(
                 "← %s HTTP %s in %.0f ms (Retry-After %s): %s",
@@ -3172,7 +3409,7 @@ class EufyCloudApi:
                 status,
                 "HTTP 429",
                 path,
-                region=identity.region,
+                region=region,
                 retry_after=retry_after,
             )
         if status == const.HTTP_UNAUTHORIZED:
@@ -3189,37 +3426,37 @@ class EufyCloudApi:
             )
         if status != 200:
             raise classify_refusal(status, _loose_code(text), _message(_loose_object(text)), path)
-        try:
-            parsed = json.loads(text)
-        except ValueError as exc:
-            raise CommunicationError(f"cloud response to {path} was not JSON") from exc
-        if not isinstance(parsed, dict):
-            raise CommunicationError(f"cloud response to {path} was not an object")
 
-        code = _body_code(parsed.get("code", _SUCCESS), path)
-        if code == _SUCCESS or code in tolerate:
-            data = self._decode_data(parsed, identity)
-            listed = _SUMMARISED_LISTS.get(path)
-            _LOGGER.debug(
-                "← %s HTTP 200 code %s in %.0f ms: %s",
-                path,
-                code,
-                _ms(started),
-                # Lists of devices, homes and invitations as counts (full in the wire dump).
-                Payload({**parsed, "data": data})
-                if listed is None
-                else _list_summary(data, listed),
-            )
-            if listed is not None:
-                _WIRE.debug("← %s data %s", path, Payload(data, limit=1_000_000))
-            return code, parsed, data
+    def _accepted_data(
+        self, parsed: Mapping[str, Any], code: int, path: str, identity: _Identity, started: float
+    ) -> Any:
+        """The decrypted ``data`` of an accepted answer (:meth:`_decode_data`), logged
+        (the summarised lists as counts, in full on the wire logger)."""
+        data = self._decode_data(parsed, identity)
+        listed = _SUMMARISED_LISTS.get(path)
+        _LOGGER.debug(
+            "← %s HTTP 200 code %s in %.0f ms: %s",
+            path,
+            code,
+            _ms(started),
+            # Lists of devices, homes and invitations as counts (full in the wire dump).
+            Payload({**parsed, "data": data}) if listed is None else _list_summary(data, listed),
+        )
+        if listed is not None:
+            _WIRE.debug("← %s data %s", path, Payload(data, limit=1_000_000))
+        return data
+
+    async def _raise_for_answer_code(
+        self, code: int, parsed: Mapping[str, Any], path: str, *, started: float, region: str
+    ) -> NoReturn:
+        """Raise the typed error of a failing body ``code``: a throttle code starts a
+        hold-off (:meth:`_hold_off`), any other is mapped by :meth:`_raise_for_code`."""
         _LOGGER.debug(
             "← %s HTTP 200 code %s in %.0f ms: %s", path, code, _ms(started), Payload(parsed)
         )
         if (throttle := const.THROTTLE_CODES.get(code)) is not None:
-            await self._hold_off(throttle, code, _message(parsed), path, region=identity.region)
+            await self._hold_off(throttle, code, _message(parsed), path, region=region)
         self._raise_for_code(code, parsed, path)
-        raise AssertionError("unreachable")  # pragma: no cover
 
     def _decode_data(self, parsed: Mapping[str, Any], identity: _Identity) -> Any:
         """Decrypt the ``data`` field if it is an encrypted string; pass a dict/list through."""
@@ -3559,6 +3796,18 @@ def _retry_after(value: str | None) -> float | None:
     except ValueError:
         return None
     return seconds if seconds is not None and seconds >= 0 else None
+
+
+def _envelope_object(text: str, path: str) -> dict[str, Any]:
+    """``text`` of a 200 answer as its JSON object; :class:`CommunicationError` when it
+    is no JSON object."""
+    try:
+        parsed = json.loads(text)
+    except ValueError as exc:
+        raise CommunicationError(f"cloud response to {path} was not JSON") from exc
+    if not isinstance(parsed, dict):
+        raise CommunicationError(f"cloud response to {path} was not an object")
+    return parsed
 
 
 def _body_code(value: object, path: str) -> int:

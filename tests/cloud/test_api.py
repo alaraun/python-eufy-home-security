@@ -449,6 +449,53 @@ async def test_a_rekey_answer_to_a_login_keeps_the_cached_password(
     assert cache.password == SYNTHETIC.password
 
 
+async def test_a_login_answered_http_401_keeps_the_cached_password(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """HTTP 401 without a body code is a rejected session, not rejected credentials;
+    its code is the status."""
+    cache.set_password(SYNTHETIC.password)
+    fake_mega.status_once["login"] = (401, {})
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(SessionRejectedError) as caught:
+                await EufyCloudApi(session, cache, SYNTHETIC.email, None, region="eu").async_login()
+    assert caught.value.code == 401
+    assert cache.password == SYNTHETIC.password
+
+
+async def test_a_successful_answer_clears_the_challenge_scope(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.two_step = {"eu"}
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            with pytest.raises(LoginChallengeError):
+                await api.async_login()
+            assert api._challenge_region == "eu"
+            await api.async_login(verify_code="123456")
+    assert api._challenge_region is None
+
+
+async def test_a_login_logs_neither_the_email_nor_the_password(
+    fake_mega: FakeMega, cache: SessionCache, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.cloud.api")
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            await _api(session, cache).async_login()
+    logged = "\n".join(
+        r.getMessage() for r in caplog.records if r.name == "eufy_home_security.cloud.api"
+    )
+    assert "logging in to the eufy cloud as" in logged
+    assert SYNTHETIC.email not in logged
+    assert SYNTHETIC.password not in logged
+
+
 async def test_a_wrong_code_keeps_the_pending_login(
     fake_mega: FakeMega, cache: SessionCache
 ) -> None:
@@ -1546,6 +1593,71 @@ async def test_malformed_bodies_are_protocol_errors(
                 await api.async_get_cipher_key(SYNTHETIC.station_sn)
 
 
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        (lambda shared: "not json", "was not JSON"),
+        (lambda shared: json.dumps([0]), "was not an object"),
+    ],
+    ids=["not-json", "not-an-object"],
+)
+async def test_an_unreadable_envelope_is_a_communication_error(
+    fake_mega: FakeMega, cache: SessionCache, body: Callable[[str], str], match: str
+) -> None:
+    fake_mega.devices = [_STATION_OF_OWNER]
+    fake_mega.body_once["devices"] = body
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(CommunicationError, match=match):
+                await api.async_get_devices()
+
+
+async def test_a_response_that_is_not_text_is_a_protocol_error(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.devices = [_STATION_OF_OWNER]
+    with aioresponses() as mock:
+        # Registered first, so it answers the first device list in place of the fake.
+        mock.post(_devices_url(fake_mega), status=200, body=b"\xff\xfe")
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(ProtocolError, match="was not text"):
+                await api.async_get_devices()
+
+
+async def test_a_call_that_times_out_is_a_communication_error(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    houses = f"https://{const.cluster_host('house', 'eu')}{const.HOUSES_PATH}"
+    with aioresponses() as mock:
+        mock.post(houses, exception=TimeoutError())  # answers before the fake does
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await api.async_login()
+            with pytest.raises(CommunicationError, match="failed"):
+                await api.async_list_houses("eu")
+
+
+async def test_a_login_success_without_data_is_an_empty_response_error(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    fake_mega.body_once["login"] = lambda shared: json.dumps({"code": 0})
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(EmptyResponseError, match="login returned no data") as caught:
+                await _api(session, cache).async_login()
+    assert caught.value.endpoint == const.LOGIN_PATH
+    assert fake_mega.login_calls == 1
+    assert cache.cloud_sessions() == {}
+
+
 async def test_device_success_without_devices_keeps_the_cache(
     fake_mega: FakeMega, cache: SessionCache
 ) -> None:
@@ -1614,6 +1726,10 @@ async def test_login_logs_the_auth_flow_with_secrets_only_when_enabled(
         assert "logging in to the eufy cloud" in text
         assert const.LOGIN_PATH in text
         assert "shared_key" in text
+        posts = [line for line in text.splitlines() if "→ POST" in line]
+        exchanges = [line for line in posts if const.KEY_EXCHANGE_PATH in line]
+        assert exchanges
+        assert all('body={"client_public_key": ' in line for line in exchanges)
         assert FAKE_AUTH_TOKEN not in text
         assert SYNTHETIC.password not in text
         assert "login: password ***," in text  # no tail, no length: either leaks part of it
