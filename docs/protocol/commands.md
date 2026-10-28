@@ -5,7 +5,7 @@ All commands in this file travel on DRW channel 0 inside an established session
 described there. Everything else is a **DeviceMsgBean** in a GCM `0x0546` frame.
 
 Code: `src/eufy_home_security/p2p/messages.py` (builders, decoders, result codes),
-`p2p/params.py` (dump model), `p2p/session.py` (send and confirm),
+`p2p/params.py` (dump model), `p2p/session/` (send and confirm),
 `src/eufy_home_security/devices/` (command names, per-model settings).
 
 ## DeviceMsgBean
@@ -91,7 +91,7 @@ sessions are not held up: a second client's full parameter read took 2.6 s while
 one was pending. Never send a command the firmware may not handle on a session
 that serves reads, and do not resend into a stall — each resend queues again.
 
-**In the library** (`decode_command_receipt` in `p2p/messages.py`, `p2p/session.py`):
+**In the library** (`decode_command_receipt` in `p2p/messages.py`, `p2p/session/`):
 
 - A frame on channel 0 that is GCM-tagged, 132 (or 36) bytes long and zero after its
   first four bytes is taken as a receipt before any decrypt attempt. On an RSA session

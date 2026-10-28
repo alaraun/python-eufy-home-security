@@ -122,6 +122,6 @@ Untagged statements in a section inherit that section's tag.
 | session crypto | `src/eufy_home_security/p2p/crypto.py` |
 | command builders and decoders | `src/eufy_home_security/p2p/messages.py`, `p2p/params.py`, `p2p/notify.py`, `p2p/alarm.py`, `p2p/mode_actions.py`, `p2p/storage_info.py` |
 | media | `src/eufy_home_security/p2p/media.py` |
-| session orchestration | `src/eufy_home_security/p2p/session.py` |
+| session orchestration | `src/eufy_home_security/p2p/session/` |
 | cloud push registration and decoding | `src/eufy_home_security/push/fcm.py`, `push/decode.py`, `push/const.py` |
 | command names and the per-model settings | `src/eufy_home_security/devices/` (see `docs/reference/devices.md`, `docs/reference/models-schema.md`) |

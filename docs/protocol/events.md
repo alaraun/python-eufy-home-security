@@ -15,7 +15,7 @@ A station reports what happens at the house on two independent channels:
 | off-LAN | no | yes |
 
 Code: `src/eufy_home_security/p2p/notify.py` (P2P push decode), `p2p/alarm.py`
-(alarm frames), `p2p/params.py` (dumps), `p2p/session.py` (probe and supervision),
+(alarm frames), `p2p/params.py` (dumps), `p2p/session/` (probe and supervision),
 `src/eufy_home_security/push/fcm.py`, `push/decode.py` and `push/const.py` (FCM),
 `events.py` (ordering, alarm tracking, de-duplication).
 

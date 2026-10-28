@@ -18,6 +18,7 @@ import pytest
 
 import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.p2p.session as session_module
+import eufy_home_security.p2p.session.media_stream as media_stream_module
 from eufy_home_security._logging import set_secret_logging
 from eufy_home_security.devices.recipes import (
     goto_preset,
@@ -89,13 +90,13 @@ from eufy_home_security.p2p.session import (
     CredentialProvider,
     EventSummary,
     Inbound,
-    MediaStream,
     MemoryKeyRefreshLatch,
     P2PCredentials,
     ParamOrigin,
     StationSession,
     _scalar_result,
 )
+from eufy_home_security.p2p.session.media_stream import MediaStream
 from eufy_home_security.p2p.transport import PPPPTransport
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
 from eufy_home_security.recordings import RecordingRef, decode_ref, encode_ref
@@ -2675,7 +2676,7 @@ async def test_lost_session_ends_the_stream_with_an_error(station: FakeStation) 
 async def test_slow_reader_drops_video_until_the_next_keyframe(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(session_module, "MEDIA_QUEUE_FRAMES", 3)
+    monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 3)
     session = make_session(station, Provider(station))
     try:
         async with await session.async_open_live(0) as stream:
@@ -2963,7 +2964,7 @@ async def test_video_dropped_after_a_reader_overflow_counts_as_reader_lag(
 ) -> None:
     """The P-frames dropped until the next keyframe after an overflow are the reader's
     lag (``dropped``), not frames skipped after one that did not decode."""
-    monkeypatch.setattr(session_module, "MEDIA_QUEUE_FRAMES", 2)
+    monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 2)
     session, stream, rsa_key = _rsa_stream(station)
     body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
     stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))

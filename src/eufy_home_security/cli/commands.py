@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
     from ..client import EufySecurity
     from ..devices.model_settings import Setting, Value
-    from ..p2p.session import MediaStream
+    from ..p2p.session.media_stream import MediaStream
     from ..station import Station
 
 LOGIN_CHALLENGE_ROUNDS = 3

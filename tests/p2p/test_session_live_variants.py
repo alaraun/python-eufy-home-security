@@ -22,7 +22,8 @@ from eufy_home_security.exceptions import (
     UnsupportedError,
 )
 from eufy_home_security.p2p.media import MediaFrame, MediaKeyType, MediaKind, VideoVariant
-from eufy_home_security.p2p.session import MediaStream, P2PCredentials, StationSession
+from eufy_home_security.p2p.session import P2PCredentials, StationSession
+from eufy_home_security.p2p.session.media_stream import MediaStream
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import MEDIA_KEYFRAME, FakeStation
 
