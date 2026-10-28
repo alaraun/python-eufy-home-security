@@ -128,7 +128,7 @@ class HistoryQueries:
 
     async def _find_local_event(self, ref: RecordingRef, timeout: float) -> HistoryRecord | None:
         """The row ``ref`` names under ``DB_QUERY_LOCAL_EVENTS``, or None (see
-        :meth:`async_find_history_record`)."""
+        :meth:`find`)."""
         cursors = ref.time_cursors()
         if cursors is None:
             raise RecordingRefError("the recording reference names no start time to ask by")

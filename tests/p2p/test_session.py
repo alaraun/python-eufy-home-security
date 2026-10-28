@@ -565,6 +565,8 @@ async def test_alarm_frames_become_param_and_alarm_changes(
     started = datetime.now(UTC)
     try:
         await session.async_get_params()
+        session.apply_local_params(1, {1202: "7"})  # a value no dump delivered
+        assert (1, 1202) in session.param_origins
         session.subscribe(events.append)
         tone, siren, light = (
             FrameType.ALARM_TONE_NOTIFY,
@@ -584,11 +586,12 @@ async def test_alarm_frames_become_param_and_alarm_changes(
         await wait_until(lambda: (0, 1201) in session.params)
     finally:
         await session.async_close()
+    assert (1, 1202) not in session.param_origins  # the frame's value is the station's own
     params = [(e.channel, e.param_id, e.old, e.new) for e in events if isinstance(e, ParamChanged)]
     assert params == [
         (1, 1400, None, "0"),
         (1, 1201, None, "3"),
-        (1, 1202, None, "25"),
+        (1, 1202, "7", "25"),
         (1, 1400, "0", "1"),
         (255, 1201, None, "16"),
         (0, 1201, None, "0"),
@@ -3216,10 +3219,11 @@ async def test_a_late_answer_to_the_first_history_query_answers_the_second(
 async def test_a_history_page_unanswered_twice_times_out_after_the_default(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The per-query default is read at call time; a single-row lookup is not resent."""
+    """The per-query default is read at call time by every history path; a single-row
+    lookup and a reference lookup are not resent."""
     monkeypatch.setattr(session_mod, "HISTORY_QUERY_TIMEOUT", 0.2)
     session = make_session(station, Provider(station))
-    sent = _history_sends(session, monkeypatch, ["drop"] * 3)
+    sent = _history_sends(session, monkeypatch, ["drop"] * 4)
     try:
         with pytest.raises(DeviceTimeoutError):
             await session.async_list_history("20260916")
@@ -3227,6 +3231,10 @@ async def test_a_history_page_unanswered_twice_times_out_after_the_default(
         with pytest.raises(DeviceTimeoutError):
             await session.async_history_record(2026091600042)
         assert len(sent) == 3
+        ref = RecordingRef(date(2026, 9, 16), 2026091600042, SYNTHETIC.camera_sn)
+        with pytest.raises(DeviceTimeoutError):
+            await asyncio.wait_for(session.async_find_history_record(ref), 5.0)
+        assert len(sent) == 4
     finally:
         await session.async_close()
 

@@ -228,7 +228,7 @@ camera, whether it needs a recording, typical time, verification status).
   alike **[verified]**. The library binds a reply to its request by
   `file`: a reply naming another path is counted (`still_file_mismatches`), logged at
   debug level with the paths redacted, and ignored. The switch is
-  `BIND_STILL_REPLY_TO_PATH` in `p2p/session/` (on).
+  `BIND_STILL_REPLY_TO_PATH` in `p2p/session/__init__.py` (on).
 - Late replies are discarded. Fetches are serialised, so when a fetch times out its
   reply is owed for 30 s: a 1308 reply naming an owed path, or the next one naming
   no path at all, is taken as that late answer and discarded (`still_late_replies`),
