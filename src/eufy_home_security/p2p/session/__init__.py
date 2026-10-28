@@ -221,7 +221,7 @@ from .history import HistoryQueries
 from .keys import SessionKeys
 from .media_stream import MediaStream
 from .param_state import ParamOrigin, ParamState
-from .stats import MediaCounters, SessionStats, count_capped
+from .stats import HealthCounters, MediaCounters, SessionStats, count_capped
 
 _LOGGER = logging.getLogger(__name__)
 _WIRE = wire_logger("p2p")
@@ -587,8 +587,6 @@ class StationSession:
         it belong to that read."""
         self.ecb_state_refused = 0
         """Always 0 (:attr:`SessionStats.ecb_state_refused`)."""
-        self._state_frames: Counter[str] = Counter()
-        """State frames taken, by encryption (``state_frames_by_encryption``)."""
         self._state_authenticated: bool | None = None
         """Whether authenticated state was taken; False after unauthenticated state only."""
         self._unauthenticated_logged: set[tuple[int, str]] = set()
@@ -599,31 +597,16 @@ class StationSession:
         """1308 replies discarded as the late answer to a timed-out request."""
         self._still_owed: deque[tuple[str, float]] = deque()
         """Timed-out 1308 requests whose reply may still arrive: (path, expiry)."""
-        # Health counters behind stats(); none is reset by a reconnect.
-        self._connects = 0
-        self._handshake_failures = 0
-        self._key_refreshes = 0
+        self._health = HealthCounters()
         self._last_error_name: str | None = None
-        self._last_event_at: float | None = None
-        self._events_by_type: Counter[str] = Counter()
-        self._frames_by_cipher: Counter[str] = Counter()
-        self._dropped_undecodable = 0
-        self._receipts_by_code: Counter[str] = Counter()
-        self._retired_wrong_port_drops = 0
-        """Wrong-port drops of transports this session no longer holds."""
-        self._account_mismatch_seen = False
         self._media_counters = MediaCounters()
-        self._stills_by_format: Counter[str] = Counter()
         self._trigger_frame_lock = asyncio.Lock()
         """At most one short-lived trigger-frame session per station at a time."""
-        self._trigger_frame_sessions = 0
         self._extra_live: set[StationSession] = set()
         """Extra sessions carrying (or opening) a live stream while this session's slot is
         busy, or a recording download."""
-        self._extra_live_opened = 0
         self._download_lock = asyncio.Lock()
         """At most one recording download per station at a time."""
-        self._recording_downloads = 0
         self._live_capacity_waiters: list[asyncio.Future[None]] = []
         """Live opens and downloads waiting for this session's slot or an extra session."""
         self._live_owner: StationSession | None = None
@@ -919,22 +902,22 @@ class StationSession:
         media = self._media_counters
         return SessionStats(
             connected=self.announced,
-            connects=self._connects,
-            reconnects=max(self._connects - 1, 0),
-            handshake_failures=self._handshake_failures,
-            key_refreshes=self._key_refreshes,
+            connects=self._health.connects,
+            reconnects=max(self._health.connects - 1, 0),
+            handshake_failures=self._health.handshake_failures,
+            key_refreshes=self._health.key_refreshes,
             last_error=self._last_error_name,
             seconds_since_last_probe=now - self._last_probe if self._last_probe else None,
             seconds_since_last_event=(
-                None if self._last_event_at is None else now - self._last_event_at
+                None if self._health.last_event_at is None else now - self._health.last_event_at
             ),
-            events_by_type=dict(self._events_by_type),
-            frames_by_cipher=dict(self._frames_by_cipher),
+            events_by_type=dict(self._health.events_by_type),
+            frames_by_cipher=dict(self._health.frames_by_cipher),
             ecb_state_refused=self.ecb_state_refused,
-            dropped_undecodable=self._dropped_undecodable,
-            receipts_by_code=dict(self._receipts_by_code),
-            wrong_port_drops=self._retired_wrong_port_drops + live_drops,
-            account_mismatch_seen=self._account_mismatch_seen,
+            dropped_undecodable=self._health.dropped_undecodable,
+            receipts_by_code=dict(self._health.receipts_by_code),
+            wrong_port_drops=self._health.retired_wrong_port_drops + live_drops,
+            account_mismatch_seen=self._health.account_mismatch_seen,
             media_opens=media.opens,
             media_failures_by_type=dict(media.failures),
             media_failures_by_channel={
@@ -954,13 +937,13 @@ class StationSession:
             media_keyframe_continuations=media.keyframe_continuations,
             media_first_records=tuple(media.first_records),
             media_rejected_keyframe=media.rejected_keyframe,
-            stills_by_format=dict(self._stills_by_format),
+            stills_by_format=dict(self._health.stills_by_format),
             still_late_replies=self.still_late_replies,
             still_file_mismatches=self.still_file_mismatches,
-            trigger_frame_sessions=self._trigger_frame_sessions,
-            extra_live_sessions=self._extra_live_opened,
+            trigger_frame_sessions=self._health.trigger_frame_sessions,
+            extra_live_sessions=self._health.extra_live_opened,
             extra_live_sessions_open=len(self._extra_live),
-            recording_downloads=self._recording_downloads,
+            recording_downloads=self._health.recording_downloads,
             media_slot_channel=self.media_slot_channel,
             conn_init_version=self._conn_init_version,
             cipher_id=self._cipher_id,
@@ -968,7 +951,7 @@ class StationSession:
             media_frames_dropped_for_reader=media.dropped_for_reader,
             media_frames_skipped_for_keyframe=media.skipped_for_keyframe,
             media_pframes_without_start_code=media.pframes_without_start_code,
-            state_frames_by_encryption=dict(self._state_frames),
+            state_frames_by_encryption=dict(self._health.state_frames),
             state_authenticated=self.state_authenticated,
         )
 
@@ -2249,7 +2232,7 @@ class StationSession:
         still = Still(path, data, classify_still(data))
         if still.format in DECODABLE_STILLS:
             still = self._decode_still(still)
-        self._stills_by_format[still.format.value] += 1
+        self._health.stills_by_format[still.format.value] += 1
         _LOGGER.debug(
             "%s: image fetch bound: %s, %d bytes in %.2fs",
             self._log_name,
@@ -2399,7 +2382,7 @@ class StationSession:
         async with self._trigger_frame_lock:
             short = self._short_lived_session()
             short._media_counters.codecs_by_channel = self._media_counters.codecs_by_channel
-            self._trigger_frame_sessions += 1
+            self._health.trigger_frame_sessions += 1
             started = time.monotonic()
             try:
                 await short.async_connect()
@@ -2654,7 +2637,7 @@ class StationSession:
                 extra._wake_failures = self._wake_failures  # one wake backoff per camera
                 self._extra_live.add(extra)
                 if slot:
-                    self._extra_live_opened += 1
+                    self._health.extra_live_opened += 1
                 return extra
             remaining = deadline - time.monotonic()
             if not wait or remaining <= 0:
@@ -2706,7 +2689,7 @@ class StationSession:
         first = _or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT)
         async with self._download_lock:
             extra = cast(StationSession, await self._reserve_media_session(first, wait, slot=False))
-            self._recording_downloads += 1
+            self._health.recording_downloads += 1
             started = time.monotonic()
             try:
                 await extra.async_connect()
@@ -3267,7 +3250,7 @@ class StationSession:
                 label="CONN_INIT",
             )
         except DeviceTimeoutError as err:
-            self._handshake_failures += 1
+            self._health.handshake_failures += 1
             self._teardown("no handshake reply")
             raise StationUnreachableError(
                 "the station did not answer the session handshake"
@@ -3281,12 +3264,12 @@ class StationSession:
             )
         except CipherUnusableError as err:
             _LOGGER.debug("%s: handshake failed: %s", self._log_name, err)
-            self._handshake_failures += 1
+            self._health.handshake_failures += 1
             self._teardown("cipher key unusable")
             raise
         except HandshakeError as err:
             _LOGGER.debug("%s: handshake failed: %s", self._log_name, err)
-            self._handshake_failures += 1
+            self._health.handshake_failures += 1
             self._teardown("handshake failed")
             raise
         except CloudError:
@@ -3299,7 +3282,7 @@ class StationSession:
             self._keys.aes_key = session_key
         else:
             self._keys.session_key = session_key
-        self._connects += 1
+        self._health.connects += 1
         self._creds = creds
         self._account_mismatch_reported = False  # a new connection may report it again
         _LOGGER.debug(
@@ -3395,7 +3378,7 @@ class StationSession:
                 f"{err}; the re-fetched credentials are for cipher {creds.cipher_id} too"
             ) from err
         await self._key_refresh.async_refreshed()  # only now: the fetch returned a key
-        self._key_refreshes += 1
+        self._health.key_refreshes += 1
         return creds
 
     async def _load_credentials(self, *, refresh: bool) -> P2PCredentials:
@@ -3497,7 +3480,7 @@ class StationSession:
 
     def _retire_transport(self, transport: PPPPTransport) -> None:
         """Keep the counters of a transport this session is letting go of."""
-        self._retired_wrong_port_drops += transport.wrong_port_drops
+        self._health.retired_wrong_port_drops += transport.wrong_port_drops
 
     def _count_media_failure(self, error: Exception, channel: int) -> None:
         """Count a stream of ``channel`` that ended in ``error``, unless the client closed
@@ -3635,7 +3618,7 @@ class StationSession:
             frames = decoder.feed(chunk.index, chunk.data)
         except ProtocolError as err:
             _LOGGER.warning("%s: channel %d stream reset: %s", self._log_name, chunk.channel, err)
-            self._dropped_undecodable += 1
+            self._health.dropped_undecodable += 1
             # Resume from the next chunk that arrives. A reset to index 0 would wait
             # for an index the station has long passed, silencing the channel for
             # the rest of the session.
@@ -3751,10 +3734,10 @@ class StationSession:
             if event is not None:
                 if _LOGGER.isEnabledFor(logging.DEBUG):
                     _log_camera_push(self._log_name, event, cipher)
-                self._last_event_at = time.monotonic()
-                self._frames_by_cipher[cipher.name.lower()] += 1
+                self._health.last_event_at = time.monotonic()
+                self._health.frames_by_cipher[cipher.name.lower()] += 1
                 count_capped(
-                    self._events_by_type,
+                    self._health.events_by_type,
                     f"{_or_unknown(event.msg_type)}:{_or_unknown(event.event_type)}",
                 )
                 self._bus.emit(event)
@@ -3796,7 +3779,7 @@ class StationSession:
         if not stamped or creds.account_id.lower() in stamped:
             return
         self._account_mismatch_reported = True
-        self._account_mismatch_seen = True
+        self._health.account_mismatch_seen = True
         _LOGGER.warning(
             "%s: the station stamps its records with another account id than the one "
             "commands carry (%s, stamped %s); commands may be dropped silently",
@@ -3833,7 +3816,7 @@ class StationSession:
             return
         alarm = decode_alarm_frame(frame, plain)
         if alarm is None:
-            self._dropped_undecodable += 1
+            self._health.dropped_undecodable += 1
             return
         self._take_state(frame)
         _LOGGER.debug(
@@ -3898,7 +3881,7 @@ class StationSession:
         key, is logged at INFO once per session, frame type and encryption.
         """
         encryption = self._keys.state_encryption(frame)
-        self._state_frames[encryption] += 1
+        self._health.state_frames[encryption] += 1
         if frame.cipher == FrameCipher.GCM or self._keys.session_ecb_frame(frame):
             self._state_authenticated = True
             return
@@ -3928,7 +3911,7 @@ class StationSession:
         if frame.cipher == FrameCipher.ECB:
             key = self._keys.ecb_key(frame)
             if key is None or len(payload) % 16:
-                self._dropped_undecodable += 1
+                self._health.dropped_undecodable += 1
                 return None
             return ecb_decrypt(key, payload)
         if frame.cipher != FrameCipher.GCM or self._keys.session_key is None:
@@ -3936,7 +3919,7 @@ class StationSession:
         try:
             return gcm_decrypt_broadcast(self._keys.session_key, payload)
         except ProtocolError:
-            self._dropped_undecodable += 1
+            self._health.dropped_undecodable += 1
             return None
 
     def _decode_alarm_mode(self, frame: Frame) -> int | None:
@@ -3976,7 +3959,7 @@ class StationSession:
             if key is None:
                 return None
             if len(payload) < 16 or len(payload) % 16:
-                self._dropped_undecodable += 1
+                self._health.dropped_undecodable += 1
                 return None
             return self._counted_json(ecb_decrypt(key, payload))
         if frame.cipher == FrameCipher.GCM:
@@ -3987,7 +3970,7 @@ class StationSession:
             try:
                 return self._counted_json(gcm_decrypt_broadcast(self._keys.session_key, payload))
             except ProtocolError:
-                self._dropped_undecodable += 1
+                self._health.dropped_undecodable += 1
                 if self._throttle.should_log(("gcm-auth", frame.type)):
                     _LOGGER.debug(
                         "%s: frame 0x%04x failed GCM authentication", self._log_name, frame.type
@@ -3999,7 +3982,7 @@ class StationSession:
         """The JSON object in ``plain``; one that has none counts as undecodable."""
         obj = decode_json_payload(plain)
         if obj is None:
-            self._dropped_undecodable += 1
+            self._health.dropped_undecodable += 1
         return obj
 
     @staticmethod
@@ -4282,7 +4265,7 @@ class StationSession:
         """Count a command receipt and log it at DEBUG: frame type, channel, encryption
         type (subheader byte 3), payload length, code and whether the bytes after the
         code are zero."""
-        count_capped(self._receipts_by_code, str(code))
+        count_capped(self._health.receipts_by_code, str(code))
         frame = inbound.frame
         _LOGGER.debug(
             "%s: result 0x%04x ch%d enc%s len %d: code %d %s, tail %s",

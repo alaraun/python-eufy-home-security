@@ -201,6 +201,48 @@ class MediaCounters:
         self.rejected_keyframe: MediaRecordShape | None = None
 
 
+class HealthCounters:
+    """The station session's own counters behind :class:`SessionStats`; a reconnect
+    resets none of them."""
+
+    __slots__ = (
+        "account_mismatch_seen",
+        "connects",
+        "dropped_undecodable",
+        "events_by_type",
+        "extra_live_opened",
+        "frames_by_cipher",
+        "handshake_failures",
+        "key_refreshes",
+        "last_event_at",
+        "receipts_by_code",
+        "recording_downloads",
+        "retired_wrong_port_drops",
+        "state_frames",
+        "stills_by_format",
+        "trigger_frame_sessions",
+    )
+
+    def __init__(self) -> None:
+        self.state_frames: Counter[str] = Counter()
+        """State frames taken, by encryption (``state_frames_by_encryption``)."""
+        self.connects = 0
+        self.handshake_failures = 0
+        self.key_refreshes = 0
+        self.last_event_at: float | None = None
+        self.events_by_type: Counter[str] = Counter()
+        self.frames_by_cipher: Counter[str] = Counter()
+        self.dropped_undecodable = 0
+        self.receipts_by_code: Counter[str] = Counter()
+        self.retired_wrong_port_drops = 0
+        """Wrong-port drops of transports this session no longer holds."""
+        self.account_mismatch_seen = False
+        self.stills_by_format: Counter[str] = Counter()
+        self.trigger_frame_sessions = 0
+        self.extra_live_opened = 0
+        self.recording_downloads = 0
+
+
 def count_capped(counter: Counter[str], key: str, *, limit: int = STAT_KEY_LIMIT) -> None:
     """Count ``key``, folding it into ``"other"`` once ``limit`` keys are known."""
     if key in counter or len(counter) < limit:
