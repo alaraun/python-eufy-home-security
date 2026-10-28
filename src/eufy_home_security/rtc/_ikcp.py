@@ -390,20 +390,7 @@ class KCP:
         cwnd = min(self.snd_wnd, self.rmt_wnd)
         if self.nocwnd == 0:
             cwnd = min(self.cwnd, cwnd)
-        while _itimediff(self.snd_nxt, self.snd_una + cwnd) < 0 and self.snd_queue:
-            newseg = self.snd_queue.popleft()
-            newseg.conv = self.conv
-            newseg.cmd = IKCP_CMD_PUSH
-            newseg.wnd = seg.wnd
-            newseg.ts = cur
-            newseg.sn = self.snd_nxt
-            newseg.una = self.rcv_nxt
-            newseg.resendts = cur
-            newseg.rto = self.rx_rto
-            newseg.fastack = 0
-            newseg.xmit = 0
-            self.snd_buf.append(newseg)
-            self.snd_nxt = _u32(self.snd_nxt + 1)
+        self._move_queued(cwnd, seg.wnd, cur)
 
         resent = self.fastresend if self.fastresend > 0 else _MASK
         rtomin = (self.rx_rto >> 3) if self.nodelay == 0 else 0
@@ -454,6 +441,23 @@ class KCP:
         if self.cwnd < 1:
             self.cwnd = 1
             self.incr = self.mss
+
+    def _move_queued(self, cwnd: int, wnd: int, cur: int) -> None:
+        """Move queued segments into the send buffer while the window ``cwnd`` allows."""
+        while _itimediff(self.snd_nxt, self.snd_una + cwnd) < 0 and self.snd_queue:
+            newseg = self.snd_queue.popleft()
+            newseg.conv = self.conv
+            newseg.cmd = IKCP_CMD_PUSH
+            newseg.wnd = wnd
+            newseg.ts = cur
+            newseg.sn = self.snd_nxt
+            newseg.una = self.rcv_nxt
+            newseg.resendts = cur
+            newseg.rto = self.rx_rto
+            newseg.fastack = 0
+            newseg.xmit = 0
+            self.snd_buf.append(newseg)
+            self.snd_nxt = _u32(self.snd_nxt + 1)
 
     def _probe_window(self, cur: int) -> None:
         if self.rmt_wnd != 0:

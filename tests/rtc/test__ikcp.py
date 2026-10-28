@@ -2,10 +2,13 @@
 
 KCP interoperability with the C ``kcp`` package (and so with the station's peer) is
 checked out of tree; here two instances of the port exchange messages over an in-memory
-pump, including a message large enough to fragment.
+pump, including a message large enough to fragment; one test decodes a single
+instance's output segment.
 """
 
 from __future__ import annotations
+
+import struct
 
 from eufy_home_security.rtc import _ikcp
 
@@ -63,3 +66,13 @@ def test_order_preserved_under_many_messages() -> None:
     msgs = [f"msg-{i:03d}".encode() for i in range(50)]
     _got_a, got_b = _pump(_configured(1), _configured(1), msgs, [])
     assert got_b == msgs
+
+
+def test_a_pushed_segment_advertises_the_free_receive_window() -> None:
+    k = _configured(7)
+    out: list[bytes] = []
+    k.include_outbound_handler(lambda _k, d: out.append(bytes(d)))
+    k.enqueue(b"hello")
+    k.update(0)
+    _conv, cmd, _frg, wnd = struct.unpack_from("<IBBH", out[0])
+    assert (cmd, wnd) == (_ikcp.IKCP_CMD_PUSH, 512)
