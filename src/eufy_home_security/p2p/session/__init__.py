@@ -115,7 +115,7 @@ from ...models import STATION_CHANNEL, GuardMode
 from ...recordings import RecordingRef
 from .._json import json_int
 from ..alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
-from ..clip import ClipWriter, MediaClip, mux_frames
+from ..clip import ClipWriter, MediaClip
 from ..crypto import (
     CONN_INIT_NO_CIPHER,
     CONN_INIT_RSA_BLOB_LEN,
@@ -138,7 +138,6 @@ from ..media import (
     PLAYBACK_ENDED,
     MediaDecoder,
     MediaKeyType,
-    MediaKind,
     Still,
     VideoCodec,
     classify_still,
@@ -600,10 +599,6 @@ class StationSession:
         self._health = HealthCounters()
         self._last_error_name: str | None = None
         self._media_counters = MediaCounters()
-        self._trigger_frame_lock = asyncio.Lock()
-        """At most one short-lived trigger-frame session per station at a time."""
-        self._download_lock = asyncio.Lock()
-        """At most one recording download per station at a time."""
         self._media_slot_free = asyncio.Event()
         self._media_slot_free.set()
         self._supervisor: asyncio.Task[None] | None = None
@@ -2367,47 +2362,9 @@ class StationSession:
         Raises what the recording's open raises (see :meth:`async_open_recording`),
         and :class:`DeviceTimeoutError` when the recording ends before a keyframe.
         """
-        if trailing_frames < 0:
-            raise ValueError("trailing_frames must not be negative")
-        self._raise_if_closed()
-        parts: list[bytes] = []
-        async with self._trigger_frame_lock:
-            short = self._short_lived_session()
-            short._media_counters.codecs_by_channel = self._media_counters.codecs_by_channel
-            self._health.trigger_frame_sessions += 1
-            started = time.monotonic()
-            try:
-                await short.async_connect()
-                _LOGGER.debug(
-                    "%s: trigger frame on channel %d: short-lived session open in %.2fs",
-                    self._log_name,
-                    channel,
-                    time.monotonic() - started,
-                )
-                stream = await short.async_open_recording(
-                    path, channel, first_frame_timeout=first_frame_timeout
-                )
-                async for frame in stream:
-                    if frame.kind is not MediaKind.VIDEO:
-                        continue
-                    if parts and frame.is_keyframe:
-                        break  # the next picture group: only P-frames trail
-                    parts.append(frame.data)
-                    if len(parts) > trailing_frames:
-                        break
-            finally:
-                await short.async_close()  # PPPP CLOSE: the station stops sending
-                _LOGGER.debug(
-                    "%s: trigger frame on channel %d: short-lived session closed after %.2fs, "
-                    "%d bytes",
-                    self._log_name,
-                    channel,
-                    time.monotonic() - started,
-                    sum(len(part) for part in parts),
-                )
-        if not parts:
-            raise DeviceTimeoutError("the recording ended before a keyframe arrived")
-        return b"".join(parts)
+        return await self._budget.trigger_frame(
+            path, channel, trailing_frames=trailing_frames, first_frame_timeout=first_frame_timeout
+        )
 
     def _short_lived_session(self) -> StationSession:
         """A second, unsupervised session to this station for one media request."""
@@ -2622,35 +2579,13 @@ class StationSession:
         recording ends before a keyframe; bytes already written stay written. A
         standalone device raises :class:`UnsupportedError` before anything is sent.
         """
-        if self.standalone:
-            raise UnsupportedError("a standalone device lists no recordings to download")
-        self._raise_if_closed()
-        first = _or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT)
-        async with self._download_lock:
-            extra = cast(StationSession, await self._budget.reserve(first, wait, slot=False))
-            self._health.recording_downloads += 1
-            started = time.monotonic()
-            try:
-                await extra.async_connect()
-                stream = await extra.async_open_recording(
-                    path,
-                    channel,
-                    download=history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS,
-                    first_frame_timeout=first,
-                )
-                async with stream:
-                    muxer, _ = await mux_frames(aiter(stream), write)
-            finally:
-                extra._budget.end_extra_live()
-                _LOGGER.debug(
-                    "%s: recording on channel %d downloaded on an extra session in %.2fs",
-                    self._log_name,
-                    channel,
-                    time.monotonic() - started,
-                )
-        if not muxer.started:
-            raise DeviceTimeoutError("the recording ended before a keyframe arrived")
-        return muxer.clip()
+        return await self._budget.download_recording(
+            path,
+            channel,
+            write,
+            first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
+            wait=wait,
+        )
 
     def _send_native_recording(
         self, path: str, channel: int, account_id: str, *, download: bool

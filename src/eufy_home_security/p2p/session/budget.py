@@ -1,4 +1,4 @@
-"""A station's session budget: its extra sessions (:class:`SessionBudget`)."""
+"""A station's session budget: extra sessions, trigger frames, downloads (:class:`SessionBudget`)."""
 
 from __future__ import annotations
 
@@ -6,13 +6,20 @@ import asyncio
 import contextlib
 import logging
 import time
-from typing import Protocol
+from typing import Protocol, cast
 
 from ...devices.live_open import LiveOpen, LiveStop
 from ...devices.live_view import LiveView
 from ...events import DisconnectCause
-from ...exceptions import EufySecurityError, LiveStreamLimitError
-from ..media import MediaKeyType
+from ...exceptions import (
+    DeviceTimeoutError,
+    EufySecurityError,
+    LiveStreamLimitError,
+    UnsupportedError,
+)
+from ..clip import ClipWriter, MediaClip, mux_frames
+from ..media import MediaKeyType, MediaKind
+from ..messages import DB_QUERY_LOCAL_EVENTS, history_query_verb
 from .media_stream import MediaStream
 from .stats import HealthCounters, MediaCounters
 from .wake import WakeBackoff
@@ -43,6 +50,10 @@ class SessionBudget:
         """On an extra session: the station session whose budget it counts against."""
         self.slot_claimed = False
         """A live open routed to this session's slot has not set its stream yet."""
+        self.trigger_frame_lock = asyncio.Lock()
+        """At most one short-lived trigger-frame session per station at a time."""
+        self.download_lock = asyncio.Lock()
+        """At most one recording download per station at a time."""
 
     async def live_route(self, timeout: float, wait: bool) -> BudgetOwner | None:
         """Where a HomeBase live open goes: None for this session's own media slot (then
@@ -152,11 +163,104 @@ class SessionBudget:
             if not waiter.done():
                 waiter.set_result(None)
 
+    async def trigger_frame(
+        self,
+        path: str,
+        channel: int,
+        *,
+        trailing_frames: int = 0,
+        first_frame_timeout: float | None = None,
+    ) -> bytes:
+        """See :meth:`StationSession.async_trigger_frame`."""
+        if trailing_frames < 0:
+            raise ValueError("trailing_frames must not be negative")
+        self._session._raise_if_closed()
+        parts: list[bytes] = []
+        async with self.trigger_frame_lock:
+            short = self._session._short_lived_session()
+            short._media_counters.codecs_by_channel = (
+                self._session._media_counters.codecs_by_channel
+            )
+            self._session._health.trigger_frame_sessions += 1
+            started = time.monotonic()
+            try:
+                await short.async_connect()
+                _LOGGER.debug(
+                    "%s: trigger frame on channel %d: short-lived session open in %.2fs",
+                    self._session._log_name,
+                    channel,
+                    time.monotonic() - started,
+                )
+                stream = await short.async_open_recording(
+                    path, channel, first_frame_timeout=first_frame_timeout
+                )
+                async for frame in stream:
+                    if frame.kind is not MediaKind.VIDEO:
+                        continue
+                    if parts and frame.is_keyframe:
+                        break  # the next picture group: only P-frames trail
+                    parts.append(frame.data)
+                    if len(parts) > trailing_frames:
+                        break
+            finally:
+                await short.async_close()  # PPPP CLOSE: the station stops sending
+                _LOGGER.debug(
+                    "%s: trigger frame on channel %d: short-lived session closed after %.2fs, "
+                    "%d bytes",
+                    self._session._log_name,
+                    channel,
+                    time.monotonic() - started,
+                    sum(len(part) for part in parts),
+                )
+        if not parts:
+            raise DeviceTimeoutError("the recording ended before a keyframe arrived")
+        return b"".join(parts)
+
+    async def download_recording(
+        self,
+        path: str,
+        channel: int,
+        write: ClipWriter,
+        *,
+        first_frame_timeout: float,
+        wait: bool = True,
+    ) -> MediaClip:
+        """See :meth:`StationSession.async_download_recording`."""
+        if self._session.standalone:
+            raise UnsupportedError("a standalone device lists no recordings to download")
+        self._session._raise_if_closed()
+        async with self.download_lock:
+            extra = cast(BudgetOwner, await self.reserve(first_frame_timeout, wait, slot=False))
+            self._session._health.recording_downloads += 1
+            started = time.monotonic()
+            try:
+                await extra.async_connect()
+                stream = await extra.async_open_recording(
+                    path,
+                    channel,
+                    download=history_query_verb(self._session.serial) == DB_QUERY_LOCAL_EVENTS,
+                    first_frame_timeout=first_frame_timeout,
+                )
+                async with stream:
+                    muxer, _ = await mux_frames(aiter(stream), write)
+            finally:
+                extra._budget.end_extra_live()
+                _LOGGER.debug(
+                    "%s: recording on channel %d downloaded on an extra session in %.2fs",
+                    self._session._log_name,
+                    channel,
+                    time.monotonic() - started,
+                )
+        if not muxer.started:
+            raise DeviceTimeoutError("the recording ended before a keyframe arrived")
+        return muxer.clip()
+
 
 class BudgetOwner(Protocol):
     """The station session members a :class:`SessionBudget` uses, on the station session
     and on its extra sessions."""
 
+    serial: str
     _log_name: str
     _closed: bool
     _budget: SessionBudget
@@ -164,6 +268,9 @@ class BudgetOwner(Protocol):
     _media_counters: MediaCounters
     _wake_backoff: WakeBackoff
     _media: MediaStream | None
+
+    @property
+    def standalone(self) -> bool: ...
 
     def _raise_if_closed(self) -> None: ...
 
@@ -193,3 +300,16 @@ class BudgetOwner(Protocol):
         media_key: MediaKeyType = MediaKeyType.RSA,
         live_view: LiveView | None = None,
     ) -> MediaStream: ...
+
+    async def async_open_recording(
+        self,
+        path: str,
+        channel: int,
+        *,
+        download: bool = False,
+        first_frame_timeout: float | None = None,
+        idle_timeout: float | None = None,
+        wait: bool = False,
+    ) -> MediaStream: ...
+
+    async def async_close(self) -> None: ...
