@@ -118,10 +118,11 @@ async def test_an_acknowledged_siren_without_its_frame_is_not_success(
     station: Station, fake: FakeStation
 ) -> None:
     fake.siren_frames = False
-    with pytest.raises(CommandNotAppliedError):
-        await station.async_trigger_device_alarm(CAMERA.device_sn, timeout=0.5)
-    with pytest.raises(CommandNotAppliedError):
-        await station.async_stop_device_alarm(CAMERA.device_sn, timeout=0.5)
+    async with asyncio.timeout(3):  # the default timeout would wait longer
+        with pytest.raises(CommandNotAppliedError):
+            await station.async_trigger_device_alarm(CAMERA.device_sn, timeout=0.5)
+        with pytest.raises(CommandNotAppliedError):
+            await station.async_stop_device_alarm(CAMERA.device_sn, timeout=0.5)
     assert not station.session._siren_waiters
 
 
@@ -588,7 +589,7 @@ async def test_a_siren_without_its_end_frame_reads_off_when_its_time_runs_out(
     await _frames(station, fake, (SIREN, 10, 1, CHANNEL))
     assert station.device_alarm_on(camera) is True
     await _until(lambda: station.device_alarm_on(camera) is False)
-    assert not station._siren_expiry
+    assert not station._alarms.siren_expiry
     assert _alarm_changes(events) == [
         (camera, True, DeviceAlarm.SOUND, 10),
         (camera, False, None, None),
@@ -607,7 +608,7 @@ async def test_the_next_frame_replaces_or_cancels_the_expiry(
     await asyncio.sleep(0.1)
     assert station.device_alarm_on(camera) is True
     await _frames(station, fake, (SIREN, 0, 0, CHANNEL))
-    assert not station._siren_expiry
+    assert not station._alarms.siren_expiry
     await _frames(station, fake, (SIREN, 10, 1, CHANNEL), (SIREN, 16, 0, CHANNEL))
     await asyncio.sleep(0.1)
     assert _alarm_changes(events) == [
@@ -626,22 +627,22 @@ async def test_frames_the_app_ignores_change_nothing(station: Station, fake: Fak
     await _frames(station, fake, (SIREN, 10, 0, CHANNEL))
     assert station.device_alarm_on(camera) is None
     await _frames(station, fake, (SIREN, 10, 30, CHANNEL))
-    timer = station._siren_expiry[CHANNEL]
+    timer = station._alarms.siren_expiry[CHANNEL]
     await _frames(
         station, fake, (SIREN, 16, 5, CHANNEL), (SIREN, 1, 5, CHANNEL), (SIREN, 25, 0, CHANNEL)
     )
     assert station.device_alarm_on(camera) is True
-    assert station._siren_expiry[CHANNEL] is timer
+    assert station._alarms.siren_expiry[CHANNEL] is timer
     assert _alarm_changes(events) == [(camera, True, DeviceAlarm.SOUND, 10)]
 
 
 async def test_closing_the_station_cancels_the_expiry(fake: FakeStation) -> None:
     station = _station(fake)
     await _frames(station, fake, (SIREN, 10, 30, CHANNEL))
-    timer = station._siren_expiry[CHANNEL]
+    timer = station._alarms.siren_expiry[CHANNEL]
     await station.async_close()
     assert timer.cancelled()
-    assert not station._siren_expiry
+    assert not station._alarms.siren_expiry
     assert station.device_alarm_on(CAMERA.device_sn) is None
 
 
@@ -652,20 +653,31 @@ async def test_the_expiry_is_due_the_time_left_plus_the_margin(
     """30 s as seconds or as milliseconds (above 1000): the off is due 30 s plus
     :data:`~eufy_home_security.station.SIREN_EXPIRY_MARGIN_S` after the frame."""
     await _frames(station, fake, (SIREN, 10, left, CHANNEL))
-    delay = station._siren_expiry[CHANNEL].when() - asyncio.get_running_loop().time()
+    delay = station._alarms.siren_expiry[CHANNEL].when() - asyncio.get_running_loop().time()
     assert delay == pytest.approx(30 + station_module.SIREN_EXPIRY_MARGIN_S, abs=0.5)
+
+
+async def test_the_expiry_margin_is_read_when_the_frame_arrives(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A margin patched on ``station`` after the station was built applies to the next
+    frame."""
+    monkeypatch.setattr(station_module, "SIREN_EXPIRY_MARGIN_S", 7.0)
+    await _frames(station, fake, (SIREN, 10, 30, CHANNEL))
+    delay = station._alarms.siren_expiry[CHANNEL].when() - asyncio.get_running_loop().time()
+    assert delay == pytest.approx(37.0, abs=0.5)
 
 
 async def test_a_failing_expiry_is_logged_with_the_siren_off(
     station: Station, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    station._sirens[CHANNEL] = True
+    station._alarms.sirens[CHANNEL] = True
 
     def boom(*_: object) -> None:
         raise RuntimeError("emit")
 
-    monkeypatch.setattr(station, "_emit_device_alarms", boom)
+    monkeypatch.setattr(station._alarms, "emit_device_alarms", boom)
     with caplog.at_level(logging.ERROR, logger=station_module.__name__):
-        station._expire_siren(CHANNEL)
-    assert station._sirens[CHANNEL] is False
+        station._alarms._expire_siren(CHANNEL)
+    assert station._alarms.sirens[CHANNEL] is False
     assert "siren expiry on channel 3 failed" in caplog.text
