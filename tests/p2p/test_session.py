@@ -89,12 +89,12 @@ from eufy_home_security.p2p.session import (
     CommandOutcome,
     CredentialProvider,
     EventSummary,
-    Inbound,
     MemoryKeyRefreshLatch,
     P2PCredentials,
     StationSession,
     _scalar_result,
 )
+from eufy_home_security.p2p.session.core import Inbound
 from eufy_home_security.p2p.session.media_stream import MediaStream
 from eufy_home_security.p2p.session.param_state import ParamOrigin
 from eufy_home_security.p2p.transport import PPPPTransport

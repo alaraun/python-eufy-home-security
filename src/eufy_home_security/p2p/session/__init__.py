@@ -45,8 +45,8 @@ import os
 import time
 from collections import Counter, deque
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Protocol, cast
@@ -108,14 +108,12 @@ from ...exceptions import (
     KeyRejectedError,
     LiveStreamLimitError,
     ProtocolError,
-    RecordingRefError,
-    RecordNotFoundError,
     SessionReplacedError,
     StationUnreachableError,
     UnsupportedError,
 )
 from ...models import STATION_CHANNEL, GuardMode
-from ...recordings import RecordingRef, encode_ref, issue_ref, row_started
+from ...recordings import RecordingRef
 from .._json import json_int
 from ..alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
 from ..clip import ClipWriter, MediaClip, mux_frames
@@ -172,7 +170,6 @@ from ..messages import (
     CMD_START_REALTIME_MEDIA,
     CMD_STOP_REALTIME_MEDIA,
     DB_EVENT_COUNT,
-    DB_QUERY_HISTORY,
     DB_QUERY_LOCAL_EVENTS,
     ECB_RESULT_CODES,
     LIVE_OPEN_SUBHEADER_FLAG,
@@ -196,15 +193,10 @@ from ..messages import (
     device_msg,
     encode_ecb_scalar_frame,
     event_count_payload,
-    flatten_history_rows,
     gcm_subheader,
-    history_cursor_time,
-    history_query_payload,
     history_query_verb,
     image_request_payload,
-    local_events_query_payload,
     native_recording_frame,
-    record_id_day,
     string_command_body,
     tone_file_payload,
 )
@@ -227,6 +219,8 @@ from ..storage_info import (
 )
 from ..transport import PPPPTransport, SilentLinkError, StationClosedLinkError, Wake
 from ..xzyh import Frame, FrameCipher, FrameType, StreamDecoder, encode_frame
+from .core import Inbound, Matcher
+from .history import HistoryQueries
 from .media_stream import MediaStream
 from .param_state import ParamOrigin, ParamState
 from .stats import MediaCounters, SessionStats, count_capped
@@ -349,19 +343,12 @@ CONN_INIT_MAX_LEN = 4096
 """Largest CONN_INIT payload accepted. A real one is a few hundred bytes; a larger one
 (corrupt, or from whatever won the punch race on the LAN) is dropped before any of the
 handshake's decryption runs on the event loop."""
-HISTORY_PAGE_SIZE = 50
-"""Default history page size for a ``DB_QUERY_HISTORY`` station."""
-HISTORY_LOCAL_PAGE_SIZE = 20
-"""The page the app asks of a station queried with ``DB_QUERY_LOCAL_EVENTS``."""
 
-HISTORY_MAX_PAGES = 1000
-"""Pages read for one day before giving up on a station that never runs out."""
 HISTORY_QUERY_TIMEOUT = 15.0
 """Seconds one station database query (a history page 10011, the event count 10013, an
 event list) waits for its answer. An idle HomeBase 3 answers a history page within 3 s; a
 busy one takes longer and sometimes leaves a query unanswered that it answers when asked
 again, so a listing asks a page once more after a timeout."""
-HISTORY_DATE_FORMAT = "%Y%m%d"
 STILL_LATE_REPLY_WINDOW = 30.0
 """After a 1308 request times out, the next 1308 reply within this many seconds is
 taken as its late answer and discarded, so it cannot answer a later request."""
@@ -489,64 +476,6 @@ class RecipeReply:
     """The ``payload`` of the answering 1351 notify; None for a receipt-only recipe."""
 
 
-@dataclass(slots=True)
-class Inbound:
-    """One reassembled frame, with its JSON body decrypted at most once."""
-
-    channel: int
-    frame: Frame
-    _session: StationSession = field(repr=False)
-    _json: dict[str, Any] | None = field(default=None, repr=False)
-    _json_done: bool = field(default=False, repr=False)
-    _mode: int | None = field(default=None, repr=False)
-    _mode_done: bool = field(default=False, repr=False)
-    _receipt: int | None = field(default=None, repr=False)
-    _receipt_done: bool = field(default=False, repr=False)
-    _result_slot: int | None = field(default=None, repr=False)
-
-    @property
-    def type(self) -> int:
-        return self.frame.type
-
-    def json(self) -> dict[str, Any] | None:
-        """The frame's JSON body, decoded at most once; None for a command receipt."""
-        if not self._json_done:
-            receipt = self.receipt() is not None
-            self._json = None if receipt else self._session._decode_json(self.frame)
-            self._json_done = True
-        return self._json
-
-    def receipt(self) -> int | None:
-        """The code of a command receipt on the request channel (0), decoded at most once;
-        None for any other frame.
-
-        On an RSA session it is the reply to a send of the frame's type, its code read
-        in clear as the eufy app reads it (:meth:`StationSession._decode_receipt`).
-        """
-        if not self._receipt_done:
-            decoded = self._session._decode_receipt(self.channel, self.frame)
-            if decoded is not None:
-                self._receipt, self._result_slot = decoded
-            self._receipt_done = True
-        return self._receipt
-
-    def result_slot(self) -> int | None:
-        """On an RSA session, the slot of the send whose result this frame is
-        (:meth:`StationSession._send_request`); None on a GCM session or for no result."""
-        self.receipt()
-        return self._result_slot
-
-    def alarm_mode(self) -> int | None:
-        """The guard mode of a 0x047F report, decoded at most once."""
-        if not self._mode_done:
-            self._mode = self._session._decode_alarm_mode(self.frame)
-            self._mode_done = True
-        return self._mode
-
-
-type Matcher = Callable[[Inbound], object | None]
-
-
 @dataclass(slots=True, eq=False)
 class _Waiter:
     match: Matcher
@@ -633,8 +562,6 @@ class StationSession:
         self._op_lock = asyncio.Lock()
         self._still_lock = asyncio.Lock()
         """Serialises still fetches, whose replies are owed in request order."""
-        self._history_lock = asyncio.Lock()
-        """Serialises history queries (a reply without a ``transaction`` binds to any)."""
         self._recipe_lock = asyncio.Lock()
         """Serialises recipes. A recipe's receipt is bound by frame type alone, and
         every standalone-device recipe shares type 1700, so two in flight would each be
@@ -726,6 +653,7 @@ class StationSession:
         self._media: MediaStream | None = None
         self._throttle = LogThrottle()
         self._log_name = redact_serial(self.serial)
+        self._history = HistoryQueries(self)
         self._param_state = ParamState(
             self.serial,
             bus=self._bus,
@@ -2208,9 +2136,9 @@ class StationSession:
         Uses the verb the app sends this station's model
         (:func:`~..messages.history_query_verb`) the way the app does: one day at a
         time (``start_date`` = the day, ``end_date`` = the next day), paging with
-        ``count`` = ``page_size`` (None: :data:`HISTORY_PAGE_SIZE`, or
-        :data:`HISTORY_LOCAL_PAGE_SIZE` under ``DB_QUERY_LOCAL_EVENTS``) until a page
-        comes back short. Under ``DB_QUERY_HISTORY`` (10011, the HomeBase 3 family)
+        ``count`` = ``page_size`` (None: :data:`~.history.HISTORY_PAGE_SIZE`, or
+        :data:`~.history.HISTORY_LOCAL_PAGE_SIZE` under ``DB_QUERY_LOCAL_EVENTS``) until a
+        page comes back short. Under ``DB_QUERY_HISTORY`` (10011, the HomeBase 3 family)
         the cursor is ``start_id`` = the previous page's oldest ``record_id``; under
         ``DB_QUERY_LOCAL_EVENTS`` (10017, every other station, **[declared: app]**,
         unverified on hardware) it is ``start_time`` = the previous page's oldest
@@ -2255,40 +2183,17 @@ class StationSession:
     ) -> list[tuple[date, HistoryRecord]]:
         """:meth:`async_list_history`, each row with the station day its query named (the
         day it belongs to on the station, whether or not its ``record_id`` carries one)."""
-        verb = history_query_verb(self.serial)
-        # A camera's own list is filtered at the station (device_info), as the app does.
-        native_device_sn = device_sn if verb == DB_QUERY_LOCAL_EVENTS else None
-        if page_size is None:
-            page_size = HISTORY_PAGE_SIZE if verb == DB_QUERY_HISTORY else HISTORY_LOCAL_PAGE_SIZE
-        if page_size < 2:
-            raise ValueError("page_size must be at least 2")
-        if count is not None and count < 1:
-            raise ValueError("count must be at least 1")
-        first = _parse_day(start_date)
-        last = first if end_date is None else _parse_day(end_date)
-        if first > last:
-            raise ValueError(f"start date {start_date} is after end date {end_date}")
-        cursor_day = _cursor_day(before, before_day)
-        records: list[tuple[date, HistoryRecord]] = []
-        seen: set[int] = set()
-        day = last if cursor_day is None else min(last, cursor_day)
-        while day >= first:
-            await self._history_day(
-                day,
-                records,
-                seen,
-                verb=verb,
-                count=count,
-                start_id=before if day == cursor_day else None,
-                keep=keep,
-                device_sn=native_device_sn,
-                page_size=page_size,
-                timeout=timeout,
-            )
-            if count is not None and len(records) >= count:
-                return records[:count]
-            day -= timedelta(days=1)
-        return records
+        return await self._history.list_by_day(
+            start_date,
+            end_date,
+            count=count,
+            before=before,
+            before_day=before_day,
+            keep=keep,
+            device_sn=device_sn,
+            page_size=page_size,
+            timeout=_or(timeout, HISTORY_QUERY_TIMEOUT),
+        )
 
     async def async_history_record(
         self, record_id: int, *, timeout: float | None = None
@@ -2301,10 +2206,7 @@ class StationSession:
         :class:`ValueError`, before sending, for an id that carries no valid day
         (check it with :func:`~..messages.record_id_day`).
         """
-        day = _record_day(record_id)
-        page, _ = await self._history_page(day, record_id, 2, timeout)
-        row = next((r for r in page if r.record_id == record_id), None)
-        return None if row is None else self._with_ref(row, day, history_query_verb(self.serial))
+        return await self._history.record(record_id, timeout=_or(timeout, HISTORY_QUERY_TIMEOUT))
 
     async def async_find_history_record(
         self, ref: RecordingRef, *, timeout: float | None = None
@@ -2316,8 +2218,8 @@ class StationSession:
         (``timeout`` None: :data:`HISTORY_QUERY_TIMEOUT` each). Under
         ``DB_QUERY_HISTORY`` one page of 2 from ``start_id`` = its ``record_id`` (the
         page starts with that row), matched by ``record_id`` and camera. Under
-        ``DB_QUERY_LOCAL_EVENTS`` a page of :data:`HISTORY_LOCAL_PAGE_SIZE` from each
-        cursor of :meth:`~...recordings.RecordingRef.time_cursors`, matched by
+        ``DB_QUERY_LOCAL_EVENTS`` a page of :data:`~.history.HISTORY_LOCAL_PAGE_SIZE`
+        from each cursor of :meth:`~...recordings.RecordingRef.time_cursors`, matched by
         ``record_id``, camera and start time: the second page is asked only when the
         first is full, lacks the row and holds no row that started before it. That
         finds the row whether the station lists the rows before the cursor or up to
@@ -2328,217 +2230,7 @@ class StationSession:
         :class:`RecordNotFoundError` when no page asked holds the row: the station no
         longer lists it (deleted), or lists that id for another camera.
         """
-        if history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS:
-            row = await self._find_local_event(ref, timeout)
-        else:
-            page, _ = await self._history_page(ref.day, ref.record_id, 2, timeout)
-            names = (ref.record_id, ref.device_sn)
-            row = next((r for r in page if (r.record_id, r.device_sn) == names), None)
-        if row is None:
-            raise RecordNotFoundError(
-                f"{self._log_name}: the station lists no such recording", device_sn=ref.device_sn
-            )
-        return replace(row, ref=encode_ref(ref, station_sn=self.serial))
-
-    async def _find_local_event(
-        self, ref: RecordingRef, timeout: float | None
-    ) -> HistoryRecord | None:
-        """The row ``ref`` names under ``DB_QUERY_LOCAL_EVENTS``, or None (see
-        :meth:`async_find_history_record`)."""
-        cursors = ref.time_cursors()
-        if cursors is None:
-            raise RecordingRefError("the recording reference names no start time to ask by")
-        names = (ref.record_id, ref.device_sn, ref.started)
-        for cursor in cursors:
-            page, _ = await self._history_page(
-                ref.day,
-                0,
-                HISTORY_LOCAL_PAGE_SIZE,
-                timeout,
-                verb=DB_QUERY_LOCAL_EVENTS,
-                start_time=cursor,
-                device_sn=ref.device_sn,
-            )
-            for row in page:
-                if (row.record_id, row.device_sn, row_started(row)) == names:
-                    return row
-            starts = [s for r in page if (s := row_started(r)) is not None]
-            # a full page with no row started before the ref may hide it: ask on once
-            if len(page) < HISTORY_LOCAL_PAGE_SIZE or min(starts, default=cursors[1]) < cursors[1]:
-                return None
-        return None
-
-    def _with_ref(self, row: HistoryRecord, day: date, verb: int) -> HistoryRecord:
-        """``row`` listed under the station ``day`` with its reference (see
-        :func:`~...recordings.issue_ref`; under ``DB_QUERY_LOCAL_EVENTS`` a row is found
-        again by its start time)."""
-        ref = issue_ref(
-            row, day, station_sn=self.serial, need_started=verb == DB_QUERY_LOCAL_EVENTS
-        )
-        return row if ref is None else replace(row, ref=ref)
-
-    async def _history_day(
-        self,
-        day: date,
-        records: list[tuple[date, HistoryRecord]],
-        seen: set[int],
-        *,
-        verb: int = DB_QUERY_HISTORY,
-        count: int | None,
-        start_id: int | None = None,
-        keep: Callable[[HistoryRecord], bool] | None = None,
-        device_sn: str | None = None,
-        page_size: int,
-        timeout: float | None,
-    ) -> None:
-        """Add one day's records to ``records``, page by page, until the day or ``count``
-        runs out; ``seen`` holds the ``record_id`` values already met. With
-        ``start_id`` the day is paged from that row, which is left out (under
-        ``DB_QUERY_LOCAL_EVENTS`` the day is paged from its newest row and the rows
-        from ``start_id`` up are left out); only rows ``keep`` accepts are added."""
-        cursor = start_id or 0
-        if start_id:
-            seen.add(start_id)  # the first page starts with the cursor row
-        local = verb == DB_QUERY_LOCAL_EVENTS
-        time_cursor = "0"
-        first_id: int | None = None
-        for number in range(1, HISTORY_MAX_PAGES + 1):
-            page, oldest = await self._history_page(
-                day,
-                cursor if not local else 0,
-                page_size,
-                timeout,
-                resend=True,
-                verb=verb,
-                start_time=time_cursor,
-                device_sn=device_sn,
-            )
-            wanted = page
-            if local and start_id:
-                wanted = [r for r in page if not r.record_id or r.record_id < start_id]
-            fresh = [r for r in wanted if not r.record_id or r.record_id not in seen]
-            seen.update(r.record_id for r in fresh)
-            kept = [r for r in fresh if keep is None or keep(r)]
-            records.extend((day, self._with_ref(r, day, verb)) for r in kept)
-            stop: str | None = None
-            if count is not None and len(records) >= count:
-                stop = "enough rows"
-            elif len(page) < page_size:
-                stop = "short page"
-            elif local:
-                # The app's paging: the oldest start_time of the page, and a page that
-                # starts with the same row as the last one ends the day.
-                times = [r.start_time for r in page if r.start_time]
-                if page[0].record_id and page[0].record_id == first_id:
-                    stop = "first row repeats"
-                elif not times:
-                    stop = "no start_time to page from"
-                else:
-                    first_id = page[0].record_id
-                    time_cursor = history_cursor_time(min(times))
-            elif not fresh or oldest is None or oldest == cursor:
-                stop = "no new cursor"
-            else:
-                cursor = oldest
-            _LOGGER.debug(
-                "%s: history of %s, page %d: %d row(s), %d new, %d kept; %s",
-                self._log_name,
-                day.isoformat(),
-                number,
-                len(page),
-                len(fresh),
-                len(kept),
-                f"last page ({stop})" if stop else "asking the next",
-            )
-            if stop:
-                return
-        _LOGGER.warning(
-            "%s: history of %s still had rows after %d pages; the rest is left out",
-            self._log_name,
-            day.isoformat(),
-            HISTORY_MAX_PAGES,
-        )
-
-    async def _history_page(
-        self,
-        day: date,
-        start_id: int,
-        page_size: int,
-        timeout: float | None,
-        *,
-        resend: bool = False,
-        verb: int = DB_QUERY_HISTORY,
-        start_time: str = "0",
-        device_sn: str | None = None,
-    ) -> tuple[list[HistoryRecord], int | None]:
-        """One page of a day's history and the cursor for the next (its oldest ``record_id``).
-
-        ``verb`` picks the query: ``DB_QUERY_HISTORY`` pages from ``start_id``,
-        ``DB_QUERY_LOCAL_EVENTS`` from ``start_time``. ``resend``: after a timeout, ask
-        the same page once more; a late reply to the first query answers the second as
-        well.
-        """
-        timeout = HISTORY_QUERY_TIMEOUT if timeout is None else timeout
-        await self.async_connect()
-        creds = self._require_creds()
-        sent: set[str] = set()
-
-        def send() -> None:
-            transaction = str(int(time.time() * 1000))
-            sent.add(transaction)
-            dates = (
-                day.strftime(HISTORY_DATE_FORMAT),
-                (day + timedelta(days=1)).strftime(HISTORY_DATE_FORMAT),
-            )
-            if verb == DB_QUERY_LOCAL_EVENTS:
-                payload = local_events_query_payload(
-                    *dates,
-                    count=page_size,
-                    start_time=start_time,
-                    device_sns=() if device_sn is None else (device_sn,),
-                    transaction=transaction,
-                )
-            else:
-                payload = history_query_payload(
-                    *dates, count=page_size, start_id=start_id, transaction=transaction
-                )
-            self._send_secure(
-                device_msg(creds.account_id, CMD_DATABASE, payload, channel=STATION_CHANNEL)
-            )
-
-        def match(inbound: Inbound) -> tuple[list[HistoryRecord], int | None] | None:
-            if inbound.type != FrameType.DB_SYNC or (obj := inbound.json()) is None:
-                return None
-            if json_int(obj.get("cmd")) != verb:
-                return None
-            echoed = obj.get("transaction")
-            if echoed is not None and str(echoed) not in sent:
-                return None  # another client's page: every session sees the replies
-            page = [HistoryRecord.from_row(row) for row in flatten_history_rows(obj)]
-            ids = [r.record_id for r in page if r.record_id]
-            oldest = json_int(obj.get("end_id"))
-            if oldest is None or oldest not in ids:
-                oldest = min(ids, default=None)
-            return page, oldest
-
-        async with self._history_lock:
-            try:
-                result = await self._request(
-                    send, match, timeout=timeout, label="history query", send_only_under_lock=True
-                )
-            except DeviceTimeoutError:
-                if not resend:
-                    raise
-                _LOGGER.info(
-                    "%s: history query of %s unanswered within %.0fs; asking once more",
-                    self._log_name,
-                    day.isoformat(),
-                    timeout,
-                )
-                result = await self._request(
-                    send, match, timeout=timeout, label="history query", send_only_under_lock=True
-                )
-        return cast(tuple[list[HistoryRecord], int | None], result)
+        return await self._history.find(ref, timeout=_or(timeout, HISTORY_QUERY_TIMEOUT))
 
     async def async_fetch_image(self, path: str, *, timeout: float | None = None) -> bytes:
         """The bytes of :meth:`async_fetch_still`, whatever their format."""
@@ -4855,38 +4547,6 @@ def _list_len(value: object) -> int:
 def _frame_camera(frame: Frame) -> int | None:
     """The channel a station media frame carries (subheader byte 2), or None."""
     return frame.subheader[2] if len(frame.subheader) > 2 else None
-
-
-def _record_day(record_id: int) -> date:
-    """The day of a date-prefixed ``record_id``; ValueError when it has none."""
-    day = record_id_day(record_id)
-    if day is None:
-        raise ValueError(f"record_id {record_id} carries no day")
-    return day
-
-
-def _cursor_day(before: int | None, before_day: date | None) -> date | None:
-    """The day a history cursor pages from: the day ``before`` carries, else
-    ``before_day``; ValueError for a cursor without a day or two that disagree."""
-    if before is None:
-        if before_day is not None:
-            raise ValueError("before_day needs before")
-        return None
-    own = record_id_day(before)
-    if own is None:
-        if before_day is None:
-            raise ValueError(f"record_id {before} carries no day")
-        return before_day
-    if before_day is not None and before_day != own:
-        raise ValueError(f"before_day {before_day} is not the day record_id {before} carries")
-    return own
-
-
-def _parse_day(text: str) -> date:
-    """A ``YYYYMMDD`` date; ValueError for anything else."""
-    if len(text) != 8 or not text.isascii() or not text.isdigit():
-        raise ValueError(f"not a YYYYMMDD date: {text!r}")
-    return date(int(text[:4]), int(text[4:6]), int(text[6:]))
 
 
 def _raise_for_code(command: int, code: int) -> None:
