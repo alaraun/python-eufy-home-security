@@ -1736,8 +1736,8 @@ class Station:
 
         A per-mode delay or action (:func:`~..devices.model_settings.mode_table_settings`)
         is written as that guard mode's whole table and confirmed by reading every value
-        back; see :meth:`_async_set_mode_table_value` for what that reads, refuses and
-        moves.
+        back; see :meth:`~.configuration.StationConfiguration.async_set_mode_table_value`
+        for what that reads, refuses and moves.
 
         Raises ``UnsupportedError`` for a key the device does not have or a setting the
         library does not write (its ``note`` says why), ``ValueError`` for a value
@@ -1869,16 +1869,17 @@ class Station:
         / ``exit_devices`` turn it on or off per serial; see
         :meth:`~..p2p.mode_actions.ModeTable.with_count_down`.
 
-        The whole mode is read fresh once, every change is applied to it with every
-        other bit and value kept, the table is sent once (``SET_ALL_ACTION``) and
-        every value confirmed by read-back. On a pro-alarm station (T8020, T8023, T8024,
-        T8026) whose devices report no per-mode params, the table is read from the
-        station's stored copy (61300-61309) and the write confirmed against it
-        (:meth:`_async_write_stored_mode_table`). Nothing is sent when the table already
-        holds the result, nor for an empty edit (which returns the current table).
-        Single-flag writes (:meth:`async_set_mode_action`, :meth:`async_set_setting`)
-        share the station's mode-table lock, so concurrent writes keep each other's bits.
-        ``expect_revision`` is checked against the configuration of the fresh read
+        The whole mode is read fresh once, every change is applied to it with every other
+        bit and value kept, the table is sent once (``SET_ALL_ACTION``) and every value
+        confirmed by read-back. On a pro-alarm station (T8020, T8023, T8024, T8026) whose
+        devices report no per-mode params, the table is read from the station's stored copy
+        (61300-61309) and the write confirmed against it
+        (:meth:`~.configuration.StationConfiguration._async_write_stored_mode_table`).
+        Nothing is sent when the table already holds the result, nor for an empty edit
+        (which returns the current table). Single-flag writes
+        (:meth:`async_set_mode_action`, :meth:`async_set_setting`) share the station's
+        mode-table lock, so concurrent writes keep each other's bits. ``expect_revision`` is
+        checked against the configuration of the fresh read
         (:class:`~..exceptions.ConfigChangedError`, nothing sent, when it differs).
 
         Raises, before anything is sent: ``UnsupportedError`` when the station's mode
@@ -1938,12 +1939,14 @@ class Station:
     ) -> ModeInfo:
         """Add a custom mode named ``name`` in the first free of Custom 1-3; returns it.
 
-        ``icon`` is the app's ``iconType`` (0-7, default :data:`DEFAULT_MODE_ICON`),
-        ``detail`` the mode's description. The mode list (1256) is read fresh, the new
-        entry added and the whole list written (``operate_type`` 100); see
-        :meth:`_async_write_mode_list` for how it is confirmed. The new mode gets the
-        app's actions for an added mode (record and notification), and the station seeds
-        its device table: cameras record and notify, sensors notify, no delays.
+        ``icon`` is the app's ``iconType`` (0-7, default
+        :data:`~..p2p.station_config_codecs.DEFAULT_MODE_ICON`), ``detail`` the mode's
+        description. The mode list (1256) is read fresh, the new entry added and the whole
+        list written (``operate_type`` 100); see
+        :meth:`~.configuration.StationConfiguration._async_write_mode_list` for how it is
+        confirmed. The new mode gets the app's actions for an added mode (record and
+        notification), and the station seeds its device table: cameras record and notify,
+        sensors notify, no delays.
 
         Raises, before anything is sent: ``UnsupportedError`` when the station's custom
         modes are *unknown* (:meth:`config_support`) or its mode list cannot be known;
@@ -2004,14 +2007,15 @@ class Station:
         and differs, the mode outside every slot (1257); returns both as
         :attr:`config` shows them after the write.
 
-        Build ``schedule`` from :class:`~..p2p.station_config_codecs.ScheduleSlot`
-        entries: their ``ValueError`` (an end before the start, overlapping slots, a mode
-        no slot can use) is the message a UI shows. The configuration is read fresh under the
-        station's mode-list lock; nothing is sent for a part that already holds the
-        value. The schedule goes as a JSON frame of type 1254, as the app sends it,
-        confirmed as :meth:`_async_confirm_param` says (a HomeBase 3's dump does not
-        carry it); the default as the app's scalar 1257 write, confirmed by the dump.
-        A schedule change is alarm-affecting while Schedule is the selected mode.
+        Build ``schedule`` from :class:`~..p2p.station_config_codecs.ScheduleSlot` entries:
+        their ``ValueError`` (an end before the start, overlapping slots, a mode no slot can
+        use) is the message a UI shows. The configuration is read fresh under the station's
+        mode-list lock; nothing is sent for a part that already holds the value. The
+        schedule goes as a JSON frame of type 1254, as the app sends it, confirmed as
+        :meth:`~.configuration.StationConfiguration._async_confirm_param` says (a HomeBase
+        3's dump does not carry it); the default as the app's scalar 1257 write, confirmed
+        by the dump. A schedule change is alarm-affecting while Schedule is the selected
+        mode.
 
         Raises before anything is sent: ``UnsupportedError`` when the schedule is
         *unknown* on the station (:meth:`config_support`); ``ValueError`` for a
