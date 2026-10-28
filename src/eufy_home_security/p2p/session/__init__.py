@@ -1,6 +1,6 @@
 """A P2P session with one station.
 
-One :class:`StationSession` owns one :class:`~.transport.PPPPTransport` and
+One :class:`StationSession` owns one :class:`~..transport.PPPPTransport` and
 everything that rides on it:
 
 * **Handshake.** After the link is punched the session sends one empty
@@ -12,10 +12,10 @@ everything that rides on it:
 * **Requests.** Every inbound frame is offered to the waiters of in-flight
   requests before the built-in handlers see it. Requests are serialised: the
   station's replies carry no reliable correlation id.
-* **Events.** Parameter dumps are diffed into :class:`~..events.ParamChanged`,
-  guard-mode reports become :class:`~..events.GuardModeChanged`, camera pushes
-  become :class:`~..events.SecurityEvent`, and the alarm frames (tone, siren, light)
-  become :class:`~..events.ParamChanged` plus :class:`~..events.AlarmChanged` on an
+* **Events.** Parameter dumps are diffed into :class:`~...events.ParamChanged`,
+  guard-mode reports become :class:`~...events.GuardModeChanged`, camera pushes
+  become :class:`~...events.SecurityEvent`, and the alarm frames (tone, siren, light)
+  become :class:`~...events.ParamChanged` plus :class:`~...events.AlarmChanged` on an
   alarm's start and end.
 * **Media.** One :class:`MediaStream` at a time (live video or a stored
   recording) receives the video and audio frames of DRW channel 1.
@@ -23,7 +23,7 @@ everything that rides on it:
   when the encrypted session is dead, so the only honest check is an
   application round trip: :meth:`async_start` probes with a parameter query on a
   fixed schedule (independent of other traffic) and reconnects when it goes
-  unanswered. :class:`~..events.ConnectionChanged` ``connected=True`` is emitted
+  unanswered. :class:`~...events.ConnectionChanged` ``connected=True`` is emitted
   after the first parameter read on a new connection, not after the handshake
   alone, so a session that punches but never answers does not flap up and down.
 
@@ -51,7 +51,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Protocol, cast
 
-from .._logging import (
+from ..._logging import (
     Address,
     LogThrottle,
     Payload,
@@ -61,13 +61,13 @@ from .._logging import (
     register_secret_bytes,
     wire_logger,
 )
-from ..cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
-from ..devices.device_alarm import USER_NAME_SLOT
-from ..devices.live_open import NVR_OPENS, LiveOpen, LiveStop
-from ..devices.live_view import LensView, LiveView, player_input
-from ..devices.live_view import live_view as live_view_of
-from ..devices.param_info import ParamInfo, param_info
-from ..devices.recipes import (
+from ...cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
+from ...devices.device_alarm import USER_NAME_SLOT
+from ...devices.live_open import NVR_OPENS, LiveOpen, LiveStop
+from ...devices.live_view import LensView, LiveView, player_input
+from ...devices.live_view import live_view as live_view_of
+from ...devices.param_info import ParamInfo, param_info
+from ...devices.recipes import (
     ConnectType,
     Recipe,
     RecipeCommand,
@@ -77,8 +77,8 @@ from ..devices.recipes import (
     open_live_stream_nvr,
     open_live_stream_single,
 )
-from ..devices.settings import Scope
-from ..events import (
+from ...devices.settings import Scope
+from ...events import (
     AccountMismatch,
     AlarmChanged,
     CloudProblem,
@@ -96,7 +96,7 @@ from ..events import (
     as_guard_mode,
     is_station_recording_path,
 )
-from ..exceptions import (
+from ...exceptions import (
     AccountRejectedError,
     CameraWakeError,
     CipherUnusableError,
@@ -117,12 +117,12 @@ from ..exceptions import (
     StationUnreachableError,
     UnsupportedError,
 )
-from ..models import STATION_CHANNEL, GuardMode
-from ..recordings import RecordingRef, encode_ref, issue_ref, row_started
-from ._json import json_int
-from .alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
-from .clip import ClipWriter, MediaClip, mux_frames
-from .crypto import (
+from ...models import STATION_CHANNEL, GuardMode
+from ...recordings import RecordingRef, encode_ref, issue_ref, row_started
+from .._json import json_int
+from ..alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
+from ..clip import ClipWriter, MediaClip, mux_frames
+from ..crypto import (
     CONN_INIT_NO_CIPHER,
     CONN_INIT_RSA_BLOB_LEN,
     FRAME_PLAIN,
@@ -141,8 +141,8 @@ from .crypto import (
     parse_conn_init,
     session_key_from_conn_init,
 )
-from .did import Did, static_key
-from .media import (
+from ..did import Did, static_key
+from ..media import (
     ANNEX_B_STARTS,
     DECODABLE_STILLS,
     KEYFRAME_MIN,
@@ -178,7 +178,7 @@ from .media import (
     video_record_shape,
     video_variant,
 )
-from .messages import (
+from ..messages import (
     CAMERA_WAKE_CODES,
     CMD_CAMERA_PUSH_NOTIFY,
     CMD_DATABASE,
@@ -227,11 +227,11 @@ from .messages import (
     string_command_body,
     tone_file_payload,
 )
-from .mode_actions import CMD_SET_ALL_ACTION, ModeTable
-from .notify import decode_camera_push, stamped_accounts
-from .params import ACTIVE_MODE_PARAM, GUARD_MODE_PARAM, ParamDump
-from .pppp import DISCOVERY_PORT, DrwChunk
-from .storage_info import (
+from ..mode_actions import CMD_SET_ALL_ACTION, ModeTable
+from ..notify import decode_camera_push, stamped_accounts
+from ..params import ACTIVE_MODE_PARAM, GUARD_MODE_PARAM, ParamDump
+from ..pppp import DISCOVERY_PORT, DrwChunk
+from ..storage_info import (
     CMD_HUB_STORAGE,
     CMD_SD_INFO,
     CMD_STORAGE,
@@ -244,8 +244,8 @@ from .storage_info import (
     storage_query_payload,
     storage_record,
 )
-from .transport import PPPPTransport, SilentLinkError, StationClosedLinkError, Wake
-from .xzyh import Frame, FrameCipher, FrameType, StreamDecoder, encode_frame
+from ..transport import PPPPTransport, SilentLinkError, StationClosedLinkError, Wake
+from ..xzyh import Frame, FrameCipher, FrameType, StreamDecoder, encode_frame
 
 _LOGGER = logging.getLogger(__name__)
 _WIRE = wire_logger("p2p")
@@ -440,7 +440,7 @@ class P2PCredentials:
 
 
 class WakeProvider(Protocol):
-    """Supplies the :class:`~.transport.Wake` for a battery station (its rendezvous
+    """Supplies the :class:`~..transport.Wake` for a battery station (its rendezvous
     servers and a device session key), or None when it cannot be built (no DSK yet, a
     cloud outage). Called before each connection attempt of an on-demand session."""
 
@@ -452,7 +452,7 @@ class CredentialProvider(Protocol):
 
     ``cipher_id`` is the cipher the station named in its CONN_INIT: the session asks
     after the handshake. None lets the provider pick (the cipher this station named
-    last, else :data:`~..cloud.const.CIPHER_ID_P2P`).
+    last, else :data:`~...cloud.const.CIPHER_ID_P2P`).
     """
 
     async def __call__(self, *, refresh: bool, cipher_id: int | None) -> P2PCredentials: ...
@@ -572,8 +572,8 @@ class SessionStats:
     are never counted here."""
     receipts_by_code: Mapping[str, int]
     """Command receipts and results by code: on a GCM session the channel-0 receipts
-    (not ciphertext; see :data:`~.messages.RECEIPT_LENS`), on an RSA session each
-    channel-0 reply to a send of its type (:func:`~.messages.decode_command_result`).
+    (not ciphertext; see :data:`~..messages.RECEIPT_LENS`), on an RSA session each
+    channel-0 reply to a send of its type (:func:`~..messages.decode_command_result`).
     ``"0"`` taken (on an RSA session: done), ``"-108"`` a command the station does not
     handle."""
     wrong_port_drops: int
@@ -590,10 +590,10 @@ class SessionStats:
     """The same failures by camera channel (``"3"``), then by exception class name."""
     media_frames_by_variant: Mapping[str, int]
     """Media records received, by protection: ``"video:<VideoVariant>"`` and
-    ``"audio:<AudioVariant>"`` (:func:`~.media.media_variant_label`)."""
+    ``"audio:<AudioVariant>"`` (:func:`~..media.media_variant_label`)."""
     media_video_codecs: Mapping[str, int]
     """Video records received, by the codec their header names
-    (:func:`~.media.video_codec_label`; ``"code:<n>"`` for a code the library does not
+    (:func:`~..media.video_codec_label`; ``"code:<n>"`` for a code the library does not
     know, which a muxer takes as HEVC)."""
     media_keyframes_rejected: int
     """Keyframes dropped because they did not decrypt to Annex-B."""
@@ -611,12 +611,12 @@ class SessionStats:
     """Video frames dropped because no NAL unit was left in them."""
     media_first_records: tuple[MediaRecordShape, ...]
     """The latest stream's first :data:`MEDIA_SHAPE_RECORDS` video records: layout and
-    what the stream did with each (:class:`~.media.MediaRecordShape`)."""
+    what the stream did with each (:class:`~..media.MediaRecordShape`)."""
     media_rejected_keyframe: MediaRecordShape | None
     """The latest keyframe counted in :attr:`media_keyframes_rejected`, with the body
     layouts that do start with a start code (``probe``)."""
     stills_by_format: Mapping[str, int]
-    """Stills fetched, by :class:`~.media.StillFormat` value."""
+    """Stills fetched, by :class:`~..media.StillFormat` value."""
     still_late_replies: int
     """1308 replies discarded as the late answer to a timed-out request."""
     still_file_mismatches: int
@@ -637,7 +637,7 @@ class SessionStats:
     """The camera channel of the live stream holding this session's own media slot, or
     ``None`` when the slot is free or held by a recording/playback (no camera channel)."""
     conn_init_version: int | None = None
-    """The version byte of the station's last CONN_INIT reply: :data:`~.crypto.CONN_INIT_ECC_VERSION`
+    """The version byte of the station's last CONN_INIT reply: :data:`~..crypto.CONN_INIT_ECC_VERSION`
     for the ECIES handshake, any other value for the legacy RSA one; None before a reply."""
     cipher_id: int | None = None
     """The cipher the station named in its last CONN_INIT reply; None before a reply."""
@@ -776,7 +776,7 @@ def _count_capped(counter: Counter[str], key: str, *, limit: int = STAT_KEY_LIMI
 
 
 class MediaStream:
-    """One open camera stream: iterate it for :class:`~.media.MediaFrame`, close it to stop.
+    """One open camera stream: iterate it for :class:`~..media.MediaFrame`, close it to stop.
 
     Video and audio start at a keyframe, because the frames before one reference
     pictures the reader never saw. A keyframe is held until the next video record, as
@@ -854,7 +854,7 @@ class MediaStream:
         self._head = b""
         self._probe = ""
         self._codec: VideoCodec | None = None
-        """The codec the stream's last keyframe picture showed (:func:`~.media.picture_codec`)."""
+        """The codec the stream's last keyframe picture showed (:func:`~..media.picture_codec`)."""
         self._held: MediaFrame | None = None
         """The latest keyframe, not yet queued: a continuation record may follow."""
         self._held_parts: list[bytes] = []
@@ -1009,7 +1009,7 @@ class MediaStream:
         subheader: bytes | None,
     ) -> str:
         """Queue the frame a media record carries, or drop it; returns what was done
-        (:attr:`~.media.MediaRecordShape.outcome`)."""
+        (:attr:`~..media.MediaRecordShape.outcome`)."""
         # Without a subheader the record's protection follows its keyframe flag.
         is_video = frame_type == FrameType.VIDEO_FRAME
         if (
@@ -1533,7 +1533,7 @@ class StationSession:
     def _session_encryption(self) -> int:
         """Encryption type of the frames an RSA session sends: 2 under a delivered key;
         without one (no cipher named, or a key that does not parse), 1 (static key) to a
-        model of :data:`~.crypto.STATIC_KEY_FALLBACK_MODELS` and 0 (clear) to any other."""
+        model of :data:`~..crypto.STATIC_KEY_FALLBACK_MODELS` and 0 (clear) to any other."""
         if not self._rsa_keyless:
             return FRAME_SESSION_ECB
         if self.serial.startswith(STATIC_KEY_FALLBACK_MODELS):
@@ -1562,7 +1562,7 @@ class StationSession:
     @property
     def standalone(self) -> bool:
         """Whether this station is a standalone device (its own station, like a SoloCam),
-        by the app's rule: its serial names no station kind (:func:`~..devices.recipes.connect_type`)."""
+        by the app's rule: its serial names no station kind (:func:`~...devices.recipes.connect_type`)."""
         return connect_type(self.serial, self.serial) is ConnectType.SINGLE
 
     @property
@@ -1829,7 +1829,7 @@ class StationSession:
         """Call ``callback(obj, cipher)`` with every JSON notify (0x0547) decoded, a
         request's answer included; returns the unsubscribe.
 
-        An :attr:`~.models.FrameCipher.ECB` notify is forgeable by anyone on the LAN:
+        An :attr:`~..models.FrameCipher.ECB` notify is forgeable by anyone on the LAN:
         use it for display state only. A failing callback is logged, never raised.
         """
         self._notify_listeners.append(callback)
@@ -1988,7 +1988,7 @@ class StationSession:
         unreachable station) surface to the caller — but the supervisor is started
         either way, so a station that is off when its consumer boots is picked up
         as soon as it answers. Afterwards the supervisor retries with backoff and
-        reports through :class:`~..events.ConnectionChanged`. A failed first start is
+        reports through :class:`~...events.ConnectionChanged`. A failed first start is
         reported there too (``connected=False`` with its cause), besides being raised.
         """
         self._raise_if_closed()
@@ -2415,7 +2415,7 @@ class StationSession:
         confirm it by reading the parameters back.
 
         The frame type is 1255 and the body the table's JSON (see
-        :mod:`.mode_actions`). The station answers only with a receipt; a non-zero
+        :mod:`..mode_actions`). The station answers only with a receipt; a non-zero
         receipt code raises :class:`CommandRejectedError`, but a zero one is not taken
         as success: every value the table leaves (each device's action and delays for
         the mode) is read back, and :class:`CommandNotAppliedError` names the first that
@@ -2512,10 +2512,10 @@ class StationSession:
         self, seconds: int, *, timeout: float | None = None
     ) -> CommandOutcome:
         """Sound the station's siren for ``seconds`` (0 stops it): SET_TONE_FILE (1201)
-        :func:`~.messages.tone_file_payload` with the session's user name, ``mChannel`` 0.
+        :func:`~..messages.tone_file_payload` with the session's user name, ``mChannel`` 0.
 
         Alarm-affecting. A HomeBase 3 acknowledges the command without a result and
-        reports the siren in its alarm-tone frame (:mod:`.alarm`). Returns and raises as
+        reports the siren in its alarm-tone frame (:mod:`..alarm`). Returns and raises as
         :meth:`async_send_alarm`.
         """
         return await self.async_send_alarm(
@@ -2537,12 +2537,12 @@ class StationSession:
     ) -> CommandOutcome:
         """Start (``on``) or stop an alarm: SET_TONE_FILE (1201) or SET_DEVS_TONE_FILE
         (1202) with ``payload`` on ``channel``; a payload value equal to
-        :data:`~.devices.device_alarm.USER_NAME_SLOT` is the session's user name.
+        :data:`~..devices.device_alarm.USER_NAME_SLOT` is the session's user name.
 
         Alarm-affecting. Returns ``APPLIED`` as soon as a result arrives or an alarm frame
         received after the send shows the alarm in the asked state: for 1201 the
         alarm-tone frame on any channel (the alarm on, or ended), for 1202 the device-siren
-        frame on ``channel`` (:attr:`~.alarm.AlarmFrame.alarm_state`; a frame that changes
+        frame on ``channel`` (:attr:`~..alarm.AlarmFrame.alarm_state`; a frame that changes
         no state, ``[10, 0]`` or ``[16, 5]``, confirms nothing). A frame arriving after the
         command's own wait still counts within ``timeout`` (:data:`TONE_CONFIRM_TIMEOUT`)
         of the call. Otherwise returns and raises as :meth:`async_send_command`
@@ -2595,7 +2595,7 @@ class StationSession:
         channel: int = 0,
         timeout: float | None = None,
     ) -> RecipeReply:
-        """Send a handler recipe (:mod:`~..devices.recipes`) and wait for its answer.
+        """Send a handler recipe (:mod:`~...devices.recipes`) and wait for its answer.
 
         The recipe's frame (:meth:`Recipe.plaintext`, of type ``recipe.cmd``) goes to
         ``channel``'s subheader. A receipt with code -108 raises
@@ -2748,7 +2748,7 @@ class StationSession:
         """Send a string setting the way the app does (its set-with-string handler).
 
         A GCM frame whose type is ``command``, subheader channel 255, body
-        :func:`~.messages.string_command_body` (``channel`` addresses the device inside
+        :func:`~..messages.string_command_body` (``channel`` addresses the device inside
         it). The station answers with a receipt of the same type: a non-zero code raises
         :class:`CommandRejectedError`, no answer :class:`CommandNotAppliedError` or
         :class:`DeviceTimeoutError`. A receipt is not a read-back. A value, account id or
@@ -2786,7 +2786,7 @@ class StationSession:
         """Read the station's storage record (``1307`` / ``11001``): disk and eMMC figures.
 
         The query of the HomeBase 3 family; see
-        :func:`~.storage_info.storage_query` for which station answers which. Read-only.
+        :func:`~..storage_info.storage_query` for which station answers which. Read-only.
         The reply carries no correlation id, so a record the station sends to this
         session for another client's query in the same moment answers it too (it is the
         same record). Raises :class:`CommandRejectedError` for a non-zero result or a
@@ -2794,7 +2794,7 @@ class StationSession:
         a station that refuses the query sends no record), :class:`ProtocolError` for a
         reply without a ``body``, and :class:`DeviceTimeoutError` when nothing answers
         within ``timeout`` (default :data:`STORAGE_TIMEOUT`). The record also becomes
-        :attr:`storage` and, when it changed, a :class:`~..events.StorageChanged`.
+        :attr:`storage` and, when it changed, a :class:`~...events.StorageChanged`.
 
         The answer to this query is taken under either cipher: on a fresh session the
         station answers it under ECB. It is the record this
@@ -2818,7 +2818,7 @@ class StationSession:
         """Read a HomeBase 2's storage (``55000``, ``APP_CMD_GET_HUB_STORAGE_INFO``).
 
         The query the app sends a HomeBase 2 from firmware 3.3.7.7 **[declared: app]**:
-        the eMMC and disk totals and free space (:func:`~.storage_info.parse_hub_storage`).
+        the eMMC and disk totals and free space (:func:`~..storage_info.parse_hub_storage`).
         Read-only; errors, timeout and the kept :attr:`storage` as for
         :meth:`async_get_storage`.
         """
@@ -2880,9 +2880,9 @@ class StationSession:
         The query a standalone device answers where it does not answer the HomeBase
         storage record (``1307`` / ``11001``): a bare command frame of type ``1144``,
         answered by a frame of the same type carrying a 12-byte body (three ``int32``:
-        status, total, free — see :func:`~.storage_info.parse_sd_card_info`). The result
+        status, total, free — see :func:`~..storage_info.parse_sd_card_info`). The result
         is a :class:`StorageInfo` with only ``emmc`` set, kept as :attr:`storage` and
-        announced with :class:`~..events.StorageChanged` when it changed.
+        announced with :class:`~...events.StorageChanged` when it changed.
 
         A T8170 just woken ignores the query for a few seconds (as it does the
         event-count query), so it is resent every :data:`SD_INFO_RESEND` seconds until
@@ -3043,7 +3043,7 @@ class StationSession:
         ``DB_QUERY_HISTORY`` (10011) query stays station-wide.
 
         Uses the verb the app sends this station's model
-        (:func:`~.messages.history_query_verb`) the way the app does: one day at a
+        (:func:`~..messages.history_query_verb`) the way the app does: one day at a
         time (``start_date`` = the day, ``end_date`` = the next day), paging with
         ``count`` = ``page_size`` (None: :data:`HISTORY_PAGE_SIZE`, or
         :data:`HISTORY_LOCAL_PAGE_SIZE` under ``DB_QUERY_LOCAL_EVENTS``) until a page
@@ -3136,7 +3136,7 @@ class StationSession:
         record's day comes from the id (``YYYYMMDD`` and a five-digit counter), and a
         page asked from ``start_id`` starts with that row. Raises
         :class:`ValueError`, before sending, for an id that carries no valid day
-        (check it with :func:`~.messages.record_id_day`).
+        (check it with :func:`~..messages.record_id_day`).
         """
         day = _record_day(record_id)
         page, _ = await self._history_page(day, record_id, 2, timeout)
@@ -3146,15 +3146,15 @@ class StationSession:
     async def async_find_history_record(
         self, ref: RecordingRef, *, timeout: float | None = None
     ) -> HistoryRecord:
-        """The history row ``ref`` names (as :func:`~..recordings.decode_ref` gives it),
-        carrying its :attr:`~..events.HistoryRecord.ref`.
+        """The history row ``ref`` names (as :func:`~...recordings.decode_ref` gives it),
+        carrying its :attr:`~...events.HistoryRecord.ref`.
 
         Queries of the ref's day with the verb the app sends this station, none resent
         (``timeout`` None: :data:`HISTORY_QUERY_TIMEOUT` each). Under
         ``DB_QUERY_HISTORY`` one page of 2 from ``start_id`` = its ``record_id`` (the
         page starts with that row), matched by ``record_id`` and camera. Under
         ``DB_QUERY_LOCAL_EVENTS`` a page of :data:`HISTORY_LOCAL_PAGE_SIZE` from each
-        cursor of :meth:`~..recordings.RecordingRef.time_cursors`, matched by
+        cursor of :meth:`~...recordings.RecordingRef.time_cursors`, matched by
         ``record_id``, camera and start time: the second page is asked only when the
         first is full, lacks the row and holds no row that started before it. That
         finds the row whether the station lists the rows before the cursor or up to
@@ -3207,7 +3207,7 @@ class StationSession:
 
     def _with_ref(self, row: HistoryRecord, day: date, verb: int) -> HistoryRecord:
         """``row`` listed under the station ``day`` with its reference (see
-        :func:`~..recordings.issue_ref`; under ``DB_QUERY_LOCAL_EVENTS`` a row is found
+        :func:`~...recordings.issue_ref`; under ``DB_QUERY_LOCAL_EVENTS`` a row is found
         again by its start time)."""
         ref = issue_ref(
             row, day, station_sn=self.serial, need_started=verb == DB_QUERY_LOCAL_EVENTS
@@ -3384,7 +3384,7 @@ class StationSession:
     async def async_fetch_still(self, path: str, *, timeout: float | None = None) -> Still:
         """Download one still (``thumb_path`` / ``crop_path``) off the station's disk.
 
-        The result carries its :class:`~.media.StillFormat`. A V1 or V2 still is decoded
+        The result carries its :class:`~..media.StillFormat`. A V1 or V2 still is decoded
         with the station's DID (``data`` is then the picture); another obfuscated still,
         or one that does not decode, is returned as it came, not raised, and
         ``is_image`` is False for it. Content that is not
@@ -3548,7 +3548,7 @@ class StationSession:
         first_frame_timeout: float | None = None,
     ) -> bytes:
         """A recording's first keyframe, the moment that triggered the event, as Annex-B in
-        the camera's codec (:func:`~.media.picture_codec`).
+        the camera's codec (:func:`~..media.picture_codec`).
 
         With ``trailing_frames`` the P-frames that follow it (up to that many, never
         past the next keyframe) are appended. The camera is not woken.
@@ -3654,30 +3654,30 @@ class StationSession:
         :data:`MEDIA_LIVE_FIRST_FRAME_TIMEOUT` and :data:`MEDIA_IDLE_TIMEOUT`.
 
         ``live_open`` is the open the device's handler sends
-        (:func:`~..devices.live_open.library_live_open`; :meth:`~..station.Station.async_open_live`
+        (:func:`~...devices.live_open.library_live_open`; :meth:`~...station.Station.async_open_live`
         passes it). A standalone device (:attr:`standalone`) gets a 1700 frame with
-        sub-command 1000 (:attr:`~..devices.live_open.LiveOpen.SINGLE`, the default, or
+        sub-command 1000 (:attr:`~...devices.live_open.LiveOpen.SINGLE`, the default, or
         without ``extValue``), or the station open below
-        (:attr:`~..devices.live_open.LiveOpen.STATION`), and a bare 1004 stop.
+        (:attr:`~...devices.live_open.LiveOpen.STATION`), and a bare 1004 stop.
         A HomeBase 3's camera gets the app's T8030 1003 in a ``DeviceMsgBean`` and a
         1004 ``DeviceMsgBean`` naming the channel; a camera behind any other station
         (a HomeBase 2) the camera handlers' 1003 without the T8030 fields
-        (:func:`~..devices.recipes.open_live_stream_station`) and a bare 1004 carrying
+        (:func:`~...devices.recipes.open_live_stream_station`) and a bare 1004 carrying
         the channel. A 1700 ``live_open`` behind a station goes on this session with the
         camera's channel in the frame header (subheader byte 4 is 0 without
         ``extValue``) and gets no 1139 ping; its stop is ``live_stop``
-        (:func:`~..devices.live_open.live_stop`), else the station's stop above. A
+        (:func:`~...devices.live_open.live_stop`), else the station's stop above. A
         non-zero receipt to a 1700 open fails the stream at once
         (:class:`CommandRejectedError`, :class:`CameraWakeError` for a wake failure).
 
-        A multi-camera ``live_open`` (:data:`~..devices.live_open.NVR_OPENS`) sends the
-        handler's 1350/1003 for ``live_view`` (:mod:`~..devices.live_view`; default: the
+        A multi-camera ``live_open`` (:data:`~...devices.live_open.NVR_OPENS`) sends the
+        handler's 1350/1003 for ``live_view`` (:mod:`~...devices.live_view`; default: the
         fixed lens alone), with the view fields only to a HomeBase 3, as the app's
         player does; behind a station its stop is ``live_stop``, as for a 1700 open.
 
         ``media_key`` is the key pair the open offers (its ``key`` field): RSA, or ECC,
         which the app offers a device whose param 1103 is 128 or more
-        (:func:`~.media.media_key_type_for`; :meth:`~..station.Station.async_open_live`
+        (:func:`~..media.media_key_type_for`; :meth:`~...station.Station.async_open_live`
         picks it so). The station protects the stream for the key it is offered.
         """
         standalone = self.standalone
@@ -3875,7 +3875,7 @@ class StationSession:
         :class:`LiveStreamLimitError`, or with ``wait`` (the default) waits up to
         ``first_frame_timeout`` for a stream to end.
 
-        ``write`` receives the muxed bytes in order (see :mod:`~.clip`). Raises what
+        ``write`` receives the muxed bytes in order (see :mod:`~..clip`). Raises what
         :meth:`async_open_recording` raises, and :class:`DeviceTimeoutError` when the
         recording ends before a keyframe; bytes already written stay written. A
         standalone device raises :class:`UnsupportedError` before anything is sent.
@@ -4988,7 +4988,7 @@ class StationSession:
 
     def _ingest_dump(self, dump: ParamDump, obj: Mapping[str, Any]) -> None:
         """Merge a station's 0x044F object; a standalone device's lone block under an
-        unknown label is filed as its own (:meth:`~.params.ParamDump.ingest` ``other``)."""
+        unknown label is filed as its own (:meth:`~..params.ParamDump.ingest` ``other``)."""
         other = self._station_blocks if self._block_aliases else None
         dump.ingest(obj, aliases=self._block_aliases, other=other)
         for label in dump.relabelled:
