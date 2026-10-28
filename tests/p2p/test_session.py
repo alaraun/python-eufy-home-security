@@ -2578,7 +2578,7 @@ async def test_a_started_stream_clears_the_wake_backoff(
         station.live_open_receipt_code = 0
         async with await session.async_open_live(0, wait=True) as stream:
             assert (await anext(stream)).is_keyframe
-        assert session._wake_failures == {}
+        assert session._wake_backoff.failures == {}
     finally:
         await session.async_close()
 

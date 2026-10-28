@@ -44,6 +44,7 @@ from ..media import (
 from ..messages import CMD_START_REALTIME_MEDIA
 from ..xzyh import FrameType
 from .stats import MEDIA_SHAPE_RECORDS, MediaCounters, count_capped
+from .wake import WakeBackoff
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -414,7 +415,7 @@ class MediaStream:
             self._need_keyframe = False
             self._lagging = False
             if not self._started and self.command == CMD_START_REALTIME_MEDIA:
-                self._session._wake_failures.pop(self.channel, None)
+                self._session._wake_backoff.failures.pop(self.channel, None)
             self._started = True
             if self._wrapped_key is None:
                 self._wrapped_key = wrapped
@@ -580,7 +581,7 @@ class StreamOwner(Protocol):
 
     _log_name: str
     _media_counters: MediaCounters
-    _wake_failures: dict[int, tuple[int, float, int]]
+    _wake_backoff: WakeBackoff
 
     @property
     def tags_live_camera(self) -> bool: ...

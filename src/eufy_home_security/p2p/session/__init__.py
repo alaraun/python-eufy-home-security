@@ -222,6 +222,7 @@ from .keys import SessionKeys
 from .media_stream import MediaStream
 from .param_state import ParamOrigin, ParamState
 from .stats import HealthCounters, MediaCounters, SessionStats, count_capped
+from .wake import WakeBackoff
 
 _LOGGER = logging.getLogger(__name__)
 _WIRE = wire_logger("p2p")
@@ -577,9 +578,8 @@ class StationSession:
         self._last_error: EufySecurityError | None = None
         self._media_rx_at = 0.0
         """When the last media frame arrived, attached to a stream or not."""
-        self._wake_failures: dict[int, tuple[int, float, int]] = {}
-        """Per camera channel: consecutive wake failures, until when opens are refused,
-        and the last failure's receipt code."""
+        self._wake_backoff = WakeBackoff()
+        """Per camera channel: the wake failures that refuse live opens for a while."""
         self._reprobe_at: float | None = None
         self._probing = False
         self._probe_ended_at: float | None = None
@@ -2546,7 +2546,7 @@ class StationSession:
             if left > 0:
                 raise CameraWakeError(
                     CMD_START_REALTIME_MEDIA,
-                    self._wake_failures[channel][2],
+                    self._wake_backoff.failures[channel][2],
                     f"the station could not wake the camera on channel {channel}; "
                     f"not retried for another {left:.0f}s",
                     retry_after=left,
@@ -2634,7 +2634,7 @@ class StationSession:
                 extra = self._short_lived_session()
                 extra._live_owner = self
                 extra._media_counters = self._media_counters  # diagnostics count here
-                extra._wake_failures = self._wake_failures  # one wake backoff per camera
+                extra._wake_backoff = self._wake_backoff  # one wake backoff per camera
                 self._extra_live.add(extra)
                 if slot:
                     self._health.extra_live_opened += 1
@@ -3078,9 +3078,9 @@ class StationSession:
         """
         if stream is None or not self._answers_live_open(stream, inbound):
             return False
-        failures = self._wake_failures.get(stream.channel, (0, 0.0, code))[0] + 1
+        failures = self._wake_backoff.failures.get(stream.channel, (0, 0.0, code))[0] + 1
         backoff = WAKE_BACKOFF[min(failures, len(WAKE_BACKOFF)) - 1]
-        self._wake_failures[stream.channel] = (failures, time.monotonic() + backoff, code)
+        self._wake_backoff.failures[stream.channel] = (failures, time.monotonic() + backoff, code)
         _LOGGER.info(
             "%s: the station could not wake the camera on channel %d (code %d %s); "
             "live opens of it refused for %.0fs",
@@ -3099,15 +3099,11 @@ class StationSession:
         Set by a :class:`CameraWakeError`, per :data:`WAKE_BACKOFF`; cleared by a live
         stream of that channel that starts, or by :meth:`clear_wake_backoff`.
         """
-        entry = self._wake_failures.get(channel)
-        return 0.0 if entry is None else max(entry[1] - time.monotonic(), 0.0)
+        return self._wake_backoff.left(channel)
 
     def clear_wake_backoff(self, channel: int | None = None) -> None:
         """Allow the next live open of ``channel`` (every channel when None) at once."""
-        if channel is None:
-            self._wake_failures.clear()
-        else:
-            self._wake_failures.pop(channel, None)
+        self._wake_backoff.clear(channel)
 
     def _on_play_ctrl(self, stream: MediaStream | None, frame: Frame) -> None:
         """End ``stream`` on the station's end-of-playback frame (0x0402 = 2).
