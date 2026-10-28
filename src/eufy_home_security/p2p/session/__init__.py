@@ -106,7 +106,6 @@ from ...exceptions import (
     EufySecurityError,
     HandshakeError,
     KeyRejectedError,
-    LiveStreamLimitError,
     ProtocolError,
     SessionReplacedError,
     StationUnreachableError,
@@ -216,6 +215,7 @@ from ..storage_info import (
 )
 from ..transport import PPPPTransport, SilentLinkError, StationClosedLinkError, Wake
 from ..xzyh import Frame, FrameCipher, FrameType, StreamDecoder, encode_frame
+from .budget import SessionBudget
 from .core import Inbound, Matcher
 from .history import HistoryQueries
 from .keys import SessionKeys
@@ -509,7 +509,7 @@ class StationSession:
         # cloud_problems_reported: the owner delivers cloud errors as CloudProblem, so
         # ConnectionChanged carries only their cause.
         self.serial = serial.strip()
-        self._max_sessions = _session_budget(max_sessions)
+        max_sessions = _session_budget(max_sessions)
         self.on_demand = on_demand
         self._idle_close = idle_close
         self._wake_provider = wake_provider
@@ -602,17 +602,8 @@ class StationSession:
         self._media_counters = MediaCounters()
         self._trigger_frame_lock = asyncio.Lock()
         """At most one short-lived trigger-frame session per station at a time."""
-        self._extra_live: set[StationSession] = set()
-        """Extra sessions carrying (or opening) a live stream while this session's slot is
-        busy, or a recording download."""
         self._download_lock = asyncio.Lock()
         """At most one recording download per station at a time."""
-        self._live_capacity_waiters: list[asyncio.Future[None]] = []
-        """Live opens and downloads waiting for this session's slot or an extra session."""
-        self._live_owner: StationSession | None = None
-        """On an extra session: the station session whose budget it counts against."""
-        self._slot_claimed = False
-        """A live open routed to this session's slot has not set its stream yet."""
         self._media_slot_free = asyncio.Event()
         self._media_slot_free.set()
         self._supervisor: asyncio.Task[None] | None = None
@@ -630,6 +621,7 @@ class StationSession:
             block_aliases=block_aliases,
             expect_channels=expect_channels,
         )
+        self._budget = SessionBudget(self, max_sessions=max_sessions)
 
     # ── state ────────────────────────────────────────────────────────────────
 
@@ -677,12 +669,12 @@ class StationSession:
         Settable at any time: a lower budget refuses new live streams past it and ends
         none; a higher one serves live opens waiting for it at once.
         """
-        return self._max_sessions
+        return self._budget.max_sessions
 
     @max_sessions.setter
     def max_sessions(self, value: int) -> None:
-        self._max_sessions = _session_budget(value)
-        self._notify_live_capacity()
+        self._budget.max_sessions = _session_budget(value)
+        self._budget.notify_capacity()
 
     @property
     def standalone(self) -> bool:
@@ -942,7 +934,7 @@ class StationSession:
             still_file_mismatches=self.still_file_mismatches,
             trigger_frame_sessions=self._health.trigger_frame_sessions,
             extra_live_sessions=self._health.extra_live_opened,
-            extra_live_sessions_open=len(self._extra_live),
+            extra_live_sessions_open=len(self._budget.extra_live),
             recording_downloads=self._health.recording_downloads,
             media_slot_channel=self.media_slot_channel,
             conn_init_version=self._conn_init_version,
@@ -1066,9 +1058,9 @@ class StationSession:
                 await self._supervisor
             self._supervisor = None
         self._teardown("closed by the client", cause=DisconnectCause.CLOSED)
-        for extra in list(self._extra_live):
-            extra._end_extra_live()
-        self._notify_live_capacity()
+        for extra in list(self._budget.extra_live):
+            extra._budget.end_extra_live()
+        self._budget.notify_capacity()
 
     # ── requests ─────────────────────────────────────────────────────────────
 
@@ -2564,7 +2556,7 @@ class StationSession:
 
         first = _or(first_frame_timeout, MEDIA_LIVE_FIRST_FRAME_TIMEOUT)
         idle = _or(idle_timeout, MEDIA_IDLE_TIMEOUT)
-        if standalone or self._live_owner is not None:
+        if standalone or self._budget.owner is not None:
             return await self._open_media(
                 CMD_START_REALTIME_MEDIA,
                 channel,
@@ -2576,9 +2568,9 @@ class StationSession:
                 media_key=media_key,
                 flag=flag,
             )
-        extra = await self._live_route(first, wait)
+        extra = await self._budget.live_route(first, wait)
         if extra is not None:
-            return await self._open_extra_live(
+            return await self._budget.open_extra_live(
                 extra,
                 channel,
                 first,
@@ -2601,61 +2593,8 @@ class StationSession:
                 flag=flag,
             )
         finally:
-            self._slot_claimed = False
-            self._notify_live_capacity()
-
-    async def _live_route(self, timeout: float, wait: bool) -> StationSession | None:
-        """Where a HomeBase live open goes: None for this session's own media slot (then
-        claimed), else an extra session reserved for it.
-
-        The slot is taken first; while it is busy (any stream, any camera) the open gets
-        an extra session, up to ``max_sessions - 2`` of them. Past that it raises
-        :class:`LiveStreamLimitError` at once, or with ``wait`` once ``timeout`` passes
-        without the slot or an extra session coming free.
-        """
-        return await self._reserve_media_session(timeout, wait, slot=True)
-
-    async def _reserve_media_session(
-        self, timeout: float, wait: bool, *, slot: bool
-    ) -> StationSession | None:
-        """An extra session reserved from the budget (``max_sessions - 2`` of them, shared
-        by live streams and recording downloads); with ``slot``, this session's own free
-        media slot first (None, then claimed). Past the budget :class:`LiveStreamLimitError`
-        at once, or with ``wait`` once ``timeout`` passes without one coming free."""
-        deadline = time.monotonic() + timeout
-        while True:
-            self._raise_if_closed()
-            self._close_abandoned_media()
-            if slot and self._media is None and not self._slot_claimed:
-                self._slot_claimed = True
-                return None
-            limit = self._max_sessions - 1
-            if len(self._extra_live) < limit - 1:
-                extra = self._short_lived_session()
-                extra._live_owner = self
-                extra._media_counters = self._media_counters  # diagnostics count here
-                extra._wake_backoff = self._wake_backoff  # one wake backoff per camera
-                self._extra_live.add(extra)
-                if slot:
-                    self._health.extra_live_opened += 1
-                return extra
-            remaining = deadline - time.monotonic()
-            if not wait or remaining <= 0:
-                raise LiveStreamLimitError(
-                    f"{limit} extra sessions (live streams, downloads) are already open to "
-                    f"this station (the library's cap)"
-                    + (f"; none closed within {timeout:g}s" if wait else ""),
-                    limit=limit,
-                )
-            waiter: asyncio.Future[None] = asyncio.get_running_loop().create_future()
-            self._live_capacity_waiters.append(waiter)
-            try:
-                with contextlib.suppress(TimeoutError):
-                    async with asyncio.timeout(remaining):
-                        await waiter
-            finally:
-                if waiter in self._live_capacity_waiters:
-                    self._live_capacity_waiters.remove(waiter)
+            self._budget.slot_claimed = False
+            self._budget.notify_capacity()
 
     async def async_download_recording(
         self,
@@ -2688,7 +2627,7 @@ class StationSession:
         self._raise_if_closed()
         first = _or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT)
         async with self._download_lock:
-            extra = cast(StationSession, await self._reserve_media_session(first, wait, slot=False))
+            extra = cast(StationSession, await self._budget.reserve(first, wait, slot=False))
             self._health.recording_downloads += 1
             started = time.monotonic()
             try:
@@ -2702,7 +2641,7 @@ class StationSession:
                 async with stream:
                     muxer, _ = await mux_frames(aiter(stream), write)
             finally:
-                extra._end_extra_live()
+                extra._budget.end_extra_live()
                 _LOGGER.debug(
                     "%s: recording on channel %d downloaded on an extra session in %.2fs",
                     self._log_name,
@@ -2712,63 +2651,6 @@ class StationSession:
         if not muxer.started:
             raise DeviceTimeoutError("the recording ended before a keyframe arrived")
         return muxer.clip()
-
-    async def _open_extra_live(
-        self,
-        extra: StationSession,
-        channel: int,
-        first: float,
-        idle: float,
-        media_key: MediaKeyType = MediaKeyType.RSA,
-        *,
-        live_open: LiveOpen | None = None,
-        live_stop: LiveStop | None = None,
-        live_view: LiveView | None = None,
-    ) -> MediaStream:
-        """Open live on ``extra`` (the same open as this session's); the stream's end
-        closes the session (PPPP CLOSE)."""
-        started = time.monotonic()
-        try:
-            await extra.async_connect()
-            _LOGGER.debug(
-                "%s: live channel %d on an extra session (%d of %d), open in %.2fs",
-                self._log_name,
-                channel,
-                len(self._extra_live),
-                self._max_sessions - 2,
-                time.monotonic() - started,
-            )
-            return await extra.async_open_live(
-                channel,
-                first_frame_timeout=first,
-                idle_timeout=idle,
-                media_key=media_key,
-                live_open=live_open,
-                live_stop=live_stop,
-                live_view=live_view,
-            )
-        except BaseException:
-            extra._end_extra_live()
-            raise
-
-    def _end_extra_live(self) -> None:
-        """Close this extra session (a live stream or a download) and return it to its
-        station session's budget."""
-        if not self._closed:
-            self._closed = True
-            self._teardown("extra session ended", cause=DisconnectCause.CLOSED)
-            _LOGGER.debug("%s: extra session closed", self._log_name)
-        owner = self._live_owner
-        if owner is not None and self in owner._extra_live:
-            owner._extra_live.discard(self)
-            owner._notify_live_capacity()
-
-    def _notify_live_capacity(self) -> None:
-        """Wake the live opens and downloads waiting for the slot or an extra session."""
-        waiters, self._live_capacity_waiters = self._live_capacity_waiters, []
-        for waiter in waiters:
-            if not waiter.done():
-                waiter.set_result(None)
 
     def _send_native_recording(
         self, path: str, channel: int, account_id: str, *, download: bool
@@ -2958,10 +2840,10 @@ class StationSession:
         self._last_used = time.monotonic()
         if stream is None:
             self._media_slot_free.set()
-            self._notify_live_capacity()
-            if self._live_owner is not None and not self._closed:
+            self._budget.notify_capacity()
+            if self._budget.owner is not None and not self._closed:
                 # After the caller's stop (1004) goes out: then the CLOSE.
-                asyncio.get_running_loop().call_soon(self._end_extra_live)
+                asyncio.get_running_loop().call_soon(self._budget.end_extra_live)
             if self._media_pinger is not None:
                 self._media_pinger.cancel()
                 self._media_pinger = None
@@ -3531,7 +3413,7 @@ class StationSession:
         taken and the camera streaming for good. Waking the stream makes the next read
         raise as it would have; detaching frees the slot for the next open.
         """
-        for extra in list(self._extra_live):
+        for extra in list(self._budget.extra_live):
             extra._close_abandoned_media()
         stream = self._media
         if stream is None or not stream._expired(time.monotonic()):
