@@ -18,6 +18,7 @@ import pytest
 
 import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.p2p.session as session_module
+import eufy_home_security.p2p.session.media_stream as media_stream_module
 from eufy_home_security._logging import set_secret_logging
 from eufy_home_security.devices.recipes import (
     goto_preset,
@@ -88,14 +89,14 @@ from eufy_home_security.p2p.session import (
     CommandOutcome,
     CredentialProvider,
     EventSummary,
-    Inbound,
-    MediaStream,
     MemoryKeyRefreshLatch,
     P2PCredentials,
-    ParamOrigin,
     StationSession,
     _scalar_result,
 )
+from eufy_home_security.p2p.session.core import Inbound
+from eufy_home_security.p2p.session.media_stream import MediaStream
+from eufy_home_security.p2p.session.param_state import ParamOrigin
 from eufy_home_security.p2p.transport import PPPPTransport
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
 from eufy_home_security.recordings import RecordingRef, decode_ref, encode_ref
@@ -564,6 +565,8 @@ async def test_alarm_frames_become_param_and_alarm_changes(
     started = datetime.now(UTC)
     try:
         await session.async_get_params()
+        session.apply_local_params(1, {1202: "7"})  # a value no dump delivered
+        assert (1, 1202) in session.param_origins
         session.subscribe(events.append)
         tone, siren, light = (
             FrameType.ALARM_TONE_NOTIFY,
@@ -583,11 +586,12 @@ async def test_alarm_frames_become_param_and_alarm_changes(
         await wait_until(lambda: (0, 1201) in session.params)
     finally:
         await session.async_close()
+    assert (1, 1202) not in session.param_origins  # the frame's value is the station's own
     params = [(e.channel, e.param_id, e.old, e.new) for e in events if isinstance(e, ParamChanged)]
     assert params == [
         (1, 1400, None, "0"),
         (1, 1201, None, "3"),
-        (1, 1202, None, "25"),
+        (1, 1202, "7", "25"),
         (1, 1400, "0", "1"),
         (255, 1201, None, "16"),
         (0, 1201, None, "0"),
@@ -2675,7 +2679,7 @@ async def test_lost_session_ends_the_stream_with_an_error(station: FakeStation) 
 async def test_slow_reader_drops_video_until_the_next_keyframe(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(session_module, "MEDIA_QUEUE_FRAMES", 3)
+    monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 3)
     session = make_session(station, Provider(station))
     try:
         async with await session.async_open_live(0) as stream:
@@ -2963,7 +2967,7 @@ async def test_video_dropped_after_a_reader_overflow_counts_as_reader_lag(
 ) -> None:
     """The P-frames dropped until the next keyframe after an overflow are the reader's
     lag (``dropped``), not frames skipped after one that did not decode."""
-    monkeypatch.setattr(session_module, "MEDIA_QUEUE_FRAMES", 2)
+    monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 2)
     session, stream, rsa_key = _rsa_stream(station)
     body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
     stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
@@ -3215,10 +3219,11 @@ async def test_a_late_answer_to_the_first_history_query_answers_the_second(
 async def test_a_history_page_unanswered_twice_times_out_after_the_default(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The per-query default is read at call time; a single-row lookup is not resent."""
+    """The per-query default is read at call time by every history path; a single-row
+    lookup and a reference lookup are not resent."""
     monkeypatch.setattr(session_mod, "HISTORY_QUERY_TIMEOUT", 0.2)
     session = make_session(station, Provider(station))
-    sent = _history_sends(session, monkeypatch, ["drop"] * 3)
+    sent = _history_sends(session, monkeypatch, ["drop"] * 4)
     try:
         with pytest.raises(DeviceTimeoutError):
             await session.async_list_history("20260916")
@@ -3226,6 +3231,10 @@ async def test_a_history_page_unanswered_twice_times_out_after_the_default(
         with pytest.raises(DeviceTimeoutError):
             await session.async_history_record(2026091600042)
         assert len(sent) == 3
+        ref = RecordingRef(date(2026, 9, 16), 2026091600042, SYNTHETIC.camera_sn)
+        with pytest.raises(DeviceTimeoutError):
+            await asyncio.wait_for(session.async_find_history_record(ref), 5.0)
+        assert len(sent) == 4
     finally:
         await session.async_close()
 
@@ -3590,11 +3599,11 @@ async def test_note_guard_mode_on_demand(station: FakeStation) -> None:
         on_demand=True,
         block_aliases={48: (255, 0)},
     )
-    session._params[(255, 1224)] = "0"
-    session._param_at[(255, 1224)] = 10.0
+    session._param_state._params[(255, 1224)] = "0"
+    session._param_state._param_at[(255, 1224)] = 10.0
     session.note_guard_mode(GuardMode.HOME)
-    assert session._params[(255, 1224)] == "1"
-    assert session._param_at[(255, 1224)] > 10.0
+    assert session._param_state._params[(255, 1224)] == "1"
+    assert session._param_state._param_at[(255, 1224)] > 10.0
 
 
 async def test_ingest_cloud_params_block_aliases_and_events(station: FakeStation) -> None:
@@ -3611,7 +3620,7 @@ async def test_ingest_cloud_params_block_aliases_and_events(station: FakeStation
     assert session.params[(255, 1224)] == "1"
     assert session.params[(0, 1101)] == "87"
 
-    session._param_at[(255, 1224)] = 20.0
+    session._param_state._param_at[(255, 1224)] = 20.0
     count_old = session.ingest_cloud_params(48, [(1224, "0", 15.0)])
     assert count_old == 0
     assert session.params[(255, 1224)] == "1"
@@ -3638,7 +3647,7 @@ async def test_apply_local_params_merges_written_values_as_a_dump(
         block_aliases=aliases,
     )
     for block in blocks:
-        session._params[(block, 1246)] = "1"
+        session._param_state._params[(block, 1246)] = "1"
     events: list[Event] = []
     session.subscribe(events.append)
     dumps: list[None] = []
@@ -4889,7 +4898,7 @@ async def test_an_arm_as_the_station_scalar(
         with pytest.raises(CommandUnsupportedError) as refused:
             await session.async_set_guard_mode(GuardMode.AWAY, timeout=3.0)
         # An RSA session sends every command under its own key, the scalar included.
-        encryption = session._session_encryption if rsa else FRAME_STATIC_ECB
+        encryption = session._keys.session_encryption if rsa else FRAME_STATIC_ECB
     finally:
         await session.async_close()
     assert (armed, disarmed) == (GuardMode.HOME, GuardMode.DISARMED)

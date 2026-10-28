@@ -262,7 +262,7 @@ async def test_discover_groups_devices_under_their_station() -> None:
     home = stations[SYNTHETIC.station_sn]
     assert [d.device_sn for d in home.sub_devices] == [SYNTHETIC.camera_sn]
     assert home.session.host == SYNTHETIC.station_ip
-    assert home.session._expect_channels == home.channels  # every probe waits for them
+    assert home.session.expect_channels == home.channels  # every probe waits for them
     assert stations[OTHER_STATION_SN].session.host == "192.0.2.20"
     assert isinstance(eufy.cloud, StubCloud)
     assert eufy.cloud.logins == [
@@ -665,7 +665,7 @@ async def test_a_schedule_boundary_on_both_channels_is_one_change() -> None:
         await eufy.async_discover()
         await eufy.async_start(p2p=False)
         session = eufy.stations[SYNTHETIC.station_sn].session
-        session._set_modes(GuardMode.SCHEDULE, GuardMode.HOME)  # a parameter dump
+        session._param_state.set_modes(GuardMode.SCHEDULE, GuardMode.HOME)  # a parameter dump
         push = StubPush.instances[0]
         for offset, slot in enumerate((GuardMode.AWAY, GuardMode.HOME, GuardMode.DISARMED)):
             session._note_mode_report(slot)  # the boundary's 0x047F

@@ -1,6 +1,6 @@
 """A P2P session with one station.
 
-One :class:`StationSession` owns one :class:`~.transport.PPPPTransport` and
+One :class:`StationSession` owns one :class:`~..transport.PPPPTransport` and
 everything that rides on it:
 
 * **Handshake.** After the link is punched the session sends one empty
@@ -12,10 +12,10 @@ everything that rides on it:
 * **Requests.** Every inbound frame is offered to the waiters of in-flight
   requests before the built-in handlers see it. Requests are serialised: the
   station's replies carry no reliable correlation id.
-* **Events.** Parameter dumps are diffed into :class:`~..events.ParamChanged`,
-  guard-mode reports become :class:`~..events.GuardModeChanged`, camera pushes
-  become :class:`~..events.SecurityEvent`, and the alarm frames (tone, siren, light)
-  become :class:`~..events.ParamChanged` plus :class:`~..events.AlarmChanged` on an
+* **Events.** Parameter dumps are diffed into :class:`~...events.ParamChanged`,
+  guard-mode reports become :class:`~...events.GuardModeChanged`, camera pushes
+  become :class:`~...events.SecurityEvent`, and the alarm frames (tone, siren, light)
+  become :class:`~...events.ParamChanged` plus :class:`~...events.AlarmChanged` on an
   alarm's start and end.
 * **Media.** One :class:`MediaStream` at a time (live video or a stored
   recording) receives the video and audio frames of DRW channel 1.
@@ -23,7 +23,7 @@ everything that rides on it:
   when the encrypted session is dead, so the only honest check is an
   application round trip: :meth:`async_start` probes with a parameter query on a
   fixed schedule (independent of other traffic) and reconnects when it goes
-  unanswered. :class:`~..events.ConnectionChanged` ``connected=True`` is emitted
+  unanswered. :class:`~...events.ConnectionChanged` ``connected=True`` is emitted
   after the first parameter read on a new connection, not after the handshake
   alone, so a session that punches but never answers does not flap up and down.
 
@@ -44,14 +44,14 @@ import logging
 import os
 import time
 from collections import Counter, deque
-from collections.abc import AsyncIterator, Callable, Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime, timedelta
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Protocol, cast
 
-from .._logging import (
+from ..._logging import (
     Address,
     LogThrottle,
     Payload,
@@ -61,13 +61,13 @@ from .._logging import (
     register_secret_bytes,
     wire_logger,
 )
-from ..cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
-from ..devices.device_alarm import USER_NAME_SLOT
-from ..devices.live_open import NVR_OPENS, LiveOpen, LiveStop
-from ..devices.live_view import LensView, LiveView, player_input
-from ..devices.live_view import live_view as live_view_of
-from ..devices.param_info import ParamInfo, param_info
-from ..devices.recipes import (
+from ...cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
+from ...devices.device_alarm import USER_NAME_SLOT
+from ...devices.live_open import NVR_OPENS, LiveOpen, LiveStop
+from ...devices.live_view import LensView, LiveView, player_input
+from ...devices.live_view import live_view as live_view_of
+from ...devices.param_info import ParamInfo, param_info
+from ...devices.recipes import (
     ConnectType,
     Recipe,
     RecipeCommand,
@@ -77,8 +77,8 @@ from ..devices.recipes import (
     open_live_stream_nvr,
     open_live_stream_single,
 )
-from ..devices.settings import Scope
-from ..events import (
+from ...devices.settings import Scope
+from ...events import (
     AccountMismatch,
     AlarmChanged,
     CloudProblem,
@@ -86,17 +86,14 @@ from ..events import (
     DisconnectCause,
     EventBus,
     EventCallback,
-    EventSource,
-    GuardModeChanged,
     HistoryRecord,
-    ParamChanged,
     SecurityEvent,
     StorageChanged,
     Unsubscribe,
     as_guard_mode,
     is_station_recording_path,
 )
-from ..exceptions import (
+from ...exceptions import (
     AccountRejectedError,
     CameraWakeError,
     CipherUnusableError,
@@ -111,25 +108,20 @@ from ..exceptions import (
     KeyRejectedError,
     LiveStreamLimitError,
     ProtocolError,
-    RecordingRefError,
-    RecordNotFoundError,
     SessionReplacedError,
     StationUnreachableError,
     UnsupportedError,
 )
-from ..models import STATION_CHANNEL, GuardMode
-from ..recordings import RecordingRef, encode_ref, issue_ref, row_started
-from ._json import json_int
-from .alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
-from .clip import ClipWriter, MediaClip, mux_frames
-from .crypto import (
+from ...models import STATION_CHANNEL, GuardMode
+from ...recordings import RecordingRef
+from .._json import json_int
+from ..alarm import ALARM_FRAME_VALUES, AlarmFrame, decode_alarm_frame
+from ..clip import ClipWriter, MediaClip, mux_frames
+from ..crypto import (
     CONN_INIT_NO_CIPHER,
     CONN_INIT_RSA_BLOB_LEN,
     FRAME_PLAIN,
-    FRAME_SESSION_ECB,
-    FRAME_STATIC_ECB,
     GCM_SEQ_START,
-    STATIC_KEY_FALLBACK_MODELS,
     ConnInit,
     aes_key_from_conn_init,
     ecb_decrypt,
@@ -141,44 +133,28 @@ from .crypto import (
     parse_conn_init,
     session_key_from_conn_init,
 )
-from .did import Did, static_key
-from .media import (
-    ANNEX_B_STARTS,
+from ..did import Did, static_key
+from ..media import (
     DECODABLE_STILLS,
-    KEYFRAME_MIN,
-    KEYFRAME_RSA_LEN,
     PLAYBACK_ENDED,
-    SHAPE_HEAD_LEN,
-    VIDEO_HEADER_LEN,
     MediaDecoder,
-    MediaFrame,
     MediaKeyType,
     MediaKind,
-    MediaRecordShape,
     Still,
     VideoCodec,
-    VideoVariant,
-    _ForeignKeyframeError,
     classify_still,
     decode_record_play_ctrl,
     decode_still,
     download_video_payload,
-    drop_empty_nals,
     generate_media_ecc_key,
     generate_media_rsa_key,
-    keyframe_layout_probe,
     media_variant_label,
-    picture_codec,
     record_view_payload,
     start_realtime_media_payload,
     stop_realtime_media_payload,
     video_codec_label,
-    video_header_ms,
-    video_record_is_key,
-    video_record_shape,
-    video_variant,
 )
-from .messages import (
+from ..messages import (
     CAMERA_WAKE_CODES,
     CMD_CAMERA_PUSH_NOTIFY,
     CMD_DATABASE,
@@ -191,7 +167,6 @@ from .messages import (
     CMD_START_REALTIME_MEDIA,
     CMD_STOP_REALTIME_MEDIA,
     DB_EVENT_COUNT,
-    DB_QUERY_HISTORY,
     DB_QUERY_LOCAL_EVENTS,
     ECB_RESULT_CODES,
     LIVE_OPEN_SUBHEADER_FLAG,
@@ -215,23 +190,18 @@ from .messages import (
     device_msg,
     encode_ecb_scalar_frame,
     event_count_payload,
-    flatten_history_rows,
     gcm_subheader,
-    history_cursor_time,
-    history_query_payload,
     history_query_verb,
     image_request_payload,
-    local_events_query_payload,
     native_recording_frame,
-    record_id_day,
     string_command_body,
     tone_file_payload,
 )
-from .mode_actions import CMD_SET_ALL_ACTION, ModeTable
-from .notify import decode_camera_push, stamped_accounts
-from .params import ACTIVE_MODE_PARAM, GUARD_MODE_PARAM, ParamDump
-from .pppp import DISCOVERY_PORT, DrwChunk
-from .storage_info import (
+from ..mode_actions import CMD_SET_ALL_ACTION, ModeTable
+from ..notify import decode_camera_push, stamped_accounts
+from ..params import ParamDump
+from ..pppp import DISCOVERY_PORT, DrwChunk
+from ..storage_info import (
     CMD_HUB_STORAGE,
     CMD_SD_INFO,
     CMD_STORAGE,
@@ -244,8 +214,14 @@ from .storage_info import (
     storage_query_payload,
     storage_record,
 )
-from .transport import PPPPTransport, SilentLinkError, StationClosedLinkError, Wake
-from .xzyh import Frame, FrameCipher, FrameType, StreamDecoder, encode_frame
+from ..transport import PPPPTransport, SilentLinkError, StationClosedLinkError, Wake
+from ..xzyh import Frame, FrameCipher, FrameType, StreamDecoder, encode_frame
+from .core import Inbound, Matcher
+from .history import HistoryQueries
+from .keys import SessionKeys
+from .media_stream import MediaStream
+from .param_state import ParamOrigin, ParamState
+from .stats import HealthCounters, MediaCounters, SessionStats, count_capped
 
 _LOGGER = logging.getLogger(__name__)
 _WIRE = wire_logger("p2p")
@@ -327,17 +303,11 @@ MEDIA_IDLE_TIMEOUT = 3.0
 """A stream that sent frames and then stays quiet this long has ended. A 1025 playback
 normally ends earlier, on the station's end-of-playback frame; this is the fallback
 (a download, a lost end frame)."""
-MEDIA_QUEUE_FRAMES = 250
-"""Frames (video and audio together) held for a slow reader before new ones are dropped."""
-MEDIA_SHAPE_RECORDS = 12
-"""Video records per stream whose shape :class:`SessionStats` keeps (diagnostics)."""
 MEDIA_DRAIN_GAP = 0.5
 """Opening a stream waits until no media frame has arrived for this long. A recording
 closed early on this session keeps streaming to its end (no command stops a playback,
 only closing the session does), a stopped live stream sends what was in flight, and
 those frames carry no stream id: they would otherwise be delivered as the next stream's."""
-MEDIA_OTHER_CAMERA_FRAMES = 25
-"""A live stream fails when this many frames of another camera arrive before its own."""
 MEDIA_DRAIN_MAX = 5.0
 """The longest an open waits for the previous stream to go quiet."""
 EVENT_COUNT_RESEND = 2.0
@@ -371,27 +341,12 @@ CONN_INIT_MAX_LEN = 4096
 """Largest CONN_INIT payload accepted. A real one is a few hundred bytes; a larger one
 (corrupt, or from whatever won the punch race on the LAN) is dropped before any of the
 handshake's decryption runs on the event loop."""
-STAT_KEY_LIMIT = 64
-"""Most distinct keys a wire-keyed statistic counts before bucketing the rest.
 
-`events_by_type` and `receipts_by_code` are keyed on values taken off the wire, in an
-object that lives for the process and is copied into every diagnostics dump. Without a
-cap a station with odd firmware — or anything on the LAN able to inject pushes — grows
-them without bound.
-"""
-HISTORY_PAGE_SIZE = 50
-"""Default history page size for a ``DB_QUERY_HISTORY`` station."""
-HISTORY_LOCAL_PAGE_SIZE = 20
-"""The page the app asks of a station queried with ``DB_QUERY_LOCAL_EVENTS``."""
-
-HISTORY_MAX_PAGES = 1000
-"""Pages read for one day before giving up on a station that never runs out."""
 HISTORY_QUERY_TIMEOUT = 15.0
 """Seconds one station database query (a history page 10011, the event count 10013, an
 event list) waits for its answer. An idle HomeBase 3 answers a history page within 3 s; a
 busy one takes longer and sometimes leaves a query unanswered that it answers when asked
 again, so a listing asks a page once more after a timeout."""
-HISTORY_DATE_FORMAT = "%Y%m%d"
 STILL_LATE_REPLY_WINDOW = 30.0
 """After a 1308 request times out, the next 1308 reply within this many seconds is
 taken as its late answer and discarded, so it cannot answer a later request."""
@@ -403,10 +358,6 @@ _STATE_FRAME_TYPES = frozenset(
 )
 """Frames carrying station state, taken under any encryption
 (:meth:`StationSession._take_state`)."""
-_RSA_STATE_ENCRYPTIONS: Mapping[int | None, str] = MappingProxyType(
-    {FRAME_PLAIN: "clear", FRAME_STATIC_ECB: "type1", FRAME_SESSION_ECB: "type2"}
-)
-"""An RSA session's state-frame label by encryption type (subheader byte 3)."""
 _UNAUTHENTICATED_STATE: Mapping[str, str] = MappingProxyType(
     {
         "clear": "in clear",
@@ -440,7 +391,7 @@ class P2PCredentials:
 
 
 class WakeProvider(Protocol):
-    """Supplies the :class:`~.transport.Wake` for a battery station (its rendezvous
+    """Supplies the :class:`~..transport.Wake` for a battery station (its rendezvous
     servers and a device session key), or None when it cannot be built (no DSK yet, a
     cloud outage). Called before each connection attempt of an on-demand session."""
 
@@ -452,7 +403,7 @@ class CredentialProvider(Protocol):
 
     ``cipher_id`` is the cipher the station named in its CONN_INIT: the session asks
     after the handshake. None lets the provider pick (the cipher this station named
-    last, else :data:`~..cloud.const.CIPHER_ID_P2P`).
+    last, else :data:`~...cloud.const.CIPHER_ID_P2P`).
     """
 
     async def __call__(self, *, refresh: bool, cipher_id: int | None) -> P2PCredentials: ...
@@ -501,16 +452,6 @@ class CommandOutcome(StrEnum):
     """The station acknowledged the datagram but sent no result (confirm by read-back)."""
 
 
-class ParamOrigin(StrEnum):
-    """Where a held parameter value came from when no dump delivered it."""
-
-    CLOUD = "cloud"
-    """A cloud snapshot (:meth:`StationSession.ingest_cloud_params`)."""
-    LOCAL_WRITE = "local_write"
-    """This library's own write (:meth:`StationSession.apply_local_params`, an applied
-    arm), or a guard mode the station reported outside a dump."""
-
-
 @dataclass(frozen=True, slots=True)
 class EventSummary:
     """One device's event count and the path of its newest event's still (10013)."""
@@ -527,764 +468,6 @@ class RecipeReply:
     outcome: CommandOutcome
     payload: Mapping[str, Any] | None = None
     """The ``payload`` of the answering 1351 notify; None for a receipt-only recipe."""
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SessionStats:
-    """Health counters of one station session, for diagnostics.
-
-    JSON-safe (``dataclasses.asdict`` then ``json.dumps``) and free of identifiers: no
-    serial, DID, address, account id or path, and errors by class name only. Counters
-    run from the session's creation (process start for a consumer) and a reconnect
-    never resets them; ``connected`` alone describes the current connection. The
-    de-duplication counters are account-wide, not per station, and live on
-    ``EufySecurity.deduplicator``.
-    """
-
-    connected: bool
-    """Whether a ``ConnectionChanged(connected=True)`` stands for a live connection."""
-    connects: int
-    """Sessions established (handshake completed), the first included."""
-    reconnects: int
-    """Sessions established after the first."""
-    handshake_failures: int
-    """``CONN_INIT`` exchanges that yielded no session key: unanswered, or a key that
-    would not unwrap."""
-    key_refreshes: int
-    """Cipher keys re-fetched because the station rejected the cached one."""
-    last_error: str | None
-    """Class name of the most recent connection failure. Unlike ``Station.last_error``
-    it is kept after the session recovers."""
-    seconds_since_last_probe: float | None
-    """Since the last answered parameter read; None before the first."""
-    seconds_since_last_event: float | None
-    """Since the last camera push over P2P; None before the first."""
-    events_by_type: Mapping[str, int]
-    """Camera pushes by ``"msg_type:event_type"`` (``?`` for a missing value)."""
-    frames_by_cipher: Mapping[str, int]
-    """Decoded camera pushes by frame cipher, ``"gcm"`` / ``"ecb"``."""
-    ecb_state_refused: int
-    """Always 0: state frames are taken under any encryption. Kept for compatibility; see
-    :attr:`state_frames_by_encryption`."""
-    dropped_undecodable: int
-    """Non-media frames dropped undecoded: GCM authentication failure, a malformed ECB
-    body, a body that is not a JSON object, or a DRW stream reset. Command receipts
-    are never counted here."""
-    receipts_by_code: Mapping[str, int]
-    """Command receipts and results by code: on a GCM session the channel-0 receipts
-    (not ciphertext; see :data:`~.messages.RECEIPT_LENS`), on an RSA session each
-    channel-0 reply to a send of its type (:func:`~.messages.decode_command_result`).
-    ``"0"`` taken (on an RSA session: done), ``"-108"`` a command the station does not
-    handle."""
-    wrong_port_drops: int
-    """Datagrams from the station's host but not its session port, summed over every
-    connection (the transport counts per connection)."""
-    account_mismatch_seen: bool
-    """Whether an ``AccountMismatch`` was emitted on any connection."""
-    media_opens: int
-    """Live or recording streams whose open was sent."""
-    media_failures_by_type: Mapping[str, int]
-    """Streams that ended in an error, by exception class name (a session closed by the
-    client is not counted)."""
-    media_failures_by_channel: Mapping[str, Mapping[str, int]]
-    """The same failures by camera channel (``"3"``), then by exception class name."""
-    media_frames_by_variant: Mapping[str, int]
-    """Media records received, by protection: ``"video:<VideoVariant>"`` and
-    ``"audio:<AudioVariant>"`` (:func:`~.media.media_variant_label`)."""
-    media_video_codecs: Mapping[str, int]
-    """Video records received, by the codec their header names
-    (:func:`~.media.video_codec_label`; ``"code:<n>"`` for a code the library does not
-    know, which a muxer takes as HEVC)."""
-    media_keyframes_rejected: int
-    """Keyframes dropped because they did not decrypt to Annex-B."""
-    media_keyframe_continuations: int
-    """Keyframe-flagged records joined to the keyframe before them: the rest of a
-    keyframe a camera sends in several records (a HomeBase 2 camera)."""
-    media_codecs_by_channel: Mapping[str, str]
-    """The codec each camera channel's latest keyframe picture showed (``{"2": "h264"}``)."""
-    media_codec_overrides: Mapping[str, int]
-    """Keyframes whose picture is another codec than their header names, as
-    ``"<header>-><picture>"`` (``"hevc->h264"``); the stream is muxed as the picture."""
-    media_empty_nals: int
-    """Empty NAL units removed from video frames before muxing."""
-    media_frames_without_nal: int
-    """Video frames dropped because no NAL unit was left in them."""
-    media_first_records: tuple[MediaRecordShape, ...]
-    """The latest stream's first :data:`MEDIA_SHAPE_RECORDS` video records: layout and
-    what the stream did with each (:class:`~.media.MediaRecordShape`)."""
-    media_rejected_keyframe: MediaRecordShape | None
-    """The latest keyframe counted in :attr:`media_keyframes_rejected`, with the body
-    layouts that do start with a start code (``probe``)."""
-    stills_by_format: Mapping[str, int]
-    """Stills fetched, by :class:`~.media.StillFormat` value."""
-    still_late_replies: int
-    """1308 replies discarded as the late answer to a timed-out request."""
-    still_file_mismatches: int
-    """1308 replies whose ``file`` differed from the requested path."""
-    trigger_frame_sessions: int
-    """Short-lived sessions opened for a recording's trigger frame (their own media
-    counters are not included above)."""
-    extra_live_sessions: int
-    """Extra sessions opened for a live stream while this session's media slot was busy
-    (their media is counted in the ``media_*`` fields above)."""
-    extra_live_sessions_open: int
-    """Extra sessions open now, live streams and recording downloads together (at most
-    :attr:`StationSession.max_sessions` - 2)."""
-    recording_downloads: int
-    """Recordings downloaded on an extra session
-    (:meth:`StationSession.async_download_recording`)."""
-    media_slot_channel: int | None
-    """The camera channel of the live stream holding this session's own media slot, or
-    ``None`` when the slot is free or held by a recording/playback (no camera channel)."""
-    conn_init_version: int | None = None
-    """The version byte of the station's last CONN_INIT reply: :data:`~.crypto.CONN_INIT_ECC_VERSION`
-    for the ECIES handshake, any other value for the legacy RSA one; None before a reply."""
-    cipher_id: int | None = None
-    """The cipher the station named in its last CONN_INIT reply; None before a reply."""
-    static_key_session: bool = False
-    """Whether the current RSA session runs under the static key
-    (:attr:`StationSession.static_key_session`)."""
-    media_frames_dropped_for_reader: int = 0
-    """Media frames dropped because a stream's reader fell behind (``MediaStream.dropped``
-    summed), the video up to the next keyframe included."""
-    media_frames_skipped_for_keyframe: int = 0
-    """Video frames skipped to the next keyframe after a keyframe that did not decode or
-    a frame with no NAL unit (``MediaStream.skipped`` summed): pictures the viewer lost."""
-    media_pframes_without_start_code: int = 0
-    """Non-keyframe video frames whose data does not start with an Annex-B start code.
-    The app's player appends such a record to the frame before it; the library delivers
-    it as its own frame."""
-    state_frames_by_encryption: Mapping[str, int] = field(default_factory=dict)
-    """State frames (0x044F, 0x047F, the alarm frames) decoded and taken, by encryption: on
-    an RSA session its type, ``"clear"``, ``"type1"`` (the fixed static key), ``"type2"``
-    (its session key) or ``"other"``; on a GCM session the tag, ``"gcm"`` or ``"ecb"`` (the
-    static key)."""
-    state_authenticated: bool | None = None
-    """Whether the station's state is authenticated, for information only: True once state
-    came under a key only the session holds (GCM, an RSA session's own key), False while
-    it came only in clear or under a key anyone can derive (the fixed key, a static-key
-    session), None before any state."""
-
-
-@dataclass(slots=True)
-class Inbound:
-    """One reassembled frame, with its JSON body decrypted at most once."""
-
-    channel: int
-    frame: Frame
-    _session: StationSession = field(repr=False)
-    _json: dict[str, Any] | None = field(default=None, repr=False)
-    _json_done: bool = field(default=False, repr=False)
-    _mode: int | None = field(default=None, repr=False)
-    _mode_done: bool = field(default=False, repr=False)
-    _receipt: int | None = field(default=None, repr=False)
-    _receipt_done: bool = field(default=False, repr=False)
-    _result_slot: int | None = field(default=None, repr=False)
-
-    @property
-    def type(self) -> int:
-        return self.frame.type
-
-    def json(self) -> dict[str, Any] | None:
-        """The frame's JSON body, decoded at most once; None for a command receipt."""
-        if not self._json_done:
-            receipt = self.receipt() is not None
-            self._json = None if receipt else self._session._decode_json(self.frame)
-            self._json_done = True
-        return self._json
-
-    def receipt(self) -> int | None:
-        """The code of a command receipt on the request channel (0), decoded at most once;
-        None for any other frame.
-
-        On an RSA session it is the reply to a send of the frame's type, its code read
-        in clear as the eufy app reads it (:meth:`StationSession._decode_receipt`).
-        """
-        if not self._receipt_done:
-            decoded = self._session._decode_receipt(self.channel, self.frame)
-            if decoded is not None:
-                self._receipt, self._result_slot = decoded
-            self._receipt_done = True
-        return self._receipt
-
-    def result_slot(self) -> int | None:
-        """On an RSA session, the slot of the send whose result this frame is
-        (:meth:`StationSession._send_request`); None on a GCM session or for no result."""
-        self.receipt()
-        return self._result_slot
-
-    def alarm_mode(self) -> int | None:
-        """The guard mode of a 0x047F report, decoded at most once."""
-        if not self._mode_done:
-            self._mode = self._session._decode_alarm_mode(self.frame)
-            self._mode_done = True
-        return self._mode
-
-
-type Matcher = Callable[[Inbound], object | None]
-
-
-class _MediaCounters:
-    """The media counters behind :class:`SessionStats`; a station session's extra live
-    sessions count into their owner's."""
-
-    __slots__ = (
-        "codec_overrides",
-        "codecs",
-        "codecs_by_channel",
-        "dropped_for_reader",
-        "empty_nals",
-        "failures",
-        "failures_by_channel",
-        "first_records",
-        "frames_without_nal",
-        "keyframe_continuations",
-        "keyframes_rejected",
-        "opens",
-        "pframes_without_start_code",
-        "rejected_keyframe",
-        "skipped_for_keyframe",
-        "variants",
-    )
-
-    def __init__(self) -> None:
-        self.opens = 0
-        self.failures: Counter[str] = Counter()
-        self.failures_by_channel: dict[int, Counter[str]] = {}
-        self.variants: Counter[str] = Counter()
-        self.codecs: Counter[str] = Counter()
-        self.codec_overrides: Counter[str] = Counter()
-        self.codecs_by_channel: dict[int, VideoCodec] = {}
-        self.empty_nals = 0
-        self.frames_without_nal = 0
-        self.keyframes_rejected = 0
-        self.keyframe_continuations = 0
-        self.dropped_for_reader = 0
-        self.skipped_for_keyframe = 0
-        self.pframes_without_start_code = 0
-        self.first_records: list[MediaRecordShape] = []
-        """The latest stream's first video records (the stream appends to it)."""
-        self.rejected_keyframe: MediaRecordShape | None = None
-
-
-def _count_capped(counter: Counter[str], key: str, *, limit: int = STAT_KEY_LIMIT) -> None:
-    """Count ``key``, folding it into ``"other"`` once ``limit`` keys are known."""
-    if key in counter or len(counter) < limit:
-        counter[key] += 1
-    else:
-        counter["other"] += 1
-
-
-class MediaStream:
-    """One open camera stream: iterate it for :class:`~.media.MediaFrame`, close it to stop.
-
-    Video and audio start at a keyframe, because the frames before one reference
-    pictures the reader never saw. A keyframe is held until the next video record, as
-    the app's player holds each frame: a keyframe-flagged record that does not start
-    with a start code is the rest of that picture and is joined to it (a HomeBase 2
-    camera splits a large keyframe); any other video record sends the keyframe out.
-    Audio arriving meanwhile is queued behind it, and records dropped before decoding
-    (another camera's, another stream's) leave it held. A keyframe no video record
-    follows is not delivered: the stream ends at ``idle_timeout`` without it, as the
-    app's player shows a frame only once the next one starts. When a slow reader lets
-    :data:`MEDIA_QUEUE_FRAMES` pile up, video is dropped until the next keyframe
-    (counted in :attr:`dropped`); after a keyframe that does not decode, or a frame with
-    no NAL unit, video is skipped to the next keyframe (counted in :attr:`skipped`), so
-    whatever is delivered still decodes.
-    The first keyframe that decodes pins the stream's wrapped key: a later keyframe
-    wrapped differently belongs to another (earlier) stream and is dropped. Before that,
-    a keyframe that does not decode under this stream's RSA key is dropped at DEBUG as
-    another stream's; only when none decodes by ``first_frame_timeout`` is it a WARNING.
-
-    Iteration ends when the stream is closed, when the station sends a recording's
-    end-of-playback frame (``0x0402`` = 2, after the frames already queued), or when
-    it stays quiet for ``idle_timeout`` after a frame (the fallback). It raises when the session
-    is lost, when the station rejects the open, or when no keyframe decodes within
-    ``first_frame_timeout``. Closing sends the stop command, which only a live stream has.
-    """
-
-    def __init__(
-        self,
-        session: StationSession,
-        *,
-        command: int,
-        channel: int,
-        decoder: MediaDecoder,
-        stop_body: Callable[[], tuple[int, bytes]] | None,
-        first_frame_timeout: float,
-        idle_timeout: float,
-    ) -> None:
-        self.command = command
-        self.channel = channel
-        self.dropped = 0
-        """Frames discarded because the reader fell behind."""
-        self.skipped = 0
-        """Video frames discarded while waiting for a keyframe after one that did not
-        decode or a frame with no NAL unit (not reader lag)."""
-        self.other_camera_frames = 0
-        """Live frames discarded because they carried another camera's channel."""
-        self._session = session
-        self._decoder = decoder
-        self._stop_body = stop_body
-        self._first_frame_timeout = first_frame_timeout
-        self._idle_timeout = idle_timeout
-        self._frames: deque[MediaFrame] = deque()
-        self._wake = asyncio.Event()
-        self._error: Exception | None = None
-        self._closed = False
-        self._opened_at = time.monotonic()
-        self._last_rx: float | None = None
-        """When the last media record arrived, decodable or not (liveness)."""
-        self._need_keyframe = True
-        self._lagging = False
-        """Whether the current wait for a keyframe is the reader's lag (:attr:`dropped`)."""
-        self._started = False
-        self._wrapped_key: bytes | None = None
-        """The RSA-wrapped key of the first keyframe that decoded (pinned)."""
-        self._foreign_keyframes = 0
-        """Keyframes dropped before the first one because they did not decode for this
-        stream's key."""
-        self._open_index: int | None = None
-        self._open_frame_type: int | None = None
-        """The frame type the open went out as (its receipt comes back as that type)."""
-        self._throttle = LogThrottle()
-        self._shapes: list[MediaRecordShape] = []
-        """The first :data:`MEDIA_SHAPE_RECORDS` video records' shapes (diagnostics)."""
-        session._media_counters.first_records = self._shapes
-        self._head = b""
-        self._probe = ""
-        self._codec: VideoCodec | None = None
-        """The codec the stream's last keyframe picture showed (:func:`~.media.picture_codec`)."""
-        self._held: MediaFrame | None = None
-        """The latest keyframe, not yet queued: a continuation record may follow."""
-        self._held_parts: list[bytes] = []
-        self._held_audio: list[MediaFrame] = []
-        """Audio that arrived while a keyframe was held, queued after it."""
-        self._last_video_at: float | None = None
-        """When the previous video record arrived (diagnostics)."""
-        self._last_video_outcome: str | None = None
-        """What the stream did with the previous video record (diagnostics)."""
-        self._last_key_ms: int | None = None
-        """The header time of the latest keyframe that decoded."""
-
-    @property
-    def closed(self) -> bool:
-        return self._closed
-
-    def __aiter__(self) -> MediaStream:
-        return self
-
-    async def __anext__(self) -> MediaFrame:
-        while True:
-            if self._frames:
-                return self._frames.popleft()
-            if self._error is not None:
-                error, self._error = self._error, None
-                raise error
-            now = time.monotonic()
-            if self._closed:
-                raise StopAsyncIteration
-            if not self._started:
-                remaining = self._opened_at + self._first_frame_timeout - now
-            else:
-                remaining = cast(float, self._last_rx) + self._idle_timeout - now
-            if remaining <= 0:
-                await self.aclose()
-                if self._started:
-                    raise StopAsyncIteration
-                if self._foreign_keyframes:
-                    _LOGGER.warning(
-                        "media (cmd %d ch%d): no keyframe decoded within %.0fs; "
-                        "%d keyframe(s) not wrapped for this stream's key were dropped",
-                        self.command,
-                        self.channel,
-                        self._first_frame_timeout,
-                        self._foreign_keyframes,
-                    )
-                if self._last_rx is not None:
-                    timed_out: EufySecurityError = ProtocolError(
-                        f"media for command {self.command} arrived, but no keyframe decoded "
-                        f"within {self._first_frame_timeout:.0f}s"
-                    )
-                else:
-                    indices = [] if self._open_index is None else [self._open_index]
-                    timed_out = self._session._unanswered_error(self.command, 0, indices)
-                self._session._count_media_failure(timed_out, self.channel)
-                raise timed_out
-            self._wake.clear()
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(self._wake.wait(), remaining)
-
-    async def __aenter__(self) -> MediaStream:
-        return self
-
-    def _expired(self, now: float) -> bool:
-        """Whether this stream should be released even though nobody is reading it.
-
-        Two ways a stream ends up unread. Its own deadlines are evaluated in
-        :meth:`__anext__`, so a stream nobody iterates never notices them — that covers
-        a station that went quiet. A station that keeps sending is the other case: the
-        queue fills, every frame is dropped, and the deadlines never fire because
-        frames keep arriving. Both mean the slot is held for nothing.
-        """
-        if self._closed:
-            return False
-        if len(self._frames) >= MEDIA_QUEUE_FRAMES and self.dropped:
-            return True
-        if not self._started:
-            return now >= self._opened_at + self._first_frame_timeout
-        return now >= cast(float, self._last_rx) + self._idle_timeout
-
-    async def __aexit__(self, *_exc: object) -> None:
-        await self.aclose()
-
-    async def aclose(self) -> None:
-        """Stop the stream at the station and release the session (idempotent)."""
-        if self._closed:
-            return
-        _LOGGER.debug(
-            "%s: media (cmd %d ch%d) closed after %.1fs; %d frame(s) dropped for a slow "
-            "reader, %d skipped waiting for a keyframe",
-            self._session._log_name,
-            self.command,
-            self.channel,
-            time.monotonic() - self._opened_at,
-            self.dropped,
-            self.skipped,
-        )
-        self._closed = True
-        self._frames.clear()
-        self._held = None
-        self._held_audio = []
-        self._wake.set()
-        self._session._detach_media(self)
-
-    def _feed(
-        self,
-        frame_type: int,
-        payload: bytes,
-        camera: int | None = None,
-        subheader: bytes | None = None,
-    ) -> None:
-        if self._closed:
-            return
-        self._head = b""
-        self._probe = ""
-        is_video = frame_type == FrameType.VIDEO_FRAME
-        now = time.monotonic()
-        previous_at, previous = self._last_video_at, self._last_video_outcome
-        if is_video:
-            self._last_video_at = now
-        outcome = self._take(frame_type, payload, camera, subheader)
-        if not is_video:
-            return
-        self._last_video_outcome = outcome
-        counters = self._session._media_counters
-        rejected = outcome == "not_annex_b"
-        if len(self._shapes) >= MEDIA_SHAPE_RECORDS and not rejected:
-            return
-        shape = video_record_shape(
-            payload, subheader, outcome=outcome, head=self._head, probe=self._probe
-        )
-        if len(self._shapes) < MEDIA_SHAPE_RECORDS:
-            self._shapes.append(shape)
-        if rejected:
-            since = None
-            if self._last_key_ms is not None and len(payload) >= VIDEO_HEADER_LEN:
-                since = video_header_ms(payload) - self._last_key_ms
-            counters.keyframes_rejected += 1
-            counters.rejected_keyframe = replace(
-                shape,
-                since_keyframe_ms=since,
-                channel=self.channel,
-                gap_ms=None if previous_at is None else round((now - previous_at) * 1000),
-                previous_outcome=previous,
-            )
-
-    def _take(
-        self,
-        frame_type: int,
-        payload: bytes,
-        camera: int | None,
-        subheader: bytes | None,
-    ) -> str:
-        """Queue the frame a media record carries, or drop it; returns what was done
-        (:attr:`~.media.MediaRecordShape.outcome`)."""
-        # Without a subheader the record's protection follows its keyframe flag.
-        is_video = frame_type == FrameType.VIDEO_FRAME
-        if (
-            self.command == CMD_START_REALTIME_MEDIA
-            and self._session.tags_live_camera
-            and camera not in (None, self.channel)
-        ):
-            self._other_camera_frame(camera, is_video)
-            return "other_camera"
-        self._last_rx = time.monotonic()
-        variant = video_variant(subheader) if is_video and subheader else None
-        if variant is not None and not self._decoder.decodes(variant):
-            self._undecodable_video(variant)
-            return "undecodable"
-        # Decide what to drop before decoding: a keyframe unwrap and its copies are
-        # the expensive part, and they are wasted on a frame that is thrown away.
-        if len(self._frames) >= MEDIA_QUEUE_FRAMES:
-            if is_video and not self._need_keyframe:
-                self._lagging = True
-            self._need_keyframe = self._need_keyframe or is_video
-            if self._started:
-                self.dropped += 1
-                self._session._media_counters.dropped_for_reader += 1
-            return "queue_full"
-        is_key = is_video and video_record_is_key(payload, variant)
-        # An ECC record without the keyframe flag is told only after its decrypt.
-        if is_video and self._need_keyframe and not is_key and variant is not VideoVariant.ECC:
-            self._skip_to_keyframe()
-            return "waiting_keyframe"
-        if not is_video and not self._started:
-            return "waiting_keyframe"  # audio before the first picture: tracks out of step
-        carries_key = is_key and variant in (None, VideoVariant.RSA_PREFIX)
-        wrapped = _wrapped_key(payload) if carries_key else None
-        if wrapped is not None and self._wrapped_key not in (None, wrapped):
-            # Another stream's keyframe. Dropping it leaves this stream's GOP intact,
-            # so the need for a keyframe is not re-armed.
-            if self._throttle.should_log("foreign-keyframe"):
-                _LOGGER.debug("dropping a keyframe wrapped to another stream's key")
-            return "foreign_key"
-        outcome = "foreign_key"
-        try:
-            frame = self._decoder.decode(frame_type, payload, subheader)
-            if (
-                frame is not None
-                and frame.is_keyframe
-                and not frame.data.startswith(ANNEX_B_STARTS)
-            ):
-                if self._held is not None:
-                    self._continue_held(frame)
-                    return "continuation"
-                outcome = "not_annex_b"
-                self._head = frame.data[:SHAPE_HEAD_LEN]
-                self._probe = keyframe_layout_probe(
-                    self._decoder.aes_key, payload[VIDEO_HEADER_LEN:]
-                )
-                raise _ForeignKeyframeError("keyframe did not decrypt to Annex-B")
-        except _ForeignKeyframeError as err:
-            self._need_keyframe = True  # the P-frames after it would not decode
-            self._lagging = False
-            if not self._started:
-                # Nothing pinned yet: most likely a keyframe of the previous stream. A
-                # stream that never decodes one is reported at the first-frame timeout.
-                self._foreign_keyframes += 1
-                if self._throttle.should_log("foreign-keyframe-unpinned"):
-                    _LOGGER.debug(
-                        "dropping a keyframe not wrapped for this stream's key "
-                        "(before its first keyframe): %s",
-                        err,
-                    )
-                return outcome
-            # Past the pinned-key check, so wrapped like this stream's keyframes: corrupt.
-            if self._throttle.should_log(("bad-media", frame_type)):
-                _LOGGER.warning("undecodable media frame 0x%04x: %s", frame_type, err)
-            return outcome
-        except ProtocolError as err:
-            if is_video:
-                self._need_keyframe = True  # the P-frames after it would not decode
-                self._lagging = False
-            if self._throttle.should_log(("bad-media", frame_type)):
-                _LOGGER.warning("undecodable media frame 0x%04x: %s", frame_type, err)
-            return "error"
-        if frame is None:
-            return "undecodable"
-        self._head = frame.data[:SHAPE_HEAD_LEN]
-        if frame.kind is MediaKind.VIDEO and self._need_keyframe and not frame.is_keyframe:
-            self._skip_to_keyframe()
-            return "waiting_keyframe"
-        if frame.kind is MediaKind.VIDEO:
-            if not frame.is_keyframe and not frame.data.startswith(ANNEX_B_STARTS):
-                # The app's player would append it to the frame before it.
-                self._session._media_counters.pframes_without_start_code += 1
-            checked = self._checked_video(frame)
-            if checked is None:
-                return "no_nal"
-            frame = checked
-        if (
-            frame.kind is MediaKind.VIDEO
-            and frame.codec is None
-            and self._throttle.should_log("unknown-codec")
-        ):
-            _LOGGER.warning(
-                "video header names codec %s, which the library does not know; "
-                "a muxer that needs a codec assumes HEVC",
-                video_codec_label(payload),
-            )
-        if frame.is_keyframe:
-            if not self._started:
-                _LOGGER.debug(
-                    "first keyframe after %.1fs (cmd %d); stream AES key %s",
-                    time.monotonic() - self._opened_at,
-                    self.command,
-                    Secret(self._decoder.aes_key),
-                )
-            self._need_keyframe = False
-            self._lagging = False
-            if not self._started and self.command == CMD_START_REALTIME_MEDIA:
-                self._session._wake_failures.pop(self.channel, None)
-            self._started = True
-            if self._wrapped_key is None:
-                self._wrapped_key = wrapped
-        if (
-            frame.kind is MediaKind.AUDIO
-            and self._held is not None
-            and len(self._held_audio) < MEDIA_QUEUE_FRAMES
-        ):
-            self._held_audio.append(frame)  # a video record ends the hold, not audio
-            return "frame"
-        self._release_held()
-        if frame.kind is MediaKind.VIDEO and frame.is_keyframe:
-            self._last_key_ms = frame.timestamp_ms
-            self._held, self._held_parts = frame, [frame.data]
-            return "keyframe"
-        self._frames.append(frame)
-        self._wake.set()
-        return "frame"
-
-    def _skip_to_keyframe(self) -> None:
-        """Count a video frame dropped while the stream waits for a keyframe, as reader
-        lag or as skipped after a frame that did not decode."""
-        if not self._started:
-            return
-        counters = self._session._media_counters
-        if self._lagging:
-            self.dropped += 1
-            counters.dropped_for_reader += 1
-        else:
-            self.skipped += 1
-            counters.skipped_for_keyframe += 1
-
-    def _continue_held(self, part: MediaFrame) -> None:
-        """Join a keyframe-flagged record that does not start with a start code to the
-        held keyframe: the rest of its picture."""
-        data, empty = drop_empty_nals(part.data)
-        counters = self._session._media_counters
-        counters.empty_nals += empty
-        counters.keyframe_continuations += 1
-        self._held_parts.append(data)
-
-    def _release_held(self) -> None:
-        """Queue the held keyframe, joined with its continuation parts, then the audio
-        that arrived while it was held."""
-        held = self._held
-        if held is None:
-            return
-        self._held = None
-        if len(self._held_parts) > 1:
-            held = replace(held, data=b"".join(self._held_parts))
-        self._held_parts = []
-        self._frames.append(held)
-        self._frames.extend(self._held_audio)
-        self._held_audio = []
-        self._wake.set()
-
-    def _end(self) -> None:
-        """The station says the recording is over: deliver what is queued, then stop."""
-        if self._closed:
-            return
-        _LOGGER.debug(
-            "media (cmd %d ch%d) ended by the station after %.1fs",
-            self.command,
-            self.channel,
-            time.monotonic() - self._opened_at,
-        )
-        self._release_held()
-        self._closed = True
-        self._wake.set()
-        self._session._detach_media(self)
-
-    def _checked_video(self, frame: MediaFrame) -> MediaFrame | None:
-        """``frame`` as it may be muxed: empty NAL units removed, the codec its picture
-        shows. None (and video dropped to the next keyframe) when no NAL unit is left."""
-        counters = self._session._media_counters
-        data, empty = drop_empty_nals(frame.data)
-        counters.empty_nals += empty
-        if not data:
-            counters.frames_without_nal += 1
-            self._need_keyframe = True
-            self._lagging = False
-            if self._throttle.should_log("no-nal"):
-                _LOGGER.debug(
-                    "media (cmd %d ch%d): dropping a video frame with no NAL unit",
-                    self.command,
-                    self.channel,
-                )
-            return None
-        if frame.is_keyframe:
-            shown = picture_codec(data)
-            if shown is not None and shown is not frame.codec:
-                header = frame.codec.value if frame.codec is not None else "unknown"
-                _count_capped(counters.codec_overrides, f"{header}->{shown.value}")
-                if self._throttle.should_log(("codec-override", shown)):
-                    _LOGGER.debug(
-                        "media (cmd %d ch%d): the video header names %s, the picture is %s; "
-                        "muxing as %s",
-                        self.command,
-                        self.channel,
-                        header,
-                        shown.value,
-                        shown.value,
-                    )
-            self._codec = shown or self._codec
-            if shown is not None:
-                counters.codecs_by_channel[self.channel] = shown
-        codec = self._codec or frame.codec
-        if data is frame.data and codec is frame.codec:
-            return frame
-        return replace(frame, data=data, codec=codec)
-
-    def _undecodable_video(self, variant: VideoVariant) -> None:
-        """Fail a stream whose video arrives in a protection its key does not decode;
-        after its first keyframe, drop such records."""
-        key = self._decoder.key_type
-        if self._started:
-            if self._throttle.should_log(("undecodable-video", variant)):
-                _LOGGER.warning(
-                    "dropping %s video records a stream opened with an %s key does not decode",
-                    variant,
-                    key,
-                )
-            return
-        self._fail(
-            UnsupportedError(
-                f"the station sends {variant.value} video, which a stream opened with an "
-                f"{key.value.upper()} key does not decode"
-            )
-        )
-        self._session._detach_media(self)
-
-    def _other_camera_frame(self, camera: int, is_video: bool) -> None:
-        """Drop a live frame tagged with another camera; fail when that is all that comes."""
-        self.other_camera_frames += 1
-        if self._throttle.should_log("other-camera"):
-            _LOGGER.debug(
-                "%s: live media for channel %d arrived tagged channel %d; dropped",
-                self._session._log_name,
-                self.channel,
-                camera,
-            )
-        if is_video and not self._started and self.other_camera_frames >= MEDIA_OTHER_CAMERA_FRAMES:
-            self._fail(
-                ProtocolError(
-                    f"the station streams channel {camera}, not the requested channel "
-                    f"{self.channel}"
-                )
-            )
-            self._session._detach_media(self)
-
-    def _fail(self, error: Exception) -> None:
-        if self._closed:
-            return
-        self._session._count_media_failure(error, self.channel)
-        _LOGGER.debug("media (cmd %d ch%d) failed: %s", self.command, self.channel, error)
-        self._closed = True
-        self._error = error
-        self._wake.set()
 
 
 @dataclass(slots=True, eq=False)
@@ -1326,16 +509,6 @@ class StationSession:
         # ConnectionChanged carries only their cause.
         self.serial = serial.strip()
         self._max_sessions = _session_budget(max_sessions)
-        self._expect_channels = frozenset(expect_channels)
-        self._block_aliases = dict(block_aliases or {})
-        # Values filed under a second alias are the same parameter: log their change once.
-        self._alias_copies = frozenset(
-            ch for targets in self._block_aliases.values() for ch in targets[1:]
-        )
-        self._station_blocks = next(
-            (tuple(t) for t in self._block_aliases.values() if STATION_CHANNEL in t),
-            (STATION_CHANNEL,),
-        )
         self.on_demand = on_demand
         self._idle_close = idle_close
         self._wake_provider = wake_provider
@@ -1356,21 +529,11 @@ class StationSession:
         self._creds: P2PCredentials | None = None
         self._cipher_id: int | None = None
         """The cipher the station named in its last CONN_INIT (None before one arrived)."""
-        self._rsa_keyless = False
-        """Whether the last RSA handshake left no session key: no cipher named, or its
-        RSA key does not parse. The session then runs under the static key."""
+        self._keys = SessionKeys(self.serial)
         self._conn_init_version: int | None = None
         """The version (subheader byte 0) of the last CONN_INIT reply."""
         self._did: Did | None = None
-        self._static_key: bytes | None = None
-        self._session_key: bytes | None = None
-        """The GCM session key of an ECIES handshake."""
-        self._aes_key: bytes | None = None
-        """The AES-128 session key of an RSA handshake: every frame is ECB under it."""
         self._decoders: dict[int, StreamDecoder] = {}
-        self._gcm_seq = GCM_SEQ_START
-        self._gcm_counter = 0
-        self._ecb_seq = 0
         self._results_due: dict[int, list[tuple[float, int]]] = {}
         """An RSA session's sends awaiting their result: frame type → (deadline (monotonic),
         slot), oldest first."""
@@ -1383,33 +546,13 @@ class StationSession:
         self._op_lock = asyncio.Lock()
         self._still_lock = asyncio.Lock()
         """Serialises still fetches, whose replies are owed in request order."""
-        self._history_lock = asyncio.Lock()
-        """Serialises history queries (a reply without a ``transaction`` binds to any)."""
         self._recipe_lock = asyncio.Lock()
         """Serialises recipes. A recipe's receipt is bound by frame type alone, and
         every standalone-device recipe shares type 1700, so two in flight would each be
         able to complete or fail on the other's receipt."""
         self._bus = EventBus()
-        self._params: dict[tuple[int, int], str | None] = {}
-        self._param_at: dict[tuple[int, int], float] = {}
-        """Epoch seconds each parameter's value dates from: its arrival over P2P, or the
-        cloud snapshot's ``update_time`` (an older snapshot never overwrites it)."""
-        self._param_origin: dict[tuple[int, int], ParamOrigin] = {}
-        """Where each parameter's value came from when not a dump (:attr:`param_origins`)."""
-        self._meta: dict[str, Any] = {}
-        """The dump's frame-level fields (firmware versions), latest value of each."""
-        self._unread_dump_keys: set[str] = set()
-        """Top-level dump keys the parser does not read, each logged once."""
-        self._dump_listeners: list[Callable[[], None]] = []
         self._notify_listeners: list[Callable[[Mapping[str, Any], FrameCipher], None]] = []
         self._alarm_listeners: list[Callable[[AlarmFrame], None]] = []
-        self._push_channels: set[int] = set()
-        """Blocks of the unsolicited dump in progress (see :meth:`_note_pushed_blocks`)."""
-        self._push_timer: asyncio.TimerHandle | None = None
-        self._guard_mode: GuardMode | int | None = None
-        """The selected guard mode (param 1224)."""
-        self._active_mode: GuardMode | int | None = None
-        """The effective guard mode (param 1151, the 0x047F report)."""
         self._alarming = False
         """Whether the last alarm-tone frame started the alarm (see :meth:`_handle_alarm`)."""
         self._tone_waiters: list[tuple[bool, asyncio.Future[AlarmChanged]]] = []
@@ -1444,8 +587,6 @@ class StationSession:
         it belong to that read."""
         self.ecb_state_refused = 0
         """Always 0 (:attr:`SessionStats.ecb_state_refused`)."""
-        self._state_frames: Counter[str] = Counter()
-        """State frames taken, by encryption (``state_frames_by_encryption``)."""
         self._state_authenticated: bool | None = None
         """Whether authenticated state was taken; False after unauthenticated state only."""
         self._unauthenticated_logged: set[tuple[int, str]] = set()
@@ -1456,31 +597,16 @@ class StationSession:
         """1308 replies discarded as the late answer to a timed-out request."""
         self._still_owed: deque[tuple[str, float]] = deque()
         """Timed-out 1308 requests whose reply may still arrive: (path, expiry)."""
-        # Health counters behind stats(); none is reset by a reconnect.
-        self._connects = 0
-        self._handshake_failures = 0
-        self._key_refreshes = 0
+        self._health = HealthCounters()
         self._last_error_name: str | None = None
-        self._last_event_at: float | None = None
-        self._events_by_type: Counter[str] = Counter()
-        self._frames_by_cipher: Counter[str] = Counter()
-        self._dropped_undecodable = 0
-        self._receipts_by_code: Counter[str] = Counter()
-        self._retired_wrong_port_drops = 0
-        """Wrong-port drops of transports this session no longer holds."""
-        self._account_mismatch_seen = False
-        self._media_counters = _MediaCounters()
-        self._stills_by_format: Counter[str] = Counter()
+        self._media_counters = MediaCounters()
         self._trigger_frame_lock = asyncio.Lock()
         """At most one short-lived trigger-frame session per station at a time."""
-        self._trigger_frame_sessions = 0
         self._extra_live: set[StationSession] = set()
         """Extra sessions carrying (or opening) a live stream while this session's slot is
         busy, or a recording download."""
-        self._extra_live_opened = 0
         self._download_lock = asyncio.Lock()
         """At most one recording download per station at a time."""
-        self._recording_downloads = 0
         self._live_capacity_waiters: list[asyncio.Future[None]] = []
         """Live opens and downloads waiting for this session's slot or an extra session."""
         self._live_owner: StationSession | None = None
@@ -1494,13 +620,23 @@ class StationSession:
         self._media: MediaStream | None = None
         self._throttle = LogThrottle()
         self._log_name = redact_serial(self.serial)
+        self._history = HistoryQueries(self)
+        self._param_state = ParamState(
+            self.serial,
+            bus=self._bus,
+            log_name=self._log_name,
+            throttle=self._throttle,
+            param=self._param,
+            block_aliases=block_aliases,
+            expect_channels=expect_channels,
+        )
 
     # ── state ────────────────────────────────────────────────────────────────
 
     @property
     def connected(self) -> bool:
         return (
-            (self._session_key is not None or self._aes_key is not None)
+            (self._keys.session_key is not None or self._keys.aes_key is not None)
             and self._transport is not None
             and self._transport.is_open
         )
@@ -1509,7 +645,7 @@ class StationSession:
     def rsa_session(self) -> bool:
         """Whether the station answered the RSA CONN_INIT, so the session runs
         AES-128-ECB under the key it carried instead of GCM."""
-        return self._aes_key is not None
+        return self._keys.rsa_session
 
     def video_codec(self, channel: int) -> VideoCodec | None:
         """The codec the latest keyframe picture of ``channel`` showed; None before any."""
@@ -1522,23 +658,12 @@ class StationSession:
         (the static key follows from the serial and DID): like the app, it takes the
         station's frames under every encryption type (clear, 1, 2), and none of its
         pushes is authenticated."""
-        return self._aes_key is not None and self._aes_key == self._static_key
+        return self._keys.static_key_session
 
     @property
     def state_authenticated(self) -> bool | None:
         """See :attr:`SessionStats.state_authenticated`."""
         return self._state_authenticated
-
-    @property
-    def _session_encryption(self) -> int:
-        """Encryption type of the frames an RSA session sends: 2 under a delivered key;
-        without one (no cipher named, or a key that does not parse), 1 (static key) to a
-        model of :data:`~.crypto.STATIC_KEY_FALLBACK_MODELS` and 0 (clear) to any other."""
-        if not self._rsa_keyless:
-            return FRAME_SESSION_ECB
-        if self.serial.startswith(STATIC_KEY_FALLBACK_MODELS):
-            return FRAME_STATIC_ECB
-        return FRAME_PLAIN
 
     @property
     def max_sessions(self) -> int:
@@ -1562,7 +687,7 @@ class StationSession:
     @property
     def standalone(self) -> bool:
         """Whether this station is a standalone device (its own station, like a SoloCam),
-        by the app's rule: its serial names no station kind (:func:`~..devices.recipes.connect_type`)."""
+        by the app's rule: its serial names no station kind (:func:`~...devices.recipes.connect_type`)."""
         return connect_type(self.serial, self.serial) is ConnectType.SINGLE
 
     @property
@@ -1612,13 +737,13 @@ class StationSession:
     def guard_mode(self) -> GuardMode | int | None:
         """The last selected guard mode known (param 1224; :attr:`GuardMode.SCHEDULE`
         while a schedule runs): observed over P2P, or noted from a push."""
-        return self._guard_mode
+        return self._param_state.guard_mode
 
     @property
     def active_mode(self) -> GuardMode | int | None:
         """The last effective guard mode known: the mode in force (param 1151, the
         ``0x047F`` report), which differs from :attr:`guard_mode` only under Schedule."""
-        return self._active_mode
+        return self._param_state.active_mode
 
     @property
     def media_slot_channel(self) -> int | None:
@@ -1648,45 +773,12 @@ class StationSession:
         report that moves the mode back. ``active_mode`` None: ``mode`` outside Schedule,
         else the effective mode stays as it was.
         """
-        self._apply_modes(mode, active_mode)
-        if not self.on_demand or self._guard_mode is None:
+        self._param_state.apply_modes(mode, active_mode)
+        if not self.on_demand or self._param_state.guard_mode is None:
             return
         # A station reached on demand has no dump to follow the push: file the modes as
         # parameters, so its state (and a later, older cloud snapshot) sees them.
-        self._file_modes("push")
-
-    def _file_modes(self, origin: str, *, origin_kind: ParamOrigin | None = None) -> None:
-        """File the known modes as the station's own parameters (1224, 1151), dated now.
-
-        The station's state is built from the held parameters, so a mode learned without
-        a dump (a push, an arm's result or report) is filed there; a cloud snapshot dated
-        before it then no longer overwrites it (:meth:`ingest_cloud_params`).
-        ``origin_kind`` marks the values as no dump's (:attr:`param_origins`).
-        """
-        values = {GUARD_MODE_PARAM: self._guard_mode, ACTIVE_MODE_PARAM: self._active_mode}
-        dump = ParamDump()
-        for param_id, value in values.items():
-            if value is None:
-                continue
-            for block in self._station_blocks:
-                dump.devices.setdefault(block, {})[param_id] = str(int(value))
-        if not dump.devices:
-            return
-        self._merge_dump(dump, origin, time.time(), origin_kind=origin_kind)
-        self._complete_dump(None)
-
-    def _scalar_cipher(self) -> tuple[bytes, int]:
-        """Key and encryption type of an ECB scalar frame: the session key on an RSA
-        session (every command goes under it), else the static key."""
-        key = self._require_static_key()
-        if self._aes_key is not None:
-            return self._aes_key, self._session_encryption
-        return key, FRAME_STATIC_ECB
-
-    def _dump_carries_mode(self) -> bool:
-        """Whether a dump delivered the station's selected mode (1224) that is held."""
-        key = (self._station_blocks[0], GUARD_MODE_PARAM)
-        return key in self._params and key not in self._param_origin
+        self._param_state.file_modes("push")
 
     def ingest_cloud_params(
         self, dev_type: int, params: Iterable[tuple[int, str, float | None]]
@@ -1700,33 +792,7 @@ class StationSession:
         emits ``ParamChanged`` (and ``GuardModeChanged``, as a cloud report) and completes
         a dump, so the station's state follows.
         """
-        targets = tuple(self._block_aliases.get(dev_type, (dev_type,)))
-        fresh: list[dict[str, Any]] = []
-        stamps: dict[int, float] = {}
-        for param_id, value, updated_at in params:
-            keys = [(block, param_id) for block in targets]
-            if updated_at is None:
-                if any(key in self._params for key in keys):
-                    continue
-            elif updated_at <= max((self._param_at.get(key, 0.0) for key in keys), default=0.0):
-                continue
-            fresh.append({"dev_type": dev_type, "param_type": param_id, "param_value": value})
-            if updated_at is not None:
-                stamps[param_id] = updated_at
-        if not fresh:
-            return 0
-        dump = ParamDump()
-        dump.ingest({"params": fresh}, aliases=self._block_aliases)
-        self._merge_dump(
-            dump,
-            "cloud snapshot",
-            time.time(),
-            stamps,
-            source=EventSource.CLOUD,
-            origin_kind=ParamOrigin.CLOUD,
-        )
-        self._complete_dump(None)
-        return len(fresh)
+        return self._param_state.ingest_cloud_params(dev_type, params)
 
     def apply_local_params(self, channel: int, values: Mapping[int, str]) -> None:
         """Merge parameter values a successful write just set on ``channel``, as one dump.
@@ -1735,23 +801,7 @@ class StationSession:
         A standalone device's values are filed under every alias of its block. Emits
         ``ParamChanged`` for each change and notifies the dump listeners.
         """
-        if not values:
-            return
-        block = next(
-            (dev for dev, targets in self._block_aliases.items() if channel in targets), channel
-        )
-        dump = ParamDump()
-        dump.ingest(
-            {
-                "params": [
-                    {"dev_type": block, "param_type": pid, "param_value": value}
-                    for pid, value in values.items()
-                ]
-            },
-            aliases=self._block_aliases,
-        )
-        self._merge_dump(dump, "local write", time.time(), origin_kind=ParamOrigin.LOCAL_WRITE)
-        self._notify_dump_listeners()
+        self._param_state.apply_local_params(channel, values)
 
     @property
     def storage(self) -> StorageInfo | None:
@@ -1762,42 +812,37 @@ class StationSession:
     def params(self) -> Mapping[tuple[int, int], str | None]:
         """Every parameter held, keyed by ``(dev_type, param_id)``: the latest value of
         each, minus the blocks a full read no longer carries (see :meth:`add_dump_listener`)."""
-        return self._params
+        return self._param_state.params
 
     @property
     def param_origins(self) -> Mapping[tuple[int, int], ParamOrigin]:
         """The :attr:`params` keys whose value no dump delivered: a cloud snapshot's
         (:meth:`ingest_cloud_params`) or this library's own write
         (:meth:`apply_local_params`), until a dump carries the key again."""
-        return MappingProxyType(self._param_origin)
+        return self._param_state.param_origins
 
     def param_time(self, key: tuple[int, int]) -> float | None:
         """Epoch seconds :attr:`params` ``[key]`` dates from (see :meth:`ingest_cloud_params`);
         None when the key is not held."""
-        return self._param_at.get(key)
+        return self._param_state.param_time(key)
 
     @property
     def expect_channels(self) -> frozenset[int]:
         """The paired sub-devices' channels every read without its own list waits for."""
-        return self._expect_channels
+        return self._param_state.expect_channels
 
     @expect_channels.setter
     def expect_channels(self, channels: Iterable[int]) -> None:
-        self._expect_channels = frozenset(channels)
+        self._param_state.expect_channels = channels
 
     @property
     def unread_dump_keys(self) -> frozenset[str]:
         """Top-level keys of this session's parameter dumps that the library does not read."""
-        return frozenset(self._unread_dump_keys)
+        return self._param_state.unread_dump_keys
 
     def merged_params(self) -> ParamDump:
         """A copy of :attr:`params` and the latest frame-level fields, as one dump."""
-        dump = ParamDump()
-        for (dev, pid), value in self._params.items():
-            if value is not None:
-                dump.devices.setdefault(dev, {})[pid] = value
-        dump.meta.update(self._meta)
-        return dump
+        return self._param_state.merged_params()
 
     def add_dump_listener(self, callback: Callable[[], None]) -> Unsubscribe:
         """Call ``callback`` once per completed parameter dump; returns the unsubscribe.
@@ -1815,13 +860,7 @@ class StationSession:
 
         A failing read signals nothing. A failing callback is logged, never raised.
         """
-        self._dump_listeners.append(callback)
-
-        def unsubscribe() -> None:
-            with contextlib.suppress(ValueError):
-                self._dump_listeners.remove(callback)
-
-        return unsubscribe
+        return self._param_state.add_dump_listener(callback)
 
     def add_notify_listener(
         self, callback: Callable[[Mapping[str, Any], FrameCipher], None]
@@ -1829,7 +868,7 @@ class StationSession:
         """Call ``callback(obj, cipher)`` with every JSON notify (0x0547) decoded, a
         request's answer included; returns the unsubscribe.
 
-        An :attr:`~.models.FrameCipher.ECB` notify is forgeable by anyone on the LAN:
+        An :attr:`~..models.FrameCipher.ECB` notify is forgeable by anyone on the LAN:
         use it for display state only. A failing callback is logged, never raised.
         """
         self._notify_listeners.append(callback)
@@ -1863,22 +902,22 @@ class StationSession:
         media = self._media_counters
         return SessionStats(
             connected=self.announced,
-            connects=self._connects,
-            reconnects=max(self._connects - 1, 0),
-            handshake_failures=self._handshake_failures,
-            key_refreshes=self._key_refreshes,
+            connects=self._health.connects,
+            reconnects=max(self._health.connects - 1, 0),
+            handshake_failures=self._health.handshake_failures,
+            key_refreshes=self._health.key_refreshes,
             last_error=self._last_error_name,
             seconds_since_last_probe=now - self._last_probe if self._last_probe else None,
             seconds_since_last_event=(
-                None if self._last_event_at is None else now - self._last_event_at
+                None if self._health.last_event_at is None else now - self._health.last_event_at
             ),
-            events_by_type=dict(self._events_by_type),
-            frames_by_cipher=dict(self._frames_by_cipher),
+            events_by_type=dict(self._health.events_by_type),
+            frames_by_cipher=dict(self._health.frames_by_cipher),
             ecb_state_refused=self.ecb_state_refused,
-            dropped_undecodable=self._dropped_undecodable,
-            receipts_by_code=dict(self._receipts_by_code),
-            wrong_port_drops=self._retired_wrong_port_drops + live_drops,
-            account_mismatch_seen=self._account_mismatch_seen,
+            dropped_undecodable=self._health.dropped_undecodable,
+            receipts_by_code=dict(self._health.receipts_by_code),
+            wrong_port_drops=self._health.retired_wrong_port_drops + live_drops,
+            account_mismatch_seen=self._health.account_mismatch_seen,
             media_opens=media.opens,
             media_failures_by_type=dict(media.failures),
             media_failures_by_channel={
@@ -1898,13 +937,13 @@ class StationSession:
             media_keyframe_continuations=media.keyframe_continuations,
             media_first_records=tuple(media.first_records),
             media_rejected_keyframe=media.rejected_keyframe,
-            stills_by_format=dict(self._stills_by_format),
+            stills_by_format=dict(self._health.stills_by_format),
             still_late_replies=self.still_late_replies,
             still_file_mismatches=self.still_file_mismatches,
-            trigger_frame_sessions=self._trigger_frame_sessions,
-            extra_live_sessions=self._extra_live_opened,
+            trigger_frame_sessions=self._health.trigger_frame_sessions,
+            extra_live_sessions=self._health.extra_live_opened,
             extra_live_sessions_open=len(self._extra_live),
-            recording_downloads=self._recording_downloads,
+            recording_downloads=self._health.recording_downloads,
             media_slot_channel=self.media_slot_channel,
             conn_init_version=self._conn_init_version,
             cipher_id=self._cipher_id,
@@ -1912,7 +951,7 @@ class StationSession:
             media_frames_dropped_for_reader=media.dropped_for_reader,
             media_frames_skipped_for_keyframe=media.skipped_for_keyframe,
             media_pframes_without_start_code=media.pframes_without_start_code,
-            state_frames_by_encryption=dict(self._state_frames),
+            state_frames_by_encryption=dict(self._health.state_frames),
             state_authenticated=self.state_authenticated,
         )
 
@@ -1988,7 +1027,7 @@ class StationSession:
         unreachable station) surface to the caller — but the supervisor is started
         either way, so a station that is off when its consumer boots is picked up
         as soon as it answers. Afterwards the supervisor retries with backoff and
-        reports through :class:`~..events.ConnectionChanged`. A failed first start is
+        reports through :class:`~...events.ConnectionChanged`. A failed first start is
         reported there too (``connected=False`` with its cause), besides being raised.
         """
         self._raise_if_closed()
@@ -2018,7 +1057,7 @@ class StationSession:
     async def async_close(self) -> None:
         """Stop supervising and close the session for good."""
         self._closed = True
-        self._cancel_push_timer()
+        self._param_state.cancel_push_timer()
         if self._supervisor is not None:
             self._supervisor.cancel()
             # A supervisor that died on an unexpected error holds it here; closing must
@@ -2048,7 +1087,7 @@ class StationSession:
         timeout = _or(timeout, PARAM_QUERY_TIMEOUT)
         await self.async_connect()
         dump = ParamDump()
-        channels = self._expect_channels if expect_channels is None else expect_channels
+        channels = self._param_state.expect_channels if expect_channels is None else expect_channels
         expected = {STATION_CHANNEL, *channels}
 
         def complete() -> bool:
@@ -2057,7 +1096,7 @@ class StationSession:
 
         def collect(inbound: Inbound) -> None:
             if inbound.type == FrameType.PARAM_NOTIFY and (obj := inbound.json()) is not None:
-                self._ingest_dump(dump, obj)
+                self._param_state.ingest_dump(dump, obj)
 
         def done(inbound: Inbound) -> ParamDump | None:
             collect(inbound)
@@ -2083,8 +1122,8 @@ class StationSession:
                 self._announce_connected()
                 if not complete():
                     await self._listen(collect, PARAM_SETTLE, until=complete)
-                full = self._expect_channels <= expected
-                self._complete_dump(dump.devices.keys() if full else None)
+                full = self._param_state.expect_channels <= expected
+                self._param_state.complete_dump(dump.devices.keys() if full else None)
             finally:
                 self._probing = False
                 self._probe_ended_at = time.monotonic()
@@ -2131,11 +1170,11 @@ class StationSession:
         await self.async_connect()
         creds = self._require_creds()
         if scalar:
-            key, encryption = self._scalar_cipher()
+            key, encryption = self._keys.scalar_cipher()
 
             def send_once() -> int:
-                seq = self._ecb_seq
-                self._ecb_seq = (seq + 1) & 0xFF
+                seq = self._keys.ecb_seq
+                self._keys.ecb_seq = (seq + 1) & 0xFF
                 frame = encode_ecb_scalar_frame(
                     key, CMD_SET_ARMING, int(mode), creds.account_id, seq=seq, encryption=encryption
                 )
@@ -2230,17 +1269,17 @@ class StationSession:
         _raise_waiter_error(waiter)  # the session was lost, or the station rejected it
 
         if applied:
-            self._set_modes(mode, None if schedule else mode)
-            self._file_modes("arm", origin_kind=ParamOrigin.LOCAL_WRITE)
+            self._param_state.set_modes(mode, None if schedule else mode)
+            self._param_state.file_modes("arm", origin_kind=ParamOrigin.LOCAL_WRITE)
             return mode
         if reported and not schedule:
             result = as_guard_mode(reported[-1])
-            self._set_modes(result, result)
+            self._param_state.set_modes(result, result)
             # The report is the station's word on its mode: file it as its parameters,
             # so the state follows it on a station no dump follows (one reached on
             # demand, one whose dump lacks the mode) until a newer dump or cloud
             # snapshot says otherwise.
-            self._file_modes("arm", origin_kind=ParamOrigin.LOCAL_WRITE)
+            self._param_state.file_modes("arm", origin_kind=ParamOrigin.LOCAL_WRITE)
             if result != mode:
                 raise CommandRejectedError(
                     CMD_SET_ARMING, int(result), f"station applied {result!r}"
@@ -2415,7 +1454,7 @@ class StationSession:
         confirm it by reading the parameters back.
 
         The frame type is 1255 and the body the table's JSON (see
-        :mod:`.mode_actions`). The station answers only with a receipt; a non-zero
+        :mod:`..mode_actions`). The station answers only with a receipt; a non-zero
         receipt code raises :class:`CommandRejectedError`, but a zero one is not taken
         as success: every value the table leaves (each device's action and delays for
         the mode) is read back, and :class:`CommandNotAppliedError` names the first that
@@ -2512,10 +1551,10 @@ class StationSession:
         self, seconds: int, *, timeout: float | None = None
     ) -> CommandOutcome:
         """Sound the station's siren for ``seconds`` (0 stops it): SET_TONE_FILE (1201)
-        :func:`~.messages.tone_file_payload` with the session's user name, ``mChannel`` 0.
+        :func:`~..messages.tone_file_payload` with the session's user name, ``mChannel`` 0.
 
         Alarm-affecting. A HomeBase 3 acknowledges the command without a result and
-        reports the siren in its alarm-tone frame (:mod:`.alarm`). Returns and raises as
+        reports the siren in its alarm-tone frame (:mod:`..alarm`). Returns and raises as
         :meth:`async_send_alarm`.
         """
         return await self.async_send_alarm(
@@ -2537,12 +1576,12 @@ class StationSession:
     ) -> CommandOutcome:
         """Start (``on``) or stop an alarm: SET_TONE_FILE (1201) or SET_DEVS_TONE_FILE
         (1202) with ``payload`` on ``channel``; a payload value equal to
-        :data:`~.devices.device_alarm.USER_NAME_SLOT` is the session's user name.
+        :data:`~..devices.device_alarm.USER_NAME_SLOT` is the session's user name.
 
         Alarm-affecting. Returns ``APPLIED`` as soon as a result arrives or an alarm frame
         received after the send shows the alarm in the asked state: for 1201 the
         alarm-tone frame on any channel (the alarm on, or ended), for 1202 the device-siren
-        frame on ``channel`` (:attr:`~.alarm.AlarmFrame.alarm_state`; a frame that changes
+        frame on ``channel`` (:attr:`~..alarm.AlarmFrame.alarm_state`; a frame that changes
         no state, ``[10, 0]`` or ``[16, 5]``, confirms nothing). A frame arriving after the
         command's own wait still counts within ``timeout`` (:data:`TONE_CONFIRM_TIMEOUT`)
         of the call. Otherwise returns and raises as :meth:`async_send_command`
@@ -2595,7 +1634,7 @@ class StationSession:
         channel: int = 0,
         timeout: float | None = None,
     ) -> RecipeReply:
-        """Send a handler recipe (:mod:`~..devices.recipes`) and wait for its answer.
+        """Send a handler recipe (:mod:`~...devices.recipes`) and wait for its answer.
 
         The recipe's frame (:meth:`Recipe.plaintext`, of type ``recipe.cmd``) goes to
         ``channel``'s subheader. A receipt with code -108 raises
@@ -2680,15 +1719,15 @@ class StationSession:
         timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
-        key, encryption = self._scalar_cipher()
+        key, encryption = self._keys.scalar_cipher()
 
         def match(inbound: Inbound) -> tuple[int, int | None] | None:
             code = _scalar_result(inbound, command)
             return None if code is None else (code, inbound.frame.cipher)
 
         async with self._op("ECB command"):
-            seq = self._ecb_seq
-            self._ecb_seq = (seq + 1) & 0xFF
+            seq = self._keys.ecb_seq
+            self._keys.ecb_seq = (seq + 1) & 0xFF
             frame = encode_ecb_scalar_frame(
                 key,
                 command,
@@ -2748,7 +1787,7 @@ class StationSession:
         """Send a string setting the way the app does (its set-with-string handler).
 
         A GCM frame whose type is ``command``, subheader channel 255, body
-        :func:`~.messages.string_command_body` (``channel`` addresses the device inside
+        :func:`~..messages.string_command_body` (``channel`` addresses the device inside
         it). The station answers with a receipt of the same type: a non-zero code raises
         :class:`CommandRejectedError`, no answer :class:`CommandNotAppliedError` or
         :class:`DeviceTimeoutError`. A receipt is not a read-back. A value, account id or
@@ -2786,7 +1825,7 @@ class StationSession:
         """Read the station's storage record (``1307`` / ``11001``): disk and eMMC figures.
 
         The query of the HomeBase 3 family; see
-        :func:`~.storage_info.storage_query` for which station answers which. Read-only.
+        :func:`~..storage_info.storage_query` for which station answers which. Read-only.
         The reply carries no correlation id, so a record the station sends to this
         session for another client's query in the same moment answers it too (it is the
         same record). Raises :class:`CommandRejectedError` for a non-zero result or a
@@ -2794,7 +1833,7 @@ class StationSession:
         a station that refuses the query sends no record), :class:`ProtocolError` for a
         reply without a ``body``, and :class:`DeviceTimeoutError` when nothing answers
         within ``timeout`` (default :data:`STORAGE_TIMEOUT`). The record also becomes
-        :attr:`storage` and, when it changed, a :class:`~..events.StorageChanged`.
+        :attr:`storage` and, when it changed, a :class:`~...events.StorageChanged`.
 
         The answer to this query is taken under either cipher: on a fresh session the
         station answers it under ECB. It is the record this
@@ -2818,7 +1857,7 @@ class StationSession:
         """Read a HomeBase 2's storage (``55000``, ``APP_CMD_GET_HUB_STORAGE_INFO``).
 
         The query the app sends a HomeBase 2 from firmware 3.3.7.7 **[declared: app]**:
-        the eMMC and disk totals and free space (:func:`~.storage_info.parse_hub_storage`).
+        the eMMC and disk totals and free space (:func:`~..storage_info.parse_hub_storage`).
         Read-only; errors, timeout and the kept :attr:`storage` as for
         :meth:`async_get_storage`.
         """
@@ -2880,9 +1919,9 @@ class StationSession:
         The query a standalone device answers where it does not answer the HomeBase
         storage record (``1307`` / ``11001``): a bare command frame of type ``1144``,
         answered by a frame of the same type carrying a 12-byte body (three ``int32``:
-        status, total, free — see :func:`~.storage_info.parse_sd_card_info`). The result
+        status, total, free — see :func:`~..storage_info.parse_sd_card_info`). The result
         is a :class:`StorageInfo` with only ``emmc`` set, kept as :attr:`storage` and
-        announced with :class:`~..events.StorageChanged` when it changed.
+        announced with :class:`~...events.StorageChanged` when it changed.
 
         A T8170 just woken ignores the query for a few seconds (as it does the
         event-count query), so it is resent every :data:`SD_INFO_RESEND` seconds until
@@ -3043,11 +2082,11 @@ class StationSession:
         ``DB_QUERY_HISTORY`` (10011) query stays station-wide.
 
         Uses the verb the app sends this station's model
-        (:func:`~.messages.history_query_verb`) the way the app does: one day at a
+        (:func:`~..messages.history_query_verb`) the way the app does: one day at a
         time (``start_date`` = the day, ``end_date`` = the next day), paging with
-        ``count`` = ``page_size`` (None: :data:`HISTORY_PAGE_SIZE`, or
-        :data:`HISTORY_LOCAL_PAGE_SIZE` under ``DB_QUERY_LOCAL_EVENTS``) until a page
-        comes back short. Under ``DB_QUERY_HISTORY`` (10011, the HomeBase 3 family)
+        ``count`` = ``page_size`` (None: :data:`~.history.HISTORY_PAGE_SIZE`, or
+        :data:`~.history.HISTORY_LOCAL_PAGE_SIZE` under ``DB_QUERY_LOCAL_EVENTS``) until a
+        page comes back short. Under ``DB_QUERY_HISTORY`` (10011, the HomeBase 3 family)
         the cursor is ``start_id`` = the previous page's oldest ``record_id``; under
         ``DB_QUERY_LOCAL_EVENTS`` (10017, every other station, **[declared: app]**,
         unverified on hardware) it is ``start_time`` = the previous page's oldest
@@ -3092,40 +2131,17 @@ class StationSession:
     ) -> list[tuple[date, HistoryRecord]]:
         """:meth:`async_list_history`, each row with the station day its query named (the
         day it belongs to on the station, whether or not its ``record_id`` carries one)."""
-        verb = history_query_verb(self.serial)
-        # A camera's own list is filtered at the station (device_info), as the app does.
-        native_device_sn = device_sn if verb == DB_QUERY_LOCAL_EVENTS else None
-        if page_size is None:
-            page_size = HISTORY_PAGE_SIZE if verb == DB_QUERY_HISTORY else HISTORY_LOCAL_PAGE_SIZE
-        if page_size < 2:
-            raise ValueError("page_size must be at least 2")
-        if count is not None and count < 1:
-            raise ValueError("count must be at least 1")
-        first = _parse_day(start_date)
-        last = first if end_date is None else _parse_day(end_date)
-        if first > last:
-            raise ValueError(f"start date {start_date} is after end date {end_date}")
-        cursor_day = _cursor_day(before, before_day)
-        records: list[tuple[date, HistoryRecord]] = []
-        seen: set[int] = set()
-        day = last if cursor_day is None else min(last, cursor_day)
-        while day >= first:
-            await self._history_day(
-                day,
-                records,
-                seen,
-                verb=verb,
-                count=count,
-                start_id=before if day == cursor_day else None,
-                keep=keep,
-                device_sn=native_device_sn,
-                page_size=page_size,
-                timeout=timeout,
-            )
-            if count is not None and len(records) >= count:
-                return records[:count]
-            day -= timedelta(days=1)
-        return records
+        return await self._history.list_by_day(
+            start_date,
+            end_date,
+            count=count,
+            before=before,
+            before_day=before_day,
+            keep=keep,
+            device_sn=device_sn,
+            page_size=page_size,
+            timeout=_or(timeout, HISTORY_QUERY_TIMEOUT),
+        )
 
     async def async_history_record(
         self, record_id: int, *, timeout: float | None = None
@@ -3136,25 +2152,22 @@ class StationSession:
         record's day comes from the id (``YYYYMMDD`` and a five-digit counter), and a
         page asked from ``start_id`` starts with that row. Raises
         :class:`ValueError`, before sending, for an id that carries no valid day
-        (check it with :func:`~.messages.record_id_day`).
+        (check it with :func:`~..messages.record_id_day`).
         """
-        day = _record_day(record_id)
-        page, _ = await self._history_page(day, record_id, 2, timeout)
-        row = next((r for r in page if r.record_id == record_id), None)
-        return None if row is None else self._with_ref(row, day, history_query_verb(self.serial))
+        return await self._history.record(record_id, timeout=_or(timeout, HISTORY_QUERY_TIMEOUT))
 
     async def async_find_history_record(
         self, ref: RecordingRef, *, timeout: float | None = None
     ) -> HistoryRecord:
-        """The history row ``ref`` names (as :func:`~..recordings.decode_ref` gives it),
-        carrying its :attr:`~..events.HistoryRecord.ref`.
+        """The history row ``ref`` names (as :func:`~...recordings.decode_ref` gives it),
+        carrying its :attr:`~...events.HistoryRecord.ref`.
 
         Queries of the ref's day with the verb the app sends this station, none resent
         (``timeout`` None: :data:`HISTORY_QUERY_TIMEOUT` each). Under
         ``DB_QUERY_HISTORY`` one page of 2 from ``start_id`` = its ``record_id`` (the
         page starts with that row), matched by ``record_id`` and camera. Under
-        ``DB_QUERY_LOCAL_EVENTS`` a page of :data:`HISTORY_LOCAL_PAGE_SIZE` from each
-        cursor of :meth:`~..recordings.RecordingRef.time_cursors`, matched by
+        ``DB_QUERY_LOCAL_EVENTS`` a page of :data:`~.history.HISTORY_LOCAL_PAGE_SIZE`
+        from each cursor of :meth:`~...recordings.RecordingRef.time_cursors`, matched by
         ``record_id``, camera and start time: the second page is asked only when the
         first is full, lacks the row and holds no row that started before it. That
         finds the row whether the station lists the rows before the cursor or up to
@@ -3165,217 +2178,7 @@ class StationSession:
         :class:`RecordNotFoundError` when no page asked holds the row: the station no
         longer lists it (deleted), or lists that id for another camera.
         """
-        if history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS:
-            row = await self._find_local_event(ref, timeout)
-        else:
-            page, _ = await self._history_page(ref.day, ref.record_id, 2, timeout)
-            names = (ref.record_id, ref.device_sn)
-            row = next((r for r in page if (r.record_id, r.device_sn) == names), None)
-        if row is None:
-            raise RecordNotFoundError(
-                f"{self._log_name}: the station lists no such recording", device_sn=ref.device_sn
-            )
-        return replace(row, ref=encode_ref(ref, station_sn=self.serial))
-
-    async def _find_local_event(
-        self, ref: RecordingRef, timeout: float | None
-    ) -> HistoryRecord | None:
-        """The row ``ref`` names under ``DB_QUERY_LOCAL_EVENTS``, or None (see
-        :meth:`async_find_history_record`)."""
-        cursors = ref.time_cursors()
-        if cursors is None:
-            raise RecordingRefError("the recording reference names no start time to ask by")
-        names = (ref.record_id, ref.device_sn, ref.started)
-        for cursor in cursors:
-            page, _ = await self._history_page(
-                ref.day,
-                0,
-                HISTORY_LOCAL_PAGE_SIZE,
-                timeout,
-                verb=DB_QUERY_LOCAL_EVENTS,
-                start_time=cursor,
-                device_sn=ref.device_sn,
-            )
-            for row in page:
-                if (row.record_id, row.device_sn, row_started(row)) == names:
-                    return row
-            starts = [s for r in page if (s := row_started(r)) is not None]
-            # a full page with no row started before the ref may hide it: ask on once
-            if len(page) < HISTORY_LOCAL_PAGE_SIZE or min(starts, default=cursors[1]) < cursors[1]:
-                return None
-        return None
-
-    def _with_ref(self, row: HistoryRecord, day: date, verb: int) -> HistoryRecord:
-        """``row`` listed under the station ``day`` with its reference (see
-        :func:`~..recordings.issue_ref`; under ``DB_QUERY_LOCAL_EVENTS`` a row is found
-        again by its start time)."""
-        ref = issue_ref(
-            row, day, station_sn=self.serial, need_started=verb == DB_QUERY_LOCAL_EVENTS
-        )
-        return row if ref is None else replace(row, ref=ref)
-
-    async def _history_day(
-        self,
-        day: date,
-        records: list[tuple[date, HistoryRecord]],
-        seen: set[int],
-        *,
-        verb: int = DB_QUERY_HISTORY,
-        count: int | None,
-        start_id: int | None = None,
-        keep: Callable[[HistoryRecord], bool] | None = None,
-        device_sn: str | None = None,
-        page_size: int,
-        timeout: float | None,
-    ) -> None:
-        """Add one day's records to ``records``, page by page, until the day or ``count``
-        runs out; ``seen`` holds the ``record_id`` values already met. With
-        ``start_id`` the day is paged from that row, which is left out (under
-        ``DB_QUERY_LOCAL_EVENTS`` the day is paged from its newest row and the rows
-        from ``start_id`` up are left out); only rows ``keep`` accepts are added."""
-        cursor = start_id or 0
-        if start_id:
-            seen.add(start_id)  # the first page starts with the cursor row
-        local = verb == DB_QUERY_LOCAL_EVENTS
-        time_cursor = "0"
-        first_id: int | None = None
-        for number in range(1, HISTORY_MAX_PAGES + 1):
-            page, oldest = await self._history_page(
-                day,
-                cursor if not local else 0,
-                page_size,
-                timeout,
-                resend=True,
-                verb=verb,
-                start_time=time_cursor,
-                device_sn=device_sn,
-            )
-            wanted = page
-            if local and start_id:
-                wanted = [r for r in page if not r.record_id or r.record_id < start_id]
-            fresh = [r for r in wanted if not r.record_id or r.record_id not in seen]
-            seen.update(r.record_id for r in fresh)
-            kept = [r for r in fresh if keep is None or keep(r)]
-            records.extend((day, self._with_ref(r, day, verb)) for r in kept)
-            stop: str | None = None
-            if count is not None and len(records) >= count:
-                stop = "enough rows"
-            elif len(page) < page_size:
-                stop = "short page"
-            elif local:
-                # The app's paging: the oldest start_time of the page, and a page that
-                # starts with the same row as the last one ends the day.
-                times = [r.start_time for r in page if r.start_time]
-                if page[0].record_id and page[0].record_id == first_id:
-                    stop = "first row repeats"
-                elif not times:
-                    stop = "no start_time to page from"
-                else:
-                    first_id = page[0].record_id
-                    time_cursor = history_cursor_time(min(times))
-            elif not fresh or oldest is None or oldest == cursor:
-                stop = "no new cursor"
-            else:
-                cursor = oldest
-            _LOGGER.debug(
-                "%s: history of %s, page %d: %d row(s), %d new, %d kept; %s",
-                self._log_name,
-                day.isoformat(),
-                number,
-                len(page),
-                len(fresh),
-                len(kept),
-                f"last page ({stop})" if stop else "asking the next",
-            )
-            if stop:
-                return
-        _LOGGER.warning(
-            "%s: history of %s still had rows after %d pages; the rest is left out",
-            self._log_name,
-            day.isoformat(),
-            HISTORY_MAX_PAGES,
-        )
-
-    async def _history_page(
-        self,
-        day: date,
-        start_id: int,
-        page_size: int,
-        timeout: float | None,
-        *,
-        resend: bool = False,
-        verb: int = DB_QUERY_HISTORY,
-        start_time: str = "0",
-        device_sn: str | None = None,
-    ) -> tuple[list[HistoryRecord], int | None]:
-        """One page of a day's history and the cursor for the next (its oldest ``record_id``).
-
-        ``verb`` picks the query: ``DB_QUERY_HISTORY`` pages from ``start_id``,
-        ``DB_QUERY_LOCAL_EVENTS`` from ``start_time``. ``resend``: after a timeout, ask
-        the same page once more; a late reply to the first query answers the second as
-        well.
-        """
-        timeout = HISTORY_QUERY_TIMEOUT if timeout is None else timeout
-        await self.async_connect()
-        creds = self._require_creds()
-        sent: set[str] = set()
-
-        def send() -> None:
-            transaction = str(int(time.time() * 1000))
-            sent.add(transaction)
-            dates = (
-                day.strftime(HISTORY_DATE_FORMAT),
-                (day + timedelta(days=1)).strftime(HISTORY_DATE_FORMAT),
-            )
-            if verb == DB_QUERY_LOCAL_EVENTS:
-                payload = local_events_query_payload(
-                    *dates,
-                    count=page_size,
-                    start_time=start_time,
-                    device_sns=() if device_sn is None else (device_sn,),
-                    transaction=transaction,
-                )
-            else:
-                payload = history_query_payload(
-                    *dates, count=page_size, start_id=start_id, transaction=transaction
-                )
-            self._send_secure(
-                device_msg(creds.account_id, CMD_DATABASE, payload, channel=STATION_CHANNEL)
-            )
-
-        def match(inbound: Inbound) -> tuple[list[HistoryRecord], int | None] | None:
-            if inbound.type != FrameType.DB_SYNC or (obj := inbound.json()) is None:
-                return None
-            if json_int(obj.get("cmd")) != verb:
-                return None
-            echoed = obj.get("transaction")
-            if echoed is not None and str(echoed) not in sent:
-                return None  # another client's page: every session sees the replies
-            page = [HistoryRecord.from_row(row) for row in flatten_history_rows(obj)]
-            ids = [r.record_id for r in page if r.record_id]
-            oldest = json_int(obj.get("end_id"))
-            if oldest is None or oldest not in ids:
-                oldest = min(ids, default=None)
-            return page, oldest
-
-        async with self._history_lock:
-            try:
-                result = await self._request(
-                    send, match, timeout=timeout, label="history query", send_only_under_lock=True
-                )
-            except DeviceTimeoutError:
-                if not resend:
-                    raise
-                _LOGGER.info(
-                    "%s: history query of %s unanswered within %.0fs; asking once more",
-                    self._log_name,
-                    day.isoformat(),
-                    timeout,
-                )
-                result = await self._request(
-                    send, match, timeout=timeout, label="history query", send_only_under_lock=True
-                )
-        return cast(tuple[list[HistoryRecord], int | None], result)
+        return await self._history.find(ref, timeout=_or(timeout, HISTORY_QUERY_TIMEOUT))
 
     async def async_fetch_image(self, path: str, *, timeout: float | None = None) -> bytes:
         """The bytes of :meth:`async_fetch_still`, whatever their format."""
@@ -3384,7 +2187,7 @@ class StationSession:
     async def async_fetch_still(self, path: str, *, timeout: float | None = None) -> Still:
         """Download one still (``thumb_path`` / ``crop_path``) off the station's disk.
 
-        The result carries its :class:`~.media.StillFormat`. A V1 or V2 still is decoded
+        The result carries its :class:`~..media.StillFormat`. A V1 or V2 still is decoded
         with the station's DID (``data`` is then the picture); another obfuscated still,
         or one that does not decode, is returned as it came, not raised, and
         ``is_image`` is False for it. Content that is not
@@ -3429,7 +2232,7 @@ class StationSession:
         still = Still(path, data, classify_still(data))
         if still.format in DECODABLE_STILLS:
             still = self._decode_still(still)
-        self._stills_by_format[still.format.value] += 1
+        self._health.stills_by_format[still.format.value] += 1
         _LOGGER.debug(
             "%s: image fetch bound: %s, %d bytes in %.2fs",
             self._log_name,
@@ -3548,7 +2351,7 @@ class StationSession:
         first_frame_timeout: float | None = None,
     ) -> bytes:
         """A recording's first keyframe, the moment that triggered the event, as Annex-B in
-        the camera's codec (:func:`~.media.picture_codec`).
+        the camera's codec (:func:`~..media.picture_codec`).
 
         With ``trailing_frames`` the P-frames that follow it (up to that many, never
         past the next keyframe) are appended. The camera is not woken.
@@ -3579,7 +2382,7 @@ class StationSession:
         async with self._trigger_frame_lock:
             short = self._short_lived_session()
             short._media_counters.codecs_by_channel = self._media_counters.codecs_by_channel
-            self._trigger_frame_sessions += 1
+            self._health.trigger_frame_sessions += 1
             started = time.monotonic()
             try:
                 await short.async_connect()
@@ -3654,30 +2457,30 @@ class StationSession:
         :data:`MEDIA_LIVE_FIRST_FRAME_TIMEOUT` and :data:`MEDIA_IDLE_TIMEOUT`.
 
         ``live_open`` is the open the device's handler sends
-        (:func:`~..devices.live_open.library_live_open`; :meth:`~..station.Station.async_open_live`
+        (:func:`~...devices.live_open.library_live_open`; :meth:`~...station.Station.async_open_live`
         passes it). A standalone device (:attr:`standalone`) gets a 1700 frame with
-        sub-command 1000 (:attr:`~..devices.live_open.LiveOpen.SINGLE`, the default, or
+        sub-command 1000 (:attr:`~...devices.live_open.LiveOpen.SINGLE`, the default, or
         without ``extValue``), or the station open below
-        (:attr:`~..devices.live_open.LiveOpen.STATION`), and a bare 1004 stop.
+        (:attr:`~...devices.live_open.LiveOpen.STATION`), and a bare 1004 stop.
         A HomeBase 3's camera gets the app's T8030 1003 in a ``DeviceMsgBean`` and a
         1004 ``DeviceMsgBean`` naming the channel; a camera behind any other station
         (a HomeBase 2) the camera handlers' 1003 without the T8030 fields
-        (:func:`~..devices.recipes.open_live_stream_station`) and a bare 1004 carrying
+        (:func:`~...devices.recipes.open_live_stream_station`) and a bare 1004 carrying
         the channel. A 1700 ``live_open`` behind a station goes on this session with the
         camera's channel in the frame header (subheader byte 4 is 0 without
         ``extValue``) and gets no 1139 ping; its stop is ``live_stop``
-        (:func:`~..devices.live_open.live_stop`), else the station's stop above. A
+        (:func:`~...devices.live_open.live_stop`), else the station's stop above. A
         non-zero receipt to a 1700 open fails the stream at once
         (:class:`CommandRejectedError`, :class:`CameraWakeError` for a wake failure).
 
-        A multi-camera ``live_open`` (:data:`~..devices.live_open.NVR_OPENS`) sends the
-        handler's 1350/1003 for ``live_view`` (:mod:`~..devices.live_view`; default: the
+        A multi-camera ``live_open`` (:data:`~...devices.live_open.NVR_OPENS`) sends the
+        handler's 1350/1003 for ``live_view`` (:mod:`~...devices.live_view`; default: the
         fixed lens alone), with the view fields only to a HomeBase 3, as the app's
         player does; behind a station its stop is ``live_stop``, as for a 1700 open.
 
         ``media_key`` is the key pair the open offers (its ``key`` field): RSA, or ECC,
         which the app offers a device whose param 1103 is 128 or more
-        (:func:`~.media.media_key_type_for`; :meth:`~..station.Station.async_open_live`
+        (:func:`~..media.media_key_type_for`; :meth:`~...station.Station.async_open_live`
         picks it so). The station protects the stream for the key it is offered.
         """
         standalone = self.standalone
@@ -3834,7 +2637,7 @@ class StationSession:
                 extra._wake_failures = self._wake_failures  # one wake backoff per camera
                 self._extra_live.add(extra)
                 if slot:
-                    self._extra_live_opened += 1
+                    self._health.extra_live_opened += 1
                 return extra
             remaining = deadline - time.monotonic()
             if not wait or remaining <= 0:
@@ -3875,7 +2678,7 @@ class StationSession:
         :class:`LiveStreamLimitError`, or with ``wait`` (the default) waits up to
         ``first_frame_timeout`` for a stream to end.
 
-        ``write`` receives the muxed bytes in order (see :mod:`~.clip`). Raises what
+        ``write`` receives the muxed bytes in order (see :mod:`~..clip`). Raises what
         :meth:`async_open_recording` raises, and :class:`DeviceTimeoutError` when the
         recording ends before a keyframe; bytes already written stay written. A
         standalone device raises :class:`UnsupportedError` before anything is sent.
@@ -3886,7 +2689,7 @@ class StationSession:
         first = _or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT)
         async with self._download_lock:
             extra = cast(StationSession, await self._reserve_media_session(first, wait, slot=False))
-            self._recording_downloads += 1
+            self._health.recording_downloads += 1
             started = time.monotonic()
             try:
                 await extra.async_connect()
@@ -3973,7 +2776,7 @@ class StationSession:
         """Send native playback 1025 or download 1024 under the static ECB key."""
         command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
         frame = native_recording_frame(
-            path, account_id, channel, self._require_static_key(), command=command
+            path, account_id, channel, self._keys.require_static_key(), command=command
         )
         if _WIRE.isEnabledFor(logging.DEBUG):
             _WIRE.debug(
@@ -4172,9 +2975,9 @@ class StationSession:
     async def _ping_while_streaming(self) -> None:
         """Send the app's 1139 PING every :data:`MEDIA_PING_INTERVAL` while a stream is open."""
         while self._media is not None and self.connected:
-            self._gcm_counter = (self._gcm_counter + 2) & 0xFF
+            self._keys.gcm_counter = (self._keys.gcm_counter + 2) & 0xFF
             with contextlib.suppress(EufySecurityError):
-                self._require_transport().send_drw(0, app_ping_frame(self._gcm_counter))
+                self._require_transport().send_drw(0, app_ping_frame(self._keys.gcm_counter))
             await asyncio.sleep(MEDIA_PING_INTERVAL)
 
     def _media_drain_wait(self, deadline: float) -> float:
@@ -4316,7 +3119,7 @@ class StationSession:
         value = (
             self._rsa_play_ctrl(frame)
             if self.rsa_session
-            else decode_record_play_ctrl(frame, self._session_key)
+            else decode_record_play_ctrl(frame, self._keys.session_key)
         )
         _LOGGER.debug("%s: playback control %s", self._log_name, value)
         if (
@@ -4414,16 +3217,16 @@ class StationSession:
             raise ProtocolError(f"cannot derive the static key for this station: {err}") from err
         self._transport = transport
         self._did = did
-        self._static_key = ecb_key
+        self._keys.static_key = ecb_key
         if transport.peer is not None:
             self._host = transport.peer[0]
         self._decoders.clear()
         self._results_due.clear()
-        self._gcm_seq = GCM_SEQ_START
-        self._gcm_counter = 0
-        self._ecb_seq = 0
+        self._keys.gcm_seq = GCM_SEQ_START
+        self._keys.gcm_counter = 0
+        self._keys.ecb_seq = 0
 
-        key = self._static_key
+        key = self._keys.static_key
         _LOGGER.debug(
             "%s: link up (DID %s); static ECB key %s; sending CONN_INIT",
             self._log_name,
@@ -4447,7 +3250,7 @@ class StationSession:
                 label="CONN_INIT",
             )
         except DeviceTimeoutError as err:
-            self._handshake_failures += 1
+            self._health.handshake_failures += 1
             self._teardown("no handshake reply")
             raise StationUnreachableError(
                 "the station did not answer the session handshake"
@@ -4461,12 +3264,12 @@ class StationSession:
             )
         except CipherUnusableError as err:
             _LOGGER.debug("%s: handshake failed: %s", self._log_name, err)
-            self._handshake_failures += 1
+            self._health.handshake_failures += 1
             self._teardown("cipher key unusable")
             raise
         except HandshakeError as err:
             _LOGGER.debug("%s: handshake failed: %s", self._log_name, err)
-            self._handshake_failures += 1
+            self._health.handshake_failures += 1
             self._teardown("handshake failed")
             raise
         except CloudError:
@@ -4476,10 +3279,10 @@ class StationSession:
             self._teardown("handshake interrupted")
             raise
         if conn_init.rsa:
-            self._aes_key = session_key
+            self._keys.aes_key = session_key
         else:
-            self._session_key = session_key
-        self._connects += 1
+            self._keys.session_key = session_key
+        self._health.connects += 1
         self._creds = creds
         self._account_mismatch_reported = False  # a new connection may report it again
         _LOGGER.debug(
@@ -4502,7 +3305,7 @@ class StationSession:
         named = conn_init.cipher_id
         self._cipher_id = named
         self._conn_init_version = conn_init.version
-        self._rsa_keyless = False
+        self._keys.rsa_keyless = False
         _LOGGER.debug(
             "%s: CONN_INIT reply (%d bytes, version %d, encryption %s) names cipher %d",
             self._log_name,
@@ -4515,7 +3318,7 @@ class StationSession:
             # No session key: the app fetches no cipher and keeps the static key.
             if creds is None or creds.cipher_id != named:
                 creds = await self._load_credentials(refresh=False)
-            self._rsa_keyless = True
+            self._keys.rsa_keyless = True
             return creds, conn_init, static
         if creds is None:
             creds = await self._load_credentials(refresh=False)
@@ -4547,7 +3350,7 @@ class StationSession:
                 named,
                 exc.reason,
             )
-            self._rsa_keyless = True
+            self._keys.rsa_keyless = True
             return creds, conn_init, static
 
     async def _refetch_rejected_key(self, err: HandshakeError) -> P2PCredentials:
@@ -4575,7 +3378,7 @@ class StationSession:
                 f"{err}; the re-fetched credentials are for cipher {creds.cipher_id} too"
             ) from err
         await self._key_refresh.async_refreshed()  # only now: the fetch returned a key
-        self._key_refreshes += 1
+        self._health.key_refreshes += 1
         return creds
 
     async def _load_credentials(self, *, refresh: bool) -> P2PCredentials:
@@ -4614,12 +3417,12 @@ class StationSession:
             self._transport.close()
             self._retire_transport(self._transport)
             self._transport = None
-        self._session_key = None
-        self._aes_key = None
+        self._keys.session_key = None
+        self._keys.aes_key = None
         self._still_owed.clear()  # a late reply cannot cross into a new connection
         # A pending settle timer would otherwise fire _complete_dump on a dead link and
         # announce a completed dump assembled from whatever arrived before the drop.
-        self._cancel_push_timer()
+        self._param_state.cancel_push_timer()
         self._fail_waiters(StationUnreachableError(reason))
         if cause is not None and was_announced:
             self._emit_down(cause, error, reason)
@@ -4655,8 +3458,8 @@ class StationSession:
         if self._transport is not None:
             self._retire_transport(self._transport)
         self._transport = None
-        self._session_key = None
-        self._aes_key = None
+        self._keys.session_key = None
+        self._keys.aes_key = None
         error = StationUnreachableError(str(exc))
         self._last_error_name = type(error).__name__
         self._fail_waiters(error)
@@ -4677,7 +3480,7 @@ class StationSession:
 
     def _retire_transport(self, transport: PPPPTransport) -> None:
         """Keep the counters of a transport this session is letting go of."""
-        self._retired_wrong_port_drops += transport.wrong_port_drops
+        self._health.retired_wrong_port_drops += transport.wrong_port_drops
 
     def _count_media_failure(self, error: Exception, channel: int) -> None:
         """Count a stream of ``channel`` that ended in ``error``, unless the client closed
@@ -4815,7 +3618,7 @@ class StationSession:
             frames = decoder.feed(chunk.index, chunk.data)
         except ProtocolError as err:
             _LOGGER.warning("%s: channel %d stream reset: %s", self._log_name, chunk.channel, err)
-            self._dropped_undecodable += 1
+            self._health.dropped_undecodable += 1
             # Resume from the next chunk that arrives. A reset to index 0 would wait
             # for an index the station has long passed, silencing the channel for
             # the rest of the session.
@@ -4832,9 +3635,9 @@ class StationSession:
                 inbound.type, inbound.frame.payload, inbound.frame.subheader
             )
             if label is not None:
-                _count_capped(self._media_counters.variants, label)
+                count_capped(self._media_counters.variants, label)
             if inbound.type == FrameType.VIDEO_FRAME:
-                _count_capped(self._media_counters.codecs, video_codec_label(inbound.frame.payload))
+                count_capped(self._media_counters.codecs, video_codec_label(inbound.frame.payload))
             if stream is not None:
                 stream._feed(
                     inbound.type,
@@ -4921,8 +3724,8 @@ class StationSession:
                     listener(obj, cipher)
                 except Exception:
                     _LOGGER.exception("%s: notify listener failed", self._log_name)
-            session_ecb = self._session_ecb_frame(inbound.frame)
-            own = cipher is FrameCipher.GCM or self._station_frame(inbound.frame)
+            session_ecb = self._keys.session_ecb_frame(inbound.frame)
+            own = cipher is FrameCipher.GCM or self._keys.station_frame(inbound.frame)
             if own and self._note_storage(obj):
                 return
             event = decode_camera_push(
@@ -4931,10 +3734,10 @@ class StationSession:
             if event is not None:
                 if _LOGGER.isEnabledFor(logging.DEBUG):
                     _log_camera_push(self._log_name, event, cipher)
-                self._last_event_at = time.monotonic()
-                self._frames_by_cipher[cipher.name.lower()] += 1
-                _count_capped(
-                    self._events_by_type,
+                self._health.last_event_at = time.monotonic()
+                self._health.frames_by_cipher[cipher.name.lower()] += 1
+                count_capped(
+                    self._health.events_by_type,
                     f"{_or_unknown(event.msg_type)}:{_or_unknown(event.event_type)}",
                 )
                 self._bus.emit(event)
@@ -4976,7 +3779,7 @@ class StationSession:
         if not stamped or creds.account_id.lower() in stamped:
             return
         self._account_mismatch_reported = True
-        self._account_mismatch_seen = True
+        self._health.account_mismatch_seen = True
         _LOGGER.warning(
             "%s: the station stamps its records with another account id than the one "
             "commands carry (%s, stamped %s); commands may be dropped silently",
@@ -4986,26 +3789,13 @@ class StationSession:
         )
         self._bus.emit(AccountMismatch(station_sn=self.serial))
 
-    def _ingest_dump(self, dump: ParamDump, obj: Mapping[str, Any]) -> None:
-        """Merge a station's 0x044F object; a standalone device's lone block under an
-        unknown label is filed as its own (:meth:`~.params.ParamDump.ingest` ``other``)."""
-        other = self._station_blocks if self._block_aliases else None
-        dump.ingest(obj, aliases=self._block_aliases, other=other)
-        for label in dump.relabelled:
-            if self._throttle.should_log(("relabelled-block", label)):
-                _LOGGER.debug(
-                    "%s: parameter block labelled %d filed as the device's own",
-                    self._log_name,
-                    label,
-                )
-
     def _handle_params(self, inbound: Inbound) -> None:
         obj = inbound.json()
         if obj is None:
             return
         dump = ParamDump()
-        self._ingest_dump(dump, obj)
-        self._merge_dump(dump, "read" if self._probing else "unsolicited", time.time())
+        self._param_state.ingest_dump(dump, obj)
+        self._param_state.merge_dump(dump, "read" if self._probing else "unsolicited", time.time())
         now = time.monotonic()
         straggler = self._probe_ended_at is not None and now - self._probe_ended_at < PARAM_SETTLE
         if not self._probing and not straggler and self._reprobe_at is None:
@@ -5014,73 +3804,7 @@ class StationSession:
             # A block right after this session's own read is that read's late sub-device block.
             self._reprobe_at = now + UNSOLICITED_REPROBE_DELAY
         if not self._probing:
-            self._note_pushed_blocks(dump.devices)
-
-    def _merge_dump(
-        self,
-        dump: ParamDump,
-        origin: str,
-        now: float,
-        stamps: Mapping[int, float] | None = None,
-        *,
-        source: EventSource = EventSource.P2P,
-        origin_kind: ParamOrigin | None = None,
-    ) -> None:
-        """Merge ``dump`` into the held parameters: emit each change, then the guard modes.
-
-        ``stamps`` date values by parameter id (a cloud snapshot); others date from ``now``.
-        ``origin_kind`` marks the values as not a dump's (:attr:`param_origins`).
-        """
-        self._meta.update(dump.meta)
-        for unread in sorted(dump.unread.keys() - self._unread_dump_keys):
-            self._unread_dump_keys.add(unread)
-            _LOGGER.info(
-                "%s: parameter dump carries key %r (%s), which the library does not read",
-                self._log_name,
-                unread,
-                type(dump.unread[unread]).__name__,
-            )
-        flat = dump.flatten()
-        changed = sum(
-            1 for key, new in flat.items() if key in self._params and self._params[key] != new
-        )
-        _LOGGER.debug(
-            "%s: parameter dump (%s): channels %s, %d value(s), %d changed",
-            self._log_name,
-            origin,
-            sorted(dump.devices),
-            len(flat),
-            changed,
-        )
-        for key, new in flat.items():
-            known = key in self._params
-            old = self._params.get(key)
-            self._params[key] = new
-            self._param_at[key] = stamps.get(key[1], now) if stamps else now
-            if origin_kind is None:
-                self._param_origin.pop(key, None)
-            else:
-                self._param_origin[key] = origin_kind
-            if known and old != new:
-                if key[0] not in self._alias_copies and _LOGGER.isEnabledFor(logging.DEBUG):
-                    info = self._param(key[1], key[0])
-                    _LOGGER.debug(
-                        "%s: param ch%d/%d: %s → %s / %s",
-                        self._log_name,
-                        key[0],
-                        key[1],
-                        info.raw(old),
-                        info.raw(new),
-                        info.change(old, new),
-                    )
-                self._bus.emit(
-                    ParamChanged(
-                        station_sn=self.serial, channel=key[0], param_id=key[1], old=old, new=new
-                    )
-                )
-        mode, active = dump.guard_mode, dump.active_mode
-        if mode is not None or active is not None:
-            self._set_modes(mode, active, source=source)
+            self._param_state.note_pushed_blocks(dump.devices, PARAM_SETTLE)
 
     def _handle_alarm(self, frame: Frame) -> None:
         """An alarm frame (tone, siren, light): cache its value per channel, emit
@@ -5092,7 +3816,7 @@ class StationSession:
             return
         alarm = decode_alarm_frame(frame, plain)
         if alarm is None:
-            self._dropped_undecodable += 1
+            self._health.dropped_undecodable += 1
             return
         self._take_state(frame)
         _LOGGER.debug(
@@ -5103,20 +3827,7 @@ class StationSession:
             alarm.values,
             self._param(alarm.param_id, alarm.channel).describe(),
         )
-        key = (alarm.channel, alarm.param_id)
-        old, new = self._params.get(key), alarm.value
-        self._param_origin.pop(key, None)
-        if old != new:
-            self._params[key] = new
-            self._bus.emit(
-                ParamChanged(
-                    station_sn=self.serial,
-                    channel=alarm.channel,
-                    param_id=alarm.param_id,
-                    old=old,
-                    new=new,
-                )
-            )
+        self._param_state.take_alarm_value(alarm.channel, alarm.param_id, alarm.value)
         for listener in list(self._alarm_listeners):
             try:
                 listener(alarm)
@@ -5136,54 +3847,6 @@ class StationSession:
             _LOGGER.debug("%s: alarm %s", self._log_name, "on" if change.alarming else "off")
             self._bus.emit(change)
 
-    def _note_pushed_blocks(self, channels: Iterable[int]) -> None:
-        """Track a frame of an unsolicited dump; signal its completion (see
-        :meth:`add_dump_listener`) at once when the station block and every expected
-        channel are in, else :data:`PARAM_SETTLE` seconds after its last frame."""
-        self._push_channels.update(channels)
-        self._cancel_push_timer()
-        expected = {STATION_CHANNEL, *self._expect_channels}
-        if len(expected) > 1 and expected <= self._push_channels:
-            self._complete_dump(None)
-        else:
-            self._push_timer = asyncio.get_running_loop().call_later(
-                PARAM_SETTLE, self._complete_dump, None
-            )
-
-    def _cancel_push_timer(self) -> None:
-        if self._push_timer is not None:
-            self._push_timer.cancel()
-            self._push_timer = None
-
-    def _complete_dump(self, carried: Collection[int] | None) -> None:
-        """A dump completed; ``carried``: the blocks of a full read (others are dropped).
-
-        Only pass ``carried`` for a read that waited for every expected channel — then a
-        block that is absent really has departed. A read that gave up waiting must pass
-        ``None``: dropping a block that was merely late erases the device's whole
-        parameter set, and a camera would vanish from the caller's state, battery and
-        signal entities with it, until the next complete dump.
-        """
-        self._cancel_push_timer()
-        self._push_channels.clear()
-        if carried is not None:
-            for key in [key for key in self._params if key[0] not in carried]:
-                del self._params[key]
-                self._param_origin.pop(key, None)
-                # The freshness stamp is only meaningful with the value it describes.
-                # Leaving it behind leaks a key per departed device, and a re-paired
-                # device's fresh cloud value would be rejected as older than a stamp
-                # that outlived the value.
-                self._param_at.pop(key, None)
-        self._notify_dump_listeners()
-
-    def _notify_dump_listeners(self) -> None:
-        for listener in list(self._dump_listeners):
-            try:
-                listener()
-            except Exception:
-                _LOGGER.exception("%s: parameter dump listener failed", self._log_name)
-
     def _note_mode_report(self, value: GuardMode | int) -> None:
         """A ``0x047F`` report: the effective mode.
 
@@ -5197,68 +3860,16 @@ class StationSession:
         """
         arming = self._arming_to
         if arming is GuardMode.SCHEDULE:
-            self._set_modes(GuardMode.SCHEDULE, value)
-        elif self._guard_mode != GuardMode.SCHEDULE or value == arming:
-            self._set_modes(value, value)
+            self._param_state.set_modes(GuardMode.SCHEDULE, value)
+        elif self._param_state.guard_mode != GuardMode.SCHEDULE or value == arming:
+            self._param_state.set_modes(value, value)
         else:
-            self._set_modes(None, value)
+            self._param_state.set_modes(None, value)
             if self._reprobe_at is None:
                 self._reprobe_at = time.monotonic() + UNSOLICITED_REPROBE_DELAY
-        if not self._dump_carries_mode():
+        if not self._param_state.dump_carries_mode():
             # A station whose dump lacks the mode: the report is its only local word.
-            self._file_modes("mode report", origin_kind=ParamOrigin.LOCAL_WRITE)
-
-    def _apply_modes(self, mode: GuardMode | int | None, active: GuardMode | int | None) -> bool:
-        """Update the selected and effective mode; whether either changed.
-
-        None leaves a value as it is, except that a selected mode other than Schedule
-        without an effective one is its own effective mode.
-        """
-        before = (self._guard_mode, self._active_mode)
-        if mode is not None:
-            self._guard_mode = mode
-        if active is not None:
-            self._active_mode = active
-        elif mode is not None and mode != GuardMode.SCHEDULE:
-            self._active_mode = mode
-        return (self._guard_mode, self._active_mode) != before
-
-    def _set_modes(
-        self,
-        mode: GuardMode | int | None,
-        active: GuardMode | int | None,
-        *,
-        source: EventSource = EventSource.P2P,
-    ) -> None:
-        """Apply the modes the station reported; emit :class:`GuardModeChanged` on a change."""
-        before = (self._guard_mode, self._active_mode)
-        if not self._apply_modes(mode, active) or self._guard_mode is None:
-            return
-        _LOGGER.debug(
-            "%s: guard mode %r → %r", self._log_name, before, (self._guard_mode, self._active_mode)
-        )
-        self._bus.emit(
-            GuardModeChanged(
-                station_sn=self.serial,
-                mode=self._guard_mode,
-                active_mode=self._active_mode,
-                source=source,
-            )
-        )
-
-    def _state_encryption(self, frame: Frame) -> str:
-        """A state frame's label in :attr:`SessionStats.state_frames_by_encryption`."""
-        if self._aes_key is None:
-            return "gcm" if frame.cipher == FrameCipher.GCM else "ecb"
-        return _RSA_STATE_ENCRYPTIONS.get(frame_encryption(frame.subheader), "other")
-
-    @property
-    def _holds_own_key(self) -> bool:
-        """Whether the session holds a key only it and the station know: a GCM session
-        key, or an RSA session key that is not the static key."""
-        if self._aes_key is not None:
-            return not self.static_key_session
-        return self._session_key is not None
+            self._param_state.file_modes("mode report", origin_kind=ParamOrigin.LOCAL_WRITE)
 
     def _take_state(self, frame: Frame) -> None:
         """Count a decoded state frame (0x044F, 0x047F, an alarm frame) as taken.
@@ -5269,14 +3880,14 @@ class StationSession:
         only). State in clear, or under the static key on a session that holds its own
         key, is logged at INFO once per session, frame type and encryption.
         """
-        encryption = self._state_encryption(frame)
-        self._state_frames[encryption] += 1
-        if frame.cipher == FrameCipher.GCM or self._session_ecb_frame(frame):
+        encryption = self._keys.state_encryption(frame)
+        self._health.state_frames[encryption] += 1
+        if frame.cipher == FrameCipher.GCM or self._keys.session_ecb_frame(frame):
             self._state_authenticated = True
             return
         if self._state_authenticated is None:
             self._state_authenticated = False
-        if encryption != "clear" and not self._holds_own_key:
+        if encryption != "clear" and not self._keys.holds_own_key:
             return
         kind = (frame.type, encryption)
         if kind in self._unauthenticated_logged:
@@ -5291,38 +3902,39 @@ class StationSession:
 
     def _state_body(self, frame: Frame) -> bytes | None:
         """The plaintext of a binary state frame: an RSA session's clear body as is, an
-        ECB body under the key its encryption type names (:meth:`_ecb_key`), a GCM body
-        under the session key. None when it has no key or does not decode (counted)."""
+        ECB body under the key its encryption type names
+        (:meth:`~.keys.SessionKeys.ecb_key`), a GCM body under the session key. None when
+        it has no key or does not decode (counted)."""
         payload = frame.payload
-        if self._plain_rsa_frame(frame):
+        if self._keys.plain_rsa_frame(frame):
             return payload
         if frame.cipher == FrameCipher.ECB:
-            key = self._ecb_key(frame)
+            key = self._keys.ecb_key(frame)
             if key is None or len(payload) % 16:
-                self._dropped_undecodable += 1
+                self._health.dropped_undecodable += 1
                 return None
             return ecb_decrypt(key, payload)
-        if frame.cipher != FrameCipher.GCM or self._session_key is None:
+        if frame.cipher != FrameCipher.GCM or self._keys.session_key is None:
             return None
         try:
-            return gcm_decrypt_broadcast(self._session_key, payload)
+            return gcm_decrypt_broadcast(self._keys.session_key, payload)
         except ProtocolError:
-            self._dropped_undecodable += 1
+            self._health.dropped_undecodable += 1
             return None
 
     def _decode_alarm_mode(self, frame: Frame) -> int | None:
-        if self._plain_rsa_frame(frame):
+        if self._keys.plain_rsa_frame(frame):
             mode = decode_alarm_mode_notify(frame, clear=True)
         else:
             mode = decode_alarm_mode_notify(
-                frame, static_key=self._ecb_key(frame), session_key=self._session_key
+                frame, static_key=self._keys.ecb_key(frame), session_key=self._keys.session_key
             )
         if mode is not None:
             self._take_state(frame)
         return mode
 
     def _decode_json(self, frame: Frame) -> dict[str, Any] | None:
-        plain_rsa = self._plain_rsa_frame(frame)
+        plain_rsa = self._keys.plain_rsa_frame(frame)
         obj = self._decode_json_body(frame, plain_rsa=plain_rsa)
         if obj is not None and frame.type in _STATE_FRAME_TYPES:
             self._take_state(frame)
@@ -5343,22 +3955,22 @@ class StationSession:
             # binds to its request by cmd, transaction or path.
             return self._counted_json(payload)
         if frame.cipher == FrameCipher.ECB:
-            key = self._ecb_key(frame)
+            key = self._keys.ecb_key(frame)
             if key is None:
                 return None
             if len(payload) < 16 or len(payload) % 16:
-                self._dropped_undecodable += 1
+                self._health.dropped_undecodable += 1
                 return None
             return self._counted_json(ecb_decrypt(key, payload))
         if frame.cipher == FrameCipher.GCM:
-            if self._session_key is None or len(payload) < 29:
+            if self._keys.session_key is None or len(payload) < 29:
                 return None
             if decode_command_receipt(frame) is not None:
                 return None  # a command receipt: GCM-tagged, but not ciphertext
             try:
-                return self._counted_json(gcm_decrypt_broadcast(self._session_key, payload))
+                return self._counted_json(gcm_decrypt_broadcast(self._keys.session_key, payload))
             except ProtocolError:
-                self._dropped_undecodable += 1
+                self._health.dropped_undecodable += 1
                 if self._throttle.should_log(("gcm-auth", frame.type)):
                     _LOGGER.debug(
                         "%s: frame 0x%04x failed GCM authentication", self._log_name, frame.type
@@ -5370,7 +3982,7 @@ class StationSession:
         """The JSON object in ``plain``; one that has none counts as undecodable."""
         obj = decode_json_payload(plain)
         if obj is None:
-            self._dropped_undecodable += 1
+            self._health.dropped_undecodable += 1
         return obj
 
     @staticmethod
@@ -5549,20 +4161,20 @@ class StationSession:
         """Send ``plaintext`` under the session's cipher: GCM after an ECIES handshake,
         AES-128-ECB under the session key after an RSA one (subheader
         ``01 <seq> <dev_type> 02 <flag> 00``, as the app sends every command then)."""
-        if self._aes_key is not None:
+        if self._keys.aes_key is not None:
             return self._send_session_ecb(
                 plaintext, frame_type=frame_type, dev_type=dev_type, flag=flag
             )
-        key = self._session_key
+        key = self._keys.session_key
         if key is None:
             raise StationUnreachableError("no P2P session")
-        seq = self._gcm_seq
-        self._gcm_seq += 1
+        seq = self._keys.gcm_seq
+        self._keys.gcm_seq += 1
         nonce = os.urandom(12)
         payload = gcm_encrypt_command(key, plaintext, nonce=nonce, seq=seq)
-        self._gcm_counter = (self._gcm_counter + 2) & 0xFF
+        self._keys.gcm_counter = (self._keys.gcm_counter + 2) & 0xFF
         frame = encode_frame(
-            frame_type, payload, gcm_subheader(self._gcm_counter, dev_type, flag=flag)
+            frame_type, payload, gcm_subheader(self._keys.gcm_counter, dev_type, flag=flag)
         )
         if _WIRE.isEnabledFor(logging.DEBUG):
             obj = decode_json_payload(plaintext)
@@ -5581,10 +4193,10 @@ class StationSession:
     ) -> int:
         """An RSA session's frame: AES-128-ECB under the session key, zero-padded, or
         clear when the session sends encryption type 0."""
-        key = cast(bytes, self._aes_key)
-        seq = self._ecb_seq
-        self._ecb_seq = (seq + 1) & 0xFF
-        encryption = self._session_encryption
+        key = cast(bytes, self._keys.aes_key)
+        seq = self._keys.ecb_seq
+        self._keys.ecb_seq = (seq + 1) & 0xFF
+        encryption = self._keys.session_encryption
         subheader = bytes([FrameCipher.ECB, seq, dev_type & 0xFF, encryption, flag & 0xFF, 0x00])
         body = plaintext if encryption == FRAME_PLAIN else ecb_encrypt(key, plaintext)
         frame = encode_frame(frame_type, body, subheader)
@@ -5603,7 +4215,7 @@ class StationSession:
         """Send ``frame`` on channel 0; on an RSA session the next channel-0 frame of
         ``frame_type`` within :data:`RSA_RESULT_WINDOW` is read as its result, under a new
         slot (:attr:`_result_slot`)."""
-        if self._aes_key is not None:
+        if self._keys.aes_key is not None:
             due = time.monotonic() + RSA_RESULT_WINDOW
             self._result_slot += 1
             self._results_due.setdefault(frame_type, []).append((due, self._result_slot))
@@ -5622,36 +4234,11 @@ class StationSession:
             return None
         return due.pop(0)[1]
 
-    def _ecb_key(self, frame: Frame) -> bytes | None:
-        """The key of an ECB-tagged station frame: the RSA session's key when its
-        encryption type (subheader byte 3) is 2, else the static key."""
-        if self._aes_key is not None and frame_encryption(frame.subheader) == FRAME_SESSION_ECB:
-            return self._aes_key
-        return self._static_key
-
     def _rsa_play_ctrl(self, frame: Frame) -> int | None:
         """An RSA session's end-of-playback value: the first ``u32le`` of its body under
-        any encryption type (:meth:`_rsa_plaintext`)."""
-        body = self._rsa_plaintext(frame)
+        any encryption type (:meth:`~.keys.SessionKeys.rsa_plaintext`)."""
+        body = self._keys.rsa_plaintext(frame)
         return int.from_bytes(body[:4], "little") if body is not None and len(body) >= 4 else None
-
-    def _rsa_plaintext(self, frame: Frame) -> bytes | None:
-        """An RSA session frame's body under the key its encryption type (subheader
-        byte 3) names, as the eufy app takes it: clear as is, type 1 the static key,
-        type 2 the session key; a partial last block stays as is. None on a GCM session
-        or for another encryption type."""
-        if self._aes_key is None:
-            return None
-        encryption = frame_encryption(frame.subheader)
-        if encryption == FRAME_PLAIN:
-            return frame.payload
-        if encryption == FRAME_STATIC_ECB:
-            key = self._static_key
-        elif encryption == FRAME_SESSION_ECB:
-            key = self._aes_key
-        else:
-            return None
-        return None if key is None else ecb_decrypt(key, frame.payload)
 
     def _decode_receipt(self, channel: int, frame: Frame) -> tuple[int, int | None] | None:
         """The code of a command receipt on the request channel (0) and, on an RSA
@@ -5666,7 +4253,7 @@ class StationSession:
         """
         if channel != 0:
             return None
-        if self._aes_key is None:
+        if self._keys.aes_key is None:
             code = decode_command_receipt(frame)
             return None if code is None else (code, None)
         code = decode_command_result(frame.payload)
@@ -5678,7 +4265,7 @@ class StationSession:
         """Count a command receipt and log it at DEBUG: frame type, channel, encryption
         type (subheader byte 3), payload length, code and whether the bytes after the
         code are zero."""
-        _count_capped(self._receipts_by_code, str(code))
+        count_capped(self._health.receipts_by_code, str(code))
         frame = inbound.frame
         _LOGGER.debug(
             "%s: result 0x%04x ch%d enc%s len %d: code %d %s, tail %s",
@@ -5690,41 +4277,6 @@ class StationSession:
             code,
             RECEIPT_CODES.get(code, ""),
             "nonzero" if any(frame.payload[4:]) else "zero",
-        )
-
-    def _session_ecb_frame(self, frame: Frame) -> bool:
-        """Whether ``frame`` is ECB under an RSA session's key and so authenticated by the
-        key only the cipher's owner could unwrap; never on a static-key session."""
-        return (
-            self._aes_key is not None
-            and not self.static_key_session
-            and frame.cipher == FrameCipher.ECB
-            and frame_encryption(frame.subheader) == FRAME_SESSION_ECB
-        )
-
-    def _session_key_frame(self, frame: Frame) -> bool:
-        """Whether ``frame`` is ECB under an RSA session's key: encryption type 2, or
-        type 1 on a static-key session, where both name the same key."""
-        if self._aes_key is None or frame.cipher != FrameCipher.ECB:
-            return False
-        encryption = frame_encryption(frame.subheader)
-        if encryption == FRAME_SESSION_ECB:
-            return True
-        return encryption == FRAME_STATIC_ECB and self.static_key_session
-
-    def _station_frame(self, frame: Frame) -> bool:
-        """Whether an RSA session takes ``frame`` as the station's own: under its key, or
-        clear on a static-key session, where clear authenticates no less than its key."""
-        if self._session_key_frame(frame):
-            return True
-        return self.static_key_session and self._plain_rsa_frame(frame)
-
-    def _plain_rsa_frame(self, frame: Frame) -> bool:
-        """Whether ``frame`` is an RSA session's clear frame (ECB tag, encryption type 0)."""
-        return (
-            self._aes_key is not None
-            and frame.cipher == FrameCipher.ECB
-            and frame_encryption(frame.subheader) == FRAME_PLAIN
         )
 
     def _unanswered_error(
@@ -5756,11 +4308,6 @@ class StationSession:
         if self._creds is None:
             raise CommunicationError("session credentials not loaded")
         return self._creds
-
-    def _require_static_key(self) -> bytes:
-        if self._static_key is None:
-            raise StationUnreachableError("no P2P link")
-        return self._static_key
 
 
 def _session_budget(value: object) -> int:
@@ -5831,15 +4378,6 @@ def _lost_cause(exc: Exception, *, asleep: bool) -> DisconnectCause:
     return DisconnectCause.UNREACHABLE  # the local socket closed
 
 
-def _wrapped_key(payload: bytes) -> bytes | None:
-    """The RSA-wrapped key bytes of a keyframe record, None when the body cannot hold one."""
-    if len(payload) < VIDEO_HEADER_LEN:
-        return None
-    body = payload[VIDEO_HEADER_LEN : VIDEO_HEADER_LEN + KEYFRAME_RSA_LEN]
-    data_len = int.from_bytes(payload[:4], "little")
-    return body if data_len >= KEYFRAME_MIN and len(body) == KEYFRAME_RSA_LEN else None
-
-
 def _log_camera_push(log_name: str, event: SecurityEvent, cipher: FrameCipher) -> None:
     """Two redacted DEBUG lines for a decoded camera push: what arrived, and what was bound.
 
@@ -5879,38 +4417,6 @@ def _list_len(value: object) -> int:
 def _frame_camera(frame: Frame) -> int | None:
     """The channel a station media frame carries (subheader byte 2), or None."""
     return frame.subheader[2] if len(frame.subheader) > 2 else None
-
-
-def _record_day(record_id: int) -> date:
-    """The day of a date-prefixed ``record_id``; ValueError when it has none."""
-    day = record_id_day(record_id)
-    if day is None:
-        raise ValueError(f"record_id {record_id} carries no day")
-    return day
-
-
-def _cursor_day(before: int | None, before_day: date | None) -> date | None:
-    """The day a history cursor pages from: the day ``before`` carries, else
-    ``before_day``; ValueError for a cursor without a day or two that disagree."""
-    if before is None:
-        if before_day is not None:
-            raise ValueError("before_day needs before")
-        return None
-    own = record_id_day(before)
-    if own is None:
-        if before_day is None:
-            raise ValueError(f"record_id {before} carries no day")
-        return before_day
-    if before_day is not None and before_day != own:
-        raise ValueError(f"before_day {before_day} is not the day record_id {before} carries")
-    return own
-
-
-def _parse_day(text: str) -> date:
-    """A ``YYYYMMDD`` date; ValueError for anything else."""
-    if len(text) != 8 or not text.isascii() or not text.isdigit():
-        raise ValueError(f"not a YYYYMMDD date: {text!r}")
-    return date(int(text[:4]), int(text[4:6]), int(text[6:]))
 
 
 def _raise_for_code(command: int, code: int) -> None:

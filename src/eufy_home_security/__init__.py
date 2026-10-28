@@ -154,8 +154,8 @@ if TYPE_CHECKING:
         MIN_STATION_SESSIONS,
         STATION_SESSION_LIMIT,
         CommandOutcome,
-        SessionStats,
     )
+    from .p2p.session.stats import SessionStats
     from .p2p.station_config_codecs import Schedule, ScheduleSlot, Weekday
     from .p2p.storage_info import DiskInfo, EmmcInfo, StorageInfo, StorageMedium
     from .recordings import RecordingsPage
@@ -353,10 +353,10 @@ _EXPORTS: dict[str, str] = {
             "MIN_STATION_SESSIONS",
             "STATION_SESSION_LIMIT",
             "CommandOutcome",
-            "SessionStats",
         ),
         "p2p.session",
     ),
+    "SessionStats": "p2p.session.stats",
     **dict.fromkeys(("DiskInfo", "EmmcInfo", "StorageInfo", "StorageMedium"), "p2p.storage_info"),
     **dict.fromkeys(
         ("RemoteStation", "SettingsCoverage", "Station", "StationState", "SubDeviceState"),
