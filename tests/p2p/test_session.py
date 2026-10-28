@@ -2426,6 +2426,55 @@ async def test_recording_plays_to_its_end(
         await session.async_close()
 
 
+@pytest.mark.parametrize("kind", ["live", "recording", "download"])
+async def test_an_unanswered_open_fails_after_the_default_first_frame_wait(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """With no ``first_frame_timeout`` an open waits the default patched on p2p.session."""
+    monkeypatch.setattr(session_mod, "MEDIA_LIVE_FIRST_FRAME_TIMEOUT", 0.3)
+    monkeypatch.setattr(session_mod, "MEDIA_RECORDING_FIRST_FRAME_TIMEOUT", 0.3)
+    session = make_session(station, Provider(station, account_id="f" * 40))
+
+    async def write(chunk: bytes) -> None:
+        pass
+
+    async def open_and_read() -> None:
+        if kind == "download":
+            await session.async_download_recording("/zx/clip.zxvideo", 1, write)
+            return
+        stream = (
+            await session.async_open_live(0)
+            if kind == "live"
+            else await session.async_open_recording("/zx/clip.zxvideo", 1)
+        )
+        await anext(stream)
+
+    try:
+        with pytest.raises(EufySecurityError):
+            await asyncio.wait_for(open_and_read(), 5.0)
+    finally:
+        await session.async_close()
+
+
+async def test_a_recording_without_an_end_frame_ends_after_the_default_idle_wait(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no ``idle_timeout`` a playback ends on the idle default patched on p2p.session."""
+    monkeypatch.setattr(session_mod, "MEDIA_IDLE_TIMEOUT", 0.2)
+    station.playback_end_delay = None
+    session = make_session(station, Provider(station))
+    try:
+        stream = await session.async_open_recording("/zx/clip.zxvideo", 1)
+
+        async def drain() -> list[Any]:
+            return [frame async for frame in stream]
+
+        frames = await asyncio.wait_for(drain(), 3.0)
+        assert len(_video(frames)) == station.recording_frames
+    finally:
+        await session.async_close()
+
+
 async def test_an_rsa_recording_ends_on_its_clear_end_of_playback_frame(
     station: FakeStation,
 ) -> None:
@@ -3914,7 +3963,12 @@ async def test_session_live_ends_early(
     try:
         await session.async_start()
         stream = await session.async_open_live(channel=0)
-        frames = [frame async for frame in stream]
+
+        async def drain() -> list[Any]:
+            return [frame async for frame in stream]
+
+        # The default idle timeout is the one patched on p2p.session.
+        frames = await asyncio.wait_for(drain(), 3.0)
         assert len(frames) < 30
     finally:
         await session.async_close()
