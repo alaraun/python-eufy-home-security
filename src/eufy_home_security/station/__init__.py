@@ -9,35 +9,31 @@ import ipaddress
 import logging
 import time
 from collections import Counter
-from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime, timedelta, tzinfo
+from datetime import date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from ._logging import LogThrottle, redact_serial
-from .cloud.models import CloudDevice
-from .devices.capabilities import (
-    PTZ_ACTION_NEEDS,
-    PTZ_ACTIONS,
+from .._logging import LogThrottle, redact_serial
+from ..cloud.models import CloudDevice
+from ..devices.capabilities import (
     Capability,
     DeviceProfile,
     kind_from_params,
     own_profile,
     profile_for_serial,
 )
-from .devices.device_alarm import DeviceAlarm, DeviceAlarms
-from .devices.device_alarm import device_alarms as alarms_for
-from .devices.device_alarm import render as render_alarm
-from .devices.live_open import (
+from ..devices.device_alarm import DeviceAlarm
+from ..devices.live_open import (
     NVR_OPENS,
     LiveOpen,
     has_live_open,
     library_live_open,
     live_stop,
 )
-from .devices.live_open import app_version as live_open_app_version
-from .devices.live_view import (
+from ..devices.live_open import app_version as live_open_app_version
+from ..devices.live_view import (
     LENS_LIST_PARAM,
     Lens,
     LensView,
@@ -45,7 +41,7 @@ from .devices.live_view import (
     live_view,
     parse_lenses,
 )
-from .devices.model_settings import (
+from ..devices.model_settings import (
     BATTERY_PROPERTY,
     PARENTLESS_ONLY,
     Setting,
@@ -60,11 +56,7 @@ from .devices.model_settings import (
     settings_of,
     sort_settings,
 )
-from .devices.ptz import PtzForm, has_ptz_recipes, ptz_actions, ptz_form
-from .devices.ptz import app_version as ptz_app_version
-from .devices.recipes import (
-    MAX_PRESET_SLOTS,
-    MAX_ZOOM,
+from ..devices.recipes import (
     MIN_ZOOM,
     ConnectType,
     PanTilt,
@@ -72,89 +64,50 @@ from .devices.recipes import (
     PtzAction,
     Recipe,
     RecipeCommand,
-    SubCommand,
     connect_type,
-    delete_preset,
-    free_preset_slot,
     goto_preset,
-    pan_tilt,
-    parse_preset_positions,
-    preset_picture,
-    query_preset_positions,
-    reported_zoom,
-    set_default_preset,
-    set_picture_zoom,
-    store_preset,
 )
-from .devices.settings import (
-    DUAL_VIEW,
-    MODE_ACTION_FLAGS,
-    VIEW_MODE_PARAM,
-    Scope,
-    SettingDef,
-    mode_action_flags,
-    mode_action_key,
-    mode_table_setting,
-    report_value,
-    scope_for_kind,
-)
-from .devices.station_config_support import (
-    ModeTableStorage,
-    StationFeature,
-    cross_camera_eligible,
-    mode_table_storage,
-    restart_command,
-    station_config_models,
-)
-from .devices.station_config_support import config_support as station_config_support
-from .devices.support import Evidence, Support
-from .devices.timezones import TIMEZONE_DOMAIN
-from .devices.types import DeviceKind, DeviceModel, model_for_serial
-from .devices.webrtc import app_uses_webrtc, route_device
-from .events import (
+from ..devices.settings import VIEW_MODE_PARAM, Scope, report_value, scope_for_kind
+from ..devices.station_config_support import StationFeature, restart_command, station_config_models
+from ..devices.station_config_support import config_support as station_config_support
+from ..devices.support import Evidence, Support
+from ..devices.timezones import TIMEZONE_DOMAIN
+from ..devices.types import DeviceKind, DeviceModel, model_for_serial
+from ..devices.webrtc import app_uses_webrtc, route_device
+from ..events import (
     MEDIA_PATH_PREFIX,
     RECORDING_SUFFIX,
     STILL_SUFFIX,
     AlarmChanged,
-    CameraBusyChanged,
     ConnectionChanged,
-    DeviceAlarmChanged,
     DevicesChanged,
     Event,
     EventBus,
     EventCallback,
     HistoryRecord,
-    PresetsChanged,
     SecurityEvent,
-    StationConfigChanged,
     StationStateChanged,
     Unsubscribe,
-    ZoomChanged,
     coerce_int,
     is_station_media_path,
     is_station_recording_path,
 )
-from .exceptions import (
+from ..exceptions import (
     CommandNotAppliedError,
     CommandRejectedError,
     CommandUnsupportedError,
-    DeviceBusyError,
     DeviceTimeoutError,
     EufySecurityError,
-    ModeInUseError,
-    PresetSlotsFullError,
-    ProtocolError,
-    PtzActionUnsupportedError,
     RecordNotFoundError,
     StillNotWrittenError,
     UnsupportedError,
 )
-from .images import (
+from ..images import (
     JPEG_CONTENT_TYPE,
     CameraImage,
     ImageSource,
 )
-from .models import (
+from ..models import (
     DEV_STATUS_ONLINE,
     NOT_CHARGING_SOURCES,
     PARAM_BATTERY,
@@ -182,110 +135,54 @@ from .models import (
     STATION_CHANNEL,
     STORAGE_STATUS_NORMAL,
     SUBSYSTEM_FIRMWARE_PARAMS,
-    FrameCipher,
     GuardMode,
     ValueSource,
 )
-from .network import LanPath, lan_path_for
-from .p2p._json import json_int
-from .p2p.alarm import AlarmFrame
-from .p2p.clip import ClipWriter, MediaClip
-from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
-from .p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
-from .p2p.messages import (
+from ..network import LanPath, lan_path_for
+from ..p2p.clip import ClipWriter, MediaClip
+from ..p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
+from ..p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
+from ..p2p.messages import (
     CMD_SET_TONE_FILE,
-    DB_QUERY_HISTORY,
     RECEIPT_NOT_HANDLED,
     SOUND_ALARM_SECONDS,
-    decode_preset_picture,
-    history_query_verb,
     record_id_day,
 )
-from .p2p.mode_actions import (
-    CMD_SET_ALL_ACTION,
-    FIELD_PARAMS,
-    MODE_TABLE_MODES,
-    MODE_TABLE_PARAMS,
-    ModeTable,
-    ModeTableField,
-    mode_action_on,
-    mode_table_from_params,
-    require_mode_delay,
-)
-from .p2p.params import (
+from ..p2p.mode_actions import MODE_TABLE_PARAMS, ModeTable, ModeTableField
+from ..p2p.params import (
     ACTIVE_MODE_PARAM,
     GUARD_MODE_PARAM,
     ParamDump,
     standalone_aliases,
 )
-from .p2p.session import (
+from ..p2p.session import (
     CommandOutcome,
     RecipeReply,
     StationSession,
 )
-from .p2p.session.media_stream import MediaStream
-from .p2p.session.param_state import ParamOrigin
-from .p2p.session.stats import SessionStats
-from .p2p.station_config_codecs import (
-    CMD_CUSTOM_MODES,
-    CMD_SCHEDULE,
-    CMD_SCHEDULE_DEFAULT,
-    CUSTOM_MODES,
-    DEFAULT_MODE_ICON,
-    PARAM_TRACKING_CAMERAS,
-    PARAM_TRACKING_GROUPS,
-    CustomModes,
-    Schedule,
-    add_custom_mode,
-    decode_custom_modes,
-    decode_schedule,
-    decode_schedule_default,
-    decode_tracking_cameras,
-    decode_tracking_groups,
-    delete_custom_mode,
-    encode_schedule_default,
-    encode_stored_mode_table,
-    encode_tracking_cameras,
-    encode_tracking_groups,
-    modify_custom_mode,
-    require_custom_mode,
-)
-from .p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
-from .p2p.xzyh import FrameType
-from .recordings import (
-    RecordingPosition,
-    RecordingsPage,
-    decode_cursor,
-    decode_ref,
-    encode_cursor,
-)
-from .station_config import (
-    ModeInfo,
-    StationConfig,
-    build_station_config,
-    changed_fields,
-    check_revision,
-    stored_device_params,
-    stored_mode_table,
-)
+from ..p2p.session.media_stream import MediaStream
+from ..p2p.session.param_state import ParamOrigin
+from ..p2p.session.stats import SessionStats
+from ..p2p.station_config_codecs import Schedule
+from ..p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
+from ..recordings import RecordingsPage
+from ..station_config import ModeInfo, StationConfig, stored_device_params
+from .alarms import AlarmWaits, StationAlarms
+from .base import _NOT_PAIRED, own_channel
+from .configuration import ConfigRules, StationConfiguration
+from .history import StationHistory
+from .ptz import PtzWaits, StationPtz
 
 if TYPE_CHECKING:
-    from .storage import SessionCache
+    from ..storage import SessionCache
 
 _LOGGER = logging.getLogger(__name__)
 
 READBACK_ATTEMPTS = 3
 READBACK_DELAY = 0.8
 
-MODE_TABLES_LOCK: Final = "mode_tables"
-"""The shared parameter group of the per-mode action tables (:meth:`Station._shared_lock`)."""
-CROSS_CAMERA_LOCK: Final = "cross_camera"
 MIN_TRACKING_CAMERAS: Final = 2
 """The fewest cameras the eufy app saves as the cross-camera tracking choice."""
-"""The shared parameter group of the cross-camera tracking cameras (1072) and groups (1073)."""
-MODE_LIST_LOCK: Final = "mode_list"
-"""The shared parameter group of the mode list (1256) and the schedule (1254, 1257), which
-names its modes."""
 
 CAMERA_IMAGE_DAYS = 7
 """Days of history :meth:`Station.async_camera_image` searches for a camera's newest event."""
@@ -320,13 +217,6 @@ PTZ_BUSY_ATTEMPTS: Final = 4
 """How often a preset command is re-sent while the camera answers :data:`PTZ_BUSY_CODE`."""
 PTZ_BUSY_DELAY: Final = 3.0
 """Wait between those attempts: a T8170 settles within a few seconds of a turn."""
-_PTZ_NAMES: Final[Mapping[Capability, str]] = {
-    Capability.PTZ_CONTROL: "pan/tilt control",
-    Capability.PTZ_PRESETS: "pan/tilt presets",
-    Capability.PTZ_ZOOM: "picture zoom",
-}
-"""How a refusal names each pan/tilt/zoom capability the device lacks."""
-_NOT_PAIRED: Final = "the device is not paired to this station"
 # The kinds the eufy app's battery display rule covers (the camera card).
 _BATTERY_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
 FRESH_KEYFRAME_WINDOW: Final = 0.5
@@ -343,16 +233,6 @@ picture size to hold: a woken T8170 climbs 1280x720 -> 1920x1080 -> 2880x1616 at
 EPOCH_MS_RANGE = (1_420_070_400_000, 4_102_444_800_000)
 
 type SerialSource = Literal["cloud"]
-
-
-def _host_today() -> date:
-    """Today in the host's zone: the newest day of a recordings window."""
-    return datetime.now().astimezone().date()
-
-
-def _host_day(value: date) -> date:
-    """A day, or a ``datetime``'s host-local day."""
-    return value.astimezone().date() if isinstance(value, datetime) else value
 
 
 def _station_modes(
@@ -488,7 +368,7 @@ class SubDeviceState:
     field that separates "reporting" from "remembered" — the rest stay frozen at
     their last values. The station's own reachability is not part of it: a state
     exists because a dump arrived, and a closed session is signalled by
-    :class:`~.events.ConnectionChanged`."""
+    :class:`~..events.ConnectionChanged`."""
     offline_code: int | None = None
     """The raw 1131 value when it is above 1 — an offline reason the app shows but
     whose codes it never names, so it is passed through unmapped. None when the
@@ -522,7 +402,7 @@ class SubDeviceState:
     stored_mode_params: Mapping[int, str] = field(default_factory=dict, repr=False)
     """The per-mode action and delay values a pro-alarm station's stored mode tables
     (61300-61309) give this device, by param id, for the modes no block of the dump
-    reports (:func:`~.station_config.stored_device_params`); the per-mode settings read
+    reports (:func:`~..station_config.stored_device_params`); the per-mode settings read
     them where :attr:`params` lacks the param."""
     settings: Mapping[str, Setting] = field(default_factory=dict, repr=False, compare=False)
     """This device's settings by key (:meth:`Station.settings_for`), resolved when the
@@ -863,14 +743,6 @@ def device_channels(sub_devices: Sequence[CloudDevice]) -> frozenset[int]:
     return frozenset(d.channel for d in sub_devices if d.channel is not None)
 
 
-def own_channel(device: CloudDevice) -> int | None:
-    """The channel a standalone station's own block is filed under (its
-    ``device_channel``, 0 when the cloud gives none); None for a hub."""
-    if not device.is_standalone:
-        return None
-    return 0 if device.channel is None else device.channel
-
-
 def station_channels(device: CloudDevice, sub_devices: Sequence[CloudDevice]) -> frozenset[int]:
     """The channels a parameter read of ``device`` waits for: its paired devices', and a
     standalone station's own."""
@@ -880,7 +752,7 @@ def station_channels(device: CloudDevice, sub_devices: Sequence[CloudDevice]) ->
 
 def station_block_aliases(device: CloudDevice) -> dict[int, tuple[int, ...]]:
     """The session's ``block_aliases`` for ``device``: a standalone station's block goes
-    under 255 and its own channel (:func:`~.p2p.params.standalone_aliases`)."""
+    under 255 and its own channel (:func:`~..p2p.params.standalone_aliases`)."""
     channel = own_channel(device)
     return {} if channel is None else standalone_aliases(device.device_type, channel)
 
@@ -911,7 +783,7 @@ def _shape_part(text: str) -> str | None:
 def _path_shape(path: str, suffix: str) -> str:
     """A rejected media path's shape for a log line: its root directory and file
     extension only (``/media/… no extension``); ``unsafe`` when it has the right
-    prefix and suffix but fails another rule of :func:`~.events.is_station_media_path`."""
+    prefix and suffix but fails another rule of :func:`~..events.is_station_media_path`."""
     if path.startswith(MEDIA_PATH_PREFIX) and path.endswith(suffix):
         return f"{MEDIA_PATH_PREFIX}…{suffix} unsafe"
     head, _, rest = path.removeprefix("/").partition("/")
@@ -989,13 +861,6 @@ class _HistoryScan:
         )
 
 
-async def _settle(settle: float | None, default: float) -> None:
-    """Wait ``settle`` seconds, or ``default`` (read at call time) when it is None."""
-    seconds = default if settle is None else settle
-    if seconds > 0:
-        await asyncio.sleep(seconds)
-
-
 async def _fresh_keyframe(stream: MediaStream) -> bytes:
     """The data of :func:`_fresh_keyframe_frame`."""
     return (await _fresh_keyframe_frame(stream)).data
@@ -1059,7 +924,7 @@ async def _held_size_keyframe(stream: MediaStream, settle: float, bound: float) 
 
 def _without_parentless_only(settings: tuple[Setting, ...]) -> tuple[Setting, ...]:
     """``settings`` less those the eufy app offers only for a device without a parent
-    (:data:`~.devices.model_settings.PARENTLESS_ONLY`)."""
+    (:data:`~..devices.model_settings.PARENTLESS_ONLY`)."""
     return tuple(s for s in settings if s.key not in PARENTLESS_ONLY)
 
 
@@ -1095,14 +960,6 @@ def _cloud_value(
     return _CloudValue(value, updated_at, now)
 
 
-@dataclass(frozen=True, slots=True)
-class _Capture:
-    """The capture holding a camera: a live image (``preset`` None) or a preset image."""
-
-    preset: int | None
-    task: asyncio.Task[CameraImage]
-
-
 class Station:
     """A HomeBase and its paired devices, reached over local P2P."""
 
@@ -1128,32 +985,23 @@ class Station:
         self._cloud_refresh = cloud_refresh
         self._log_name = redact_serial(device.device_sn)
         self._bus = EventBus()
-        self._presets: dict[str, tuple[PresetPosition, ...]] = {}
-        self._captures: dict[str, _Capture] = {}
-        """The capture holding each camera (a live or preset image), by serial."""
+        self._ptz = StationPtz(self)
         self._throttle = LogThrottle()
         self._emitted_state: StationState | None = None
-        self._emitted_config: StationConfig | None = None
+        self._configuration = StationConfiguration(self)
         self._settings_memo: dict[tuple[str, str], tuple[Setting, ...]] = {}
         """:meth:`settings_for` per ``(serial, product code)``."""
-        self._zooms: dict[str, float] = {}
         self._cloud: dict[int, _CloudValue] = {}
         """The cloud list's copy of the station's own parameters (a station reached on
         demand files them in its session instead)."""
         self._cloud_time_zone: _CloudValue | None = None
         """The station entry's ``time_zone``."""
-        self._shared_locks: dict[str, asyncio.Lock] = {}
-        """:meth:`_shared_lock` per shared parameter group."""
-        self._alarm: AlarmChanged | None = None
-        """The last alarm transition (:attr:`last_alarm`)."""
-        self._sirens: dict[int, bool] = {}
-        """The device-siren state per channel (:meth:`device_alarm_on`)."""
-        self._siren_expiry: dict[int, asyncio.TimerHandle] = {}
-        """The pending off of each channel whose siren is on (:data:`SIREN_EXPIRY_MARGIN_S`)."""
+        self._alarms = StationAlarms(self)
         session.add_dump_listener(self._on_dump_complete)
-        session.add_alarm_listener(self._on_alarm_frame)
-        session.add_notify_listener(self._on_notify)
+        session.add_alarm_listener(self._alarms.on_alarm_frame)
+        session.add_notify_listener(self._ptz.on_notify)
         session.subscribe(self._on_session_event)
+        self._history = StationHistory(self)
 
     # ── identity ─────────────────────────────────────────────────────────────
 
@@ -1187,7 +1035,7 @@ class Station:
     @property
     def is_standalone(self) -> bool:
         """Whether this station is itself the device (a standalone camera), see
-        :attr:`~.cloud.models.CloudDevice.is_standalone`. Its one parameter block is
+        :attr:`~..cloud.models.CloudDevice.is_standalone`. Its one parameter block is
         both :attr:`StationState.params` and ``StationState.devices[own channel]``,
         whose serial is the station's own."""
         return self.device.is_standalone
@@ -1215,17 +1063,17 @@ class Station:
     def settings_for(self, device_sn: str | None = None) -> tuple[Setting, ...]:
         """The settings of the station (``None``, or its own serial) or of a paired
         device: its model's settings and, for a paired device, the per-mode delays and
-        actions of its kind (:func:`~.devices.model_settings.mode_table_settings`, section
-        ``modes``), in :func:`~.devices.model_settings.sort_settings` order: by section,
+        actions of its kind (:func:`~..devices.model_settings.mode_table_settings`, section
+        ``modes``), in :func:`~..devices.model_settings.sort_settings` order: by section,
         then the eufy app's page, group and order, then the name. A paired device's list
         leaves out the settings the eufy app offers only without a parent
-        (:data:`~.devices.model_settings.PARENTLESS_ONLY`). A model the library has
+        (:data:`~..devices.model_settings.PARENTLESS_ONLY`). A model the library has
         no settings file for lists the read-only settings of its cloud thing description
         when the client's model scan found one (``note`` "not in bundled data"), else
         ``()``.
 
         Sync and free of I/O once the model's file is loaded: :meth:`async_start`
-        (:meth:`async_load_settings`) and :class:`~.client.EufySecurity` load every
+        (:meth:`async_load_settings`) and :class:`~..client.EufySecurity` load every
         product code off the event loop. Raises ``UnsupportedError`` when ``device_sn``
         is not paired to this station.
         """
@@ -1254,7 +1102,7 @@ class Station:
         """Whether the camera or doorbell ``device_sn`` (the station itself for ``None``)
         runs on a battery, as the eufy app decides whether to show one **[declared]**:
         True when its settings list (:meth:`settings_for`) declares
-        :data:`~.devices.model_settings.BATTERY_PROPERTY`, False when the list is
+        :data:`~..devices.model_settings.BATTERY_PROPERTY`, False when the list is
         known and declares none (a mains-powered camera, a wired doorbell), whose
         block may still report ``battery`` and ``charging`` figures the app hides.
 
@@ -1344,7 +1192,7 @@ class Station:
         await asyncio.to_thread(_load_settings, {c for c in codes if c is not None})
 
     def _product_code(self, serial: str) -> str | None:
-        """``serial``'s product code (:func:`~.devices.model_settings.product_code_of`):
+        """``serial``'s product code (:func:`~..devices.model_settings.product_code_of`):
         the cloud's ``device_new_pn``, else the serial's rule or catalogued model."""
         new_pn = next(
             (
@@ -1448,11 +1296,11 @@ class Station:
     # ── lifecycle and events ─────────────────────────────────────────────────
 
     def subscribe(self, callback: EventCallback) -> Unsubscribe:
-        """The session's events plus this station's own (:class:`~.events.DevicesChanged`,
-        :class:`~.events.StationStateChanged`, :class:`~.events.StationConfigChanged`,
-        :class:`~.events.CameraBusyChanged`,
-        :class:`~.events.PresetsChanged`, :class:`~.events.ZoomChanged`,
-        :class:`~.events.DeviceAlarmChanged`); returns the unsubscribe callable."""
+        """The session's events plus this station's own (:class:`~..events.DevicesChanged`,
+        :class:`~..events.StationStateChanged`, :class:`~..events.StationConfigChanged`,
+        :class:`~..events.CameraBusyChanged`,
+        :class:`~..events.PresetsChanged`, :class:`~..events.ZoomChanged`,
+        :class:`~..events.DeviceAlarmChanged`); returns the unsubscribe callable."""
         unsubscribes = (self.session.subscribe(callback), self._bus.subscribe(callback))
 
         def unsubscribe() -> None:
@@ -1464,7 +1312,7 @@ class Station:
     def update_sub_devices(self, sub_devices: Sequence[CloudDevice]) -> DevicesChanged | None:
         """Replace the paired devices (a newer cloud list) and the channels reads wait for.
 
-        Emits and returns :class:`~.events.DevicesChanged` when a serial was added,
+        Emits and returns :class:`~..events.DevicesChanged` when a serial was added,
         removed or moved to another channel; None (and no event) otherwise.
         """
         old = {d.device_sn: d.channel for d in self.sub_devices}
@@ -1482,49 +1330,13 @@ class Station:
         self._bus.emit(event)
         return event
 
-    def _on_notify(self, obj: Mapping[str, Any], cipher: FrameCipher) -> None:
-        zoom = reported_zoom(obj)
-        if zoom is None:
-            return
-        device_sn = self._zoom_device(obj)
-        if device_sn is not None:
-            self._keep_zoom(device_sn, zoom)
-
-    def _zoom_device(self, obj: Mapping[str, Any]) -> str | None:
-        """The camera a 6203 report is about: the one on its ``mChannel``; a standalone
-        station's own serial when it names none. None when that is not a zoom camera."""
-        channel = json_int(obj.get("mChannel"))
-        if self.is_standalone and channel in (None, own_channel(self.device)):
-            device_sn: str | None = self.serial
-        else:
-            device_sn = next(
-                (
-                    d.device_sn
-                    for d in self.sub_devices
-                    if channel is not None and d.channel == channel
-                ),
-                None,
-            )
-        if device_sn is None:
-            return None
-        profile = profile_for_serial(device_sn)
-        if profile is None or profile.support(Capability.PTZ_ZOOM) is Support.UNKNOWN:
-            return None
-        return device_sn
-
-    def _keep_zoom(self, device_sn: str, zoom: float) -> None:
-        if self._zooms.get(device_sn) == zoom:
-            return
-        self._zooms[device_sn] = zoom
-        self._bus.emit(ZoomChanged(station_sn=self.serial, device_sn=device_sn, zoom=zoom))
-
     def _on_session_event(self, event: Event) -> None:
         if isinstance(event, AlarmChanged):
             self.note_alarm(event)
         # A camera that loses its link has gone idle, and an idle camera returns to 1x.
         if isinstance(event, ConnectionChanged) and not event.connected:
-            for device_sn in list(self._zooms):
-                self._keep_zoom(device_sn, MIN_ZOOM)
+            for device_sn in list(self._ptz.zooms):
+                self._ptz.keep_zoom(device_sn, MIN_ZOOM)
 
     def _on_dump_complete(self) -> None:
         state = self.state
@@ -1532,7 +1344,7 @@ class Station:
             return
         self._emitted_state = state
         self._bus.emit(StationStateChanged(station_sn=self.serial, state=state))
-        self._emit_config_change(state)
+        self._configuration.emit_config_change(state)
 
     async def async_start(self) -> None:
         """Load the model settings, connect, take a baseline parameter dump, and keep the
@@ -1545,47 +1357,47 @@ class Station:
         try:
             await self.session.async_close()
         finally:
-            for timer in self._siren_expiry.values():
+            for timer in self._alarms.siren_expiry.values():
                 timer.cancel()
-            self._siren_expiry.clear()
-            self._sirens.clear()
+            self._alarms.siren_expiry.clear()
+            self._alarms.sirens.clear()
 
     @property
     def connected(self) -> bool:
-        """Whether the last :class:`~.events.ConnectionChanged` said connected and still holds."""
+        """Whether the last :class:`~..events.ConnectionChanged` said connected and still holds."""
         return self.session.announced
 
     @property
     def alarming(self) -> bool:
         """Whether the station's alarm is sounding, as the last
-        :class:`~.events.AlarmChanged` for it said; False before any. Under
-        :class:`~.client.EufySecurity` it follows the account's alarm tracker (the
+        :class:`~..events.AlarmChanged` for it said; False before any. Under
+        :class:`~..client.EufySecurity` it follows the account's alarm tracker (the
         station's alarm-tone frames, the cloud's alarm pushes, a disarm) and is already
         set when a subscriber receives the event. It is not re-read on reconnect: an
         alarm that ends while the session is down stays on until the next transition."""
-        return self._alarm is not None and self._alarm.alarming
+        return self._alarms.alarm is not None and self._alarms.alarm.alarming
 
     @property
     def last_alarm(self) -> AlarmChanged | None:
-        """The last :class:`~.events.AlarmChanged` for this station (its channel, event
+        """The last :class:`~..events.AlarmChanged` for this station (its channel, event
         type, duration or stop source); None before any."""
-        return self._alarm
+        return self._alarms.alarm
 
     def note_alarm(self, change: AlarmChanged) -> None:
         """Record an alarm transition for this station (:attr:`alarming`).
 
-        The station records its own session's at once; :class:`~.client.EufySecurity`
+        The station records its own session's at once; :class:`~..client.EufySecurity`
         records the ones its tracker makes from a push or a disarm before emitting
         them. A change for another station is ignored. A transition is also a
-        :class:`~.events.DeviceAlarmChanged` for every device here whose alarm is the
+        :class:`~..events.DeviceAlarmChanged` for every device here whose alarm is the
         station's tone (:meth:`device_alarm_on`).
         """
         if change.station_sn != self.serial:
             return
-        was = self._alarm is not None and self._alarm.alarming
-        self._alarm = change
+        was = self._alarms.alarm is not None and self._alarms.alarm.alarming
+        self._alarms.alarm = change
         if change.alarming != was:
-            self._emit_device_alarms(
+            self._alarms.emit_device_alarms(
                 lambda alarms, _: alarms.station_tone, change.alarming, change.event_type, change.at
             )
 
@@ -1602,7 +1414,7 @@ class Station:
 
     async def async_update(self, *, wake: bool = False) -> StationState:
         """Read a fresh dump of the station and every paired device; returns :attr:`state`
-        right after it (the same snapshot a :class:`~.events.StationStateChanged` carries).
+        right after it (the same snapshot a :class:`~..events.StationStateChanged` carries).
 
         A station reached on demand (:attr:`connects_on_demand`) is not woken for it: the
         state it has (the cloud snapshot, pushes, the last session) is returned as is,
@@ -1616,9 +1428,9 @@ class Station:
     @property
     def max_sessions(self) -> int:
         """P2P sessions this library holds to the station at most; ``max_sessions - 1``
-        live streams at once (see :attr:`~.p2p.session.StationSession.max_sessions`).
-        Settable: ``ValueError`` outside :data:`~.p2p.session.MIN_STATION_SESSIONS` ..
-        :data:`~.p2p.session.STATION_SESSION_LIMIT`. A lower value ends no stream."""
+        live streams at once (see :attr:`~..p2p.session.StationSession.max_sessions`).
+        Settable: ``ValueError`` outside :data:`~..p2p.session.MIN_STATION_SESSIONS` ..
+        :data:`~..p2p.session.STATION_SESSION_LIMIT`. A lower value ends no stream."""
         return self.session.max_sessions
 
     @max_sessions.setter
@@ -1642,7 +1454,7 @@ class Station:
         A live still or preset capture on a HomeBase is a live open like any other: while
         this slot is busy it runs on an extra session, so a live view blocks it only when
         the session budget (:attr:`max_sessions`) is used up. Then the capture raises
-        :class:`~.exceptions.LiveStreamLimitError`, or with ``wait`` waits for a stream to
+        :class:`~..exceptions.LiveStreamLimitError`, or with ``wait`` waits for a stream to
         end; ending this camera's view frees the slot. A standalone camera has one stream:
         its own view blocks its captures.
 
@@ -1658,9 +1470,9 @@ class Station:
     @property
     def connects_on_demand(self) -> bool:
         """Whether this station is reached only on demand (a battery device, see
-        :func:`~.devices.types.connects_on_demand`): no held session, its state comes from
+        :func:`~..devices.types.connects_on_demand`): no held session, its state comes from
         the cloud snapshot and pushes, and every command connects, then the link closes
-        after :data:`~.p2p.session.ON_DEMAND_IDLE_CLOSE` seconds idle."""
+        after :data:`~..p2p.session.ON_DEMAND_IDLE_CLOSE` seconds idle."""
         return self.session.on_demand
 
     @property
@@ -1679,8 +1491,8 @@ class Station:
         The copy is the second source of the station's settings
         (:attr:`StationState.setting_params`); the entry replaces the previous copy. A
         station reached on demand merges the snapshot into its session instead (see
-        :meth:`~.p2p.session.StationSession.ingest_cloud_params`), where it is its state.
-        News emits :class:`~.events.StationStateChanged` once the station has a state.
+        :meth:`~..p2p.session.StationSession.ingest_cloud_params`), where it is its state.
+        News emits :class:`~..events.StationStateChanged` once the station has a state.
         Only this station's own entry counts (a hub's paired devices report through the
         hub); an entry of another serial changes nothing.
         """
@@ -1714,7 +1526,7 @@ class Station:
 
         Each parameter holds its latest value from any dump, pushed or read. A device
         block absent from a full read is gone (see
-        :meth:`~.p2p.session.StationSession.add_dump_listener`).
+        :meth:`~..p2p.session.StationSession.add_dump_listener`).
         """
         dump = self.session.merged_params()
         return self._state(dump) if STATION_CHANNEL in dump.devices else None
@@ -1873,10 +1685,10 @@ class Station:
         """Arm/disarm; returns the mode the station applied.
 
         The request takes the form the eufy app sends this station's model
-        (:func:`~.devices.model_settings.arms_by_scalar`): the station scalar 1224 where
+        (:func:`~..devices.model_settings.arms_by_scalar`): the station scalar 1224 where
         its handler builds a bare 1224, else the 1350 payload object. The station's
         result code 0 is final, as the eufy app takes it
-        (:meth:`~.p2p.session.StationSession.async_set_guard_mode`).
+        (:meth:`~..p2p.session.StationSession.async_set_guard_mode`).
 
         Raises ``UnsupportedError`` before anything is sent for a station model on
         record whose guard mode is *unknown* (:meth:`config_support`: T8N00, T9000 and
@@ -1913,19 +1725,19 @@ class Station:
     ) -> CommandOutcome:
         """Write setting ``key`` of the station (no target, or channel 255), of the
         paired device ``device_sn`` or of the device on ``channel``; returns how far the
-        write got (:class:`~.p2p.session.CommandOutcome`).
+        write got (:class:`~..p2p.session.CommandOutcome`).
 
-        ``value`` is validated (:meth:`~.devices.model_settings.Setting.validate`) and
+        ``value`` is validated (:meth:`~..devices.model_settings.Setting.validate`) and
         rendered for the device (station child or standalone) before anything is sent,
         then sent on the path the setting's codec names: an ECB scalar, a 1350 or 1700
         sub-command, or a GCM command of its own id. Once sent, the values the write
         sets are merged into the session's parameters, so :attr:`state` shows them
         until the next dump. Nothing is read back.
 
-        A per-mode delay or action (:func:`~.devices.model_settings.mode_table_settings`)
+        A per-mode delay or action (:func:`~..devices.model_settings.mode_table_settings`)
         is written as that guard mode's whole table and confirmed by reading every value
-        back; see :meth:`_async_set_mode_table_value` for what that reads, refuses and
-        moves.
+        back; see :meth:`~.configuration.StationConfiguration.async_set_mode_table_value`
+        for what that reads, refuses and moves.
 
         Raises ``UnsupportedError`` for a key the device does not have or a setting the
         library does not write (its ``note`` says why), ``ValueError`` for a value
@@ -1938,7 +1750,9 @@ class Station:
             raise UnsupportedError(f"{key} is not writable: {setting.note or 'read-only'}")
         public = setting.validate(value)
         if setting._mode_table is not None:
-            await self._async_set_mode_table_value(setting._mode_table, int(public), ctx.channel)
+            await self._configuration.async_set_mode_table_value(
+                setting._mode_table, int(public), ctx.channel
+            )
             return CommandOutcome.APPLIED
         ctx = await self._with_write_params(setting, ctx)
         if setting.bit is not None:
@@ -1982,7 +1796,7 @@ class Station:
 
     async def _with_write_params(self, setting: Setting, ctx: WriteContext) -> WriteContext:
         """``ctx`` with the current values of the parameters ``setting``'s write takes
-        (:attr:`~.devices.model_settings.Setting.write_params`): from the session's
+        (:attr:`~..devices.model_settings.Setting.write_params`): from the session's
         parameters, else from a fresh read. Raises :class:`CommandNotAppliedError` when
         the device does not report one, since the handler would send null in its place."""
         needed = setting.write_params
@@ -2017,11 +1831,15 @@ class Station:
 
     # ── mode tables: bulk edits ──────────────────────────────────────────────
 
-    def _shared_lock(self, group: str) -> asyncio.Lock:
-        """The lock that serialises read-modify-writes of the shared parameter ``group``
-        on this station (:data:`MODE_TABLES_LOCK`), so concurrent writes keep each
-        other's changes."""
-        return self._shared_locks.setdefault(group, asyncio.Lock())
+    def _config_rules(self) -> ConfigRules:
+        """The read-back waits and the cross-camera minimum as ``station`` holds them now,
+        where tests and consumers patch them (:class:`~.configuration.StationConfiguration`
+        asks each time it reads them)."""
+        return ConfigRules(
+            readback_attempts=READBACK_ATTEMPTS,
+            readback_delay=READBACK_DELAY,
+            min_tracking_cameras=MIN_TRACKING_CAMERAS,
+        )
 
     async def async_set_mode_actions(
         self,
@@ -2038,30 +1856,31 @@ class Station:
         mode-table write; returns the table now in effect.
 
         ``changes`` maps a paired device's serial to ``{flag: on}`` for the flags of
-        its kind (:func:`~.devices.settings.mode_action_flags`), for example
+        its kind (:func:`~..devices.settings.mode_action_flags`), for example
         ``{cam_sn: {"record": True, "camera_siren": False}, sensor_sn: {"notification":
         True}}``. A flag is on as the app's checkbox is ticked: ``motion_sensor_respond``
-        True clears its bit (:data:`~.p2p.mode_actions.MODE_ACTION_INVERTED`), and
+        True clears its bit (:data:`~..p2p.mode_actions.MODE_ACTION_INVERTED`), and
         turning it off also turns the sensor's ``notification`` and ``station_alarm`` off
-        in the same write, as the app does (:data:`~.p2p.mode_actions.MODE_ACTION_CLEARS`).
+        in the same write, as the app does (:data:`~..p2p.mode_actions.MODE_ACTION_CLEARS`).
         The delays follow the app's delay screen (one value per mode):
         ``entry_s`` / ``exit_s`` set the alarm (entry) / leaving (exit) delay of every
         device that has it on afterwards (0 turns it off on all), one of the app's
-        choices :data:`~.p2p.mode_actions.MODE_DELAY_CHOICES`, and ``entry_devices``
+        choices :data:`~..p2p.mode_actions.MODE_DELAY_CHOICES`, and ``entry_devices``
         / ``exit_devices`` turn it on or off per serial; see
-        :meth:`~.p2p.mode_actions.ModeTable.with_count_down`.
+        :meth:`~..p2p.mode_actions.ModeTable.with_count_down`.
 
-        The whole mode is read fresh once, every change is applied to it with every
-        other bit and value kept, the table is sent once (``SET_ALL_ACTION``) and
-        every value confirmed by read-back. On a pro-alarm station (T8020, T8023, T8024,
-        T8026) whose devices report no per-mode params, the table is read from the
-        station's stored copy (61300-61309) and the write confirmed against it
-        (:meth:`_async_write_stored_mode_table`). Nothing is sent when the table already
-        holds the result, nor for an empty edit (which returns the current table).
-        Single-flag writes (:meth:`async_set_mode_action`, :meth:`async_set_setting`)
-        share the station's mode-table lock, so concurrent writes keep each other's bits.
-        ``expect_revision`` is checked against the configuration of the fresh read
-        (:class:`~.exceptions.ConfigChangedError`, nothing sent, when it differs).
+        The whole mode is read fresh once, every change is applied to it with every other
+        bit and value kept, the table is sent once (``SET_ALL_ACTION``) and every value
+        confirmed by read-back. On a pro-alarm station (T8020, T8023, T8024, T8026) whose
+        devices report no per-mode params, the table is read from the station's stored copy
+        (61300-61309) and the write confirmed against it
+        (:meth:`~.configuration.StationConfiguration._async_write_stored_mode_table`).
+        Nothing is sent when the table already holds the result, nor for an empty edit
+        (which returns the current table). Single-flag writes
+        (:meth:`async_set_mode_action`, :meth:`async_set_setting`) share the station's
+        mode-table lock, so concurrent writes keep each other's bits. ``expect_revision`` is
+        checked against the configuration of the fresh read
+        (:class:`~..exceptions.ConfigChangedError`, nothing sent, when it differs).
 
         Raises, before anything is sent: ``UnsupportedError`` when the station's mode
         tables (for ``changes``) or delays are *unknown* (:meth:`config_support`), for a
@@ -2078,46 +1897,15 @@ class Station:
         the device and flag (or delay) the read-back does not show, and the session's
         typed errors.
         """
-        if changes:
-            self._require_feature(StationFeature.MODE_TABLES)
-        if any(v is not None for v in (entry_s, exit_s)) or entry_devices or exit_devices:
-            self._require_feature(StationFeature.MODE_DELAYS)
-        for what, seconds in (("entry_s", entry_s), ("exit_s", exit_s)):
-            if seconds is not None:
-                require_mode_delay(what, seconds)
-        guard = GuardMode.parse(mode)
-        if guard not in MODE_TABLE_MODES:
-            raise UnsupportedError(f"guard mode {guard!r} has no per-device actions")
-        edits: dict[int, tuple[SettingDef, dict[str, bool]]] = {}
-        for device_sn, flags in changes.items():
-            channel = self.channel_for(device_sn)
-            spec = self._mode_action_spec(guard, channel)
-            for flag, on in flags.items():
-                if not isinstance(on, bool):
-                    raise ValueError(f"{flag}: on must be a bool, got {on!r}")
-            spec.with_flags(0, flags)  # refuses an unknown or clashing flag before any traffic
-            edits.setdefault(channel, (spec, {}))[1].update(flags)
-        count_downs = {
-            ModeTableField.ALARM_DELAY: (entry_s, self._delay_channels(entry_devices)),
-            ModeTableField.LEAVING_DELAY: (exit_s, self._delay_channels(exit_devices)),
-        }
-        targets = set(edits).union(*(chs for _, chs in count_downs.values()))
-
-        def edit(table: ModeTable) -> ModeTable:
-            table = self._with_flags(table, edits)
-            for table_field, (seconds, channels) in count_downs.items():
-                if seconds is not None or channels:
-                    table = table.with_count_down(table_field, seconds=seconds, channels=channels)
-            return table
-
-        _, new = await self._async_edit_mode_table(
-            guard,
-            edit,
-            targets={ch: edits[ch][0] if ch in edits else None for ch in targets},
-            command=FIELD_PARAMS[ModeTableField.ACTION][guard],
+        return await self._configuration.async_set_mode_actions(
+            mode,
+            changes,
+            entry_s=entry_s,
+            exit_s=exit_s,
+            entry_devices=entry_devices,
+            exit_devices=exit_devices,
             expect_revision=expect_revision,
         )
-        return new
 
     async def async_set_mode_delays(
         self,
@@ -2130,9 +1918,8 @@ class Station:
         expect_revision: int | None = None,
     ) -> ModeTable:
         """:meth:`async_set_mode_actions` with delay changes only (one table write)."""
-        return await self.async_set_mode_actions(
+        return await self._configuration.async_set_mode_delays(
             mode,
-            {},
             entry_s=entry_s,
             exit_s=exit_s,
             entry_devices=entry_devices,
@@ -2152,32 +1939,25 @@ class Station:
     ) -> ModeInfo:
         """Add a custom mode named ``name`` in the first free of Custom 1-3; returns it.
 
-        ``icon`` is the app's ``iconType`` (0-7, default :data:`DEFAULT_MODE_ICON`),
-        ``detail`` the mode's description. The mode list (1256) is read fresh, the new
-        entry added and the whole list written (``operate_type`` 100); see
-        :meth:`_async_write_mode_list` for how it is confirmed. The new mode gets the
-        app's actions for an added mode (record and notification), and the station seeds
-        its device table: cameras record and notify, sensors notify, no delays.
+        ``icon`` is the app's ``iconType`` (0-7, default
+        :data:`~..p2p.station_config_codecs.DEFAULT_MODE_ICON`), ``detail`` the mode's
+        description. The mode list (1256) is read fresh, the new entry added and the whole
+        list written (``operate_type`` 100); see
+        :meth:`~.configuration.StationConfiguration._async_write_mode_list` for how it is
+        confirmed. The new mode gets the app's actions for an added mode (record and
+        notification), and the station seeds its device table: cameras record and notify,
+        sensors notify, no delays.
 
         Raises, before anything is sent: ``UnsupportedError`` when the station's custom
         modes are *unknown* (:meth:`config_support`) or its mode list cannot be known;
         ``ValueError`` (a message a UI can show) when all three custom modes exist, the
         name is empty, longer than 30 characters or already used, or the icon or detail
-        is out of range; :class:`~.exceptions.ConfigChangedError` when ``expect_revision``
+        is out of range; :class:`~..exceptions.ConfigChangedError` when ``expect_revision``
         differs from the fresh read's.
         """
-        self._require_feature(StationFeature.CUSTOM_MODES)
-        icon_type = DEFAULT_MODE_ICON if icon is None else icon
-        text = "" if detail is None else detail
-        add_custom_mode(None, account_id="", title=name, icon_type=icon_type, detail=text)
-        async with self._shared_lock(MODE_LIST_LOCK):
-            state, config = await self._config_for_write(expect_revision)
-            current = self._custom_modes(state, config)
-            doc = add_custom_mode(
-                current, account_id="", title=name, icon_type=icon_type, detail=text
-            )
-            await self._async_write_mode_list(doc)
-        return self._defined_mode(cast(GuardMode, doc.mode_id))
+        return await self._configuration.async_create_custom_mode(
+            name, icon=icon, detail=detail, expect_revision=expect_revision
+        )
 
     async def async_rename_custom_mode(
         self,
@@ -2193,21 +1973,11 @@ class Station:
         Raises before anything is sent: ``UnsupportedError`` as
         :meth:`async_create_custom_mode`; ``ValueError`` for a built-in mode, a custom
         mode the station does not have, or a name or icon the app refuses;
-        :class:`~.exceptions.ConfigChangedError` for a stale ``expect_revision``.
+        :class:`~..exceptions.ConfigChangedError` for a stale ``expect_revision``.
         """
-        self._require_feature(StationFeature.CUSTOM_MODES)
-        target = require_custom_mode(GuardMode.parse(mode), "rename")
-        add_custom_mode(
-            None, account_id="", title=name, icon_type=icon or 0, mode=target
-        )  # refuses a name or icon before any traffic
-        async with self._shared_lock(MODE_LIST_LOCK):
-            state, config = await self._config_for_write(expect_revision)
-            current = self._custom_modes(state, config)
-            if current is None:
-                raise ValueError(f"{target.label} does not exist")
-            doc = modify_custom_mode(current, target, account_id="", title=name, icon_type=icon)
-            await self._async_write_mode_list(doc)
-        return self._defined_mode(target)
+        return await self._configuration.async_rename_custom_mode(
+            mode, name, icon=icon, expect_revision=expect_revision
+        )
 
     async def async_delete_custom_mode(
         self, mode: GuardMode | str | int, *, expect_revision: int | None = None
@@ -2217,39 +1987,14 @@ class Station:
 
         Raises before anything is sent: ``UnsupportedError`` as
         :meth:`async_create_custom_mode`; ``ValueError`` for a built-in mode or one the
-        station does not have; :class:`~.exceptions.ModeInUseError` (its ``reason`` a
+        station does not have; :class:`~..exceptions.ModeInUseError` (its ``reason`` a
         sentence a UI can show) when the mode is the station's current mode or the one
         in force, a schedule slot uses it or it is the schedule's mode outside every
-        slot; :class:`~.exceptions.ConfigChangedError` for a stale ``expect_revision``.
+        slot; :class:`~..exceptions.ConfigChangedError` for a stale ``expect_revision``.
         """
-        self._require_feature(StationFeature.CUSTOM_MODES)
-        target = require_custom_mode(GuardMode.parse(mode), "delete")
-        async with self._shared_lock(MODE_LIST_LOCK):
-            state, config = await self._config_for_write(expect_revision)
-            current = self._custom_modes(state, config)
-            if current is None:
-                raise ValueError(f"{target.label} does not exist")
-            doc = delete_custom_mode(current, target, account_id="")
-            self._check_mode_unused(config, target)
-            await self._async_write_mode_list(doc)
-
-    @staticmethod
-    def _check_mode_unused(config: StationConfig, mode: GuardMode) -> None:
-        """:class:`~.exceptions.ModeInUseError` when ``config`` is in ``mode`` or its
-        schedule uses it."""
-        name = config.mode_name(mode)
-        if mode in (config.guard_mode, config.effective_mode):
-            raise ModeInUseError(
-                f"{name} is the station's current mode; switch to another mode before deleting it"
-            )
-        if config.schedule is not None and mode in config.schedule.modes():
-            raise ModeInUseError(
-                f"{name} is used by the schedule; remove it from the schedule first"
-            )
-        if config.schedule_default == mode:
-            raise ModeInUseError(
-                f"{name} is the schedule's mode outside its time slots; choose another one first"
-            )
+        return await self._configuration.async_delete_custom_mode(
+            mode, expect_revision=expect_revision
+        )
 
     async def async_set_schedule(
         self,
@@ -2262,56 +2007,26 @@ class Station:
         and differs, the mode outside every slot (1257); returns both as
         :attr:`config` shows them after the write.
 
-        Build ``schedule`` from :class:`~.p2p.station_config_codecs.ScheduleSlot`
-        entries: their ``ValueError`` (an end before the start, overlapping slots, a mode
-        no slot can use) is the message a UI shows. The configuration is read fresh under the
-        station's mode-list lock; nothing is sent for a part that already holds the
-        value. The schedule goes as a JSON frame of type 1254, as the app sends it,
-        confirmed as :meth:`_async_confirm_param` says (a HomeBase 3's dump does not
-        carry it); the default as the app's scalar 1257 write, confirmed by the dump.
-        A schedule change is alarm-affecting while Schedule is the selected mode.
+        Build ``schedule`` from :class:`~..p2p.station_config_codecs.ScheduleSlot` entries:
+        their ``ValueError`` (an end before the start, overlapping slots, a mode no slot can
+        use) is the message a UI shows. The configuration is read fresh under the station's
+        mode-list lock; nothing is sent for a part that already holds the value. The
+        schedule goes as a JSON frame of type 1254, as the app sends it, confirmed as
+        :meth:`~.configuration.StationConfiguration._async_confirm_param` says (a HomeBase
+        3's dump does not carry it); the default as the app's scalar 1257 write, confirmed
+        by the dump. A schedule change is alarm-affecting while Schedule is the selected
+        mode.
 
         Raises before anything is sent: ``UnsupportedError`` when the schedule is
         *unknown* on the station (:meth:`config_support`); ``ValueError`` for a
         ``schedule`` that is not a :class:`Schedule`, a default no schedule can name, or
         a slot or default whose mode the station does not have (a custom mode it does
-        not list); :class:`~.exceptions.ConfigChangedError` for a stale
+        not list); :class:`~..exceptions.ConfigChangedError` for a stale
         ``expect_revision``.
         """
-        self._require_feature(StationFeature.SCHEDULE)
-        if not isinstance(schedule, Schedule):
-            raise ValueError(f"a schedule must be a Schedule, got {schedule!r}")
-        default = None if default_mode is None else GuardMode.parse(default_mode)
-        if default is not None:
-            encode_schedule_default(default)
-        async with self._shared_lock(MODE_LIST_LOCK):
-            _, config = await self._config_for_write(expect_revision)
-            defined = [m.code for m in config.modes if isinstance(m.code, GuardMode)]
-            schedule.require_defined(defined)
-            if default is not None and default not in defined:
-                raise ValueError(
-                    f"the schedule default {default.label} is a mode the station does not have"
-                )
-            current = config.schedule
-            if current is None or current.slots != schedule.slots:
-
-                def holds(raw: str) -> bool:
-                    stored = decode_schedule(raw)
-                    return stored is not None and stored.slots == schedule.slots
-
-                await self._async_write_document(CMD_SCHEDULE, schedule, holds)
-            if default is not None and default != config.schedule_default:
-                await self.session.async_send_ecb_scalar(CMD_SCHEDULE_DEFAULT, int(default))
-                await self._async_confirm_param(
-                    CMD_SCHEDULE_DEFAULT,
-                    str(int(default)),
-                    lambda raw: decode_schedule_default(raw) == default,
-                    answered=True,
-                )
-        after = self.config
-        if after is None:  # pragma: no cover - a write leaves a state
-            return schedule, default
-        return after.schedule, after.schedule_default
+        return await self._configuration.async_set_schedule(
+            schedule, default_mode=default_mode, expect_revision=expect_revision
+        )
 
     async def async_set_cross_camera_cameras(
         self, serials: Iterable[str] | None, *, expect_revision: int | None = None
@@ -2323,45 +2038,19 @@ class Station:
         the app's handler sends it), read fresh under the station's cross-camera lock
         and confirmed by the parameter dump; nothing is sent when the station already
         holds the choice. The tracking switches (1065, 1069, 1070) are settings
-        (:attr:`~.station_config.StationConfig.setting_keys`).
+        (:attr:`~..station_config.StationConfig.setting_keys`).
 
         Raises before anything is sent: ``UnsupportedError`` when cross-camera tracking
         is *unknown* on the station or a serial is not in :meth:`cross_camera_eligible`
         (a sensor, a keypad, another station's camera) or, for ``None``, when fewer than
         :data:`MIN_TRACKING_CAMERAS` are eligible; ``ValueError`` for a choice of fewer than
         :data:`MIN_TRACKING_CAMERAS` (the eufy app saves no smaller one) or a serial listed
-        twice; :class:`~.exceptions.ConfigChangedError` for a stale
+        twice; :class:`~..exceptions.ConfigChangedError` for a stale
         ``expect_revision``.
         """
-        self._require_feature(StationFeature.CROSS_CAMERA)
-        if serials is None:
-            chosen = self.cross_camera_eligible()
-            if len(chosen) < MIN_TRACKING_CAMERAS:
-                raise UnsupportedError(
-                    f"{self._log_name} has fewer than {MIN_TRACKING_CAMERAS} cameras "
-                    "cross-camera tracking can follow",
-                    device_sn=self.serial,
-                )
-        else:
-            chosen = self._own_cameras(serials, "tracking cameras")
-            if len(chosen) < MIN_TRACKING_CAMERAS:
-                raise ValueError(
-                    f"choose at least {MIN_TRACKING_CAMERAS} cameras, as the eufy app requires; "
-                    "None chooses every camera"
-                )
-        value = encode_tracking_cameras(chosen)
-        async with self._shared_lock(CROSS_CAMERA_LOCK):
-            _, config = await self._config_for_write(expect_revision)
-            if config.cross_camera is None or config.cross_camera.cameras != chosen:
-                await self._async_write_list(
-                    PARAM_TRACKING_CAMERAS,
-                    list(chosen),
-                    value,
-                    lambda raw: decode_tracking_cameras(raw) == chosen,
-                )
-        after = self.config
-        cross = after.cross_camera if after is not None else None
-        return cross.cameras if cross is not None and cross.cameras is not None else chosen
+        return await self._configuration.async_set_cross_camera_cameras(
+            serials, expect_revision=expect_revision
+        )
 
     async def async_set_cross_camera_groups(
         self, groups: Iterable[Iterable[str]], *, expect_revision: int | None = None
@@ -2374,65 +2063,19 @@ class Station:
         Raises before anything is sent: ``UnsupportedError`` when tracking groups are
         *unknown* on the station or a serial is not in :meth:`cross_camera_eligible`;
         ``ValueError`` for an empty group or a camera listed twice (in one group or in
-        two); :class:`~.exceptions.ConfigChangedError` for a stale ``expect_revision``.
+        two); :class:`~..exceptions.ConfigChangedError` for a stale ``expect_revision``.
         """
-        self._require_feature(StationFeature.CROSS_CAMERA_GROUPS)
-        if isinstance(groups, str):
-            raise ValueError("tracking groups must be a list of serial lists")
-        chosen = tuple(self._own_cameras(group, "a tracking group") for group in groups)
-        members = [serial for group in chosen for serial in group]
-        if any(not group for group in chosen):
-            raise ValueError("a tracking group needs at least one camera")
-        if len(set(members)) != len(members):
-            raise ValueError("a camera can be in one tracking group only")
-        value = encode_tracking_groups(chosen)
-        async with self._shared_lock(CROSS_CAMERA_LOCK):
-            _, config = await self._config_for_write(expect_revision)
-            if config.cross_camera is None or config.cross_camera.groups != chosen:
-                await self._async_write_list(
-                    PARAM_TRACKING_GROUPS,
-                    [{"value": list(group)} for group in chosen],
-                    value,
-                    lambda raw: decode_tracking_groups(raw) == chosen,
-                )
-        after = self.config
-        cross = after.cross_camera if after is not None else None
-        return cross.groups if cross is not None else chosen
-
-    def _own_cameras(self, serials: Iterable[str], what: str) -> tuple[str, ...]:
-        """``serials`` checked as distinct cameras paired to this station."""
-        if isinstance(serials, str):
-            raise ValueError(f"{what} must be a list of serials, not one string")
-        out = tuple(serials)
-        encode_tracking_cameras(out)  # refuses an empty or repeated serial
-        eligible = self.cross_camera_eligible()
-        for serial in out:
-            if serial not in eligible:
-                raise UnsupportedError(
-                    f"{redact_serial(serial)} is not a device paired to "
-                    f"{self._log_name} that cross-camera tracking can follow",
-                    device_sn=serial,
-                )
-        return out
+        return await self._configuration.async_set_cross_camera_groups(
+            groups, expect_revision=expect_revision
+        )
 
     def cross_camera_eligible(self) -> tuple[str, ...]:
         """The serials of the paired devices cross-camera tracking can follow, by channel:
         the cameras and doorbells the eufy app offers in its camera list
-        (:func:`~.devices.station_config_support.cross_camera_candidate`). The rule
+        (:func:`~..devices.station_config_support.cross_camera_candidate`). The rule
         :meth:`async_set_cross_camera_cameras` and :meth:`async_set_cross_camera_groups`
         check a serial against, and what ``None`` chooses. No I/O."""
-        paired = sorted(self.sub_devices, key=lambda d: (d.channel is None, d.channel or 0))
-        return cross_camera_eligible(d.device_sn for d in paired)
-
-    async def _async_write_list(
-        self, param: int, payload: list[Any], stored: str, holds: Callable[[str], bool]
-    ) -> None:
-        """Send ``payload`` as the 1350 sub-command ``param`` (the handler's ``param_list``)
-        and confirm it (:meth:`_async_confirm_param`; ``stored`` is its param value)."""
-        outcome = await self.session.async_send_command(param, payload=payload)
-        await self._async_confirm_param(
-            param, stored, holds, answered=outcome is CommandOutcome.APPLIED
-        )
+        return self._configuration.cross_camera_eligible()
 
     def target_mode_name(self, mode: GuardMode) -> str | None:
         """The name this station gives ``mode``, for a write that targets it (the guard
@@ -2441,343 +2084,7 @@ class Station:
 
         Raises ``UnsupportedError`` for a custom mode the known list does not define.
         """
-        config = self.config
-        if config is None or config.sources.get("modes") in (None, ValueSource.APP_DEFAULT):
-            return None
-        if mode in CUSTOM_MODES and not config.is_defined(mode):
-            have = ", ".join(m.name for m in config.modes if m.custom) or "none"
-            raise UnsupportedError(
-                f"{self._log_name} has no {mode.label} (its custom modes: {have})",
-                device_sn=self.serial,
-            )
-        return config.mode_name(mode)
-
-    def _require_feature(self, feature: StationFeature) -> None:
-        """``UnsupportedError`` when ``feature`` is *unknown* on this station."""
-        evidence = self.config_support(feature)
-        if evidence.support is Support.UNKNOWN:
-            raise UnsupportedError(f"{feature.value} is not supported here: {evidence.source}")
-
-    async def _config_for_write(
-        self, expect_revision: int | None
-    ) -> tuple[StationState, StationConfig]:
-        """A fresh read and its configuration, checked against ``expect_revision``
-        (:class:`~.exceptions.ConfigChangedError`, nothing sent, when it differs)."""
-        state = await self.async_update(wake=True)
-        config = build_station_config(state)
-        check_revision(config, expect_revision)
-        return state, config
-
-    def _custom_modes(self, state: StationState, config: StationConfig) -> CustomModes | None:
-        """The mode list (1256) a write starts from; None when the station has none.
-
-        ``UnsupportedError`` when the list does not decode, or when no source carries
-        it and the station has no cloud copy: the list may exist where the library cannot
-        see it, and a write would replace it.
-        """
-        if (problem := config.unreadable.get("modes")) is not None:
-            raise UnsupportedError(f"the station's mode list cannot be read: {problem}")
-        raw = state.setting_params.get(CMD_CUSTOM_MODES)
-        if raw is None and not self.has_cloud_copy:
-            raise UnsupportedError(
-                "the station's mode list is not known yet (its parameter dump does not "
-                "carry it); read the configuration with refresh first"
-            )
-        return decode_custom_modes(raw)
-
-    async def _async_write_mode_list(self, doc: CustomModes) -> None:
-        """Send mode list ``doc`` (frame 1256) and confirm it (:meth:`_async_confirm_param`)."""
-
-        def holds(raw: str) -> bool:
-            stored = decode_custom_modes(raw)
-            return stored is not None and stored.modes == doc.modes
-
-        await self._async_write_document(CMD_CUSTOM_MODES, doc, holds)
-
-    async def _async_write_document(
-        self, command: int, doc: CustomModes | Schedule, holds: Callable[[str], bool]
-    ) -> None:
-        """Send ``doc`` with the owner's account id as a JSON frame of type ``command``
-        (the param it sets) and confirm it (:meth:`_async_confirm_param`)."""
-        sent: list[CustomModes | Schedule] = []
-
-        def body(account: str) -> bytes:
-            sent.append(replace(doc, account_id=account))
-            return sent[-1].body()
-
-        receipted = await self.session.async_send_json_frame(command, body)
-        await self._async_confirm_param(command, sent[-1].param_value(), holds, receipted)
-
-    async def _async_confirm_param(
-        self, param: int, stored: str, holds: Callable[[str], bool], answered: bool
-    ) -> None:
-        """Confirm a write of the station's own ``param`` and show it in :attr:`state`.
-
-        Where a fresh parameter dump carries ``param``, it must hold the write
-        (``holds``) within :data:`READBACK_ATTEMPTS` reads. Where the dump does not carry
-        it (a HomeBase 3's mode list and schedule live in the cloud's copy), the station's
-        own answer to the write (``answered``: a zero receipt or result) is all that
-        confirms it, and ``stored`` is filed as this library's own write, which
-        :attr:`state` shows until the cloud copy changes after it. Raises
-        :class:`CommandNotAppliedError` when neither confirms the write.
-        """
-        for attempt in range(READBACK_ATTEMPTS):
-            raw = (await self.session.async_get_params()).station.get(param)
-            if raw is None:
-                break
-            with contextlib.suppress(ProtocolError):
-                if holds(raw):
-                    return
-            if attempt + 1 < READBACK_ATTEMPTS:
-                await asyncio.sleep(READBACK_DELAY)
-        else:
-            raise CommandNotAppliedError(
-                param, f"param {param} not confirmed: the station reports another value"
-            )
-        if not answered:
-            raise CommandNotAppliedError(
-                param,
-                f"the station acknowledged command {param} without answering it, and its "
-                "parameter dump does not carry it: nothing confirms the write",
-            )
-        self.session.apply_local_params(STATION_CHANNEL, {param: stored})
-
-    def _defined_mode(self, mode: GuardMode) -> ModeInfo:
-        """``mode`` as :attr:`config` lists it after a write."""
-        config = self.config
-        info = config.mode(mode) if config is not None else None
-        if info is None:
-            raise CommandNotAppliedError(
-                CMD_CUSTOM_MODES, f"{mode.label} is not listed after the write"
-            )
-        return info
-
-    @staticmethod
-    def _with_flags(
-        table: ModeTable, edits: Mapping[int, tuple[SettingDef, Mapping[str, bool]]]
-    ) -> ModeTable:
-        """``table`` with each channel's flags turned on or off (:meth:`SettingDef.with_flags`:
-        with the flags a flag turned off clears), every other bit kept;
-        :class:`CommandNotAppliedError` when a channel's current mask is not in it."""
-        for channel, (spec, flags) in sorted(edits.items()):
-            mask = table.actions.get(channel)
-            if mask is None:
-                raise CommandNotAppliedError(
-                    spec.command_id,
-                    f"{spec.key}: the station does not report the current mask on channel "
-                    f"{channel}; refusing to write a whole mask blind",
-                )
-            table = table.with_action(channel, spec.with_flags(mask, flags))
-        return table
-
-    def _delay_channels(self, devices: Mapping[str, bool] | None) -> dict[int, bool]:
-        """``{serial: on}`` as ``{channel: on}``; refuses an unpaired serial or a non-bool."""
-        out: dict[int, bool] = {}
-        for device_sn, on in (devices or {}).items():
-            if not isinstance(on, bool):
-                raise ValueError(f"a delay's on must be a bool, got {on!r}")
-            out[self.channel_for(device_sn)] = on
-        return out
-
-    def _mode_action_spec(self, mode: GuardMode, channel: int) -> SettingDef:
-        """The action-mask setting of the device on ``channel`` for ``mode``, with the
-        flags of its kind and cloud type; ``UnsupportedError`` for a mode without
-        actions or a device of no catalogued kind."""
-        key = mode_action_key(mode, scope_for_kind(self._kind_on(channel)))
-        cloud = self._cloud_by_channel().get(channel)
-        return mode_table_setting(key).for_device_type(cloud.device_type if cloud else None)
-
-    async def _async_edit_mode_table(
-        self,
-        mode: GuardMode,
-        edit: Callable[[ModeTable], ModeTable],
-        *,
-        targets: Mapping[int, SettingDef | None],
-        command: int,
-        expect_revision: int | None = None,
-    ) -> tuple[ModeTable, ModeTable]:
-        """Read ``mode``'s whole table fresh, ``edit`` it, send it once and confirm it by
-        read-back, all under the mode-table lock; returns (table read, table in effect).
-
-        ``targets`` are the channels the edit changes, each with the setting it changes
-        (checked against the device's kind) or None. Refuses (nothing sent) as
-        :meth:`async_set_mode_actions` lists; ``command`` is the id its errors carry.
-        """
-        async with self._shared_lock(MODE_TABLES_LOCK):
-            wanted = self.channels | targets.keys()
-            dump = await self.session.async_get_params(expect_channels=wanted)
-            missing = sorted(wanted - dump.devices.keys())
-            if missing:
-                raise CommandNotAppliedError(
-                    command,
-                    f"{mode.name.lower()} mode table: channels {missing} are missing from the "
-                    "parameter dump; refusing to write a mode table without them",
-                    device_sns=self._serials_on(missing),
-                )
-            state = self._state(dump)
-            for target, spec in sorted(targets.items()):
-                device = state.devices.get(target)
-                if device is None:
-                    # `state.devices` holds sub-devices only, so a station channel (or one
-                    # that went away since the dump) lands here.
-                    raise UnsupportedError(f"channel {target} is no paired device")
-                if spec is not None and not spec.applies_to(scope_for_kind(device.kind)):
-                    raise UnsupportedError(
-                        f"setting {spec.key!r} is a {spec.scope} setting, not one of "
-                        f"channel {target}"
-                    )
-            if expect_revision is not None:
-                # The merged state after this dump, as `config` shows it: the dump alone
-                # lacks the receipt-confirmed writes the revision covers.
-                check_revision(build_station_config(self.state or state), expect_revision)
-            table = mode_table_from_params(dump.devices, mode)
-            stored_param: int | None = None
-            if not table.actions:
-                # The merged state: the fresh dump, else a write of this library's own
-                # that the cloud has not replaced, else the cloud's copy.
-                merged = self.state or state
-                stored_param, table = self._stored_table_for_write(merged, mode, table)
-            new = edit(table)
-            if new.same_values(table):
-                return table, table
-            # A channel with no known device (the station's own block can carry a
-            # per-mode action) is refused like one of a kind without catalogued actions.
-            unknown = sorted(
-                ch
-                for ch in new.actions
-                if ch not in state.devices
-                or scope_for_kind(state.devices[ch].kind) not in MODE_ACTION_FLAGS
-            )
-            if unknown:
-                raise UnsupportedError(
-                    f"{mode.name.lower()} mode table: channels {unknown} are of a kind "
-                    "without catalogued actions; a mode table always clears siren-accessory "
-                    "triggers, so it is not written",
-                    device_sns=self._serials_on(unknown),
-                )
-            new.request("")  # refuses a delay the table cannot carry, before any traffic
-            if stored_param is not None:
-                await self._async_write_stored_mode_table(new, stored_param)
-                return table, new
-            try:
-                await self.session.async_set_mode_table(new)
-            except CommandNotAppliedError as err:
-                detail, serials = self._mode_table_mismatch(new)
-                raise CommandNotAppliedError(
-                    err.command, f"{detail}: {err}", device_sns=serials
-                ) from err
-            return table, new
-
-    def _serials_on(self, channels: Iterable[int]) -> tuple[str, ...]:
-        """The cloud serials of the devices on ``channels``, in their order; a channel the
-        cloud lists no device on (or several) is left out."""
-        cloud = self._cloud_by_channel()
-        return tuple(d.device_sn for ch in channels if (d := cloud.get(ch)) is not None)
-
-    @staticmethod
-    def _stored_table_for_write(
-        state: StationState, mode: GuardMode, table: ModeTable
-    ) -> tuple[int, ModeTable]:
-        """The table a write starts from when no device reports ``mode``'s action
-        param (``table`` is empty): a pro-alarm station's stored copy (61300-61309, dump
-        before cloud) with its param. ``UnsupportedError`` when there is none (a 1255
-        replaces the whole table, so it is never sent blind), when it does not decode,
-        or when it names a siren-accessory trigger (a library table clears those).
-        """
-        action_param = FIELD_PARAMS[ModeTableField.ACTION][mode]
-        name = mode.name.lower()
-        if mode_table_storage(state.product_code) is not ModeTableStorage.PRO_ALARM:
-            raise UnsupportedError(
-                f"the station stores no {name} mode table (no device reports param {action_param})"
-            )
-        try:
-            stored = stored_mode_table(state.setting_params, state.product_code, mode)
-            built = stored.to_mode_table() if stored is not None else table
-        except (ProtocolError, ValueError) as err:
-            raise UnsupportedError(
-                f"the station's stored {name} mode table cannot be read: {err}"
-            ) from err
-        if stored is None or not built.actions:
-            raise UnsupportedError(
-                f"the station stores no {name} mode table (no device reports param "
-                f"{action_param}, and no source carries its stored copy)"
-            )
-        if any(stored.siren_actions.values()):
-            raise UnsupportedError(
-                f"the stored {name} mode table sounds a siren accessory on a trigger; a "
-                "library mode table clears those triggers, so it is not written"
-            )
-        return stored.param, built
-
-    async def _async_write_stored_mode_table(self, table: ModeTable, param: int) -> None:
-        """Send ``table`` (frame 1255) to a station that keeps it in its own ``param``
-        and confirm it (:meth:`_async_confirm_param`): a fresh dump carrying ``param``
-        must hold the table, else the station's zero receipt confirms it and the sent
-        body is filed as this library's write of ``param``."""
-        sent: list[bytes] = []
-
-        def body(account: str) -> bytes:
-            sent.append(table.encode(account))
-            return sent[-1]
-
-        def holds(raw: str) -> bool:
-            try:
-                stored = stored_mode_table({param: raw}, product_code, table.mode)
-                return stored is not None and stored.to_mode_table().same_values(table)
-            except (UnsupportedError, ValueError):
-                return False
-
-        product_code = self._product_code(self.serial)
-        _LOGGER.info(
-            "%s: writing the %s mode table (%d devices, stored in param %d)",
-            self._log_name,
-            table.mode.name,
-            len(table.actions),
-            param,
-        )
-        receipted = await self.session.async_send_json_frame(CMD_SET_ALL_ACTION, body)
-        await self._async_confirm_param(param, encode_stored_mode_table(sent[-1]), holds, receipted)
-
-    def _mode_table_mismatch(self, table: ModeTable) -> tuple[str, tuple[str, ...]]:
-        """Which device's flag or delay the last read does not show as ``table`` set it,
-        and the serials of those devices, in the order the text names them."""
-        reported = self.session.merged_params().devices
-        cloud = self._cloud_by_channel()
-        action_param = FIELD_PARAMS[ModeTableField.ACTION][table.mode]
-        problems: list[str] = []
-        serials: list[str] = []
-        for channel, values in sorted(table.params().items()):
-            entry = cloud.get(channel)
-            name = redact_serial(entry.device_sn) if entry else f"channel {channel}"
-            block = reported.get(channel, {})
-            before = len(problems)
-            for param, want in sorted(values.items()):
-                raw = block.get(param)
-                got = json_int(raw) if raw is not None else None
-                if got == want:
-                    continue
-                if param != action_param or got is None:
-                    what = "action" if param == action_param else MODE_TABLE_PARAMS[param][1]
-                    problems.append(f"{name} {what}: wrote {want}, station reports {got}")
-                    continue
-                flags = mode_action_flags(
-                    scope_for_kind(self._kind_on(channel)), entry.device_type if entry else None
-                )
-                for flag, bit in flags.items():
-                    if (want ^ got) & bit:
-                        wrote, reads = (
-                            ("on", "off") if mode_action_on(flag, want) else ("off", "on")
-                        )
-                        problems.append(f"{name} {flag}: wrote {wrote}, station reports {reads}")
-                named = 0
-                for bit in flags.values():
-                    named |= bit
-                if (want ^ got) & ~named:
-                    problems.append(f"{name} action: wrote {want}, station reports {got}")
-            if entry is not None and len(problems) > before:
-                serials.append(entry.device_sn)
-        detail = "; ".join(problems) or "the read-back differs"
-        return f"{table.mode.name.lower()} mode table not confirmed ({detail})", tuple(serials)
+        return self._configuration.target_mode_name(mode)
 
     async def async_set_mode_action(
         self,
@@ -2808,29 +2115,17 @@ class Station:
         :class:`CommandNotAppliedError` when the current mask cannot be read; and
         ``ValueError`` when both or neither target is given.
         """
-        if (device_sn is None) == (channel is None):
-            raise ValueError("pass exactly one of device_sn or channel")
-        self._require_feature(StationFeature.MODE_TABLES)
-        target = self.channel_for(device_sn) if device_sn is not None else cast(int, channel)
-        guard = GuardMode.parse(mode)
-        spec = self._mode_action_spec(guard, target)
-        spec.with_flag(0, flag, on)  # refuses an unknown flag before any traffic
-        _, new = await self._async_edit_mode_table(
-            guard,
-            lambda table: self._with_flags(table, {target: (spec, {flag: on})}),
-            targets={target: spec},
-            command=spec.command_id,
+        return await self._configuration.async_set_mode_action(
+            mode, flag, on, device_sn=device_sn, channel=channel
         )
-        return new.actions[target]
 
     # ── station configuration ────────────────────────────────────────────────
 
     @property
     def config(self) -> StationConfig | None:
         """The configuration of :attr:`state` (no I/O); None before the station's own
-        block has arrived. See :class:`~.station_config.StationConfig`."""
-        state = self.state
-        return None if state is None else build_station_config(state)
+        block has arrived. See :class:`~..station_config.StationConfig`."""
+        return self._configuration.config
 
     async def async_get_config(self, *, refresh: bool = False) -> StationConfig:
         """The station's configuration: modes, mode tables, schedule, cross-camera
@@ -2842,80 +2137,7 @@ class Station:
         device list once (read-only) when the client gave this station that read. Raises
         the typed errors of those reads.
         """
-        if refresh:
-            await self.async_update(wake=True)
-            if self._cloud_refresh is not None:
-                await self._cloud_refresh()
-        state = self.state or await self.async_update()
-        return build_station_config(state)
-
-    def _emit_config_change(self, state: StationState) -> None:
-        """Emit :class:`~.events.StationConfigChanged` when ``state``'s configuration has
-        another revision than the last one emitted."""
-        config = build_station_config(state)
-        old = self._emitted_config
-        if old is not None and old.revision == config.revision:
-            return
-        self._emitted_config = config
-        self._bus.emit(
-            StationConfigChanged(
-                station_sn=self.serial,
-                revision=config.revision,
-                fields=changed_fields(old, config),
-            )
-        )
-
-    async def _check_revision(self, expect_revision: int | None) -> StationConfig | None:
-        """For a write taking ``expect_revision``: None when it is None; else the
-        configuration of a fresh parameter read, raising
-        :class:`~.exceptions.ConfigChangedError` (nothing sent) when its revision differs."""
-        if expect_revision is None:
-            return None
-        config = build_station_config(await self.async_update(wake=True))
-        check_revision(config, expect_revision)
-        return config
-
-    def _kind_on(self, channel: int) -> DeviceKind | None:
-        """The kind of the device on ``channel``: its cloud serial's model, else the last
-        snapshot's reading of its block; None when neither says."""
-        cloud = self._cloud_by_channel().get(channel)
-        model = model_for_serial(cloud.device_sn) if cloud is not None else None
-        if model is not None:
-            return model.kind
-        state = self.state
-        device = state.devices.get(channel) if state is not None else None
-        return device.kind if device is not None else None
-
-    async def _async_set_mode_table_value(self, spec: SettingDef, value: int, target: int) -> int:
-        """Write one mode-table value: read the whole mode fresh, change ``target``'s
-        entry, send the table (``SET_ALL_ACTION``) and confirm every value by read-back.
-
-        Refuses (``UnsupportedError``, nothing sent) where :meth:`config_support` grades
-        mode tables (an action) or mode delays (a delay) *unknown*, when the setting does not apply to
-        the device on ``target``, when a device of the table is of a kind without catalogued
-        actions (it may be a siren accessory, whose triggers a library table would clear),
-        or when a delay the table must carry unchanged differs between devices; and
-        (``CommandNotAppliedError``) when a paired device or the target is missing from
-        the fresh read, since a table without it would drop it. A non-zero delay also
-        moves the delay of every device that has it on (one value per mode). Returns
-        ``value`` without writing when the table already holds it.
-        """
-        mode, table_field = MODE_TABLE_PARAMS[spec.command_id]
-        self._require_feature(
-            StationFeature.MODE_TABLES
-            if table_field is ModeTableField.ACTION
-            else StationFeature.MODE_DELAYS
-        )
-
-        def edit(table: ModeTable) -> ModeTable:
-            if table_field is ModeTableField.ACTION:
-                return table.with_action(target, value)
-            return table.with_delay(table_field, target, value)
-
-        await self._async_edit_mode_table(
-            mode, edit, targets={target: spec}, command=spec.command_id
-        )
-        return value
+        return await self._configuration.async_get_config(refresh=refresh)
 
     async def _read_back(self, param_id: int, channel: int) -> int | None:
         # A single dump can end before a camera's block arrives; retry a few times.
@@ -2956,8 +2178,8 @@ class Station:
 
         On a HomeBase, a stream opened while the station session's slot is busy runs on an
         extra session, up to ``session.max_sessions - 1`` live streams; past that
-        :class:`~.exceptions.LiveStreamLimitError`, or with ``wait`` a wait for a
-        stream to end (see :meth:`~.p2p.session.StationSession.async_open_live`).
+        :class:`~..exceptions.LiveStreamLimitError`, or with ``wait`` a wait for a
+        stream to end (see :meth:`~..p2p.session.StationSession.async_open_live`).
 
         With ``preset`` (needs ``device_sn``), the camera is first turned to that stored
         slot and the stream is opened straight after, so a battery camera stays awake
@@ -2969,17 +2191,17 @@ class Station:
         ``media_key`` to override it.
 
         A camera whose handler sends the multi-camera open
-        (:data:`~.devices.live_open.NVR_OPENS`) gets the layout ``lens_view`` of its
+        (:data:`~..devices.live_open.NVR_OPENS`) gets the layout ``lens_view`` of its
         lenses (:meth:`lenses`); without it the one the app's live page opens in
-        (:func:`~.devices.live_view.default_lens_view`). Only a HomeBase 3 is sent the
+        (:func:`~..devices.live_view.default_lens_view`). Only a HomeBase 3 is sent the
         layout, as the app does; other stations and cameras ignore it.
         """
         ch = self._media_channel(device_sn, channel)
         if preset is not None:
             if device_sn is None:
                 raise ValueError("preset needs device_sn")
-            slot_channel = self._stored_slot(device_sn, preset)
-            self._refuse_while_capturing(device_sn)
+            slot_channel = self._ptz.stored_slot(device_sn, preset)
+            self._ptz.refuse_while_capturing(device_sn)
             await self._ptz_recipe(goto_preset(preset), slot_channel)
         return await self._session_live(ch, wait=wait, lens_view=lens_view, **kwargs)
 
@@ -2990,7 +2212,7 @@ class Station:
         (:meth:`live_open`), the media key the app offers (:meth:`media_key_type`), and
         for a multi-camera open the view (``lens_view``, see :meth:`async_open_live`).
         A device whose handler's open the library does not implement raises
-        :class:`~.exceptions.UnsupportedError` before anything is sent."""
+        :class:`~..exceptions.UnsupportedError` before anything is sent."""
         device = self._device_on_channel(channel)
         mode = stop = view = None
         if device is not None:
@@ -3010,7 +2232,7 @@ class Station:
 
     def lenses(self, device_sn: str) -> tuple[Lens, ...]:
         """The lenses ``device_sn`` lists in the cloud's parameter snapshot
-        (:data:`~.devices.live_view.LENS_LIST_PARAM`, as the app reads its device's
+        (:data:`~..devices.live_view.LENS_LIST_PARAM`, as the app reads its device's
         parameters); ``()`` for an unknown device, none listed, or a snapshot the cache
         did not keep (a paired device's, until the next device-list fetch)."""
         device = next(
@@ -3045,7 +2267,7 @@ class Station:
 
     def app_uses_webrtc(self, device_sn: str) -> bool:
         """Whether the eufy app reaches ``device_sn`` (this station or a device paired to
-        it) over WebRTC rather than P2P (:func:`~.devices.webrtc.app_uses_webrtc`, from
+        it) over WebRTC rather than P2P (:func:`~..devices.webrtc.app_uses_webrtc`, from
         the thing descriptions, the serials and the firmware of this station and its
         devices). The library has no WebRTC transport: it sends no live open there."""
         return app_uses_webrtc(device_sn, map(route_device, (self.device, *self.sub_devices)))
@@ -3074,9 +2296,9 @@ class Station:
     def live_support(self, device_sn: str) -> Evidence:
         """How well a live stream of ``device_sn`` is supported (live view, live image).
 
-        :attr:`~.devices.support.Support.VERIFIED` from the model's profile; else
+        :attr:`~..devices.support.Support.VERIFIED` from the model's profile; else
         ``DECLARED`` when the library sends the open the device's handler sends
-        under this station (:func:`~.devices.live_open.library_live_open`, generated from
+        under this station (:func:`~..devices.live_open.library_live_open`, generated from
         the eufy app's handlers); else the model profile's own entry, or ``UNKNOWN`` with
         the reason.
         """
@@ -3100,85 +2322,41 @@ class Station:
         )
 
     def ptz_support(self, device_sn: str, capability: Capability) -> Evidence:
-        """How well pan/tilt (:attr:`~.devices.capabilities.Capability.PTZ_CONTROL`),
+        """How well pan/tilt (:attr:`~..devices.capabilities.Capability.PTZ_CONTROL`),
         presets (``PTZ_PRESETS``) or picture zoom (``PTZ_ZOOM``) of ``device_sn`` is
         supported through this station.
 
         ``UNKNOWN`` with the reason for a device not paired here, or when the device's
         thing description lacks an action of the capability
-        (:data:`~.devices.capabilities.PTZ_ACTIONS`) or the library does not send one as
-        the device's handler does under this station (:mod:`.devices.ptz`, generated from
-        the eufy app's handlers); else :attr:`~.devices.support.Support.VERIFIED` from
+        (:data:`~..devices.capabilities.PTZ_ACTIONS`) or the library does not send one as
+        the device's handler does under this station (:mod:`..devices.ptz`, generated from
+        the eufy app's handlers); else :attr:`~..devices.support.Support.VERIFIED` from
         the model's profile; else ``DECLARED``. A model without recorded handler actions
         keeps its profile's own entry. Raises ``ValueError`` for a capability that is not
         one of the three.
         """
-        actions = PTZ_ACTIONS.get(capability)
-        if actions is None:
-            raise ValueError(f"{capability} is not a pan/tilt/zoom capability")
-        if not self._is_paired(device_sn):
-            return Evidence(Support.UNKNOWN, _NOT_PAIRED)
-        code = self._product_code(device_sn)
-        connect = self._connect_type_of(device_sn)
-        if has_ptz_recipes(code):
-            missing = [a for a in actions if ptz_form(code, a, connect) is None]
-            if missing:
-                return Evidence(Support.UNKNOWN, self._ptz_unsupported_reason(device_sn, missing))
-        profile = own_profile(device_sn)
-        listed = None if profile is None else profile.capabilities.get(capability)
-        if listed is not None and listed.support is Support.VERIFIED:
-            return listed
-        if not has_ptz_recipes(code):
-            return listed or Evidence(
-                Support.UNKNOWN, f"no pan/tilt/zoom action recorded for {code or 'this model'}"
-            )
-        return Evidence(
-            Support.DECLARED,
-            f"the {code} handler's {' and '.join(actions)} under {connect.value} "
-            f"{'is' if len(actions) == 1 else 'are'} the library's recipe "
-            f"(eufy app {ptz_app_version()})",
-        )
+        return self._ptz.ptz_support(device_sn, capability)
 
     def ptz_action_support(self, device_sn: str, action: PtzAction) -> Evidence:
         """How well the preset slot edit ``action`` (store, delete, default change, slot
         picture) of ``device_sn`` is supported through this station.
 
         ``UNKNOWN`` with the reason when a capability the action needs
-        (:data:`~.devices.capabilities.PTZ_ACTION_NEEDS`) is ``UNKNOWN`` under
+        (:data:`~..devices.capabilities.PTZ_ACTION_NEEDS`) is ``UNKNOWN`` under
         :meth:`ptz_support`, or when the device's thing description does not declare the
         action or the library does not send it as the device's handler does under this
-        station (:mod:`.devices.ptz`); else :attr:`~.devices.support.Support.VERIFIED`
+        station (:mod:`..devices.ptz`); else :attr:`~..devices.support.Support.VERIFIED`
         from the model's profile; else ``DECLARED``. A model without recorded handler
         actions takes the weakest grade of the capabilities it needs. Where this is
         ``UNKNOWN``, the action's method raises
-        :class:`~.exceptions.PtzActionUnsupportedError` (the action) or
+        :class:`~..exceptions.PtzActionUnsupportedError` (the action) or
         ``UnsupportedError`` (a capability) before sending.
         """
-        grades = tuple(Support)
-        weakest = max(
-            (self.ptz_support(device_sn, c) for c in PTZ_ACTION_NEEDS[action]),
-            key=lambda evidence: grades.index(evidence.support),
-        )
-        if weakest.support is Support.UNKNOWN:
-            return weakest
-        code = self._product_code(device_sn)
-        connect = self._connect_type_of(device_sn)
-        if has_ptz_recipes(code) and ptz_form(code, action, connect) is None:
-            return Evidence(Support.UNKNOWN, self._ptz_unsupported_reason(device_sn, [action]))
-        profile = own_profile(device_sn)
-        listed = None if profile is None else profile.ptz_actions.get(action)
-        if listed is not None and listed.support is Support.VERIFIED:
-            return listed
-        if not has_ptz_recipes(code):
-            return weakest
-        return Evidence(
-            Support.DECLARED,
-            f"the {code} handler's {action.value} under {connect.value} is the library's recipe",
-        )
+        return self._ptz.ptz_action_support(device_sn, action)
 
     def config_support(self, feature: StationFeature) -> Evidence:
         """How well the station configuration ``feature`` is supported on this station:
-        :func:`~.devices.station_config_support.config_support` for its product code and
+        :func:`~..devices.station_config_support.config_support` for its product code and
         firmware (a station below the app's firmware gate is ``UNKNOWN``).
         ``feature.alarm_affecting`` says whether a write needs the user's confirmation.
         """
@@ -3189,7 +2367,7 @@ class Station:
     @property
     def local_events(self) -> Evidence:
         """Whether this station pushes its cameras' detections over the P2P session:
-        the :attr:`~.devices.capabilities.Capability.LOCAL_EVENTS` entry of the
+        the :attr:`~..devices.capabilities.Capability.LOCAL_EVENTS` entry of the
         station's own model, else ``UNKNOWN`` with the reason.
 
         A standalone camera's is its own model's entry; :meth:`local_detections_for`
@@ -3206,7 +2384,7 @@ class Station:
 
     def local_detections_for(self, device_sn: str) -> Evidence:
         """Whether this station pushes ``device_sn``'s detections over the P2P session:
-        the :class:`~.events.SecurityEvent` detections of that device, a motion
+        the :class:`~..events.SecurityEvent` detections of that device, a motion
         sensor's ``msg_type`` 14 motion included.
 
         Not covered: a doorbell's ring, a lock's events, and the station's alarm
@@ -3216,7 +2394,7 @@ class Station:
 
         :attr:`local_events` for every device of a station whose own grade is not
         ``VERIFIED``. Behind a ``VERIFIED`` station, a model the eufy app shows as a
-        camera (:attr:`~.devices.types.DeviceModel.has_camera`: a video doorbell or
+        camera (:attr:`~..devices.types.DeviceModel.has_camera`: a video doorbell or
         video lock too) takes its own model's ``VERIFIED`` entry (a standalone camera
         itself: :attr:`local_events`), else the station's grade with a source naming the
         extension; any other device (the station itself without a camera, a sensor, a
@@ -3253,62 +2431,9 @@ class Station:
             station.note,
         )
 
-    def _ptz_unsupported_reason(self, device_sn: str, actions: Sequence[str]) -> str:
-        code = self._product_code(device_sn)
-        connect = self._connect_type_of(device_sn)
-        where = (
-            "on its own" if connect is ConnectType.SINGLE else f"behind a {connect.value} station"
-        )
-        undeclared = [a for a in actions if a not in ptz_actions(code)]
-        if undeclared:
-            return f"the {code} thing description declares no {', '.join(undeclared)}"
-        return (
-            f"the eufy app sends {', '.join(actions)} to a {code} {where} in a way this "
-            "library does not implement"
-        )
-
-    def _ptz_form(self, device_sn: str, action: str) -> PtzForm:
-        """The form the library sends ``action`` to ``device_sn`` in (:mod:`.devices.ptz`):
-        :attr:`~.devices.ptz.PtzForm.STANDARD` for a model without recorded handler
-        actions. Raises :class:`~.exceptions.PtzActionUnsupportedError` when the device's
-        handler sends it in no form the library has, or its thing description does not
-        declare it; nothing is sent."""
-        code = self._product_code(device_sn)
-        if not has_ptz_recipes(code):
-            return PtzForm.STANDARD
-        form = ptz_form(code, action, self._connect_type_of(device_sn))
-        if form is None:
-            raise PtzActionUnsupportedError(
-                f"{redact_serial(device_sn)}: {self._ptz_unsupported_reason(device_sn, [action])}",
-                action=action,
-                device_sn=device_sn,
-            )
-        return form
-
-    def _require_ptz(self, device_sn: str, capability: Capability) -> int:
-        """``device_sn``'s channel, after checking :meth:`ptz_support` for ``capability``;
-        ``UnsupportedError`` naming it and the reason otherwise."""
-        channel = self.channel_for(device_sn)
-        evidence = self.ptz_support(device_sn, capability)
-        if evidence.support is Support.UNKNOWN:
-            raise UnsupportedError(
-                f"{redact_serial(device_sn)} has no {_PTZ_NAMES[capability]}: {evidence.source}",
-                device_sn=device_sn,
-            )
-        return channel
-
-    def _require_ptz_action(self, device_sn: str, action: PtzAction) -> int:
-        """``device_sn``'s channel, after the checks :meth:`ptz_action_support` grades:
-        each capability ``action`` needs, then the action itself; nothing is sent."""
-        channel = self.channel_for(device_sn)
-        for capability in PTZ_ACTION_NEEDS[action]:
-            self._require_ptz(device_sn, capability)
-        self._ptz_form(device_sn, action)
-        return channel
-
     def media_key_type(self, channel: int) -> MediaKeyType:
         """The media key the app offers the camera on ``channel``: ECC when the camera's
-        cloud param 1103 is 128 or more, else RSA (:func:`~.p2p.media.media_key_type_for`).
+        cloud param 1103 is 128 or more, else RSA (:func:`~..p2p.media.media_key_type_for`).
         A channel without a known device gets RSA."""
         device = self._device_on_channel(channel)
         return media_key_type_for(None if device is None else device.camera_info)
@@ -3337,7 +2462,7 @@ class Station:
         **kwargs: Any,
     ) -> bytes:
         """One full-resolution picture as one decodable Annex-B keyframe in the camera's
-        codec (HEVC or H.264: :func:`~.p2p.media.picture_codec` tells which).
+        codec (HEVC or H.264: :func:`~..p2p.media.picture_codec` tells which).
 
         With ``recording`` it is :meth:`async_trigger_frame`: the recording's first
         keyframe, the moment that triggered the event, taken on a short-lived session
@@ -3348,8 +2473,8 @@ class Station:
         replay a keyframe of its previous stream. A live snapshot opens live video as
         :meth:`async_open_live` does: on a HomeBase with the slot busy it runs on an extra
         session, and past the session budget it raises
-        :class:`~.exceptions.LiveStreamLimitError`; a standalone camera with its stream
-        open raises :class:`~.exceptions.CommunicationError`. With ``wait`` it waits for
+        :class:`~..exceptions.LiveStreamLimitError`; a standalone camera with its stream
+        open raises :class:`~..exceptions.CommunicationError`. With ``wait`` it waits for
         a stream to end instead.
         """
         ch = self._media_channel(device_sn, channel)
@@ -3369,11 +2494,11 @@ class Station:
         first_frame_timeout: float | None = None,
     ) -> bytes:
         """A recording's trigger frame (its first keyframe) as Annex-B, by path, in the
-        camera's codec (:func:`~.p2p.media.picture_codec` tells which).
+        camera's codec (:func:`~..p2p.media.picture_codec` tells which).
 
         Played on a short-lived second session that is closed as soon as the frames
         are in, so this station's session is neither flooded nor stalled (see
-        :meth:`~.p2p.session.StationSession.async_trigger_frame`). ``trailing_frames``
+        :meth:`~..p2p.session.StationSession.async_trigger_frame`). ``trailing_frames``
         appends up to that many following P-frames.
         """
         return await self.session.async_trigger_frame(
@@ -3393,7 +2518,7 @@ class Station:
         """The trigger frame of an event's recording (:meth:`async_trigger_frame`).
 
         The camera is the event's ``device_sn`` when it is paired here, else its
-        ``channel``. Raises :class:`~.exceptions.UnsupportedError`, before anything is
+        ``channel``. Raises :class:`~..exceptions.UnsupportedError`, before anything is
         sent, when the event has no ``video_path``, names another station, or names
         no camera this station can address.
         """
@@ -3419,21 +2544,21 @@ class Station:
         describe an earlier event, so the history row is the usual source. Check
         ``is_image`` before showing the still.
 
-        Raises :class:`~.exceptions.UnsupportedError`, before anything is sent, when
+        Raises :class:`~..exceptions.UnsupportedError`, before anything is sent, when
         the event names another station or carries neither a ``thumb_path`` nor a
-        ``record_id`` with a day; :class:`~.exceptions.StillNotWrittenError` when the
+        ``record_id`` with a day; :class:`~..exceptions.StillNotWrittenError` when the
         history has no row for it or the row has no thumbnail yet (the station writes
-        it when the clip is saved: retry later); :class:`~.exceptions.RecordNotFoundError`
+        it when the clip is saved: retry later); :class:`~..exceptions.RecordNotFoundError`
         when the row is another camera's or its thumbnail path is not a still's.
         ``timeout`` bounds the history query and the still fetch each; None gives each
-        its own default (:data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`,
-        :data:`~.p2p.session.STILL_FETCH_TIMEOUT`).
+        its own default (:data:`~..p2p.session.HISTORY_QUERY_TIMEOUT`,
+        :data:`~..p2p.session.STILL_FETCH_TIMEOUT`).
 
         On a standalone device (its detections come by cloud push, with no path or
         record) the device's newest event still (event-count query, waking it) is
         returned when its time falls within :data:`STANDALONE_STILL_WINDOW` of the
-        event's; :class:`~.exceptions.StillNotWrittenError` when it is older (not
-        written yet: retry once, later), :class:`~.exceptions.RecordNotFoundError` when
+        event's; :class:`~..exceptions.StillNotWrittenError` when it is older (not
+        written yet: retry once, later), :class:`~..exceptions.RecordNotFoundError` when
         it is newer (a later detection replaced it).
         """
         self._require_own_event(event)
@@ -3483,18 +2608,18 @@ class Station:
         *,
         full_resolution: bool = False,
     ) -> CameraImage:
-        """One image of a detection, from ``source`` (see :data:`~.images.IMAGE_SOURCES`).
+        """One image of a detection, from ``source`` (see :data:`~..images.IMAGE_SOURCES`).
 
         * ``THUMBNAIL``: :meth:`async_event_thumbnail`, a JPEG.
         * ``TRIGGER_FRAME``: :meth:`async_event_trigger_frame`, the recording's first
-          keyframe at full resolution (its :attr:`~.images.CameraImage.codec`); the camera stays asleep. Not on a
+          keyframe at full resolution (its :attr:`~..images.CameraImage.codec`); the camera stays asleep. Not on a
           standalone device (it lists no recordings, see :meth:`image_sources`).
         * ``LIVE``: a live keyframe of the event's camera now; wakes a battery
           camera. ``full_resolution`` as for :meth:`async_camera_image`.
 
         Each source fails on its own: a consumer that wants "the thumbnail at once, then
         the HD frame" calls it twice. Raises what the underlying call raises, and
-        :class:`~.exceptions.UnsupportedError` before anything is sent for an event of
+        :class:`~..exceptions.UnsupportedError` before anything is sent for an event of
         another station, naming no paired camera, a trigger frame of a standalone
         device, or (thumbnail) a still that is not a plain JPEG.
         """
@@ -3528,7 +2653,7 @@ class Station:
         return await self._live_image(device_sn, channel, full_resolution=full_resolution)
 
     def image_sources(self, device_sn: str) -> tuple[ImageSource, ...]:
-        """The :class:`~.images.ImageSource` values :meth:`async_camera_image` can serve
+        """The :class:`~..images.ImageSource` values :meth:`async_camera_image` can serve
         for ``device_sn``: all three behind a station; on a standalone device
         ``THUMBNAIL`` and ``LIVE``, since it lists no recordings (no trigger frame).
         Offer only these."""
@@ -3555,19 +2680,19 @@ class Station:
 
         ``wait`` applies to ``LIVE`` only (see :meth:`async_snapshot`): past the session
         budget it waits up to the first-frame timeout for a stream to end (the default),
-        or with ``wait=False`` raises :class:`~.exceptions.LiveStreamLimitError` at once.
+        or with ``wait=False`` raises :class:`~..exceptions.LiveStreamLimitError` at once.
 
         A ``LIVE`` image carries its picture ``width`` and ``height``. By default it is
         the first fresh keyframe, which on a woken standalone camera is the small first
         rung of its climb (1280x720 on a T8170). With ``full_resolution`` the stream is
         held until the picture size stops changing for the settle window
-        (:data:`~.p2p.encoder.SETTLE_STANDALONE` on a standalone camera, else
-        :data:`~.p2p.encoder.SETTLE_STATION`), at most :data:`FULL_RESOLUTION_TIMEOUT`
+        (:data:`~..p2p.encoder.SETTLE_STANDALONE` on a standalone camera, else
+        :data:`~..p2p.encoder.SETTLE_STATION`), at most :data:`FULL_RESOLUTION_TIMEOUT`
         after the first keyframe, and the largest size's keyframe is returned; the
         camera stays awake that long.
 
-        Raises :class:`~.exceptions.UnsupportedError` for a device not paired here, and
-        :class:`~.exceptions.RecordNotFoundError` when the history holds no event of the
+        Raises :class:`~..exceptions.UnsupportedError` for a device not paired here, and
+        :class:`~..exceptions.RecordNotFoundError` when the history holds no event of the
         camera with that media in the window (for example after a format).
         """
         if days < 1:
@@ -3723,7 +2848,7 @@ class Station:
                     frame = await _held_size_keyframe(stream, held, FULL_RESOLUTION_TIMEOUT)
                 else:
                     frame = await _fresh_keyframe_frame(stream)
-            await self._refresh_presets_while_awake(device_sn)
+            await self._ptz.refresh_presets_while_awake(device_sn)
             _LOGGER.debug(
                 "%s: live image of %s: %dx%d",
                 self._log_name,
@@ -3740,34 +2865,28 @@ class Station:
                 height=frame.height or None,
             )
 
-        return await self._run_capture(device_sn, None, capture)
+        return await self._ptz.run_capture(device_sn, None, capture)
 
     # ── pan/tilt presets ─────────────────────────────────────────────────────
+
+    def _ptz_waits(self) -> PtzWaits:
+        """The pan/tilt waits as ``station`` holds them now, where tests and consumers
+        patch them (:class:`~.ptz.StationPtz` asks each time it waits)."""
+        return PtzWaits(
+            default_preset_result=DEFAULT_PRESET_RESULT_WAIT,
+            preset_stream_idle=PRESET_STREAM_IDLE_SECONDS,
+        )
 
     def presets(self, device_sn: str) -> tuple[PresetPosition, ...] | None:
         """Camera ``device_sn``'s preset slots as last read, enabled or not; None when
         never read. No I/O: the slots are read by :meth:`async_refresh_presets`, and
-        again whenever the camera is awake for an image (see :class:`~.events.PresetsChanged`)."""
-        cached = self._presets.get(device_sn)
-        if cached is not None or self._cache is None:
-            return cached
-        stored = self._cache.presets(self.serial, device_sn)
-        if stored is None:
-            return None
-        try:
-            slots = parse_preset_positions({"points": stored})
-        except (EufySecurityError, TypeError, ValueError):
-            return None
-        self._presets[device_sn] = slots
-        return slots
+        again whenever the camera is awake for an image (see :class:`~..events.PresetsChanged`)."""
+        return self._ptz.presets(device_sn)
 
     def default_preset(self, device_sn: str) -> int | None:
         """The slot camera ``device_sn`` returns to on its own when idle, from the last
         read of :meth:`presets`; None when never read or no slot is the default."""
-        slots = self.presets(device_sn)
-        if slots is None:
-            return None
-        return next((s.index for s in slots if s.is_default), None)
+        return self._ptz.default_preset(device_sn)
 
     async def async_set_default_preset(
         self, device_sn: str, preset: int, *, confirm: bool = False
@@ -3776,40 +2895,24 @@ class Station:
         turn the camera there now, as the app does. Wakes a battery camera.
 
         The camera receipts the write and sends no result, so the slots are read back
-        (:meth:`presets`, :class:`~.events.PresetsChanged`) and the write counts only
+        (:meth:`presets`, :class:`~..events.PresetsChanged`) and the write counts only
         when the read shows the slot as default: otherwise
-        :class:`~.exceptions.CommandNotAppliedError`. A camera that refuses with
+        :class:`~..exceptions.CommandNotAppliedError`. A camera that refuses with
         code -502 wants ``confirm`` (the app's "set anyway?" dialog). Raises
-        :class:`~.exceptions.PtzActionUnsupportedError` for a model without the default
+        :class:`~..exceptions.PtzActionUnsupportedError` for a model without the default
         action (:meth:`ptz_action_support`), ``UnsupportedError`` for one without presets
-        or a slot the last read showed empty, and :class:`~.exceptions.DeviceBusyError`
+        or a slot the last read showed empty, and :class:`~..exceptions.DeviceBusyError`
         while a capture holds the camera (the turn would spoil its image).
         """
-        self._require_ptz_action(device_sn, PtzAction.SET_DEFAULT)
-        channel = self._stored_slot(device_sn, preset)
-        self._refuse_while_capturing(device_sn)
-        await self.session.async_run_recipe(
-            set_default_preset(preset, confirm=confirm),
-            channel=channel,
-            timeout=DEFAULT_PRESET_RESULT_WAIT,
-        )
-        await self.session.async_run_recipe(goto_preset(preset), channel=channel)
-        slots = await self.async_refresh_presets(device_sn)
-        if not any(s.index == preset and s.is_default for s in slots):
-            raise CommandNotAppliedError(
-                SubCommand.COMMAND_APP_SET_DEFAULT_POSITION,
-                f"{redact_serial(device_sn)} did not make preset {preset} its default",
-                device_sn=device_sn,
-            )
-        return slots
+        return await self._ptz.async_set_default_preset(device_sn, preset, confirm=confirm)
 
     def zoom(self, device_sn: str) -> float | None:
         """Camera ``device_sn``'s picture zoom as last reported (1.0 = 1x); None until it
         reports one. Kept from the camera's 6203 reports: the echo of
         :meth:`async_set_zoom` and the report after each go-to and live open. Set to 1.0
         when the session goes down: the camera is idle then, and idle resets the zoom.
-        Changes are announced as :class:`~.events.ZoomChanged`."""
-        return self._zooms.get(device_sn)
+        Changes are announced as :class:`~..events.ZoomChanged`."""
+        return self._ptz.zoom(device_sn)
 
     async def async_set_zoom(self, device_sn: str, zoom: float) -> None:
         """Zoom camera ``device_sn``'s picture to ``zoom`` (1x-12x) about its centre.
@@ -3823,45 +2926,27 @@ class Station:
         to the default preset and a reopened live view each reset it to the preset's
         own zoom (1x for most). Send it while a view is open.
 
-        Raises ``ValueError`` for a zoom outside :data:`~.devices.recipes.MIN_ZOOM`
-        .. :data:`~.devices.recipes.MAX_ZOOM`, ``UnsupportedError`` for a model without
+        Raises ``ValueError`` for a zoom outside :data:`~..devices.recipes.MIN_ZOOM`
+        .. :data:`~..devices.recipes.MAX_ZOOM`, ``UnsupportedError`` for a model without
         zoom or a camera in dual view (param 6243), and
-        :class:`~.exceptions.DeviceBusyError` while a capture holds the camera; nothing
+        :class:`~..exceptions.DeviceBusyError` while a capture holds the camera; nothing
         is sent for these.
         """
-        if not (MIN_ZOOM <= zoom <= MAX_ZOOM):
-            raise ValueError(f"zoom {zoom!r} is outside {MIN_ZOOM:g}..{MAX_ZOOM:g}")
-        channel = self._require_ptz(device_sn, Capability.PTZ_ZOOM)
-        self._ptz_form(device_sn, "set_picture_zoom")
-        view_mode = self.session.merged_params().devices.get(channel, {}).get(VIEW_MODE_PARAM)
-        if json_int(view_mode) == DUAL_VIEW:
-            raise UnsupportedError(
-                f"{redact_serial(device_sn)} is in dual view; zoom needs single",
-                device_sn=device_sn,
-            )
-        self._refuse_while_capturing(device_sn)
-        await self._ptz_recipe(set_picture_zoom(zoom), channel)
+        return await self._ptz.async_set_zoom(device_sn, zoom)
 
     def is_capturing(self, device_sn: str) -> bool:
         """Whether a live or preset image of ``device_sn`` is being taken (see
-        :class:`~.events.CameraBusyChanged`)."""
-        return device_sn in self._captures
+        :class:`~..events.CameraBusyChanged`)."""
+        return self._ptz.is_capturing(device_sn)
 
     async def async_refresh_presets(self, device_sn: str) -> tuple[PresetPosition, ...]:
         """Read camera ``device_sn``'s preset slots from the camera. Wakes a battery camera.
 
-        Stores them (:meth:`presets`) and emits :class:`~.events.PresetsChanged` when
+        Stores them (:meth:`presets`) and emits :class:`~..events.PresetsChanged` when
         they differ from the last read. Raises ``UnsupportedError`` for a camera whose
         model has no pan/tilt presets.
         """
-        channel = self._preset_channel(device_sn)
-        form = self._ptz_form(device_sn, "query_preset_positions")
-        reply = await self._ptz_recipe(
-            query_preset_positions(value=form is PtzForm.STANDARD), channel
-        )
-        slots = parse_preset_positions(reply.payload or {})
-        self._store_presets(device_sn, slots)
-        return slots
+        return await self._ptz.async_refresh_presets(device_sn)
 
     # ── pan/tilt control ─────────────────────────────────────────────────────
 
@@ -3878,15 +2963,13 @@ class Station:
         :meth:`async_save_preset` while the camera is still awake.
 
         Raises ``UnsupportedError`` for a model without pan/tilt control,
-        :class:`~.exceptions.DeviceBusyError` while a capture holds the camera, and
-        :class:`~.exceptions.CommandRejectedError` when the camera is still moving
+        :class:`~..exceptions.DeviceBusyError` while a capture holds the camera, and
+        :class:`~..exceptions.CommandRejectedError` when the camera is still moving
         after :data:`PTZ_BUSY_ATTEMPTS` tries.
         """
-        channel = self._ptz_channel(device_sn)
-        form = self._ptz_form(device_sn, "ptz_action_control")
-        self._refuse_while_capturing(device_sn)
-        await self._ptz_recipe(pan_tilt(direction, zoom_ivalue=form is PtzForm.STANDARD), channel)
-        await _settle(settle, PTZ_SETTLE_SECONDS)
+        return await self._ptz.async_pan_tilt(
+            device_sn, direction, settle=PTZ_SETTLE_SECONDS if settle is None else settle
+        )
 
     async def async_goto_preset(
         self, device_sn: str, preset: int, *, settle: float | None = None
@@ -3902,14 +2985,13 @@ class Station:
         preset on its own, and a running live view keeps it awake.
 
         Raises ``UnsupportedError`` for a model without presets or a slot the last read
-        showed empty, :class:`~.exceptions.DeviceBusyError` while a capture holds the
-        camera, and :class:`~.exceptions.CommandRejectedError` when the camera is still
+        showed empty, :class:`~..exceptions.DeviceBusyError` while a capture holds the
+        camera, and :class:`~..exceptions.CommandRejectedError` when the camera is still
         moving after :data:`PTZ_BUSY_ATTEMPTS` tries; nothing is sent for the first two.
         """
-        channel = self._stored_slot(device_sn, preset)
-        self._refuse_while_capturing(device_sn)
-        await self._ptz_recipe(goto_preset(preset), channel)
-        await _settle(settle, PRESET_SETTLE_SECONDS)
+        return await self._ptz.async_goto_preset(
+            device_sn, preset, settle=PRESET_SETTLE_SECONDS if settle is None else settle
+        )
 
     async def async_store_preset(
         self, device_sn: str, preset: int, *, confirm: bool = False
@@ -3918,26 +3000,19 @@ class Station:
 
         The camera receipts the write and sends no result, so the slots are read
         back and the write counts only when the slot shows as enabled:
-        :class:`~.exceptions.CommandNotAppliedError` otherwise. A camera whose slots
+        :class:`~..exceptions.CommandNotAppliedError` otherwise. A camera whose slots
         are **full stores nothing while still receipting the command** — a T8170 keeps
-        at most :data:`~.devices.recipes.MAX_PRESET_SLOTS` — so free one with
+        at most :data:`~..devices.recipes.MAX_PRESET_SLOTS` — so free one with
         :meth:`async_delete_preset` first. ``confirm`` sends the app's
         "set anyway?" answer.
 
-        Raises :class:`~.exceptions.PtzActionUnsupportedError` for a model without the
+        Raises :class:`~..exceptions.PtzActionUnsupportedError` for a model without the
         store action (:meth:`ptz_action_support`), ``UnsupportedError`` for one without
         pan/tilt control and presets or a slot outside the camera's range, and
-        :class:`~.exceptions.DeviceBusyError` while a capture holds the camera (the view
+        :class:`~..exceptions.DeviceBusyError` while a capture holds the camera (the view
         is the capture's, not the one to keep); nothing is sent for these.
         """
-        channel = self._require_ptz_action(device_sn, PtzAction.STORE)
-        self._check_slot(device_sn, preset)
-        self._refuse_while_capturing(device_sn)
-        await self._ptz_recipe(store_preset(preset, confirm=confirm), channel)
-        slots = await self.async_refresh_presets(device_sn)
-        if not any(s.index == preset and s.enabled for s in slots):
-            raise self._not_stored(device_sn, preset, slots)
-        return slots
+        return await self._ptz.async_store_preset(device_sn, preset, confirm=confirm)
 
     async def async_save_preset(
         self,
@@ -3959,75 +3034,23 @@ class Station:
         seconds of :meth:`async_pan_tilt`, or while a live view runs): an idle camera
         is back at its default.
 
-        Raises :class:`~.exceptions.CommandNotAppliedError` when the camera already
-        holds :data:`~.devices.recipes.MAX_PRESET_SLOTS` slots (before sending, when
+        Raises :class:`~..exceptions.CommandNotAppliedError` when the camera already
+        holds :data:`~..devices.recipes.MAX_PRESET_SLOTS` slots (before sending, when
         the last read shows it) or the read-back does not show the store or the
-        default; :class:`~.exceptions.PtzActionUnsupportedError` for a model without the
+        default; :class:`~..exceptions.PtzActionUnsupportedError` for a model without the
         store action (or, with ``make_default``, the default action);
-        ``UnsupportedError`` for one without presets or a slot outside the camera's range; :class:`~.exceptions.DeviceBusyError` while a capture
+        ``UnsupportedError`` for one without presets or a slot outside the camera's range; :class:`~..exceptions.DeviceBusyError` while a capture
         holds the camera. Only the store and default writes change the camera.
         """
-        self._require_ptz_action(device_sn, PtzAction.STORE)
-        if make_default:
-            self._require_ptz_action(device_sn, PtzAction.SET_DEFAULT)
-        if preset is not None:
-            self._check_slot(device_sn, preset)
-        self._refuse_while_capturing(device_sn)
-        known = self.presets(device_sn)
-        if known is not None and self._is_full(known, preset):
-            raise self._not_stored(device_sn, preset, known)
-        if preset is None:
-            known = await self.async_refresh_presets(device_sn)
-            preset = free_preset_slot(known)
-            if preset is None:
-                raise self._not_stored(device_sn, None, known)
-        slots = await self.async_store_preset(device_sn, preset, confirm=confirm)
-        if make_default:
-            slots = await self.async_set_default_preset(device_sn, preset, confirm=confirm)
-        return next(s for s in slots if s.index == preset)
+        return await self._ptz.async_save_preset(
+            device_sn, preset=preset, make_default=make_default, confirm=confirm
+        )
 
     def free_preset(self, device_sn: str) -> int | None:
         """The slot :meth:`async_save_preset` would store into, from the last read of
         :meth:`presets`; None when never read or when no slot can take a store (the
-        camera holds :data:`~.devices.recipes.MAX_PRESET_SLOTS`). No I/O."""
-        slots = self.presets(device_sn)
-        return None if slots is None else free_preset_slot(slots)
-
-    @staticmethod
-    def _is_full(slots: Sequence[PresetPosition], preset: int | None) -> bool:
-        """Whether a store into ``preset`` (None: a free slot) cannot take: the camera
-        holds the most it stores and ``preset`` is not one of them."""
-        stored = {s.index for s in slots if s.enabled}
-        return len(stored) >= MAX_PRESET_SLOTS and preset not in stored
-
-    def _not_stored(
-        self, device_sn: str, preset: int | None, slots: Sequence[PresetPosition]
-    ) -> CommandNotAppliedError:
-        """The error for a store that did not take (or cannot), naming a full camera.
-
-        A camera at :data:`~.devices.recipes.MAX_PRESET_SLOTS` yields
-        :class:`~.exceptions.PresetSlotsFullError` so a consumer can tell a full
-        camera from a genuine not-applied store without re-deriving the rule.
-        """
-        stored = [s.index for s in slots if s.enabled]
-        full = len(stored) >= MAX_PRESET_SLOTS
-        hint = (
-            f" (the camera already holds {MAX_PRESET_SLOTS} slots; delete one first)"
-            if full
-            else ""
-        )
-        target = "a preset" if preset is None else f"preset {preset}"
-        message = (
-            f"{redact_serial(device_sn)} did not store {target}{hint} (slots in use: {stored})"
-        )
-        if full:
-            return PresetSlotsFullError(
-                SubCommand.COMMAND_INDOOR_SPAN_SET_POINT,
-                message,
-                slots=MAX_PRESET_SLOTS,
-                in_use=tuple(stored),
-            )
-        return CommandNotAppliedError(SubCommand.COMMAND_INDOOR_SPAN_SET_POINT, message)
+        camera holds :data:`~..devices.recipes.MAX_PRESET_SLOTS`). No I/O."""
+        return self._ptz.free_preset(device_sn)
 
     async def async_delete_preset(self, device_sn: str, preset: int) -> tuple[PresetPosition, ...]:
         """Clear slot ``preset`` of camera ``device_sn``, and read the slots back.
@@ -4035,57 +3058,25 @@ class Station:
         Clearing the default slot clears its default flag too: :meth:`default_preset`
         is None until :meth:`async_set_default_preset` names another slot.
 
-        Raises :class:`~.exceptions.CommandNotAppliedError` when the read-back still
-        shows the slot in use, :class:`~.exceptions.PtzActionUnsupportedError` for a
+        Raises :class:`~..exceptions.CommandNotAppliedError` when the read-back still
+        shows the slot in use, :class:`~..exceptions.PtzActionUnsupportedError` for a
         model without the delete action, and ``UnsupportedError`` for one without pan/tilt
         control and presets or a slot outside the camera's range; nothing is sent for
         these.
         """
-        channel = self._require_ptz_action(device_sn, PtzAction.DELETE)
-        self._check_slot(device_sn, preset)
-        await self._ptz_recipe(delete_preset(preset), channel)
-        slots = await self.async_refresh_presets(device_sn)
-        if any(s.index == preset and s.enabled for s in slots):
-            raise CommandNotAppliedError(
-                SubCommand.COMMAND_INDOOR_SPAN_DEL_POINT,
-                f"{redact_serial(device_sn)} still holds preset {preset}",
-                device_sn=device_sn,
-            )
-        return slots
+        return await self._ptz.async_delete_preset(device_sn, preset)
 
     async def async_preset_picture(self, device_sn: str, preset: int) -> bytes | None:
         """The JPEG camera ``device_sn`` stored for slot ``preset``, or None when empty.
 
         The camera's own thumbnail of the slot, taken when the slot was stored — it
         shows the slot's view without turning the camera there. Wakes a battery camera
-        but does not move it. Raises :class:`~.exceptions.PtzActionUnsupportedError`
+        but does not move it. Raises :class:`~..exceptions.PtzActionUnsupportedError`
         for a model without the slot picture action, ``UnsupportedError`` for one without
         pan/tilt control and presets or a slot outside the camera's range; nothing is
         sent for these.
         """
-        channel = self._require_ptz_action(device_sn, PtzAction.SLOT_PICTURE)
-        self._check_slot(device_sn, preset)
-        reply = await self._ptz_recipe(preset_picture(preset), channel)
-        data = decode_preset_picture(reply.payload or {})
-        return data or None
-
-    def _check_slot(self, device_sn: str, preset: int) -> None:
-        """Refuse a slot the camera does not have, before anything is sent.
-
-        The slot range and the store limit are different numbers: a T8170 offers ten
-        slot indices (0-9) but stores at most :data:`~.devices.recipes.MAX_PRESET_SLOTS`
-        of them at a time. Only the range can be checked up front; a store beyond the
-        limit is caught by the read-back.
-        """
-        known = self.presets(device_sn)
-        if known and not any(s.index == preset for s in known):
-            raise UnsupportedError(
-                f"{redact_serial(device_sn)} has no preset slot {preset} "
-                f"(slots 0-{max(s.index for s in known)})",
-                device_sn=device_sn,
-            )
-        if preset < 0:
-            raise UnsupportedError(f"preset {preset} is not a slot number")
+        return await self._ptz.async_preset_picture(device_sn, preset)
 
     async def _ptz_recipe(self, recipe: Recipe, channel: int) -> RecipeReply:
         """Run a preset/pan-tilt recipe, re-sending while the camera answers "busy".
@@ -4110,10 +3101,6 @@ class Station:
                 await asyncio.sleep(PTZ_BUSY_DELAY)
         raise AssertionError("unreachable")  # pragma: no cover
 
-    def _ptz_channel(self, device_sn: str) -> int:
-        """``device_sn``'s channel, after checking it has pan/tilt control here."""
-        return self._require_ptz(device_sn, Capability.PTZ_CONTROL)
-
     async def async_preset_image(
         self, device_sn: str, preset: int, *, settle: float | None = None, wait: bool = False
     ) -> CameraImage:
@@ -4128,132 +3115,16 @@ class Station:
 
         One capture holds a camera at a time: a call for the same preset while one runs
         gets that capture's image; any other capture of the camera raises
-        :class:`~.exceptions.DeviceBusyError` at once, before anything is sent
-        (:class:`~.events.CameraBusyChanged` reports the state). Raises
+        :class:`~..exceptions.DeviceBusyError` at once, before anything is sent
+        (:class:`~..events.CameraBusyChanged` reports the state). Raises
         ``UnsupportedError`` for a model without presets, or for a slot the last read
         showed empty. The live open is :meth:`async_open_live`'s: past the session budget
-        it raises :class:`~.exceptions.LiveStreamLimitError` at once (the default), or
+        it raises :class:`~..exceptions.LiveStreamLimitError` at once (the default), or
         with ``wait`` waits up to the first-frame timeout for a stream to end.
         """
-        channel = self._stored_slot(device_sn, preset)
-
-        async def capture() -> CameraImage:
-            await self.session.async_run_recipe(goto_preset(preset), channel=channel)
-            data = await self._settled_keyframe(
-                channel, PRESET_SETTLE_SECONDS if settle is None else settle, wait=wait
-            )
-            await self._refresh_presets_while_awake(device_sn)
-            return CameraImage.keyframe(
-                source=ImageSource.LIVE, device_sn=device_sn, data=data, preset=preset
-            )
-
-        return await self._run_capture(device_sn, preset, capture)
-
-    async def _settled_keyframe(self, channel: int, settle: float, *, wait: bool) -> bytes:
-        """The first keyframe of live video that arrives ``settle`` seconds from now.
-
-        A keyframe from before then may show the camera still turning, so none is
-        returned instead: a stream that ends first raises ``DeviceTimeoutError``.
-        """
-        deadline = time.monotonic() + settle
-        stream = await self._session_live(
-            channel, idle_timeout=max(PRESET_STREAM_IDLE_SECONDS, settle), wait=wait
+        return await self._ptz.async_preset_image(
+            device_sn, preset, settle=PRESET_SETTLE_SECONDS if settle is None else settle, wait=wait
         )
-        async with stream:
-            async for frame in stream:
-                if frame.is_keyframe and time.monotonic() >= deadline:
-                    return frame.data
-        raise DeviceTimeoutError(f"the stream ended before the camera settled ({settle:g}s)")
-
-    async def _run_capture(
-        self,
-        device_sn: str,
-        preset: int | None,
-        capture: Callable[[], Coroutine[Any, Any, CameraImage]],
-    ) -> CameraImage:
-        """Run ``capture`` as the one capture holding ``device_sn``: join the running one
-        when it is the same (live, or the same preset), else raise ``DeviceBusyError``."""
-        running = self._captures.get(device_sn)
-        if running is not None and running.preset == preset:
-            return await asyncio.shield(running.task)
-        self._refuse_while_capturing(device_sn)
-        task = asyncio.get_running_loop().create_task(
-            capture(), name=f"eufy-security-capture-{self._log_name}"
-        )
-        self._captures[device_sn] = _Capture(preset=preset, task=task)
-        self._bus.emit(CameraBusyChanged(station_sn=self.serial, device_sn=device_sn, busy=True))
-
-        def release(_task: asyncio.Task[CameraImage]) -> None:
-            if self._captures.get(device_sn) is not None and self._captures[device_sn].task is task:
-                del self._captures[device_sn]
-                self._bus.emit(
-                    CameraBusyChanged(station_sn=self.serial, device_sn=device_sn, busy=False)
-                )
-
-        task.add_done_callback(release)
-        return await asyncio.shield(task)
-
-    def _refuse_while_capturing(self, device_sn: str) -> None:
-        """Raise ``DeviceBusyError`` when a capture holds ``device_sn``: a command that
-        turns the camera would spoil the image being taken."""
-        running = self._captures.get(device_sn)
-        if running is not None:
-            raise DeviceBusyError(
-                f"{redact_serial(device_sn)} is busy with "
-                + ("a live image" if running.preset is None else f"preset {running.preset}"),
-                device_sn=device_sn,
-            )
-
-    def _stored_slot(self, device_sn: str, preset: int) -> int:
-        """``device_sn``'s channel, after checking its model has presets and ``preset``
-        is not a slot the last read showed empty; nothing is sent."""
-        channel = self._preset_channel(device_sn)
-        known = self.presets(device_sn)
-        if known is not None and not any(s.index == preset and s.enabled for s in known):
-            raise UnsupportedError(
-                f"preset {preset} is not set on {redact_serial(device_sn)}", device_sn=device_sn
-            )
-        return channel
-
-    def _preset_channel(self, device_sn: str) -> int:
-        """``device_sn``'s channel, after checking it has pan/tilt presets here."""
-        return self._require_ptz(device_sn, Capability.PTZ_PRESETS)
-
-    async def _refresh_presets_while_awake(self, device_sn: str) -> None:
-        """Re-read the presets of a pan/tilt camera that is awake anyway (best effort)."""
-        if self.ptz_support(device_sn, Capability.PTZ_PRESETS).support is Support.UNKNOWN:
-            return
-        try:
-            await self.async_refresh_presets(device_sn)
-        except EufySecurityError as err:
-            _LOGGER.debug("%s: preset read while awake failed: %s", self._log_name, err)
-
-    def _store_presets(self, device_sn: str, slots: tuple[PresetPosition, ...]) -> None:
-        if self.presets(device_sn) == slots:
-            return
-        self._presets[device_sn] = slots
-        if self._cache is not None:
-            self._cache.set_presets(
-                self.serial,
-                device_sn,
-                [
-                    {
-                        "index": s.index,
-                        "enable": int(s.enabled),
-                        "zoom": s.zoom,
-                        "isdefault": int(s.is_default),
-                    }
-                    for s in slots
-                ],
-            )
-            self._cache.schedule_save()
-        _LOGGER.debug(
-            "%s: presets of %s: %s enabled",
-            self._log_name,
-            redact_serial(device_sn),
-            [s.index for s in slots if s.enabled],
-        )
-        self._bus.emit(PresetsChanged(station_sn=self.serial, device_sn=device_sn, presets=slots))
 
     def _event_camera(self, event: SecurityEvent) -> tuple[str, int]:
         """The paired camera an event names: its ``device_sn``, else its ``channel``; on a
@@ -4298,11 +3169,11 @@ class Station:
         """Read the storage record: internal disk, external disk and eMMC figures.
 
         Read-only (the app's HDD screen). The query is the one the eufy app sends this
-        model (:func:`~.p2p.storage_info.storage_query`, by serial and the listed
+        model (:func:`~..p2p.storage_info.storage_query`, by serial and the listed
         firmware): the ``1307`` record on the HomeBase 3 family, ``55000`` on a HomeBase 2
         from firmware 3.3.7.7, and ``SDINFO_EX`` (``1144``) on a standalone camera, an
         older HomeBase 2 and the small HomeBases, which sets
-        :attr:`~.p2p.storage_info.StorageInfo.emmc` alone. A model the app asks nothing
+        :attr:`~..p2p.storage_info.StorageInfo.emmc` alone. A model the app asks nothing
         raises :class:`CommandUnsupportedError` without sending. Wakes a battery camera.
         The result is also kept as :attr:`storage`.
         """
@@ -4326,14 +3197,14 @@ class Station:
         the other models).
 
         Sends the model's restart request
-        (:func:`~.devices.station_config_support.restart_command`, an ECB station scalar
+        (:func:`~..devices.station_config_support.restart_command`, an ECB station scalar
         with value 0) and returns ``APPLIED`` once the station answered it. The station
         then drops the session while it boots: :attr:`state` and every call fail with the
         session's typed errors until the session reconnects on its normal path (the
         supervisor of :meth:`async_start`, or the next call's connect), and a
-        :class:`~.events.ConnectionChanged` reports both edges. Raises ``UnsupportedError``
+        :class:`~..events.ConnectionChanged` reports both edges. Raises ``UnsupportedError``
         before sending where :meth:`config_support` grades
-        :attr:`~.devices.station_config_support.StationFeature.RESTART` ``UNKNOWN``,
+        :attr:`~..devices.station_config_support.StationFeature.RESTART` ``UNKNOWN``,
         :class:`CommandRejectedError` for a non-zero result, :class:`CommandNotAppliedError`
         when the station acknowledged it but never answered, and
         :class:`DeviceTimeoutError` without even an ACK.
@@ -4366,12 +3237,12 @@ class Station:
         """Sound the station's own siren for ``seconds`` (the eufy app's alarm action;
         verified on a T8030, declared on the other models). **Alarm-affecting.**
 
-        ``seconds`` is one of :data:`~.p2p.messages.SOUND_ALARM_SECONDS` (``ValueError``
+        ``seconds`` is one of :data:`~..p2p.messages.SOUND_ALARM_SECONDS` (``ValueError``
         otherwise). Returns ``APPLIED`` once the station answered SET_TONE_FILE (1201)
         or its alarm-tone frame shows the siren on (a HomeBase 3 answers only that way);
-        the siren also shows as :class:`~.events.AlarmChanged`.
+        the siren also shows as :class:`~..events.AlarmChanged`.
         Raises ``UnsupportedError`` before sending where :meth:`config_support` grades
-        :attr:`~.devices.station_config_support.StationFeature.SOUND_ALARM` ``UNKNOWN``,
+        :attr:`~..devices.station_config_support.StationFeature.SOUND_ALARM` ``UNKNOWN``,
         :class:`CommandRejectedError` for a non-zero result, :class:`CommandNotAppliedError`
         when the station acknowledged it but never answered, and
         :class:`DeviceTimeoutError` without even an ACK.
@@ -4393,129 +3264,44 @@ class Station:
 
     # ── device alarms: a camera's own siren and light ──────────────────────────
 
+    def _alarm_waits(self) -> AlarmWaits:
+        """The alarm waits as ``station`` holds them now, where tests and consumers patch
+        them (:class:`~.alarms.StationAlarms` asks each time it sets an expiry)."""
+        return AlarmWaits(siren_expiry_margin=SIREN_EXPIRY_MARGIN_S)
+
     def device_alarms(self, device_sn: str) -> tuple[DeviceAlarm, ...]:
         """The alarm choices the eufy app's alarm button offers for ``device_sn`` (a
         device paired here, or this station): its own siren, light or both, by its model
-        and how it is reached (:mod:`~.devices.device_alarm`; declared: eufy app, not
+        and how it is reached (:mod:`~..devices.device_alarm`; declared: eufy app, not
         verified on hardware). Empty when the app offers the device none, or when
         ``device_sn`` is neither this station nor paired to it.
 
         A HomeBase's own serial offers sound, light and sound and light as the app does,
         each sending the station siren request of :meth:`async_trigger_alarm`."""
-        alarms = self._device_alarms_of(device_sn)
-        return () if alarms is None else alarms.choices
+        return self._alarms.device_alarms(device_sn)
 
     def device_alarm_default(self, device_sn: str) -> DeviceAlarm | None:
         """The choice the app preselects for ``device_sn``; None when it offers none or
         ``device_sn`` is neither this station nor paired to it."""
-        alarms = self._device_alarms_of(device_sn)
-        return None if alarms is None else alarms.default
-
-    def _device_alarms_of(self, device_sn: str) -> DeviceAlarms | None:
-        if all(d.device_sn != device_sn for d in (self.device, *self.sub_devices)):
-            return None
-        return alarms_for(self._product_code(device_sn), self._connect_type_of(device_sn))
+        return self._alarms.device_alarm_default(device_sn)
 
     def device_alarm_on(self, device_sn: str) -> bool | None:
         """Whether ``device_sn``'s own alarm (siren, light or both) is on, from the frames
         the eufy app reads it from; None before any, where :meth:`device_alarms` is
         empty, for a paired device without a channel, and after :meth:`async_close`.
-        Each transition is announced as :class:`~.events.DeviceAlarmChanged`.
+        Each transition is announced as :class:`~..events.DeviceAlarmChanged`.
 
         A device whose alarm request is SET_TONE_FILE (1201) sounds the station's alarm
         tone: its state is the station's alarm (:attr:`alarming`, None before any
-        :class:`~.events.AlarmChanged`), as for a HomeBase's own serial, with its rules
+        :class:`~..events.AlarmChanged`), as for a HomeBase's own serial, with its rules
         (no countdown: it stays on until the next transition). Any other device reads the
         device-siren frames (``0x04B2``) on its channel as the app does
-        (:attr:`~.p2p.alarm.AlarmFrame.alarm_state`): on for an on type with time left,
+        (:attr:`~..p2p.alarm.AlarmFrame.alarm_state`): on for an on type with time left,
         off for an off type (0, 1, 15/16/17) with none; other frames and parameter dumps
         change nothing. An on state reads off when its time left plus
         :data:`SIREN_EXPIRY_MARGIN_S` passes without another frame on that channel (an
         end frame lost, or sent while the session was down)."""
-        alarms = self._device_alarms_of(device_sn)
-        if alarms is None:
-            return None
-        if alarms.station_tone:
-            return None if self._alarm is None else self._alarm.alarming
-        try:
-            return self._sirens.get(self._alarm_channel(device_sn))
-        except UnsupportedError:
-            return None
-
-    def _alarm_channel(self, device_sn: str) -> int:
-        """The channel ``device_sn``'s alarm is addressed on: a hub's own on channel 0, as
-        SET_TONE_FILE does; else :meth:`channel_for`."""
-        if device_sn == self.serial and own_channel(self.device) is None:
-            return 0
-        return self.channel_for(device_sn)
-
-    def _on_alarm_frame(self, frame: AlarmFrame) -> None:
-        """Take a device-siren frame's state for its channel; an on state expires after
-        its time left plus :data:`SIREN_EXPIRY_MARGIN_S`, the next counted frame on that
-        channel replaces or cancels the expiry."""
-        if frame.param_id != FrameType.SIREN_NOTIFY:
-            return
-        on = frame.alarm_state
-        if on is None:
-            return
-        timer = self._siren_expiry.pop(frame.channel, None)
-        if timer is not None:
-            timer.cancel()
-        if on:
-            self._siren_expiry[frame.channel] = asyncio.get_running_loop().call_later(
-                frame.seconds_left + SIREN_EXPIRY_MARGIN_S, self._expire_siren, frame.channel
-            )
-        self._set_siren(frame.channel, on, frame.values[0])
-
-    def _expire_siren(self, channel: int) -> None:
-        # A loop callback: an error is logged, the state is set before the emit.
-        try:
-            self._siren_expiry.pop(channel, None)
-            self._set_siren(channel, False, None)
-        except Exception:
-            _LOGGER.exception("%s: siren expiry on channel %d failed", self._log_name, channel)
-
-    def _set_siren(self, channel: int, on: bool, event_type: int | None) -> None:
-        """Store ``channel``'s siren state; announce a change for the devices it reports
-        (an unseen channel counts as off)."""
-        was = self._sirens.get(channel, False)
-        self._sirens[channel] = on
-        if was == on:
-            return
-
-        def reported(alarms: DeviceAlarms, device_sn: str) -> bool:
-            if alarms.station_tone:
-                return False
-            try:
-                return self._alarm_channel(device_sn) == channel
-            except UnsupportedError:
-                return False
-
-        self._emit_device_alarms(reported, on, event_type, datetime.now(UTC))
-
-    def _emit_device_alarms(
-        self,
-        reports: Callable[[DeviceAlarms, str], bool],
-        on: bool,
-        event_type: int | None,
-        at: datetime,
-    ) -> None:
-        """Emit :class:`~.events.DeviceAlarmChanged` for every device here with an alarm
-        whose state ``reports(alarms, device_sn)`` says changed."""
-        for device in (self.device, *self.sub_devices):
-            alarms = self._device_alarms_of(device.device_sn)
-            if alarms is None or not reports(alarms, device.device_sn):
-                continue
-            self._bus.emit(
-                DeviceAlarmChanged(
-                    station_sn=self.serial,
-                    device_sn=device.device_sn,
-                    on=on,
-                    alarm=alarms.choice_for(event_type) if on else None,
-                    event_type=event_type,
-                    at=at,
-                )
-            )
+        return self._alarms.device_alarm_on(device_sn)
 
     async def async_trigger_device_alarm(
         self,
@@ -4542,7 +3328,7 @@ class Station:
         :class:`CommandNotAppliedError` when the station acknowledged it but no
         confirmation came, and :class:`DeviceTimeoutError` without even an ACK.
         """
-        return await self._async_device_alarm(device_sn, alarm, start=True, timeout=timeout)
+        return await self._alarms.trigger_device_alarm(device_sn, alarm, timeout=timeout)
 
     async def async_stop_device_alarm(
         self,
@@ -4555,53 +3341,14 @@ class Station:
         app's preselected choice); confirmed by the frame of the command sent showing it
         off. **Alarm-affecting.** Refuses, returns and raises as
         :meth:`async_trigger_device_alarm`."""
-        return await self._async_device_alarm(device_sn, alarm, start=False, timeout=timeout)
-
-    async def _async_device_alarm(
-        self,
-        device_sn: str,
-        alarm: DeviceAlarm | int | None,
-        *,
-        start: bool,
-        timeout: float | None,
-    ) -> CommandOutcome:
-        if device_sn != self.serial:
-            self.sub_device(device_sn)  # UnsupportedError when not paired here
-        alarms = self._device_alarms_of(device_sn)
-        if alarms is None:
-            raise UnsupportedError(
-                f"{redact_serial(device_sn)}: the eufy app offers this device no alarm",
-                device_sn=device_sn,
-            )
-        try:
-            choice = alarms.default if alarm is None else DeviceAlarm(alarm)
-        except ValueError:
-            choice = None
-        request = None if choice is None else (alarms.start if start else alarms.stop).get(choice)
-        if request is None:
-            name = alarm if choice is None else choice.name
-            raise UnsupportedError(
-                f"{redact_serial(device_sn)}: the eufy app offers no {name} alarm here",
-                device_sn=device_sn,
-            )
-        if device_sn == self.serial and own_channel(self.device) is None:
-            self._require_action(StationFeature.SOUND_ALARM)
-        channel = self._alarm_channel(device_sn)
-        outcome = await self.session.async_send_alarm(
-            request.command,
-            render_alarm(request.params, channel=channel),
-            channel=channel,
-            on=start,
-            timeout=timeout,
-        )
-        return self._answered(request.command, outcome)
+        return await self._alarms.stop_device_alarm(device_sn, alarm, timeout=timeout)
 
     @property
     def storage(self) -> StorageInfo | None:
         """The last storage record read or pushed; None until one arrived.
 
         The station pushes a record when a format finishes and whenever another client
-        reads it, each announced as :class:`~.events.StorageChanged`.
+        reads it, each announced as :class:`~..events.StorageChanged`.
         """
         return self.session.storage
 
@@ -4610,51 +3357,39 @@ class Station:
     ) -> list[HistoryRecord]:
         """History records across all devices from ``start_date`` to ``end_date``
         (``YYYYMMDD``, both included), newest first; paged like the app (see
-        :meth:`~.p2p.session.StationSession.async_list_history`)."""
-        return await self.session.async_list_history(start_date, end_date, **kwargs)
+        :meth:`~..p2p.session.StationSession.async_list_history`)."""
+        return await self._history.list_history(start_date, end_date, **kwargs)
 
     async def async_history_record(self, record_id: int) -> HistoryRecord | None:
         """The history row of one ``record_id`` (one query), or None when the station has
-        none. Raises :class:`~.exceptions.UnsupportedError`, before sending, on a
+        none. Raises :class:`~..exceptions.UnsupportedError`, before sending, on a
         standalone device (it lists no history) and for an id that carries no day; on
         every station a listed row is looked up by its
-        :attr:`~.events.HistoryRecord.ref` (:meth:`async_history_record_by_ref`)."""
-        if self.is_standalone:
-            raise UnsupportedError("a standalone device lists no history")
-        if record_id_day(record_id) is None:
-            raise UnsupportedError(f"record_id {record_id} carries no day")
-        return await self.session.async_history_record(record_id)
+        :attr:`~..events.HistoryRecord.ref` (:meth:`async_history_record_by_ref`)."""
+        return await self._history.history_record(record_id)
 
     async def async_history_record_by_ref(
         self, ref: str, *, device_sn: str | None = None, timeout: float | None = None
     ) -> HistoryRecord:
-        """The history row a listed row's :attr:`~.events.HistoryRecord.ref` names, on
+        """The history row a listed row's :attr:`~..events.HistoryRecord.ref` names, on
         every station (a HomeBase 2's ids carry no day: the ref carries the station day
         and start time); the row carries the same ``ref``. One history query, or on a
         station paged by start time at most two
-        (:meth:`~.p2p.session.StationSession.async_find_history_record`).
+        (:meth:`~..p2p.session.StationSession.async_find_history_record`).
 
         ``ref`` is the text as the library gave it; with ``device_sn`` it must be a
         row of that camera. ``timeout`` bounds each query (None:
-        :data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`); none is resent.
+        :data:`~..p2p.session.HISTORY_QUERY_TIMEOUT`); none is resent.
 
-        Raises before anything is sent: :class:`~.exceptions.RecordingRefError` (a
+        Raises before anything is sent: :class:`~..exceptions.RecordingRefError` (a
         ``ValueError``) for a ref that does not check out for this station (and
         ``device_sn``) or one that does not parse; ``UnsupportedError`` for a
         ``device_sn`` not paired here and on a standalone device. Raises
-        :class:`~.exceptions.RecordNotFoundError` when the station no longer lists
+        :class:`~..exceptions.RecordNotFoundError` when the station no longer lists
         that row (deleted, or that id now belongs to another camera) and, on a station
         paged by start time, for a row behind a full page of rows of its start second.
         """
-        if device_sn is not None:
-            self.channel_for(device_sn)  # raises for a device not paired here
-            cameras: tuple[str, ...] = (device_sn,)
-        else:
-            cameras = (self.serial, *(d.device_sn for d in self.devices))
-        found = decode_ref(ref, station_sn=self.serial, device_sns=cameras)
-        if self.is_standalone:
-            raise UnsupportedError("a standalone device lists no history")
-        return await self.session.async_find_history_record(found, timeout=timeout)
+        return await self._history.history_record_by_ref(ref, device_sn=device_sn, timeout=timeout)
 
     async def async_list_recordings(
         self,
@@ -4668,7 +3403,7 @@ class Station:
         timeout: float | None = None,
     ) -> list[HistoryRecord]:
         """The recordings on the station's disk, newest first: the history rows with a
-        valid :attr:`~.events.HistoryRecord.video_path`, of ``device_sn`` (None: every
+        valid :attr:`~..events.HistoryRecord.video_path`, of ``device_sn`` (None: every
         camera paired here).
 
         Covers today and ``days - 1`` days back (the host's days; stations keep local
@@ -4687,45 +3422,22 @@ class Station:
         today, so an ``until`` before the window lists nothing. ``before`` wins over
         ``until``. Raises :class:`ValueError`, before anything is sent, for ``days`` or
         ``limit`` below 1 and a ``before`` that carries no day
-        (:func:`~.p2p.messages.record_id_day`).
+        (:func:`~..p2p.messages.record_id_day`).
 
         ``timeout`` bounds each history query (None:
-        :data:`~.p2p.session.HISTORY_QUERY_TIMEOUT`); an unanswered one is asked once
-        more, then :class:`~.exceptions.DeviceTimeoutError` is raised.
+        :data:`~..p2p.session.HISTORY_QUERY_TIMEOUT`); an unanswered one is asked once
+        more, then :class:`~..exceptions.DeviceTimeoutError` is raised.
 
         A detection's row exists while its clip still records: download a row once
         :meth:`recording_settled` says so.
         """
-        if days < 1:
-            raise ValueError("days must be at least 1")
-        if limit is not None and limit < 1:
-            raise ValueError("limit must be at least 1")
-        cursor_day = None if before is None else record_id_day(before)
-        if before is not None and cursor_day is None:
-            raise ValueError(f"before {before} carries no day")
-        if device_sn is not None:
-            self.channel_for(device_sn)  # raises for a device not paired here
-        if self.is_standalone:
-            return []
-        today = _host_today()
-        first = today - timedelta(days=days - 1)
-        if since is not None:
-            first = max(first, since.astimezone().date())
-        if cursor_day is not None:
-            last = min(today, cursor_day)
-        elif until is not None:
-            last = min(today, _host_day(until))
-        else:
-            last = today
-        if first > last:
-            return []
-        return await self.session.async_list_history(
-            first.strftime("%Y%m%d"),
-            last.strftime("%Y%m%d"),
-            count=limit,
-            before=before if cursor_day is not None and cursor_day <= last else None,
-            keep=self._recording_filter(device_sn, since),
-            device_sn=device_sn,
+        return await self._history.list_recordings(
+            device_sn,
+            days=days,
+            since=since,
+            limit=limit,
+            before=before,
+            until=until,
             timeout=timeout,
         )
 
@@ -4759,87 +3471,21 @@ class Station:
         Positions are the station's own days (the day a row's id carries, else the day
         its query named), never the host's.
 
-        Raises before anything is sent: :class:`~.exceptions.RecordingCursorError` (a
+        Raises before anything is sent: :class:`~..exceptions.RecordingCursorError` (a
         ``ValueError``) for a cursor that does not check out for that station and camera
         or one that does not parse; :class:`ValueError` for ``limit``, ``days`` or
         ``page_days`` below 1; ``UnsupportedError`` for a device not paired here. A
         standalone device lists none: an empty page without a cursor.
         """
-        if days < 1:
-            raise ValueError("days must be at least 1")
-        if limit < 1:
-            raise ValueError("limit must be at least 1")
-        if page_days is not None and page_days < 1:
-            raise ValueError("page_days must be at least 1")
-        position = None
-        if cursor is not None:
-            position = decode_cursor(cursor, station_sn=self.serial, device_sn=device_sn)
-        if device_sn is not None:
-            self.channel_for(device_sn)  # raises for a device not paired here
-        if self.is_standalone:
-            return RecordingsPage((), None)
-        today = _host_today()
-        first = today - timedelta(days=days - 1)
-        if position is not None:
-            start = min(today, position.day)
-        elif until is not None:
-            start = min(today, _host_day(until))
-        else:
-            start = today
-        oldest = first if page_days is None else max(first, start - timedelta(days=page_days - 1))
-        if oldest > start:
-            return RecordingsPage((), None)
-        record_id = None if position is None else position.record_id
-        listed = await self.session.async_list_history_by_day(
-            oldest.strftime("%Y%m%d"),
-            start.strftime("%Y%m%d"),
-            count=limit,
-            before=record_id,  # the session pages it only on its own day
-            before_day=None if position is None or record_id is None else position.day,
-            keep=self._recording_filter(device_sn, None),
-            device_sn=device_sn,
+        return await self._history.list_recordings_page(
+            device_sn,
+            limit=limit,
+            days=days,
+            cursor=cursor,
+            until=until,
+            page_days=page_days,
             timeout=timeout,
         )
-        rows = tuple(row for _day, row in listed)
-        # rows without an id (none above 0) cannot be paged from: go on after the page's
-        # last row with one, so they may come again but none is skipped
-        paged = [(day, row.record_id) for day, row in listed if row.record_id > 0]
-        if len(listed) < limit:  # the days asked hold no more: go on before them
-            following = RecordingPosition(oldest - timedelta(days=1))
-        elif paged:
-            following = RecordingPosition.after(paged[-1][1], paged[-1][0])
-        else:  # no row to page from: go on with the day before the last one
-            following = RecordingPosition(listed[-1][0] - timedelta(days=1))
-        if following.record_id is None and following.day < first:
-            return RecordingsPage(rows, None)  # the window holds no more
-        text = encode_cursor(following, station_sn=self.serial, device_sn=device_sn)
-        return RecordingsPage(rows, text)
-
-    def _recording_filter(
-        self, device_sn: str | None, since: datetime | None
-    ) -> Callable[[HistoryRecord], bool]:
-        """Which history rows are recordings of ``device_sn`` (None: of every camera
-        paired here) that started at or after ``since``."""
-        paired = {d.device_sn for d in self.devices}
-
-        def wanted(row: HistoryRecord) -> bool:
-            if row.video_path is None or row.device_sn is None:
-                return False
-            if (
-                row.video_path.endswith(".dat")
-                and history_query_verb(self.serial) == DB_QUERY_HISTORY
-            ):
-                return False
-            if device_sn is not None and row.device_sn != device_sn:
-                return False
-            if device_sn is None and row.device_sn not in paired:
-                return False
-            if since is not None:
-                started = row.started_at
-                return started is not None and started >= since
-            return True
-
-        return wanted
 
     @staticmethod
     def recording_settled(
@@ -4850,13 +3496,9 @@ class Station:
 
         A detection's row exists while its clip still records, so download only settled
         rows; :meth:`async_download_recording` reads the row again afterwards and
-        :attr:`~.p2p.clip.MediaClip.complete` is False when it gained frames meanwhile.
+        :attr:`~..p2p.clip.MediaClip.complete` is False when it gained frames meanwhile.
         """
-        ended = record.ended_at
-        if ended is None:
-            return False
-        current = now if now is not None else datetime.now(ended.tzinfo)
-        return (current - ended).total_seconds() >= quiet
+        return StationHistory.recording_settled(record, now=now, quiet=quiet)
 
     async def async_download_recording(
         self, record: HistoryRecord, write: ClipWriter, *, wait: bool = True
@@ -4864,36 +3506,15 @@ class Station:
         """Download a history record's recording as one MPEG-TS clip into ``write``.
 
         The station plays it off its disk on an extra session (the camera is not woken;
-        see :meth:`~.p2p.session.StationSession.async_download_recording`): about as fast
+        see :meth:`~..p2p.session.StationSession.async_download_recording`): about as fast
         as it was recorded or faster, the original video (HEVC or H.264) and AAC untouched. The clip
         carries the record's ``started_at``, ``record_id`` and its frame count, so
-        :attr:`~.p2p.clip.MediaClip.complete` says whether everything arrived.
+        :attr:`~..p2p.clip.MediaClip.complete` says whether everything arrived.
 
-        Raises :class:`~.exceptions.UnsupportedError`, before anything is sent, for a
+        Raises :class:`~..exceptions.UnsupportedError`, before anything is sent, for a
         record without a valid recording path, of a device not paired here, or on a
-        standalone device; :class:`~.exceptions.LiveStreamLimitError` past the session
+        standalone device; :class:`~..exceptions.LiveStreamLimitError` past the session
         budget (with ``wait``, after waiting for a stream to end); otherwise what the
         playback raises.
         """
-        path = record.video_path
-        if path is None:
-            raise UnsupportedError("the record carries no recording")
-        if record.device_sn is None:
-            raise UnsupportedError("the record names no camera")
-        channel = self.channel_for(record.device_sn)
-        clip = await self.session.async_download_recording(path, channel, write, wait=wait)
-        # Read the row again: a clip still recording when the download began has more
-        # frames now than were delivered, and then the clip is not complete.
-        expected = record.frame_count
-        if record.record_id and record_id_day(record.record_id) is not None:
-            with contextlib.suppress(EufySecurityError):
-                fresh = await self.session.async_history_record(record.record_id)
-                if fresh is not None and fresh.frame_count is not None:
-                    expected = max(expected or 0, fresh.frame_count)
-        return replace(
-            clip,
-            started_at=record.started_at,
-            device_sn=record.device_sn,
-            record_id=record.record_id or None,
-            expected_frames=expected,
-        )
+        return await self._history.download_recording(record, write, wait=wait)

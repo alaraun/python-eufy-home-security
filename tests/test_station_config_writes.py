@@ -6,6 +6,7 @@ import dataclasses
 import datetime as dt
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any
 
 import pytest
 
@@ -98,6 +99,11 @@ async def test_create_writes_the_whole_list_and_shows_the_mode_at_once(
     station.apply_cloud_device(_cloud_entry({1256: LISTED}))  # the same stale copy
     assert station.config is not None
     assert station.config.is_defined(GuardMode.CUSTOM_2)
+
+
+async def test_create_writes_the_detail(station: Station, fake: FakeStation) -> None:
+    await station.async_create_custom_mode("Garden", detail="Back yard")
+    assert b'"detail":"Back yard"' in sent(fake, 1256)[0]
 
 
 async def test_a_newer_cloud_copy_replaces_the_own_write(station: Station) -> None:
@@ -237,6 +243,8 @@ async def test_a_stale_revision_sends_nothing(station: Station, fake: FakeStatio
     with pytest.raises(ConfigChangedError) as caught:
         await station.async_create_custom_mode("Garden", expect_revision=config.revision)
     assert caught.value.config.guard_mode is GuardMode.AWAY
+    with pytest.raises(ConfigChangedError):
+        await station.async_delete_custom_mode(GuardMode.CUSTOM_1, expect_revision=config.revision)
     assert fake.config_frames_received == []
 
     fresh = await station.async_get_config()
@@ -255,6 +263,21 @@ async def test_a_dump_that_carries_the_list_is_the_read_back(
     fake.apply_settings = False  # receipted, never stored
     with pytest.raises(CommandNotAppliedError, match="1256 not confirmed"):
         await station.async_rename_custom_mode(4, "Yard")
+
+
+async def test_a_contradicted_write_is_read_back_the_patched_delay_apart(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A write the dump contradicts is read ``READBACK_ATTEMPTS`` times, ``READBACK_DELAY``
+    apart, as patched on ``station`` when called."""
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 0.05)  # each read is quick
+    monkeypatch.setattr(station_module, "READBACK_DELAY", 0.2)
+    fake.params[255][1256] = LISTED
+    fake.apply_settings = False  # receipted, never stored
+    start = time.monotonic()
+    with pytest.raises(CommandNotAppliedError, match="1256 not confirmed"):
+        await station.async_create_custom_mode("Garden")
+    assert 0.4 <= time.monotonic() - start < 1.2  # three reads, two waits between them
 
 
 async def test_an_unanswered_write_the_dump_cannot_confirm_is_not_applied(
@@ -516,6 +539,29 @@ async def test_cross_camera_refusals_send_nothing(
     assert fake.param_queries == 0
 
 
+async def test_a_tracking_write_goes_through_the_station_members_a_consumer_patches(
+    hub: Station, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The write reads the eligible cameras and the configuration through the station's
+    public members, so a patch of them on :class:`Station` applies."""
+    calls: list[str] = []
+    config = vars(Station)["config"]
+    eligible = Station.cross_camera_eligible
+
+    def config_spy(self: Station) -> Any:
+        calls.append("config")
+        return config.fget(self)
+
+    def eligible_spy(self: Station) -> tuple[str, ...]:
+        calls.append("eligible")
+        return eligible(self)
+
+    monkeypatch.setattr(Station, "config", property(config_spy))
+    monkeypatch.setattr(Station, "cross_camera_eligible", eligible_spy)
+    await hub.async_set_cross_camera_cameras(None)
+    assert calls == ["eligible", "config"]
+
+
 async def test_cross_camera_unknown_support_and_stale_revision_send_nothing(
     hub: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -523,6 +569,10 @@ async def test_cross_camera_unknown_support_and_stale_revision_send_nothing(
     fake.params[255][1224] = "0"
     with pytest.raises(ConfigChangedError):
         await hub.async_set_cross_camera_groups([], expect_revision=config.revision)
+    with pytest.raises(ConfigChangedError):
+        await hub.async_set_cross_camera_cameras(
+            (CAMERA.device_sn, CAMERA_2.device_sn), expect_revision=config.revision
+        )
 
     def groups_unknown(self: Station, feature: StationFeature) -> Evidence:
         known = feature is not StationFeature.CROSS_CAMERA_GROUPS

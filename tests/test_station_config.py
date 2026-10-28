@@ -638,13 +638,13 @@ async def test_get_config_refresh_reads_the_station_and_the_cloud_once(
 
 
 async def test_a_write_s_revision_check_reads_fresh(station: Station, fake: FakeStation) -> None:
-    assert await station._check_revision(None) is None
+    assert await station._configuration._check_revision(None) is None
     config = await station.async_get_config()
-    assert await station._check_revision(config.revision) == config
+    assert await station._configuration._check_revision(config.revision) == config
 
     fake.params[255][1254] = schedule((3, 6, 7, 0))  # changed elsewhere
     with pytest.raises(ConfigChangedError) as caught:
-        await station._check_revision(config.revision)
+        await station._configuration._check_revision(config.revision)
     assert caught.value.config.is_defined(GuardMode.SCHEDULE)
 
 

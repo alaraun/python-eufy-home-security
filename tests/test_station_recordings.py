@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-import eufy_home_security.station as station_mod
+import eufy_home_security.station.history as station_history
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.events import HistoryRecord
 from eufy_home_security.exceptions import (
@@ -20,6 +20,7 @@ from eufy_home_security.exceptions import (
     RecordNotFoundError,
     UnsupportedError,
 )
+from eufy_home_security.p2p.clip import ClipWriter, MediaClip
 from eufy_home_security.p2p.did import static_key
 from eufy_home_security.p2p.messages import HISTORY_RECORD_COUNTER
 from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
@@ -77,7 +78,7 @@ async def station(fake: FakeStation) -> AsyncIterator[Station]:
 
 
 class _AnyDatetime(type):
-    """Keeps ``isinstance(x, datetime)`` true in the station module while it is patched."""
+    """Keeps ``isinstance(x, datetime)`` true in the history module while it is patched."""
 
     def __instancecheck__(cls, obj: object) -> bool:
         return isinstance(obj, datetime)
@@ -94,7 +95,7 @@ def today(monkeypatch: pytest.MonkeyPatch) -> datetime:
         def now(cls, tz: tzinfo | None = None) -> datetime:  # type: ignore[override]
             return now if tz is None else now.astimezone(tz)
 
-    monkeypatch.setattr(station_mod, "datetime", Frozen)
+    monkeypatch.setattr(station_history, "datetime", Frozen)
     return now
 
 
@@ -646,6 +647,14 @@ async def test_a_station_row_of_the_station_itself_is_found_by_its_ref(
     assert (found, found.ref) == (rows[0], rows[0].ref)
 
 
+async def test_a_history_listing_passes_its_options_to_the_session(
+    station: Station, fake: FakeStation, today: datetime
+) -> None:
+    fake.rows = [_row(today, 4, SYNTHETIC.camera_sn), _row(today, 3, SYNTHETIC.camera_sn)]
+    assert len(await station.async_list_history(_day(today))) == 2
+    assert len(await station.async_list_history(_day(today), count=1)) == 1
+
+
 async def test_a_standalone_device_finds_no_recording_by_ref() -> None:
     device = CloudDevice(
         device_sn=SYNTHETIC.camera_sn,
@@ -741,6 +750,27 @@ async def test_a_clip_that_grew_during_its_download_is_not_complete(
     clip = await station.async_download_recording(record, write)
     assert clip.expected_frames == 40
     assert not clip.complete
+
+
+async def test_a_download_passes_wait_to_the_session(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake.recording_frames = 6
+    fake.rows = [_row(today, 7, SYNTHETIC.camera_sn)]
+    (record,) = await station.async_list_recordings()
+    download = station.session.async_download_recording
+    waits: list[bool] = []
+
+    async def spy(path: str, channel: int, write: ClipWriter, *, wait: bool = True) -> MediaClip:
+        waits.append(wait)
+        return await download(path, channel, write, wait=wait)
+
+    async def write(_chunk: bytes) -> None:
+        return None
+
+    monkeypatch.setattr(station.session, "async_download_recording", spy)
+    await station.async_download_recording(record, write, wait=False)
+    assert waits == [False]
 
 
 @pytest.mark.parametrize(

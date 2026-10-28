@@ -17,7 +17,7 @@ Loggers follow the module path, so one subsystem can be turned up on its own:
 | `eufy_home_security.p2p.broadcast` | a shared live stream's subscribers falling behind, resolution changes, resize grace |
 | `eufy_home_security.p2p.session` (and its submodules) | handshake steps and keys, every request (label, resends, reply time), command-lock waits, parameter changes, guard mode, camera pushes and their record binding, still fetches, trigger frames, media streams (see [Tracing a detection](#tracing-a-detection)) |
 | `eufy_home_security.devices.td` | thing-description properties skipped or units dropped while reading a cloud TD |
-| `eufy_home_security.station` | event thumbnail source and history lookup outcome |
+| `eufy_home_security.station` (and its submodules) | event thumbnail source and history lookup outcome |
 | `eufy_home_security.events` | de-duplication drops and enrichments, stale guard and alarm pushes |
 | `eufy_home_security.push.fcm` | GCM checkin, Firebase install, GCM register, the MCS socket (connect, login, heartbeats, acks, resets), every push received and every drop decision |
 | `eufy_home_security.wire.p2p` / `.wire.cloud` | hexdumps of every datagram; the full decoded P2P JSON of every command sent and notification received; raw cloud request and response bodies (identifiers masked like everywhere else, see [Redaction](#redaction)) |
