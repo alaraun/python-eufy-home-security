@@ -9,7 +9,7 @@ import time
 from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import replace
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from ..._logging import LogThrottle, Secret
 from ...exceptions import (
@@ -45,6 +45,9 @@ from ..messages import CMD_START_REALTIME_MEDIA
 from ..xzyh import FrameType
 from .stats import MEDIA_SHAPE_RECORDS, MediaCounters, count_capped
 from .wake import WakeBackoff
+
+if TYPE_CHECKING:
+    from .media_slot import MediaSlot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -198,7 +201,7 @@ class MediaStream:
                 else:
                     indices = [] if self._open_index is None else [self._open_index]
                     timed_out = self._session._unanswered_error(self.command, 0, indices)
-                self._session._count_media_failure(timed_out, self.channel)
+                self._session._media_slot.count_failure(timed_out, self.channel)
                 raise timed_out
             self._wake.clear()
             with contextlib.suppress(TimeoutError):
@@ -246,7 +249,7 @@ class MediaStream:
         self._held = None
         self._held_audio = []
         self._wake.set()
-        self._session._detach_media(self)
+        self._session._media_slot.detach(self)
 
     def _feed(
         self,
@@ -485,7 +488,7 @@ class MediaStream:
         self._release_held()
         self._closed = True
         self._wake.set()
-        self._session._detach_media(self)
+        self._session._media_slot.detach(self)
 
     def _checked_video(self, frame: MediaFrame) -> MediaFrame | None:
         """``frame`` as it may be muxed: empty NAL units removed, the codec its picture
@@ -545,7 +548,7 @@ class MediaStream:
                 f"{key.value.upper()} key does not decode"
             )
         )
-        self._session._detach_media(self)
+        self._session._media_slot.detach(self)
 
     def _other_camera_frame(self, camera: int, is_video: bool) -> None:
         """Drop a live frame tagged with another camera; fail when that is all that comes."""
@@ -564,12 +567,12 @@ class MediaStream:
                     f"{self.channel}"
                 )
             )
-            self._session._detach_media(self)
+            self._session._media_slot.detach(self)
 
     def _fail(self, error: Exception) -> None:
         if self._closed:
             return
-        self._session._count_media_failure(error, self.channel)
+        self._session._media_slot.count_failure(error, self.channel)
         _LOGGER.debug("media (cmd %d ch%d) failed: %s", self.command, self.channel, error)
         self._closed = True
         self._error = error
@@ -582,13 +585,10 @@ class StreamOwner(Protocol):
     _log_name: str
     _media_counters: MediaCounters
     _wake_backoff: WakeBackoff
+    _media_slot: MediaSlot
 
     @property
     def tags_live_camera(self) -> bool: ...
-
-    def _count_media_failure(self, error: Exception, channel: int) -> None: ...
-
-    def _detach_media(self, stream: MediaStream) -> None: ...
 
     def _unanswered_error(
         self, command: int, channel: int, indices: Sequence[int]

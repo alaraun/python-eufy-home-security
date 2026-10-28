@@ -6,10 +6,27 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
+from ...exceptions import (
+    AccountRejectedError,
+    CameraWakeError,
+    CommandRejectedError,
+    CommandUnsupportedError,
+)
+from ..messages import (
+    CAMERA_WAKE_CODES,
+    CMD_DOWNLOAD_VIDEO,
+    CMD_RECORD_VIEW,
+    RECEIPT_CODES,
+    RECEIPT_NOT_HANDLED,
+    RESULT_INVALID_ACCOUNT,
+    RESULT_INVALID_COMMAND,
+)
 from ..xzyh import Frame, FrameType
 
 if TYPE_CHECKING:
     from . import P2PCredentials
+
+_RECORDING_COMMANDS = frozenset({CMD_DOWNLOAD_VIDEO, CMD_RECORD_VIEW})
 
 
 class FrameDecoder(Protocol):
@@ -109,3 +126,26 @@ class RequestCore(Protocol):
         label: str = "request",
         send_only_under_lock: bool = False,
     ) -> object: ...
+
+
+def _rejection(command: int, code: int, message: str = "") -> CommandRejectedError:
+    """The error a non-zero result or receipt code raises on every command path: -104
+    :class:`AccountRejectedError`, -103 :class:`CommandUnsupportedError`, any other
+    :class:`CommandRejectedError`."""
+    if code == RESULT_INVALID_ACCOUNT:
+        return AccountRejectedError(command, code, message)
+    if code == RESULT_INVALID_COMMAND:
+        return CommandUnsupportedError(command, code, message)
+    return CommandRejectedError(command, code, message)
+
+
+def _receipt_error(command: int, code: int) -> CommandRejectedError:
+    """The error a non-zero command receipt or result raises: -108
+    :class:`CommandUnsupportedError`, a camera wake failure :class:`CameraWakeError`,
+    any other code as :func:`_rejection` maps it."""
+    name = RECEIPT_CODES.get(code, "")
+    if code == RECEIPT_NOT_HANDLED:
+        return CommandUnsupportedError(command, code, name)
+    if code in CAMERA_WAKE_CODES:
+        return CameraWakeError(command, code, f"the station could not wake the camera ({name})")
+    return _rejection(command, code, f"command receipt {name}".rstrip())

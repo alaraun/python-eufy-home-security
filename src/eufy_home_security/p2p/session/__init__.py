@@ -39,11 +39,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import logging
 import os
 import time
-from collections import Counter, deque
+from collections import deque
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -63,19 +62,15 @@ from ..._logging import (
 )
 from ...cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
 from ...devices.device_alarm import USER_NAME_SLOT
-from ...devices.live_open import NVR_OPENS, LiveOpen, LiveStop
-from ...devices.live_view import LensView, LiveView, player_input
-from ...devices.live_view import live_view as live_view_of
+from ...devices.live_open import LiveOpen, LiveStop
+from ...devices.live_view import LiveView
 from ...devices.param_info import ParamInfo, param_info
 from ...devices.recipes import (
     ConnectType,
     Recipe,
     RecipeCommand,
     ResultFrom,
-    close_live_stream,
     connect_type,
-    open_live_stream_nvr,
-    open_live_stream_single,
 )
 from ...devices.settings import Scope
 from ...events import (
@@ -91,16 +86,12 @@ from ...events import (
     StorageChanged,
     Unsubscribe,
     as_guard_mode,
-    is_station_recording_path,
 )
 from ...exceptions import (
-    AccountRejectedError,
-    CameraWakeError,
     CipherUnusableError,
     CloudError,
     CommandNotAppliedError,
     CommandRejectedError,
-    CommandUnsupportedError,
     CommunicationError,
     DeviceTimeoutError,
     EufySecurityError,
@@ -125,7 +116,6 @@ from ..crypto import (
     aes_key_from_conn_init,
     ecb_decrypt,
     ecb_encrypt,
-    ecc_private_key_from_hex,
     frame_encryption,
     gcm_decrypt_broadcast,
     gcm_encrypt_command,
@@ -136,20 +126,13 @@ from ..did import Did, static_key
 from ..media import (
     DECODABLE_STILLS,
     PLAYBACK_ENDED,
-    MediaDecoder,
     MediaKeyType,
     Still,
     VideoCodec,
     classify_still,
     decode_record_play_ctrl,
     decode_still,
-    download_video_payload,
-    generate_media_ecc_key,
-    generate_media_rsa_key,
     media_variant_label,
-    record_view_payload,
-    start_realtime_media_payload,
-    stop_realtime_media_payload,
     video_codec_label,
 )
 from ..messages import (
@@ -162,19 +145,11 @@ from ..messages import (
     CMD_SET_ARMING,
     CMD_SET_DEVS_TONE_FILE,
     CMD_SET_TONE_FILE,
-    CMD_START_REALTIME_MEDIA,
-    CMD_STOP_REALTIME_MEDIA,
     DB_EVENT_COUNT,
-    DB_QUERY_LOCAL_EVENTS,
     ECB_RESULT_CODES,
-    LIVE_OPEN_SUBHEADER_FLAG,
     PARAM_QUERY_ALL,
     RECEIPT_CODES,
-    RECEIPT_NOT_HANDLED,
     RECEIPT_TAKEN,
-    RESULT_INVALID_ACCOUNT,
-    RESULT_INVALID_COMMAND,
-    app_ping_frame,
     arm_payload,
     conn_init_request,
     database_query_payload,
@@ -189,7 +164,6 @@ from ..messages import (
     encode_ecb_scalar_frame,
     event_count_payload,
     gcm_subheader,
-    history_query_verb,
     image_request_payload,
     native_recording_frame,
     string_command_body,
@@ -215,9 +189,10 @@ from ..storage_info import (
 from ..transport import PPPPTransport, SilentLinkError, StationClosedLinkError, Wake
 from ..xzyh import Frame, FrameCipher, FrameType, StreamDecoder, encode_frame
 from .budget import SessionBudget
-from .core import Inbound, Matcher
+from .core import _RECORDING_COMMANDS, Inbound, Matcher, _receipt_error, _rejection
 from .history import HistoryQueries
 from .keys import SessionKeys
+from .media_slot import MediaSlot, MediaWaits
 from .media_stream import MediaStream
 from .param_state import ParamOrigin, ParamState
 from .stats import HealthCounters, MediaCounters, SessionStats, count_capped
@@ -352,7 +327,6 @@ STILL_LATE_REPLY_WINDOW = 30.0
 taken as its late answer and discarded, so it cannot answer a later request."""
 
 _MEDIA_FRAME_TYPES = frozenset({FrameType.VIDEO_FRAME, FrameType.AUDIO_FRAME})
-_RECORDING_COMMANDS = frozenset({CMD_DOWNLOAD_VIDEO, CMD_RECORD_VIEW})
 _STATE_FRAME_TYPES = frozenset(
     {FrameType.PARAM_NOTIFY, FrameType.ALARM_MODE_NOTIFY, *ALARM_FRAME_VALUES}
 )
@@ -575,8 +549,6 @@ class StationSession:
         self._outage_reported: set[tuple[DisconnectCause, type[EufySecurityError] | None]] = set()
         """The (cause, error type) pairs already reported since the last connected=True."""
         self._last_error: EufySecurityError | None = None
-        self._media_rx_at = 0.0
-        """When the last media frame arrived, attached to a stream or not."""
         self._wake_backoff = WakeBackoff()
         """Per camera channel: the wake failures that refuse live opens for a while."""
         self._reprobe_at: float | None = None
@@ -599,11 +571,7 @@ class StationSession:
         self._health = HealthCounters()
         self._last_error_name: str | None = None
         self._media_counters = MediaCounters()
-        self._media_slot_free = asyncio.Event()
-        self._media_slot_free.set()
         self._supervisor: asyncio.Task[None] | None = None
-        self._media_pinger: asyncio.Task[None] | None = None
-        self._media: MediaStream | None = None
         self._throttle = LogThrottle()
         self._log_name = redact_serial(self.serial)
         self._history = HistoryQueries(self)
@@ -617,6 +585,7 @@ class StationSession:
             expect_channels=expect_channels,
         )
         self._budget = SessionBudget(self, max_sessions=max_sessions)
+        self._media_slot = MediaSlot(self)
 
     # ── state ────────────────────────────────────────────────────────────────
 
@@ -745,10 +714,7 @@ class StationSession:
         open before a capture claims it. A capture opened with ``wait`` then waits for
         the slot up to its first-frame timeout.
         """
-        stream = self._media
-        if stream is None or stream.command != CMD_START_REALTIME_MEDIA:
-            return None
-        return stream.channel
+        return self._media_slot.live_channel
 
     def note_guard_mode(
         self, mode: GuardMode | int, active_mode: GuardMode | int | None = None
@@ -2379,6 +2345,16 @@ class StationSession:
             cloud_problems_reported=self._cloud_problems_reported,
         )
 
+    def _media_waits(self) -> MediaWaits:
+        """The media waits as ``p2p.session`` holds them now, where tests and consumers
+        patch them (:class:`~.media_slot.MediaSlot` asks each time it waits)."""
+        return MediaWaits(
+            ping_interval=MEDIA_PING_INTERVAL,
+            drain_gap=MEDIA_DRAIN_GAP,
+            drain_max=MEDIA_DRAIN_MAX,
+            wake_backoff=WAKE_BACKOFF,
+        )
+
     async def async_open_live(
         self,
         channel: int,
@@ -2432,126 +2408,16 @@ class StationSession:
         (:func:`~..media.media_key_type_for`; :meth:`~...station.Station.async_open_live`
         picks it so). The station protects the stream for the key it is offered.
         """
-        standalone = self.standalone
-        if standalone:
-            single = live_open in (None, LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT)
-        else:
-            single = live_open in (LiveOpen.SINGLE, LiveOpen.SINGLE_NO_EXT)
-        homebase3 = self.homebase3
-        bare_stop = standalone or not homebase3
-        flag = LIVE_OPEN_SUBHEADER_FLAG
-        nvr = live_open in NVR_OPENS
-        if (single or nvr) and not standalone and live_stop is not None:
-            bare_stop = live_stop is LiveStop.BARE
-        if single and live_open is LiveOpen.SINGLE_NO_EXT:
-            flag = 0  # subheader byte 4 (the stream id) is 0 without extValue
-        if nvr:
-            view = live_view or live_view_of(channel, (), LensView.MAIN)
-
-            def open_frame(account_id: str, key_hex: str) -> tuple[int, bytes]:
-                player = player_input(
-                    account_id=account_id, key_hex=key_hex, view=view, station_fields=homebase3
-                )
-                recipe = open_live_stream_nvr(
-                    channel=channel,
-                    player=player,
-                    camera_type_from_lens=live_open is LiveOpen.NVR_LENS,
-                )
-                body = json.dumps(dict(recipe.params or {}), separators=(",", ":"))
-                return FrameType.CMD_TRANSFER, body.encode()
-
-        elif single:
-
-            def open_frame(account_id: str, key_hex: str) -> tuple[int, bytes]:
-                recipe = open_live_stream_single(
-                    channel=channel,
-                    account_id=account_id,
-                    key_hex=key_hex,
-                    ext_value=live_open is not LiveOpen.SINGLE_NO_EXT,
-                )
-                return recipe.cmd, recipe.plaintext()
-
-        else:
-
-            def open_frame(account_id: str, key_hex: str) -> tuple[int, bytes]:
-                payload = start_realtime_media_payload(
-                    account_id, channel, key_hex, homebase3=homebase3
-                )
-                body = self._media_msg(account_id, CMD_START_REALTIME_MEDIA, channel, payload)
-                return FrameType.CMD_TRANSFER, body
-
-        def stop_frame(account_id: str) -> tuple[int, bytes]:
-            if bare_stop:
-                recipe = close_live_stream()
-                # A standalone device's own 1700 stream stops with four zero bytes.
-                body_channel = 0 if standalone and single else channel
-                return recipe.cmd, recipe.plaintext(body_channel)
-            payload = stop_realtime_media_payload(account_id, channel)
-            body = self._media_msg(account_id, CMD_STOP_REALTIME_MEDIA, channel, payload)
-            return FrameType.CMD_TRANSFER, body
-
-        if not (standalone and single):
-            left = self.wake_backoff_left(channel)
-            if left > 0:
-                raise CameraWakeError(
-                    CMD_START_REALTIME_MEDIA,
-                    self._wake_backoff.failures[channel][2],
-                    f"the station could not wake the camera on channel {channel}; "
-                    f"not retried for another {left:.0f}s",
-                    retry_after=left,
-                )
-        _LOGGER.debug(
-            "%s: live open %s (%s%s) on channel %d, subheader flag 0x%02x, %s stop",
-            self._log_name,
-            (live_open or (LiveOpen.SINGLE if single else LiveOpen.STATION)).value,
-            "1700/1000" if single else "1350/1003",
-            f", view {view.view.value}" if nvr else "",
+        return await self._media_slot.open_live(
             channel,
-            flag,
-            "bare 1004" if bare_stop else "1350/1004",
+            first_frame_timeout=_or(first_frame_timeout, MEDIA_LIVE_FIRST_FRAME_TIMEOUT),
+            idle_timeout=_or(idle_timeout, MEDIA_IDLE_TIMEOUT),
+            wait=wait,
+            live_open=live_open,
+            live_stop=live_stop,
+            media_key=media_key,
+            live_view=live_view,
         )
-
-        first = _or(first_frame_timeout, MEDIA_LIVE_FIRST_FRAME_TIMEOUT)
-        idle = _or(idle_timeout, MEDIA_IDLE_TIMEOUT)
-        if standalone or self._budget.owner is not None:
-            return await self._open_media(
-                CMD_START_REALTIME_MEDIA,
-                channel,
-                open_frame,
-                stop_frame,
-                first_frame_timeout=first,
-                idle_timeout=idle,
-                wait=wait,
-                media_key=media_key,
-                flag=flag,
-            )
-        extra = await self._budget.live_route(first, wait)
-        if extra is not None:
-            return await self._budget.open_extra_live(
-                extra,
-                channel,
-                first,
-                idle,
-                media_key,
-                live_open=live_open,
-                live_stop=live_stop,
-                live_view=live_view,
-            )
-        try:
-            return await self._open_media(
-                CMD_START_REALTIME_MEDIA,
-                channel,
-                open_frame,
-                stop_frame,
-                first_frame_timeout=first,
-                idle_timeout=idle,
-                wait=wait,
-                media_key=media_key,
-                flag=flag,
-            )
-        finally:
-            self._budget.slot_claimed = False
-            self._budget.notify_capacity()
 
     async def async_download_recording(
         self,
@@ -2629,286 +2495,14 @@ class StationSession:
         frames without that, use :meth:`async_trigger_frame`, which plays the
         recording on a short-lived session and closes it.
         """
-        if not is_station_recording_path(path):
-            raise UnsupportedError("not a validated station recording path")
-        # The app chooses native or JSON playback by station family, not filename.
-        if history_query_verb(self.serial) == DB_QUERY_LOCAL_EVENTS:
-            command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
-            return await self._open_media(
-                command,
-                channel,
-                lambda _account_id, _key_hex: (command, b""),
-                None,
-                first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
-                idle_timeout=_or(idle_timeout, MEDIA_IDLE_TIMEOUT),
-                wait=wait,
-                media_key=MediaKeyType.ECC,
-                native_recording_path=path,
-            )
-        if path.endswith(".dat"):
-            raise UnsupportedError("a 10011 station cannot play a native .dat path")
-        command = CMD_DOWNLOAD_VIDEO if download else CMD_RECORD_VIEW
-        build = download_video_payload if download else record_view_payload
-        return await self._open_media(
-            command,
+        return await self._media_slot.open_recording(
+            path,
             channel,
-            lambda account_id, key_hex: (
-                FrameType.CMD_TRANSFER,
-                self._media_msg(account_id, command, channel, build(path, key_hex)),
-            ),
-            None,
+            download=download,
             first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
             idle_timeout=_or(idle_timeout, MEDIA_IDLE_TIMEOUT),
             wait=wait,
         )
-
-    async def _open_media(
-        self,
-        command: int,
-        channel: int,
-        open_frame: Callable[[str, str], tuple[int, bytes]],
-        stop_body: Callable[[str], tuple[int, bytes]] | None,
-        *,
-        first_frame_timeout: float,
-        idle_timeout: float,
-        wait: bool,
-        media_key: MediaKeyType = MediaKeyType.RSA,
-        flag: int = LIVE_OPEN_SUBHEADER_FLAG,
-        native_recording_path: str | None = None,
-    ) -> MediaStream:
-        await self.async_connect()
-        creds = self._require_creds()
-        if native_recording_path is not None:
-            # HomeBase 2's recording key is the station owner account's ECC key;
-            # the newer JSON media path creates a fresh per-open key instead.
-            decoder = MediaDecoder(ecc_private_key=ecc_private_key_from_hex(creds.ecc_private_key))
-            frame_type, body = command, b""
-        else:
-            if media_key is MediaKeyType.ECC:
-                key_hex, ecc_key = generate_media_ecc_key()
-                decoder = MediaDecoder(ecc_private_key=ecc_key)
-            else:
-                # RSA key generation takes tens of milliseconds: keep it off the event loop.
-                key_hex, rsa_key = await asyncio.to_thread(generate_media_rsa_key)
-                decoder = MediaDecoder(rsa_key)
-            frame_type, body = open_frame(creds.account_id, key_hex)
-        slot_deadline = time.monotonic() + first_frame_timeout
-        # The slot wait and the drain run without the op lock, so commands are not
-        # queued behind them; the lock is taken only to open, after re-checking both.
-        drain_deadline: float | None = None
-        while True:
-            if self._media is not None:
-                # An abandoned stream holds the slot for good: its deadlines are only
-                # evaluated while something reads it. Reclaim it here as well as in the
-                # supervisor, so an unsupervised session is not stuck either.
-                self._close_abandoned_media()
-            if self._media is not None:
-                await self._wait_for_media_slot(wait, slot_deadline, first_frame_timeout)
-                drain_deadline = None
-                continue
-            if drain_deadline is None:
-                drain_deadline = time.monotonic() + MEDIA_DRAIN_MAX
-            pause = self._media_drain_wait(drain_deadline)
-            if pause > 0:
-                await asyncio.sleep(pause)
-                continue
-            async with self._op("media open"):
-                if not self._media_slot_free.is_set() or self._media_drain_wait(drain_deadline) > 0:
-                    continue  # another open won the slot, or frames arrived meanwhile
-                stream = MediaStream(
-                    self,
-                    command=command,
-                    channel=channel,
-                    decoder=decoder,
-                    stop_body=(None if stop_body is None else lambda: stop_body(creds.account_id)),
-                    first_frame_timeout=first_frame_timeout,
-                    idle_timeout=idle_timeout,
-                )
-                _LOGGER.debug(
-                    "%s: opening %s (cmd %d) on channel %d with an %s key",
-                    self._log_name,
-                    "a recording" if command in _RECORDING_COMMANDS else "live media",
-                    command,
-                    channel,
-                    media_key,
-                )
-                stream._open_frame_type = frame_type
-                self._set_media(stream)
-                try:
-                    if native_recording_path is not None:
-                        stream._open_index = self._send_native_recording(
-                            native_recording_path,
-                            channel,
-                            creds.account_id,
-                            download=command == CMD_DOWNLOAD_VIDEO,
-                        )
-                    elif command == CMD_START_REALTIME_MEDIA:
-                        # The station picks the live camera from the subheader, not the JSON.
-                        stream._open_index = self._send_secure(
-                            body, frame_type=frame_type, dev_type=channel, flag=flag
-                        )
-                    else:
-                        stream._open_index = self._send_secure(body, frame_type=frame_type)
-                except BaseException:
-                    self._set_media(None)
-                    raise
-                self._media_counters.opens += 1
-                return stream
-
-    async def _wait_for_media_slot(self, wait: bool, deadline: float, timeout: float) -> None:
-        """Wait for the open stream to close (``wait``), or raise at once / at ``deadline``."""
-        if wait:
-            remaining = deadline - time.monotonic()
-            if remaining > 0:
-                with contextlib.suppress(TimeoutError):
-                    async with asyncio.timeout(remaining):
-                        await self._media_slot_free.wait()
-                if self._media is None:
-                    return
-            raise CommunicationError(
-                f"a media stream is still open on this session after {timeout:g}s"
-            )
-        raise CommunicationError("a media stream is already open on this session; close it first")
-
-    def _set_media(self, stream: MediaStream | None) -> None:
-        self._media = stream
-        self._last_used = time.monotonic()
-        if stream is None:
-            self._media_slot_free.set()
-            self._budget.notify_capacity()
-            if self._budget.owner is not None and not self._closed:
-                # After the caller's stop (1004) goes out: then the CLOSE.
-                asyncio.get_running_loop().call_soon(self._budget.end_extra_live)
-            if self._media_pinger is not None:
-                self._media_pinger.cancel()
-                self._media_pinger = None
-        else:
-            self._media_slot_free.clear()
-            if self.standalone and self._media_pinger is None:
-                self._media_pinger = asyncio.get_running_loop().create_task(
-                    self._ping_while_streaming(), name=f"eufy-security-ping-{self._log_name}"
-                )
-
-    async def _ping_while_streaming(self) -> None:
-        """Send the app's 1139 PING every :data:`MEDIA_PING_INTERVAL` while a stream is open."""
-        while self._media is not None and self.connected:
-            self._keys.gcm_counter = (self._keys.gcm_counter + 2) & 0xFF
-            with contextlib.suppress(EufySecurityError):
-                self._require_transport().send_drw(0, app_ping_frame(self._keys.gcm_counter))
-            await asyncio.sleep(MEDIA_PING_INTERVAL)
-
-    def _media_drain_wait(self, deadline: float) -> float:
-        """Seconds to wait until the previous stream's frames stop arriving (0: open now).
-
-        Whatever ended that stream — a close, its idle end, a rejected open or a
-        first-frame timeout — the station may still be sending it, and on the wire
-        its P-frames are indistinguishable from the next stream's. The wait is
-        bounded by ``deadline``.
-        """
-        now = time.monotonic()
-        quiet_at = self._media_rx_at + MEDIA_DRAIN_GAP
-        if now >= quiet_at:
-            return 0.0
-        if now >= deadline:
-            if self._throttle.should_log("media-drain-max"):
-                _LOGGER.debug(
-                    "%s: media still arriving after %.0fs; opening anyway",
-                    self._log_name,
-                    MEDIA_DRAIN_MAX,
-                )
-            return 0.0
-        return min(quiet_at, deadline) - now
-
-    @staticmethod
-    def _media_msg(
-        account_id: str, command: int, channel: int, payload: Mapping[str, Any]
-    ) -> bytes:
-        return device_msg(
-            account_id,
-            command,
-            payload,
-            channel=channel,
-            value3=command,
-            transaction=str(int(time.time() * 1000)),
-            media=True,
-        )
-
-    def _detach_media(self, stream: MediaStream) -> None:
-        """Release the session from ``stream`` and send its stop, if it has one (live: 1004)."""
-        if self._media is not stream:
-            return
-        self._set_media(None)
-        if stream._stop_body is not None and self.connected:
-            _LOGGER.debug("%s: stopping media (cmd %d)", self._log_name, stream.command)
-            frame_type, body = stream._stop_body()
-            with contextlib.suppress(EufySecurityError):
-                self._send_secure(body, frame_type=frame_type, dev_type=stream.channel)
-
-    def _take_media_reply(self, stream: MediaStream, inbound: Inbound) -> bool:
-        """Whether ``inbound`` is the reply to ``stream``'s open (then it is consumed here)."""
-        obj = inbound.json()
-        if obj is None or json_int(obj.get("cmd")) != stream.command:
-            return False
-        _LOGGER.debug(
-            "%s: media cmd %d reply code %s", self._log_name, stream.command, obj.get("code")
-        )
-        code = json_int(obj.get("code"))
-        if code is not None and code != 0:
-            self._fail_media(_rejection(stream.command, code, ECB_RESULT_CODES.get(code, "")))
-        return True
-
-    def _answers_live_open(self, stream: MediaStream, inbound: Inbound) -> bool:
-        """Whether the receipt ``inbound`` can answer ``stream``'s live open: the stream
-        has not started and the receipt has the open's frame type. Receipts carry no
-        command id, so a 1700 receipt is the open's only while no 1700 recipe waits."""
-        if (
-            stream._started
-            or stream.command != CMD_START_REALTIME_MEDIA
-            or inbound.type != stream._open_frame_type
-        ):
-            return False
-        return inbound.type != RecipeCommand.DOORBELL_PAYLOAD or not self._recipe_lock.locked()
-
-    def _take_open_refusal(self, stream: MediaStream | None, inbound: Inbound, code: int) -> bool:
-        """Fail a 1700 live open that has not started on its non-zero receipt."""
-        if (
-            stream is None
-            or inbound.type != RecipeCommand.DOORBELL_PAYLOAD
-            or not self._answers_live_open(stream, inbound)
-        ):
-            return False
-        _LOGGER.debug(
-            "%s: live open on channel %d refused: receipt %d %s",
-            self._log_name,
-            stream.channel,
-            code,
-            RECEIPT_CODES.get(code, ""),
-        )
-        self._fail_media(_receipt_error(RecipeCommand.DOORBELL_PAYLOAD, code))
-        return True
-
-    def _take_wake_failure(self, stream: MediaStream | None, inbound: Inbound, code: int) -> bool:
-        """Fail a HomeBase live open that has not started on a wake-failure receipt.
-
-        Receipts carry no command id; a wake failure can only answer a command that
-        wakes a camera, and the live open is the only one of those.
-        """
-        if stream is None or not self._answers_live_open(stream, inbound):
-            return False
-        failures = self._wake_backoff.failures.get(stream.channel, (0, 0.0, code))[0] + 1
-        backoff = WAKE_BACKOFF[min(failures, len(WAKE_BACKOFF)) - 1]
-        self._wake_backoff.failures[stream.channel] = (failures, time.monotonic() + backoff, code)
-        _LOGGER.info(
-            "%s: the station could not wake the camera on channel %d (code %d %s); "
-            "live opens of it refused for %.0fs",
-            self._log_name,
-            stream.channel,
-            code,
-            RECEIPT_CODES.get(code, ""),
-            backoff,
-        )
-        self._fail_media(_receipt_error(stream.command, code))
-        return True
 
     def wake_backoff_left(self, channel: int) -> float:
         """Seconds a live open of the camera on ``channel`` is still refused (0: none).
@@ -2943,11 +2537,6 @@ class StationSession:
         ):
             return
         stream._end()
-
-    def _fail_media(self, error: Exception) -> None:
-        if self._media is not None:
-            self._media._fail(error)
-            self._set_media(None)
 
     # ── connection internals ─────────────────────────────────────────────────
 
@@ -2985,7 +2574,7 @@ class StationSession:
         # A closed UDP transport releases its socket on the next loop iteration; a
         # pinned local port is only free again after that.
         await asyncio.sleep(0)
-        self._media_rx_at = 0.0
+        self._media_slot.rx_at = 0.0
         last_error: EufySecurityError = StationUnreachableError("no discovery attempt made")
         for attempt in range(1, DISCOVERY_ATTEMPTS + 1):
             _LOGGER.debug(
@@ -3248,7 +2837,7 @@ class StationSession:
         return (
             self.on_demand
             and self._transport is not None
-            and self._media is None
+            and self._media_slot.stream is None
             and not self._waiters
             and time.monotonic() - self._last_used >= ON_DEMAND_ASLEEP_AFTER
         )
@@ -3259,7 +2848,7 @@ class StationSession:
         # sleep, not an outage. Anything waiting still fails.
         asleep = (
             self.on_demand
-            and self._media is None
+            and self._media_slot.stream is None
             and not self._op_lock.locked()
             and not self._waiters
         )
@@ -3295,15 +2884,6 @@ class StationSession:
         """Keep the counters of a transport this session is letting go of."""
         self._health.retired_wrong_port_drops += transport.wrong_port_drops
 
-    def _count_media_failure(self, error: Exception, channel: int) -> None:
-        """Count a stream of ``channel`` that ended in ``error``, unless the client closed
-        the session."""
-        if not self._closed:
-            name = type(error).__name__
-            counters = self._media_counters
-            counters.failures[name] += 1
-            counters.failures_by_channel.setdefault(channel, Counter())[name] += 1
-
     def _emit_down(
         self, cause: DisconnectCause, error: EufySecurityError | None, reason: str
     ) -> None:
@@ -3328,7 +2908,7 @@ class StationSession:
             await asyncio.sleep(_IDLE_CHECK_EVERY)
             if (
                 self.connected
-                and self._media is None
+                and self._media_slot.stream is None
                 and not self._op_lock.locked()
                 and not self._connect_lock.locked()
                 and time.monotonic() - self._last_used >= self._idle_close
@@ -3339,27 +2919,6 @@ class StationSession:
                     self._idle_close,
                 )
                 self._teardown("idle on-demand session", cause=DisconnectCause.IDLE)
-
-    def _close_abandoned_media(self) -> None:
-        """Release a media stream whose deadline passed with nobody reading it.
-
-        A stream evaluates its own timeouts only while it is being iterated, so
-        ``async for ... : break`` without closing leaves the session's one media slot
-        taken and the camera streaming for good. Waking the stream makes the next read
-        raise as it would have; detaching frees the slot for the next open.
-        """
-        for extra in list(self._budget.extra_live):
-            extra._close_abandoned_media()
-        stream = self._media
-        if stream is None or not stream._expired(time.monotonic()):
-            return
-        _LOGGER.debug(
-            "%s: media stream for command %d timed out unread; releasing the slot",
-            self._log_name,
-            stream.command,
-        )
-        stream._wake.set()
-        self._detach_media(stream)
 
     async def _supervise(self, probe_every: float, stale_after: float) -> None:
         # The backoff resets only on a successful probe: a station that punches and
@@ -3396,7 +2955,7 @@ class StationSession:
                         raise error from None
                     failures = 0
                 await asyncio.sleep(1.0)
-                self._close_abandoned_media()
+                self._media_slot.close_abandoned()
             except asyncio.CancelledError:
                 raise
             except EufySecurityError as err:
@@ -3441,9 +3000,9 @@ class StationSession:
             self._dispatch(Inbound(chunk.channel, frame, self))
 
     def _dispatch(self, inbound: Inbound) -> None:  # noqa: C901
-        stream = self._media
+        stream = self._media_slot.stream
         if inbound.type in _MEDIA_FRAME_TYPES:
-            self._media_rx_at = time.monotonic()
+            self._media_slot.rx_at = time.monotonic()
             label = media_variant_label(
                 inbound.type, inbound.frame.payload, inbound.frame.subheader
             )
@@ -3473,9 +3032,13 @@ class StationSession:
         receipt = inbound.receipt()
         if receipt is not None:
             self._note_receipt(inbound, receipt)
-            if receipt in CAMERA_WAKE_CODES and self._take_wake_failure(stream, inbound, receipt):
+            if receipt in CAMERA_WAKE_CODES and self._media_slot.take_wake_failure(
+                stream, inbound, receipt
+            ):
                 return
-            if receipt != RECEIPT_TAKEN and self._take_open_refusal(stream, inbound, receipt):
+            if receipt != RECEIPT_TAKEN and self._media_slot.take_open_refusal(
+                stream, inbound, receipt
+            ):
                 return
         elif inbound.type == FrameType.RECORD_PLAY_CTRL:
             self._on_play_ctrl(stream, inbound.frame)
@@ -3483,7 +3046,7 @@ class StationSession:
         if (
             stream is not None
             and inbound.type == FrameType.NOTIFY_PAYLOAD
-            and self._take_media_reply(stream, inbound)
+            and self._media_slot.take_reply(stream, inbound)
         ):
             return  # not a result for whatever other command is waiting
         if inbound.type == FrameType.MEDIA_DOWNLOAD and self._take_late_still_reply(inbound):
@@ -3835,7 +3398,7 @@ class StationSession:
             waiter.future.exception()  # retrieved: a caller that stopped early is not "unhandled"
 
     def _fail_waiters(self, exc: Exception) -> None:
-        self._fail_media(exc)
+        self._media_slot.fail(exc)
         for waiter in self._waiters:
             if not waiter.future.done():
                 waiter.future.set_exception(exc)
@@ -4155,29 +3718,6 @@ def _scalar_result(inbound: Inbound, command: int) -> int | None:
     if inbound.type != command or len(inbound.frame.payload) < 4:
         return None
     return decode_ecb_scalar_result(inbound.frame.payload)
-
-
-def _rejection(command: int, code: int, message: str = "") -> CommandRejectedError:
-    """The error a non-zero result or receipt code raises on every command path: -104
-    :class:`AccountRejectedError`, -103 :class:`CommandUnsupportedError`, any other
-    :class:`CommandRejectedError`."""
-    if code == RESULT_INVALID_ACCOUNT:
-        return AccountRejectedError(command, code, message)
-    if code == RESULT_INVALID_COMMAND:
-        return CommandUnsupportedError(command, code, message)
-    return CommandRejectedError(command, code, message)
-
-
-def _receipt_error(command: int, code: int) -> CommandRejectedError:
-    """The error a non-zero command receipt or result raises: -108
-    :class:`CommandUnsupportedError`, a camera wake failure :class:`CameraWakeError`,
-    any other code as :func:`_rejection` maps it."""
-    name = RECEIPT_CODES.get(code, "")
-    if code == RECEIPT_NOT_HANDLED:
-        return CommandUnsupportedError(command, code, name)
-    if code in CAMERA_WAKE_CODES:
-        return CameraWakeError(command, code, f"the station could not wake the camera ({name})")
-    return _rejection(command, code, f"command receipt {name}".rstrip())
 
 
 def _lost_cause(exc: Exception, *, asleep: bool) -> DisconnectCause:

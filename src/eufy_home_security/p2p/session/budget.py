@@ -6,7 +6,7 @@ import asyncio
 import contextlib
 import logging
 import time
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from ...devices.live_open import LiveOpen, LiveStop
 from ...devices.live_view import LiveView
@@ -23,6 +23,9 @@ from ..messages import DB_QUERY_LOCAL_EVENTS, history_query_verb
 from .media_stream import MediaStream
 from .stats import HealthCounters, MediaCounters
 from .wake import WakeBackoff
+
+if TYPE_CHECKING:
+    from .media_slot import MediaSlot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,8 +77,8 @@ class SessionBudget:
         deadline = time.monotonic() + timeout
         while True:
             self._session._raise_if_closed()
-            self._session._close_abandoned_media()
-            if slot and self._session._media is None and not self.slot_claimed:
+            self._session._media_slot.close_abandoned()
+            if slot and self._session._media_slot.stream is None and not self.slot_claimed:
                 self.slot_claimed = True
                 return None
             limit = self.max_sessions - 1
@@ -267,14 +270,12 @@ class BudgetOwner(Protocol):
     _health: HealthCounters
     _media_counters: MediaCounters
     _wake_backoff: WakeBackoff
-    _media: MediaStream | None
+    _media_slot: MediaSlot
 
     @property
     def standalone(self) -> bool: ...
 
     def _raise_if_closed(self) -> None: ...
-
-    def _close_abandoned_media(self) -> None: ...
 
     def _short_lived_session(self) -> BudgetOwner: ...
 
