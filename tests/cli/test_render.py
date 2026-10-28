@@ -3,7 +3,9 @@ from __future__ import annotations
 import dataclasses
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, get_args
+
+import pytest
 
 from eufy_home_security.cli import render
 from eufy_home_security.cli.render import render_network
@@ -20,6 +22,7 @@ from eufy_home_security.events import (
     CredentialsRefreshed,
     DeviceAlarmChanged,
     DevicesChanged,
+    Event,
     EventSource,
     GuardModeChanged,
     ParamChanged,
@@ -27,6 +30,7 @@ from eufy_home_security.events import (
     PushChanged,
     SecurityEvent,
     StationConfigChanged,
+    StationsChanged,
     StationStateChanged,
     StorageChanged,
     ZoomChanged,
@@ -104,6 +108,61 @@ def test_storage_events_render_and_serialise() -> None:
     assert "Disk:          none reported" in render.render_storage(bare.storage, name="Home Base")
     data = json.loads(json.dumps(render.event_json(changed)))
     assert data["storage"]["disk"]["parted_status"] == 2
+
+
+def test_stations_changed_lines() -> None:
+    assert (
+        render.render_event(StationsChanged(), now=NOW, show_serials=False)
+        == "[03:04:05] stations changed (unknown list): nothing"
+    )
+    both = StationsChanged(
+        added=(SYNTHETIC.station_sn,),
+        removed=(SYNTHETIC.homebase2_station_sn,),
+        source="cache",
+    )
+    assert render.render_event(both, now=NOW, show_serials=False) == (
+        "[03:04:05] stations changed (cache list): added T8030***2345; removed T8010***2345"
+    )
+
+
+def test_security_event_line_names_the_recognised_person() -> None:
+    event = SecurityEvent(
+        source=EventSource.CLOUD,
+        device_sn=SYNTHETIC.camera_sn,
+        msg_type=1,
+        event_type=3102,
+        person_name="Alice",
+    )
+    assert render.render_event(event, now=NOW, show_serials=False) == (
+        "[03:04:05] cloud: identity_person detection  T8160***7890  person Alice"
+    )
+
+
+@pytest.mark.parametrize(
+    ("event", "line"),
+    [
+        (
+            SecurityEvent(source=EventSource.CLOUD, msg_type=999),
+            "[03:04:05] cloud: msg_type 999 event_type None",
+        ),
+        (SecurityEvent(source=EventSource.CLOUD), "[03:04:05] cloud: event"),
+        (
+            SecurityEvent(
+                source=EventSource.CLOUD, station_sn=SYNTHETIC.station_sn, msg_type=9, guard_mode=99
+            ),
+            "[03:04:05] cloud: arming  T8030***2345  guard mode unknown code 99",
+        ),
+    ],
+)
+def test_security_event_line_with_unknown_codes(event: SecurityEvent, line: str) -> None:
+    assert render.render_event(event, now=NOW, show_serials=False) == line
+
+
+def test_every_event_type_has_a_monitor_line() -> None:
+    """The renderer table covers the whole Event union; anything else is a bug."""
+    assert set(render._RENDERERS) == set(get_args(Event.__value__))
+    with pytest.raises(AssertionError, match="unreachable"):
+        render.render_event(object(), now=NOW, show_serials=False)  # type: ignore[arg-type]
 
 
 def test_serials_are_redacted_unless_asked() -> None:
