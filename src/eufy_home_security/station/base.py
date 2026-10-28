@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 from ..cloud.models import CloudDevice
+
+_NOT_PAIRED: Final = "the device is not paired to this station"
 
 
 def own_channel(device: CloudDevice) -> int | None:

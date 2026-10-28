@@ -16,6 +16,7 @@ import pytest
 
 import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.station as station_mod
+import eufy_home_security.station.ptz as station_ptz
 from eufy_home_security._logging import redact_serial
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices._ptz_data import PTZ
@@ -42,6 +43,7 @@ from eufy_home_security.devices.recipes import (
     PanTilt,
     PresetPosition,
     PtzAction,
+    Recipe,
     pan_tilt,
     set_picture_zoom,
 )
@@ -94,8 +96,10 @@ from eufy_home_security.p2p.session import (
     PARAM_SETTLE,
     CommandOutcome,
     P2PCredentials,
+    RecipeReply,
     StationSession,
 )
+from eufy_home_security.p2p.session.media_stream import MediaStream
 from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.station import (
     Station,
@@ -2863,6 +2867,24 @@ async def test_async_preset_image_timeout(
         await standalone_station.async_preset_image("T8170P2000054321", 1, settle=0.5)
 
 
+async def test_a_preset_image_stream_may_idle_the_patched_stream_idle(
+    standalone_station: Station, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A preset image's live open may stay quiet ``PRESET_STREAM_IDLE_SECONDS`` as patched
+    when called (``settle`` when longer)."""
+    monkeypatch.setattr(station_mod, "PRESET_STREAM_IDLE_SECONDS", 0.75)
+    opened = standalone_station._session_live
+    idles: list[object] = []
+
+    async def spy(channel: int, **kwargs: Any) -> MediaStream:
+        idles.append(kwargs.get("idle_timeout"))
+        return await opened(channel, **kwargs)
+
+    monkeypatch.setattr(standalone_station, "_session_live", spy)
+    await standalone_station.async_preset_image("T8170P2000054321", 1, settle=0.05)
+    assert idles == [0.75]
+
+
 async def test_presets_refresh_and_cache(standalone_station: Station, fake: FakeStation) -> None:
 
     cache = SessionCache(MemoryStore(), "test@example.com")
@@ -3506,7 +3528,7 @@ def test_ptz_action_support_of_a_model_the_table_does_not_list_follows_its_profi
         capabilities={Capability.PTZ_PRESETS: presets, Capability.PTZ_CONTROL: control},
         params={},
     )
-    monkeypatch.setattr(station_mod, "own_profile", lambda serial: profile)
+    monkeypatch.setattr(station_ptz, "own_profile", lambda serial: profile)
     hub = _hub_with(CAMERA)
     assert hub.ptz_action_support(SYNTHETIC.camera_sn, PtzAction.STORE) == control
     assert hub.ptz_action_support(SYNTHETIC.camera_sn, PtzAction.SET_DEFAULT) == presets
@@ -3526,7 +3548,7 @@ def test_a_listed_model_whose_handler_sends_the_action_otherwise_is_unknown(
 ) -> None:
     """Capabilities supported, the action declared, but sent in no form the library has."""
     hub = _hub_with(_FLOODLIGHT)
-    monkeypatch.setattr(station_mod, "ptz_form", lambda code, action, connect: None)
+    monkeypatch.setattr(station_ptz, "ptz_form", lambda code, action, connect: None)
     monkeypatch.setattr(
         hub, "ptz_support", lambda device_sn, capability: Evidence(Support.DECLARED, "x")
     )
@@ -3565,9 +3587,9 @@ def _placed(code: str, parent: str | None) -> tuple[Station, str]:
 def _ptz_refuses(station: Station, serial: str, capability: Capability) -> bool:
     """Whether the capability's gate, or the form of one of its actions, refuses."""
     try:
-        station._require_ptz(serial, capability)
+        station._ptz._require_ptz(serial, capability)
         for action in PTZ_ACTIONS[capability]:
-            station._ptz_form(serial, action)
+            station._ptz._ptz_form(serial, action)
     except UnsupportedError:
         return True
     return False
@@ -3576,7 +3598,7 @@ def _ptz_refuses(station: Station, serial: str, capability: Capability) -> bool:
 def _action_refuses(station: Station, serial: str, action: PtzAction) -> bool:
     """Whether the gate of the slot edit ``action`` refuses."""
     try:
-        station._require_ptz_action(serial, action)
+        station._ptz._require_ptz_action(serial, action)
     except UnsupportedError:
         return True
     return False
@@ -3629,7 +3651,7 @@ async def test_a_delete_or_slot_picture_the_model_lacks_is_refused_before_sendin
     fake: FakeStation, monkeypatch: pytest.MonkeyPatch, action: PtzAction
 ) -> None:
     monkeypatch.setattr(
-        station_mod,
+        station_ptz,
         "ptz_form",
         lambda code, name, connect: None if name == action else ptz_form(code, name, connect),
     )
@@ -3895,6 +3917,29 @@ async def test_settle_none_is_the_library_default_read_at_call_time(
     assert fake.preset_gotos == [1, 2, 1]
 
 
+@pytest.mark.parametrize("call", ["pan_tilt", "goto_preset"])
+async def test_settle_waits_the_patched_default_or_the_given_seconds(
+    standalone_station: Station, monkeypatch: pytest.MonkeyPatch, call: str
+) -> None:
+    """Without ``settle`` a move waits the module default as patched when called; a given
+    ``settle`` replaces it."""
+    monkeypatch.setattr(station_mod, "PTZ_SETTLE_SECONDS", 0.4)
+    monkeypatch.setattr(station_mod, "PRESET_SETTLE_SECONDS", 0.4)
+    loop = asyncio.get_running_loop()
+
+    async def move(settle: float | None) -> float:
+        start = loop.time()
+        if call == "pan_tilt":
+            await standalone_station.async_pan_tilt("T8170P2000054321", PanTilt.LEFT, settle=settle)
+        else:
+            await standalone_station.async_goto_preset("T8170P2000054321", 1, settle=settle)
+        return loop.time() - start
+
+    async with asyncio.timeout(5):
+        assert 0.4 <= await move(None) < 1.4
+        assert await move(0) < 0.4
+
+
 async def test_goto_preset_refuses_an_empty_slot(
     standalone_station: Station, fake: FakeStation
 ) -> None:
@@ -4111,6 +4156,41 @@ async def test_save_preset_make_default(standalone_station: Station, fake: FakeS
     assert _stores(fake) == [{"settingstate": 1, "value": 3}]
     assert fake.default_preset_sets == [(3, 1)]
     assert standalone_station.default_preset("T8170P2000054321") == 3
+
+
+async def test_store_preset_passes_confirm_flag(
+    standalone_station: Station, fake: FakeStation
+) -> None:
+    await standalone_station.async_store_preset("T8170P2000054321", 3, confirm=True)
+    assert _stores(fake) == [{"settingstate": 1, "value": 3}]
+
+
+async def test_a_save_goes_through_the_station_methods_a_consumer_patches(
+    standalone_station: Station, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``async_save_preset`` reads, stores and makes default through the station's public
+    methods, so a patch of any of them on :class:`Station` applies."""
+    calls: list[str] = []
+    for name in (
+        "presets",
+        "async_refresh_presets",
+        "async_store_preset",
+        "async_set_default_preset",
+    ):
+        real = getattr(Station, name)
+
+        def spy(self: Station, *args: Any, _real: Any = real, _name: str = name, **kw: Any) -> Any:
+            calls.append(_name)
+            return _real(self, *args, **kw)
+
+        monkeypatch.setattr(Station, name, spy)
+    await standalone_station.async_save_preset("T8170P2000054321", make_default=True)
+    assert set(calls) == {
+        "presets",
+        "async_refresh_presets",
+        "async_store_preset",
+        "async_set_default_preset",
+    }
 
 
 async def test_save_preset_rejects_a_slot_outside_the_camera(
@@ -4557,6 +4637,25 @@ async def test_async_set_default_preset_passes_confirm_flag(
     await standalone_station.async_refresh_presets("T8170P2000054321")
     await standalone_station.async_set_default_preset("T8170P2000054321", 1, confirm=True)
     assert fake.default_preset_sets == [(1, 1)]
+
+
+async def test_the_default_preset_write_waits_the_patched_result_wait(
+    standalone_station: Station, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The default-preset write waits ``DEFAULT_PRESET_RESULT_WAIT`` for its result, as
+    patched when called."""
+    monkeypatch.setattr(station_mod, "DEFAULT_PRESET_RESULT_WAIT", 0.25)
+    run = standalone_station.session.async_run_recipe
+    timeouts: list[float | None] = []
+
+    async def spy(recipe: Recipe, *, channel: int = 0, timeout: float | None = None) -> RecipeReply:
+        timeouts.append(timeout)
+        return await run(recipe, channel=channel, timeout=timeout)
+
+    await standalone_station.async_refresh_presets("T8170P2000054321")
+    monkeypatch.setattr(standalone_station.session, "async_run_recipe", spy)
+    await standalone_station.async_set_default_preset("T8170P2000054321", 1)
+    assert timeouts[0] == 0.25
 
 
 async def test_async_set_default_preset_raises_for_disabled_slot(

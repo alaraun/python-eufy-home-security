@@ -9,7 +9,7 @@ import ipaddress
 import logging
 import time
 from collections import Counter
-from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
@@ -18,8 +18,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .._logging import LogThrottle, redact_serial
 from ..cloud.models import CloudDevice
 from ..devices.capabilities import (
-    PTZ_ACTION_NEEDS,
-    PTZ_ACTIONS,
     Capability,
     DeviceProfile,
     kind_from_params,
@@ -58,11 +56,7 @@ from ..devices.model_settings import (
     settings_of,
     sort_settings,
 )
-from ..devices.ptz import PtzForm, has_ptz_recipes, ptz_actions, ptz_form
-from ..devices.ptz import app_version as ptz_app_version
 from ..devices.recipes import (
-    MAX_PRESET_SLOTS,
-    MAX_ZOOM,
     MIN_ZOOM,
     ConnectType,
     PanTilt,
@@ -70,22 +64,10 @@ from ..devices.recipes import (
     PtzAction,
     Recipe,
     RecipeCommand,
-    SubCommand,
     connect_type,
-    delete_preset,
-    free_preset_slot,
     goto_preset,
-    pan_tilt,
-    parse_preset_positions,
-    preset_picture,
-    query_preset_positions,
-    reported_zoom,
-    set_default_preset,
-    set_picture_zoom,
-    store_preset,
 )
 from ..devices.settings import (
-    DUAL_VIEW,
     MODE_ACTION_FLAGS,
     VIEW_MODE_PARAM,
     Scope,
@@ -114,19 +96,16 @@ from ..events import (
     RECORDING_SUFFIX,
     STILL_SUFFIX,
     AlarmChanged,
-    CameraBusyChanged,
     ConnectionChanged,
     DevicesChanged,
     Event,
     EventBus,
     EventCallback,
     HistoryRecord,
-    PresetsChanged,
     SecurityEvent,
     StationConfigChanged,
     StationStateChanged,
     Unsubscribe,
-    ZoomChanged,
     coerce_int,
     is_station_media_path,
     is_station_recording_path,
@@ -135,13 +114,10 @@ from ..exceptions import (
     CommandNotAppliedError,
     CommandRejectedError,
     CommandUnsupportedError,
-    DeviceBusyError,
     DeviceTimeoutError,
     EufySecurityError,
     ModeInUseError,
-    PresetSlotsFullError,
     ProtocolError,
-    PtzActionUnsupportedError,
     RecordNotFoundError,
     StillNotWrittenError,
     UnsupportedError,
@@ -179,7 +155,6 @@ from ..models import (
     STATION_CHANNEL,
     STORAGE_STATUS_NORMAL,
     SUBSYSTEM_FIRMWARE_PARAMS,
-    FrameCipher,
     GuardMode,
     ValueSource,
 )
@@ -192,7 +167,6 @@ from ..p2p.messages import (
     CMD_SET_TONE_FILE,
     RECEIPT_NOT_HANDLED,
     SOUND_ALARM_SECONDS,
-    decode_preset_picture,
     record_id_day,
 )
 from ..p2p.mode_actions import (
@@ -256,8 +230,9 @@ from ..station_config import (
     stored_mode_table,
 )
 from .alarms import AlarmWaits, StationAlarms
-from .base import own_channel
+from .base import _NOT_PAIRED, own_channel
 from .history import StationHistory
+from .ptz import PtzWaits, StationPtz
 
 if TYPE_CHECKING:
     from ..storage import SessionCache
@@ -310,13 +285,6 @@ PTZ_BUSY_ATTEMPTS: Final = 4
 """How often a preset command is re-sent while the camera answers :data:`PTZ_BUSY_CODE`."""
 PTZ_BUSY_DELAY: Final = 3.0
 """Wait between those attempts: a T8170 settles within a few seconds of a turn."""
-_PTZ_NAMES: Final[Mapping[Capability, str]] = {
-    Capability.PTZ_CONTROL: "pan/tilt control",
-    Capability.PTZ_PRESETS: "pan/tilt presets",
-    Capability.PTZ_ZOOM: "picture zoom",
-}
-"""How a refusal names each pan/tilt/zoom capability the device lacks."""
-_NOT_PAIRED: Final = "the device is not paired to this station"
 # The kinds the eufy app's battery display rule covers (the camera card).
 _BATTERY_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
 FRESH_KEYFRAME_WINDOW: Final = 0.5
@@ -961,13 +929,6 @@ class _HistoryScan:
         )
 
 
-async def _settle(settle: float | None, default: float) -> None:
-    """Wait ``settle`` seconds, or ``default`` (read at call time) when it is None."""
-    seconds = default if settle is None else settle
-    if seconds > 0:
-        await asyncio.sleep(seconds)
-
-
 async def _fresh_keyframe(stream: MediaStream) -> bytes:
     """The data of :func:`_fresh_keyframe_frame`."""
     return (await _fresh_keyframe_frame(stream)).data
@@ -1067,14 +1028,6 @@ def _cloud_value(
     return _CloudValue(value, updated_at, now)
 
 
-@dataclass(frozen=True, slots=True)
-class _Capture:
-    """The capture holding a camera: a live image (``preset`` None) or a preset image."""
-
-    preset: int | None
-    task: asyncio.Task[CameraImage]
-
-
 class Station:
     """A HomeBase and its paired devices, reached over local P2P."""
 
@@ -1100,15 +1053,12 @@ class Station:
         self._cloud_refresh = cloud_refresh
         self._log_name = redact_serial(device.device_sn)
         self._bus = EventBus()
-        self._presets: dict[str, tuple[PresetPosition, ...]] = {}
-        self._captures: dict[str, _Capture] = {}
-        """The capture holding each camera (a live or preset image), by serial."""
+        self._ptz = StationPtz(self)
         self._throttle = LogThrottle()
         self._emitted_state: StationState | None = None
         self._emitted_config: StationConfig | None = None
         self._settings_memo: dict[tuple[str, str], tuple[Setting, ...]] = {}
         """:meth:`settings_for` per ``(serial, product code)``."""
-        self._zooms: dict[str, float] = {}
         self._cloud: dict[int, _CloudValue] = {}
         """The cloud list's copy of the station's own parameters (a station reached on
         demand files them in its session instead)."""
@@ -1119,7 +1069,7 @@ class Station:
         self._alarms = StationAlarms(self)
         session.add_dump_listener(self._on_dump_complete)
         session.add_alarm_listener(self._alarms.on_alarm_frame)
-        session.add_notify_listener(self._on_notify)
+        session.add_notify_listener(self._ptz.on_notify)
         session.subscribe(self._on_session_event)
         self._history = StationHistory(self)
 
@@ -1450,49 +1400,13 @@ class Station:
         self._bus.emit(event)
         return event
 
-    def _on_notify(self, obj: Mapping[str, Any], cipher: FrameCipher) -> None:
-        zoom = reported_zoom(obj)
-        if zoom is None:
-            return
-        device_sn = self._zoom_device(obj)
-        if device_sn is not None:
-            self._keep_zoom(device_sn, zoom)
-
-    def _zoom_device(self, obj: Mapping[str, Any]) -> str | None:
-        """The camera a 6203 report is about: the one on its ``mChannel``; a standalone
-        station's own serial when it names none. None when that is not a zoom camera."""
-        channel = json_int(obj.get("mChannel"))
-        if self.is_standalone and channel in (None, own_channel(self.device)):
-            device_sn: str | None = self.serial
-        else:
-            device_sn = next(
-                (
-                    d.device_sn
-                    for d in self.sub_devices
-                    if channel is not None and d.channel == channel
-                ),
-                None,
-            )
-        if device_sn is None:
-            return None
-        profile = profile_for_serial(device_sn)
-        if profile is None or profile.support(Capability.PTZ_ZOOM) is Support.UNKNOWN:
-            return None
-        return device_sn
-
-    def _keep_zoom(self, device_sn: str, zoom: float) -> None:
-        if self._zooms.get(device_sn) == zoom:
-            return
-        self._zooms[device_sn] = zoom
-        self._bus.emit(ZoomChanged(station_sn=self.serial, device_sn=device_sn, zoom=zoom))
-
     def _on_session_event(self, event: Event) -> None:
         if isinstance(event, AlarmChanged):
             self.note_alarm(event)
         # A camera that loses its link has gone idle, and an idle camera returns to 1x.
         if isinstance(event, ConnectionChanged) and not event.connected:
-            for device_sn in list(self._zooms):
-                self._keep_zoom(device_sn, MIN_ZOOM)
+            for device_sn in list(self._ptz.zooms):
+                self._ptz.keep_zoom(device_sn, MIN_ZOOM)
 
     def _on_dump_complete(self) -> None:
         state = self.state
@@ -2946,8 +2860,8 @@ class Station:
         if preset is not None:
             if device_sn is None:
                 raise ValueError("preset needs device_sn")
-            slot_channel = self._stored_slot(device_sn, preset)
-            self._refuse_while_capturing(device_sn)
+            slot_channel = self._ptz.stored_slot(device_sn, preset)
+            self._ptz.refuse_while_capturing(device_sn)
             await self._ptz_recipe(goto_preset(preset), slot_channel)
         return await self._session_live(ch, wait=wait, lens_view=lens_view, **kwargs)
 
@@ -3075,37 +2989,13 @@ class Station:
         ``UNKNOWN`` with the reason for a device not paired here, or when the device's
         thing description lacks an action of the capability
         (:data:`~..devices.capabilities.PTZ_ACTIONS`) or the library does not send one as
-        the device's handler does under this station (:mod:`.devices.ptz`, generated from
+        the device's handler does under this station (:mod:`..devices.ptz`, generated from
         the eufy app's handlers); else :attr:`~..devices.support.Support.VERIFIED` from
         the model's profile; else ``DECLARED``. A model without recorded handler actions
         keeps its profile's own entry. Raises ``ValueError`` for a capability that is not
         one of the three.
         """
-        actions = PTZ_ACTIONS.get(capability)
-        if actions is None:
-            raise ValueError(f"{capability} is not a pan/tilt/zoom capability")
-        if not self._is_paired(device_sn):
-            return Evidence(Support.UNKNOWN, _NOT_PAIRED)
-        code = self._product_code(device_sn)
-        connect = self._connect_type_of(device_sn)
-        if has_ptz_recipes(code):
-            missing = [a for a in actions if ptz_form(code, a, connect) is None]
-            if missing:
-                return Evidence(Support.UNKNOWN, self._ptz_unsupported_reason(device_sn, missing))
-        profile = own_profile(device_sn)
-        listed = None if profile is None else profile.capabilities.get(capability)
-        if listed is not None and listed.support is Support.VERIFIED:
-            return listed
-        if not has_ptz_recipes(code):
-            return listed or Evidence(
-                Support.UNKNOWN, f"no pan/tilt/zoom action recorded for {code or 'this model'}"
-            )
-        return Evidence(
-            Support.DECLARED,
-            f"the {code} handler's {' and '.join(actions)} under {connect.value} "
-            f"{'is' if len(actions) == 1 else 'are'} the library's recipe "
-            f"(eufy app {ptz_app_version()})",
-        )
+        return self._ptz.ptz_support(device_sn, capability)
 
     def ptz_action_support(self, device_sn: str, action: PtzAction) -> Evidence:
         """How well the preset slot edit ``action`` (store, delete, default change, slot
@@ -3115,34 +3005,14 @@ class Station:
         (:data:`~..devices.capabilities.PTZ_ACTION_NEEDS`) is ``UNKNOWN`` under
         :meth:`ptz_support`, or when the device's thing description does not declare the
         action or the library does not send it as the device's handler does under this
-        station (:mod:`.devices.ptz`); else :attr:`~..devices.support.Support.VERIFIED`
+        station (:mod:`..devices.ptz`); else :attr:`~..devices.support.Support.VERIFIED`
         from the model's profile; else ``DECLARED``. A model without recorded handler
         actions takes the weakest grade of the capabilities it needs. Where this is
         ``UNKNOWN``, the action's method raises
         :class:`~..exceptions.PtzActionUnsupportedError` (the action) or
         ``UnsupportedError`` (a capability) before sending.
         """
-        grades = tuple(Support)
-        weakest = max(
-            (self.ptz_support(device_sn, c) for c in PTZ_ACTION_NEEDS[action]),
-            key=lambda evidence: grades.index(evidence.support),
-        )
-        if weakest.support is Support.UNKNOWN:
-            return weakest
-        code = self._product_code(device_sn)
-        connect = self._connect_type_of(device_sn)
-        if has_ptz_recipes(code) and ptz_form(code, action, connect) is None:
-            return Evidence(Support.UNKNOWN, self._ptz_unsupported_reason(device_sn, [action]))
-        profile = own_profile(device_sn)
-        listed = None if profile is None else profile.ptz_actions.get(action)
-        if listed is not None and listed.support is Support.VERIFIED:
-            return listed
-        if not has_ptz_recipes(code):
-            return weakest
-        return Evidence(
-            Support.DECLARED,
-            f"the {code} handler's {action.value} under {connect.value} is the library's recipe",
-        )
+        return self._ptz.ptz_action_support(device_sn, action)
 
     def config_support(self, feature: StationFeature) -> Evidence:
         """How well the station configuration ``feature`` is supported on this station:
@@ -3220,59 +3090,6 @@ class Station:
             f"{station.source}; extended to {model.model}, which the eufy app shows as a camera",
             station.note,
         )
-
-    def _ptz_unsupported_reason(self, device_sn: str, actions: Sequence[str]) -> str:
-        code = self._product_code(device_sn)
-        connect = self._connect_type_of(device_sn)
-        where = (
-            "on its own" if connect is ConnectType.SINGLE else f"behind a {connect.value} station"
-        )
-        undeclared = [a for a in actions if a not in ptz_actions(code)]
-        if undeclared:
-            return f"the {code} thing description declares no {', '.join(undeclared)}"
-        return (
-            f"the eufy app sends {', '.join(actions)} to a {code} {where} in a way this "
-            "library does not implement"
-        )
-
-    def _ptz_form(self, device_sn: str, action: str) -> PtzForm:
-        """The form the library sends ``action`` to ``device_sn`` in (:mod:`.devices.ptz`):
-        :attr:`~..devices.ptz.PtzForm.STANDARD` for a model without recorded handler
-        actions. Raises :class:`~..exceptions.PtzActionUnsupportedError` when the device's
-        handler sends it in no form the library has, or its thing description does not
-        declare it; nothing is sent."""
-        code = self._product_code(device_sn)
-        if not has_ptz_recipes(code):
-            return PtzForm.STANDARD
-        form = ptz_form(code, action, self._connect_type_of(device_sn))
-        if form is None:
-            raise PtzActionUnsupportedError(
-                f"{redact_serial(device_sn)}: {self._ptz_unsupported_reason(device_sn, [action])}",
-                action=action,
-                device_sn=device_sn,
-            )
-        return form
-
-    def _require_ptz(self, device_sn: str, capability: Capability) -> int:
-        """``device_sn``'s channel, after checking :meth:`ptz_support` for ``capability``;
-        ``UnsupportedError`` naming it and the reason otherwise."""
-        channel = self.channel_for(device_sn)
-        evidence = self.ptz_support(device_sn, capability)
-        if evidence.support is Support.UNKNOWN:
-            raise UnsupportedError(
-                f"{redact_serial(device_sn)} has no {_PTZ_NAMES[capability]}: {evidence.source}",
-                device_sn=device_sn,
-            )
-        return channel
-
-    def _require_ptz_action(self, device_sn: str, action: PtzAction) -> int:
-        """``device_sn``'s channel, after the checks :meth:`ptz_action_support` grades:
-        each capability ``action`` needs, then the action itself; nothing is sent."""
-        channel = self.channel_for(device_sn)
-        for capability in PTZ_ACTION_NEEDS[action]:
-            self._require_ptz(device_sn, capability)
-        self._ptz_form(device_sn, action)
-        return channel
 
     def media_key_type(self, channel: int) -> MediaKeyType:
         """The media key the app offers the camera on ``channel``: ECC when the camera's
@@ -3691,7 +3508,7 @@ class Station:
                     frame = await _held_size_keyframe(stream, held, FULL_RESOLUTION_TIMEOUT)
                 else:
                     frame = await _fresh_keyframe_frame(stream)
-            await self._refresh_presets_while_awake(device_sn)
+            await self._ptz.refresh_presets_while_awake(device_sn)
             _LOGGER.debug(
                 "%s: live image of %s: %dx%d",
                 self._log_name,
@@ -3708,34 +3525,28 @@ class Station:
                 height=frame.height or None,
             )
 
-        return await self._run_capture(device_sn, None, capture)
+        return await self._ptz.run_capture(device_sn, None, capture)
 
     # ── pan/tilt presets ─────────────────────────────────────────────────────
+
+    def _ptz_waits(self) -> PtzWaits:
+        """The pan/tilt waits as ``station`` holds them now, where tests and consumers
+        patch them (:class:`~.ptz.StationPtz` asks each time it waits)."""
+        return PtzWaits(
+            default_preset_result=DEFAULT_PRESET_RESULT_WAIT,
+            preset_stream_idle=PRESET_STREAM_IDLE_SECONDS,
+        )
 
     def presets(self, device_sn: str) -> tuple[PresetPosition, ...] | None:
         """Camera ``device_sn``'s preset slots as last read, enabled or not; None when
         never read. No I/O: the slots are read by :meth:`async_refresh_presets`, and
         again whenever the camera is awake for an image (see :class:`~..events.PresetsChanged`)."""
-        cached = self._presets.get(device_sn)
-        if cached is not None or self._cache is None:
-            return cached
-        stored = self._cache.presets(self.serial, device_sn)
-        if stored is None:
-            return None
-        try:
-            slots = parse_preset_positions({"points": stored})
-        except (EufySecurityError, TypeError, ValueError):
-            return None
-        self._presets[device_sn] = slots
-        return slots
+        return self._ptz.presets(device_sn)
 
     def default_preset(self, device_sn: str) -> int | None:
         """The slot camera ``device_sn`` returns to on its own when idle, from the last
         read of :meth:`presets`; None when never read or no slot is the default."""
-        slots = self.presets(device_sn)
-        if slots is None:
-            return None
-        return next((s.index for s in slots if s.is_default), None)
+        return self._ptz.default_preset(device_sn)
 
     async def async_set_default_preset(
         self, device_sn: str, preset: int, *, confirm: bool = False
@@ -3753,23 +3564,7 @@ class Station:
         or a slot the last read showed empty, and :class:`~..exceptions.DeviceBusyError`
         while a capture holds the camera (the turn would spoil its image).
         """
-        self._require_ptz_action(device_sn, PtzAction.SET_DEFAULT)
-        channel = self._stored_slot(device_sn, preset)
-        self._refuse_while_capturing(device_sn)
-        await self.session.async_run_recipe(
-            set_default_preset(preset, confirm=confirm),
-            channel=channel,
-            timeout=DEFAULT_PRESET_RESULT_WAIT,
-        )
-        await self.session.async_run_recipe(goto_preset(preset), channel=channel)
-        slots = await self.async_refresh_presets(device_sn)
-        if not any(s.index == preset and s.is_default for s in slots):
-            raise CommandNotAppliedError(
-                SubCommand.COMMAND_APP_SET_DEFAULT_POSITION,
-                f"{redact_serial(device_sn)} did not make preset {preset} its default",
-                device_sn=device_sn,
-            )
-        return slots
+        return await self._ptz.async_set_default_preset(device_sn, preset, confirm=confirm)
 
     def zoom(self, device_sn: str) -> float | None:
         """Camera ``device_sn``'s picture zoom as last reported (1.0 = 1x); None until it
@@ -3777,7 +3572,7 @@ class Station:
         :meth:`async_set_zoom` and the report after each go-to and live open. Set to 1.0
         when the session goes down: the camera is idle then, and idle resets the zoom.
         Changes are announced as :class:`~..events.ZoomChanged`."""
-        return self._zooms.get(device_sn)
+        return self._ptz.zoom(device_sn)
 
     async def async_set_zoom(self, device_sn: str, zoom: float) -> None:
         """Zoom camera ``device_sn``'s picture to ``zoom`` (1x-12x) about its centre.
@@ -3797,23 +3592,12 @@ class Station:
         :class:`~..exceptions.DeviceBusyError` while a capture holds the camera; nothing
         is sent for these.
         """
-        if not (MIN_ZOOM <= zoom <= MAX_ZOOM):
-            raise ValueError(f"zoom {zoom!r} is outside {MIN_ZOOM:g}..{MAX_ZOOM:g}")
-        channel = self._require_ptz(device_sn, Capability.PTZ_ZOOM)
-        self._ptz_form(device_sn, "set_picture_zoom")
-        view_mode = self.session.merged_params().devices.get(channel, {}).get(VIEW_MODE_PARAM)
-        if json_int(view_mode) == DUAL_VIEW:
-            raise UnsupportedError(
-                f"{redact_serial(device_sn)} is in dual view; zoom needs single",
-                device_sn=device_sn,
-            )
-        self._refuse_while_capturing(device_sn)
-        await self._ptz_recipe(set_picture_zoom(zoom), channel)
+        return await self._ptz.async_set_zoom(device_sn, zoom)
 
     def is_capturing(self, device_sn: str) -> bool:
         """Whether a live or preset image of ``device_sn`` is being taken (see
         :class:`~..events.CameraBusyChanged`)."""
-        return device_sn in self._captures
+        return self._ptz.is_capturing(device_sn)
 
     async def async_refresh_presets(self, device_sn: str) -> tuple[PresetPosition, ...]:
         """Read camera ``device_sn``'s preset slots from the camera. Wakes a battery camera.
@@ -3822,14 +3606,7 @@ class Station:
         they differ from the last read. Raises ``UnsupportedError`` for a camera whose
         model has no pan/tilt presets.
         """
-        channel = self._preset_channel(device_sn)
-        form = self._ptz_form(device_sn, "query_preset_positions")
-        reply = await self._ptz_recipe(
-            query_preset_positions(value=form is PtzForm.STANDARD), channel
-        )
-        slots = parse_preset_positions(reply.payload or {})
-        self._store_presets(device_sn, slots)
-        return slots
+        return await self._ptz.async_refresh_presets(device_sn)
 
     # ── pan/tilt control ─────────────────────────────────────────────────────
 
@@ -3850,11 +3627,9 @@ class Station:
         :class:`~..exceptions.CommandRejectedError` when the camera is still moving
         after :data:`PTZ_BUSY_ATTEMPTS` tries.
         """
-        channel = self._ptz_channel(device_sn)
-        form = self._ptz_form(device_sn, "ptz_action_control")
-        self._refuse_while_capturing(device_sn)
-        await self._ptz_recipe(pan_tilt(direction, zoom_ivalue=form is PtzForm.STANDARD), channel)
-        await _settle(settle, PTZ_SETTLE_SECONDS)
+        return await self._ptz.async_pan_tilt(
+            device_sn, direction, settle=PTZ_SETTLE_SECONDS if settle is None else settle
+        )
 
     async def async_goto_preset(
         self, device_sn: str, preset: int, *, settle: float | None = None
@@ -3874,10 +3649,9 @@ class Station:
         camera, and :class:`~..exceptions.CommandRejectedError` when the camera is still
         moving after :data:`PTZ_BUSY_ATTEMPTS` tries; nothing is sent for the first two.
         """
-        channel = self._stored_slot(device_sn, preset)
-        self._refuse_while_capturing(device_sn)
-        await self._ptz_recipe(goto_preset(preset), channel)
-        await _settle(settle, PRESET_SETTLE_SECONDS)
+        return await self._ptz.async_goto_preset(
+            device_sn, preset, settle=PRESET_SETTLE_SECONDS if settle is None else settle
+        )
 
     async def async_store_preset(
         self, device_sn: str, preset: int, *, confirm: bool = False
@@ -3898,14 +3672,7 @@ class Station:
         :class:`~..exceptions.DeviceBusyError` while a capture holds the camera (the view
         is the capture's, not the one to keep); nothing is sent for these.
         """
-        channel = self._require_ptz_action(device_sn, PtzAction.STORE)
-        self._check_slot(device_sn, preset)
-        self._refuse_while_capturing(device_sn)
-        await self._ptz_recipe(store_preset(preset, confirm=confirm), channel)
-        slots = await self.async_refresh_presets(device_sn)
-        if not any(s.index == preset and s.enabled for s in slots):
-            raise self._not_stored(device_sn, preset, slots)
-        return slots
+        return await self._ptz.async_store_preset(device_sn, preset, confirm=confirm)
 
     async def async_save_preset(
         self,
@@ -3935,67 +3702,15 @@ class Station:
         ``UnsupportedError`` for one without presets or a slot outside the camera's range; :class:`~..exceptions.DeviceBusyError` while a capture
         holds the camera. Only the store and default writes change the camera.
         """
-        self._require_ptz_action(device_sn, PtzAction.STORE)
-        if make_default:
-            self._require_ptz_action(device_sn, PtzAction.SET_DEFAULT)
-        if preset is not None:
-            self._check_slot(device_sn, preset)
-        self._refuse_while_capturing(device_sn)
-        known = self.presets(device_sn)
-        if known is not None and self._is_full(known, preset):
-            raise self._not_stored(device_sn, preset, known)
-        if preset is None:
-            known = await self.async_refresh_presets(device_sn)
-            preset = free_preset_slot(known)
-            if preset is None:
-                raise self._not_stored(device_sn, None, known)
-        slots = await self.async_store_preset(device_sn, preset, confirm=confirm)
-        if make_default:
-            slots = await self.async_set_default_preset(device_sn, preset, confirm=confirm)
-        return next(s for s in slots if s.index == preset)
+        return await self._ptz.async_save_preset(
+            device_sn, preset=preset, make_default=make_default, confirm=confirm
+        )
 
     def free_preset(self, device_sn: str) -> int | None:
         """The slot :meth:`async_save_preset` would store into, from the last read of
         :meth:`presets`; None when never read or when no slot can take a store (the
         camera holds :data:`~..devices.recipes.MAX_PRESET_SLOTS`). No I/O."""
-        slots = self.presets(device_sn)
-        return None if slots is None else free_preset_slot(slots)
-
-    @staticmethod
-    def _is_full(slots: Sequence[PresetPosition], preset: int | None) -> bool:
-        """Whether a store into ``preset`` (None: a free slot) cannot take: the camera
-        holds the most it stores and ``preset`` is not one of them."""
-        stored = {s.index for s in slots if s.enabled}
-        return len(stored) >= MAX_PRESET_SLOTS and preset not in stored
-
-    def _not_stored(
-        self, device_sn: str, preset: int | None, slots: Sequence[PresetPosition]
-    ) -> CommandNotAppliedError:
-        """The error for a store that did not take (or cannot), naming a full camera.
-
-        A camera at :data:`~..devices.recipes.MAX_PRESET_SLOTS` yields
-        :class:`~..exceptions.PresetSlotsFullError` so a consumer can tell a full
-        camera from a genuine not-applied store without re-deriving the rule.
-        """
-        stored = [s.index for s in slots if s.enabled]
-        full = len(stored) >= MAX_PRESET_SLOTS
-        hint = (
-            f" (the camera already holds {MAX_PRESET_SLOTS} slots; delete one first)"
-            if full
-            else ""
-        )
-        target = "a preset" if preset is None else f"preset {preset}"
-        message = (
-            f"{redact_serial(device_sn)} did not store {target}{hint} (slots in use: {stored})"
-        )
-        if full:
-            return PresetSlotsFullError(
-                SubCommand.COMMAND_INDOOR_SPAN_SET_POINT,
-                message,
-                slots=MAX_PRESET_SLOTS,
-                in_use=tuple(stored),
-            )
-        return CommandNotAppliedError(SubCommand.COMMAND_INDOOR_SPAN_SET_POINT, message)
+        return self._ptz.free_preset(device_sn)
 
     async def async_delete_preset(self, device_sn: str, preset: int) -> tuple[PresetPosition, ...]:
         """Clear slot ``preset`` of camera ``device_sn``, and read the slots back.
@@ -4009,17 +3724,7 @@ class Station:
         control and presets or a slot outside the camera's range; nothing is sent for
         these.
         """
-        channel = self._require_ptz_action(device_sn, PtzAction.DELETE)
-        self._check_slot(device_sn, preset)
-        await self._ptz_recipe(delete_preset(preset), channel)
-        slots = await self.async_refresh_presets(device_sn)
-        if any(s.index == preset and s.enabled for s in slots):
-            raise CommandNotAppliedError(
-                SubCommand.COMMAND_INDOOR_SPAN_DEL_POINT,
-                f"{redact_serial(device_sn)} still holds preset {preset}",
-                device_sn=device_sn,
-            )
-        return slots
+        return await self._ptz.async_delete_preset(device_sn, preset)
 
     async def async_preset_picture(self, device_sn: str, preset: int) -> bytes | None:
         """The JPEG camera ``device_sn`` stored for slot ``preset``, or None when empty.
@@ -4031,29 +3736,7 @@ class Station:
         pan/tilt control and presets or a slot outside the camera's range; nothing is
         sent for these.
         """
-        channel = self._require_ptz_action(device_sn, PtzAction.SLOT_PICTURE)
-        self._check_slot(device_sn, preset)
-        reply = await self._ptz_recipe(preset_picture(preset), channel)
-        data = decode_preset_picture(reply.payload or {})
-        return data or None
-
-    def _check_slot(self, device_sn: str, preset: int) -> None:
-        """Refuse a slot the camera does not have, before anything is sent.
-
-        The slot range and the store limit are different numbers: a T8170 offers ten
-        slot indices (0-9) but stores at most :data:`~..devices.recipes.MAX_PRESET_SLOTS`
-        of them at a time. Only the range can be checked up front; a store beyond the
-        limit is caught by the read-back.
-        """
-        known = self.presets(device_sn)
-        if known and not any(s.index == preset for s in known):
-            raise UnsupportedError(
-                f"{redact_serial(device_sn)} has no preset slot {preset} "
-                f"(slots 0-{max(s.index for s in known)})",
-                device_sn=device_sn,
-            )
-        if preset < 0:
-            raise UnsupportedError(f"preset {preset} is not a slot number")
+        return await self._ptz.async_preset_picture(device_sn, preset)
 
     async def _ptz_recipe(self, recipe: Recipe, channel: int) -> RecipeReply:
         """Run a preset/pan-tilt recipe, re-sending while the camera answers "busy".
@@ -4078,10 +3761,6 @@ class Station:
                 await asyncio.sleep(PTZ_BUSY_DELAY)
         raise AssertionError("unreachable")  # pragma: no cover
 
-    def _ptz_channel(self, device_sn: str) -> int:
-        """``device_sn``'s channel, after checking it has pan/tilt control here."""
-        return self._require_ptz(device_sn, Capability.PTZ_CONTROL)
-
     async def async_preset_image(
         self, device_sn: str, preset: int, *, settle: float | None = None, wait: bool = False
     ) -> CameraImage:
@@ -4103,125 +3782,9 @@ class Station:
         it raises :class:`~..exceptions.LiveStreamLimitError` at once (the default), or
         with ``wait`` waits up to the first-frame timeout for a stream to end.
         """
-        channel = self._stored_slot(device_sn, preset)
-
-        async def capture() -> CameraImage:
-            await self.session.async_run_recipe(goto_preset(preset), channel=channel)
-            data = await self._settled_keyframe(
-                channel, PRESET_SETTLE_SECONDS if settle is None else settle, wait=wait
-            )
-            await self._refresh_presets_while_awake(device_sn)
-            return CameraImage.keyframe(
-                source=ImageSource.LIVE, device_sn=device_sn, data=data, preset=preset
-            )
-
-        return await self._run_capture(device_sn, preset, capture)
-
-    async def _settled_keyframe(self, channel: int, settle: float, *, wait: bool) -> bytes:
-        """The first keyframe of live video that arrives ``settle`` seconds from now.
-
-        A keyframe from before then may show the camera still turning, so none is
-        returned instead: a stream that ends first raises ``DeviceTimeoutError``.
-        """
-        deadline = time.monotonic() + settle
-        stream = await self._session_live(
-            channel, idle_timeout=max(PRESET_STREAM_IDLE_SECONDS, settle), wait=wait
+        return await self._ptz.async_preset_image(
+            device_sn, preset, settle=PRESET_SETTLE_SECONDS if settle is None else settle, wait=wait
         )
-        async with stream:
-            async for frame in stream:
-                if frame.is_keyframe and time.monotonic() >= deadline:
-                    return frame.data
-        raise DeviceTimeoutError(f"the stream ended before the camera settled ({settle:g}s)")
-
-    async def _run_capture(
-        self,
-        device_sn: str,
-        preset: int | None,
-        capture: Callable[[], Coroutine[Any, Any, CameraImage]],
-    ) -> CameraImage:
-        """Run ``capture`` as the one capture holding ``device_sn``: join the running one
-        when it is the same (live, or the same preset), else raise ``DeviceBusyError``."""
-        running = self._captures.get(device_sn)
-        if running is not None and running.preset == preset:
-            return await asyncio.shield(running.task)
-        self._refuse_while_capturing(device_sn)
-        task = asyncio.get_running_loop().create_task(
-            capture(), name=f"eufy-security-capture-{self._log_name}"
-        )
-        self._captures[device_sn] = _Capture(preset=preset, task=task)
-        self._bus.emit(CameraBusyChanged(station_sn=self.serial, device_sn=device_sn, busy=True))
-
-        def release(_task: asyncio.Task[CameraImage]) -> None:
-            if self._captures.get(device_sn) is not None and self._captures[device_sn].task is task:
-                del self._captures[device_sn]
-                self._bus.emit(
-                    CameraBusyChanged(station_sn=self.serial, device_sn=device_sn, busy=False)
-                )
-
-        task.add_done_callback(release)
-        return await asyncio.shield(task)
-
-    def _refuse_while_capturing(self, device_sn: str) -> None:
-        """Raise ``DeviceBusyError`` when a capture holds ``device_sn``: a command that
-        turns the camera would spoil the image being taken."""
-        running = self._captures.get(device_sn)
-        if running is not None:
-            raise DeviceBusyError(
-                f"{redact_serial(device_sn)} is busy with "
-                + ("a live image" if running.preset is None else f"preset {running.preset}"),
-                device_sn=device_sn,
-            )
-
-    def _stored_slot(self, device_sn: str, preset: int) -> int:
-        """``device_sn``'s channel, after checking its model has presets and ``preset``
-        is not a slot the last read showed empty; nothing is sent."""
-        channel = self._preset_channel(device_sn)
-        known = self.presets(device_sn)
-        if known is not None and not any(s.index == preset and s.enabled for s in known):
-            raise UnsupportedError(
-                f"preset {preset} is not set on {redact_serial(device_sn)}", device_sn=device_sn
-            )
-        return channel
-
-    def _preset_channel(self, device_sn: str) -> int:
-        """``device_sn``'s channel, after checking it has pan/tilt presets here."""
-        return self._require_ptz(device_sn, Capability.PTZ_PRESETS)
-
-    async def _refresh_presets_while_awake(self, device_sn: str) -> None:
-        """Re-read the presets of a pan/tilt camera that is awake anyway (best effort)."""
-        if self.ptz_support(device_sn, Capability.PTZ_PRESETS).support is Support.UNKNOWN:
-            return
-        try:
-            await self.async_refresh_presets(device_sn)
-        except EufySecurityError as err:
-            _LOGGER.debug("%s: preset read while awake failed: %s", self._log_name, err)
-
-    def _store_presets(self, device_sn: str, slots: tuple[PresetPosition, ...]) -> None:
-        if self.presets(device_sn) == slots:
-            return
-        self._presets[device_sn] = slots
-        if self._cache is not None:
-            self._cache.set_presets(
-                self.serial,
-                device_sn,
-                [
-                    {
-                        "index": s.index,
-                        "enable": int(s.enabled),
-                        "zoom": s.zoom,
-                        "isdefault": int(s.is_default),
-                    }
-                    for s in slots
-                ],
-            )
-            self._cache.schedule_save()
-        _LOGGER.debug(
-            "%s: presets of %s: %s enabled",
-            self._log_name,
-            redact_serial(device_sn),
-            [s.index for s in slots if s.enabled],
-        )
-        self._bus.emit(PresetsChanged(station_sn=self.serial, device_sn=device_sn, presets=slots))
 
     def _event_camera(self, event: SecurityEvent) -> tuple[str, int]:
         """The paired camera an event names: its ``device_sn``, else its ``channel``; on a
