@@ -595,7 +595,7 @@ def _str_form(value: Value) -> str:
 # ── rendering ───────────────────────────────────────────────────────────────
 
 
-def _render(
+def _render(  # noqa: C901
     template: Recipe,
     value: Value,
     *,

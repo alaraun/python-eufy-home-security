@@ -710,7 +710,7 @@ def empty_value_reads(
         _count(counts, "read:empty value")
 
 
-def build_context(
+def build_context(  # noqa: C901
     product_code: str,
     handler: Path,
     td: dict[str, Any],
@@ -877,7 +877,7 @@ def merge_contexts(per_context: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
-def apply_param_values(
+def apply_param_values(  # noqa: C901
     product_code: str,
     settings: dict[str, Any],
     props: list[dict[str, Any]],

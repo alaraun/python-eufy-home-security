@@ -153,7 +153,7 @@ def _in_context(setting: dict[str, Any], context: str | None) -> dict[str, Any]:
     return out
 
 
-def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> None:
+def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> None:  # noqa: C901
     assert IDENT.fullmatch(ident), ident
     assert set(s) <= SETTING_KEYS, sorted(set(s) - SETTING_KEYS)
     assert s["kind"] in KINDS
