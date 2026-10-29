@@ -111,9 +111,10 @@ Where the inputs differ from the app's:
 - For a HomeBase 2 and other stations of its generation, the app removes every character
   other than digits and dots from the station's firmware before comparing
   `parent_version`; the library compares the firmware as listed.
-- `user_country` is the country the library logs in with (`EufyCloudApi.login_country`:
-  the `country` option, else the host's IP country), which can differ from the country
-  the account was registered in.
+- `user_country` is the country of the login scope that lists the device: an extra
+  country scope's own country, else the country the library logs in with
+  (`EufyCloudApi.login_country`: the `country` option, else the host's IP country), which
+  can differ from the country the account was registered in.
 - An associated condition whose value the handler's read never produces never passes,
   as in the app: on a T8180, `live_streaming_resolution__v1` and `record_resolution__v1`
   need view mode `12`, which the view-mode read reports only as `0` or `1`, so the

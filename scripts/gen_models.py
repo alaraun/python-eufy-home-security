@@ -248,15 +248,14 @@ def reported_param(
         found = data.get("p2p") if isinstance(data, dict) else None
         return found.get(ident, codec.MISSING) if isinstance(found, dict) else codec.MISSING
 
-    def stored(value: str) -> str | None:
-        """The text the handler's write of ``value`` stores; None when it stores none."""
+    def stored(param: int, value: str) -> str | None:
+        """The text the handler's write of ``value`` stores in ``param`` (``update`` or
+        ``extUpdates``); None when it stores none there."""
         device = context.device(product_code)
         request = {"kind": "set", "identifier": ident, "payload": value, "device": device}
         (reply,) = run_driver(product_code, handler, [request])
-        update = (p2p(reply) or {}).get("update")
-        if not isinstance(update, dict):
-            return None
-        return variants.text(update.get("paramValue"))
+        hits = [d["param_value"] for d in _param_dump(p2p(reply)) if d["param_type"] == param]
+        return variants.text(hits[0]) if hits else None
 
     every = {p: str(p) for p in PROBE_PARAMS}
     for cmds in ((), PROBE_PARAMS):
@@ -266,7 +265,7 @@ def reported_param(
         param = int(found)
         asked = [param] if cmds else []
         if all(variants.text(ask({param: v}, asked)) == v for v in values) and all(
-            stored(v) in (None, v) for v in values
+            stored(param, v) in (None, v) for v in values
         ):
             return param
     return None
