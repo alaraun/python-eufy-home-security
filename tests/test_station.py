@@ -10,6 +10,7 @@ import math
 import time
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -4949,3 +4950,79 @@ def _dump_of(blocks: dict[int, dict[int, str]]) -> ParamDump:
         }
     )
     return dump
+
+
+def _camera_of(code: str, *, params: dict[int, str] | None = None, **fields: Any) -> CloudDevice:
+    raw: dict[str, Any] = {"device_new_pn": code}
+    if params is not None:
+        raw["params"] = [{"param_type": k, "param_value": v} for k, v in params.items()]
+    return CloudDevice(
+        device_sn=code + SYNTHETIC.camera_sn[5:],
+        device_type=31,
+        name="camera",
+        station_sn=SYNTHETIC.station_sn,
+        channel=0,
+        raw=raw,
+        **fields,
+    )
+
+
+def test_setting_in_use_names_the_member_the_app_uses_for_the_unit() -> None:
+    """A camera behind a HomeBase 3 whose device-list parameters report AI empowerment
+    uses its ``__v1`` detection types; a key without variants is in use; without any
+    parameter of the device the client cannot tell."""
+    camera = _camera_of("T8410", params={1299: "1"})
+    hub = _hub_with(camera)
+    members = ["detection_type_set", "detection_type_set__v1", "detection_type_set__v2"]
+    assert [hub.setting_in_use(k, camera.device_sn) for k in members] == [False, True, False]
+    assert hub.setting_in_use("time_format_set") is True
+    bare = _camera_of("T8410")
+    assert _hub_with(bare).setting_in_use("detection_type_set", bare.device_sn) is None
+    with pytest.raises(UnsupportedError, match="unknown setting"):
+        hub.setting_in_use("no_such_setting", camera.device_sn)
+    with pytest.raises(UnsupportedError, match="not paired"):
+        hub.setting_in_use("detection_type_set", "T8160P2000099999")
+
+
+def test_setting_in_use_reads_the_device_s_reported_block_over_the_cloud(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera = _camera_of("T8410", params={1299: "1"})
+    hub = _hub_with(camera)
+    state = SimpleNamespace(setting_params={}, devices={0: SimpleNamespace(params={1299: "0"})})
+    monkeypatch.setattr(Station, "state", property(lambda _self: state))
+    assert hub.setting_in_use("detection_type_set", camera.device_sn) is True
+    state.devices = {}  # no block for its channel: the cloud's copy
+    assert hub.setting_in_use("detection_type_set", camera.device_sn) is False
+
+
+def test_setting_in_use_reads_the_login_country_unless_the_device_s_scope_names_one() -> None:
+    members = ("player_model_config", "player_model_config__v1")
+    camera = _camera_of("T814X", params={})
+    base = _hub_with(camera)
+    station = Station(base.device, base.session, sub_devices=[camera], login_country=lambda: "OM")
+    assert [station.setting_in_use(k, camera.device_sn) for k in members] == [False, True]
+    assert [base.setting_in_use(k, camera.device_sn) for k in members] == [None, None]
+    abroad = dataclasses.replace(camera, region="eu:DE")
+    station = Station(base.device, base.session, sub_devices=[abroad], login_country=lambda: "OM")
+    assert [station.setting_in_use(k, abroad.device_sn) for k in members] == [True, False]
+
+
+def test_setting_in_use_reads_a_missing_firmware_as_below_every_bound() -> None:
+    members = ("record_resolution", "record_resolution__v1")
+    camera = _camera_of("T8162", params={})
+    assert [_hub_with(camera).setting_in_use(k, camera.device_sn) for k in members] == [True, False]
+    newer = dataclasses.replace(camera, main_sw_version="3.1.5.8")
+    assert [_hub_with(newer).setting_in_use(k, newer.device_sn) for k in members] == [False, True]
+
+
+def test_setting_in_use_compares_the_station_s_firmware_for_a_paired_device() -> None:
+    """A T8180 behind a HomeBase 3 uses ``is_connect_webrtc__v1`` from the station's
+    firmware 3.7.4.3 on; the camera's own firmware plays no part."""
+    members = ("is_connect_webrtc", "is_connect_webrtc__v1")
+    camera = _camera_of("T8180", params={}, main_sw_version="9.9.9.9")
+    base = _hub_with(camera)
+    for firmware, expected in (("3.7.4.2", [True, False]), ("3.7.4.3", [False, True])):
+        device = dataclasses.replace(base.device, main_sw_version=firmware)
+        station = Station(device, base.session, sub_devices=[camera])
+        assert [station.setting_in_use(k, camera.device_sn) for k in members] == expected

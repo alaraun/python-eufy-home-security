@@ -245,7 +245,22 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
-   "section": "modes"
+   "section": "modes",
+   "variants": [
+    {
+     "id": "automation_config__v1",
+     "key": "automation_config__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8010).*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "automation_config__v1": {
    "access": "ro",
@@ -274,6 +289,29 @@
    "values": [
     0,
     4
+   ],
+   "variants": [
+    {
+     "id": "automation_detect_trigger_type__v1",
+     "key": "automation_detect_trigger_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8N00|T8025|T7000|T8040).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
    ]
   },
   "automation_detect_trigger_type__v1": {
@@ -508,6 +546,29 @@
    "values": [
     5,
     6
+   ],
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!(T8134|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
    ],
    "write": {
     "cmd": 1350,
@@ -969,7 +1030,72 @@
    "default": true,
    "kind": "bool",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "is_support_multiple_bridge__v1",
+     "key": "is_support_multiple_bridge__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T9000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "3.3.2.9"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.1.3.9"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.3.0.4"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "3.3.2.9"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_support_multiple_bridge__v2",
+     "key": "is_support_multiple_bridge__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8025).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "3.3.2.9"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.0.3.6"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "is_support_multiple_bridge__v1": {
    "access": "ro",
@@ -1749,6 +1875,21 @@
    "values": [
     5,
     2
+   ],
+   "variants": [
+    {
+     "id": "record_resolution__v1",
+     "key": "record_resolution__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8134).*$"
+       }
+      ]
+     ]
+    }
    ],
    "write": {
     "cmd": 1700,

@@ -465,6 +465,29 @@
     "param": 1298
    },
    "section": "detection",
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T817L).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 1298,
@@ -894,6 +917,21 @@
     0,
     1,
     2
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "^(?i)(JP|OM).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_storage_type__v1": {
@@ -1146,7 +1184,97 @@
    "default": true,
    "kind": "bool",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "is_support_multiple_bridge__v1",
+     "key": "is_support_multiple_bridge__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T9000).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_support_multiple_bridge__v2",
+     "key": "is_support_multiple_bridge__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8025).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_support_multiple_bridge__v3",
+     "key": "is_support_multiple_bridge__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8N00).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_support_multiple_bridge__v4",
+     "key": "is_support_multiple_bridge__v4",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8010).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_support_multiple_bridge__v5",
+     "key": "is_support_multiple_bridge__v5",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T7000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.2.1.8"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_support_multiple_bridge__v6",
+     "key": "is_support_multiple_bridge__v6",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.3.0.4"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "is_support_multiple_bridge__v1": {
    "access": "ro",
@@ -1309,6 +1437,21 @@
     1,
     13,
     3
+   ],
+   "variants": [
+    {
+     "id": "live_bottom_hor_toolbar_list__v1",
+     "key": "live_bottom_hor_toolbar_list__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "^(OM).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "live_bottom_hor_toolbar_list__v1": {
@@ -1362,6 +1505,21 @@
     7,
     6,
     12
+   ],
+   "variants": [
+    {
+     "id": "live_bottom_toolbar_list__v1",
+     "key": "live_bottom_toolbar_list__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "^(OM).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "live_bottom_toolbar_list__v1": {

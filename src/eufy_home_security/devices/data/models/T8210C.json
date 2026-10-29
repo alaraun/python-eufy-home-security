@@ -275,6 +275,29 @@
     5,
     6
    ],
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!(T8210P8|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1252,
     "params": {
@@ -684,7 +707,35 @@
    "access": "ro",
    "kind": "other",
    "read": null,
-   "section": "notifications"
+   "section": "notifications",
+   "variants": [
+    {
+     "id": "device_snooze_time_extra_type__v1",
+     "key": "device_snooze_time_extra_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030|T9000).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_snooze_time_extra_type__v2",
+     "key": "device_snooze_time_extra_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8021|T8023).*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "device_snooze_time_extra_type__v1": {
    "access": "ro",

@@ -5,8 +5,8 @@ For every cached product whose thing description declares ``set_alarm_type`` (or
 Node) standalone and behind each station kind of ``PARENT_CONNECT_TYPES``, on two
 channels. Per connect type the generator picks the identifier the app reads there (the
 ``__v`` form whose ``read_conditions`` pass with the most conditions, else the base;
-``parent_sn``/``device_sn`` pattern conditions are evaluated on synthetic serials of the
-product's and the station's prefix, any other condition does not pass), and records for
+conditions are evaluated as the app does on synthetic serials of the product's and the
+station's prefix, and a condition that needs any other device input does not pass), and records for
 each choice of its enum except the HomeBase alarm (:data:`HOMEBASE_CHOICE`) the request
 the handler builds to start (``open`` true) and to stop it (``open`` false): the command
 (``subCmd`` of a 1350 wrapper, else ``cmd``) and ``params`` with the channel and the
@@ -32,6 +32,14 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from eufy_home_security.devices.conditions import (
+    ConditionUnit,
+    choices,
+    groups_of,
+    passes,
+    td_conditions,
+    variant_rest,
+)
 from eufy_home_security.devices.device_alarm import (
     ALARM_COMMANDS,
     ALARM_IDENTIFIER,
@@ -47,7 +55,6 @@ DEFAULT_OUT = ROOT / "src" / "eufy_home_security" / "devices" / "_device_alarm_d
 NICKNAME = "nickname-probe"  # the app's ``nick_name``; becomes USER_NAME_SLOT
 WRAPPER = 1350  # the handler's SET_PAYLOAD wrapper: the library sends its subCmd
 _VARIANT = re.compile(r"__v\d+$")
-_PATTERN_TYPES = frozenset({"parent_sn", "device_sn"})
 
 
 def _load(name: str) -> ModuleType:
@@ -74,39 +81,25 @@ def contexts(code: str) -> dict[ConnectType, Any]:
     return out
 
 
-def passes(prop: Mapping[str, Any], device_sn: str, parent_sn: str) -> bool:
-    """Whether ``prop``'s ``read_conditions`` pass (none at all, or every condition of a
-    group); only ``RE`` patterns on the serials are evaluated."""
-    groups = (prop.get("read_conditions") or {}).get("condition_list") or []
-    serials = {"device_sn": device_sn, "parent_sn": parent_sn}
-    return not groups or any(
-        all(
-            c.get("type") in _PATTERN_TYPES
-            and c.get("qualifier") == "RE"
-            and re.search(str(c.get("value") or ""), serials[c["type"]]) is not None
-            for c in group.get("conditions") or []
-        )
-        for group in groups
-    )
-
-
 def resolve(
     props: Sequence[Mapping[str, Any]], device_sn: str, parent_sn: str
 ) -> Mapping[str, Any] | None:
     """The alarm property the app reads for the device: the ``__v`` form whose read
-    conditions pass with the most conditions (the first of equals), else the base."""
-    base = next((p for p in props if p["identifier"] == ALARM_IDENTIFIER), None)
-    chosen, most = base, -1
-    for prop in props:
-        groups = (prop.get("read_conditions") or {}).get("condition_list") or []
-        if not _VARIANT.search(prop["identifier"]) or not groups:
-            continue
-        if not passes(prop, device_sn, parent_sn):
-            continue
-        count = sum(len(g.get("conditions") or []) for g in groups)
-        if count > most:
-            chosen, most = prop, count
-    return chosen
+    conditions pass with the most conditions (the first of equals), else the base
+    (:mod:`~eufy_home_security.devices.conditions`). Only the serials are known: a
+    variant whose conditions need any other input does not pass."""
+    unit = ConditionUnit(
+        serial=device_sn, parent_serial=parent_sn, firmware=None, parent_firmware=None
+    )
+    candidates = [
+        (prop["identifier"], groups_of(td_conditions(prop.get("read_conditions"))))
+        for prop in props
+        if variant_rest(prop["identifier"], ALARM_IDENTIFIER)
+    ]
+    known = [(ident, groups) for ident, groups in candidates if passes(groups, unit) is True]
+    (chosen,) = choices(known, unit)
+    name = ALARM_IDENTIFIER if chosen is None else chosen
+    return next((p for p in props if p["identifier"] == name), None)
 
 
 def _choices(prop: Mapping[str, Any]) -> tuple[list[int], int | None]:

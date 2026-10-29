@@ -632,12 +632,18 @@ class EufySecurity:
                 cache=self.cache,
                 listed_settings=self._listed_settings,
                 cloud_refresh=self.async_refresh_cloud_state,
+                login_country=self._login_country_code,
             )
             station.apply_cloud_device(device)  # the cached snapshot, until a fresh one
             self.stations[serial] = station
             self._unsubs.append(station.subscribe(self._on_station_event))
         self._report_stations_changed(first, built, candidates)
         return list(self.stations.values())
+
+    def _login_country_code(self) -> str | None:
+        """The code of the country the account logs in with; None while unknown."""
+        country = self.cloud.login_country
+        return None if country is None else country.code
 
     @property
     def device_list_source(self) -> DeviceListSource | None:

@@ -243,6 +243,21 @@
     0,
     2,
     4
+   ],
+   "variants": [
+    {
+     "id": "automation_detect_trigger_type__v1",
+     "key": "automation_detect_trigger_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8040).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "automation_detect_trigger_type__v1": {
@@ -468,6 +483,29 @@
     "param": 1298
    },
    "section": "detection",
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030|T9000).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 1298,

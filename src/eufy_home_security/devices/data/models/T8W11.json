@@ -682,6 +682,21 @@
    "values": [
     0,
     1
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "^(?i)(JP).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_storage_type__v1": {

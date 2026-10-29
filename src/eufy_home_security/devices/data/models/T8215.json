@@ -798,6 +798,79 @@
    "values": [
     5,
     6
+   ],
+   "variants": [
+    {
+     "id": "device_motion_detection__v1",
+     "key": "device_motion_detection__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "SE",
+        "type": "parent_sn",
+        "value": "^(?!T8215).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       },
+       {
+        "default": "1",
+        "prop": "device_power_supply_mode",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "5"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_motion_detection__v2",
+     "key": "device_motion_detection__v2",
+     "read_conditions": [
+      [
+       {
+        "default": "1",
+        "prop": "device_power_supply_mode",
+        "qualifier": "!=",
+        "type": "associated_field",
+        "value": "5"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_motion_detection__v3",
+     "key": "device_motion_detection__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "SE",
+        "type": "parent_sn",
+        "value": "^(?!T8215).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       },
+       {
+        "default": "1",
+        "prop": "device_power_supply_mode",
+        "qualifier": "!=",
+        "type": "associated_field",
+        "value": "5"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_motion_detection__v1": {
@@ -1354,7 +1427,35 @@
    "access": "ro",
    "kind": "other",
    "read": null,
-   "section": "notifications"
+   "section": "notifications",
+   "variants": [
+    {
+     "id": "device_snooze_time_extra_type__v1",
+     "key": "device_snooze_time_extra_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030|T9000).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_snooze_time_extra_type__v2",
+     "key": "device_snooze_time_extra_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8021|T8023).*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "device_snooze_time_extra_type__v1": {
    "access": "ro",
@@ -1571,7 +1672,27 @@
    "default": true,
    "kind": "bool",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "is_connect_webrtc__v1",
+     "key": "is_connect_webrtc__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "3.7.4.3"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "is_connect_webrtc__v1": {
    "access": "ro",
@@ -1614,7 +1735,63 @@
    "default": true,
    "kind": "bool",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "is_support_multiple_bridge__v1",
+     "key": "is_support_multiple_bridge__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T9000).*$"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8025).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.0.8.2"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "0.1.5.9"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8N00).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.2.2.1"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "0.1.5.9"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "is_support_multiple_bridge__v1": {
    "access": "ro",
@@ -2599,7 +2776,24 @@
    "default": "60",
    "kind": "other",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "p2p_ping_timeout__v1",
+     "key": "p2p_ping_timeout__v1",
+     "read_conditions": [
+      [
+       {
+        "default": "1",
+        "prop": "device_power_supply_mode",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "5"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "p2p_ping_timeout__v1": {
    "access": "ro",
@@ -2651,6 +2845,23 @@
     2,
     1,
     3
+   ],
+   "variants": [
+    {
+     "id": "power_manager_mode__v1",
+     "key": "power_manager_mode__v1",
+     "read_conditions": [
+      [
+       {
+        "default": "1",
+        "prop": "device_power_supply_mode",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "5"
+       }
+      ]
+     ]
+    }
    ],
    "write": {
     "cmd": 1246,
@@ -2814,6 +3025,66 @@
     5,
     2,
     6
+   ],
+   "variants": [
+    {
+     "id": "record_resolution__v1",
+     "key": "record_resolution__v1",
+     "read_conditions": [
+      [
+       {
+        "default": "false",
+        "prop": "homekit_device_connect_homekit_status",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "true"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "record_resolution__v2",
+     "key": "record_resolution__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8215).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "0.1.7.3"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "record_resolution__v3",
+     "key": "record_resolution__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8215).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "0.1.7.3"
+       },
+       {
+        "default": "false",
+        "prop": "homekit_device_connect_homekit_status",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "true"
+       }
+      ]
+     ]
+    }
    ],
    "write": {
     "cmd": 1350,

@@ -70,8 +70,11 @@ SETTING_KEYS = {
     "bit",
     "domain",
     "contexts",
+    "variants",
     *WRITE_KEYS,
 }
+CONDITION_KEYS = {"type", "qualifier", "value"}
+ASSOCIATED_KEYS = {"prop", "param", "map", "default"}
 CONTROLS = {
     "bool": {"switch"},
     "enum": {"select"},
@@ -251,11 +254,32 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
         assert primary in settings
         assert "variant_of" not in settings[primary]
         assert s["section"] == settings[primary]["section"], ident
+        assert "variants" not in s
+    for rule in s.get("variants", []):
+        _check_variant(ident, rule, settings)
     assert s["section"] in SECTIONS, ident
     assert ("group" in s) == ("order" in s)
     if "group" in s:
         assert isinstance(s["group"], str)
         assert isinstance(s["order"], int)
+
+
+def _check_variant(primary: str, rule: dict[str, Any], settings: dict[str, Any]) -> None:
+    assert set(rule) == {"id", "key", "read_conditions"}
+    assert rule["id"].startswith(primary + "__v"), rule["id"]
+    key = rule["key"]
+    assert key is None or key == primary or settings[key].get("variant_of") == primary
+    assert rule["read_conditions"], "a variant without read conditions never competes"
+    for group in rule["read_conditions"]:
+        for cond in group:
+            assert CONDITION_KEYS <= set(cond) <= CONDITION_KEYS | ASSOCIATED_KEYS, cond
+            assert all(isinstance(cond[k], str) for k in CONDITION_KEYS)
+            if cond["type"] not in ("associated_field", "parent_associated_field"):
+                assert not set(cond) & ASSOCIATED_KEYS, cond
+            if "prop" in cond:
+                assert isinstance(cond["default"], str)
+            assert isinstance(cond.get("param", 0), int)
+            assert all(isinstance(v, str) for v in cond.get("map", {}).values())
 
 
 @pytest.mark.parametrize("code", CODES)

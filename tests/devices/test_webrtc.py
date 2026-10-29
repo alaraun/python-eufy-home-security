@@ -12,6 +12,7 @@ import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices import webrtc
+from eufy_home_security.devices.conditions import Condition
 from eufy_home_security.devices.webrtc import (
     RouteDevice,
     app_uses_webrtc,
@@ -41,6 +42,10 @@ def child(
         station_serial=serial if hub is None else hub.serial,
         firmware=firmware,
     )
+
+
+def firmware_from(bound: str) -> Condition:
+    return Condition(kind="device_version", qualifier=">=", value=bound)
 
 
 def routed(device: RouteDevice, *others: RouteDevice) -> bool:
@@ -171,7 +176,7 @@ def test_a_station_cycle_ends() -> None:
 
 
 def test_equal_variants_keep_the_first(monkeypatch: pytest.MonkeyPatch) -> None:
-    passing = (("device_version", ">=", "1.0.0.0"),)
+    passing = (firmware_from("1.0.0.0"),)
     variants = (
         webrtc._Property("is_connect_webrtc", "0", (), ((),)),
         webrtc._Property("is_connect_webrtc__V1", "2", (), (passing,)),  # any case
@@ -193,7 +198,7 @@ def test_a_variant_without_read_conditions_is_never_chosen(
 
 
 def test_only_a_variant_is_no_property(monkeypatch: pytest.MonkeyPatch) -> None:
-    readable = ((("device_version", ">=", "1.0.0.0"),),)
+    readable = ((firmware_from("1.0.0.0"),),)
     props = (webrtc._Property("is_connect_webrtc__v1", "2", (), readable),)
     monkeypatch.setattr(webrtc, "_PROPERTIES", {"T0000": props})
     assert not app_webrtc_only(child("T0000", None, "1.0.0.0"))
@@ -202,51 +207,11 @@ def test_only_a_variant_is_no_property(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_a_station_value_that_is_not_available_is_no_property(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    later = ((("device_version", ">=", "9.0.0.0"),),)
+    later = ((firmware_from("9.0.0.0"),),)
     props = (webrtc._Property("is_connect_webrtc", "2", later, ()),)
     monkeypatch.setattr(webrtc, "_PROPERTIES", {"T0000": props})
     hub = station("T0000", "1.0.0.0")
     assert not routed(child("T8160", hub), hub)
-
-
-@pytest.mark.parametrize(
-    ("version", "qualifier", "bound", "expected"),
-    [
-        ("2.0", ">", "1.9", True),
-        ("2.0", ">", "2.0", False),
-        ("1.9", "<", "2.0", True),
-        ("2.0", "<", "2.0", False),
-        ("2.0", "=", "2.0.0", True),
-        ("2.0", "=", "2.1", False),
-        ("2.0", "!=", "2.0", False),
-        ("2.1", "!=", "2.0", True),
-        ("2.0", ">=", "2.0", True),
-        ("2.0", "<=", "2.0", True),
-        ("2.1", "<=", "2.0", False),
-        ("2.0.beta", "RE", "beta", True),
-        ("2.0", "RE", "beta", False),
-        ("2.0", "~", "2.0", False),
-    ],
-)
-def test_version_conditions(version: str, qualifier: str, bound: str, expected: bool) -> None:
-    assert webrtc._version(version, qualifier, bound) is expected
-
-
-@pytest.mark.parametrize(
-    ("pattern", "value", "expected"),
-    [
-        ("", "T8030", True),
-        ("^T8030", "", True),
-        ("^T8030", "T8030P1", True),
-        ("^T8030", "T8010P1", False),
-        ("x" * 512, "x" * 512, True),
-        ("x" * 513, "x" * 513, False),
-        ("^x", "x" * 2048, True),
-        ("^x", "x" * 2049, False),
-    ],
-)
-def test_pattern_conditions(pattern: str, value: str, expected: bool) -> None:
-    assert webrtc._regex(pattern, value) is expected
 
 
 @pytest.mark.parametrize(
@@ -277,12 +242,9 @@ def test_sub_device_lists(text: str, codes: list[str]) -> None:
     assert webrtc._code_list(text) == codes
 
 
-def test_parent_version_without_a_bound_passes() -> None:
-    graph = webrtc._Graph(())
-    device = child("T8170", None)
-    assert graph.condition(device, "parent_version", ">=", "")
-    assert not graph.condition(device, "parent_version", ">=", "1.0")  # no parent listed
-    assert not graph.condition(device, "user_country", "=", "DE")
+def test_a_parent_the_list_lacks_has_no_firmware() -> None:
+    unit = webrtc._Graph(()).unit(child("T8170", station("T8030", "3.8.7.4"), firmware=None))
+    assert (unit.firmware, unit.parent_firmware, unit.parent_listed) == ("", "", False)
 
 
 def test_a_cloud_device_as_the_rule_reads_it() -> None:

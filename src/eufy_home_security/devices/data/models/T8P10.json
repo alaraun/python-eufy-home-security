@@ -531,6 +531,26 @@
    "section": "storage",
    "values": [
     0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8N00).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.0.2"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_storage_type__v1": {

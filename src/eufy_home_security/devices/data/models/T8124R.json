@@ -449,6 +449,29 @@
     5,
     6
    ],
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!(T8124P40|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 1298,
@@ -1556,6 +1579,21 @@
    "values": [
     5,
     2
+   ],
+   "variants": [
+    {
+     "id": "record_resolution__v1",
+     "key": "record_resolution__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8124P40).*$"
+       }
+      ]
+     ]
+    }
    ],
    "write": {
     "cmd": 1700,

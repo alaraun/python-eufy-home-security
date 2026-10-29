@@ -168,7 +168,9 @@ The model list (`devices/app_models.py`: every serial prefix the app names, with
 kind, product categories and cloud device type) comes from the same app build, through
 `scripts/gen_app_models.py`; see
 [add-a-device.md § The model](add-a-device.md#1-the-model). Regenerate it with the
-settings files, then the support matrix.
+settings files, then the support matrix. The app build's thing-SDK version, which
+`sdk_version` conditions compare, is `THING_SDK_VERSION` in `devices/conditions.py`:
+set it to that build's version when the cache moves to a new build.
 
 ## Before a release
 

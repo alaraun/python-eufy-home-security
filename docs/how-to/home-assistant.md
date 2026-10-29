@@ -1182,8 +1182,18 @@ both in sentence case, as HA names entities.
 `video_clip_length` and `trigger_interval_time` on the custom-recording page); use it as
 the entity's unit of measurement. `setting.variant_of` is the key of the setting the app
 uses in this one's place on the same model (`record_resolution__v1` →
-`record_resolution`, `nightvision_type` → `nightvision_type_new`), else `None`: register
-a variant disabled by default instead of matching key suffixes. A variant identical to its
+`record_resolution`, `nightvision_type` → `nightvision_type_new`), else `None`. Which
+member of a group the app uses depends on the unit (its station, firmware and reported
+values): `station.setting_in_use(key, device_sn)` is True for the member in use, False
+for the others and None when the library cannot tell yet (no device list or state for
+the device, or an input it lacks such as the account's country). Enable by default the
+member in use and register the others disabled; on None, fall back to the primary. Ask
+again after a firmware update or a state change (`StationStateChanged`): the answer can
+change; leave alone an entity the user changed. The firmware it compares is the device
+list's, the country the one the library logs in with (which can differ from the
+account's registered country), and a HomeBase 2-generation station's firmware is
+compared as listed: see [models-schema.md § Variants](../reference/models-schema.md#variants)
+for where this can differ from the app. A variant identical to its
 primary in codec, domain, labels and control is not in the file at all
 (`detection_sensitivity_test_mode` on a T8160): an entity registered under such a key has no
 setting; remove it. A released key stays: where a release shipped it (the same key on

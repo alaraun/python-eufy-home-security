@@ -25,6 +25,21 @@
     "positionNum",
     "zoneWidth",
     "zoneHeight"
+   ],
+   "variants": [
+    {
+     "id": "activityzone_config__v1",
+     "key": "activityzone_config__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "SE",
+        "type": "device_sn",
+        "value": "^.{6}7"
+       }
+      ]
+     ]
+    }
    ]
   },
   "activityzone_config__v1": {
@@ -240,7 +255,22 @@
    "default": "{\"trigger\":[12],\"action\":[0,3,5]}",
    "kind": "string",
    "read": null,
-   "section": "modes"
+   "section": "modes",
+   "variants": [
+    {
+     "id": "automation_config__v1",
+     "key": "automation_config__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8010).*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "automation_config__v1": {
    "access": "ro",
@@ -269,6 +299,21 @@
    "values": [
     0,
     4
+   ],
+   "variants": [
+    {
+     "id": "automation_detect_trigger_type__v1",
+     "key": "automation_detect_trigger_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8N00|T7000|T8040).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "automation_detect_trigger_type__v1": {
@@ -457,6 +502,29 @@
    "values": [
     5,
     6
+   ],
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8140).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
    ],
    "write": {
     "cmd": 1252,
@@ -1457,6 +1525,21 @@
     "positionNum",
     "zoneWidth",
     "zoneHeight"
+   ],
+   "variants": [
+    {
+     "id": "set_privacy_zone__v1",
+     "key": "set_privacy_zone__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "SE",
+        "type": "device_sn",
+        "value": "^.{6}7"
+       }
+      ]
+     ]
+    }
    ]
   },
   "set_privacy_zone__v1": {
@@ -1536,6 +1619,21 @@
     0,
     1,
     2
+   ],
+   "variants": [
+    {
+     "id": "speaker_volume__v1",
+     "key": "speaker_volume__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "SE",
+        "type": "device_sn",
+        "value": "^.{6}7"
+       }
+      ]
+     ]
+    }
    ],
    "write": {
     "cmd": 1230,

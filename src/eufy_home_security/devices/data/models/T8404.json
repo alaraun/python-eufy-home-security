@@ -614,6 +614,29 @@
     2,
     3,
     4
+   ],
+   "variants": [
+    {
+     "id": "device_motion_detection__v1",
+     "key": "device_motion_detection__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8404).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_motion_detection__v1": {
@@ -697,7 +720,65 @@
    "default": "v3",
    "kind": "string",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "device_multiple_bridge_style__v1",
+     "key": "device_multiple_bridge_style__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8N00).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "1.0.0.0"
+       },
+       {
+        "qualifier": "<=",
+        "type": "parent_version",
+        "value": "1.1.3.7"
+       },
+       {
+        "qualifier": "<=",
+        "type": "device_version",
+        "value": "1.0.6.4"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_multiple_bridge_style__v2",
+     "key": "device_multiple_bridge_style__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8N00).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "1.1.3.8"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "1.0.6.5"
+       },
+       {
+        "qualifier": ">=",
+        "type": "sdk_version",
+        "value": "2.0.0.0"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "device_multiple_bridge_style__v1": {
    "access": "ro",
@@ -978,6 +1059,21 @@
    "section": "storage",
    "values": [
     0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8404).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_storage_type__v1": {
@@ -1147,7 +1243,40 @@
    "default": true,
    "kind": "bool",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "is_support_multiple_bridge__v1",
+     "key": "is_support_multiple_bridge__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8N00).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "1.0.0.0"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_support_multiple_bridge__v2",
+     "key": "is_support_multiple_bridge__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T9000).*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "is_support_multiple_bridge__v1": {
    "access": "ro",
