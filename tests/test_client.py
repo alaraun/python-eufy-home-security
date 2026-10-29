@@ -2662,3 +2662,25 @@ async def test_a_pushed_picture_that_is_no_image_raises_and_logs_its_format(
     assert type(caught.value) is error
     assert logged in caplog.text
     assert SYNTHETIC.camera_sn not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("client_country", "expected"), [("OM", [False, True]), (None, [None, None])]
+)
+async def test_the_login_country_decides_a_country_gated_setting_variant(
+    client_country: str | None, expected: list[bool | None]
+) -> None:
+    """The country the account logs in with reaches the stations' variant decision;
+    while it is unknown, a country-gated group cannot be decided."""
+    camera = camera_device() | {"device_new_pn": "T814X"}
+    cloud = FakeCloud(
+        devices=[station_device(), camera],
+        client_country=client_country,
+        country_regions={"OM": "eu"},
+    )
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        home = next(s for s in await eufy.async_discover() if s.serial == SYNTHETIC.station_sn)
+        members = ("player_model_config", "player_model_config__v1")
+        assert [home.setting_in_use(k, SYNTHETIC.camera_sn) for k in members] == expected
+        await eufy.async_close()

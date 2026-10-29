@@ -5014,3 +5014,15 @@ def test_setting_in_use_reads_a_missing_firmware_as_below_every_bound() -> None:
     assert [_hub_with(camera).setting_in_use(k, camera.device_sn) for k in members] == [True, False]
     newer = dataclasses.replace(camera, main_sw_version="3.1.5.8")
     assert [_hub_with(newer).setting_in_use(k, newer.device_sn) for k in members] == [False, True]
+
+
+def test_setting_in_use_compares_the_station_s_firmware_for_a_paired_device() -> None:
+    """A T8180 behind a HomeBase 3 uses ``is_connect_webrtc__v1`` from the station's
+    firmware 3.7.4.3 on; the camera's own firmware plays no part."""
+    members = ("is_connect_webrtc", "is_connect_webrtc__v1")
+    camera = _camera_of("T8180", params={}, main_sw_version="9.9.9.9")
+    base = _hub_with(camera)
+    for firmware, expected in (("3.7.4.2", [True, False]), ("3.7.4.3", [False, True])):
+        device = dataclasses.replace(base.device, main_sw_version=firmware)
+        station = Station(device, base.session, sub_devices=[camera])
+        assert [station.setting_in_use(k, camera.device_sn) for k in members] == expected

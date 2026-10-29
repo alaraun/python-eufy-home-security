@@ -209,6 +209,11 @@ def _entries(rules: object, member: dict[str, object]) -> dict[str, dict[str, ob
     ("variants", "member", "error"),
     [
         ([{"id": "x__v1", "key": "y", "read_conditions": []}], {}, "not one of its variants"),
+        (  # a setting of the file, but not a variant of x
+            [{"id": "x__v1", "key": "x__v1", "read_conditions": []}],
+            {"variant_of": None},
+            "not one of its variants",
+        ),
         (
             [{"id": "x__v1", "key": "x__v1", "read_conditions": []}],
             {"variants": [{"id": "x__v1__v1", "key": None, "read_conditions": []}]},
