@@ -1189,7 +1189,11 @@ for the others and None when the library cannot tell yet (no device list or stat
 the device, or an input it lacks such as the account's country). Enable by default the
 member in use and register the others disabled; on None, fall back to the primary. Ask
 again after a firmware update or a state change (`StationStateChanged`): the answer can
-change; leave alone an entity the user changed. A variant identical to its
+change; leave alone an entity the user changed. The firmware it compares is the device
+list's, the country the one the library logs in with (which can differ from the
+account's registered country), and a HomeBase 2-generation station's firmware is
+compared as listed: see [models-schema.md § Variants](../reference/models-schema.md#variants)
+for where this can differ from the app. A variant identical to its
 primary in codec, domain, labels and control is not in the file at all
 (`detection_sensitivity_test_mode` on a T8160): an entity registered under such a key has no
 setting; remove it. A released key stays: where a release shipped it (the same key on

@@ -96,12 +96,28 @@ condition list passes when any group passes, a group when all its conditions pas
 | `sdk_version` | the app's thing-SDK version | as above |
 | `device_sn`, `parent_sn` | the device's / its parent's serial | the value is a pattern, whatever the qualifier |
 | `user_country` | the country the account logs in with | pattern |
-| `associated_field` | the property `prop`: device parameter `param` read through `map` (absent: as reported), `default` when the device reports no such parameter; no `param` when the generator found no read; no `prop`: `""` | `=`, `!=`, text order for `<`, `<=`, `>`, `>=`; `RE` as a pattern |
+| `associated_field` | the property `prop`: device parameter `param` read through `map` (absent: as reported), `default` when the device reports no such parameter; no `param` when the generator found no parameter the handler reports it from as is (read by name, else by command id) and its own write, if any, stores as is; no `prop`: `""` | `=`, `!=`, text order for `<`, `<=`, `>`, `>=`; `RE` as a pattern |
 | `parent_associated_field` | the parent's property `prop`; passes when the parent is not listed | not evaluated otherwise (unknown) |
 
 A pattern passes on an empty pattern or value and on a match anywhere (an inline flag
 such as `(?i)` applies to the whole pattern); any other type fails.
 `Station.setting_in_use(key, device_sn)` evaluates it per unit (see *At runtime*).
+
+Where the inputs differ from the app's:
+
+- `device_version`, `parent_version` read the device list's `main_sw_version`; the app
+  prefers the device's own `firmware_main_version` property where it has one, so right
+  after a firmware update the answer can lag until the next device list.
+- For a HomeBase 2 and other stations of its generation, the app removes every character
+  other than digits and dots from the station's firmware before comparing
+  `parent_version`; the library compares the firmware as listed.
+- `user_country` is the country the library logs in with (`EufyCloudApi.login_country`:
+  the `country` option, else the host's IP country), which can differ from the country
+  the account was registered in.
+- An associated condition whose value the handler's read never produces never passes,
+  as in the app: on a T8180, `live_streaming_resolution__v1` and `record_resolution__v1`
+  need view mode `12`, which the view-mode read reports only as `0` or `1`, so the
+  primaries stay in use.
 
 ### Per-view reads
 
