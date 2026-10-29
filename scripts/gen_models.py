@@ -53,7 +53,7 @@ import sys
 import tempfile
 import threading
 import traceback
-from collections.abc import Collection, Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -230,24 +230,45 @@ def reported_param(
     ident: str,
     values: Collection[str],
 ) -> int | None:
-    """The device parameter getProperty reports ``ident`` from as is, in ``context``
-    (asked for ``ident`` alone, as the app asks for a property): the one whose own id
-    comes back when the device holds every id of :data:`PROBE_PARAMS` with itself as the
-    value, and which reads each of ``values`` back unchanged; None when there is none."""
+    """The device parameter getProperty reports ``ident`` from as is, in ``context``:
+    the one whose own id comes back when the device holds every id of
+    :data:`PROBE_PARAMS` with itself as the value, which reads each of ``values`` back
+    unchanged and which the handler's own write of ``ident`` (if any) stores each of them
+    in as is; None when there is none. Asked for ``ident`` alone, as the app asks for a
+    property, else with every id as a command id too (a handler that parses the property
+    only from its command); another parameter's parse error does not hide it.
+    """
 
-    def ask(params: Mapping[int, str]) -> Any:
+    def ask(params: Mapping[int, str], cmds: Sequence[int]) -> Any:
         device = context.device(product_code)
         device["params"] = [{"param_type": k, "param_value": v} for k, v in params.items()]
-        request = {"kind": "get", "cmds": [], "device": device, "props": [ident]}
+        request = {"kind": "get", "cmds": list(cmds), "device": device, "props": [ident]}
         (reply,) = run_driver(product_code, handler, [request])
-        return (p2p(reply) or {}).get(ident, codec.MISSING)
+        data = reply.get("data") if isinstance(reply, dict) else None
+        found = data.get("p2p") if isinstance(data, dict) else None
+        return found.get(ident, codec.MISSING) if isinstance(found, dict) else codec.MISSING
 
-    found = ask({p: str(p) for p in PROBE_PARAMS})
-    if isinstance(found, bool) or str(found) not in PROBE_TEXTS:
-        return None
-    param = int(found)
-    if all(variants.text(ask({param: v})) == v for v in values):
-        return param
+    def stored(value: str) -> str | None:
+        """The text the handler's write of ``value`` stores; None when it stores none."""
+        device = context.device(product_code)
+        request = {"kind": "set", "identifier": ident, "payload": value, "device": device}
+        (reply,) = run_driver(product_code, handler, [request])
+        update = (p2p(reply) or {}).get("update")
+        if not isinstance(update, dict):
+            return None
+        return variants.text(update.get("paramValue"))
+
+    every = {p: str(p) for p in PROBE_PARAMS}
+    for cmds in ((), PROBE_PARAMS):
+        found = ask(every, cmds)
+        if isinstance(found, bool) or str(found) not in PROBE_TEXTS:
+            continue
+        param = int(found)
+        asked = [param] if cmds else []
+        if all(variants.text(ask({param: v}, asked)) == v for v in values) and all(
+            stored(v) in (None, v) for v in values
+        ):
+            return param
     return None
 
 

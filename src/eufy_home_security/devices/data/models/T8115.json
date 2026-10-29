@@ -509,6 +509,7 @@
        },
        {
         "default": "1",
+        "param": 1299,
         "prop": "ai_empower",
         "qualifier": "=",
         "type": "associated_field",
