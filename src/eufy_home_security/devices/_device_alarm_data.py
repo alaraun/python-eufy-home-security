@@ -6695,9 +6695,58 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
                 "M8023",
                 "M8024",
                 "M8025",
+                "T9000",
+            ),
+            {
+                "default": 2,
+                "choices": {
+                    0: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+        (
+            (
                 "NVR",
                 "T7000",
-                "T9000",
             ),
             {
                 "default": 2,

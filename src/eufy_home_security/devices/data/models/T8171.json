@@ -262,7 +262,22 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
-   "section": "modes"
+   "section": "modes",
+   "variants": [
+    {
+     "id": "automation_config__v1",
+     "key": "automation_config__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8010).*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "automation_config__v1": {
    "access": "ro",
@@ -293,6 +308,21 @@
     0,
     2,
     4
+   ],
+   "variants": [
+    {
+     "id": "automation_detect_trigger_type__v1",
+     "key": "automation_detect_trigger_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8N00|T8025|T7000|T8040).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "automation_detect_trigger_type__v1": {
@@ -581,6 +611,29 @@
     "param": 1298
    },
    "section": "detection",
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8171|T8010).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 1298,
@@ -914,6 +967,44 @@
    "section": "storage",
    "values": [
     0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "^(?i)(?!JP).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "^(?i)(?!JP).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_storage_type__v1": {
@@ -1187,7 +1278,143 @@
    "default": true,
    "kind": "bool",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "is_support_multiple_bridge__v1",
+     "key": "is_support_multiple_bridge__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T9000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.1.3.9"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "1.2.0.4"
+       },
+       {
+        "qualifier": "SE",
+        "type": "device_sn",
+        "value": "^.{6}[^3].*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_support_multiple_bridge__v2",
+     "key": "is_support_multiple_bridge__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "3.7.6.1"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "1.2.1.5"
+       },
+       {
+        "qualifier": "SE",
+        "type": "device_sn",
+        "value": "^.{6}3.*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_support_multiple_bridge__v3",
+     "key": "is_support_multiple_bridge__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T9000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.1.3.9"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "1.2.1.5"
+       },
+       {
+        "qualifier": "SE",
+        "type": "device_sn",
+        "value": "^.{6}3.*$"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.3.0.4"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "1.2.1.5"
+       },
+       {
+        "qualifier": "SE",
+        "type": "device_sn",
+        "value": "^.{6}3.*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_support_multiple_bridge__v5",
+     "key": "is_support_multiple_bridge__v5",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.3.0.4"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "1.2.0.4"
+       },
+       {
+        "qualifier": "SE",
+        "type": "device_sn",
+        "value": "^.{6}[^3].*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "is_support_multiple_bridge__v1": {
    "access": "ro",

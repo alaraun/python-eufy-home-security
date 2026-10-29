@@ -487,6 +487,21 @@
     0,
     1,
     2
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "^(?i)(JP).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_storage_type__v1": {
@@ -592,7 +607,27 @@
    "default": "[\"T8223\",\"T8224\",\"T8215\"]",
    "kind": "string",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "is_connect_webrtc_sub_device_list__v1",
+     "key": "is_connect_webrtc_sub_device_list__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": ">=",
+        "type": "sdk_version",
+        "value": "2.2.4.0"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "4.0.8.3"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "is_connect_webrtc_sub_device_list__v1": {
    "access": "ro",

@@ -518,6 +518,50 @@
     "param": 1298
    },
    "section": "detection",
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!(T814X|T8040)).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 1298,
@@ -815,6 +859,43 @@
    "section": "storage",
    "values": [
     0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "2.0.9.0"
+       },
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T814X).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(?:JP|OM)).*$"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030|T9000|T8025).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(?:JP|OM)).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_storage_type__v1": {
@@ -1798,7 +1879,22 @@
    "default": "{\"style\": {\"spotlight_switch\": \"v1\", \"nightvision_type\": \"v3\"}, \"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"ptz_action_control#F#3\", \"spotlight_switch#F#4\", \"nightvision_type#G#1\", \"media_screenshot#G#2\", \"set_preset_positions#G#3\", \"ai_tracking_status#G#4\", \"set_round_look_360#G#5\", \"live_streaming_resolution#G#6\", \"ptz_calibrate#G#7\"]}, \"config\": {\"SwipePanTilt\": 1, \"GoAnywhere\": 1}}",
    "kind": "string",
    "read": null,
-   "section": "recording"
+   "section": "recording",
+   "variants": [
+    {
+     "id": "player_model_config__v1",
+     "key": "player_model_config__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)(OM).*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "player_model_config__v1": {
    "access": "ro",

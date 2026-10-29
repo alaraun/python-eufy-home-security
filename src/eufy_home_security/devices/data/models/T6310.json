@@ -818,6 +818,21 @@
     0,
     1,
     2
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "T8030"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_storage_type__v1": {

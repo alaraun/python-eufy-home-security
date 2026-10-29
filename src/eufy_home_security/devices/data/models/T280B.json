@@ -60,6 +60,38 @@
     1,
     2,
     3
+   ],
+   "variants": [
+    {
+     "id": "ecl_get_voice_list__v1",
+     "key": "ecl_get_voice_list__v1",
+     "read_conditions": [
+      [
+       {
+        "default": "2",
+        "prop": "ecl_language_version",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "ecl_get_voice_list__v2",
+     "key": "ecl_get_voice_list__v2",
+     "read_conditions": [
+      [
+       {
+        "default": "2",
+        "prop": "ecl_language_version",
+        "qualifier": ">=",
+        "type": "associated_field",
+        "value": "3"
+       }
+      ]
+     ]
+    }
    ]
   },
   "ecl_get_voice_list__v1": {

@@ -263,7 +263,22 @@
    "default": "{\"trigger\":[12],\"action\":[0,3,5]}",
    "kind": "string",
    "read": null,
-   "section": "modes"
+   "section": "modes",
+   "variants": [
+    {
+     "id": "automation_config__v1",
+     "key": "automation_config__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8010).*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "automation_config__v1": {
    "access": "ro",

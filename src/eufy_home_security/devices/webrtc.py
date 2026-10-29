@@ -30,9 +30,9 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final
 
-from ._webrtc_routing_data import ROUTE_PROPERTIES, THING_SDK_VERSION
+from ._webrtc_routing_data import ROUTE_PROPERTIES
+from .conditions import Condition, ConditionUnit, Groups, choices, passes, variant_rest
 from .model_settings import product_code_of
-from .versions import version_bigger_than, version_equals
 
 if TYPE_CHECKING:
     from ..cloud.models import CloudDevice
@@ -44,24 +44,21 @@ CONDITION_TYPES: Final = frozenset(
 )
 """The condition types the rule evaluates (the generator refuses any other)."""
 
-_VARIANT: Final = "__v"
-_MAX_PATTERN: Final = 512
-_MAX_VALUE: Final = 2048
 _JAVA_INT: Final = re.compile(r"[+-]?[0-9]+")
-
-type _Conditions = tuple[tuple[tuple[str, str, str], ...], ...]
 
 
 @dataclass(frozen=True, slots=True)
 class _Property:
     identifier: str
     default: str
-    available: _Conditions
-    read: _Conditions
+    available: Groups
+    read: Groups
 
 
-def _conditions(groups: list[list[list[str]]]) -> _Conditions:
-    return tuple(tuple((c[0], c[1], c[2]) for c in group) for group in groups)
+def _conditions(groups: list[list[list[str]]]) -> Groups:
+    return tuple(
+        tuple(Condition(kind=c[0], qualifier=c[1], value=c[2]) for c in group) for group in groups
+    )
 
 
 _PROPERTIES: Final[Mapping[str, tuple[_Property, ...]]] = MappingProxyType(
@@ -104,35 +101,6 @@ def route_device(device: CloudDevice) -> RouteDevice:
     )
 
 
-def _regex(pattern: str, value: str) -> bool:
-    """A pattern condition: an empty pattern or value passes; a match anywhere passes."""
-    if not pattern or not value:
-        return True
-    if len(pattern) > _MAX_PATTERN or len(value) > _MAX_VALUE:
-        return False
-    return re.search(pattern, value) is not None
-
-
-def _version(version: str, qualifier: str, bound: str) -> bool:
-    """A version condition: ``version`` against ``bound`` (:mod:`.versions`)."""
-    match qualifier:
-        case ">":
-            return version_bigger_than(version, bound)
-        case "<":
-            return version_bigger_than(bound, version)
-        case "=":
-            return version_equals(version, bound)
-        case "!=":
-            return not version_equals(version, bound)
-        case ">=":
-            return version_bigger_than(version, bound) or version_equals(version, bound)
-        case "<=":
-            return version_bigger_than(bound, version) or version_equals(version, bound)
-        case "RE":
-            return _regex(bound, version)
-    return False
-
-
 class _Graph:
     """The device list the rule reads: devices by serial and paired product codes."""
 
@@ -151,28 +119,21 @@ class _Graph:
             if d.parent == device.serial and d.product_code is not None
         }
 
-    def condition(self, device: RouteDevice, kind: str, qualifier: str, value: str) -> bool:
-        match kind:
-            case "device_version":
-                return _version(device.firmware or "", qualifier, value)
-            case "parent_version":
-                if not value or not qualifier:
-                    return True
-                parent = self.parent_of(device)
-                return _version((parent and parent.firmware) or "", qualifier, value)
-            case "sdk_version":
-                return _version(THING_SDK_VERSION, qualifier, value)
-            case "device_sn":
-                return _regex(value, device.serial)
-            case "parent_sn":
-                return _regex(value, device.parent)
-        return False
-
-    def passes(self, device: RouteDevice, groups: _Conditions) -> bool:
-        """Whether ``groups`` pass: none at all, or every condition of some group."""
-        return not groups or any(
-            all(self.condition(device, *cond) for cond in group) for group in groups
+    def unit(self, device: RouteDevice) -> ConditionUnit:
+        """``device`` as the conditions read it: a missing firmware is ``""``, as is the
+        firmware of a parent the list lacks."""
+        parent = self.parent_of(device)
+        return ConditionUnit(
+            serial=device.serial,
+            parent_serial=device.parent,
+            firmware=device.firmware or "",
+            parent_firmware=(parent and parent.firmware) or "",
+            parent_listed=parent is not None,
         )
+
+    def passes(self, device: RouteDevice, groups: Groups) -> bool:
+        """Whether ``groups`` pass: none at all, or every condition of some group."""
+        return passes(groups, self.unit(device)) is True
 
     def has(self, device: RouteDevice, identifier: str) -> bool:
         props = _properties(device)
@@ -183,20 +144,13 @@ class _Graph:
     def resolve(self, device: RouteDevice, identifier: str) -> _Property | None:
         """The property ``identifier`` reads: its ``__v`` variant whose read conditions
         pass with the most conditions (the first of equals), else itself."""
-        chosen, most = identifier, -1
-        for prop in _properties(device):
-            rest = prop.identifier[len(identifier) :]
-            if (
-                not prop.identifier.startswith(identifier)
-                or not rest.lower().startswith(_VARIANT)
-                or not prop.read
-                or not self.passes(device, prop.read)
-            ):
-                continue
-            count = sum(len(group) for group in prop.read)
-            if count > most:
-                chosen, most = prop.identifier, count
-        return next((p for p in _properties(device) if p.identifier == chosen), None)
+        props = _properties(device)
+        candidates = [
+            (p.identifier, p.read) for p in props if variant_rest(p.identifier, identifier)
+        ]
+        (chosen,) = choices(candidates, self.unit(device))
+        name = identifier if chosen is None else chosen
+        return next((p for p in props if p.identifier == name), None)
 
     def value(self, device: RouteDevice, identifier: str) -> str:
         """The property's value: its default when readable, else empty."""

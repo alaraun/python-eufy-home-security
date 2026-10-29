@@ -494,6 +494,29 @@
     "param": 1298
    },
    "section": "detection",
+   "variants": [
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 1298,

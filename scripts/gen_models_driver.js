@@ -5,7 +5,7 @@
 // job:    {"handler": "<path to <PN>Handle.mix.js>",
 //          "requests": [{"kind": "set", "identifier", "payload", "device"}
 //                     | {"kind": "action", "identifier", "payload", "device"}
-//                     | {"kind": "get", "cmds", "device"}]}
+//                     | {"kind": "get", "cmds", "device", "props"?}]}
 // "set" sends the action "setProperty"; "action" sends the identifier itself as the action.
 // reply:  a JSON array with one reply per request; a throwing request yields {"error": "..."}.
 //
@@ -80,7 +80,7 @@ function call(handler, request) {
   if (request.kind === "get") {
     const msg = {
       action: "getProperty",
-      input: { property: [], commandId: request.cmds },
+      input: { property: request.props || [], commandId: request.cmds },
       device: request.device,
     };
     return handler.deviceStatus(JSON.stringify(msg) + "EOF;", 1);

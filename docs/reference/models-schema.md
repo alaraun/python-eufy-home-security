@@ -47,6 +47,7 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `bit` | A `bool` that is one bit of a parameter other settings share: the value is `raw & bit`, and a write sends the whole current mask with this bit set or cleared (`$v:int` is the mask) |
 | `advanced` | `true` on a setting the eufy app puts behind a warning (`working_mode_value`: switching to Standard reduces the HomeBase's Wi-Fi range). A UI offers it hidden by default; absent otherwise |
 | `variant_of` | The identifier of the setting the app uses in this one's place on the same model, absent on the primary. Set for `<base>__v<n>` when `<base>` exists (the app resolves a versioned identifier to its base and picks one by the TD's read conditions) and for listed legacy pairs (`nightvision_type` → `nightvision_type_new`, enum form only) |
+| `variants` | On a primary only: the `__v` properties the app may read in its place, with their read conditions (see *Variants*); absent when it has none with read conditions |
 
 An `rw` setting has exactly one of `write` and `write_table`. An `ro` setting has no
 write key and `read: null`, except a status the app only reads, which keeps its read. A `flags` setting and a `bit` setting read the raw mask
@@ -66,6 +67,41 @@ device paired to such a station. Every context lists the same settings. The gene
 sweeps the handler in each context on two channels; a T8170 behind a HomeBase 3, for
 example, reads `detection_sensitivity` from 1276 and `notification_type` from 1289
 instead of the standalone 6070 and 6020.
+
+### Variants
+
+The app reads a setting through its versioned forms: of the TD properties named
+`<identifier>__v<n>` (any case) that have read conditions, those whose conditions pass for
+the unit compete, the one with the most conditions (summed over its groups) wins, the
+first in TD order among equals, and none passing leaves the primary itself. The primary's
+`variants` lists those candidates in TD order:
+
+```json
+"variants": [
+  {"id": "detection_type_set__v1", "key": "detection_type_set__v1",
+   "read_conditions": [[
+     {"type": "parent_sn", "qualifier": "RE", "value": "^(?!(T8410|T8040)).*$"},
+     {"type": "associated_field", "qualifier": "=", "value": "1",
+      "prop": "ai_empower", "param": 1299, "default": "0"}]]}
+]
+```
+
+`id` is the TD property, `key` the setting that stands for it (itself; the primary when it
+was dropped as equal to the primary; `null` when the file has no setting for it). A
+condition list passes when any group passes, a group when all its conditions pass:
+
+| `type` | Input | Comparison |
+|---|---|---|
+| `device_version`, `parent_version` | the device's / its parent's main firmware (the device's own when it is its own parent); a missing firmware is `""`, below every version | `>`, `<`, `=`, `!=`, `>=`, `<=` as versions (`devices/versions.py`), `RE` as a pattern; `parent_version` without a value or qualifier passes |
+| `sdk_version` | the app's thing-SDK version | as above |
+| `device_sn`, `parent_sn` | the device's / its parent's serial | the value is a pattern, whatever the qualifier |
+| `user_country` | the country the account logs in with | pattern |
+| `associated_field` | the property `prop`: device parameter `param` read through `map` (absent: as reported), `default` when the device reports no such parameter; no `param` when the generator found no read; no `prop`: `""` | `=`, `!=`, text order for `<`, `<=`, `>`, `>=`; `RE` as a pattern |
+| `parent_associated_field` | the parent's property `prop`; passes when the parent is not listed | not evaluated otherwise (unknown) |
+
+A pattern passes on an empty pattern or value and on a match anywhere (an inline flag
+such as `(?i)` applies to the whole pattern); any other type fails.
+`Station.setting_in_use(key, device_sn)` evaluates it per unit (see *At runtime*).
 
 ### Per-view reads
 
@@ -207,6 +243,7 @@ product code and turns each entry into a `Setting`:
 | `note` | `note`, plus the reason when the library refuses the write |
 | `advanced` | `advanced` (False when absent) |
 | `variant_of` | `variant_of` |
+| (not public) | `variants`: `devices/variants.py` `setting_in_use` and `Station.setting_in_use` |
 | `control` (`SettingControl` or None) | `control`; None when the library does not write the setting |
 | `flags`, `bit` | `flags` (member → bits), `bit` |
 

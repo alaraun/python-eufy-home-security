@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Final, Literal, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .._logging import LogThrottle, redact_serial
+from ..cloud.const import scope_country
 from ..cloud.models import CloudDevice
 from ..devices.capabilities import (
     Capability,
@@ -24,6 +25,7 @@ from ..devices.capabilities import (
     own_profile,
     profile_for_serial,
 )
+from ..devices.conditions import ConditionUnit
 from ..devices.device_alarm import DeviceAlarm
 from ..devices.live_open import (
     NVR_OPENS,
@@ -73,6 +75,7 @@ from ..devices.station_config_support import config_support as station_config_su
 from ..devices.support import Evidence, Support
 from ..devices.timezones import TIMEZONE_DOMAIN
 from ..devices.types import DeviceKind, DeviceModel, model_for_serial
+from ..devices.variants import setting_in_use
 from ..devices.webrtc import app_uses_webrtc, route_device
 from ..events import (
     MEDIA_PATH_PREFIX,
@@ -972,17 +975,21 @@ class Station:
         cache: SessionCache | None = None,
         listed_settings: Callable[[str], Sequence[Setting]] | None = None,
         cloud_refresh: Callable[[], Awaitable[object]] | None = None,
+        login_country: Callable[[], str | None] | None = None,
     ) -> None:
         """``listed_settings`` gives the read-only settings listed for a product code
         without a bundled file (the client's model scan); None lists nothing.
         ``cloud_refresh`` reads the cloud device list and applies it
-        (:meth:`async_get_config` with ``refresh``); None reads no cloud."""
+        (:meth:`async_get_config` with ``refresh``); None reads no cloud.
+        ``login_country`` gives the country the account logs in with (None: unknown).
+        """
         self.device = device
         self.session = session
         self.sub_devices: tuple[CloudDevice, ...] = tuple(sub_devices)
         self._cache = cache
         self._listed_settings = listed_settings
         self._cloud_refresh = cloud_refresh
+        self._login_country = login_country
         self._log_name = redact_serial(device.device_sn)
         self._bus = EventBus()
         self._ptz = StationPtz(self)
@@ -1097,6 +1104,63 @@ class Station:
         if not settings:
             return None
         return any(setting.key == key for setting in settings)
+
+    def setting_in_use(self, key: str, device_sn: str | None = None) -> bool | None:
+        """Whether the eufy app uses setting ``key`` for the station (``None``, or its own
+        serial) or the paired device ``device_sn``, of the members of its variant group
+        (:attr:`~..devices.model_settings.Setting.variant_of`), decided as the app decides
+        it (:func:`~..devices.variants.setting_in_use`).
+
+        True for the member in use (a setting without variants is always in use), False
+        for the others, None when the client cannot tell: the decision needs an input it
+        lacks (the account's country, a parameter of the device before its first state or
+        device list, or one the library cannot read). The inputs are the serials, the
+        firmware of the device and of its station (a missing one compares as below every
+        version, as in the app) and the device's parameters as last reported (P2P, then
+        the cloud's copy), so the answer can change with a firmware update or a reported
+        value. Offer the member in use and keep the others disabled. Sync; raises
+        ``UnsupportedError`` as :meth:`settings_for` and for a key not in that list.
+        """
+        settings = {s.key: s for s in self.settings_for(device_sn)}
+        if key not in settings:
+            raise UnsupportedError(f"unknown setting {key!r} for this device")
+        serial = self.serial if device_sn in (None, self.serial) else device_sn
+        return setting_in_use(settings, key, self._condition_unit(serial))
+
+    def _condition_unit(self, serial: str) -> ConditionUnit:
+        """The paired device ``serial`` (this station's own serial: the station) as the
+        thing-description conditions read it."""
+        device = self.device if serial == self.serial else self.sub_device(serial)
+        own = device is self.device
+        parent = self.device if not own or device.station_sn in (None, serial) else None
+        country = scope_country(device.region or "") or (
+            self._login_country() if self._login_country is not None else None
+        )
+        return ConditionUnit(
+            serial=serial,
+            parent_serial=serial if own else self.serial,
+            firmware=device.main_sw_version or "",
+            parent_firmware=(parent.main_sw_version or "") if parent is not None else "",
+            parent_listed=parent is not None,
+            params=self._reported_params(device),
+            country=country,
+        )
+
+    def _reported_params(self, device: CloudDevice) -> Mapping[int, str] | None:
+        """``device``'s parameters as last reported: its P2P block over the cloud's copy;
+        None when the client holds neither."""
+        params = {p.param_id: p.value for p in device.cloud_params}
+        state = self.state
+        block: Mapping[int, str | None] | None = None
+        if state is not None and device is self.device:
+            block = state.setting_params
+        elif state is not None and device.channel is not None:
+            sub = state.devices.get(device.channel)
+            block = None if sub is None else sub.params
+        if block is None and not params:
+            return None
+        params.update({k: v for k, v in (block or {}).items() if v is not None})
+        return params
 
     def has_battery(self, device_sn: str | None = None) -> bool | None:
         """Whether the camera or doorbell ``device_sn`` (the station itself for ``None``)

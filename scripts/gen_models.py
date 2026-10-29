@@ -78,6 +78,8 @@ SCHEMA_VERSION = 3
 BASE = "SINGLE"  # the base context: a station child whose parent is no station kind
 STANDALONE = "standalone"
 IDENTIFIER = re.compile(r"[a-z0-9_]+")
+PROBE_PARAMS = range(1000, 10000)  # the parameter ids reported_param() looks among
+PROBE_TEXTS = frozenset(str(p) for p in PROBE_PARAMS)
 
 
 def _load(name: str) -> ModuleType:
@@ -95,6 +97,7 @@ node = _load("gen_models_node")
 joiner = _load("gen_models_join")
 controls = _load("gen_models_controls")
 sections = _load("gen_models_sections")
+variants = _load("gen_models_variants")
 GeneratorError = codec.GeneratorError
 DRIVERS = node.DriverPool()  # one Node worker per generating thread
 RECIPE_FIELDS = ("cmd", "subCmd", "params")
@@ -218,6 +221,34 @@ def run_driver(
     if wire:
         return [codec.from_wire(r, rep, wire) for r, rep in zip(sent, replies, strict=True)]
     return replies
+
+
+def reported_param(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    ident: str,
+    values: Collection[str],
+) -> int | None:
+    """The device parameter getProperty reports ``ident`` from as is, in ``context``
+    (asked for ``ident`` alone, as the app asks for a property): the one whose own id
+    comes back when the device holds every id of :data:`PROBE_PARAMS` with itself as the
+    value, and which reads each of ``values`` back unchanged; None when there is none."""
+
+    def ask(params: Mapping[int, str]) -> Any:
+        device = context.device(product_code)
+        device["params"] = [{"param_type": k, "param_value": v} for k, v in params.items()]
+        request = {"kind": "get", "cmds": [], "device": device, "props": [ident]}
+        (reply,) = run_driver(product_code, handler, [request])
+        return (p2p(reply) or {}).get(ident, codec.MISSING)
+
+    found = ask({p: str(p) for p in PROBE_PARAMS})
+    if isinstance(found, bool) or str(found) not in PROBE_TEXTS:
+        return None
+    param = int(found)
+    if all(variants.text(ask({param: v})) == v for v in values):
+        return param
+    return None
 
 
 def p2p(reply: Any) -> dict[str, Any] | None:
@@ -1083,6 +1114,13 @@ def generate(
         counts["skipped"] = skipped
     merged = merge_contexts(per_context)
     apply_param_values(product_code, merged, props, tree, titles)
+    variants.add_variants(
+        merged,
+        props,
+        drop,
+        lambda ident, values: reported_param(product_code, handler, contexts[BASE], ident, values),
+        counts,
+    )
     model = model_for_serial(product_code)
     station = model is not None and model.kind is DeviceKind.STATION
     for key, n in sections.assign(merged, station=station).items():

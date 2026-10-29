@@ -758,6 +758,29 @@
    "values": [
     5,
     6
+   ],
+   "variants": [
+    {
+     "id": "device_motion_detection__v1",
+     "key": "device_motion_detection__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T85M1).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_motion_detection__v1": {
@@ -1061,6 +1084,21 @@
    "section": "notifications",
    "values": [
     0
+   ],
+   "variants": [
+    {
+     "id": "device_snooze_time_extra_type__v1",
+     "key": "device_snooze_time_extra_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030|T9000).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_snooze_time_extra_type__v1": {
@@ -1095,6 +1133,21 @@
    "section": "storage",
    "values": [
     0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_storage_type__v1": {
@@ -1123,6 +1176,21 @@
    "section": "detection",
    "values": [
     1
+   ],
+   "variants": [
+    {
+     "id": "device_support_event_filter_detection_type__v1",
+     "key": "device_support_event_filter_detection_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T85M0).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_support_event_filter_detection_type__v1": {

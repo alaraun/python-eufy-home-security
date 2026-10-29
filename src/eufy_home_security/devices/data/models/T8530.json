@@ -143,6 +143,29 @@
    "values": [
     0,
     4
+   ],
+   "variants": [
+    {
+     "id": "automation_detect_trigger_type__v1",
+     "key": "automation_detect_trigger_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8N00|T8040).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
    ]
   },
   "automation_detect_trigger_type__v1": {
@@ -327,6 +350,29 @@
    "values": [
     5,
     6
+   ],
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030|T9000).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
    ]
   },
   "detection_type_set__v1": {
@@ -537,6 +583,34 @@
    "section": "notifications",
    "values": [
     0
+   ],
+   "variants": [
+    {
+     "id": "device_snooze_time_extra_type__v1",
+     "key": "device_snooze_time_extra_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030|T9000).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_snooze_time_extra_type__v2",
+     "key": "device_snooze_time_extra_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8020|T8021|T8023).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_snooze_time_extra_type__v1": {

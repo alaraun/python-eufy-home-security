@@ -580,7 +580,27 @@
    "default": "1",
    "kind": "other",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "is_connect_webrtc__v1",
+     "key": "is_connect_webrtc__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "4.2.0.0"
+       },
+       {
+        "qualifier": "RE",
+        "type": "sdk_version",
+        "value": "^(?!.*beta).*[a-zA-Z].*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "is_connect_webrtc__v1": {
    "access": "ro",
@@ -595,7 +615,50 @@
    "default": "[\"T8223\",\"T8224\",\"T8215\"]",
    "kind": "string",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "is_connect_webrtc_sub_device_list__v1",
+     "key": "is_connect_webrtc_sub_device_list__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "3.8.5.1"
+       },
+       {
+        "qualifier": "<=",
+        "type": "device_version",
+        "value": "4.1.9.999"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "is_connect_webrtc_sub_device_list__v2",
+     "key": "is_connect_webrtc_sub_device_list__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "3.8.2.9"
+       },
+       {
+        "qualifier": "<=",
+        "type": "device_version",
+        "value": "4.1.9.999"
+       },
+       {
+        "qualifier": "RE",
+        "type": "sdk_version",
+        "value": "^(?!.*beta).*[a-zA-Z].*$"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "is_connect_webrtc_sub_device_list__v1": {
    "access": "ro",

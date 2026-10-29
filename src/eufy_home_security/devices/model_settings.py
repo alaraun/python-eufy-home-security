@@ -29,6 +29,7 @@ from typing import Any, Final, cast
 
 from ..exceptions import ModelDataError, UnsupportedError
 from ..p2p.mode_actions import ACTION_FLAGS
+from .conditions import Groups, groups_of
 from .labels import setting_name
 from .recipes import ConnectType
 from .sections import (
@@ -193,6 +194,18 @@ class WireCommand:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class VariantRule:
+    """A thing-description property the app may read in a primary setting's place:
+    ``identifier`` (``<primary>__v<n>``), the setting that stands for it (``key``: the
+    variant, the primary itself when the two are the same, None when the model's file
+    has none) and its read conditions."""
+
+    identifier: str
+    key: str | None
+    read_conditions: Groups
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Setting:
     """One setting of a model: domain, labels, layout and the handler's codecs.
 
@@ -263,6 +276,8 @@ class Setting:
     _write_params: frozenset[int] = field(default=frozenset(), repr=False)
     _mode_table: SettingDef | None = field(default=None, repr=False)
     """The hand-written mode-table entry a mode-table setting is written through."""
+    _variants: tuple[VariantRule, ...] = field(default=(), repr=False)
+    """On a group's primary: the ``__v`` properties the app may read in its place."""
 
     @property
     def section_info(self) -> SettingSection:
@@ -1119,6 +1134,17 @@ def _parse(
             raise ValueError(f"{key}: variant_of {setting.variant_of!r} is not a setting")
         if primary.section != setting.section:
             raise ValueError(f"{key}: section {setting.section!r} is not its primary's")
+        if setting._variants:
+            raise ValueError(f"{key}: a variant lists variants")
+    for key, setting in settings.items():
+        for rule in setting._variants:
+            member = settings.get(rule.key) if rule.key is not None else None
+            if (
+                rule.key is not None
+                and rule.key != key
+                and (member is None or member.variant_of != key)
+            ):
+                raise ValueError(f"{key}: variant {rule.key!r} is not one of its variants")
     return settings
 
 
@@ -1333,4 +1359,28 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         _read_map=None if read_map is None else MappingProxyType(read_map),
         _read_view=read_view,
         _write_params=_template_params([write, *(table or {}).values()]),
+        _variants=_variant_rules(entry.get("variants")),
     )
+
+
+def _variant_rules(raw: Any) -> tuple[VariantRule, ...]:
+    """A primary's ``variants`` (absent: none)."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise TypeError("variants is not a list")
+    rules = []
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+            raise TypeError(f"variant {item!r} has no id")
+        key = item.get("key")
+        if key is not None and not isinstance(key, str):
+            raise TypeError(f"variant {item['id']}: key is not a string")
+        rules.append(
+            VariantRule(
+                identifier=item["id"],
+                key=key,
+                read_conditions=groups_of(item.get("read_conditions")),
+            )
+        )
+    return tuple(rules)

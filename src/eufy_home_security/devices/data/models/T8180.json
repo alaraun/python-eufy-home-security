@@ -300,6 +300,21 @@
     0,
     2,
     4
+   ],
+   "variants": [
+    {
+     "id": "automation_detect_trigger_type__v1",
+     "key": "automation_detect_trigger_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8180).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "automation_detect_trigger_type__v1": {
@@ -834,6 +849,29 @@
     5,
     6
    ],
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8180).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 1298,
@@ -993,6 +1031,29 @@
     1,
     2,
     4
+   ],
+   "variants": [
+    {
+     "id": "device_motion_detection__v1",
+     "key": "device_motion_detection__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8180).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_motion_detection__v1": {
@@ -1291,6 +1352,39 @@
    "section": "storage",
    "values": [
     0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T9000|T8025|T8010).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "^(?i)(?!JP).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8N00).*$"
+       }
+      ]
+     ]
+    }
    ]
   },
   "device_storage_type__v1": {
@@ -1514,7 +1608,27 @@
    "default": "1",
    "kind": "other",
    "read": null,
-   "section": "network"
+   "section": "network",
+   "variants": [
+    {
+     "id": "is_connect_webrtc__v1",
+     "key": "is_connect_webrtc__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "3.7.4.3"
+       }
+      ]
+     ]
+    }
+   ]
   },
   "is_connect_webrtc__v1": {
    "access": "ro",
@@ -1730,6 +1844,29 @@
     5,
     2,
     6
+   ],
+   "variants": [
+    {
+     "id": "live_streaming_resolution__v1",
+     "key": "live_streaming_resolution__v1",
+     "read_conditions": [
+      [
+       {
+        "default": "1",
+        "map": {
+         "": "0",
+         "0": "1",
+         "12": "0"
+        },
+        "param": 6243,
+        "prop": "view_mode",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "12"
+       }
+      ]
+     ]
+    }
    ],
    "write": {
     "cmd": 1350,
@@ -2310,6 +2447,21 @@
     1,
     3
    ],
+   "variants": [
+    {
+     "id": "power_manager_mode__v1",
+     "key": "power_manager_mode__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "2"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1246,
     "params": {
@@ -2468,6 +2620,29 @@
     5,
     2,
     6
+   ],
+   "variants": [
+    {
+     "id": "record_resolution__v1",
+     "key": "record_resolution__v1",
+     "read_conditions": [
+      [
+       {
+        "default": "1",
+        "map": {
+         "": "0",
+         "0": "1",
+         "12": "0"
+        },
+        "param": 6243,
+        "prop": "view_mode",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "12"
+       }
+      ]
+     ]
+    }
    ],
    "write": {
     "cmd": 1350,

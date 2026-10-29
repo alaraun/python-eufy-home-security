@@ -56,15 +56,16 @@ def test_of_two_variants_with_as_many_conditions_the_first_wins() -> None:
     assert gen.resolve(props, "T9ZZ9P0000000002", "T8030P0000000001") is BEHIND_A_STATION
 
 
-def test_a_serial_condition_that_is_no_pattern_match_keeps_the_base() -> None:
-    other = _prop("set_alarm_type__v1", [("parent_sn", "SE", ".*")])
-    assert gen.resolve([BASE, other], "T9ZZ9P0000000002", "T8030P0000000001") is BASE
+def test_a_serial_condition_is_a_pattern_whatever_its_qualifier() -> None:
+    other = _prop("set_alarm_type__v1", [("parent_sn", "SE", "^T8030")])
+    assert gen.resolve([BASE, other], "T9ZZ9P0000000002", "T8030P0000000001") is other
+    assert gen.resolve([BASE, other], "T9ZZ9P0000000002", "T8010P0000000001") is BASE
 
 
 def test_a_condition_on_a_device_value_keeps_the_base() -> None:
     gated = _prop(
         "set_alarm_type__v1",
-        [("parent_sn", "RE", ".*"), ("associated_field", "=", "1")],
+        [("parent_sn", "RE", ".*"), ("device_version", ">=", "1.0")],
     )
     assert gen.resolve([BASE, gated], "T9ZZ9P0000000002", "T8030P0000000001") is BASE
 
