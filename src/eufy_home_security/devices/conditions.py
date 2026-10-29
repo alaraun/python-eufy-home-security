@@ -26,7 +26,6 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Final
 
-from ._webrtc_routing_data import THING_SDK_VERSION
 from .versions import version_bigger_than, version_equals
 
 __all__ = [
@@ -40,6 +39,9 @@ __all__ = [
     "td_conditions",
 ]
 
+THING_SDK_VERSION: Final = "2.3.1.2"
+"""The app's thing-SDK version that ``sdk_version`` conditions compare: that of the app
+build the generated data comes from (see docs/how-to/regenerate-models.md)."""
 VARIANT_SEPARATOR: Final = "__v"
 """What follows a base identifier in a variant's identifier (compared ignoring case)."""
 ASSOCIATED_TYPES: Final = frozenset({"associated_field", "parent_associated_field"})
