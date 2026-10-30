@@ -4,6 +4,20 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.9](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.8...v0.4.9) (2026-10-30)
+
+
+### Features
+
+* **devices:** tell which variant of a setting the eufy app uses per unit (Station.setting_in_use) ([issue 145](https://github.com/alaraun/homeassistant-eufy-home-security/issues/145)) ([b5e9fb9](https://github.com/alaraun/python-eufy-home-security/commit/b5e9fb9aff03fa244ef7769cf7b5224099d45e8a))
+
+
+### Bug Fixes
+
+* **devices:** a T8600 behind a station other than an NVR or a T7000 offers the alarm choices the eufy app shows there (no Light-only) ([b5e9fb9](https://github.com/alaraun/python-eufy-home-security/commit/b5e9fb9aff03fa244ef7769cf7b5224099d45e8a))
+* **station:** end a full-resolution image's settle wait on time when the stream goes quiet ([#162](https://github.com/alaraun/python-eufy-home-security/issues/162)) ([350936b](https://github.com/alaraun/python-eufy-home-security/commit/350936b701c361c0a85eb2b83969f76426c6e56e))
+* **station:** read a multi-lens camera's lens list from its station's parameters as well as the cloud's, so it opens with every lens stacked as in the eufy app ([issue 132](https://github.com/alaraun/homeassistant-eufy-home-security/issues/132)) ([56e928f](https://github.com/alaraun/python-eufy-home-security/commit/56e928f14c0193eaa2fa070e40ef4b505b38d23d))
+
 ## [0.4.8](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.7...v0.4.8) (2026-10-27)
 
 
