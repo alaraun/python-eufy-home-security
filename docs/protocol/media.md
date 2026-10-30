@@ -438,8 +438,19 @@ app does, in three steps (`devices.live_view`, `recipes.open_live_stream_nvr`):
 1. **Lenses.** The camera's parameter 9240 lists its lenses as JSON
    (`[{"type":1,"id":0},{"type":1,"id":1}]`; id 0 the fixed lens, 1 the moving one; a
    missing field reads 0, other keys are ignored). An empty or absent value, or one that
-   does not decode as a whole, lists none. The library reads it from the cloud's
-   parameter snapshot of the device (`Station.lenses`).
+   does not decode as a whole, lists none. As in the app, the value is the station's
+   value when it reported one, else the cloud's snapshot of the device (`Station.lenses`;
+   a station value that does not decode lists none, even when the cloud's would). Some
+   stations report the list for a camera whose cloud snapshot has none. Before the open
+   of a camera sent a layout (behind a HomeBase 3) whose parameters the session does not
+   hold, the station's parameters are read, at most once per channel per connection;
+   concurrent opens of the camera wait for that one read. The read waits up to 3 s
+   (`station.LENS_READ_TIMEOUT`): one the station answered, or left unanswered, counts
+   for the connection; one that could not reach the station, or was cancelled, is
+   repeated at the next open. A failed read leaves the cloud's list, or none. After
+   `Station.async_start` the parameters are held. A debug line before the open names the
+   list's source and length (`lens list station (2)`), and
+   `Station.stats().lens_lists_by_channel` holds both per camera channel.
 2. **View.** The app's live page opens with every lens stacked (`stitch_mode` 5) when the
    camera lists lenses, else on the fixed lens (`stitch_mode` 1); `Station.async_open_live`
    takes another layout as `lens_view` (`LensView`: `main`, `sub`, `stacked`, `pip`).

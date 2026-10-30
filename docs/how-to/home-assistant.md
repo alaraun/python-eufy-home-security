@@ -429,6 +429,9 @@ counts the state frames taken by encryption (`"type2"`, `"type1"`, `"clear"`, `"
 clear or under the static key (an RSA station such as a T8414 sends its state under the
 static key), True once it came under a key only the session holds, None before any.
 Both are information only: state counts under any encryption, as in the eufy app.
+`lens_lists_by_channel` gives, per channel of a camera sent a layout (a multi-camera open
+behind a HomeBase 3), its lens count and where the list came from (`station`, `cloud`,
+`none`); other cameras and standalone devices have no entry.
 
 ### Firmware updates
 
@@ -1582,7 +1585,11 @@ before anything is sent.
 A device whose handler sends the multi-camera open (the T8172 camera, the T8215
 doorbell, the T8532 and T85M1 video locks and others) streams one picture. Behind a
 HomeBase 3 it is in the layout the eufy app opens with: every lens stacked when the device
-lists lenses (`station.lenses(device_sn)`), else the fixed lens; pass
+lists lenses (`station.lenses(device_sn)`: the list its station reports, else the cloud's),
+else the fixed lens. When the session holds none of the camera's parameters, the open
+first reads the station's, at most once per channel per connection and for 3 s at most.
+A stacked picture of two lenses is 8:9 (1280x1440 at first), taller than wide: keep the
+picture's shape, no 16:9 crop. Pass
 `lens_view=LensView.MAIN` / `SUB` / `STACKED` / `PIP` to `async_open_live` for another
 layout, each its own open. Behind a HomeBase 2 the app sends no layout, and the library
 ignores `lens_view` there (see `docs/protocol/media.md` § Multi-camera open).

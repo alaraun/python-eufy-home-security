@@ -30,7 +30,7 @@ if TYPE_CHECKING:
         StationRefreshStatus,
     )
     from .devices.device_alarm import DeviceAlarm
-    from .devices.live_view import Lens, LensView
+    from .devices.live_view import Lens, LensReport, LensSource, LensView
     from .devices.model_settings import Setting, SettingControl, SettingKind
     from .devices.recipes import (
         MAX_PRESET_SLOTS,
@@ -232,7 +232,7 @@ _EXPORTS: dict[str, str] = {
         ("MAX_PRESET_SLOTS", "MAX_ZOOM", "MIN_ZOOM", "PanTilt", "PresetPosition", "PtzAction"),
         "devices.recipes",
     ),
-    **dict.fromkeys(("Lens", "LensView"), "devices.live_view"),
+    **dict.fromkeys(("Lens", "LensReport", "LensSource", "LensView"), "devices.live_view"),
     **dict.fromkeys(
         ("DEFAULT_QUEUE_CHUNKS", "FrameStream", "ResizePolicy", "StreamBroadcast"), "p2p.broadcast"
     ),
@@ -484,6 +484,8 @@ __all__ = [
     "KeyRejectedError",
     "LanPath",
     "Lens",
+    "LensReport",
+    "LensSource",
     "LensView",
     "LiveStreamLimitError",
     "LoginChallengeError",

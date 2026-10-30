@@ -62,6 +62,26 @@ def parse_lenses(value: str | None) -> tuple[Lens, ...]:
     return tuple(lenses)
 
 
+class LensSource(StrEnum):
+    """Where a camera's lens list came from."""
+
+    STATION = "station"
+    """The parameters its station reported (a dump), which the app merges into the
+    device's parameters and which win over the cloud's copy."""
+    CLOUD = "cloud"
+    """The cloud's parameter snapshot of the device, when the station reported none."""
+    NONE = "none"
+    """Neither lists one: the camera shows one lens."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LensReport:
+    """A camera's lens list for diagnostics: how many lenses and from where."""
+
+    count: int
+    source: LensSource
+
+
 class LensView(StrEnum):
     """The live view layouts the app offers for a camera."""
 

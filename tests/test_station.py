@@ -27,8 +27,14 @@ from eufy_home_security.devices.capabilities import (
     Capability,
     DeviceProfile,
 )
-from eufy_home_security.devices.live_open import LiveOpen, live_open
-from eufy_home_security.devices.live_view import Lens, LensView
+from eufy_home_security.devices.live_open import NVR_OPENS, LiveOpen, live_open
+from eufy_home_security.devices.live_view import (
+    LENS_LIST_PARAM,
+    Lens,
+    LensReport,
+    LensSource,
+    LensView,
+)
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
     bundled_codes,
@@ -66,6 +72,7 @@ from eufy_home_security.events import (
 )
 from eufy_home_security.exceptions import (
     AccountRejectedError,
+    CameraWakeError,
     CommandNotAppliedError,
     CommandRejectedError,
     CommandUnsupportedError,
@@ -76,6 +83,7 @@ from eufy_home_security.exceptions import (
     PresetSlotsFullError,
     PtzActionUnsupportedError,
     RecordNotFoundError,
+    StationUnreachableError,
     StillNotWrittenError,
     UnsupportedError,
 )
@@ -3114,6 +3122,7 @@ async def test_a_standalone_multi_camera_product_gets_the_open_without_a_view(
         (payload,) = fake.live_open_payloads
         assert (payload["stitch_mode"], payload["chn_list"]) == (1, [])
         assert "extValue" not in payload
+        assert station.stats().lens_lists_by_channel == {}  # no layout sent
         assert not fake.doorbell_payloads
         async with asyncio.timeout(3):
             while fake.bare_stops == 0:
@@ -3141,6 +3150,254 @@ def test_a_camera_lists_its_lenses_from_the_cloud_parameters(station: Station) -
         == ()
     )
     assert hub.lenses("T9999P2000067890") == ()
+
+
+@pytest.mark.parametrize("serial", ["T8172P2000067890", "T85M1P2000067890"])
+@pytest.mark.parametrize("read_before", [True, False])
+async def test_a_camera_whose_station_reports_its_lens_list_opens_every_lens_stacked(
+    station: Station,
+    fake: FakeStation,
+    caplog: pytest.LogCaptureFixture,
+    serial: str,
+    read_before: bool,
+) -> None:
+    """A lens list only the station reports gives the app's default view; an open
+    before any read of the camera's block reads the station's parameters first."""
+    fake.params[3] = {LENS_LIST_PARAM: _LENS_LIST}
+    camera = dataclasses.replace(_two_lens_camera(None), device_sn=serial)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    if read_before:
+        await hub.async_update()
+    with caplog.at_level(logging.DEBUG, logger="eufy_home_security.station"):
+        async with await hub.async_open_live(camera.device_sn) as stream:
+            await anext(aiter(stream))
+    (payload,) = fake.live_open_payloads
+    assert (payload["stitch_mode"], payload["chn_list"]) == (5, [_entry(0, 0), _entry(1, 1)])
+    assert "channel 3 view stacked, lens list station (2)" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("reported", "cloud", "expected", "source"),
+    [
+        (_LENS_LIST, None, (Lens(1, 0), Lens(1, 1)), LensSource.STATION),
+        (None, _LENS_LIST, (Lens(1, 0), Lens(1, 1)), LensSource.CLOUD),
+        ('[{"type":2,"id":1}]', _LENS_LIST, (Lens(2, 1),), LensSource.STATION),
+        ("[]", _LENS_LIST, (), LensSource.STATION),
+        ('[{"type":"x"}]', _LENS_LIST, (), LensSource.STATION),
+        (None, None, (), LensSource.NONE),
+    ],
+)
+async def test_a_cameras_lens_list_is_the_stations_value_before_the_clouds(
+    station: Station,
+    fake: FakeStation,
+    *,
+    reported: str | None,
+    cloud: str | None,
+    expected: tuple[Lens, ...],
+    source: LensSource,
+) -> None:
+    if reported is not None:
+        fake.params[3] = {LENS_LIST_PARAM: reported}
+    camera = _two_lens_camera(cloud)
+    hub = Station(station.device, station.session, sub_devices=[CAMERA, camera])
+    await hub.async_update()
+    assert hub.lenses(camera.device_sn) == expected
+    # Only devices whose live open carries a layout are listed.
+    assert hub.stats().lens_lists_by_channel == {
+        "3": LensReport(count=len(expected), source=source)
+    }
+
+
+@pytest.mark.parametrize(("held", "expected"), [("[]", ()), ('[{"type":2,"id":1}]', (Lens(2, 1),))])
+def test_a_lens_list_the_session_holds_from_the_cloud_comes_before_the_devices_copy(
+    station: Station, held: str, expected: tuple[Lens, ...]
+) -> None:
+    camera = _two_lens_camera()
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    station.session.ingest_cloud_params(3, [(LENS_LIST_PARAM, held, None)])
+    assert hub.lenses(camera.device_sn) == expected
+    assert hub.stats().lens_lists_by_channel == {
+        "3": LensReport(count=len(expected), source=LensSource.CLOUD)
+    }
+
+
+def test_the_lens_lists_are_listed_by_channel_for_cameras_sent_a_layout(
+    station: Station,
+) -> None:
+    cameras = [
+        dataclasses.replace(_two_lens_camera(), device_sn="T85M1P2000067891", channel=12),
+        dataclasses.replace(_two_lens_camera(), channel=2),
+        dataclasses.replace(CAMERA, channel=4),
+    ]
+    hub = Station(station.device, station.session, sub_devices=cameras)
+    assert list(hub.stats().lens_lists_by_channel) == ["2", "12"]
+
+
+async def _open_once(hub: Station, device_sn: str) -> None:
+    async with await hub.async_open_live(device_sn) as stream:
+        await anext(aiter(stream))
+
+
+async def test_an_unanswered_parameter_read_before_a_multi_camera_open_is_not_repeated(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The open waits :data:`LENS_READ_TIMEOUT`, not the parameter query's own timeout,
+    and goes ahead with the cloud's list; the link counts as read."""
+    monkeypatch.setattr(station_mod, "LENS_READ_TIMEOUT", 0.3)
+    fake.answer_params = False
+    camera = _two_lens_camera(None)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    await station.session.async_connect()
+    started = time.monotonic()
+    await _open_once(hub, camera.device_sn)
+    assert time.monotonic() - started < session_module.PARAM_QUERY_TIMEOUT / 2
+    assert fake.param_queries == 1
+    await _open_once(hub, camera.device_sn)
+    assert fake.param_queries == 1
+    assert [p["stitch_mode"] for p in fake.live_open_payloads] == [1, 1]
+    assert hub.stats().lens_lists_by_channel == {"3": LensReport(count=0, source=LensSource.NONE)}
+
+
+@pytest.mark.parametrize("failing", ["async_connect", "async_get_params"])
+async def test_a_parameter_read_that_does_not_reach_the_station_is_repeated_on_the_next_open(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch, failing: str
+) -> None:
+    """A read whose connect fails, or that fails on a link that stays up, counts for no
+    connection."""
+    fake.params[3] = {LENS_LIST_PARAM: _LENS_LIST}
+    camera = _two_lens_camera(None)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    if failing == "async_get_params":
+        await station.session.async_connect()
+    call = getattr(station.session, failing)
+    calls = 0
+
+    async def unreachable_once(**kwargs: Any) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise StationUnreachableError("no reply")
+        return await call(**kwargs)
+
+    monkeypatch.setattr(station.session, failing, unreachable_once)
+    await _open_once(hub, camera.device_sn)
+    assert fake.param_queries == 0
+    await _open_once(hub, camera.device_sn)
+    assert fake.param_queries == 1
+    assert [p["stitch_mode"] for p in fake.live_open_payloads] == [1, 5]
+
+
+async def test_a_cancelled_parameter_read_is_repeated_on_the_next_open(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(station_mod, "LENS_READ_TIMEOUT", 30.0)
+    fake.answer_params = False
+    fake.params[3] = {LENS_LIST_PARAM: _LENS_LIST}
+    camera = _two_lens_camera(None)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    await station.session.async_connect()
+    opening = asyncio.create_task(_open_once(hub, camera.device_sn))
+    async with asyncio.timeout(3):
+        while fake.param_queries == 0:
+            await asyncio.sleep(0.01)
+    opening.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await opening
+    fake.answer_params = True
+    await _open_once(hub, camera.device_sn)
+    assert fake.param_queries >= 2
+    (payload,) = fake.live_open_payloads
+    assert payload["stitch_mode"] == 5
+
+
+async def test_concurrent_multi_camera_opens_share_one_parameter_read(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake.params[3] = {LENS_LIST_PARAM: _LENS_LIST}
+    camera = _two_lens_camera(None)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    views: list[LensView] = []
+
+    async def record_open(channel: int, **kwargs: Any) -> None:
+        views.append(kwargs["live_view"].view)
+
+    monkeypatch.setattr(station.session, "async_open_live", record_open)
+    await asyncio.gather(*(hub.async_open_live(camera.device_sn) for _ in range(2)))
+    assert fake.param_queries == 1
+    assert views == [LensView.STACKED, LensView.STACKED]
+
+
+async def test_an_unexpected_error_of_the_parameter_read_fails_the_open(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def broken_read(**kwargs: Any) -> None:
+        raise RuntimeError("bug")
+
+    camera = _two_lens_camera()
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    monkeypatch.setattr(station.session, "async_get_params", broken_read)
+    with pytest.raises(RuntimeError, match="bug"):
+        await hub.async_open_live(camera.device_sn)
+    assert fake.live_open_payloads == []
+
+
+async def test_a_held_block_is_not_read_again_before_a_multi_camera_open(
+    station: Station, fake: FakeStation
+) -> None:
+    fake.params[3] = {LENS_LIST_PARAM: _LENS_LIST}
+    camera = _two_lens_camera(None)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    await hub.async_update()
+    before = fake.param_queries
+    await _open_once(hub, camera.device_sn)
+    assert fake.param_queries == before
+
+
+async def test_a_channel_the_station_reports_no_block_for_is_read_once_per_connection(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_module, "PARAM_SETTLE", 0.1)
+    camera = _two_lens_camera(None)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    await _open_once(hub, camera.device_sn)
+    assert fake.param_queries == 1
+    await _open_once(hub, camera.device_sn)
+    assert fake.param_queries == 1
+    # A new link, up before the open, and a link down at the open: each reads again.
+    station.session._teardown("dropped")
+    await station.session.async_connect()
+    await _open_once(hub, camera.device_sn)
+    assert fake.param_queries == 2
+    station.session._teardown("dropped")
+    await _open_once(hub, camera.device_sn)
+    assert fake.param_queries == 3
+
+
+async def test_a_multi_camera_open_behind_a_homebase_2_reads_no_parameters(
+    fake: FakeStation,
+) -> None:
+    camera = _two_lens_camera(None)
+    base = await _station_of_model(fake, "T8010P2000054321", "3.4.2.6h")
+    hub = Station(base.device, base.session, sub_devices=[camera])
+    try:
+        assert hub._live_open_of(camera.device_sn) in NVR_OPENS
+        await _open_once(hub, camera.device_sn)
+        assert fake.live_opens == [3]
+        assert fake.param_queries == 0
+        assert hub.stats().lens_lists_by_channel == {}
+    finally:
+        await hub.async_close()
+
+
+async def test_no_parameter_read_before_an_open_the_camera_wake_backs_off(
+    station: Station, fake: FakeStation
+) -> None:
+    camera = _two_lens_camera(None)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    station.session._wake_backoff.failures[3] = (1, time.monotonic() + 60, -1)
+    with pytest.raises(CameraWakeError):
+        await hub.async_open_live(camera.device_sn)
+    assert fake.param_queries == 0
 
 
 async def test_the_lens_view_changes_nothing_for_a_camera_with_the_station_open(

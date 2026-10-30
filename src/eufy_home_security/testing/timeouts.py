@@ -39,6 +39,7 @@ SHORT_TIMEOUTS: Final[Mapping[str, tuple[str, Any]]] = {
     "MEDIA_LIVE_FIRST_FRAME_TIMEOUT": ("p2p.session", 2.0),
     "MEDIA_RECORDING_FIRST_FRAME_TIMEOUT": ("p2p.session", 2.0),
     "READBACK_DELAY": ("station", 0.05),
+    "LENS_READ_TIMEOUT": ("station", 0.5),
     "PRESET_STREAM_IDLE_SECONDS": ("station", 1.0),
     "PRESET_SETTLE_SECONDS": ("station", 0.05),
     "PTZ_SETTLE_SECONDS": ("station", 0.05),
