@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from ...devices.live_view import LensReport
 from ..media import MediaRecordShape, VideoCodec
 
 STAT_KEY_LIMIT = 64
@@ -156,6 +157,10 @@ class SessionStats:
     came under a key only the session holds (GCM, an RSA session's own key), False while
     it came only in clear or under a key anyone can derive (the fixed key, a static-key
     session), None before any state."""
+    lens_lists_by_channel: Mapping[str, LensReport] = field(default_factory=dict)
+    """The lens list of each camera channel whose live open carries a layout: count and
+    source (:class:`~...devices.live_view.LensReport`). Filled by ``Station.stats()``;
+    empty from the session alone."""
 
 
 class MediaCounters:

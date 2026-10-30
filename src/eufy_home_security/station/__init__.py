@@ -38,6 +38,8 @@ from ..devices.live_open import app_version as live_open_app_version
 from ..devices.live_view import (
     LENS_LIST_PARAM,
     Lens,
+    LensReport,
+    LensSource,
     LensView,
     default_lens_view,
     live_view,
@@ -1471,8 +1473,17 @@ class Station:
         return self.session.last_error
 
     def stats(self) -> SessionStats:
-        """Health counters of this station's session, JSON-safe and identifier-free."""
-        return self.session.stats()
+        """Health counters of this station's session, JSON-safe and identifier-free, with
+        the lens list of each device whose live open carries a layout
+        (:attr:`~..p2p.session.SessionStats.lens_lists_by_channel`)."""
+        lens_lists = {
+            str(channel): LensReport(count=len(lenses), source=source)
+            for device in (self.device, *self.sub_devices)
+            if (channel := self._channel_of(device)) is not None
+            and self._live_open_of(device.device_sn) in NVR_OPENS
+            for lenses, source in (self._lens_list(device),)
+        }
+        return replace(self.session.stats(), lens_lists_by_channel=lens_lists)
 
     # ── reads ────────────────────────────────────────────────────────────────
 
@@ -2274,8 +2285,8 @@ class Station:
     ) -> MediaStream:
         """The session's live open on ``channel``: the open the device's handler sends
         (:meth:`live_open`), the media key the app offers (:meth:`media_key_type`), and
-        for a multi-camera open the view (``lens_view``, see :meth:`async_open_live`).
-        A device whose handler's open the library does not implement raises
+        for a multi-camera open the view (``lens_view``, see :meth:`async_open_live`),
+        after a parameter read when the session holds nothing of the device yet. A device whose handler's open the library does not implement raises
         :class:`~..exceptions.UnsupportedError` before anything is sent."""
         device = self._device_on_channel(channel)
         mode = stop = view = None
@@ -2287,34 +2298,53 @@ class Station:
                 self._product_code(device.device_sn), self._connect_type_of(device.device_sn)
             )
             if mode in NVR_OPENS:
-                lenses = self.lenses(device.device_sn)
-                view = live_view(channel, lenses, lens_view or default_lens_view(lenses))
+                if not any(dev == channel for dev, _ in self.session.params):
+                    await self.session.async_get_params(expect_channels=(channel,))
+                lenses, source = self._lens_list(device)
+                view = live_view(
+                    channel, lenses, lens_view or default_lens_view(lenses), source=source
+                )
         kwargs.setdefault("media_key", self.media_key_type(channel))
         return await self.session.async_open_live(
             channel, live_open=mode, live_stop=stop, live_view=view, **kwargs
         )
 
     def lenses(self, device_sn: str) -> tuple[Lens, ...]:
-        """The lenses ``device_sn`` lists in the cloud's parameter snapshot
-        (:data:`~..devices.live_view.LENS_LIST_PARAM`, as the app reads its device's
-        parameters); ``()`` for an unknown device, none listed, or a snapshot the cache
-        did not keep (a paired device's, until the next device-list fetch)."""
+        """The lenses ``device_sn`` lists (:data:`~..devices.live_view.LENS_LIST_PARAM`),
+        as the app reads its device's parameters: the value the station reported, else
+        the cloud's snapshot (:class:`~..devices.live_view.LensSource`). ``()`` for an
+        unknown device or none listed; a cache load keeps no paired device's snapshot
+        until the next device-list fetch."""
         device = next(
             (d for d in (self.device, *self.sub_devices) if d.device_sn == device_sn), None
         )
-        if device is None:
-            return ()
+        return () if device is None else self._lens_list(device)[0]
+
+    def _lens_list(self, device: CloudDevice) -> tuple[tuple[Lens, ...], LensSource]:
+        """``device``'s lens list and its source (see :meth:`lenses`). A station value
+        that does not parse lists none, as the app's decode of it does."""
+        channel = self._channel_of(device)
+        if channel is not None:
+            key = (channel, LENS_LIST_PARAM)
+            reported = self.session.params.get(key)
+            if (
+                reported is not None
+                and self.session.param_origins.get(key) is not ParamOrigin.CLOUD
+            ):
+                return parse_lenses(reported), LensSource.STATION
         value = next((p.value for p in device.cloud_params if p.param_id == LENS_LIST_PARAM), None)
-        return parse_lenses(value)
+        if value is None:
+            return (), LensSource.NONE
+        return parse_lenses(value), LensSource.CLOUD
+
+    def _channel_of(self, device: CloudDevice) -> int | None:
+        """The channel ``device`` is addressed on (the station's own when standalone)."""
+        return own_channel(device) if device is self.device else device.channel
 
     def _device_on_channel(self, channel: int) -> CloudDevice | None:
         """The device addressed on ``channel`` (the station itself when standalone)."""
         return next(
-            (
-                d
-                for d in (self.device, *self.sub_devices)
-                if (own_channel(d) if d is self.device else d.channel) == channel
-            ),
+            (d for d in (self.device, *self.sub_devices) if self._channel_of(d) == channel),
             None,
         )
 

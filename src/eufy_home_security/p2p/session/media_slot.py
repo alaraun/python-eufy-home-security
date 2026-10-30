@@ -193,7 +193,9 @@ class MediaSlot:
             self._session._log_name,
             (live_open or (LiveOpen.SINGLE if single else LiveOpen.STATION)).value,
             "1700/1000" if single else "1350/1003",
-            f", view {view.view.value}" if nvr else "",
+            f", view {view.view.value}, lens list {view.lens_source.value} ({view.lens_count})"
+            if nvr
+            else "",
             channel,
             flag,
             "bare 1004" if bare_stop else "1350/1004",

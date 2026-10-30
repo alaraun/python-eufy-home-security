@@ -28,7 +28,13 @@ from eufy_home_security.devices.capabilities import (
     DeviceProfile,
 )
 from eufy_home_security.devices.live_open import LiveOpen, live_open
-from eufy_home_security.devices.live_view import Lens, LensView
+from eufy_home_security.devices.live_view import (
+    LENS_LIST_PARAM,
+    Lens,
+    LensReport,
+    LensSource,
+    LensView,
+)
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
     bundled_codes,
@@ -3141,6 +3147,72 @@ def test_a_camera_lists_its_lenses_from_the_cloud_parameters(station: Station) -
         == ()
     )
     assert hub.lenses("T9999P2000067890") == ()
+
+
+@pytest.mark.parametrize("serial", ["T8172P2000067890", "T85M1P2000067890"])
+@pytest.mark.parametrize("read_before", [True, False])
+async def test_a_camera_whose_station_reports_its_lens_list_opens_every_lens_stacked(
+    station: Station,
+    fake: FakeStation,
+    caplog: pytest.LogCaptureFixture,
+    serial: str,
+    read_before: bool,
+) -> None:
+    """A lens list only the station reports gives the app's default view; an open
+    before any read of the camera's block reads the station's parameters first."""
+    fake.params[3] = {LENS_LIST_PARAM: _LENS_LIST}
+    camera = dataclasses.replace(_two_lens_camera(None), device_sn=serial)
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    if read_before:
+        await hub.async_update()
+    with caplog.at_level(logging.DEBUG, logger="eufy_home_security.p2p.session"):
+        async with await hub.async_open_live(camera.device_sn) as stream:
+            await anext(aiter(stream))
+    (payload,) = fake.live_open_payloads
+    assert (payload["stitch_mode"], payload["chn_list"]) == (5, [_entry(0, 0), _entry(1, 1)])
+    assert "view stacked, lens list station (2)" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("reported", "cloud", "expected", "source"),
+    [
+        (_LENS_LIST, None, (Lens(1, 0), Lens(1, 1)), LensSource.STATION),
+        (None, _LENS_LIST, (Lens(1, 0), Lens(1, 1)), LensSource.CLOUD),
+        ('[{"type":2,"id":1}]', _LENS_LIST, (Lens(2, 1),), LensSource.STATION),
+        ("[]", _LENS_LIST, (), LensSource.STATION),
+        ('[{"type":"x"}]', _LENS_LIST, (), LensSource.STATION),
+        (None, None, (), LensSource.NONE),
+    ],
+)
+async def test_a_cameras_lens_list_is_the_stations_value_before_the_clouds(
+    station: Station,
+    fake: FakeStation,
+    *,
+    reported: str | None,
+    cloud: str | None,
+    expected: tuple[Lens, ...],
+    source: LensSource,
+) -> None:
+    if reported is not None:
+        fake.params[3] = {LENS_LIST_PARAM: reported}
+    camera = _two_lens_camera(cloud)
+    hub = Station(station.device, station.session, sub_devices=[CAMERA, camera])
+    await hub.async_update()
+    assert hub.lenses(camera.device_sn) == expected
+    # Only devices whose live open carries a layout are listed.
+    assert hub.stats().lens_lists_by_channel == {
+        "3": LensReport(count=len(expected), source=source)
+    }
+
+
+def test_a_lens_list_the_session_holds_from_the_cloud_counts_as_the_clouds(
+    station: Station,
+) -> None:
+    camera = _two_lens_camera()
+    hub = Station(station.device, station.session, sub_devices=[camera])
+    station.session.ingest_cloud_params(3, [(LENS_LIST_PARAM, "[]", None)])
+    assert hub.lenses(camera.device_sn) == (Lens(1, 0), Lens(1, 1))
+    assert hub.stats().lens_lists_by_channel["3"].source is LensSource.CLOUD
 
 
 async def test_the_lens_view_changes_nothing_for_a_camera_with_the_station_open(
