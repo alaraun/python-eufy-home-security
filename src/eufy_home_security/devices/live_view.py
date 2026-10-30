@@ -123,10 +123,6 @@ class LiveView:
     audio_chn: int
     station_video_type: int
     pip_cord: tuple[float, float, float, float] | None
-    lens_count: int = 0
-    """How many lenses the camera lists (for logs)."""
-    lens_source: LensSource = LensSource.NONE
-    """Where that lens list came from (for logs)."""
 
 
 def default_lens_view(lenses: Sequence[Lens]) -> LensView:
@@ -135,17 +131,11 @@ def default_lens_view(lenses: Sequence[Lens]) -> LensView:
     return LensView.STACKED if lenses else LensView.MAIN
 
 
-def live_view(
-    channel: int,
-    lenses: Sequence[Lens],
-    view: LensView,
-    *,
-    source: LensSource = LensSource.NONE,
-) -> LiveView:
+def live_view(channel: int, lenses: Sequence[Lens], view: LensView) -> LiveView:
     """The app's live parameters for ``view`` of the camera on ``channel`` with
-    ``lenses`` (listed by ``source``). One lens names that lens; a layout of several
-    names every listed lens (index 0 for the fixed one, 1 for the others), or the fixed
-    one alone when the camera lists none."""
+    ``lenses``. One lens names that lens; a layout of several names every listed lens
+    (index 0 for the fixed one, 1 for the others), or the fixed one alone when the
+    camera lists none."""
     stitch, camera = _LAYOUTS[view]
     if stitch is StitchMode.SINGLE:
         order = [(0, int(camera))]
@@ -163,8 +153,6 @@ def live_view(
         audio_chn=channel,
         station_video_type=PIP_STATION_VIDEO_TYPE if stitch is StitchMode.PIP else int(camera),
         pip_cord=PIP_CORD_DEFAULT if stitch is StitchMode.PIP else None,
-        lens_count=len(lenses),
-        lens_source=source,
     )
 
 

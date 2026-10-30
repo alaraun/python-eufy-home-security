@@ -429,8 +429,9 @@ counts the state frames taken by encryption (`"type2"`, `"type1"`, `"clear"`, `"
 clear or under the static key (an RSA station such as a T8414 sends its state under the
 static key), True once it came under a key only the session holds, None before any.
 Both are information only: state counts under any encryption, as in the eufy app.
-`lens_lists_by_channel` gives, per channel of a camera whose live open carries a layout,
-its lens count and where the list came from (`station`, `cloud`, `none`).
+`lens_lists_by_channel` gives, per channel of a camera sent a layout (a multi-camera open
+behind a HomeBase 3), its lens count and where the list came from (`station`, `cloud`,
+`none`); other cameras and standalone devices have no entry.
 
 ### Firmware updates
 

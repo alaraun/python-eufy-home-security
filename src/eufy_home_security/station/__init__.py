@@ -1005,6 +1005,9 @@ class Station:
         demand files them in its session instead)."""
         self._cloud_time_zone: _CloudValue | None = None
         """The station entry's ``time_zone``."""
+        self._lens_reads: set[int] = set()
+        """Channels a multi-camera open read the parameters for on this connection
+        (:meth:`_read_lens_params`)."""
         self._alarms = StationAlarms(self)
         session.add_dump_listener(self._on_dump_complete)
         session.add_alarm_listener(self._alarms.on_alarm_frame)
@@ -1401,6 +1404,7 @@ class Station:
             self.note_alarm(event)
         # A camera that loses its link has gone idle, and an idle camera returns to 1x.
         if isinstance(event, ConnectionChanged) and not event.connected:
+            self._lens_reads.clear()
             for device_sn in list(self._ptz.zooms):
                 self._ptz.keep_zoom(device_sn, MIN_ZOOM)
 
@@ -1474,13 +1478,19 @@ class Station:
 
     def stats(self) -> SessionStats:
         """Health counters of this station's session, JSON-safe and identifier-free, with
-        the lens list of each device whose live open carries a layout
-        (:attr:`~..p2p.session.SessionStats.lens_lists_by_channel`)."""
+        the lens list of each camera sent a layout (a HomeBase 3's multi-camera open),
+        by channel (:attr:`~..p2p.session.SessionStats.lens_lists_by_channel`)."""
+        sent = sorted(
+            (
+                (d.channel, d)
+                for d in self.sub_devices
+                if d.channel is not None and self._sends_layout(d)
+            ),
+            key=lambda entry: entry[0],
+        )
         lens_lists = {
             str(channel): LensReport(count=len(lenses), source=source)
-            for device in (self.device, *self.sub_devices)
-            if (channel := self._channel_of(device)) is not None
-            and self._live_open_of(device.device_sn) in NVR_OPENS
+            for channel, device in sent
             for lenses, source in (self._lens_list(device),)
         }
         return replace(self.session.stats(), lens_lists_by_channel=lens_lists)
@@ -2285,9 +2295,10 @@ class Station:
     ) -> MediaStream:
         """The session's live open on ``channel``: the open the device's handler sends
         (:meth:`live_open`), the media key the app offers (:meth:`media_key_type`), and
-        for a multi-camera open the view (``lens_view``, see :meth:`async_open_live`),
-        after a parameter read when the session holds nothing of the device yet. A device whose handler's open the library does not implement raises
-        :class:`~..exceptions.UnsupportedError` before anything is sent."""
+        for a multi-camera open the view (``lens_view``, see :meth:`async_open_live`; its
+        lens list read as :meth:`_read_lens_params` says). A device whose handler's open
+        the library does not implement raises :class:`~..exceptions.UnsupportedError`
+        before anything is sent."""
         device = self._device_on_channel(channel)
         mode = stop = view = None
         if device is not None:
@@ -2298,11 +2309,16 @@ class Station:
                 self._product_code(device.device_sn), self._connect_type_of(device.device_sn)
             )
             if mode in NVR_OPENS:
-                if not any(dev == channel for dev, _ in self.session.params):
-                    await self.session.async_get_params(expect_channels=(channel,))
+                await self._read_lens_params(channel)
                 lenses, source = self._lens_list(device)
-                view = live_view(
-                    channel, lenses, lens_view or default_lens_view(lenses), source=source
+                view = live_view(channel, lenses, lens_view or default_lens_view(lenses))
+                _LOGGER.debug(
+                    "%s: channel %d view %s, lens list %s (%d)",
+                    self._log_name,
+                    channel,
+                    view.view.value,
+                    source.value,
+                    len(lenses),
                 )
         kwargs.setdefault("media_key", self.media_key_type(channel))
         return await self.session.async_open_live(
@@ -2320,18 +2336,44 @@ class Station:
         )
         return () if device is None else self._lens_list(device)[0]
 
+    def _sends_layout(self, device: CloudDevice) -> bool:
+        """Whether ``device``'s live open carries a layout: a multi-camera open behind a
+        HomeBase 3, the only station the app sends one."""
+        return self.session.homebase3 and self._live_open_of(device.device_sn) in NVR_OPENS
+
+    async def _read_lens_params(self, channel: int) -> None:
+        """Read the station's parameters before the open of a camera sent a layout
+        (:meth:`_sends_layout`) when the session holds none of ``channel``'s, at most once
+        per channel and connection, and not while the camera's wake backs off. A failed
+        read leaves the cloud's lens list, or none."""
+        device = self._device_on_channel(channel)
+        if (
+            device is None
+            or channel in self._lens_reads
+            or not self._sends_layout(device)
+            or self.session.wake_backoff_left(channel) > 0
+            or any(dev == channel for dev, _ in self.session.params)
+        ):
+            return
+        self._lens_reads.add(channel)
+        try:
+            await self.session.async_get_params(expect_channels=(channel,))
+        except EufySecurityError as err:
+            _LOGGER.debug(
+                "%s: lens list read failed: %s; using the cloud/none", self._log_name, err
+            )
+
     def _lens_list(self, device: CloudDevice) -> tuple[tuple[Lens, ...], LensSource]:
         """``device``'s lens list and its source (see :meth:`lenses`). A station value
-        that does not parse lists none, as the app's decode of it does."""
+        that does not parse lists none, as the app's decode of it does; a cloud value the
+        session holds (newest snapshot) comes before the device's own copy."""
         channel = self._channel_of(device)
         if channel is not None:
             key = (channel, LENS_LIST_PARAM)
-            reported = self.session.params.get(key)
-            if (
-                reported is not None
-                and self.session.param_origins.get(key) is not ParamOrigin.CLOUD
-            ):
-                return parse_lenses(reported), LensSource.STATION
+            held = self.session.params.get(key)
+            if held is not None:
+                cloud = self.session.param_origins.get(key) is ParamOrigin.CLOUD
+                return parse_lenses(held), LensSource.CLOUD if cloud else LensSource.STATION
         value = next((p.value for p in device.cloud_params if p.param_id == LENS_LIST_PARAM), None)
         if value is None:
             return (), LensSource.NONE

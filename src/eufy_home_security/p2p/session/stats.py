@@ -158,9 +158,9 @@ class SessionStats:
     it came only in clear or under a key anyone can derive (the fixed key, a static-key
     session), None before any state."""
     lens_lists_by_channel: Mapping[str, LensReport] = field(default_factory=dict)
-    """The lens list of each camera channel whose live open carries a layout: count and
-    source (:class:`~...devices.live_view.LensReport`). Filled by ``Station.stats()``;
-    empty from the session alone."""
+    """The lens list of each camera sent a layout (a HomeBase 3's multi-camera open), by
+    channel in channel order: count and source (:class:`~...devices.live_view.LensReport`).
+    Filled by ``Station.stats()``; empty from the session alone."""
 
 
 class MediaCounters:
