@@ -95,6 +95,8 @@ class _ClipMuxer:
         self.last_ms: int | None = None
         self.width = 0
         self.height = 0
+        self.codec_changed = False
+        """A keyframe of another codec arrived: the clip ends before it."""
 
     @property
     def started(self) -> bool:
@@ -106,6 +108,7 @@ class _ClipMuxer:
 
     async def feed(self, frame: MediaFrame) -> None:
         out = self._encoder.feed(frame)
+        self.codec_changed = out.codec_changed
         if not out.data:
             return
         if frame.kind is MediaKind.VIDEO:
@@ -163,7 +166,8 @@ async def mux_frames(
     """Mux ``frames`` into ``write`` from the first keyframe on.
 
     With ``max_ms`` it stops at the first video frame that many milliseconds of stream
-    clock after the first keyframe (that frame is not written). Returns the muxer (its
+    clock after the first keyframe (that frame is not written). A keyframe of another
+    codec ends the clip too, before it: one clip carries one codec. Returns the muxer (its
     counters) and whether ``max_ms`` was reached; the rest is flushed either way.
     """
     muxer = _ClipMuxer(write)
@@ -179,6 +183,8 @@ async def mux_frames(
                 reached = True
                 break
             await muxer.feed(frame)
+            if muxer.codec_changed:
+                break
     finally:
         await muxer.flush()
     return muxer, reached

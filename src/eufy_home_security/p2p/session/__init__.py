@@ -892,6 +892,7 @@ class StationSession:
                 for channel, codec in sorted(media.codecs_by_channel.items())
             },
             media_codec_overrides=dict(media.codec_overrides),
+            media_codec_changes=dict(media.codec_changes),
             media_empty_nals=media.empty_nals,
             media_frames_without_nal=media.frames_without_nal,
             media_keyframes_rejected=media.keyframes_rejected,

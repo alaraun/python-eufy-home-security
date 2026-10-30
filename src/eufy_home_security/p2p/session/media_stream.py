@@ -147,6 +147,10 @@ class MediaStream:
         self._probe = ""
         self._codec: VideoCodec | None = None
         """The codec the stream's last keyframe picture showed (:func:`~..media.picture_codec`)."""
+        self._key_codec: VideoCodec | None = None
+        """The codec the last keyframe went out as."""
+        self._key_header: VideoCodec | None = None
+        """The codec the last keyframe's video header named."""
         self._held: MediaFrame | None = None
         """The latest keyframe, not yet queued: a continuation record may follow."""
         self._held_parts: list[bytes] = []
@@ -525,7 +529,27 @@ class MediaStream:
             self._codec = shown or self._codec
             if shown is not None:
                 counters.codecs_by_channel[self.channel] = shown
-        codec = self._codec or frame.codec
+            codec = self._codec or frame.codec
+            previous = self._key_codec
+            if codec is not None and previous is not None and codec is not previous:
+                count_capped(counters.codec_changes, f"{previous.value}->{codec.value}")
+                if self._throttle.should_log(("codec-change", codec)):
+                    _LOGGER.debug(
+                        "media (cmd %d ch%d): the video codec changed %s -> %s at %dx%d",
+                        self.command,
+                        self.channel,
+                        previous.value,
+                        codec.value,
+                        frame.width,
+                        frame.height,
+                    )
+            self._key_codec, self._key_header = codec, frame.codec
+        elif frame.codec is not None and self._key_header not in (None, frame.codec):
+            # The header names another codec than at the keyframe: the next codec's
+            # frame, which its own picture cannot tell before that codec's keyframe.
+            codec = frame.codec
+        else:
+            codec = self._codec or frame.codec
         if data is frame.data and codec is frame.codec:
             return frame
         return replace(frame, data=data, codec=codec)

@@ -155,6 +155,18 @@ async def test_a_capture_names_the_codec_it_carries(codec: VideoCodec) -> None:
     assert clip.codec is codec
 
 
+async def test_a_capture_ends_at_a_codec_change() -> None:
+    """A clip carries one codec: a keyframe of another ends it early."""
+    frames = [*camera(1), *camera(2, start_ms=6000, codec=VideoCodec.H264)]
+    _, open_stream = _opener(FakeStream(frames, hold=True))
+    broadcast = StreamBroadcast(open_stream, name="test")  # type: ignore[arg-type]
+    clip = await broadcast.async_capture(2.0, Sink())
+    assert clip.ended_early
+    assert clip.codec is VideoCodec.HEVC
+    assert clip.duration_s < 1.0
+    await broadcast.aclose()
+
+
 async def test_a_stream_that_ends_early_returns_what_it_got() -> None:
     _, open_stream = _opener(FakeStream(camera(1)))
     broadcast = StreamBroadcast(open_stream, name="test")  # type: ignore[arg-type]

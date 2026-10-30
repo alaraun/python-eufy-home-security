@@ -142,7 +142,13 @@ if TYPE_CHECKING:
     from .install import InstallState
     from .models import GUARD_MODE_LABELS, FrameCipher, GuardMode, ValueSource
     from .network import HostSource, LanPath, PathWarning, suggest_local_ports
-    from .p2p.broadcast import DEFAULT_QUEUE_CHUNKS, FrameStream, ResizePolicy, StreamBroadcast
+    from .p2p.broadcast import (
+        CODEC_CHANGE_GRACE,
+        DEFAULT_QUEUE_CHUNKS,
+        FrameStream,
+        ResizePolicy,
+        StreamBroadcast,
+    )
     from .p2p.clip import CLIP_CONTENT_TYPE, ClipWriter, MediaClip
     from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
     from .p2p.media import MediaKeyType, Still, StillFormat, VideoCodec, picture_codec
@@ -234,7 +240,14 @@ _EXPORTS: dict[str, str] = {
     ),
     **dict.fromkeys(("Lens", "LensReport", "LensSource", "LensView"), "devices.live_view"),
     **dict.fromkeys(
-        ("DEFAULT_QUEUE_CHUNKS", "FrameStream", "ResizePolicy", "StreamBroadcast"), "p2p.broadcast"
+        (
+            "CODEC_CHANGE_GRACE",
+            "DEFAULT_QUEUE_CHUNKS",
+            "FrameStream",
+            "ResizePolicy",
+            "StreamBroadcast",
+        ),
+        "p2p.broadcast",
     ),
     **dict.fromkeys(("CLIP_CONTENT_TYPE", "ClipWriter", "MediaClip"), "p2p.clip"),
     **dict.fromkeys(("SETTLE_STANDALONE", "SETTLE_STATION"), "p2p.encoder"),
@@ -389,6 +402,7 @@ _EXPORTS: dict[str, str] = {
 __all__ = [
     "CACHE_LAYOUT_VERSION",
     "CLIP_CONTENT_TYPE",
+    "CODEC_CHANGE_GRACE",
     "DEFAULT_QUEUE_CHUNKS",
     "DEFAULT_STATION_SESSIONS",
     "GUARD_MODE_LABELS",

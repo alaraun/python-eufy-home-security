@@ -1623,6 +1623,7 @@ across all clients, a T8170 4, and a live open wakes a battery camera.
 | `settle` | the settle window in use: 0 by default (see *Starting*) |
 | `error` | why the last stream ended, or `None` if it ended cleanly |
 | `ended_by_resize` | the last stream ended at a picture-size change (`on_resize="end"` only) |
+| `ended_by_codec_change` | the last stream ended at a video-codec change (either policy); reconnect |
 | `resizes` | size changes the running stream followed (`on_resize="continue"`) |
 | `subscribers` | how many readers are attached |
 | `running` | whether the camera stream is open |
@@ -1737,6 +1738,20 @@ the camera stream open with no subscriber, so a reconnect within that time needs
 wake and no settle: the next subscriber gets the new size's keyframe at once. **A
 battery camera stays awake for the grace time**: a stream costs about the same power as
 a watched one, so 30 s of grace per resize end is 30 s of live-view battery.
+
+**A video-codec change ends the stream under either policy.** Some cameras open a live
+stream with a short picture group in one codec (HEVC) and go on in the other (H.264). A
+transport stream declares its codec once and neither go2rtc nor HA's stream worker
+follows a change inside one, so the broadcast ends the subscribers' stream at the first
+keyframe of the new codec: their iteration ends, `ended_by_codec_change` is set and
+`error` stays `None`. The camera stream stays open for `CODEC_CHANGE_GRACE` (20 s, or
+`resize_grace` when longer: HA's stream worker restarts 10 s after its source ends), and
+a subscriber that joins within it gets the new codec's keyframe first, with no new open
+and no wake. **Treat this end as a reconnect, not a failure:** re-subscribe within the
+grace (or let go2rtc / the stream worker reconnect to the same URL) without an error to
+the viewer. A player that negotiated the old codec (a WebRTC session) needs a new
+session for the new one. `station.stats().media_codec_changes` counts the
+changes (`{"hevc->h264": 1}`).
 
 #### Audio
 
@@ -1855,7 +1870,8 @@ output; hard-code neither codec anywhere.
 `VideoCodec.content_type` is `video/hevc` / `video/h264`, `VideoCodec.mp4_tag` is
 `hvc1` / None. `picture_codec`, `VideoCodec` and the content-type constants are exported
 from the package root. For diagnostics, `station.stats()` has `media_video_codecs` (by
-header), `media_codec_overrides` (header vs picture) and `media_codecs_by_channel`.
+header), `media_codec_overrides` (header vs picture), `media_codec_changes` (codec
+changes within a stream) and `media_codecs_by_channel`.
 
 ### Recordings and clips
 
@@ -2956,7 +2972,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
   `media_rejected_keyframe` and `media_failures_by_channel` (which camera channel's
   opens failed, by error class); for "the picture freezes", at
   `media_frames_skipped_for_keyframe` against `media_frames_dropped_for_reader`
-  (see `docs/protocol/media.md`). For "events stopped", compare
+  and `media_codec_changes` (see `docs/protocol/media.md`). For "events stopped", compare
   `seconds_since_last_event` with `seconds_since_last_probe` and look at
   `state_frames_by_encryption`, `dropped_undecodable` and `wrong_port_drops`; for a flapping
   station, `reconnects`, `handshake_failures`, `key_refreshes` and `last_error` (a class
