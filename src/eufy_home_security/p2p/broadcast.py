@@ -15,6 +15,11 @@ ramp is carried the same way, so by default the stream starts at the first keyfr
 ``on_resize="end"`` ends the subscribers' stream instead, optionally keeping the camera
 open for ``resize_grace`` seconds so the consumer's reconnect needs no wake and no
 settle; it waits for the ramp to finish (the settle window) before starting.
+
+A video-codec change mid-stream always ends the subscribers' stream (a transport stream
+declares its codec once) and keeps the camera open for at least
+:data:`CODEC_CHANGE_GRACE` seconds when subscribers were attached, so the reconnect
+starts at the new codec's keyframe without a new wake.
 """
 
 from __future__ import annotations
@@ -39,6 +44,7 @@ _LOGGER = logging.getLogger(__name__)
 __all__ = [
     "CAPTURE_QUEUE_FRAMES",
     "CAPTURE_START_TIMEOUT",
+    "CODEC_CHANGE_GRACE",
     "DEFAULT_QUEUE_CHUNKS",
     "FrameStream",
     "ResizePolicy",
@@ -48,6 +54,11 @@ __all__ = [
 #: How many muxed chunks a subscriber may fall behind before it is resynchronised.
 #: A chunk is one frame, so this is a few seconds of video.
 DEFAULT_QUEUE_CHUNKS = 120
+
+#: Seconds the camera stream stays open after a codec change ended the subscribers'
+#: stream (or ``resize_grace`` when longer), for their reconnect: longer than Home
+#: Assistant's stream worker waits before its first restart (10 s).
+CODEC_CHANGE_GRACE = 20.0
 
 ResizePolicy = Literal["continue", "end"]
 """What a broadcast does when the picture size changes after the stream started."""
@@ -182,6 +193,13 @@ class StreamBroadcast:
     subscriber, and a subscriber joining within it reuses the open stream. A battery
     camera stays awake for the grace time.
 
+    A keyframe of another video codec ends the subscribers' stream under either policy
+    and sets :attr:`ended_by_codec_change`; the camera stays open for
+    :data:`CODEC_CHANGE_GRACE` (or ``resize_grace`` when longer) and a subscriber
+    joining within it starts at that keyframe. A grace is kept only for subscribers
+    attached at the change (or still awaited from an earlier one, at most two graces
+    after the first change); with captures alone the camera closes when they return.
+
     ``fill_audio`` (with ``audio``) declares the AAC track at the start and carries
     silence until the camera's audio arrives, so a stream started before the first
     audio frame still has audio; a camera that sends none yields a silent track.
@@ -229,7 +247,9 @@ class StreamBroadcast:
         self._started = asyncio.Event()
         self._error: Exception | None = None
         self._ended_by_resize = False
+        self._ended_by_codec_change = False
         self._grace_until: float | None = None
+        self._grace_cap = 0.0
         self._grace_handle: asyncio.TimerHandle | None = None
         self._grace_stop: asyncio.Task[None] | None = None
 
@@ -273,6 +293,17 @@ class StreamBroadcast:
         ``resize_grace``.
         """
         return self._ended_by_resize
+
+    @property
+    def ended_by_codec_change(self) -> bool:
+        """Whether the subscribers' last stream ended at a video-codec change.
+
+        Under either ``on_resize`` policy; :attr:`error` stays ``None`` for it. The camera
+        stream stays open for :data:`CODEC_CHANGE_GRACE` (or ``resize_grace`` when
+        longer), so a reconnect within it needs no new open. Cleared like
+        :attr:`ended_by_resize`.
+        """
+        return self._ended_by_codec_change
 
     @property
     def resizes(self) -> int:
@@ -346,10 +377,9 @@ class StreamBroadcast:
         self._subscribers.add(sub)
         try:
             if self._grace_until is not None and self.running:
-                # Joining the camera stream kept open after a resize end.
-                _LOGGER.debug("%s: a subscriber rejoined within the resize grace", self._name)
-                self._end_grace()
-                self._ended_by_resize = False
+                # Joining the camera stream kept open after a resize or codec-change end.
+                _LOGGER.debug("%s: a subscriber rejoined within the grace", self._name)
+                self._rejoin()
             self._ensure_pump()
             header = self._encoder.header
             if header:
@@ -414,8 +444,7 @@ class StreamBroadcast:
         watcher = None if stop is None else loop.create_task(tap.stop_on(stop))
         try:
             if self._grace_until is not None and self.running:
-                self._end_grace()
-                self._ended_by_resize = False
+                self._rejoin()
             self._ensure_pump()
             extra = CAPTURE_START_TIMEOUT if start_timeout is None else start_timeout
             deadline = loop.time() + seconds + extra
@@ -468,6 +497,7 @@ class StreamBroadcast:
         self._started = asyncio.Event()
         self._error = None
         self._ended_by_resize = False
+        self._ended_by_codec_change = False
         self._pump = asyncio.get_running_loop().create_task(self._run())
 
     def _new_encoder(
@@ -481,17 +511,33 @@ class StreamBroadcast:
             fill_audio=self._fill_audio,
         )
 
-    # ── resize grace ─────────────────────────────────────────────────────────
+    # ── reconnect grace ──────────────────────────────────────────────────────
 
     def _in_grace(self) -> bool:
         return self._grace_until is not None and time.monotonic() < self._grace_until
 
-    def _begin_grace(self) -> None:
-        """Keep the camera stream open ``resize_grace`` s for a reconnecting subscriber."""
-        self._grace_until = time.monotonic() + self._resize_grace
-        self._grace_handle = asyncio.get_running_loop().call_later(
-            self._resize_grace, self._grace_expired
-        )
+    def _begin_grace(self, seconds: float) -> None:
+        """Keep the camera stream open ``seconds`` for a reconnecting subscriber.
+
+        A change while an earlier grace still waits keeps the later deadline, but never
+        past the first change's deadline plus one grace: a camera that keeps changing
+        with nobody back stays open at most two graces after the first change.
+        """
+        now = time.monotonic()
+        until = now + seconds
+        if self._grace_until is None:
+            self._grace_cap = until + seconds
+        else:
+            until = min(max(until, self._grace_until), self._grace_cap)
+        self._end_grace()
+        self._grace_until = until
+        self._grace_handle = asyncio.get_running_loop().call_later(until - now, self._grace_expired)
+
+    def _rejoin(self) -> None:
+        """A subscriber joined the camera stream kept open after an end."""
+        self._end_grace()
+        self._ended_by_resize = False
+        self._ended_by_codec_change = False
 
     def _end_grace(self) -> None:
         self._grace_until = None
@@ -502,9 +548,9 @@ class StreamBroadcast:
     def _grace_expired(self) -> None:
         self._grace_handle = None
         self._grace_until = None
-        if self._subscribers:
-            return
-        _LOGGER.debug("%s: nobody rejoined within the resize grace; closing", self._name)
+        if self._subscribers or self._taps:
+            return  # the last one to leave closes the camera
+        _LOGGER.debug("%s: nobody rejoined within the grace; closing", self._name)
         self._grace_stop = asyncio.get_running_loop().create_task(self._stop())
 
     # ── the pump ─────────────────────────────────────────────────────────────
@@ -526,28 +572,10 @@ class StreamBroadcast:
                 for tap in self._taps:
                     tap.offer(frame)
                 out = self._encoder.feed(frame)
-                if out.resized:
-                    # on_resize="end": the subscribers' stream ends here.
-                    self._ended_by_resize = True
-                    if self._resize_grace <= 0:
-                        _LOGGER.info(
-                            "%s: the camera changed resolution mid-stream; ending", self._name
-                        )
+                if out.resized or out.codec_changed:
+                    # The subscribers' stream ends here (on_resize="end", or a new codec).
+                    if not self._restart_at(frame, codec_changed=out.codec_changed):
                         break
-                    _LOGGER.info(
-                        "%s: the camera changed resolution mid-stream; ending the "
-                        "subscribers' stream, camera kept open %.0f s",
-                        self._name,
-                        self._resize_grace,
-                    )
-                    # The camera has settled already: start again at the first
-                    # keyframe of the new size, with the audio decision carried over.
-                    self._encoder = self._new_encoder(
-                        settle=0.0, assume_audio=self._encoder.has_audio
-                    )
-                    self._begin_grace()  # before the sentinels: leavers must not stop the camera
-                    self._finish_subscribers()
-                    self._encoder.feed(frame)
                     continue
                 if out.restarted:
                     _LOGGER.debug(
@@ -568,6 +596,46 @@ class StreamBroadcast:
             await self._close_stream()
             self._finish_subscribers()
             self._end_taps()
+
+    def _restart_at(self, frame: MediaFrame, *, codec_changed: bool) -> bool:
+        """End the subscribers' stream at ``frame``; False when the camera closes too.
+
+        With a grace the camera stream stays open and a fresh encoder starts at ``frame``
+        (the keyframe of the new size or codec), so a reconnect needs no wake and no
+        settle. The grace is armed only for subscribers present at the change or still
+        awaited from an earlier one (see :meth:`_begin_grace`).
+        """
+        what = "video codec" if codec_changed else "resolution"
+        log = _LOGGER.debug if codec_changed else _LOGGER.info
+        if not self._subscribers and self._grace_until is None:
+            # Nobody to reconnect (captures only): go on at ``frame`` without a grace;
+            # the last capture to leave closes the camera.
+            log("%s: the camera changed %s mid-stream; no viewer to restart", self._name, what)
+            self._encoder = self._new_encoder(settle=0.0, assume_audio=self._encoder.has_audio)
+            self._encoder.feed(frame)
+            return True
+        grace = max(self._resize_grace, CODEC_CHANGE_GRACE) if codec_changed else self._resize_grace
+        if codec_changed:
+            self._ended_by_codec_change = True
+        else:
+            self._ended_by_resize = True
+        if grace <= 0:
+            log("%s: the camera changed %s mid-stream; ending", self._name, what)
+            return False
+        log(
+            "%s: the camera changed %s mid-stream; ending the subscribers' stream, "
+            "camera kept open %.0f s",
+            self._name,
+            what,
+            grace,
+        )
+        # The camera has settled already: start again at the first keyframe of the new
+        # size or codec, with the audio decision carried over.
+        self._encoder = self._new_encoder(settle=0.0, assume_audio=self._encoder.has_audio)
+        self._begin_grace(grace)  # before the sentinels: leavers must not stop the camera
+        self._finish_subscribers()
+        self._encoder.feed(frame)
+        return True
 
     def _end_taps(self) -> None:
         for tap in list(self._taps):

@@ -98,6 +98,11 @@ class SessionStats:
     media_codec_overrides: Mapping[str, int]
     """Keyframes whose picture is another codec than their header names, as
     ``"<header>-><picture>"`` (``"hevc->h264"``); the stream is muxed as the picture."""
+    media_codec_changes: Mapping[str, int]
+    """Keyframes whose picture is another codec than the stream's keyframe before, as
+    ``"<before>-><after>"`` (``"hevc->h264"``): a camera that changes codec mid-stream.
+    The live broadcast restarts its viewers' stream at each (``ended_by_codec_change``).
+    """
     media_empty_nals: int
     """Empty NAL units removed from video frames before muxing."""
     media_frames_without_nal: int
@@ -168,6 +173,7 @@ class MediaCounters:
     sessions count into their owner's."""
 
     __slots__ = (
+        "codec_changes",
         "codec_overrides",
         "codecs",
         "codecs_by_channel",
@@ -193,6 +199,7 @@ class MediaCounters:
         self.variants: Counter[str] = Counter()
         self.codecs: Counter[str] = Counter()
         self.codec_overrides: Counter[str] = Counter()
+        self.codec_changes: Counter[str] = Counter()
         self.codecs_by_channel: dict[int, VideoCodec] = {}
         self.empty_nals = 0
         self.frames_without_nal = 0

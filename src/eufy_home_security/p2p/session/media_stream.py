@@ -146,7 +146,12 @@ class MediaStream:
         self._head = b""
         self._probe = ""
         self._codec: VideoCodec | None = None
-        """The codec the stream's last keyframe picture showed (:func:`~..media.picture_codec`)."""
+        """The codec the stream's last keyframe picture showed (:func:`~..media.picture_codec`),
+        or its header named when the picture showed none and the header changed."""
+        self._key_codec: VideoCodec | None = None
+        """The codec the last keyframe went out as."""
+        self._key_header: VideoCodec | None = None
+        """The codec the last keyframe's video header named."""
         self._held: MediaFrame | None = None
         """The latest keyframe, not yet queued: a continuation record may follow."""
         self._held_parts: list[bytes] = []
@@ -522,13 +527,39 @@ class MediaStream:
                         shown.value,
                         shown.value,
                     )
-            self._codec = shown or self._codec
             if shown is not None:
+                self._codec = shown
                 counters.codecs_by_channel[self.channel] = shown
-        codec = self._codec or frame.codec
+            elif self._header_changed(frame):
+                self._codec = frame.codec
+            codec = self._codec or frame.codec
+            previous = self._key_codec
+            if codec is not None and previous is not None and codec is not previous:
+                count_capped(counters.codec_changes, f"{previous.value}->{codec.value}")
+                if self._throttle.should_log(("codec-change", codec)):
+                    _LOGGER.debug(
+                        "media (cmd %d ch%d): the video codec changed %s -> %s at %dx%d",
+                        self.command,
+                        self.channel,
+                        previous.value,
+                        codec.value,
+                        frame.width,
+                        frame.height,
+                    )
+            self._key_codec, self._key_header = codec, frame.codec
+        elif self._header_changed(frame):
+            # The next codec's frame, which its own picture cannot tell before that
+            # codec's keyframe.
+            codec = frame.codec
+        else:
+            codec = self._codec or frame.codec
         if data is frame.data and codec is frame.codec:
             return frame
         return replace(frame, data=data, codec=codec)
+
+    def _header_changed(self, frame: MediaFrame) -> bool:
+        """Whether ``frame``'s header names another codec than the last keyframe's did."""
+        return frame.codec is not None and self._key_header not in (None, frame.codec)
 
     def _undecodable_video(self, variant: VideoVariant) -> None:
         """Fail a stream whose video arrives in a protection its key does not decode;

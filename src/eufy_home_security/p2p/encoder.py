@@ -16,6 +16,11 @@ are dropped. With ``follow_resize=False`` :class:`StreamEncoder` waits for the s
 hold still for :attr:`~StreamEncoder.settle`, then starts on the next keyframe, and a
 later size change is reported instead.
 
+A camera can also change video codec mid-stream (a short opening picture group in one
+codec, then the other). A transport stream declares its codec once, in the PMT, and no
+consumer in use follows a change, so a keyframe of another codec spends the encoder
+(:attr:`EncodedStream.codec_changed`) and frames of the new codec before it are dropped.
+
 The PMT is written at the start and consumers pick their tracks from it once, so the
 audio decision cannot wait for the camera's audio: ``fill_audio=True`` declares AAC at
 the start and carries silent AAC frames until the camera's own audio arrives (see
@@ -93,6 +98,14 @@ class EncodedStream:
     further bytes. The caller must build a new encoder (and reconnect its consumers) or
     stop.
     """
+    codec_changed: bool = False
+    """True when a keyframe's codec differs from the started stream's, whatever
+    ``follow_resize`` says: the stream's PMT declares its codec once.
+
+    Once this is reported the encoder is **spent**, like :attr:`resized`: nothing of the
+    new codec is muxed and the caller must build a new encoder, which starts at that
+    keyframe.
+    """
     restarted: bool = False
     """True on the keyframe that resumes a followed stream at a new size (``data`` holds
     the tables and that keyframe, which start a new :attr:`StreamEncoder.header`)."""
@@ -113,6 +126,10 @@ class StreamEncoder:
     :attr:`header`. Audio keeps flowing through the gap. With ``follow_resize=False`` a
     size change spends the encoder (:attr:`EncodedStream.resized`).
 
+    A keyframe of another codec spends the encoder under either setting
+    (:attr:`EncodedStream.codec_changed`); a frame of another codec before such a keyframe
+    is dropped. A frame that names no codec is taken as the stream's.
+
     ``audio=True`` carries the camera's AAC. The PMT is written when the stream starts
     and consumers pick their tracks from it once, so the track must be declared then and
     fed from then on: a declared track with no data makes HA's stream worker fail with
@@ -127,6 +144,7 @@ class StreamEncoder:
         "_audio_seen",
         "_awaiting_keyframe",
         "_clock",
+        "_codec_changed",
         "_fill_audio",
         "_fill_ms",
         "_follow_resize",
@@ -169,6 +187,7 @@ class StreamEncoder:
         self._size_since = 0.0
         self._started = False
         self._awaiting_keyframe = False
+        self._codec_changed = False
         self._resizes = 0
         self._video_seen = 0
         self._gop: list[bytes] = []
@@ -241,6 +260,15 @@ class StreamEncoder:
             mux = self._mux
             if mux is None:  # pragma: no cover - started implies a muxer
                 return EncodedStream()
+            if self._codec_changed:
+                return EncodedStream(codec_changed=True)
+            if frame.codec is not None and frame.codec is not mux.codec:
+                if not frame.is_keyframe:
+                    # Another codec's frame has no reference here; the stream's may go on.
+                    silence = self._silence(mux, frame.timestamp_ms)
+                    return EncodedStream(data=self._note(silence, keyframe=False))
+                self._codec_changed = True
+                return EncodedStream(codec_changed=True)
             if size != self._size or self._awaiting_keyframe:
                 if not self._follow_resize:
                     return EncodedStream(resized=True)

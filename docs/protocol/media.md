@@ -550,6 +550,18 @@ unit of each keyframe that opens a picture group (an HEVC VPS/SPS/PPS or IRAP pi
 layer 0, an H.264 SPS or IDR), and falls back to byte 5 when none does
 (`media.picture_codec`); the muxer declares that codec.
 
+A camera can **change codec mid-stream**: a live stream can open with a short picture
+group in one codec and go on in the other, the header byte switching with the picture.
+A transport stream declares its codec once, in its PMT, and consumers do not follow a
+change inside one stream, so a keyframe of another codec than the stream's ends the
+muxed stream there; `StreamBroadcast` starts a new one at that keyframe on the open
+camera stream, kept open for a reconnect only when viewers were attached
+(`ended_by_codec_change`, `docs/how-to/home-assistant.md`). Frames whose header names the
+next codec before its first keyframe are dropped; a keyframe whose NAL units name no codec
+takes its header's codec when that changed. A live capture or a download ends at the
+change (one clip, one codec) and is marked `ended_early`. `SessionStats.media_codec_changes` counts the
+changes as `"hevc->h264"`.
+
 Empty NAL units (a start code followed by another or by the end of the frame) are
 removed before muxing, and a frame left with none is dropped with the video waiting for
 the next keyframe: a consumer's parser may index into an empty unit.
@@ -730,7 +742,8 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
   variant, subheader bytes, keyframe flag, codec, lengths, size, the first 5 body
   bytes as delivered, and what the stream did with each), and
   `media_codec_overrides` (keyframes whose picture is another codec than their header,
-  as `"hevc->h264"`), `media_empty_nals` and `media_frames_without_nal`,
+  as `"hevc->h264"`), `media_codec_changes` (keyframes whose picture is another codec
+  than the stream's keyframe before), `media_empty_nals` and `media_frames_without_nal`,
   `media_keyframes_rejected` with `media_rejected_keyframe`: a keyframe that did not
   decrypt to Annex-B, with `probe` naming the body layouts that do start with a start
   code (`raw@<n>`: clear from offset n; `ecb@<n>`: one 128-byte ECB run from n under
@@ -746,7 +759,9 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
 
 What the eufy app calls **Streaming Quality** (the thing description's
 `live_streaming_resolution`, access mode RW) picks the resolution a live stream settles
-at. It does **not** change the codec: every value streams HEVC.
+at. It does **not** change the codec on the cameras the table below was measured on
+(HEVC at every value); other cameras stream H.264, and a camera can change codec within a
+live stream (see [Frames](#frames)).
 
 The value is read back from **param 1705** (`STREAMING_QUALITY_OTHER`, app enum `BAT_DOORBELL_VIDEO_QUALITY`). Param 1020 is a
 decoy — it reads `0` on a HomeBase 3 while the real setting is 10. The app's parser

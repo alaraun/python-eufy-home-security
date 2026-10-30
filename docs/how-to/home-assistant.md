@@ -1623,6 +1623,7 @@ across all clients, a T8170 4, and a live open wakes a battery camera.
 | `settle` | the settle window in use: 0 by default (see *Starting*) |
 | `error` | why the last stream ended, or `None` if it ended cleanly |
 | `ended_by_resize` | the last stream ended at a picture-size change (`on_resize="end"` only) |
+| `ended_by_codec_change` | the last stream ended at a video-codec change (either policy); reconnect |
 | `resizes` | size changes the running stream followed (`on_resize="continue"`) |
 | `subscribers` | how many readers are attached |
 | `running` | whether the camera stream is open |
@@ -1737,6 +1738,32 @@ the camera stream open with no subscriber, so a reconnect within that time needs
 wake and no settle: the next subscriber gets the new size's keyframe at once. **A
 battery camera stays awake for the grace time**: a stream costs about the same power as
 a watched one, so 30 s of grace per resize end is 30 s of live-view battery.
+
+**A video-codec change ends the stream under either policy.** Some cameras open a live
+stream with a short picture group in one codec (HEVC) and go on in the other (H.264). A
+transport stream declares its codec once and neither go2rtc nor HA's stream worker
+follows a change inside one, so the broadcast ends the subscribers' stream at the first
+keyframe of the new codec: their iteration ends, `ended_by_codec_change` is set and
+`error` stays `None`. When subscribers were attached, the camera stream stays open for
+`CODEC_CHANGE_GRACE` (20 s, or `resize_grace` when longer), and a subscriber that joins
+within it gets the new codec's keyframe first, with no new open and no wake. Another
+change before anyone rejoins keeps the later deadline, but the camera closes at the
+latest two graces after the first change, so a camera that keeps changing codec with
+nobody watching does not stay awake. With only captures attached there is no grace: the
+camera closes when the last capture returns (a capture ends at the change, see
+*Recordings and clips*). **Treat this end as a reconnect, not a failure:** re-subscribe
+within the grace (or let go2rtc / the stream worker reconnect to the same URL) without an
+error to the viewer. How the consumers reconnect:
+
+- HA's stream worker restarts its source 10 s after it ended the first time, so its first
+  reconnect falls within the grace. Later restarts wait 10 s longer each (20 s, 30 s, …;
+  the wait resets after a run of more than 300 s), so a view that goes on across more changes can miss the
+  grace and open the camera again, which wakes a battery camera.
+- go2rtc reconnects to its source at once, but a WebRTC session keeps the codec it
+  negotiated: a player on the old codec stays frozen until it starts a new session, so
+  the player has to re-attach when the picture stalls.
+
+`station.stats().media_codec_changes` counts the changes (`{"hevc->h264": 1}`).
 
 #### Audio
 
@@ -1855,7 +1882,8 @@ output; hard-code neither codec anywhere.
 `VideoCodec.content_type` is `video/hevc` / `video/h264`, `VideoCodec.mp4_tag` is
 `hvc1` / None. `picture_codec`, `VideoCodec` and the content-type constants are exported
 from the package root. For diagnostics, `station.stats()` has `media_video_codecs` (by
-header), `media_codec_overrides` (header vs picture) and `media_codecs_by_channel`.
+header), `media_codec_overrides` (header vs picture), `media_codec_changes` (codec
+changes within a stream) and `media_codecs_by_channel`.
 
 ### Recordings and clips
 
@@ -1872,8 +1900,9 @@ video and AAC untouched, starting at a keyframe) written through the integration
 `duration_s` (by the camera's clock), `width`/`height` (the last frame's), `resizes`,
 `codec` (`VideoCodec` the clip carries, None without video; picks the MP4 tag below),
 `started_at` (aware), `device_sn`, `record_id` (downloads), `expected_frames` (the
-record's `frame_num`), `ended_early` (a capture whose stream ended first), `stopped` (a
-capture ended by its `stop` event; complete), `complete`, `content_type`.
+record's `frame_num`), `ended_early` (a capture whose stream ended first, or a clip cut
+at a video-codec change), `stopped` (a capture ended by its `stop` event; complete),
+`complete`, `content_type`.
 
 #### The station's recordings
 
@@ -2956,7 +2985,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
   `media_rejected_keyframe` and `media_failures_by_channel` (which camera channel's
   opens failed, by error class); for "the picture freezes", at
   `media_frames_skipped_for_keyframe` against `media_frames_dropped_for_reader`
-  (see `docs/protocol/media.md`). For "events stopped", compare
+  and `media_codec_changes` (see `docs/protocol/media.md`). For "events stopped", compare
   `seconds_since_last_event` with `seconds_since_last_probe` and look at
   `state_frames_by_encryption`, `dropped_undecodable` and `wrong_port_drops`; for a flapping
   station, `reconnects`, `handshake_failures`, `key_refreshes` and `last_error` (a class

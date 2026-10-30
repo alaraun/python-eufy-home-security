@@ -9,10 +9,12 @@ from collections.abc import AsyncIterator
 import pytest
 
 from eufy_home_security.exceptions import StationUnreachableError
-from eufy_home_security.p2p.broadcast import StreamBroadcast
+from eufy_home_security.p2p import broadcast as broadcast_module
+from eufy_home_security.p2p.broadcast import ResizePolicy, StreamBroadcast
 from eufy_home_security.p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
 from eufy_home_security.p2p.media import MediaFrame, MediaKind, VideoCodec
-from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
+from eufy_home_security.p2p.mpegts import PMT_PID, TS_PACKET_LEN
+from tests.p2p.codec_frames import SWITCHES, coded
 
 
 def _ended_by_resize(broadcast: StreamBroadcast) -> bool:
@@ -401,3 +403,211 @@ async def test_a_cancelled_viewer_closes_the_camera_stream(where: str) -> None:
         assert broadcast.subscribers == 0
     finally:
         await broadcast.aclose()
+
+
+_STREAM_TYPES = {VideoCodec.HEVC: 0x24, VideoCodec.H264: 0x1B}
+
+
+def _codec_switch(old: VideoCodec, new: VideoCodec) -> list[MediaFrame]:
+    """An opening picture group in ``old``, then ``new`` at another size."""
+    return [
+        coded(old, keyframe=True, ms=1000),
+        coded(old, ms=1066),
+        coded(new, ms=1133, size=(640, 920)),  # before the new codec's keyframe
+        coded(new, keyframe=True, ms=1200, size=(640, 920)),
+        coded(new, ms=1266, size=(640, 920)),
+    ]
+
+
+def _pmt_stream_types(ts: bytes) -> set[int]:
+    """Every elementary stream type the PMTs in ``ts`` declare."""
+    types = set()
+    for o in range(0, len(ts), TS_PACKET_LEN):
+        pkt = ts[o : o + TS_PACKET_LEN]
+        if ((pkt[1] & 0x1F) << 8) | pkt[2] != PMT_PID or not pkt[1] & 0x40:
+            continue
+        p = 5 + pkt[4]
+        end = p + 3 + (((pkt[p + 1] & 0x0F) << 8) | pkt[p + 2]) - 4
+        q = p + 12 + (((pkt[p + 10] & 0x0F) << 8) | pkt[p + 11])
+        while q < end:
+            types.add(pkt[q])
+            q += 5 + (((pkt[q + 3] & 0x0F) << 8) | pkt[q + 4])
+    return types
+
+
+def _ended_by_codec_change(broadcast: StreamBroadcast) -> bool:
+    return broadcast.ended_by_codec_change
+
+
+@pytest.mark.parametrize("on_resize", ["continue", "end"])
+@pytest.mark.parametrize(("old", "new"), SWITCHES)
+async def test_a_codec_change_restarts_the_viewers_stream_on_the_open_camera(
+    old: VideoCodec, new: VideoCodec, on_resize: ResizePolicy
+) -> None:
+    stream = FakeStream(_codec_switch(old, new), hold=True)
+    opens = 0
+
+    async def open_stream() -> FakeStream:
+        nonlocal opens
+        opens += 1
+        return stream
+
+    broadcast = StreamBroadcast(
+        open_stream, settle=0.0, on_resize=on_resize, fill_audio=False, name="test"
+    )
+    first = b"".join([chunk async for chunk in broadcast.subscribe()])
+    assert _pmt_stream_types(first) == {_STREAM_TYPES[old]}
+    assert new.value.encode() + b"-" not in first, "nothing of the new codec under the old PMT"
+    assert broadcast.ended_by_codec_change
+    assert (broadcast.ended_by_resize, broadcast.error) == (False, None)
+    assert broadcast.running, "the camera stays open for the reconnect"
+    assert not stream.closed
+    second = (await asyncio.wait_for(drain(broadcast, 1), 2))[0]
+    assert opens == 1, "no second open, so no wake"
+    assert _pmt_stream_types(second) == {_STREAM_TYPES[new]}
+    assert second.find(new.value.encode() + b"-key") > 0, "starts at the new codec's keyframe"
+    assert old.value.encode() + b"-" not in second, "no picture of the old codec is replayed"
+    assert not _ended_by_codec_change(broadcast), "a rejoining subscriber clears it"
+    await broadcast.aclose()
+    assert stream.closed
+
+
+async def test_the_camera_closes_when_nobody_returns_after_a_codec_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(broadcast_module, "CODEC_CHANGE_GRACE", 0.05)
+    stream = FakeStream(_codec_switch(VideoCodec.HEVC, VideoCodec.H264), hold=True)
+    broadcast = StreamBroadcast(lambda: _wrap(stream), settle=0.0, fill_audio=False, name="test")
+    assert [chunk async for chunk in broadcast.subscribe()]
+    assert broadcast.running
+    await asyncio.sleep(0.2)
+    assert stream.closed
+    assert not broadcast.running
+
+
+async def test_a_longer_resize_grace_also_holds_a_codec_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(broadcast_module, "CODEC_CHANGE_GRACE", 0.05)
+    stream = FakeStream(_codec_switch(VideoCodec.HEVC, VideoCodec.H264), hold=True)
+    broadcast = StreamBroadcast(
+        lambda: _wrap(stream), settle=0.0, resize_grace=5.0, fill_audio=False, name="test"
+    )
+    assert [chunk async for chunk in broadcast.subscribe()]
+    await asyncio.sleep(0.2)
+    assert broadcast.running
+    await broadcast.aclose()
+
+
+async def test_without_a_grace_a_codec_change_closes_the_camera_until_the_next_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(broadcast_module, "CODEC_CHANGE_GRACE", 0.0)
+    streams = [FakeStream(_codec_switch(VideoCodec.HEVC, VideoCodec.H264)), FakeStream(settled(4))]
+
+    async def open_stream() -> FakeStream:
+        return streams.pop(0)
+
+    broadcast = StreamBroadcast(open_stream, settle=0.0, fill_audio=False, name="test")
+    assert [chunk async for chunk in broadcast.subscribe()]
+    assert broadcast.ended_by_codec_change
+    assert not broadcast.running
+    assert [chunk async for chunk in broadcast.subscribe()]
+    assert not _ended_by_codec_change(broadcast), "a new stream clears it"
+
+
+class PacedStream(FakeStream):
+    """Yields each frame after its delay (seconds), then holds open until closed."""
+
+    def __init__(self, paced: list[tuple[float, MediaFrame]]) -> None:
+        super().__init__([frame for _, frame in paced], hold=True)
+        self._delays = [delay for delay, _ in paced]
+
+    async def _iter(self) -> AsyncIterator[MediaFrame]:
+        for delay, frame in zip(self._delays, self._frames, strict=True):
+            await asyncio.sleep(delay)
+            yield frame
+        while not self.closed:
+            await asyncio.sleep(0.01)
+
+
+async def _until_closed(stream: FakeStream, timeout: float) -> None:
+    async with asyncio.timeout(timeout):
+        while not stream.closed:
+            await asyncio.sleep(0.01)
+
+
+async def test_a_second_change_before_the_rejoin_keeps_the_later_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(broadcast_module, "CODEC_CHANGE_GRACE", 0.5)
+    hevc, h264 = VideoCodec.HEVC, VideoCodec.H264
+    stream = PacedStream(
+        [
+            (0.0, coded(hevc, keyframe=True, ms=1000)),
+            (0.0, coded(hevc, ms=1066)),
+            (0.0, coded(h264, keyframe=True, ms=1133, size=(640, 920))),
+            (0.3, coded(hevc, keyframe=True, ms=1200)),
+        ]
+    )
+    broadcast = StreamBroadcast(lambda: _wrap(stream), settle=0.0, fill_audio=False, name="test")
+    loop = asyncio.get_running_loop()
+    assert [chunk async for chunk in broadcast.subscribe()]
+    changed = loop.time()
+    await asyncio.sleep(changed + 0.65 - loop.time())
+    assert broadcast.running, "the first change's deadline passed; the second one's holds"
+    await _until_closed(stream, 1.0)
+    assert loop.time() - changed >= 0.75
+
+
+async def test_a_flapping_camera_with_nobody_back_closes_two_graces_after_the_first_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(broadcast_module, "CODEC_CHANGE_GRACE", 0.3)
+    codecs = [VideoCodec.HEVC, VideoCodec.H264]
+    stream = PacedStream(
+        [
+            (0.0, coded(VideoCodec.HEVC, keyframe=True, ms=1000)),
+            *(
+                (0.05, coded(codecs[(i + 1) % 2], keyframe=True, ms=1066 + i * 66))
+                for i in range(60)
+            ),
+        ]
+    )
+    broadcast = StreamBroadcast(lambda: _wrap(stream), settle=0.0, fill_audio=False, name="test")
+    loop = asyncio.get_running_loop()
+    assert [chunk async for chunk in broadcast.subscribe()]
+    changed = loop.time()
+    await asyncio.sleep(0.45)
+    assert broadcast.running, "later changes extend the grace"
+    await _until_closed(stream, 1.0)
+    assert loop.time() - changed < 1.2, "closed at the bound, while the camera still flaps"
+
+
+async def test_a_resize_with_a_shorter_grace_keeps_the_codec_change_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(broadcast_module, "CODEC_CHANGE_GRACE", 0.5)
+    stream = PacedStream(
+        [
+            (0.0, coded(VideoCodec.HEVC, keyframe=True, ms=1000)),
+            (0.0, coded(VideoCodec.H264, keyframe=True, ms=1066, size=(640, 920))),
+            (0.1, coded(VideoCodec.H264, keyframe=True, ms=1133)),
+        ]
+    )
+    broadcast = StreamBroadcast(
+        lambda: _wrap(stream),
+        settle=0.0,
+        on_resize="end",
+        resize_grace=0.05,
+        fill_audio=False,
+        name="test",
+    )
+    loop = asyncio.get_running_loop()
+    assert [chunk async for chunk in broadcast.subscribe()]
+    changed = loop.time()
+    await asyncio.sleep(0.35)
+    assert broadcast.running
+    assert _ended_by_resize(broadcast), "the resize happened"
+    await _until_closed(stream, 1.0)
+    assert loop.time() - changed >= 0.45

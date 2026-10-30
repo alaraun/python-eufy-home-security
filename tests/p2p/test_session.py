@@ -70,6 +70,7 @@ from eufy_home_security.p2p.crypto import (
 )
 from eufy_home_security.p2p.did import Did, static_key
 from eufy_home_security.p2p.media import (
+    VIDEO_CODEC_H264,
     MediaDecoder,
     MediaFrame,
     MediaKeyType,
@@ -3083,6 +3084,80 @@ async def test_a_keyframe_whose_picture_matches_its_header_keeps_the_header_code
     stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
     assert (await anext(stream)).codec is VideoCodec.HEVC
     assert session.stats().media_codec_overrides == {}
+
+
+async def test_a_keyframe_of_another_codec_is_counted_and_logged(
+    station: FakeStation, caplog: pytest.LogCaptureFixture
+) -> None:
+    session, stream, rsa_key = _rsa_stream(station)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    h264 = media_keyframe(rsa_key.public_key(), bytes(range(16)), clear=H264_KEYFRAME)
+    wrapped = len(body) - 1 - len(MEDIA_KEYFRAME)  # the RSA-wrapped stream key comes first
+    switched = body[:wrapped] + h264[wrapped:]  # the same stream key, another picture
+    with caplog.at_level(logging.DEBUG, logger="eufy_home_security.p2p.session.media_stream"):
+        stream._feed(
+            FrameType.VIDEO_FRAME,
+            video_record(switched, keyframe=True, codec=VIDEO_CODEC_H264, width=640, height=920),
+        )
+        stream._feed(
+            FrameType.VIDEO_FRAME,
+            video_record(H264_PFRAME, keyframe=False, codec=VIDEO_CODEC_H264),
+        )
+        await anext(stream)
+    assert (await anext(stream)).codec is VideoCodec.H264
+    assert session.stats().media_codec_changes == {"hevc->h264": 1}
+    assert "ch0): the video codec changed hevc -> h264 at 640x920" in caplog.text
+
+
+async def test_a_keyframe_whose_picture_is_silent_takes_a_changed_header_codec(
+    station: FakeStation,
+) -> None:
+    """Its NAL units name no codec: a header that changed codec marks the next codec."""
+    session, stream, rsa_key = _rsa_stream(station)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    silent = b"\x00\x00\x00\x01\x09\xf0" + bytes((i * 5 + 1) & 0xFF for i in range(300))
+    other = media_keyframe(rsa_key.public_key(), bytes(range(16)), clear=silent)
+    wrapped = len(body) - 1 - len(MEDIA_KEYFRAME)  # the RSA-wrapped stream key comes first
+    switched = body[:wrapped] + other[wrapped:]
+    stream._feed(
+        FrameType.VIDEO_FRAME, video_record(switched, keyframe=True, codec=VIDEO_CODEC_H264)
+    )
+    stream._feed(
+        FrameType.VIDEO_FRAME, video_record(H264_PFRAME, keyframe=False, codec=VIDEO_CODEC_H264)
+    )
+    codecs = [(await anext(stream)).codec for _ in range(3)]
+    assert codecs == [VideoCodec.HEVC, VideoCodec.H264, VideoCodec.H264]
+    assert session.stats().media_codec_changes == {"hevc->h264": 1}
+
+
+async def test_a_pframe_whose_header_codec_changed_carries_the_header_codec(
+    station: FakeStation,
+) -> None:
+    """Its picture cannot tell: the header's change marks it as the next codec's."""
+    session, stream, rsa_key = _rsa_stream(station)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
+    stream._feed(
+        FrameType.VIDEO_FRAME,
+        video_record(H264_PFRAME, keyframe=False, codec=VIDEO_CODEC_H264),
+    )
+    codecs = [(await anext(stream)).codec for _ in range(3)]
+    assert codecs == [VideoCodec.HEVC, VideoCodec.HEVC, VideoCodec.H264]
+    assert session.stats().media_codec_changes == {}
+
+
+async def test_a_pframe_with_an_unknown_header_codec_keeps_the_stream_codec(
+    station: FakeStation,
+) -> None:
+    _, stream, rsa_key = _rsa_stream(station)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False, codec=7))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
+    assert [(await anext(stream)).codec for _ in range(2)] == [VideoCodec.HEVC, VideoCodec.HEVC]
 
 
 async def test_empty_nal_units_never_reach_the_reader(station: FakeStation) -> None:

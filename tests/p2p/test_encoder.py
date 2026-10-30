@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+
 from eufy_home_security.p2p.encoder import SILENT_AAC_FRAME, SILENT_AAC_FRAME_MS, StreamEncoder
 from eufy_home_security.p2p.media import MediaFrame, MediaKind, VideoCodec
 from eufy_home_security.p2p.mpegts import AUDIO_PID, TS_PACKET_LEN
+from tests.p2p.codec_frames import SWITCHES, coded
 
 
 class FakeClock:
@@ -382,3 +385,44 @@ def test_silence_flows_while_a_followed_resize_waits_for_its_keyframe() -> None:
     enc.feed(video(keyframe=True, ms=1000))
     dropped = enc.feed(video(1920, 1080, ms=1100))
     assert dropped.data.count(SILENT_AAC_FRAME) == 1, "video dropped, silence kept"
+
+
+@pytest.mark.parametrize("follow", [True, False])
+@pytest.mark.parametrize(("old", "new"), SWITCHES)
+def test_a_keyframe_of_another_codec_spends_the_encoder(
+    old: VideoCodec, new: VideoCodec, follow: bool
+) -> None:
+    enc = StreamEncoder(settle=0.0, follow_resize=follow, clock=FakeClock())
+    assert enc.feed(coded(old, keyframe=True)).started
+    assert enc.feed(coded(old, ms=1066)).data
+    header = enc.header
+    out = enc.feed(coded(new, keyframe=True, ms=1133, size=(640, 920)))
+    assert out.codec_changed
+    assert (out.data, out.resized, out.restarted) == (b"", False, False)
+    assert enc.codec is old
+    assert enc.header == header, "nothing of the new codec joins the picture group"
+    later = enc.feed(coded(new, ms=1200, size=(640, 920)))
+    assert later.codec_changed, "spent: it keeps reporting the change"
+    assert later.data == b""
+
+
+@pytest.mark.parametrize("follow", [True, False])
+def test_frames_of_another_codec_before_its_keyframe_are_dropped(follow: bool) -> None:
+    enc = StreamEncoder(
+        audio=True, settle=0.0, fill_audio=True, follow_resize=follow, clock=FakeClock()
+    )
+    enc.feed(coded(VideoCodec.HEVC, keyframe=True, ms=1000))
+    dropped = enc.feed(coded(VideoCodec.H264, ms=1100, size=(640, 920)))
+    assert (dropped.codec_changed, dropped.resized) == (False, False)
+    assert b"h264-p" not in dropped.data
+    assert dropped.data.count(SILENT_AAC_FRAME) == 1, "video dropped, silence kept"
+    assert b"hevc-p" in enc.feed(coded(VideoCodec.HEVC, ms=1166)).data, "the old codec goes on"
+    assert enc.feed(coded(VideoCodec.H264, keyframe=True, ms=1233, size=(640, 920))).codec_changed
+
+
+def test_a_frame_that_names_no_codec_rides_the_stream() -> None:
+    enc = StreamEncoder(settle=0.0, clock=FakeClock())
+    enc.feed(coded(VideoCodec.H264, keyframe=True))
+    out = enc.feed(coded(None, ms=1066, units=VideoCodec.H264))
+    assert b"h264-p" in out.data
+    assert not out.codec_changed
