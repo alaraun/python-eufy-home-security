@@ -185,6 +185,9 @@ _LOGGER = logging.getLogger(__name__)
 
 READBACK_ATTEMPTS = 3
 READBACK_DELAY = 0.8
+LENS_READ_TIMEOUT = 3.0
+"""Seconds the parameter read before a multi-camera open waits for the station's reply
+(:meth:`Station._read_lens_params`); the open goes ahead without it after that."""
 
 MIN_TRACKING_CAMERAS: Final = 2
 """The fewest cameras the eufy app saves as the cross-camera tracking choice."""
@@ -1005,9 +1008,11 @@ class Station:
         demand files them in its session instead)."""
         self._cloud_time_zone: _CloudValue | None = None
         """The station entry's ``time_zone``."""
-        self._lens_reads: set[int] = set()
-        """Channels a multi-camera open read the parameters for on this connection
-        (:meth:`_read_lens_params`)."""
+        self._lens_reads: dict[int, int] = {}
+        """Per channel, the session's :attr:`~..p2p.session.StationSession.link_generation`
+        a multi-camera open's parameter read counted for (:meth:`_read_lens_params`)."""
+        self._lens_read_locks: dict[int, asyncio.Lock] = {}
+        """Per channel, held while its parameter read runs, so concurrent opens share it."""
         self._alarms = StationAlarms(self)
         session.add_dump_listener(self._on_dump_complete)
         session.add_alarm_listener(self._alarms.on_alarm_frame)
@@ -1404,7 +1409,6 @@ class Station:
             self.note_alarm(event)
         # A camera that loses its link has gone idle, and an idle camera returns to 1x.
         if isinstance(event, ConnectionChanged) and not event.connected:
-            self._lens_reads.clear()
             for device_sn in list(self._ptz.zooms):
                 self._ptz.keep_zoom(device_sn, MIN_ZOOM)
 
@@ -2343,25 +2347,42 @@ class Station:
 
     async def _read_lens_params(self, channel: int) -> None:
         """Read the station's parameters before the open of a camera sent a layout
-        (:meth:`_sends_layout`) when the session holds none of ``channel``'s, at most once
-        per channel and connection, and not while the camera's wake backs off. A failed
-        read leaves the cloud's lens list, or none."""
+        (:meth:`_sends_layout`) when the session holds none of ``channel``'s: at most once
+        per channel and connection, and not while the camera's wake backs off. Concurrent
+        opens of a channel wait for one read. A read the station answered, or left
+        unanswered for :data:`LENS_READ_TIMEOUT` on a working link, counts for the
+        connection; one that did not reach the station, or was cancelled, does not. A
+        failed read leaves the cloud's lens list, or none."""
+        async with self._lens_read_locks.setdefault(channel, asyncio.Lock()):
+            if not self._lens_read_due(channel):
+                return
+            try:
+                await self.session.async_get_params(
+                    timeout=LENS_READ_TIMEOUT, expect_channels=(channel,)
+                )
+            except DeviceTimeoutError as err:
+                # Asking again on this link would delay every open by the same wait.
+                _LOGGER.debug(
+                    "%s: lens list read unanswered: %s; using the cloud/none", self._log_name, err
+                )
+            except EufySecurityError as err:
+                _LOGGER.debug(
+                    "%s: lens list read failed: %s; using the cloud/none", self._log_name, err
+                )
+                return
+            self._lens_reads[channel] = self.session.link_generation
+
+    def _lens_read_due(self, channel: int) -> bool:
+        """Whether :meth:`_read_lens_params` reads for ``channel`` now."""
         device = self._device_on_channel(channel)
-        if (
+        session = self.session
+        return not (
             device is None
-            or channel in self._lens_reads
             or not self._sends_layout(device)
-            or self.session.wake_backoff_left(channel) > 0
-            or any(dev == channel for dev, _ in self.session.params)
-        ):
-            return
-        self._lens_reads.add(channel)
-        try:
-            await self.session.async_get_params(expect_channels=(channel,))
-        except EufySecurityError as err:
-            _LOGGER.debug(
-                "%s: lens list read failed: %s; using the cloud/none", self._log_name, err
-            )
+            or (session.connected and self._lens_reads.get(channel) == session.link_generation)
+            or session.wake_backoff_left(channel) > 0
+            or any(dev == channel for dev, _ in session.params)
+        )
 
     def _lens_list(self, device: CloudDevice) -> tuple[tuple[Lens, ...], LensSource]:
         """``device``'s lens list and its source (see :meth:`lenses`). A station value

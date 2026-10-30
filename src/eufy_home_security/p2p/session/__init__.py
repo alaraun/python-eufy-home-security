@@ -500,6 +500,8 @@ class StationSession:
         self._local_port = local_port
 
         self._transport: PPPPTransport | None = None
+        self._links = 0
+        """Transports this session brought up (:attr:`link_generation`)."""
         self._creds: P2PCredentials | None = None
         self._cipher_id: int | None = None
         """The cipher the station named in its last CONN_INIT (None before one arrived)."""
@@ -596,6 +598,12 @@ class StationSession:
             and self._transport is not None
             and self._transport.is_open
         )
+
+    @property
+    def link_generation(self) -> int:
+        """The number of transports this session has brought up, the current one
+        included: a value read on one connection never matches on a later one."""
+        return self._links
 
     @property
     def rsa_session(self) -> bool:
@@ -2618,6 +2626,7 @@ class StationSession:
             transport.close()
             raise ProtocolError(f"cannot derive the static key for this station: {err}") from err
         self._transport = transport
+        self._links += 1
         self._did = did
         self._keys.static_key = ecb_key
         if transport.peer is not None:
