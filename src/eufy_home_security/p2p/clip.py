@@ -63,7 +63,8 @@ class MediaClip:
     expected_frames: int | None = None
     """A download's video frames by the history record (``frame_num``); None when unknown."""
     ended_early: bool = False
-    """A live capture whose stream ended before the asked duration."""
+    """A live capture whose stream ended before the asked duration, or a clip (capture or
+    download) cut at a video-codec change."""
     stopped: bool = False
     """A live capture ended by its ``stop`` event before the asked duration; it counts
     as complete."""
@@ -155,7 +156,7 @@ class _ClipMuxer:
             resizes=self.resizes,
             codec=self._encoder.codec if self.video_frames else None,
             started_at=started_at,
-            ended_early=ended_early,
+            ended_early=ended_early or self.codec_changed,
             stopped=stopped,
         )
 
@@ -168,7 +169,8 @@ async def mux_frames(
     With ``max_ms`` it stops at the first video frame that many milliseconds of stream
     clock after the first keyframe (that frame is not written). A keyframe of another
     codec ends the clip too, before it: one clip carries one codec. Returns the muxer (its
-    counters) and whether ``max_ms`` was reached; the rest is flushed either way.
+    counters; its clip is ``ended_early`` after a codec change) and whether ``max_ms`` was
+    reached; the rest is flushed either way.
     """
     muxer = _ClipMuxer(write)
     reached = False

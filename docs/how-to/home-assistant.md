@@ -1744,14 +1744,26 @@ stream with a short picture group in one codec (HEVC) and go on in the other (H.
 transport stream declares its codec once and neither go2rtc nor HA's stream worker
 follows a change inside one, so the broadcast ends the subscribers' stream at the first
 keyframe of the new codec: their iteration ends, `ended_by_codec_change` is set and
-`error` stays `None`. The camera stream stays open for `CODEC_CHANGE_GRACE` (20 s, or
-`resize_grace` when longer: HA's stream worker restarts 10 s after its source ends), and
-a subscriber that joins within it gets the new codec's keyframe first, with no new open
-and no wake. **Treat this end as a reconnect, not a failure:** re-subscribe within the
-grace (or let go2rtc / the stream worker reconnect to the same URL) without an error to
-the viewer. A player that negotiated the old codec (a WebRTC session) needs a new
-session for the new one. `station.stats().media_codec_changes` counts the
-changes (`{"hevc->h264": 1}`).
+`error` stays `None`. When subscribers were attached, the camera stream stays open for
+`CODEC_CHANGE_GRACE` (20 s, or `resize_grace` when longer), and a subscriber that joins
+within it gets the new codec's keyframe first, with no new open and no wake. Another
+change before anyone rejoins keeps the later deadline, but the camera closes at the
+latest two graces after the first change, so a camera that keeps changing codec with
+nobody watching does not stay awake. With only captures attached there is no grace: the
+camera closes when the last capture returns (a capture ends at the change, see
+*Recordings and clips*). **Treat this end as a reconnect, not a failure:** re-subscribe
+within the grace (or let go2rtc / the stream worker reconnect to the same URL) without an
+error to the viewer. How the consumers reconnect:
+
+- HA's stream worker restarts its source 10 s after it ended the first time, so its first
+  reconnect falls within the grace. Later restarts wait 10 s longer each (20 s, 30 s, …;
+  the wait resets after a run of more than 300 s), so a view that goes on across more changes can miss the
+  grace and open the camera again, which wakes a battery camera.
+- go2rtc reconnects to its source at once, but a WebRTC session keeps the codec it
+  negotiated: a player on the old codec stays frozen until it starts a new session, so
+  the player has to re-attach when the picture stalls.
+
+`station.stats().media_codec_changes` counts the changes (`{"hevc->h264": 1}`).
 
 #### Audio
 
@@ -1888,8 +1900,9 @@ video and AAC untouched, starting at a keyframe) written through the integration
 `duration_s` (by the camera's clock), `width`/`height` (the last frame's), `resizes`,
 `codec` (`VideoCodec` the clip carries, None without video; picks the MP4 tag below),
 `started_at` (aware), `device_sn`, `record_id` (downloads), `expected_frames` (the
-record's `frame_num`), `ended_early` (a capture whose stream ended first), `stopped` (a
-capture ended by its `stop` event; complete), `complete`, `content_type`.
+record's `frame_num`), `ended_early` (a capture whose stream ended first, or a clip cut
+at a video-codec change), `stopped` (a capture ended by its `stop` event; complete),
+`complete`, `content_type`.
 
 #### The station's recordings
 

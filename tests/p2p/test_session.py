@@ -3110,6 +3110,28 @@ async def test_a_keyframe_of_another_codec_is_counted_and_logged(
     assert "ch0): the video codec changed hevc -> h264 at 640x920" in caplog.text
 
 
+async def test_a_keyframe_whose_picture_is_silent_takes_a_changed_header_codec(
+    station: FakeStation,
+) -> None:
+    """Its NAL units name no codec: a header that changed codec marks the next codec."""
+    session, stream, rsa_key = _rsa_stream(station)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    silent = b"\x00\x00\x00\x01\x09\xf0" + bytes((i * 5 + 1) & 0xFF for i in range(300))
+    other = media_keyframe(rsa_key.public_key(), bytes(range(16)), clear=silent)
+    wrapped = len(body) - 1 - len(MEDIA_KEYFRAME)  # the RSA-wrapped stream key comes first
+    switched = body[:wrapped] + other[wrapped:]
+    stream._feed(
+        FrameType.VIDEO_FRAME, video_record(switched, keyframe=True, codec=VIDEO_CODEC_H264)
+    )
+    stream._feed(
+        FrameType.VIDEO_FRAME, video_record(H264_PFRAME, keyframe=False, codec=VIDEO_CODEC_H264)
+    )
+    codecs = [(await anext(stream)).codec for _ in range(3)]
+    assert codecs == [VideoCodec.HEVC, VideoCodec.H264, VideoCodec.H264]
+    assert session.stats().media_codec_changes == {"hevc->h264": 1}
+
+
 async def test_a_pframe_whose_header_codec_changed_carries_the_header_codec(
     station: FakeStation,
 ) -> None:

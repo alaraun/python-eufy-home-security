@@ -555,9 +555,11 @@ group in one codec and go on in the other, the header byte switching with the pi
 A transport stream declares its codec once, in its PMT, and consumers do not follow a
 change inside one stream, so a keyframe of another codec than the stream's ends the
 muxed stream there; `StreamBroadcast` starts a new one at that keyframe on the open
-camera stream (`ended_by_codec_change`, `docs/how-to/home-assistant.md`). Frames whose
-header names the next codec before its first keyframe are dropped, and a live capture
-ends at the change (one clip, one codec). `SessionStats.media_codec_changes` counts the
+camera stream, kept open for a reconnect only when viewers were attached
+(`ended_by_codec_change`, `docs/how-to/home-assistant.md`). Frames whose header names the
+next codec before its first keyframe are dropped; a keyframe whose NAL units name no codec
+takes its header's codec when that changed. A live capture or a download ends at the
+change (one clip, one codec) and is marked `ended_early`. `SessionStats.media_codec_changes` counts the
 changes as `"hevc->h264"`.
 
 Empty NAL units (a start code followed by another or by the end of the frame) are

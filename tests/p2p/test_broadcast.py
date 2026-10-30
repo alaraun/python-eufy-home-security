@@ -14,7 +14,7 @@ from eufy_home_security.p2p.broadcast import ResizePolicy, StreamBroadcast
 from eufy_home_security.p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
 from eufy_home_security.p2p.media import MediaFrame, MediaKind, VideoCodec
 from eufy_home_security.p2p.mpegts import PMT_PID, TS_PACKET_LEN
-from tests.p2p.test_encoder import SWITCHES, coded
+from tests.p2p.codec_frames import SWITCHES, coded
 
 
 def _ended_by_resize(broadcast: StreamBroadcast) -> bool:
@@ -514,3 +514,100 @@ async def test_without_a_grace_a_codec_change_closes_the_camera_until_the_next_s
     assert not broadcast.running
     assert [chunk async for chunk in broadcast.subscribe()]
     assert not _ended_by_codec_change(broadcast), "a new stream clears it"
+
+
+class PacedStream(FakeStream):
+    """Yields each frame after its delay (seconds), then holds open until closed."""
+
+    def __init__(self, paced: list[tuple[float, MediaFrame]]) -> None:
+        super().__init__([frame for _, frame in paced], hold=True)
+        self._delays = [delay for delay, _ in paced]
+
+    async def _iter(self) -> AsyncIterator[MediaFrame]:
+        for delay, frame in zip(self._delays, self._frames, strict=True):
+            await asyncio.sleep(delay)
+            yield frame
+        while not self.closed:
+            await asyncio.sleep(0.01)
+
+
+async def _until_closed(stream: FakeStream, timeout: float) -> None:
+    async with asyncio.timeout(timeout):
+        while not stream.closed:
+            await asyncio.sleep(0.01)
+
+
+async def test_a_second_change_before_the_rejoin_keeps_the_later_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(broadcast_module, "CODEC_CHANGE_GRACE", 0.5)
+    hevc, h264 = VideoCodec.HEVC, VideoCodec.H264
+    stream = PacedStream(
+        [
+            (0.0, coded(hevc, keyframe=True, ms=1000)),
+            (0.0, coded(hevc, ms=1066)),
+            (0.0, coded(h264, keyframe=True, ms=1133, size=(640, 920))),
+            (0.3, coded(hevc, keyframe=True, ms=1200)),
+        ]
+    )
+    broadcast = StreamBroadcast(lambda: _wrap(stream), settle=0.0, fill_audio=False, name="test")
+    loop = asyncio.get_running_loop()
+    assert [chunk async for chunk in broadcast.subscribe()]
+    changed = loop.time()
+    await asyncio.sleep(changed + 0.65 - loop.time())
+    assert broadcast.running, "the first change's deadline passed; the second one's holds"
+    await _until_closed(stream, 1.0)
+    assert loop.time() - changed >= 0.75
+
+
+async def test_a_flapping_camera_with_nobody_back_closes_two_graces_after_the_first_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(broadcast_module, "CODEC_CHANGE_GRACE", 0.3)
+    codecs = [VideoCodec.HEVC, VideoCodec.H264]
+    stream = PacedStream(
+        [
+            (0.0, coded(VideoCodec.HEVC, keyframe=True, ms=1000)),
+            *(
+                (0.05, coded(codecs[(i + 1) % 2], keyframe=True, ms=1066 + i * 66))
+                for i in range(60)
+            ),
+        ]
+    )
+    broadcast = StreamBroadcast(lambda: _wrap(stream), settle=0.0, fill_audio=False, name="test")
+    loop = asyncio.get_running_loop()
+    assert [chunk async for chunk in broadcast.subscribe()]
+    changed = loop.time()
+    await asyncio.sleep(0.45)
+    assert broadcast.running, "later changes extend the grace"
+    await _until_closed(stream, 1.0)
+    assert loop.time() - changed < 1.2, "closed at the bound, while the camera still flaps"
+
+
+async def test_a_resize_with_a_shorter_grace_keeps_the_codec_change_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(broadcast_module, "CODEC_CHANGE_GRACE", 0.5)
+    stream = PacedStream(
+        [
+            (0.0, coded(VideoCodec.HEVC, keyframe=True, ms=1000)),
+            (0.0, coded(VideoCodec.H264, keyframe=True, ms=1066, size=(640, 920))),
+            (0.1, coded(VideoCodec.H264, keyframe=True, ms=1133)),
+        ]
+    )
+    broadcast = StreamBroadcast(
+        lambda: _wrap(stream),
+        settle=0.0,
+        on_resize="end",
+        resize_grace=0.05,
+        fill_audio=False,
+        name="test",
+    )
+    loop = asyncio.get_running_loop()
+    assert [chunk async for chunk in broadcast.subscribe()]
+    changed = loop.time()
+    await asyncio.sleep(0.35)
+    assert broadcast.running
+    assert _ended_by_resize(broadcast), "the resize happened"
+    await _until_closed(stream, 1.0)
+    assert loop.time() - changed >= 0.45
