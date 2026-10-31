@@ -4,6 +4,18 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.10](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.9...v0.4.10) (2026-10-31)
+
+
+### Bug Fixes
+
+* **p2p:** a mid-stream video-codec change restarts the live stream at the new codec without waking the camera again ([issue 149](https://github.com/alaraun/homeassistant-eufy-home-security/issues/149)) ([3cf9fd6](https://github.com/alaraun/python-eufy-home-security/commit/3cf9fd6aeddfc816ba33cc7779458db94d3ffdef))
+
+
+### Documentation
+
+* point Home Assistant users to the integration at the top of the README ([#168](https://github.com/alaraun/python-eufy-home-security/issues/168)) ([ab26fd7](https://github.com/alaraun/python-eufy-home-security/commit/ab26fd7ba38fb17f01c3b5edfa77254f0c7d5a52))
+
 ## [0.4.9](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.8...v0.4.9) (2026-10-30)
 
 
