@@ -10,6 +10,13 @@ to the HomeBase and its cameras directly over the local network, and uses eufy's
 only for login, keys and push events. It is written for a Home Assistant integration,
 but it has no Home Assistant dependency and works on its own.
 
+**Home Assistant users:** install the
+[Anker eufy Home Security integration](https://github.com/alaraun/homeassistant-eufy-home-security)
+through HACS, following its
+[installation steps](https://github.com/alaraun/homeassistant-eufy-home-security#installation).
+This package is the Python library that integration uses; Home Assistant installs it
+automatically, so do not add this repository to HACS.
+
 > **Status: beta, incomplete.** This is a 0.x release. It works day to day on the
 > hardware it was developed against, but device coverage is narrow, much of the
 > device support is unproven, and the API may change in any release. Do not make it
