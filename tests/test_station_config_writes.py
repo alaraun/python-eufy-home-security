@@ -55,7 +55,9 @@ async def fake() -> AsyncIterator[FakeStation]:
 async def station(fake: FakeStation) -> AsyncIterator[Station]:
     """The synthetic HomeBase 3 whose cloud copy carries the mode list, as on hardware."""
 
-    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def credentials(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(ACCOUNT, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -210,7 +212,9 @@ async def test_mode_list_refusals_send_nothing(
 
 
 async def test_a_mode_list_no_source_carries_is_not_overwritten(fake: FakeStation) -> None:
-    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def credentials(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(ACCOUNT, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -421,7 +425,9 @@ async def hub(fake: FakeStation) -> AsyncIterator[Station]:
     """The synthetic HomeBase 3 with two cameras and a motion sensor."""
     fake.reply_to_settings = True  # a 1350 setting answered with code 0
 
-    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def credentials(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(ACCOUNT, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -599,7 +605,9 @@ async def test_a_custom_mode_the_known_list_lacks_is_not_set(
 
 
 async def _station_of(fake: FakeStation, pn: str) -> Station:
-    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def credentials(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(ACCOUNT, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -683,7 +691,9 @@ async def pro_alarm(fake: FakeStation, monkeypatch: pytest.MonkeyPatch) -> Async
     fake.mode_table_store = PRO_ALARM_STORE
     fake.params[255][61301] = AWAY_TABLE
 
-    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def credentials(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(ACCOUNT, "user", fake.ecc_private_key_hex)
 
     session = StationSession(

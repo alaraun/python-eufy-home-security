@@ -235,7 +235,9 @@ CAMERA = CloudDevice(
 
 @pytest.fixture
 async def real_station(station: FakeStation) -> AsyncIterator[Station]:
-    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def credentials(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     session = StationSession(

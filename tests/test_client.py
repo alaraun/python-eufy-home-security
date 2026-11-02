@@ -49,6 +49,7 @@ from eufy_home_security.events import (
 from eufy_home_security.exceptions import (
     AuthenticationError,
     CipherUnavailableError,
+    CloudApiError,
     CloudError,
     CommunicationError,
     EmptyResponseError,
@@ -1754,6 +1755,102 @@ async def test_no_key_for_the_named_cipher_is_one_cloud_problem_and_no_fetch_sto
     finally:
         await eufy.async_close()
         fake.stop()
+
+
+async def test_an_rsa_station_without_a_served_key_runs_under_the_static_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A station answering the RSA CONN_INIT names a cipher the cloud serves no key for:
+    the session runs under the static key, as the eufy app does, with no CloudProblem,
+    and a reconnect inside the back-off asks the cloud no second time."""
+    monkeypatch.setattr(session_module, "RECONNECT_BACKOFF", (0.05,))
+    fake = FakeStation(
+        cipher_id=1, account_id=OWNER_ID, conn_init_version=1, static_key_session=True
+    )
+    await fake.start()
+    cloud = replace(FakeCloud.for_stations(fake), cipher_keys={}, rsa_cipher_keys={})
+    store = warm_store(email=SYNTHETIC.email, cloud=cloud)
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email,
+        store=store,
+        cloud=cloud,
+        stations={fake.serial: fake},
+        include={fake.serial: Reach.LOCAL},
+    )
+    events: list[Event] = []
+    eufy.subscribe(events.append)
+    try:
+        await eufy.async_discover()
+        assert await eufy.async_start(push=False) == {}
+        session = eufy.stations[fake.serial].session
+        assert session.static_key_session
+        inits = fake.conn_inits
+        session._teardown("test reconnect")
+        await wait_for(lambda: fake.conn_inits > inits and session.connected)
+        assert session.static_key_session
+        assert cloud.cipher_ids_requested == [1]
+        assert not [e for e in events if isinstance(e, CloudProblem)]
+    finally:
+        await eufy.async_close()
+        fake.stop()
+
+
+async def test_keys_optional_credentials_without_a_served_key_carry_the_owner_only() -> None:
+    """``keys_optional`` (an RSA handshake): the cloud's empty answer for the cipher gives
+    the owner's credentials without keys, no CloudProblem and no refresh event; within
+    the back-off a refresh asks nothing. Without it the empty answer still raises."""
+    cloud = FakeCloud(owner_ids={SYNTHETIC.station_sn: OWNER_ID})
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        events: list[Event] = []
+        eufy.subscribe(events.append)
+        await eufy.async_login()
+        provider = eufy._credential_provider(SYNTHETIC.station_sn)
+        creds = await provider(refresh=False, cipher_id=1, keys_optional=True)
+        again = await provider(refresh=True, cipher_id=1, keys_optional=True)
+        assert creds == again
+        assert (creds.account_id, creds.cipher_id) == (OWNER_ID, 1)
+        assert (creds.ecc_private_key, creds.rsa_private_key) == ("", None)
+        assert cloud.cipher_ids_requested == [1]
+        assert not [e for e in events if isinstance(e, (CloudProblem, CredentialsRefreshed))]
+        with pytest.raises(CipherUnavailableError):
+            await provider(refresh=False, cipher_id=1)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        CommunicationError("no route"),
+        RateLimitedError("slow down", retry_after=60.0),
+        CloudApiError(10000, "server error"),
+    ],
+    ids=["network", "rate_limit", "api"],
+)
+async def test_keys_optional_credentials_keep_a_failed_cipher_fetch_an_error(
+    error: EufySecurityError,
+) -> None:
+    """A cipher fetch that fails (network, rate limit, an error code) is no "no key"
+    answer: it raises with ``keys_optional`` too."""
+    cloud = FakeCloud(owner_ids={SYNTHETIC.station_sn: OWNER_ID})
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        await eufy.async_login()
+        provider = eufy._credential_provider(SYNTHETIC.station_sn)
+        await eufy.cloud.async_get_station_owner_id(SYNTHETIC.station_sn)
+        cloud.call_errors = [error]
+        with pytest.raises(type(error)):
+            await provider(refresh=False, cipher_id=1, keys_optional=True)
+
+
+async def test_keys_optional_credentials_still_need_the_owner_id() -> None:
+    cloud = FakeCloud(devices=[])  # the station is not on this account: no owner id
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        await eufy.async_login()
+        provider = eufy._credential_provider(SYNTHETIC.station_sn)
+        with pytest.raises(CloudApiError, match="not on this account"):
+            await provider(refresh=False, cipher_id=1, keys_optional=True)
+        assert cloud.cipher_ids_requested == []
 
 
 async def test_discover_builds_a_standalone_station_that_reads_its_one_block() -> None:

@@ -59,6 +59,7 @@ from .events import (
     pic_url_kind,
 )
 from .exceptions import (
+    CipherUnavailableError,
     CloudError,
     CommunicationError,
     EmptyResponseError,
@@ -808,11 +809,17 @@ class EufySecurity:
         """
         cloud, cache = self.cloud, self.cache
 
-        async def provide(*, refresh: bool, cipher_id: int | None) -> P2PCredentials:
+        async def provide(
+            *, refresh: bool, cipher_id: int | None, keys_optional: bool = False
+        ) -> P2PCredentials:
             async with self._credentials_lock:
-                return await fetch(refresh=refresh, cipher_id=cipher_id)
+                return await fetch(
+                    refresh=refresh, cipher_id=cipher_id, keys_optional=keys_optional
+                )
 
-        async def fetch(*, refresh: bool, cipher_id: int | None) -> P2PCredentials:
+        async def fetch(
+            *, refresh: bool, cipher_id: int | None, keys_optional: bool
+        ) -> P2PCredentials:
             await self._ensure_cache_loaded()
             if cipher_id is None:
                 cipher_id = cache.station_cipher_id(station_sn)
@@ -825,11 +832,27 @@ class EufySecurity:
             try:
                 account_id = await cloud.async_get_station_owner_id(station_sn, refresh=refresh)
                 # A station naming no cipher runs under its static key: nothing to fetch.
-                keys = (
-                    CipherKeys(ecc_private_key=None, rsa_private_key=None)
-                    if cipher_id == CONN_INIT_NO_CIPHER
-                    else await cloud.async_get_cipher_keys(station_sn, cipher_id, refresh=refresh)
-                )
+                keys = CipherKeys(ecc_private_key=None, rsa_private_key=None)
+                if cipher_id != CONN_INIT_NO_CIPHER:
+                    try:
+                        keys = await cloud.async_get_cipher_keys(
+                            station_sn, cipher_id, refresh=refresh
+                        )
+                    except CipherUnavailableError:
+                        if not keys_optional:
+                            raise
+                        # The session runs under the static key: no problem to report.
+                        _LOGGER.debug(
+                            "%s: no key served for cipher %d; credentials without keys",
+                            redact_serial(station_sn),
+                            cipher_id,
+                        )
+                        return P2PCredentials(
+                            account_id=account_id,
+                            user_name=cloud.user_name,
+                            ecc_private_key="",
+                            cipher_id=cipher_id,
+                        )
             except CloudError as err:
                 self._cloud_failed(err, station_sn)
                 raise

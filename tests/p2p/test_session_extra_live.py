@@ -34,7 +34,9 @@ async def station() -> AsyncIterator[FakeStation]:
 
 
 def _session(station: FakeStation, serial: str = SYNTHETIC.station_sn) -> StationSession:
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     return StationSession(serial, provider, host="127.0.0.1", port=station.discovery_port)

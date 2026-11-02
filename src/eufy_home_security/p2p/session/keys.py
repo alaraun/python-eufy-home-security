@@ -31,8 +31,9 @@ class SessionKeys:
     def __init__(self, serial: str) -> None:
         self.serial = serial
         self.rsa_keyless = False
-        """Whether the last RSA handshake left no session key: no cipher named, or its
-        RSA key does not parse. The session then runs under the static key."""
+        """Whether the last RSA handshake left no session key: no cipher named, or no
+        usable RSA key for it (none served, or one that does not parse). The session
+        then runs under the static key."""
         self.static_key: bytes | None = None
         self.session_key: bytes | None = None
         """The GCM session key of an ECIES handshake."""
@@ -55,7 +56,7 @@ class SessionKeys:
     @property
     def session_encryption(self) -> int:
         """Encryption type of the frames an RSA session sends: 2 under a delivered key;
-        without one (no cipher named, or a key that does not parse), 1 (static key) to a
+        without one (no cipher named, no key served, or one that does not parse), 1 (static key) to a
         model of :data:`~..crypto.STATIC_KEY_FALLBACK_MODELS` and 0 (clear) to any other."""
         if not self.rsa_keyless:
             return FRAME_SESSION_ECB

@@ -56,6 +56,7 @@ from eufy_home_security.exceptions import (
     RateLimitedError,
     RecordingRefError,
     RecordNotFoundError,
+    RefreshCooldownError,
     StationUnreachableError,
     UnsupportedError,
 )
@@ -136,7 +137,9 @@ class Provider:
         self.stale_key = stale_key
         self.calls: list[bool] = []
 
-    async def __call__(self, *, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def __call__(
+        self, *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         self.calls.append(refresh)
         key = (
             self.stale_key if (self.stale_key and not refresh) else self.station.ecc_private_key_hex
@@ -841,7 +844,9 @@ async def test_a_failed_refetch_sets_no_latch(station: FakeStation) -> None:
     wrong = FakeStation().ecc_private_key_hex
     calls: list[bool] = []
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         calls.append(refresh)
         if refresh:
             raise RateLimitedError("throttled", code=26145)
@@ -881,7 +886,9 @@ async def test_failed_first_start_raises_and_reports_its_cause(
 ) -> None:
     wrong = FakeStation().ecc_private_key_hex
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         if failure is not None:
             raise failure
         return P2PCredentials(SYNTHETIC.account_id, "user", wrong)
@@ -3503,7 +3510,9 @@ async def test_a_standalone_device_streams_whatever_channel_its_frames_name(
 
     monkeypatch.setattr(FakeStation, "_start_media", tagged_1)
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     station.serial = "T8442P2000054321"
@@ -3545,7 +3554,9 @@ async def test_a_session_loads_the_key_of_the_cipher_the_station_names() -> None
     step = 1
     bad_hex = FakeStation().ecc_private_key_hex
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         calls.append((refresh, cipher_id))
         if cipher_id == 98:
             if step >= 3:
@@ -3591,7 +3602,9 @@ async def test_a_cloud_error_for_the_named_cipher_ends_the_attempt() -> None:
         "no key", cipher_id=98, owner_source="member.admin_user_id", retry_after=60.0
     )
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         calls.append(cipher_id)
         raise error
 
@@ -3618,7 +3631,9 @@ async def test_a_standalone_block_is_filed_under_the_station_and_its_channel(
     station = FakeStation(receipt_len=STANDALONE_RECEIPT_LEN, params={48: {1224: "1", 1101: "51"}})
     await station.start()
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     session = StationSession(
@@ -3660,7 +3675,9 @@ async def test_a_standalone_block_under_an_unknown_label_is_the_devices_own() ->
     station = FakeStation(receipt_len=STANDALONE_RECEIPT_LEN, params={1000: {1101: "64"}})
     await station.start()
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     session = StationSession(
@@ -3817,7 +3834,9 @@ async def test_station_goes_silent_on_demand_is_idle_vs_closed(
 
 
 async def test_session_standalone_property(station: FakeStation) -> None:
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     session = StationSession(
@@ -3832,7 +3851,9 @@ async def test_session_standalone_property(station: FakeStation) -> None:
 
 
 async def test_session_run_recipe_query_preset(station: FakeStation) -> None:
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     station.preset_points = [{"index": 1, "enable": 1, "zoom": 1, "isdefault": 0}]
@@ -3851,7 +3872,9 @@ async def test_session_run_recipe_query_preset(station: FakeStation) -> None:
 
 
 async def test_session_run_recipe_goto_preset(station: FakeStation) -> None:
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     station.serial = "T8170P2000054321"
@@ -3871,7 +3894,9 @@ async def test_session_run_recipe_goto_preset(station: FakeStation) -> None:
 async def test_session_run_recipe_unsupported(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     orig_send_receipt = station.send_receipt
@@ -3901,7 +3926,9 @@ async def test_session_run_recipe_unsupported(
 async def test_session_run_recipe_timeout(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     orig_send_json = station.send_json
@@ -3927,7 +3954,9 @@ async def test_session_run_recipe_timeout(
 
 
 async def test_session_live_standalone_sends_doorbell_payload(station: FakeStation) -> None:
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     station.serial = "T8170P2000054321"
@@ -3951,7 +3980,9 @@ async def test_session_live_standalone_sends_doorbell_payload(station: FakeStati
 
 
 async def test_session_live_homebase_sends_1003(station: FakeStation) -> None:
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     session = StationSession(
@@ -3977,7 +4008,9 @@ async def test_session_live_standalone_pings(
 ) -> None:
     monkeypatch.setattr(session_mod, "MEDIA_PING_INTERVAL", 0.05)
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     station.serial = "T8170P2000054321"
@@ -4004,7 +4037,9 @@ async def test_session_live_homebase_no_pings(
 ) -> None:
     monkeypatch.setattr(session_mod, "MEDIA_PING_INTERVAL", 0.05)
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     session = StationSession(
@@ -4027,7 +4062,9 @@ async def test_session_live_ends_early(
     station.live_ends_unpinged_after = 0.05
     monkeypatch.setattr(session_mod, "MEDIA_IDLE_TIMEOUT", 0.1)
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     station.serial = "T8170P2000054321"
@@ -4056,7 +4093,9 @@ async def test_session_live_keeps_delivering_with_pings(
     station.live_ends_unpinged_after = 0.05
     monkeypatch.setattr(session_mod, "MEDIA_IDLE_TIMEOUT", 0.1)
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     station.serial = "T8170P2000054321"
@@ -4378,7 +4417,9 @@ class RsaProvider:
 
     ``bad_key`` serves an unparsable ``private_key`` (the cloud lowercases the base64
     on some accounts); ``cached_rsa_key`` False serves none until a refresh (a cache
-    that predates the RSA key); ``calls`` records each ``refresh`` flag asked.
+    that predates the RSA key); ``cooldown`` refuses a refresh as the cloud client's
+    cooldown does; ``calls`` records each ``refresh`` flag asked, ``keys_optional``
+    each such flag.
     """
 
     def __init__(
@@ -4388,15 +4429,23 @@ class RsaProvider:
         rsa_key: bool = True,
         bad_key: bool = False,
         cached_rsa_key: bool = True,
+        cooldown: bool = False,
     ) -> None:
         self.station = station
         self.rsa_key = rsa_key
         self.bad_key = bad_key
         self.cached_rsa_key = cached_rsa_key
+        self.cooldown = cooldown
         self.calls: list[bool] = []
+        self.keys_optional: list[bool] = []
 
-    async def __call__(self, *, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def __call__(
+        self, *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         self.calls.append(refresh)
+        self.keys_optional.append(keys_optional)
+        if refresh and self.cooldown:
+            raise RefreshCooldownError("cipher refresh on cooldown", retry_after=60.0)
         if not self.rsa_key or not (refresh or self.cached_rsa_key):
             rsa_key = None
         elif self.bad_key:
@@ -5201,22 +5250,79 @@ async def test_a_static_key_rsa_session_takes_the_station_state_unauthenticated(
     assert (push.session_ecb, push.authenticated) == (False, False)
 
 
-async def test_an_rsa_conn_init_without_an_rsa_key_is_unusable_after_one_refresh(
-    station: FakeStation,
+@pytest.mark.parametrize("cooldown", [False, True], ids=["refetched", "refetch_on_cooldown"])
+async def test_an_rsa_conn_init_without_an_rsa_key_runs_under_the_static_key(
+    station: FakeStation, cooldown: bool, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Credentials without the RSA key are re-fetched once; still without it, the cipher
-    is unusable (not a rejected key) and no stale-key latch is set."""
-    provider = RsaProvider(station, rsa_key=False)
+    """Credentials without the RSA key (the cloud serves none for the named cipher) are
+    re-fetched once; still without it, or with the re-fetch on cooldown, the session
+    runs under the static key, as the eufy app does: no error, no stale-key latch. A
+    reconnect does the same and logs it once."""
+    caplog.set_level(logging.DEBUG, logger=session_module.__name__)
+    station.cipher_id = 1
+    station.static_key_session = True
+    provider = RsaProvider(station, rsa_key=False, cooldown=cooldown)
     latch = MemoryKeyRefreshLatch()
     session = make_rsa_session(station, provider, key_refresh=latch)
     try:
-        with pytest.raises(CipherUnusableError, match="no RSA private key") as err:
+        await session.async_connect()
+        assert session.static_key_session
+        session._teardown("test reconnect")
+        await session.async_connect()
+        assert session.static_key_session
+        assert session.stats().static_key_session
+    finally:
+        await session.async_close()
+    assert provider.calls == [False, True, False, True]
+    assert all(provider.keys_optional)
+    assert latch.retry_blocked_for() == 0.0
+    infos = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.INFO and "serves no RSA key for cipher 1" in r.getMessage()
+    ]
+    assert len(infos) == 1
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+async def test_an_ecies_conn_init_without_an_ecc_key_keeps_a_refetch_cooldown(
+    station: FakeStation,
+) -> None:
+    """Version 8 with no ``ecc_private_key`` and the re-fetch on cooldown: the cooldown
+    error, not a session."""
+
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
+        if refresh:
+            raise RefreshCooldownError("cipher refresh on cooldown", retry_after=60.0)
+        return P2PCredentials(SYNTHETIC.account_id, "user", "")
+
+    session = StationSession(
+        SYNTHETIC.station_sn, provider, host="127.0.0.1", port=station.discovery_port
+    )
+    try:
+        with pytest.raises(RefreshCooldownError):
             await session.async_connect()
     finally:
         await session.async_close()
-    assert (err.value.reason, err.value.cipher_id) == ("no_rsa_key", station.cipher_id)
-    assert provider.calls == [False, True]
-    assert latch.retry_blocked_for() == 0.0
+
+
+@pytest.mark.parametrize(("version", "optional"), [(None, False), (8, False), (1, True)])
+async def test_credentials_are_keys_optional_only_after_an_rsa_conn_init(
+    station: FakeStation, version: int | None, optional: bool
+) -> None:
+    """Before any CONN_INIT, and after an ECIES one, the provider must serve the keys."""
+    provider = RsaProvider(station)
+    session = StationSession(
+        SYNTHETIC.station_sn, provider, host="127.0.0.1", port=station.discovery_port
+    )
+    session._conn_init_version = version
+    try:
+        await session._load_credentials(refresh=False)
+    finally:
+        await session.async_close()
+    assert provider.keys_optional == [optional]
 
 
 async def test_an_rsa_key_missing_from_the_cache_is_fetched_once(station: FakeStation) -> None:
@@ -5238,7 +5344,9 @@ async def test_a_refetched_rsa_key_that_does_not_parse_leaves_the_static_key(
     other = FakeStation().rsa_private_key_pem  # a valid key that unwraps noise
     calls: list[bool] = []
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         calls.append(refresh)
         key = station.rsa_private_key_pem.lower() if refresh else other
         return P2PCredentials(SYNTHETIC.account_id, "user", "", rsa_private_key=key)
@@ -5259,7 +5367,9 @@ async def test_a_cipher_still_mismatching_after_a_refresh_fails_without_the_latc
     handshake error naming both ciphers, and no stale-key latch (no key was rejected)."""
     calls: list[tuple[bool, int | None]] = []
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         calls.append((refresh, cipher_id))
         key = station.ecc_private_key_hex
         return P2PCredentials(SYNTHETIC.account_id, "user", key, cipher_id=station.cipher_id + 1)
@@ -5287,10 +5397,12 @@ async def test_a_cipher_still_mismatching_after_a_refresh_fails_without_the_latc
 
 async def test_an_ecies_conn_init_without_an_ecc_key_is_unusable(station: FakeStation) -> None:
     """Version 8 with no ``ecc_private_key`` held, even after one refresh: unusable."""
-    calls: list[bool] = []
+    calls: list[tuple[bool, bool]] = []
 
-    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
-        calls.append(refresh)
+    async def provider(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
+        calls.append((refresh, keys_optional))
         return P2PCredentials(SYNTHETIC.account_id, "user", "")
 
     latch = MemoryKeyRefreshLatch()
@@ -5307,7 +5419,7 @@ async def test_an_ecies_conn_init_without_an_ecc_key_is_unusable(station: FakeSt
     finally:
         await session.async_close()
     assert (err.value.reason, err.value.cipher_id) == ("no_ecc_key", station.cipher_id)
-    assert calls == [False, True]
+    assert calls == [(False, False), (True, False)]  # the ECIES handshake needs its key
     assert latch.retry_blocked_for() == 0.0
 
 

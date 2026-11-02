@@ -380,7 +380,9 @@ async def test_a_paired_cameras_command_under_subheader_0_gets_only_receipt_108(
     channel: under 0 it answers -108 and the camera never sees the zoom."""
     fake.relayed_channels = {2}
 
-    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+    async def credentials(
+        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
+    ) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(

@@ -15,10 +15,10 @@
 - **Current station/camera firmware.** Current firmware uses the ECIES session
   handshake (CONN_INIT version 8). A device on older firmware that negotiates the legacy
   RSA handshake (CONN_INIT version 1) is supported as *declared*, not verified on
-  hardware. Some accounts are served the cipher's RSA key lowercased; like the eufy
-  app, the library then runs the session under the static key. A station whose RSA key
-  eufy does not serve at all reports `key_unusable` and stays unavailable; updating the
-  device's firmware in the eufy app moves it to the ECIES handshake. See [protocol/session-crypto.md](protocol/session-crypto.md#rsa-conn_init-declared-app-legacy).
+  hardware. When eufy serves no usable RSA key for the cipher (none at all, or one
+  lowercased on some accounts), the library runs the session under the static key, as
+  the eufy app does. Updating the device's firmware in the eufy app moves it to the
+  ECIES handshake. See [protocol/session-crypto.md](protocol/session-crypto.md#rsa-conn_init-declared-app-legacy).
 
 ## Install
 
