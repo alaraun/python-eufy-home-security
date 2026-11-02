@@ -4,7 +4,8 @@ For each model in the cache (``<cache>/<PN>/{td.json, <PN>Handle.mix.js}``), run
 vendor handler through ``scripts/gen_models_driver.js`` with setProperty over every
 writable property's domain, in a station-child and a standalone context, infer the write
 codecs (``scripts/gen_models_codec.py``), feed each written recipe's parameter dump back
-to getProperty for the read codec, join the app's labels and settings layout
+to getProperty for the read codec (a setting without a write: the parameter getProperty
+fills it from, ``locate_params``), join the app's labels and settings layout
 (``scripts/gen_models_join.py``) with the app's setting titles, units and variant pairs,
 and write ``<out>/<PN>.json``, then ``<out>/INDEX.json``,
 the sorted list of every ``<PN>.json`` in ``<out>``.
@@ -53,7 +54,7 @@ import sys
 import tempfile
 import threading
 import traceback
-from collections.abc import Collection, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -78,8 +79,10 @@ SCHEMA_VERSION = 3
 BASE = "SINGLE"  # the base context: a station child whose parent is no station kind
 STANDALONE = "standalone"
 IDENTIFIER = re.compile(r"[a-z0-9_]+")
-PROBE_PARAMS = range(1000, 10000)  # the parameter ids reported_param() looks among
-PROBE_TEXTS = frozenset(str(p) for p in PROBE_PARAMS)
+PROBE_PARAMS = range(1000, 65536)  # the parameter ids locate_params() looks among
+# Ids held at once: getProperty matches every held id against its commandId list.
+PROBE_CHUNK = 9000
+PROBE_ON, PROBE_OFF = "1", "0"  # the two values a held parameter takes while locating
 
 
 def _load(name: str) -> ModuleType:
@@ -223,52 +226,204 @@ def run_driver(
     return replies
 
 
+@dataclass(frozen=True)
+class Located:
+    """The device parameter getProperty reads a property from, and whether the ask names
+    it as a command id (a handler that parses the property only from its command)."""
+
+    param: int
+    as_command: bool
+
+    def request(
+        self, product_code: str, context: codec.Context, ident: str, raw: str
+    ) -> dict[str, Any]:
+        """getProperty for ``ident`` on a device that holds only this parameter, at ``raw``."""
+        device = context.device(product_code)
+        device["params"] = [{"param_type": self.param, "param_value": raw}]
+        cmds = [self.param] if self.as_command else []
+        return {"kind": "get", "cmds": cmds, "device": device, "props": [ident]}
+
+
+def _property_values(reply: Any) -> dict[str, Any]:
+    """The properties of a getProperty reply, also beside another parameter's parse error."""
+    data = reply.get("data") if isinstance(reply, dict) else None
+    found = data.get("p2p") if isinstance(data, dict) else None
+    return found if isinstance(found, dict) else {}
+
+
+def _answer(reply: Any, ident: str) -> str:
+    """``ident``'s value in a getProperty reply, canonical; "" when it has none."""
+    values = _property_values(reply)
+    return _canon(values[ident]) if ident in values else ""
+
+
+def _held_block(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    idents: Sequence[str],
+    params: Mapping[int, str],
+    *,
+    as_command: bool,
+) -> dict[str, str]:
+    """getProperty for ``idents`` on a device holding ``params``, by identifier (``_answer``)."""
+    device = context.device(product_code)
+    device["params"] = [{"param_type": p, "param_value": v} for p, v in params.items()]
+    cmds = list(params) if as_command else []
+    request = {"kind": "get", "cmds": cmds, "device": device, "props": list(idents)}
+    (reply,) = run_driver(product_code, handler, [request])
+    return {i: _answer(reply, i) for i in idents}
+
+
+def _locate_in_block(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    idents: Sequence[str],
+    block: range,
+    *,
+    as_command: bool,
+) -> dict[str, Located]:
+    """The identifiers of ``idents`` one parameter of ``block`` decides (see
+    :func:`locate_params`), each with that parameter."""
+
+    def held(on: Callable[[int], bool], asked: Sequence[str]) -> dict[str, str]:
+        params = {p: PROBE_ON if on(p) else PROBE_OFF for p in block}
+        return _held_block(product_code, handler, context, asked, params, as_command=as_command)
+
+    high = held(lambda _: True, idents)
+    low = held(lambda _: False, idents)
+    param = {i: 0 for i in idents if high[i] != low[i]}
+    for bit in range(block[-1].bit_length()):
+        if not param:
+            break
+        answer = held(lambda p, bit=bit: bool(p >> bit & 1), list(param))
+        for ident in param:
+            if answer[ident] == high[ident]:
+                param[ident] |= 1 << bit
+    candidates = {i: Located(p, as_command) for i, p in param.items() if p in block}
+    asks = [(i, raw) for i in candidates for raw in (PROBE_ON, PROBE_OFF)]
+    requests = [candidates[i].request(product_code, context, i, raw) for i, raw in asks]
+    replies = run_driver(product_code, handler, requests) if requests else []
+    alone = {key: _answer(reply, key[0]) for key, reply in zip(asks, replies, strict=True)}
+    # Held alone, the parameter must decide the value as it did in the block.
+    return {
+        i: where
+        for i, where in candidates.items()
+        if (alone[i, PROBE_ON], alone[i, PROBE_OFF]) == (high[i], low[i])
+    }
+
+
+def locate_params(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    idents: Sequence[str],
+    counts: dict[str, int],
+) -> dict[str, Located]:
+    """Per identifier, the parameter of :data:`PROBE_PARAMS` getProperty reads it from in
+    ``context``; an identifier no single parameter decides is left out.
+
+    The device holds a block of ids at :data:`PROBE_ON`, then at :data:`PROBE_OFF`; for
+    an identifier whose value differs between the two, each bit of the deciding id is
+    the answer with only the ids that have that bit at :data:`PROBE_ON`, and the id held
+    alone must give both values again. Asked for the properties alone, as the app asks
+    for them, then with the held ids as command ids for those still unplaced; the first
+    block that places an identifier wins.
+    """
+    found: dict[str, Located] = {}
+    blocks = [
+        range(start, min(start + PROBE_CHUNK, PROBE_PARAMS.stop))
+        for start in range(PROBE_PARAMS.start, PROBE_PARAMS.stop, PROBE_CHUNK)
+    ]
+    for as_command in (False, True):
+        for block in blocks:
+            pending = [i for i in idents if i not in found]
+            if not pending:
+                return found
+            placed = _locate_in_block(
+                product_code, handler, context, pending, block, as_command=as_command
+            )
+            found.update(placed)
+            if placed:
+                _count(counts, "locate:" + ("command" if as_command else "property"), len(placed))
+    return found
+
+
 def reported_param(
     product_code: str,
     handler: Path,
     context: codec.Context,
     ident: str,
     values: Collection[str],
+    *,
+    located: Mapping[str, Located],
 ) -> int | None:
     """The device parameter getProperty reports ``ident`` from as is, in ``context``:
-    the one whose own id comes back when the device holds every id of
-    :data:`PROBE_PARAMS` with itself as the value, which reads each of ``values`` back
-    unchanged and which the handler's own write of ``ident`` (if any) stores each of them
-    in as is; None when there is none. Asked for ``ident`` alone, as the app asks for a
-    property, else with every id as a command id too (a handler that parses the property
-    only from its command); another parameter's parse error does not hide it.
+    the one :func:`locate_params` placed it on (``located``), which reads each of
+    ``values`` back unchanged and which the handler's own write of ``ident`` (if any)
+    stores each of them in as is; None when there is none.
     """
+    where = located.get(ident)
+    if where is None:
+        return None
 
-    def ask(params: Mapping[int, str], cmds: Sequence[int]) -> Any:
-        device = context.device(product_code)
-        device["params"] = [{"param_type": k, "param_value": v} for k, v in params.items()]
-        request = {"kind": "get", "cmds": list(cmds), "device": device, "props": [ident]}
+    def read(value: str) -> str:
+        request = where.request(product_code, context, ident, value)
         (reply,) = run_driver(product_code, handler, [request])
-        data = reply.get("data") if isinstance(reply, dict) else None
-        found = data.get("p2p") if isinstance(data, dict) else None
-        return found.get(ident, codec.MISSING) if isinstance(found, dict) else codec.MISSING
+        return variants.text(_property_values(reply).get(ident, codec.MISSING))
 
-    def stored(param: int, value: str) -> str | None:
-        """The text the handler's write of ``value`` stores in ``param`` (``update`` or
-        ``extUpdates``); None when it stores none there."""
+    def stored(value: str) -> str | None:
+        """The text the handler's write of ``value`` stores in the parameter (``update``
+        or ``extUpdates``); None when it stores none there."""
         device = context.device(product_code)
         request = {"kind": "set", "identifier": ident, "payload": value, "device": device}
         (reply,) = run_driver(product_code, handler, [request])
-        hits = [d["param_value"] for d in _param_dump(p2p(reply)) if d["param_type"] == param]
+        hits = [d["param_value"] for d in _param_dump(p2p(reply)) if d["param_type"] == where.param]
         return variants.text(hits[0]) if hits else None
 
-    every = {p: str(p) for p in PROBE_PARAMS}
-    for cmds in ((), PROBE_PARAMS):
-        found = ask(every, cmds)
-        if isinstance(found, bool) or str(found) not in PROBE_TEXTS:
-            continue
-        param = int(found)
-        asked = [param] if cmds else []
-        if all(variants.text(ask({param: v}, asked)) == v for v in values) and all(
-            stored(param, v) in (None, v) for v in values
-        ):
-            return param
+    if all(read(v) == v for v in values) and all(stored(v) in (None, v) for v in values):
+        return where.param
     return None
+
+
+def located_reads(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    props: Mapping[str, dict[str, Any]],
+    located: Mapping[str, Located],
+    *,
+    counts: dict[str, int],
+    wire: codec.WireValues | None = None,
+) -> dict[str, dict[str, Any]]:
+    """The read codec of each of ``props`` (identifier -> property) from the parameter
+    :func:`locate_params` placed it on, in ``context``: the device holds the parameter at
+    the text form of each value of the property's domain (``codec.str_form``), and the
+    codec is inferred from those round trips as a write's is (``codec.infer_read``)."""
+    asks = [
+        (ident, v, where)
+        for ident, prop in sorted(props.items())
+        if (where := located.get(ident)) is not None
+        for v in codec.domain(prop)[1]
+    ]
+    requests = [
+        where.request(product_code, context, ident, codec.str_form(v)) for ident, v, where in asks
+    ]
+    replies = run_driver(product_code, handler, requests, wire) if requests else []
+    rows: dict[str, list[Any]] = {}
+    for (ident, v, where), reply in zip(asks, replies, strict=True):
+        decoded = _property_values(reply).get(ident, codec.MISSING)
+        rows.setdefault(ident, []).append(
+            codec.ReadSample(v, where.param, codec.str_form(v), decoded)
+        )
+    out: dict[str, dict[str, Any]] = {}
+    for ident, samples in rows.items():
+        read, _ = codec.infer_read(codec.domain(props[ident])[0], samples)
+        if read is not None:
+            out[ident] = read
+            _count(counts, "read:handler parameter")
+    return out
 
 
 def p2p(reply: Any) -> dict[str, Any] | None:
@@ -775,11 +930,13 @@ def build_context(  # noqa: C901
     reference: list[dict[str, Any]],
     background: Mapping[int, Any],
     seen: Mapping[int, list[str]],
+    located: Mapping[str, Located],
     wire: codec.WireValues | None = None,
 ) -> tuple[dict[str, Any], dict[str, int]]:
     """The settings of one model in one context and its counters. ``background``: every
     parameter the model's writes set in any context, with one value each; ``seen``: the
-    distinct values they set per parameter.
+    distinct values they set per parameter; ``located``: the parameter each property is
+    read from (:func:`locate_params`), for the settings without a write.
 
     Raises CheckError when a codec does not reproduce a swept recipe or an unaccepted
     reference row of this context.
@@ -858,6 +1015,12 @@ def build_context(  # noqa: C901
             else:
                 _count(counts, f"ro:{result.note}")
         settings[ident] = entry
+    # A setting without a write reads as the handler fills it from the device's parameters.
+    unwritten = {p["identifier"]: p for p in props if settings[p["identifier"]]["access"] == "ro"}
+    for ident, read in located_reads(
+        product_code, handler, context, unwritten, located, counts=counts, wire=wire
+    ).items():
+        settings[ident]["read"] = read
     try:
         joined = joiner.join(product_code, settings, td, app_labels, tree, titles=titles)
     except GeneratorError as err:
@@ -1104,6 +1267,10 @@ def generate(
     per_context: dict[str, dict[str, Any]] = {}
     references: dict[str, list[dict[str, Any]]] = {}
     counts: dict[str, int] = {}
+    located_counts: dict[str, int] = {}
+    located = locate_params(
+        product_code, handler, contexts[BASE], [p["identifier"] for p in props], located_counts
+    )
     for name, ctx in contexts.items():
         wanted = {BASE: "child", STANDALONE: "standalone"}.get(name)
         references[name] = [r for r in rows if r["context"] == wanted]
@@ -1120,11 +1287,14 @@ def generate(
             reference=references[name],
             background=background,
             seen=seen,
+            located=located,
             wire=wire,
         )
         per_context[name] = settings
         if name == BASE:
             counts = ctx_counts
+    for key, n in located_counts.items():
+        _count(counts, key, n)
     drop = controls.variants_to_drop(list(per_context.values()), released)
     for name, settings in per_context.items():
         controls.drop_same_codec_variants(settings, counts if name == BASE else {}, only=drop)
@@ -1138,7 +1308,9 @@ def generate(
         merged,
         props,
         drop,
-        lambda ident, values: reported_param(product_code, handler, contexts[BASE], ident, values),
+        lambda ident, values: reported_param(
+            product_code, handler, contexts[BASE], ident, values, located=located
+        ),
         counts,
     )
     model = model_for_serial(product_code)

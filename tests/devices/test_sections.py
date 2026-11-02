@@ -96,12 +96,13 @@ def test_the_camera_card_keys_sit_in_their_card_tab() -> None:
 
 
 def test_writable_camera_and_station_settings_avoid_other() -> None:
-    """Only the garage-door controller's door switches fit no section."""
+    """Only the garage-door controller's door switches fit no section; a read-only status
+    may."""
     left = {
         (code, key)
         for code, settings in _bundled()
         for key, s in settings.items()
-        if s.section == OTHER_SECTION and (s.writable or s.readable)
+        if s.section == OTHER_SECTION and s.writable
     }
     assert {key for _, key in left} <= {"garage_door_on_off", "garage_door_binding_status"}
 

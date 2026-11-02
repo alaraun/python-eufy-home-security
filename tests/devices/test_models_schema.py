@@ -205,7 +205,6 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
     else:
         assert present == [], present
         if s.get("note") != STATUS_NOTE:
-            assert s.get("read") is None
             assert len(parts) <= 1, s["note"]
             assert all(p in RO_NOTES for p in parts), s["note"]
     templates = [s["write"]] if "write" in s else []

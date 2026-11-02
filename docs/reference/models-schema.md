@@ -32,7 +32,7 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `access` | `rw`: the handler has a value-dependent write. `ro`: it has none, or the setting is a status the eufy app only reads (`hb_keypad_is_password_set`) |
 | `write` | Recipe template (base context, below) |
 | `write_table` | `{"<value>": recipe}` when the recipe's shape depends on the value. It replaces `write` |
-| `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. Either may carry `view` (below). `null`: not readable. The generator takes it from the handler's getProperty of each written value. An enum whose getProperty does not return the written value, but whose write stores every value as its own parameter value (no failed conversion such as `NaN`), is read by the inverse of the write unless a per-view read decodes it: the value read is the one the client wrote. The eufy app's own display of the watermark setting (T8414, T8440, T8442) differs from it |
+| `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. Either may carry `view` (below). `null`: not readable. The generator takes it from the handler's getProperty of each written value; for a setting without a write, from the one parameter the handler fills it from (found by holding the device's parameters at two values and reading the property back, by name, else by command id), held at each value's string form. An enum whose getProperty does not return the written value, but whose write stores every value as its own parameter value (no failed conversion such as `NaN`), is read by the inverse of the write unless a per-view read decodes it: the value read is the one the client wrote. The eufy app's own display of the watermark setting (T8414, T8440, T8442) differs from it |
 | `contexts` | What other contexts change (below); absent when every context sees the base entry |
 | `labels` | `{"<value>": "<title>"}` from the app's titles, else the cleaned TD description. The app's option titles of `working_mode_value`: `Standard` (EU), `Performance (beta)` (US) |
 | `section` | Always present: the UI section id, one of `devices/sections.py`'s `SETTING_SECTIONS`. Assigned by `scripts/gen_models_sections.py` from the app page the setting lives on, else the station rules (station models), else the identifier rules, else `other`; a variant has its primary's. Every context has the same section |
@@ -50,7 +50,7 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `variants` | On a primary only: the `__v` properties the app may read in its place, with their read conditions (see *Variants*); absent when it has none with read conditions |
 
 An `rw` setting has exactly one of `write` and `write_table`. An `ro` setting has no
-write key and `read: null`, except a status the app only reads, which keeps its read. A `flags` setting and a `bit` setting read the raw mask
+write key; it is readable (`read` not null) when one parameter fills it as above. A `flags` setting and a `bit` setting read the raw mask
 (`read.map` null).
 
 ### Contexts
@@ -96,7 +96,7 @@ condition list passes when any group passes, a group when all its conditions pas
 | `sdk_version` | the app's thing-SDK version | as above |
 | `device_sn`, `parent_sn` | the device's / its parent's serial | the value is a pattern, whatever the qualifier |
 | `user_country` | the country the account logs in with | pattern |
-| `associated_field` | the property `prop`: device parameter `param` read through `map` (absent: as reported), `default` when the device reports no such parameter; no `param` when the generator found no parameter the handler reports it from as is (read by name, else by command id) and its own write, if any, stores as is; no `prop`: `""` | `=`, `!=`, text order for `<`, `<=`, `>`, `>=`; `RE` as a pattern |
+| `associated_field` | the property `prop`: device parameter `param` read through `map` (absent: as reported), `default` when the device reports no such parameter; no `param` when the generator found no parameter the handler reports it from as is (read by name, else by command id; the property's own `read` when it has one) and its own write, if any, stores as is; no `prop`: `""` | `=`, `!=`, text order for `<`, `<=`, `>`, `>=`; `RE` as a pattern |
 | `parent_associated_field` | the parent's property `prop`; passes when the parent is not listed | not evaluated otherwise (unknown) |
 
 A pattern passes on an empty pattern or value and on a match anywhere (an inline flag
