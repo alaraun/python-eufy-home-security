@@ -52,7 +52,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_geofence_config": {
@@ -78,7 +81,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -156,7 +162,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_extender_info": {
@@ -301,7 +310,10 @@
   "device_wifi_name": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -314,7 +326,10 @@
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1266
+   },
    "section": "network"
   },
   "firmware_main_version": {
@@ -372,7 +387,10 @@
   "notification_alarm_delay_value": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1282
+   },
    "section": "modes"
   },
   "prompt_volume_value": {
@@ -446,7 +464,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1253
+   },
    "section": "system"
   },
   "timezone_set": {

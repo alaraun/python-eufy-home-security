@@ -20,7 +20,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_is_online": {
@@ -55,7 +58,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "firmware_main_version": {
@@ -77,21 +83,42 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "sensor_door_status": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1550
+   },
    "section": "system"
   },
   "sensor_is_low_power": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1552
+   },
    "section": "power"
   }
  },

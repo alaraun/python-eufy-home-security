@@ -6,7 +6,10 @@
    "access": "ro",
    "default": "100",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 8001
+   },
    "section": "power"
   },
   "device_ability_data": {
@@ -34,7 +37,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 8003
+   },
    "section": "system"
   },
   "is_device_upgrade": {

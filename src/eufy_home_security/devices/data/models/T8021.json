@@ -6,7 +6,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_has_buzzer": {
@@ -76,7 +79,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1140
+   },
    "section": "system"
   },
   "firmware_main_version": {
@@ -103,7 +109,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1133
+   },
    "section": "system"
   },
   "is_support_silent_ota_switch": {

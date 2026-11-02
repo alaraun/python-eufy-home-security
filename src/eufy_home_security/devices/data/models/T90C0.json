@@ -13,7 +13,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_model": {

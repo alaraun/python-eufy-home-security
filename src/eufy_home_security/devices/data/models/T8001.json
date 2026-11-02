@@ -7,7 +7,10 @@
    "default": "0",
    "kind": "other",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "alarm_status": {
@@ -68,7 +71,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_geofence_config": {
@@ -94,7 +100,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -169,7 +178,10 @@
   "arming_working_mode": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1151
+   },
    "section": "modes"
   },
   "database_synchronize": {
@@ -183,7 +195,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_has_buzzer": {
@@ -286,7 +301,10 @@
   "device_status": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1140
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -355,7 +373,10 @@
   "notification_alarm_delay_value": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1282
+   },
    "section": "modes"
   },
   "ordered_trigger_actions": {
@@ -434,7 +455,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1253
+   },
    "section": "system"
   },
   "timezone_set": {

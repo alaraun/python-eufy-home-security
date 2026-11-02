@@ -32,7 +32,10 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "ai_tracking_status": {
@@ -87,7 +90,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
@@ -106,7 +112,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -189,7 +198,10 @@
   "arming_working_mode": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1151
+   },
    "section": "modes"
   },
   "audio_recording_on_off": {
@@ -372,7 +384,10 @@
    "default": "{\"enable\":0,\"interval\":1800}",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6453
+   },
    "section": "recording"
   },
   "change_wifi_is_check_same_lan": {
@@ -416,7 +431,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1192
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -453,7 +471,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_charging_mode": {
@@ -565,7 +586,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 9202
+   },
    "section": "recording"
   },
   "device_is_battery_device": {
@@ -1038,7 +1062,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_medium": {
@@ -1098,7 +1125,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -1863,7 +1893,10 @@
     "3": "16x"
    },
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6001
+   },
    "section": "recording",
    "values": [
     0,
@@ -1951,7 +1984,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1193
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -2388,7 +2424,10 @@
    "access": "ro",
    "kind": "other",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6243
+   },
    "section": "picture"
   },
   "watermark_set": {
@@ -2434,7 +2473,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1191
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"

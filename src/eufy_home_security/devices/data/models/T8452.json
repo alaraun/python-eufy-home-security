@@ -32,14 +32,20 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "arming_cust_mode_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
@@ -58,7 +64,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -136,7 +145,10 @@
   "arming_working_mode": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1151
+   },
    "section": "modes"
   },
   "audio_recording_on_off": {
@@ -426,7 +438,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_continuous_recording_switch": {
@@ -642,7 +657,10 @@
   "device_wifi_name": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -1175,7 +1193,10 @@
     "3": "16x"
    },
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6001
+   },
    "section": "recording",
    "values": [
     0,

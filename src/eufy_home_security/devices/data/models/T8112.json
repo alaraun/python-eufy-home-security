@@ -32,7 +32,10 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "alerts_detection_type": {
@@ -114,7 +117,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
@@ -133,7 +139,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -215,7 +224,10 @@
   "arming_working_mode": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1151
+   },
    "section": "modes"
   },
   "audio_recording_on_off": {
@@ -284,7 +296,10 @@
   "battery_value": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1101
+   },
    "section": "power"
   },
   "camera_on_off": {
@@ -348,7 +363,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1192
+   },
    "section": "recording"
   },
   "detection_sensitivity": {
@@ -575,7 +593,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_charging_mode": {
@@ -722,7 +743,10 @@
    "access": "ro",
    "default": "1",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -1338,7 +1362,10 @@
     "6": "External solar panel",
     "7": "External and built-in solar charging"
    },
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2111
+   },
    "section": "power",
    "values": [
     0,
@@ -1355,7 +1382,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1193
+   },
    "section": "recording"
   },
   "reset_device_mode": {
@@ -1514,7 +1544,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1191
+   },
    "section": "recording"
   }
  },

@@ -6,14 +6,20 @@
    "access": "ro",
    "default": "100",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1101
+   },
    "section": "power"
   },
   "device_ability_data": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_is_online": {
@@ -83,7 +89,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_to_hb_connect_type": {
@@ -119,7 +128,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "notification_jump_to_mode_page": {
@@ -133,7 +149,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1601
+   },
    "section": "power"
   },
   "sensor_panic_trigger_type": {

@@ -32,7 +32,10 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "ai_tracking_status": {
@@ -89,7 +92,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
@@ -108,7 +114,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -186,7 +195,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1151
+   },
    "section": "modes"
   },
   "audio_recording_on_off": {
@@ -436,7 +448,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler rejects the probed values",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6073
+   },
    "section": "detection"
   },
   "detection_sensitivity": {
@@ -611,7 +626,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_continuous_recording_switch": {
@@ -928,7 +946,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -951,7 +972,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -1098,7 +1122,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_multiple_bridge": {
@@ -2058,7 +2089,10 @@
     "3": "16x"
    },
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6001
+   },
    "section": "recording",
    "values": [
     0,

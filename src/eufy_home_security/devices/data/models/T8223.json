@@ -32,14 +32,20 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "arming_cust_mode_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_keypad_set_cus_model": {
@@ -66,7 +72,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -287,7 +296,10 @@
    "access": "ro",
    "kind": "other",
    "page": "PowerManager",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1198
+   },
    "section": "power"
   },
   "battery_value": {
@@ -354,7 +366,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1192
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -540,7 +555,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_audio_ringtone_volume": {
@@ -727,7 +745,10 @@
    "default": "1",
    "kind": "other",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6445
+   },
    "section": "power"
   },
   "device_pre_recording_switch": {
@@ -833,7 +854,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6439
+   },
    "section": "doorbell"
   },
   "device_serial_number": {
@@ -1002,7 +1026,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -1022,7 +1049,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -1123,7 +1153,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_multiple_bridge": {
@@ -1482,7 +1519,14 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1018
+   },
    "section": "system"
   },
   "live_support_screenshot": {
@@ -1966,7 +2010,10 @@
     "3": "16x"
    },
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6001
+   },
    "section": "recording",
    "values": [
     0,
@@ -2051,7 +2098,10 @@
     "5": "USB and built-in solar charging",
     "8": "External solar panel"
    },
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2111
+   },
    "section": "power",
    "values": [
     0,
@@ -2110,7 +2160,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1193
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -2496,7 +2549,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1191
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"

@@ -32,14 +32,20 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "arming_cust_mode_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
@@ -409,7 +415,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_is_online": {
@@ -452,7 +461,10 @@
   "device_rtsp_parent_sn": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 40008
+   },
    "section": "network"
   },
   "device_serial_number": {
@@ -556,7 +568,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -579,14 +594,20 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1142
+   },
    "section": "network"
   },
   "device_wifi_signal_strength_level": {
@@ -666,7 +687,14 @@
   "hb_connect_support_hb_nas": {
    "access": "ro",
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 40005
+   },
    "section": "storage"
   },
   "hb_connect_support_version": {
@@ -686,7 +714,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_silent_ota_switch": {
@@ -704,7 +739,6 @@
       "access": "ro",
       "control": null,
       "note": "no handler write path",
-      "read": null,
       "write": null
      },
      "names": [

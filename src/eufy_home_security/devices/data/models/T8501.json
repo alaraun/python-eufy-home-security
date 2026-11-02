@@ -6,14 +6,20 @@
    "access": "ro",
    "default": "100",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1101
+   },
    "section": "power"
   },
   "device_ability_data": {
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_is_battery_device": {
@@ -103,7 +109,10 @@
    "default": true,
    "kind": "bool",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6507
+   },
    "section": "network"
   },
   "is_device_upgrade": {

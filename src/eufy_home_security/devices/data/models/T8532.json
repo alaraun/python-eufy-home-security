@@ -39,14 +39,20 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "arming_cust_mode_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
@@ -65,7 +71,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -347,7 +356,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1192
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -379,7 +391,10 @@
    "default": false,
    "kind": "bool",
    "note": "handler rejects the probed values",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2706
+   },
    "section": "detection"
   },
   "detection_radar_mode": {
@@ -457,7 +472,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_audio_ringtone_volume": {
@@ -489,7 +507,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6492
+   },
    "section": "system"
   },
   "device_backup_battery_type": {
@@ -637,7 +662,10 @@
   "device_connect_wifi_ssid": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 60001
+   },
    "section": "network"
   },
   "device_delivery_guard_quick_response": {
@@ -720,7 +748,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2715
+   },
    "section": "detection"
   },
   "device_model": {
@@ -821,7 +852,10 @@
   "device_multi_route_connect_status": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 60009
+   },
    "section": "network"
   },
   "device_name": {
@@ -894,7 +928,10 @@
    "kind": "string",
    "note": "handler transforms the value",
    "page": "PackageGuard",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2711
+   },
    "section": "detection"
   },
   "device_packages_guard_switch": {
@@ -951,7 +988,10 @@
    "kind": "string",
    "note": "handler ignores the value",
    "page": "UncollectedPackageAlert",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2713
+   },
    "section": "detection"
   },
   "device_response_timeout_schedule": {
@@ -1105,7 +1145,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -1205,7 +1248,10 @@
   "device_wifi_name": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -1305,7 +1351,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_homekey": {
@@ -1623,7 +1676,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2727
+   },
    "section": "detection"
   },
   "motion_detection_leaving_detection_switch": {
@@ -1631,7 +1687,10 @@
    "default": false,
    "kind": "bool",
    "note": "handler rejects the probed values",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2726
+   },
    "section": "detection"
   },
   "motion_detection_status": {
@@ -2278,7 +2337,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1193
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -2335,7 +2397,10 @@
    "kind": "range",
    "max": 2,
    "min": 0,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6609
+   },
    "section": "system",
    "step": 1
   },
@@ -2451,7 +2516,10 @@
    "kind": "string",
    "note": "no handler write path",
    "page": "PowerManager",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1920
+   },
    "section": "power"
   },
   "smart_lock_notification_locked_switch": {
@@ -2526,7 +2594,14 @@
    "default": true,
    "kind": "bool",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1919
+   },
    "section": "notifications"
   },
   "smart_lock_notification_unlocked_switch": {
@@ -2592,7 +2667,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6466
+   },
    "section": "system"
   },
   "smart_lock_setting_manage_access": {
@@ -2851,7 +2929,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1191
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"

@@ -32,14 +32,20 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "arming_cust_mode_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
@@ -58,7 +64,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -134,7 +143,6 @@
       "access": "ro",
       "control": null,
       "note": "no handler write path",
-      "read": null,
       "write": null
      },
      "names": [
@@ -247,7 +255,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1101
+   },
    "section": "power"
   },
   "camera_on_off": {
@@ -488,7 +499,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_audio_ringtone_volume": {
@@ -742,7 +756,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -768,7 +785,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -823,7 +843,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_live_entry_open_smart_lock": {
@@ -855,7 +882,6 @@
       "access": "ro",
       "control": null,
       "note": "no handler write path",
-      "read": null,
       "write": null
      },
      "names": [
@@ -1632,7 +1658,10 @@
    "min": 5,
    "note": "no handler write path",
    "page": "CustomizeRecording",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1250
+   },
    "section": "recording",
    "step": 1
   },
@@ -1655,7 +1684,10 @@
    "min": 5,
    "note": "no handler write path",
    "page": "CustomizeRecording",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1249
+   },
    "section": "recording",
    "step": 1
   },

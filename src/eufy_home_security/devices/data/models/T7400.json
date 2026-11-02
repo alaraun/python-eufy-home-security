@@ -14,7 +14,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1101
+   },
    "section": "power"
   },
   "charging_status": {
@@ -95,7 +98,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_charging_mode": {
@@ -129,7 +135,10 @@
    "access": "ro",
    "kind": "string",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1217
+   },
    "section": "system"
   },
   "device_serial_number": {
@@ -170,7 +179,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -213,7 +225,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_ble": {
@@ -238,10 +257,39 @@
   },
   "motion_detection_status": {
    "access": "ro",
+   "contexts": [
+    {
+     "entry": {
+      "read": null
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "default": true,
    "kind": "bool",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6040
+   },
    "section": "detection"
   },
   "motion_stop_end_early": {

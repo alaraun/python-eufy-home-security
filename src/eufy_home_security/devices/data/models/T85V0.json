@@ -32,14 +32,20 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "arming_cust_mode_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
@@ -58,7 +64,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -393,7 +402,10 @@
    "default": false,
    "kind": "bool",
    "note": "handler rejects the probed values",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2706
+   },
    "section": "detection"
   },
   "detection_radar_mode": {
@@ -541,7 +553,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_audio_ringtone_volume": {
@@ -573,7 +588,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6492
+   },
    "section": "system"
   },
   "device_backup_battery_type": {
@@ -649,7 +671,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2715
+   },
    "section": "detection"
   },
   "device_model": {
@@ -691,7 +716,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6065
+   },
    "section": "detection"
   },
   "device_rain_mode": {
@@ -915,7 +943,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -941,7 +972,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -996,7 +1030,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_live_entry_open_smart_lock": {
@@ -1080,7 +1121,6 @@
       "access": "ro",
       "control": null,
       "note": "no handler write path",
-      "read": null,
       "write": null
      },
      "names": [
@@ -1402,7 +1442,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2727
+   },
    "section": "detection"
   },
   "motion_detection_leaving_detection_switch": {
@@ -1410,7 +1453,10 @@
    "default": false,
    "kind": "bool",
    "note": "handler rejects the probed values",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2726
+   },
    "section": "detection"
   },
   "motion_detection_status": {
@@ -1901,7 +1947,10 @@
    "kind": "string",
    "note": "handler transforms the value",
    "page": "PowerManager",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1920
+   },
    "section": "power"
   },
   "smart_lock_notification_locked_switch": {
@@ -1953,7 +2002,14 @@
    "default": true,
    "kind": "bool",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1919
+   },
    "section": "notifications"
   },
   "smart_lock_notification_unlocked_switch": {
@@ -2006,7 +2062,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6466
+   },
    "section": "system"
   },
   "smart_lock_set_setting_params": {
@@ -2281,7 +2340,14 @@
    "default": true,
    "kind": "bool",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": {
+     "": true,
+     "0": false,
+     "1": true
+    },
+    "param": 1214
+   },
    "section": "picture"
   }
  },

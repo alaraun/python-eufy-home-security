@@ -34,7 +34,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_backup_battery_type": {
@@ -70,14 +73,20 @@
    "access": "ro",
    "kind": "string",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1217
+   },
    "section": "system"
   },
   "device_power_saving_mode": {
    "access": "ro",
    "kind": "string",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6063
+   },
    "section": "power"
   },
   "device_silent_ota_switch": {
@@ -85,7 +94,14 @@
    "default": true,
    "kind": "bool",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6287
+   },
    "section": "system"
   },
   "device_text_event_data_type": {
@@ -113,7 +129,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_live_entry_open_smart_lock": {

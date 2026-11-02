@@ -893,6 +893,12 @@ A closed session (`async_close`) never reconnects on its own — build a new
     the client wrote, after a write and after a reload. The eufy app's own display of
     the watermark setting (T8414, T8440, T8442) differs: it shows another choice than the
     one written.
+  - A setting without a write is readable when the device's handler fills it from one
+    parameter, as the eufy app reads it: an entry sensor's `sensor_door_status` (`True`
+    = open), a tamper or low-battery flag. Such a status is the device's state, not a
+    setting to change; some of them repeat what the device fields already give (battery
+    level, online status) or carry a JSON value or a counter: show those as diagnostics
+    at most.
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
     bool for a bool, str for a string. `default` is the vendor default; a station setting

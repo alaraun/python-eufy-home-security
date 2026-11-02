@@ -6,7 +6,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1101
+   },
    "section": "power"
   },
   "change_wifi_is_support": {
@@ -20,7 +23,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_is_battery_device": {
@@ -117,7 +123,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -247,8 +256,21 @@
   },
   "smart_lock_onoff_status": {
    "access": "ro",
+   "contexts": [
+    {
+     "entry": {
+      "read": null
+     },
+     "names": [
+      "standalone"
+     ]
+    }
+   ],
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1912
+   },
    "section": "system"
   },
   "smart_lock_scramble_password_switch": {

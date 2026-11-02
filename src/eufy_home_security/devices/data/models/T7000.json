@@ -5,14 +5,20 @@
   "accessory_ota_status": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 9272
+   },
    "section": "system"
   },
   "ai_card_device_list": {
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61503
+   },
    "section": "detection"
   },
   "ai_card_feature_switch": {
@@ -99,43 +105,64 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_get_alarm_away_mode": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61301
+   },
    "section": "modes"
   },
   "arming_get_alarm_custom1_mode": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61307
+   },
    "section": "modes"
   },
   "arming_get_alarm_custom2_mode": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61308
+   },
    "section": "modes"
   },
   "arming_get_alarm_custom3_mode": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61309
+   },
    "section": "modes"
   },
   "arming_get_alarm_disarm_mode": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61306
+   },
    "section": "modes"
   },
   "arming_get_alarm_home_mode": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61300
+   },
    "section": "modes"
   },
   "arming_jump_to_platform_setting_page": {
@@ -168,7 +195,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -245,7 +275,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1151
+   },
    "section": "modes"
   },
   "audio_alert_volume": {
@@ -313,7 +346,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_agree_ai_terms_switch": {
@@ -372,7 +408,10 @@
    "access": "ro",
    "kind": "string",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1073
+   },
    "section": "detection"
   },
   "device_cross_cam_interval": {
@@ -448,7 +487,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1072
+   },
    "section": "detection"
   },
   "device_cross_cam_tracking_swtich": {
@@ -635,7 +677,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1140
+   },
    "section": "system"
   },
   "device_storage_medium": {
@@ -728,7 +773,10 @@
   "general_device_plugin_type": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6489
+   },
    "section": "system"
   },
   "hb_aic_feature_available": {
@@ -769,7 +817,10 @@
   "inserted_ai_card_info": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61500
+   },
    "section": "detection"
   },
   "ip_address": {
@@ -797,7 +848,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1133
+   },
    "section": "system"
   },
   "is_support_familiar_face": {
@@ -860,7 +918,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1282
+   },
    "section": "modes"
   },
   "notification_ignore_switch": {
@@ -890,7 +951,10 @@
   "nvr_get_device_volume": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 9231
+   },
    "section": "audio"
   },
   "nvr_motion_detection": {
@@ -910,7 +974,10 @@
     "3": "16x"
    },
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6001
+   },
    "section": "recording",
    "values": [
     0,
@@ -956,7 +1023,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1265
+   },
    "section": "network"
   },
   "setting_model_config": {

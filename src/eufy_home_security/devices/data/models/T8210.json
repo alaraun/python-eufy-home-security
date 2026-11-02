@@ -32,7 +32,10 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "audio_recording_on_off": {
@@ -318,7 +321,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1192
+   },
    "section": "recording"
   },
   "detection_sensitivity": {
@@ -457,7 +463,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_audio_ringtone_volume": {
@@ -702,7 +711,10 @@
    "default": "1",
    "kind": "other",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6445
+   },
    "section": "power"
   },
   "device_serial_number": {
@@ -874,7 +886,10 @@
   "device_status": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_wifi_signal_strength": {
@@ -908,7 +923,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_silent_ota_switch": {
@@ -1053,7 +1075,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1018
+   },
    "section": "system"
   },
   "live_support_screenshot": {
@@ -1522,7 +1551,10 @@
     "5": "USB and built-in solar charging",
     "8": "External solar panel"
    },
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2111
+   },
    "section": "power",
    "values": [
     0,
@@ -1591,7 +1623,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1193
+   },
    "section": "recording"
   },
   "reset_device_mode": {
@@ -1986,7 +2021,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1191
+   },
    "section": "recording"
   }
  },

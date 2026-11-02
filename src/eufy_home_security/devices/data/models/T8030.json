@@ -13,7 +13,10 @@
    "default": "0",
    "kind": "other",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "ai_support_service": {
@@ -82,13 +85,19 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_get_alarm_home_mode": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1157
+   },
    "section": "modes"
   },
   "arming_jump_to_platform_setting_page": {
@@ -122,7 +131,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -188,7 +200,10 @@
   "arming_working_mode": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1151
+   },
    "section": "modes"
   },
   "automation_config": {
@@ -223,7 +238,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_cross_cam_assistance_switch": {
@@ -253,7 +271,10 @@
    "access": "ro",
    "kind": "string",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1073
+   },
    "section": "detection"
   },
   "device_cross_cam_interval": {
@@ -329,7 +350,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1072
+   },
    "section": "detection"
   },
   "device_cross_cam_tracking_swtich": {
@@ -461,7 +485,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1140
+   },
    "section": "system"
   },
   "device_storage_medium": {
@@ -504,7 +531,10 @@
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1266
+   },
    "section": "network"
   },
   "encrypt_playback_version": {
@@ -679,7 +709,14 @@
   "is_device_upgrade": {
    "access": "ro",
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1133
+   },
    "section": "system"
   },
   "is_support_familiar_face": {
@@ -705,7 +742,10 @@
   "notification_alarm_delay_value": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1282
+   },
    "section": "modes"
   },
   "notification_ignore_switch": {
@@ -741,13 +781,19 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "network"
   },
   "power_source_mode": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2111
+   },
    "section": "power"
   },
   "prompt_volume_value": {
@@ -792,7 +838,10 @@
   "setting_current_connection_type": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1265
+   },
    "section": "network"
   },
   "switching_notification": {

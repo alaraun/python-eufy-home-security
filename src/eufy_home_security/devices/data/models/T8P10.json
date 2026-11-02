@@ -32,7 +32,10 @@
    "default": "1",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "aic_activityzone_config": {
@@ -65,7 +68,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "audio_recording_on_off": {
@@ -207,7 +213,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_connect_type": {
@@ -215,7 +224,10 @@
    "default": "1",
    "kind": "other",
    "page": "NVRPairedDevice",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 9235
+   },
    "section": "system"
   },
   "device_continuous_recording_time": {
@@ -290,7 +302,10 @@
    "kind": "string",
    "note": "handler transforms the value",
    "page": "NVREventRecordingScreen",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 9202
+   },
    "section": "recording"
   },
   "device_is_online": {
@@ -381,7 +396,10 @@
   "device_sensor_count": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 9240
+   },
    "section": "system"
   },
   "device_serial_number": {
@@ -517,7 +535,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -639,7 +660,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_silent_ota_switch": {
@@ -1326,7 +1354,10 @@
     "3": "16x"
    },
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6001
+   },
    "section": "recording",
    "values": [
     0,

@@ -27,7 +27,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1101
+   },
    "section": "power"
   },
   "charging_status": {
@@ -41,7 +44,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_audio_ringtone_volume": {
@@ -342,7 +348,14 @@
    "default": true,
    "kind": "bool",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1919
+   },
    "section": "notifications"
   },
   "smart_lock_notification_unlocked_switch": {

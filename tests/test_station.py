@@ -1334,6 +1334,30 @@ def test_setting_is_none_when_absent_never_a_default() -> None:
     assert absent.setting("watermark_set", channel=0) is None
 
 
+@pytest.mark.parametrize("serial", ["T8900P0000000001", "T90E0P0000000001"])
+@pytest.mark.parametrize(("raw", "door_open"), [("1", True), ("0", False)])
+def test_an_entry_sensors_read_only_door_status_reads_its_parameter(
+    serial: str, raw: str, door_open: bool
+) -> None:
+    """``sensor_door_status`` is a read-only bool read from parameter 1550, as the handler
+    fills it: listed without a control, and decoded from the sensor's block."""
+    sensor = CloudDevice(
+        device_sn=serial, device_type=2, name="Door", station_sn=SYNTHETIC.station_sn, channel=17
+    )
+    setting = _hub_with(sensor).setting("sensor_door_status", device_sn=serial)
+    assert (setting.writable, setting.readable, setting.control) == (False, True, None)
+    assert setting.kind.value == "bool"
+    state = _state_of({17: {1550: raw}}, sub_devices=(sensor,))
+    assert state.setting("sensor_door_status", device_sn=serial) is door_open
+    assert state.setting("sensor_door_status", channel=17) is door_open
+    assert (
+        _state_of({17: {1141: "-60"}}, sub_devices=(sensor,)).setting(
+            "sensor_door_status", device_sn=serial
+        )
+        is None
+    )  # not reported: unknown, never the default
+
+
 def test_setting_refuses_a_key_the_device_does_not_have() -> None:
     state = _settings_state()
     with pytest.raises(UnsupportedError, match="unknown setting"):

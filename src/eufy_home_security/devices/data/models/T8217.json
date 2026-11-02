@@ -39,14 +39,20 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "arming_cust_mode_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_keypad_set_cus_model": {
@@ -72,7 +78,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -322,7 +331,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1192
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -477,7 +489,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_audio_ringtone_volume": {
@@ -737,7 +752,10 @@
    "kind": "range",
    "max": 10000,
    "min": 0,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 10021
+   },
    "section": "detection",
    "step": 1
   },
@@ -745,7 +763,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2710
+   },
    "section": "detection"
   },
   "device_delivery_guard_support_ignored_zone": {
@@ -946,7 +967,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2711
+   },
    "section": "detection"
   },
   "device_packages_guard_switch": {
@@ -1051,7 +1075,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2713
+   },
    "section": "detection"
   },
   "device_power_supply_mode": {
@@ -1202,7 +1229,10 @@
    "default": "0",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6439
+   },
    "section": "doorbell"
   },
   "device_serial_number": {
@@ -1371,7 +1401,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_medium": {
@@ -1400,14 +1433,20 @@
    "kind": "range",
    "max": 10000,
    "min": 0,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 10020
+   },
    "section": "doorbell",
    "step": 1
   },
   "device_wifi_name": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -1518,7 +1557,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_ddr_live": {
@@ -1738,7 +1784,14 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1018
+   },
    "section": "system"
   },
   "live_support_screenshot": {
@@ -2539,7 +2592,10 @@
     "3": "16x"
    },
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6001
+   },
    "section": "recording",
    "values": [
     0,
@@ -2570,7 +2626,10 @@
     "1": "External Solar Panel"
    },
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1293
+   },
    "section": "power",
    "values": [
     0,
@@ -2740,7 +2799,10 @@
     "5": "USB and built-in solar charging",
     "8": "External solar panel"
    },
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2111
+   },
    "section": "power",
    "values": [
     0,
@@ -2820,7 +2882,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1193
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -3305,7 +3370,10 @@
     "5": "Lower right"
    },
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6243
+   },
    "section": "picture",
    "values": [
     2,
@@ -3378,7 +3446,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1191
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"

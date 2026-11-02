@@ -39,14 +39,20 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "arming_cust_mode_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_keypad_set_cus_model": {
@@ -73,7 +79,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -283,7 +292,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1192
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -371,7 +383,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_agree_face_recognition_switch": {
@@ -683,7 +698,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2710
+   },
    "section": "detection"
   },
   "device_delivery_guard_support_ignored_zone": {
@@ -820,6 +838,7 @@
        },
        {
         "default": "1",
+        "param": 6445,
         "prop": "device_power_supply_mode",
         "qualifier": "=",
         "type": "associated_field",
@@ -835,6 +854,7 @@
       [
        {
         "default": "1",
+        "param": 6445,
         "prop": "device_power_supply_mode",
         "qualifier": "!=",
         "type": "associated_field",
@@ -863,6 +883,7 @@
        },
        {
         "default": "1",
+        "param": 6445,
         "prop": "device_power_supply_mode",
         "qualifier": "!=",
         "type": "associated_field",
@@ -1094,7 +1115,10 @@
    "kind": "string",
    "note": "handler transforms the value",
    "page": "PackageGuard",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2711
+   },
    "section": "detection"
   },
   "device_packages_guard_switch": {
@@ -1202,7 +1226,10 @@
    "kind": "string",
    "note": "handler ignores the value",
    "page": "UncollectedPackageAlert",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2713
+   },
    "section": "detection"
   },
   "device_power_supply_mode": {
@@ -1213,7 +1240,10 @@
    "note": "handler transforms the value",
    "order": 1,
    "page": "PowerManager",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6445
+   },
    "section": "power"
   },
   "device_pre_recording_switch": {
@@ -1322,7 +1352,10 @@
    "default": "0",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6439
+   },
    "section": "doorbell"
   },
   "device_serial_number": {
@@ -1491,7 +1524,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -1542,7 +1578,10 @@
   "device_wifi_name": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -1635,7 +1674,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6062
+   },
    "section": "network"
   },
   "homekit_info": {
@@ -1713,7 +1759,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_fast_charging_mode": {
@@ -2060,7 +2113,14 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1018
+   },
    "section": "system"
   },
   "live_support_screenshot": {
@@ -2785,6 +2845,7 @@
       [
        {
         "default": "1",
+        "param": 6445,
         "prop": "device_power_supply_mode",
         "qualifier": "=",
         "type": "associated_field",
@@ -2854,6 +2915,7 @@
       [
        {
         "default": "1",
+        "param": 6445,
         "prop": "device_power_supply_mode",
         "qualifier": "=",
         "type": "associated_field",
@@ -2975,7 +3037,10 @@
     "5": "USB and built-in solar charging",
     "8": "External solar panel"
    },
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2111
+   },
    "section": "power",
    "values": [
     0,
@@ -3034,6 +3099,12 @@
       [
        {
         "default": "false",
+        "map": {
+         "": "false",
+         "0": "false",
+         "1": "true"
+        },
+        "param": 6062,
         "prop": "homekit_device_connect_homekit_status",
         "qualifier": "=",
         "type": "associated_field",
@@ -3077,6 +3148,12 @@
        },
        {
         "default": "false",
+        "map": {
+         "": "false",
+         "0": "false",
+         "1": "true"
+        },
+        "param": 6062,
         "prop": "homekit_device_connect_homekit_status",
         "qualifier": "=",
         "type": "associated_field",
@@ -3279,7 +3356,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1193
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -3873,7 +3953,10 @@
    "kind": "range",
    "max": 120,
    "min": 10,
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1191
+   },
    "section": "recording",
    "step": 1,
    "unit": "d"

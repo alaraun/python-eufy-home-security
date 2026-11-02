@@ -23,14 +23,20 @@
   "accessory_ota_status": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 9272
+   },
    "section": "system"
   },
   "ai_card_device_list": {
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61503
+   },
    "section": "detection"
   },
   "ai_card_feature_switch": {
@@ -121,46 +127,67 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_get_alarm_away_mode": {
    "access": "ro",
    "kind": "string",
    "name": "Away mode",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61301
+   },
    "section": "modes"
   },
   "arming_get_alarm_custom1_mode": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61307
+   },
    "section": "modes"
   },
   "arming_get_alarm_custom2_mode": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61308
+   },
    "section": "modes"
   },
   "arming_get_alarm_custom3_mode": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61309
+   },
    "section": "modes"
   },
   "arming_get_alarm_disarm_mode": {
    "access": "ro",
    "kind": "string",
    "name": "Disarm mode",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61306
+   },
    "section": "modes"
   },
   "arming_get_alarm_home_mode": {
    "access": "ro",
    "kind": "string",
    "name": "Home mode",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61300
+   },
    "section": "modes"
   },
   "arming_jump_to_platform_setting_page": {
@@ -194,7 +221,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -278,21 +308,30 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1151
+   },
    "section": "modes"
   },
   "battery_healthy": {
    "access": "ro",
    "kind": "other",
    "page": "PowerManager",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1314
+   },
    "section": "power"
   },
   "battery_residue_time": {
    "access": "ro",
    "kind": "other",
    "page": "PowerManager",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1313
+   },
    "section": "power"
   },
   "battery_value": {
@@ -326,7 +365,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_alarm_duration": {
@@ -411,7 +453,10 @@
    "access": "ro",
    "kind": "string",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1073
+   },
    "section": "detection"
   },
   "device_cross_cam_interval": {
@@ -487,7 +532,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1072
+   },
    "section": "detection"
   },
   "device_cross_cam_tracking_swtich": {
@@ -516,7 +564,14 @@
   "device_exist_battery": {
    "access": "ro",
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1315
+   },
    "section": "power"
   },
   "device_extender_info": {
@@ -613,7 +668,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 61210
+   },
    "section": "alarm"
   },
   "device_silent_ota_switch": {
@@ -646,20 +708,29 @@
   "device_simslot2_info": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61401
+   },
    "section": "network"
   },
   "device_simslot_info": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61400
+   },
    "section": "network"
   },
   "device_status": {
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1140
+   },
    "section": "system"
   },
   "device_storage_medium": {
@@ -686,7 +757,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -700,7 +774,10 @@
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1266
+   },
    "section": "network"
   },
   "discover_third_party_device_switch": {
@@ -830,7 +907,10 @@
   "inserted_ai_card_info": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 61500
+   },
    "section": "detection"
   },
   "ip_address": {
@@ -852,7 +932,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1133
+   },
    "section": "system"
   },
   "is_support_familiar_face": {
@@ -909,7 +996,10 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1282
+   },
    "section": "modes"
   },
   "notification_ignore_switch": {
@@ -941,7 +1031,10 @@
    "access": "ro",
    "kind": "string",
    "page": "NVRPairedDevice",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 9231
+   },
    "section": "system"
   },
   "power_charge_mode": {
@@ -974,7 +1067,10 @@
     "5": "USB and built-in solar charging",
     "8": "External solar panel"
    },
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2111
+   },
    "section": "power",
    "values": [
     0,
@@ -1038,7 +1134,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1265
+   },
    "section": "network"
   },
   "setting_model_config": {
@@ -1052,20 +1151,29 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6218
+   },
    "section": "network"
   },
   "sim_card_info": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 7002
+   },
    "section": "network"
   },
   "subnet_mask": {
    "access": "ro",
    "kind": "string",
    "page": "SelectHomeBaseConnection",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1320
+   },
    "section": "network"
   },
   "support_multiple_live_stream": {

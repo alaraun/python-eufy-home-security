@@ -32,7 +32,10 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "anti_theft_detection_switch": {
@@ -65,7 +68,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
@@ -84,7 +90,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -166,7 +175,10 @@
   "arming_working_mode": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1151
+   },
    "section": "modes"
   },
   "audio_recording_on_off": {
@@ -268,13 +280,19 @@
    "access": "ro",
    "kind": "other",
    "page": "PowerManager",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1198
+   },
    "section": "power"
   },
   "battery_value": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1101
+   },
    "section": "power"
   },
   "camera_on_off": {
@@ -390,7 +408,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1192
+   },
    "section": "recording"
   },
   "detection_sensitivity": {
@@ -519,7 +540,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_charging_mode": {
@@ -679,7 +703,10 @@
    "default": "1",
    "kind": "other",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6445
+   },
    "section": "power"
   },
   "device_pre_recording_switch": {
@@ -805,7 +832,10 @@
    "access": "ro",
    "default": "1",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1131
+   },
    "section": "system"
   },
   "device_storage_type": {
@@ -824,7 +854,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -1665,7 +1698,10 @@
     "3": "16x"
    },
    "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6001
+   },
    "section": "recording",
    "values": [
     0,
@@ -1684,7 +1720,10 @@
   "power_charge_history": {
    "access": "ro",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 3100
+   },
    "section": "power"
   },
   "power_charge_mode": {
@@ -1757,6 +1796,7 @@
       [
        {
         "default": "1",
+        "param": 6445,
         "prop": "device_power_supply_mode",
         "qualifier": "=",
         "type": "associated_field",
@@ -1766,6 +1806,7 @@
       [
        {
         "default": "1",
+        "param": 6445,
         "prop": "device_power_supply_mode",
         "qualifier": "=",
         "type": "associated_field",
@@ -1857,7 +1898,10 @@
     "6": "External solar panel",
     "7": "External and built-in solar charging"
    },
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2111
+   },
    "section": "power",
    "values": [
     0,
@@ -1929,7 +1973,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1193
+   },
    "section": "recording"
   },
   "reset_device_mode": {
@@ -1973,7 +2020,10 @@
   "solar_intensity": {
    "access": "ro",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1309
+   },
    "section": "power"
   },
   "speaker_on_off": {
@@ -2234,7 +2284,10 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1191
+   },
    "section": "recording"
   }
  },

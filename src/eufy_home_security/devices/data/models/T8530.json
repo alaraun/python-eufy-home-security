@@ -32,14 +32,20 @@
    "default": "0",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1299
+   },
    "section": "detection"
   },
   "arming_cust_mode_config": {
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1256
+   },
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
@@ -58,14 +64,20 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1254
+   },
    "section": "modes"
   },
   "arming_selected_mode": {
    "access": "ro",
    "kind": "other",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1224
+   },
    "section": "modes"
   },
   "arming_support_arm_delay": {
@@ -191,7 +203,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1101
+   },
    "section": "power"
   },
   "camera_on_off": {
@@ -274,7 +289,10 @@
    "default": false,
    "kind": "bool",
    "note": "handler rejects the probed values",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2706
+   },
    "section": "detection"
   },
   "detection_radar_mode": {
@@ -418,7 +436,10 @@
    "access": "ro",
    "default": " 0",
    "kind": "other",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1103
+   },
    "section": "system"
   },
   "device_charging_mode": {
@@ -445,7 +466,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2715
+   },
    "section": "detection"
   },
   "device_model": {
@@ -675,7 +699,10 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 6200
+   },
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -718,7 +745,14 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1134
+   },
    "section": "system"
   },
   "is_support_live_entry_open_smart_lock": {
@@ -870,7 +904,10 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2727
+   },
    "section": "detection"
   },
   "motion_detection_leaving_detection_switch": {
@@ -878,7 +915,10 @@
    "default": false,
    "kind": "bool",
    "note": "handler rejects the probed values",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 2726
+   },
    "section": "detection"
   },
   "motion_detection_status": {
@@ -980,7 +1020,14 @@
    "default": true,
    "kind": "bool",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1013
+   },
    "section": "picture"
   },
   "notification_type": {
@@ -1242,7 +1289,14 @@
    "default": true,
    "kind": "bool",
    "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1214
+   },
    "section": "picture"
   }
  },
