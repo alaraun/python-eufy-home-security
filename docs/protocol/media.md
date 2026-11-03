@@ -21,9 +21,8 @@ async with await station.async_open_live(channel=0) as stream:  # or device_sn=
 
 stream = await station.async_open_recording(storage_path, channel=1)  # ends by itself
 frame = await station.async_trigger_frame(storage_path, channel=1)  # first keyframe
-later = await station.async_trigger_frame(
-    storage_path, channel=1, keyframe_number=3
-)  # third keyframe
+# Third keyframe instead of the default first.
+frame = await station.async_trigger_frame(storage_path, channel=1, keyframe_number=3)
 frame = await station.async_event_trigger_frame(event, trailing_frames=8)  # + P-frames
 image = await station.async_preset_image(device_sn, preset=1)  # pan/tilt: turn, settle, keyframe
 ```
