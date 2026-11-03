@@ -33,6 +33,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -49,6 +50,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -282,6 +284,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -473,6 +476,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -483,6 +487,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -539,6 +544,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -696,6 +702,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1018
    },
    "section": "system"
@@ -944,14 +951,7 @@
    "kind": "bool",
    "note": "handler rejects the probed values",
    "page": "SettingsHome",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 1031
-   },
+   "read": null,
    "section": "notifications"
   },
   "notification_type": {
@@ -1250,10 +1250,7 @@
    "default": true,
    "kind": "bool",
    "note": "handler ignores the value",
-   "read": {
-    "map": null,
-    "param": 2040
-   },
+   "read": null,
    "section": "recording"
   },
   "video_quality_when_recoding_clips": {

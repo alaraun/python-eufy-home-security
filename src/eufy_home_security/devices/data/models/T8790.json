@@ -9,6 +9,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1299
    },
    "section": "detection"
@@ -164,6 +165,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -253,6 +255,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -332,6 +335,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -341,14 +345,7 @@
    "default": false,
    "kind": "bool",
    "note": "no handler write path",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 6014
-   },
+   "read": null,
    "section": "picture"
   },
   "live_bottom_hor_toolbar_list": {
@@ -505,6 +502,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1240
    },
    "section": "audio"
@@ -683,6 +681,7 @@
    },
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2111
    },
    "section": "power",
@@ -750,6 +749,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1241
    },
    "section": "audio"
@@ -766,6 +766,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1230
    },
    "section": "audio",

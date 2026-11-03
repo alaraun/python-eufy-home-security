@@ -34,6 +34,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1299
    },
    "section": "detection"
@@ -44,6 +45,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -66,6 +68,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -152,6 +155,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1151
    },
    "section": "modes"
@@ -464,6 +468,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -734,6 +739,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -1355,6 +1361,7 @@
    "note": "handler ignores the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6001
    },
    "section": "recording",

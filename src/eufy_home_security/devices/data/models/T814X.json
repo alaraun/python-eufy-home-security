@@ -41,6 +41,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1299
    },
    "section": "detection"
@@ -74,6 +75,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -103,6 +105,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -189,6 +192,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1151
    },
    "section": "modes"
@@ -304,6 +308,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1101
    },
    "section": "power"
@@ -442,6 +447,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1192
    },
    "section": "recording"
@@ -678,6 +684,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -770,6 +777,7 @@
    "note": "handler expects a structured value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6270
    },
    "section": "recording"
@@ -871,6 +879,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -962,6 +971,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -1109,6 +1119,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 40005
    },
    "section": "storage"
@@ -1142,6 +1153,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -2029,6 +2041,7 @@
    },
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2111
    },
    "section": "power",
@@ -2149,6 +2162,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1193
    },
    "section": "recording"
@@ -2574,6 +2588,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1191
    },
    "section": "recording"

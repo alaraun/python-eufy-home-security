@@ -41,6 +41,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1299
    },
    "section": "detection"
@@ -51,6 +52,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -73,6 +75,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -373,6 +376,7 @@
    "min": 10,
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1192
    },
    "section": "recording",
@@ -408,6 +412,7 @@
    "note": "handler rejects the probed values",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2706
    },
    "section": "detection"
@@ -489,6 +494,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -528,6 +534,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 6492
    },
    "section": "system"
@@ -679,6 +686,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 60001
    },
    "section": "network"
@@ -765,6 +773,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2715
    },
    "section": "detection"
@@ -869,6 +878,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 60009
    },
    "section": "network"
@@ -945,6 +955,7 @@
    "page": "PackageGuard",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2711
    },
    "section": "detection"
@@ -1005,6 +1016,7 @@
    "page": "UncollectedPackageAlert",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2713
    },
    "section": "detection"
@@ -1162,6 +1174,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -1265,6 +1278,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -1379,6 +1393,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -1715,6 +1730,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2727
    },
    "section": "detection"
@@ -1726,6 +1742,7 @@
    "note": "handler rejects the probed values",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2726
    },
    "section": "detection"
@@ -2330,6 +2347,7 @@
    "min": 10,
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1193
    },
    "section": "recording",
@@ -2390,6 +2408,7 @@
    "min": 0,
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6609
    },
    "section": "system",
@@ -2509,6 +2528,7 @@
    "page": "PowerManager",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1920
    },
    "section": "power"
@@ -2591,6 +2611,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1919
    },
    "section": "notifications"
@@ -2660,6 +2681,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6466
    },
    "section": "system"
@@ -2922,6 +2944,7 @@
    "min": 10,
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1191
    },
    "section": "recording",

@@ -9,6 +9,7 @@
    "note": "handler ignores the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1299
    },
    "section": "detection"
@@ -72,6 +73,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -81,6 +83,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1157
    },
    "section": "modes"
@@ -103,6 +106,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -174,6 +178,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1151
    },
    "section": "modes"
@@ -198,6 +203,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -310,6 +316,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1140
    },
    "section": "system"
@@ -459,6 +466,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1282
    },
    "section": "modes"
@@ -507,6 +515,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1265
    },
    "section": "network"

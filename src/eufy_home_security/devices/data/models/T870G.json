@@ -35,6 +35,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1101
    },
    "section": "power"
@@ -291,6 +292,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -354,6 +356,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -405,6 +408,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6275
    },
    "section": "detection"
@@ -445,6 +449,7 @@
    },
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2111
    },
    "section": "power",
@@ -648,10 +653,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": {
-    "map": null,
-    "param": 9501
-   },
+   "read": null,
    "section": "other"
   }
  },

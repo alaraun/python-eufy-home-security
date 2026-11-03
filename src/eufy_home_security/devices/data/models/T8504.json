@@ -8,6 +8,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1101
    },
    "section": "power"
@@ -25,6 +26,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -125,6 +127,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -269,6 +272,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1912
    },
    "section": "system"

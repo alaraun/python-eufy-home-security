@@ -15,6 +15,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1101
    },
    "section": "power"
@@ -25,6 +26,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -98,6 +100,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -141,6 +144,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -156,14 +160,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 1601
-   },
+   "read": null,
    "section": "power"
   },
   "sensor_panic_status": {
@@ -171,6 +168,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61013
    },
    "section": "alarm"

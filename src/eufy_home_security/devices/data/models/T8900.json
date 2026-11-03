@@ -22,6 +22,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -60,6 +61,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -89,6 +91,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -103,6 +106,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1550
    },
    "section": "system"
@@ -117,6 +121,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1552
    },
    "section": "power"

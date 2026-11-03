@@ -33,6 +33,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -55,6 +56,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -309,6 +311,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -394,6 +397,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2710
    },
    "section": "detection"
@@ -450,6 +454,7 @@
    "page": "PackageGuard",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2711
    },
    "section": "detection"
@@ -554,6 +559,7 @@
    "page": "UncollectedPackageAlert",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2713
    },
    "section": "detection"
@@ -563,10 +569,7 @@
    "default": "1",
    "kind": "other",
    "note": "handler transforms the value",
-   "read": {
-    "map": null,
-    "param": 6445
-   },
+   "read": null,
    "section": "power"
   },
   "device_serial_number": {
@@ -689,6 +692,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -852,6 +856,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1018
    },
    "section": "system"
@@ -1166,6 +1171,7 @@
    },
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2111
    },
    "section": "power",
@@ -1457,6 +1463,7 @@
    "note": "handler ignores the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2700
    },
    "section": "picture",

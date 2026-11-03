@@ -14,10 +14,7 @@
    "default": false,
    "kind": "bool",
    "page": "BottleWasherHomeScreen",
-   "read": {
-    "map": null,
-    "param": 61419
-   },
+   "read": null,
    "section": "other"
   },
   "device_custody_time": {
@@ -27,6 +24,7 @@
    "page": "BottleWasherHomeScreen",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61410
    },
    "section": "other"
@@ -36,10 +34,7 @@
    "default": false,
    "kind": "bool",
    "page": "BottleWasherHomeScreen",
-   "read": {
-    "map": null,
-    "param": 61406
-   },
+   "read": null,
    "section": "other"
   },
   "device_disinfection_time": {
@@ -49,6 +44,7 @@
    "page": "BottleWasherHomeScreen",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61407
    },
    "section": "other"
@@ -58,10 +54,7 @@
    "default": false,
    "kind": "bool",
    "page": "BottleWasherHomeScreen",
-   "read": {
-    "map": null,
-    "param": 61408
-   },
+   "read": null,
    "section": "other"
   },
   "device_dry_time": {
@@ -71,6 +64,7 @@
    "page": "BottleWasherHomeScreen",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61409
    },
    "section": "other"
@@ -80,10 +74,7 @@
    "default": false,
    "kind": "bool",
    "page": "BottleWasherHomeScreen",
-   "read": {
-    "map": null,
-    "param": 61418
-   },
+   "read": null,
    "section": "other"
   },
   "device_fault_status": {
@@ -101,6 +92,7 @@
    "page": "BottleWasherHomeScreen",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61421
    },
    "section": "detection"
@@ -116,6 +108,7 @@
    },
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61416
    },
    "section": "other",
@@ -187,6 +180,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 61415
    },
    "section": "notifications"
@@ -197,6 +191,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61413
    },
    "section": "system"
@@ -212,6 +207,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 6287
    },
    "section": "system"
@@ -222,6 +218,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -257,6 +254,7 @@
    "page": "BottleWasherHomeScreen",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61411
    },
    "section": "other"
@@ -268,6 +266,7 @@
    "page": "BottleWasherHomeScreen",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61412
    },
    "section": "other"
@@ -279,6 +278,7 @@
    "page": "BottleWasherHomeScreen",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61414
    },
    "section": "other"
@@ -289,6 +289,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -314,6 +315,7 @@
    "page": "BottleWasherHomeScreen",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61405
    },
    "section": "other"
@@ -325,6 +327,7 @@
    "page": "BottleWasherHomeScreen",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61403
    },
    "section": "other"
@@ -382,10 +385,7 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
-   "read": {
-    "map": null,
-    "param": 1134
-   },
+   "read": null,
    "section": "system"
   },
   "is_support_ble": {

@@ -8,6 +8,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -18,6 +19,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1101
    },
    "section": "power"
@@ -28,6 +30,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -52,6 +55,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1217
    },
    "section": "system"
@@ -67,6 +71,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 6287
    },
    "section": "system"
@@ -102,6 +107,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"

@@ -34,6 +34,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1299
    },
    "section": "detection"
@@ -44,6 +45,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -66,6 +68,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -132,6 +135,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1151
    },
    "section": "modes"
@@ -271,6 +275,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1101
    },
    "section": "power"
@@ -536,6 +541,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -689,6 +695,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -704,6 +711,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -763,6 +771,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -1389,10 +1398,7 @@
   "power_source_mode": {
    "access": "ro",
    "kind": "other",
-   "read": {
-    "map": null,
-    "param": 2111
-   },
+   "read": null,
    "section": "power"
   },
   "record_resolution": {
@@ -1468,6 +1474,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1309
    },
    "section": "power"

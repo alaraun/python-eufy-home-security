@@ -8,6 +8,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -79,10 +80,7 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "read": {
-    "map": null,
-    "param": 1140
-   },
+   "read": null,
    "section": "system"
   },
   "firmware_main_version": {
@@ -115,6 +113,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1133
    },
    "section": "system"

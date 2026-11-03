@@ -29,6 +29,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1101
    },
    "section": "power"
@@ -46,6 +47,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -354,6 +356,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1919
    },
    "section": "notifications"

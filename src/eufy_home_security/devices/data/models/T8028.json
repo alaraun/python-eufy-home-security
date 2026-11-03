@@ -15,6 +15,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1281
    },
    "section": "alarm"
@@ -28,6 +29,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1235
    },
    "section": "alarm",
@@ -58,6 +60,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -68,6 +71,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1224
    },
    "section": "modes"
@@ -133,6 +137,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -155,6 +160,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1217
    },
    "section": "system"
@@ -183,6 +189,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 6287
    },
    "section": "system"
@@ -198,6 +205,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -212,10 +220,7 @@
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": {
-    "map": null,
-    "param": 1266
-   },
+   "read": null,
    "section": "network"
   },
   "firmware_main_version": {
@@ -259,6 +264,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -288,6 +294,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1045
    },
    "section": "picture"
@@ -303,6 +310,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1282
    },
    "section": "modes"
@@ -316,6 +324,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1292
    },
    "section": "alarm",
@@ -363,6 +372,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1215
    },
    "section": "system"

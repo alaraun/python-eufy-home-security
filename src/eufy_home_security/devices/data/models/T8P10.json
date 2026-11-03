@@ -34,6 +34,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1299
    },
    "section": "detection"
@@ -70,6 +71,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -215,6 +217,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -226,6 +229,7 @@
    "page": "NVRPairedDevice",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 9235
    },
    "section": "system"
@@ -304,6 +308,7 @@
    "page": "NVREventRecordingScreen",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 9202
    },
    "section": "recording"
@@ -398,6 +403,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 9240
    },
    "section": "system"
@@ -537,6 +543,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -666,6 +673,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -1356,6 +1364,7 @@
    "note": "handler ignores the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6001
    },
    "section": "recording",

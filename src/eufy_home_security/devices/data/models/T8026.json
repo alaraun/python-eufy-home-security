@@ -61,6 +61,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -90,6 +91,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -171,6 +173,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -266,6 +269,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -280,10 +284,7 @@
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": {
-    "map": null,
-    "param": 1266
-   },
+   "read": null,
    "section": "network"
   },
   "firmware_main_version": {
@@ -329,6 +330,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -420,6 +422,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1282
    },
    "section": "modes"

@@ -34,6 +34,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1299
    },
    "section": "detection"
@@ -70,6 +71,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -92,6 +94,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -177,6 +180,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1151
    },
    "section": "modes"
@@ -282,6 +286,7 @@
    "page": "PowerManager",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1198
    },
    "section": "power"
@@ -291,6 +296,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1101
    },
    "section": "power"
@@ -410,6 +416,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1192
    },
    "section": "recording"
@@ -542,6 +549,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -703,10 +711,7 @@
    "default": "1",
    "kind": "other",
    "note": "handler transforms the value",
-   "read": {
-    "map": null,
-    "param": 6445
-   },
+   "read": null,
    "section": "power"
   },
   "device_pre_recording_switch": {
@@ -834,6 +839,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -856,6 +862,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -1700,6 +1707,7 @@
    "note": "handler ignores the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6001
    },
    "section": "recording",
@@ -1722,6 +1730,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 3100
    },
    "section": "power"
@@ -1796,7 +1805,6 @@
       [
        {
         "default": "1",
-        "param": 6445,
         "prop": "device_power_supply_mode",
         "qualifier": "=",
         "type": "associated_field",
@@ -1806,7 +1814,6 @@
       [
        {
         "default": "1",
-        "param": 6445,
         "prop": "device_power_supply_mode",
         "qualifier": "=",
         "type": "associated_field",
@@ -1900,6 +1907,7 @@
    },
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2111
    },
    "section": "power",
@@ -1975,6 +1983,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1193
    },
    "section": "recording"
@@ -2022,6 +2031,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1309
    },
    "section": "power"
@@ -2286,6 +2296,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1191
    },
    "section": "recording"

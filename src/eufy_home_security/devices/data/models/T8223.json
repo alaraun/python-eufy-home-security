@@ -34,6 +34,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1299
    },
    "section": "detection"
@@ -44,6 +45,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -74,6 +76,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -298,6 +301,7 @@
    "page": "PowerManager",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1198
    },
    "section": "power"
@@ -368,6 +372,7 @@
    "min": 10,
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1192
    },
    "section": "recording",
@@ -557,6 +562,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -745,10 +751,7 @@
    "default": "1",
    "kind": "other",
    "note": "handler transforms the value",
-   "read": {
-    "map": null,
-    "param": 6445
-   },
+   "read": null,
    "section": "power"
   },
   "device_pre_recording_switch": {
@@ -856,6 +859,7 @@
    "note": "handler ignores the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6439
    },
    "section": "doorbell"
@@ -1028,6 +1032,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -1051,6 +1056,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -1159,6 +1165,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1134
    },
    "section": "system"
@@ -1525,6 +1532,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1018
    },
    "section": "system"
@@ -2012,6 +2020,7 @@
    "note": "handler ignores the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6001
    },
    "section": "recording",
@@ -2100,6 +2109,7 @@
    },
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2111
    },
    "section": "power",
@@ -2162,6 +2172,7 @@
    "min": 10,
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1193
    },
    "section": "recording",
@@ -2551,6 +2562,7 @@
    "min": 10,
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1191
    },
    "section": "recording",

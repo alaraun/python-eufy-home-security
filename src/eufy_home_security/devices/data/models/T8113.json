@@ -75,6 +75,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1299
    },
    "section": "detection"
@@ -85,6 +86,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -107,6 +109,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -178,6 +181,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1151
    },
    "section": "modes"
@@ -354,6 +358,7 @@
    "page": "PowerManager",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1198
    },
    "section": "power"
@@ -363,6 +368,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1101
    },
    "section": "power"
@@ -430,6 +436,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1192
    },
    "section": "recording"
@@ -614,6 +621,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -764,6 +772,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1131
    },
    "section": "system"
@@ -901,38 +910,9 @@
   },
   "homekit_device_connect_homekit_status": {
    "access": "ro",
-   "contexts": [
-    {
-     "entry": {
-      "read": null
-     },
-     "names": [
-      "HB1",
-      "HB2",
-      "HB3",
-      "HB4",
-      "M8020",
-      "M8021",
-      "M8022",
-      "M8023",
-      "M8024",
-      "M8025",
-      "NVR",
-      "T7000",
-      "T9000"
-     ]
-    }
-   ],
    "default": false,
    "kind": "bool",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 6062
-   },
+   "read": null,
    "section": "network"
   },
   "homekit_info": {
@@ -1464,6 +1444,7 @@
    },
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2111
    },
    "section": "power",
@@ -1484,6 +1465,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1193
    },
    "section": "recording"
@@ -1857,6 +1839,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1191
    },
    "section": "recording"

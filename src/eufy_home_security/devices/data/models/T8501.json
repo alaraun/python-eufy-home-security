@@ -8,6 +8,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1101
    },
    "section": "power"
@@ -18,6 +19,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -109,10 +111,7 @@
    "default": true,
    "kind": "bool",
    "note": "no handler write path",
-   "read": {
-    "map": null,
-    "param": 6507
-   },
+   "read": null,
    "section": "network"
   },
   "is_device_upgrade": {

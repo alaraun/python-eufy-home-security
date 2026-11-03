@@ -25,6 +25,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 9272
    },
    "section": "system"
@@ -35,6 +36,7 @@
    "note": "handler ignores the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61503
    },
    "section": "detection"
@@ -129,6 +131,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1256
    },
    "section": "modes"
@@ -139,6 +142,7 @@
    "name": "Away mode",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61301
    },
    "section": "modes"
@@ -148,6 +152,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61307
    },
    "section": "modes"
@@ -157,6 +162,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61308
    },
    "section": "modes"
@@ -166,6 +172,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61309
    },
    "section": "modes"
@@ -176,6 +183,7 @@
    "name": "Disarm mode",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61306
    },
    "section": "modes"
@@ -186,6 +194,7 @@
    "name": "Home mode",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61300
    },
    "section": "modes"
@@ -223,6 +232,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1254
    },
    "section": "modes"
@@ -310,6 +320,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1151
    },
    "section": "modes"
@@ -320,6 +331,7 @@
    "page": "PowerManager",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1314
    },
    "section": "power"
@@ -330,6 +342,7 @@
    "page": "PowerManager",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1313
    },
    "section": "power"
@@ -367,6 +380,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1103
    },
    "section": "system"
@@ -455,6 +469,7 @@
    "note": "no handler write path",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1073
    },
    "section": "detection"
@@ -534,6 +549,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1072
    },
    "section": "detection"
@@ -570,6 +586,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1315
    },
    "section": "power"
@@ -674,6 +691,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 61210
    },
    "section": "alarm"
@@ -710,6 +728,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61401
    },
    "section": "network"
@@ -719,6 +738,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61400
    },
    "section": "network"
@@ -729,6 +749,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1140
    },
    "section": "system"
@@ -759,6 +780,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6200
    },
    "section": "network"
@@ -774,10 +796,7 @@
    "access": "ro",
    "default": "4",
    "kind": "other",
-   "read": {
-    "map": null,
-    "param": 1266
-   },
+   "read": null,
    "section": "network"
   },
   "discover_third_party_device_switch": {
@@ -909,6 +928,7 @@
    "kind": "string",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 61500
    },
    "section": "detection"
@@ -938,6 +958,7 @@
      "0": false,
      "1": true
     },
+    "no_default": true,
     "param": 1133
    },
    "section": "system"
@@ -998,6 +1019,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1282
    },
    "section": "modes"
@@ -1033,6 +1055,7 @@
    "page": "NVRPairedDevice",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 9231
    },
    "section": "system"
@@ -1069,6 +1092,7 @@
    },
    "read": {
     "map": null,
+    "no_default": true,
     "param": 2111
    },
    "section": "power",
@@ -1136,6 +1160,7 @@
    "kind": "other",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1265
    },
    "section": "network"
@@ -1153,6 +1178,7 @@
    "note": "handler transforms the value",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 6218
    },
    "section": "network"
@@ -1160,10 +1186,7 @@
   "sim_card_info": {
    "access": "ro",
    "kind": "string",
-   "read": {
-    "map": null,
-    "param": 7002
-   },
+   "read": null,
    "section": "network"
   },
   "subnet_mask": {
@@ -1172,6 +1195,7 @@
    "page": "SelectHomeBaseConnection",
    "read": {
     "map": null,
+    "no_default": true,
     "param": 1320
    },
    "section": "network"
