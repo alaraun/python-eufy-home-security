@@ -898,7 +898,10 @@ A closed session (`async_close`) never reconnects on its own — build a new
     = open), a tamper or low-battery flag. Such a status is the device's state, not a
     setting to change; some of them repeat what the device fields already give (battery
     level, online status) or carry a JSON value or a counter: show those as diagnostics
-    at most.
+    at most. A JSON value is a string that can run past 255 characters (Home Assistant's
+    state limit): show it as an attribute, not a state. A status the device has not
+    reported reads None, also on a station or a standalone device: its `default` never
+    stands in (see `setting` below).
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
     bool for a bool, str for a string. `default` is the vendor default; a station setting
@@ -928,7 +931,8 @@ A closed session (`async_close`) never reconnects on its own — build a new
   from the dump. A station setting (no target, the station's serial, or channel 255)
   reads the dump, then the cloud's copy of the station (the device list's `params`, and
   its `time_zone` for the time-zone setting), then the setting's `default`, which is what
-  the eufy app shows when neither carries the parameter; `state.setting_source(key, …)`
+  the eufy app shows when neither carries the parameter (not for a read-only status
+  such as `battery_value`: unreported, it is None); `state.setting_source(key, …)`
   says which (`ValueSource.P2P`, `CLOUD`, `APP_DEFAULT`, or None for no value). So a
   HomeBase 3's cross-camera tracking switches, alarm volume and time zone have values
   although its dump never reports them. Put the source in an entity attribute if you

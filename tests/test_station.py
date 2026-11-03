@@ -1417,6 +1417,20 @@ def test_a_standalone_device_reads_its_own_settings() -> None:
     assert state.setting("led_on_off") is True
 
 
+def test_a_standalone_devices_unreported_read_only_status_has_no_default() -> None:
+    """A read-only status only the device reports (battery level, default 100) reads
+    None while unreported, never its default; reported, it reads the report."""
+    station = _standalone_t8170()
+    battery = station.setting("battery_value")
+    assert (battery.writable, battery.readable, battery.default) == (False, True, "100")
+    state = station._state(_dump_of({0: {6014: "1"}, 255: {6014: "1"}}))
+    assert state.setting("battery_value") is None
+    assert state.setting_source("battery_value") is None
+    reported = station._state(_dump_of({0: {1101: "87"}, 255: {1101: "87"}}))
+    assert reported.setting("battery_value") == "87"
+    assert reported.setting_source("battery_value") is ValueSource.P2P
+
+
 def _mode_table_blocks(fake: FakeStation) -> None:
     """The synthetic camera (0) and a motion sensor known only by its markers (16)."""
     fake.params[0].update({1400: "0", 1239: "9", 1167: "0", 1172: "0", 1225: "1", 1166: "30"})

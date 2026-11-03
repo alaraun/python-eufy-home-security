@@ -129,7 +129,7 @@ serial, or channel 255) from three sources in turn, and
 |---|---|---|
 | 1 | `P2P`: the parameter dump | the station's live value. It wins whenever it carries the parameter (a HomeBase 3 reports 1280 as 0 where the cloud copy says 30) |
 | 2 | `CLOUD`: the device list's station entry | its `params` (1065, 1069, 1070, 1235, 1254, 1256 and the 1157-1159 mode tables on a HomeBase 3, which its dump never carries) and its `time_zone` field, read by the time-zone setting (`domain` `timezone`); a HomeBase 3 never reports 1215 |
-| 3 | `APP_DEFAULT`: the setting's `default` | used only when neither source carries the parameter: the value the eufy app shows then |
+| 3 | `APP_DEFAULT`: the setting's `default` | used only when neither source carries the parameter: the value the eufy app shows then. Not for a read-only status the device alone reports (`read.no_default`): it is None then |
 
 `None` from `setting_source` means no value: the setting is not readable, has no
 default, or a source carries the parameter in a form the setting cannot place (then no

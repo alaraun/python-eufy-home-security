@@ -651,8 +651,9 @@ class StationState:
         serial, or channel 255) or a paired device's, by its cloud serial or its channel.
 
         A station setting reads the P2P dump, then the cloud's copy, then the setting's
-        ``default`` (the value the eufy app shows when neither carries the parameter);
-        :meth:`setting_source` says which. A paired device's reads its dump block only.
+        ``default`` (the value the eufy app shows when neither carries the parameter; a
+        read-only status the device alone reports gets none); :meth:`setting_source` says
+        which. A paired device's reads its dump block only.
         None when no source gives a value (a parameter carried in a form the setting
         cannot place gets no default), or the setting is not readable. Raises
         ``UnsupportedError`` for a key the addressed device does not have (an unknown
@@ -689,7 +690,7 @@ class StationState:
             value = _read(self.settings, key, self.setting_params)
             source = self.param_sources.get(param, ValueSource.P2P)
             return value, None if value is None else source
-        if setting.default is None:
+        if setting.default is None or setting._no_default:
             return None, None
         return setting.default, ValueSource.APP_DEFAULT
 
