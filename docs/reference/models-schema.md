@@ -36,6 +36,7 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `contexts` | What other contexts change (below); absent when every context sees the base entry |
 | `labels` | `{"<value>": "<title>"}` from the app's titles, else the cleaned TD description. The app's option titles of `working_mode_value`: `Standard` (EU), `Performance (beta)` (US) |
 | `section` | Always present: the UI section id, one of `devices/sections.py`'s `SETTING_SECTIONS`. Assigned by `scripts/gen_models_sections.py` from the app page the setting lives on, else the station rules (station models), else the identifier rules, else `other`; a variant has its primary's. Every context has the same section |
+| `role` | Always present: what the setting is to the user, from where the eufy app shows it; assigned by `scripts/gen_models_roles.py`, the first rule that applies deciding. `setting`: the handler has a write (`rw` in some context); or the thing description declares the property writable and the app does not list it as a status it only reads (the app's control, which the library cannot write: `access` `ro`). `diagnostic`: read from a parameter the library already reads into device state (`devices/param_info.py` `STATE_PARAM_INFO`: battery, online status, counters, active mode), so a consumer has the value as a device field. `status`: read-only and shown by the app: its device card or home page reads it (an entry sensor's door state, tamper and low-battery flag), one of its settings pages reads it or places it in its layout, or the app lists it as a status it only reads. `diagnostic`: read-only and shown nowhere (capability data such as `device_ability_data`, schedules and other configuration values). A `<base>__v<n>` variant is shown where its base is. Every context has the same role |
 | `group`, `order` | Block and position on the app's settings page, where the app's layout names them. Always present together; they order settings within a section |
 | `page` | The app page the setting lives on; it decides `section` where the page holds one kind of setting |
 | `applies_when` | `[<enum setting>, <value>]`: the app shows the setting only while that setting has that value |
@@ -256,6 +257,7 @@ product code and turns each entry into a `Setting`:
 | `labels` | `labels`, keyed by the public value; `label(value)` looks one up |
 | `writable` | `access` is `rw` and the library sends the write (below) |
 | `readable` | `read` is not null |
+| `role` (`SettingRole`) | `role`: `SETTING`, `STATUS` or `DIAGNOSTIC`; a setting listed from a thing description alone, without a file, is `DIAGNOSTIC`, a mode-table setting a `SETTING` |
 | `group`, `order`, `page`, `applies_when` | the same keys; `applies_when` as a `(key, value)` tuple |
 | `note` | `note`, plus the reason when the library refuses the write |
 | `advanced` | `advanced` (False when absent) |
@@ -317,7 +319,7 @@ is written, every codec must render back each swept recipe, and every row of
 `tests/fixtures/models_v1_reference.json` must render to its recorded `cmd`/`subCmd`/`params`.
 A model that fails is not written, and the run exits 1; Node failing a job stops the run
 with exit 2. `--check` exits 1 on any byte difference and 2 when Node, the cache, the
-labels, the layout or the title data are missing.
+labels, the layout, the title or the shown-property data are missing.
 Run it on the full corpus after changing the generator.
 
 Tests that need only committed files check the schema of all 159 files and the v1

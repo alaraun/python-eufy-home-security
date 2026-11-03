@@ -82,6 +82,7 @@ def _args(tmp_path: Path, jobs: int) -> argparse.Namespace:
     data.mkdir()
     for name in ("labels", "trees", "titles", "released"):
         (data / f"{name}.json").write_text("{}", encoding="utf-8")
+    (data / "shown.json").write_text('{"pages": {}, "cards": {}}', encoding="utf-8")
     return argparse.Namespace(
         product_codes=PNS,
         jobs=jobs,
@@ -89,6 +90,7 @@ def _args(tmp_path: Path, jobs: int) -> argparse.Namespace:
         labels=data / "labels.json",
         trees=data / "trees.json",
         titles=data / "titles.json",
+        shown=data / "shown.json",
         released=data / "released.json",
     )
 
@@ -166,7 +168,8 @@ def _cli(tmp_path: Path, node_version: str, jobs: int) -> subprocess.CompletedPr
         (cache / pn / "td.json").write_text(json.dumps(td), encoding="utf-8")
     args = _args(tmp_path, jobs)
     inputs = [
-        f"--{name}={getattr(args, name)}" for name in ("labels", "trees", "titles", "released")
+        f"--{name}={getattr(args, name)}"
+        for name in ("labels", "trees", "titles", "shown", "released")
     ]
     paths = [f"--cache={cache}", f"--out={tmp_path / 'out'}", f"--jobs={jobs}"]
     return subprocess.run(

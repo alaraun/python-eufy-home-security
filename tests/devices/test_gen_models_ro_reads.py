@@ -150,6 +150,10 @@ PROPS: list[dict[str, Any]] = [
     _prop("digits", {"type": "int"}),
 ]
 
+SHOWN = frozenset({"door_open", "label", "mode_num"})  # what the app's card and pages read
+TREE = {"positions": {"setting_model_config": {"AboutDevice": ["ability#A#1"]}}}
+TITLES: dict[str, Any] = {"read_only": {"nick": {}}}  # a status the app only reads
+
 pytestmark = pytest.mark.needs_node
 
 
@@ -169,7 +173,7 @@ def _cache(tmp_path: Path) -> Path:
 @pytest.fixture(scope="module")
 def generated(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     doc: dict[str, Any] = gen_models.generate(
-        PN, _cache(tmp_path_factory.mktemp("cache")), titles={}
+        PN, _cache(tmp_path_factory.mktemp("cache")), tree=TREE, titles=TITLES, shown=SHOWN
     )[0]
     return doc
 
@@ -286,6 +290,23 @@ def test_a_writable_setting_keeps_its_write_round_trip(generated: dict[str, Any]
 
 
 @pytest.mark.timeout(120)
+def test_every_setting_gets_its_role(generated: dict[str, Any]) -> None:
+    got = {k: e["role"] for k, e in generated["settings"].items()}
+    named = {
+        "door_open": "status",  # shown, read-only
+        "label": "status",
+        "ability": "status",  # placed in the app's layout
+        "mode_num": "diagnostic",  # shown, but it reads the active mode, a device state field
+        "volume": "setting",  # written
+        "power_mode": "setting",  # writable in the thing description, no library write
+        "nick": "status",  # writable in the thing description, the app only reads it
+    }
+    assert {k: got[k] for k in named} == named
+    # The rest are read-only and shown nowhere.
+    assert {r for k, r in got.items() if k not in named} == {"diagnostic"}
+
+
+@pytest.mark.timeout(120)
 def test_the_generated_file_reads_through_the_library(generated: dict[str, Any]) -> None:
     """The file loads as the package loads a bundled one; the read-only bool decodes the
     parameter's values and is not writable."""
@@ -301,5 +322,8 @@ def test_the_generated_file_reads_through_the_library(generated: dict[str, Any])
     assert [door.decode(raw) for raw in ("1", "0", "")] == [True, False, False]
     assert settings["door_open_count"].decode("3") == 3
     assert door._no_default
+    assert door.role is model_settings.SettingRole.STATUS
+    assert settings["volume"].role is model_settings.SettingRole.SETTING
+    assert settings["door_open_count"].role is model_settings.SettingRole.DIAGNOSTIC
     assert not settings["status_text"].readable
     assert settings["status_text"].decode("1") is None

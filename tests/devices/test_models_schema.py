@@ -60,6 +60,7 @@ SETTING_KEYS = {
     "order",
     "page",
     "section",
+    "role",
     "applies_when",
     "note",
     "name",
@@ -89,6 +90,7 @@ IDENT = re.compile(r"[a-z0-9_]+")
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 SERIAL = re.compile(r"T[0-9A-Z]{4}[A-Z0-9]{11}")
 SECTIONS = {s.id for s in SETTING_SECTIONS}
+ROLES = {r.value for r in model_settings.SettingRole}
 
 
 def _load(name: str) -> ModuleType:
@@ -260,6 +262,9 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
     for rule in s.get("variants", []):
         _check_variant(ident, rule, settings)
     assert s["section"] in SECTIONS, ident
+    assert s["role"] in ROLES, ident
+    if s["access"] == "rw":
+        assert s["role"] == "setting", ident  # a setting the library writes is a control
     assert ("group" in s) == ("order" in s)
     if "group" in s:
         assert isinstance(s["group"], str)
@@ -312,6 +317,7 @@ def test_model_file_matches_the_schema(code: str) -> None:
             assert item["entry"], "a contexts item changes nothing"
             assert "contexts" not in item["entry"]
             assert "section" not in item["entry"]  # one section in every context
+            assert "role" not in item["entry"]  # one role in every context
             named.update(item["names"])
     for context in sorted(named):
         resolved = {k: _in_context(v, context) for k, v in settings.items()}

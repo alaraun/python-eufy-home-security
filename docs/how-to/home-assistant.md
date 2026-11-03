@@ -895,13 +895,21 @@ A closed session (`async_close`) never reconnects on its own — build a new
     one written.
   - A setting without a write is readable when the device's handler fills it from one
     parameter, as the eufy app reads it: an entry sensor's `sensor_door_status` (`True`
-    = open), a tamper or low-battery flag. Such a status is the device's state, not a
-    setting to change; some of them repeat what the device fields already give (battery
-    level, online status) or carry a JSON value or a counter: show those as diagnostics
-    at most. A JSON value is a string that can run past 255 characters (Home Assistant's
-    state limit): show it as an attribute, not a state. A status the device has not
-    reported reads None, also on a station or a standalone device: its `default` never
-    stands in (see `setting` below).
+    = open), a tamper or low-battery flag. A status the device has not reported reads
+    None, also on a station or a standalone device: its `default` never stands in (see
+    `setting` below).
+  - `role` (`SettingRole`) says what the setting is to the user, from where the eufy app
+    shows it; map entities from it, never from per-key rules:
+
+    | `role` | entity |
+    |---|---|
+    | `SETTING` | the control above when `writable`; when not, the app offers it as a control the library cannot write: no entity, or a disabled diagnostic `sensor` |
+    | `STATUS` | read-only, shown by the app on the device card or a settings page: an enabled `sensor` (`binary_sensor` for a bool), not diagnostic. An entry sensor's `sensor_door_status` is its primary entity (device class `door`); a tamper or low-battery flag fits device class `tamper` / `battery` |
+    | `DIAGNOSTIC` | read-only and shown nowhere by the app, or a value the device fields already give (battery level, online status, counters, the active mode): a disabled diagnostic entity, or none |
+
+    A `STRING` or `OTHER` status can carry a JSON value, a string that can run past 255
+    characters (Home Assistant's state limit): show a value that long as an attribute,
+    not a state.
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
     bool for a bool, str for a string. `default` is the vendor default; a station setting
@@ -1184,7 +1192,7 @@ For the integration this means:
 - **Names and labels come from the library.** Name the entity from `setting.name` and
   show each value by its label; do not ship translations of vendor keys.
 - **Import the types from the package root:** `Setting`, `SettingKind`, `SettingControl`,
-  `SettingUnit`, `CommandOutcome` and `SettingsCoverage` are exported there; capability grades
+  `SettingRole`, `SettingUnit`, `CommandOutcome` and `SettingsCoverage` are exported there; capability grades
   (`Capability`, `Support`, `profile_for_serial`), `MODE_ACTION_FLAGS`,
   `MODE_ACTION_LABELS`, `MODE_ACTION_INVERTED`, `MODE_ACTION_CLEARS` and `mode_action_on`
   from `eufy_home_security.devices`.

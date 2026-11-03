@@ -55,6 +55,7 @@ __all__ = [
     "Setting",
     "SettingControl",
     "SettingKind",
+    "SettingRole",
     "Value",
     "WireCommand",
     "WriteContext",
@@ -136,6 +137,20 @@ class SettingControl(StrEnum):
     """One on/off per member of a ``FLAGS`` mask."""
     TEXT = "text"
     """Free text (a ``STRING``)."""
+
+
+class SettingRole(StrEnum):
+    """What a setting is to the user, from where the eufy app shows it."""
+
+    SETTING = "setting"
+    """A control: the library writes it, or the app offers it as one (``writable`` then
+    says whether the library can write it)."""
+    STATUS = "status"
+    """A read-only state the app shows: on the device card or home page (an entry
+    sensor's door state, tamper, low battery) or as a row of a settings page."""
+    DIAGNOSTIC = "diagnostic"
+    """A read-only value the app shows nowhere (capability data, configuration JSON), or
+    one the library already reports as a device state field (battery, online, counters)."""
 
 
 #: The controls each kind may carry (a ``STRING`` with a :attr:`Setting.domain` is a select).
@@ -233,6 +248,10 @@ class Setting:
     primary's. ``page`` is the eufy app screen the setting is on, ``group`` and ``order``
     its block and position there, where the app's layout names them.
 
+    ``role`` says what the setting is to the user (:class:`SettingRole`): a control, a
+    status the app shows, or a diagnostic value. A setting listed from a thing description
+    alone (no bundled file) is a diagnostic.
+
     ``domain`` names a library table a ``STRING`` setting's values come from
     (:data:`~.timezones.TIMEZONE_DOMAIN`: the app's device time zones). Such a setting is
     a ``SELECT``: ``values`` are the table's ids, a write takes an id and sends the
@@ -257,6 +276,7 @@ class Setting:
     order: int | None = None
     page: str | None = None
     section: str = OTHER_SECTION
+    role: SettingRole = SettingRole.SETTING
     applies_when: tuple[str, Value] | None = None
     note: str | None = None
     variant_of: str | None = None
@@ -1307,6 +1327,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     section = entry["section"]
     if section not in _SECTION_ORDER:
         raise ValueError(f"section {section!r} is not in the catalogue")
+    role = SettingRole(entry["role"])
     default = entry.get("default")
     name = _optional_str(entry, "name")
     variant_of = _optional_str(entry, "variant_of")
@@ -1355,6 +1376,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         order=order,
         page=_optional_str(entry, "page"),
         section=section,
+        role=role,
         applies_when=applies_when,
         note=note,
         variant_of=variant_of,

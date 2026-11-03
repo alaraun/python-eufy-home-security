@@ -201,7 +201,7 @@ def test_a_member_the_unknown_input_cannot_reach_is_out() -> None:
 
 
 def _entries(rules: object, member: dict[str, object]) -> dict[str, dict[str, object]]:
-    base = {"kind": "bool", "access": "ro", "read": None, "section": "other"}
+    base = {"kind": "bool", "access": "ro", "read": None, "section": "other", "role": "status"}
     return {"x": {**base, "variants": rules}, "x__v1": {**base, "variant_of": "x", **member}}
 
 

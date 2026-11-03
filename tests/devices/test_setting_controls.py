@@ -39,7 +39,7 @@ def data_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]
 
 
 def _load(root: Path, settings: Mapping[str, Mapping[str, object]]) -> dict[str, Setting]:
-    entries = {k: {"section": "other", **e} for k, e in settings.items()}
+    entries = {k: {"section": "other", "role": "setting", **e} for k, e in settings.items()}
     doc = {"schema_version": 3, "product_code": "T0001", "settings": entries}
     (root / "T0001.json").write_text(json.dumps(doc), encoding="utf-8")
     model_settings._load.cache_clear()

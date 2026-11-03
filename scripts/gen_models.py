@@ -7,7 +7,8 @@ codecs (``scripts/gen_models_codec.py``), feed each written recipe's parameter d
 to getProperty for the read codec (a setting without a write: the parameter getProperty
 fills it from, ``locate_params``), join the app's labels and settings layout
 (``scripts/gen_models_join.py``) with the app's setting titles, units and variant pairs,
-and write ``<out>/<PN>.json``, then ``<out>/INDEX.json``,
+give each setting its role from the properties the app shows (``--shown``,
+``scripts/gen_models_roles.py``), and write ``<out>/<PN>.json``, then ``<out>/INDEX.json``,
 the sorted list of every ``<PN>.json`` in ``<out>``.
 
 Every model is checked before it is written: each codec must render back every swept
@@ -29,8 +30,8 @@ time) stops the run at once: exit 2 and the cause. Runs on a maintainer host onl
 cache); nothing at runtime executes vendor code. See docs/reference/models-schema.md.
 
     gen_models.py [PN ...] [--check] [--cache DIR] [--out DIR] [--jobs N]
-                  [--labels FILE] [--trees FILE] [--titles FILE] [--app-version V]
-                  [--released FILE] [--update-released REF]
+                  [--labels FILE] [--trees FILE] [--titles FILE] [--shown FILE]
+                  [--app-version V] [--released FILE] [--update-released REF]
 """
 
 from __future__ import annotations
@@ -62,6 +63,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from eufy_home_security.devices.param_info import STATE_PARAM_INFO
 from eufy_home_security.devices.settings import DUAL_VIEW, VIEW_MODE_PARAM
 from eufy_home_security.devices.types import DeviceKind, model_for_serial
 
@@ -74,6 +76,7 @@ DEFAULT_RELEASED = ROOT / "scripts" / "data" / "released_keys.json"
 DEFAULT_LABELS = ROOT / ".work" / "tools" / "data" / "app_choice_labels.json"
 DEFAULT_TREES = ROOT / ".work" / "tools" / "data" / "settings_trees.json"
 DEFAULT_TITLES = ROOT / ".work" / "tools" / "data" / "app_setting_titles.json"
+DEFAULT_SHOWN = ROOT / ".work" / "tools" / "data" / "app_shown.json"
 REFERENCE = ROOT / "tests" / "fixtures" / "models_v1_reference.json"
 DEFAULT_APP_VERSION = "6.1.10"  # the app build the label and tree data come from
 SCHEMA_VERSION = 3
@@ -107,6 +110,7 @@ joiner = _load("gen_models_join")
 controls = _load("gen_models_controls")
 sections = _load("gen_models_sections")
 variants = _load("gen_models_variants")
+roles = _load("gen_models_roles")
 GeneratorError = codec.GeneratorError
 DRIVERS = node.DriverPool()  # one Node worker per generating thread
 RECIPE_FIELDS = ("cmd", "subCmd", "params")
@@ -1385,6 +1389,7 @@ def generate(
     reference: list[dict[str, Any]] | None = None,
     titles: dict[str, Any] | None = None,
     released: Collection[str] = (),
+    shown: Collection[str] = (),
 ) -> tuple[dict[str, Any], dict[str, int]]:
     """The settings-file object of one model and its counters (the base context's).
 
@@ -1392,7 +1397,9 @@ def generate(
     files (None: TD labels only / no UI placement); ``reference`` its v1 reference rows
     (``child`` rows check the base context, ``standalone`` rows the standalone one);
     ``titles`` the app setting-title file (None: no names, app units or variants);
-    ``released`` the model's keys in the released-keys manifest (never dropped).
+    ``released`` the model's keys in the released-keys manifest (never dropped);
+    ``shown`` the identifiers the app's device cards, home page and settings pages read
+    (:func:`shown_identifiers`; the model's tree adds the ones its layout places).
     Raises CheckError when a codec does not reproduce a swept recipe or an unaccepted
     reference row.
     """
@@ -1490,6 +1497,14 @@ def generate(
     station = model is not None and model.kind is DeviceKind.STATION
     for key, n in sections.assign(merged, station=station).items():
         _count(counts, key, n)
+    for key, n in roles.assign(
+        merged,
+        td_writable={p["identifier"] for p in props if "W" in (p.get("access_mode") or "")},
+        app_read_only=set((titles or {}).get("read_only") or {}),
+        shown=set(shown) | placed_identifiers(tree),
+        state_params=STATE_PARAM_INFO.keys(),
+    ).items():
+        _count(counts, key, n)
     for entry in merged.values():
         for item in entry.get("contexts", ()):
             for name in item["names"]:
@@ -1501,6 +1516,29 @@ def generate(
         "settings": merged,
     }
     return doc, counts
+
+
+def placed_identifiers(tree: Mapping[str, Any] | None) -> set[str]:
+    """The identifiers a model's settings tree places in one of the app's layouts
+    (``positions``: ``{config: {page: ["<identifier>#<group>#<order>", ...]}}``)."""
+    out: set[str] = set()
+    for config in ((tree or {}).get("positions") or {}).values():
+        for keys in config.values():
+            out.update(str(key).partition("#")[0] for key in keys)
+    return out
+
+
+def shown_identifiers(shown: Mapping[str, Any]) -> frozenset[str]:
+    """Every identifier of the shown-property file: ``pages`` (settings screens that read
+    it) and ``cards`` (device card and home page code that reads it), each
+    ``{identifier: [where, ...]}``; raises GeneratorError on another shape."""
+    out: set[str] = set()
+    for part in ("pages", "cards"):
+        block = shown.get(part)
+        if not isinstance(block, dict):
+            raise GeneratorError(f"shown-property data has no {part} object")
+        out.update(block)
+    return frozenset(out)
 
 
 def app_wire_values(
@@ -1678,6 +1716,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--labels", type=Path, default=DEFAULT_LABELS)
     parser.add_argument("--trees", type=Path, default=DEFAULT_TREES)
     parser.add_argument("--titles", type=Path, default=DEFAULT_TITLES)
+    parser.add_argument("--shown", type=Path, default=DEFAULT_SHOWN)
     parser.add_argument("--app-version", default=DEFAULT_APP_VERSION)
     parser.add_argument(
         "--released",
@@ -1701,8 +1740,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     cache: Path = args.cache
     missing = _missing_inputs(cache, args.product_codes)
-    if missing is None and not all(p.is_file() for p in (args.labels, args.trees, args.titles)):
-        missing = "label, settings-tree or title data not found"
+    inputs = (args.labels, args.trees, args.titles, args.shown)
+    if missing is None and not all(p.is_file() for p in inputs):
+        missing = "label, settings-tree, title or shown-property data not found"
     if missing is None and not args.released.is_file():
         missing = f"no released-keys manifest at {args.released}"
     if missing is not None:
@@ -1787,6 +1827,7 @@ class _Task:
     reference: list[dict[str, Any]] | None
     titles: dict[str, Any]
     released: Collection[str]
+    shown: Collection[str] = ()
 
 
 type _Result = tuple[str, str | None, dict[str, int], str]
@@ -1811,6 +1852,7 @@ def _build(task: _Task) -> _Result:
                 reference=task.reference,
                 titles=task.titles,
                 released=task.released,
+                shown=task.shown,
             )
         except node.NodeError as err:
             stop = err
@@ -1894,6 +1936,7 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     labels = _read_json(args.labels)
     trees = _read_json(args.trees)
     titles = _read_json(args.titles)
+    shown = shown_identifiers(_read_json(args.shown))
     released = _read_json(args.released)
     reference = load_reference()
     pns = args.product_codes or sorted(d.name for d in cache.iterdir() if d.is_dir())
@@ -1908,6 +1951,7 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
             reference.get(pn),
             titles,
             released.get(pn, ()),
+            shown,
         )
         for pn in pns
     ]

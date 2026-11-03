@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from eufy_home_security.devices.model_settings import SettingKind
+from eufy_home_security.devices.model_settings import SettingKind, SettingRole
 from eufy_home_security.devices.settings import SettingUnit
 from eufy_home_security.devices.td import (
     LISTED_NOTE,
@@ -32,6 +32,7 @@ def test_enum_lists_values_labels_and_default_read_only() -> None:
     assert dict(s.labels) == {1: "Low", 2: "Medium", 3: "High"}
     assert s.default == 2
     assert (s.writable, s.readable, s.note) == (False, False, LISTED_NOTE)
+    assert s.role is SettingRole.DIAGNOSTIC  # no app data places a listed setting
     assert s.name == "Motion sensitivity"
     assert s.product_code == CODE
 

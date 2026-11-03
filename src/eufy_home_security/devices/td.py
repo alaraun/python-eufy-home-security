@@ -14,7 +14,7 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from .labels import choice_label, setting_name
-from .model_settings import IDENTIFIER, Setting, SettingKind, Value
+from .model_settings import IDENTIFIER, Setting, SettingKind, SettingRole, Value
 from .settings import SettingUnit
 
 __all__ = [
@@ -208,6 +208,7 @@ def _listed_setting(code: str, prop: Mapping[str, Any]) -> Setting:
         labels=MappingProxyType(labels),
         writable=False,
         readable=False,
+        role=SettingRole.DIAGNOSTIC,
         note=LISTED_NOTE,
     )
 
