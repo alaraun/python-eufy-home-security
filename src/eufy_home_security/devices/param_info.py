@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Final
 
-from .._logging import Address, Identifier
+from .._logging import Address, Identifier, Payload
 from ..cloud.models import CAMERA_INFO_PARAM
 from ..models import (
     DEV_STATUS_ONLINE,
@@ -172,10 +172,15 @@ class ParamInfo:
         return self.param_id in IDENTIFYING_PARAMS or self.param_id == PARAM_LAN_IP
 
     def raw(self, value: object) -> str:
-        """The wire value as ``repr``, redacted when it is identifying."""
-        if value is None or not self.identifying:
+        """The wire value as ``repr``, redacted when it is identifying; a value holding
+        a JSON object or list as JSON with its identifying fields masked (:class:`Payload`)."""
+        if value is None:
             return repr(value)
-        return repr(self.value(value))
+        if self.identifying:
+            return repr(self.value(value))
+        if isinstance(value, str) and value.lstrip()[:1] in ("{", "["):
+            return str(Payload(value))
+        return repr(value)
 
     def value(self, value: object) -> str:
         """A readable value: choice names, flag names, units, guard-mode names."""

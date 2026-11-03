@@ -14,7 +14,7 @@ from typing import Any
 from ..._logging import LogThrottle
 from ...devices.param_info import ParamInfo
 from ...events import EventBus, EventSource, GuardModeChanged, ParamChanged, Unsubscribe
-from ...models import STATION_CHANNEL, GuardMode
+from ...models import STATION_CHANNEL, GuardMode, ValueSource
 from ..params import ACTIVE_MODE_PARAM, GUARD_MODE_PARAM, ParamDump
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +28,21 @@ class ParamOrigin(StrEnum):
     LOCAL_WRITE = "local_write"
     """This library's own write (:meth:`StationSession.apply_local_params`, an applied
     arm), or a guard mode the station reported outside a dump."""
+    NOTIFY = "notify"
+    """The station's parameter notify (:mod:`..param_notify`): its own report between
+    dumps, replaced by the next dump's value as any later report is."""
+
+    @property
+    def value_source(self) -> ValueSource:
+        """The :class:`~...models.ValueSource` a value of this origin reads as."""
+        return _VALUE_SOURCES[self]
+
+
+_VALUE_SOURCES = {
+    ParamOrigin.CLOUD: ValueSource.CLOUD,
+    ParamOrigin.LOCAL_WRITE: ValueSource.P2P,
+    ParamOrigin.NOTIFY: ValueSource.NOTIFY,
+}
 
 
 class ParamState:
@@ -168,11 +183,29 @@ class ParamState:
 
     def apply_local_params(self, channel: int, values: Mapping[int, str]) -> None:
         """Merge the values a write set (see :meth:`StationSession.apply_local_params`)."""
-        if not values:
-            return
         block = next(
             (dev for dev, targets in self._block_aliases.items() if channel in targets), channel
         )
+        self._apply_values(block, values, "local write", ParamOrigin.LOCAL_WRITE)
+
+    def apply_notify(self, channel: int, values: Mapping[int, str]) -> None:
+        """Merge the values of a parameter notify about ``channel`` (the frame's device).
+
+        A standalone device's notify is its own, whichever channel the frame names, as a
+        dump's lone block is (:meth:`ingest_dump`).
+        """
+        block = next(
+            (dev for dev, targets in self._block_aliases.items() if STATION_CHANNEL in targets),
+            channel,
+        )
+        self._apply_values(block, values, "notify", ParamOrigin.NOTIFY)
+
+    def _apply_values(
+        self, block: int, values: Mapping[int, str], origin: str, kind: ParamOrigin
+    ) -> None:
+        """Merge ``values`` of the dump block labelled ``block``; signal the listeners."""
+        if not values:
+            return
         dump = ParamDump()
         dump.ingest(
             {
@@ -183,7 +216,7 @@ class ParamState:
             },
             aliases=self._block_aliases,
         )
-        self.merge_dump(dump, "local write", time.time(), origin_kind=ParamOrigin.LOCAL_WRITE)
+        self.merge_dump(dump, origin, time.time(), origin_kind=kind)
         self.notify_dump_listeners()
 
     def ingest_dump(self, dump: ParamDump, obj: Mapping[str, Any]) -> None:
@@ -212,7 +245,9 @@ class ParamState:
         """Merge ``dump`` into the held parameters: emit each change, then the guard modes.
 
         ``stamps`` date values by parameter id (a cloud snapshot); others date from ``now``.
-        ``origin_kind`` marks the values as not a dump's (:attr:`param_origins`).
+        ``origin_kind`` marks the values as not a dump's (:attr:`param_origins`). A change is
+        a held value that moved; a notify's first value of a parameter is one too, since
+        the station sent it because it moved.
         """
         self._meta.update(dump.meta)
         for unread in sorted(dump.unread.keys() - self._unread_dump_keys):
@@ -224,8 +259,12 @@ class ParamState:
                 type(dump.unread[unread]).__name__,
             )
         flat = dump.flatten()
+        value_source = ValueSource.P2P if origin_kind is None else origin_kind.value_source
+        first_is_change = origin_kind is ParamOrigin.NOTIFY
         changed = sum(
-            1 for key, new in flat.items() if key in self._params and self._params[key] != new
+            1
+            for key, new in flat.items()
+            if (key in self._params or first_is_change) and self._params.get(key) != new
         )
         _LOGGER.debug(
             "%s: parameter dump (%s): channels %s, %d value(s), %d changed",
@@ -244,7 +283,7 @@ class ParamState:
                 self._param_origin.pop(key, None)
             else:
                 self._param_origin[key] = origin_kind
-            if known and old != new:
+            if (known or first_is_change) and old != new:
                 if key[0] not in self._alias_copies and _LOGGER.isEnabledFor(logging.DEBUG):
                     info = self._param(key[1], key[0])
                     _LOGGER.debug(
@@ -258,7 +297,12 @@ class ParamState:
                     )
                 self._bus.emit(
                     ParamChanged(
-                        station_sn=self.serial, channel=key[0], param_id=key[1], old=old, new=new
+                        station_sn=self.serial,
+                        channel=key[0],
+                        param_id=key[1],
+                        old=old,
+                        new=new,
+                        source=value_source,
                     )
                 )
         mode, active = dump.guard_mode, dump.active_mode

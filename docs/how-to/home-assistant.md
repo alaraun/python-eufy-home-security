@@ -571,8 +571,13 @@ A `DataUpdateCoordinator[StationState]` per station:
     one event per dump. Set `coordinator.data = event.state` and call
     `coordinator.async_update_listeners()`. `station.state` gives the same merged
     snapshot on demand.
-  - `ParamChanged`: per parameter and low level; the integration does not need it
-    (`StationStateChanged` carries the same change as typed state).
+  - `ParamChanged`: per parameter and low level; `StationStateChanged` carries the
+    same change as typed state. `source` says what delivered it: `ValueSource.NOTIFY` is
+    the station's parameter notify, a status that moved between dumps (an entry
+    sensor's door, a tamper flag; see `docs/protocol/events.md` § Parameter notifies).
+    For such an event, refresh the entities of the device on `channel` from
+    `station.state` at once (the session's merged values, no cloud call) instead of
+    waiting for the next poll; the `StationStateChanged` that follows carries the same.
   - `ConnectionChanged(connected=False)`: `coordinator.async_set_update_error(...)`.
 - **A battery station (`station.connects_on_demand`) must not be polled over P2P.** A
   held session keeps a battery camera awake, so the library holds none for it (a T8170
@@ -844,9 +849,13 @@ A closed session (`async_close`) never reconnects on its own — build a new
   state is on the station: `station.alarming` (bool) and `station.last_alarm` (the last
   `AlarmChanged`, None before any), already set when a subscriber receives the event, so
   a panel or card reads it at setup and on any later refresh instead of keeping a copy.
-  `DELAY`
-  (pending) is only on the push: `SecurityEvent.alarm_phase is AlarmPhase.DELAY` for
-  `alarm_delay` seconds (msg_type 16, unverified). For `changed_by`, use
+  The alarm delay (pending) comes over P2P as **`AlarmDelayChanged`**: `delaying=True`
+  with `seconds` until the alarm and the triggering device's `channel` (`alarm_type` 6:
+  a sensor triggered) → `pending` for that long; `delaying=False` → back to the armed
+  state; an `AlarmChanged` start ends it too (no end event then). A second trigger
+  sends another start with fresh seconds. On the cloud push it is
+  `SecurityEvent.alarm_phase is AlarmPhase.DELAY` for `alarm_delay` seconds (msg_type 16,
+  unverified). For `changed_by`, use
   `arming_source` (keypad, key fob, app; `None` when not authenticated) and `user_name`
   only as a plain label: any client can send any name. Arm with
   `station.async_set_guard_mode(GuardMode.AWAY)`; it returns the mode the station
@@ -895,7 +904,7 @@ A closed session (`async_close`) never reconnects on its own — build a new
     | `role` | `shown` | entity |
     |---|---|---|
     | `SETTING` | any | the control above when `writable`; when not, the app offers it as a control the library cannot write: a disabled diagnostic `sensor` (it keeps its identity once a write lands) |
-    | `STATUS` | `CARD` | an enabled primary entity, no entity category: a `sensor`, a `binary_sensor` for a bool. An entry sensor's `sensor_door_status` (device class `door`), a tamper or low-battery flag (`tamper` / `battery`) |
+    | `STATUS` | `CARD` | an enabled primary entity, no entity category: a `sensor`, a `binary_sensor` for a bool. An entry sensor's `sensor_door_status` (device class `door`), a tamper or low-battery flag (`tamper` / `battery`). Its value moves with the station's parameter notifies: refresh it on `ParamChanged` with `source` `NOTIFY` (see [Coordinator per station](#coordinator-per-station-push-for-the-rest)) |
     | `STATUS` | `PAGE` | an enabled entity with entity category diagnostic: listed in the device page's Diagnostic section, neither hidden nor disabled |
     | `DIAGNOSTIC` | any | a disabled diagnostic entity, or none: the app shows it nowhere, or it is a value the device fields already give (battery level, online status, charging, a station's own status, counters, the active mode, a firmware update in progress). That last test ignores scope: on a camera paired to a HomeBase the storage status, and on a station that is not standalone its battery, charging and Wi-Fi values, are diagnostic though no device field carries them; none of these is readable today |
 

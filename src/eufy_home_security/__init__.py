@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from .events import (
         AccountMismatch,
         AlarmChanged,
+        AlarmDelayChanged,
         AlarmPhase,
         AlarmStopSource,
         ArmingSource,
@@ -268,6 +269,7 @@ _EXPORTS: dict[str, str] = {
         (
             "AccountMismatch",
             "AlarmChanged",
+            "AlarmDelayChanged",
             "AlarmPhase",
             "AlarmStopSource",
             "ArmingSource",
@@ -440,6 +442,7 @@ __all__ = [
     "AccountRejectedError",
     "AccountReport",
     "AlarmChanged",
+    "AlarmDelayChanged",
     "AlarmPhase",
     "AlarmStopSource",
     "ArmingActivation",

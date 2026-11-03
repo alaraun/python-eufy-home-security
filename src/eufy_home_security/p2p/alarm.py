@@ -16,6 +16,10 @@ frame                     param    body                       meaning
 ``0x04B2`` camera siren   1202     ``[event_type, seconds]``  ``[25, 30]`` on, ``[0, 0]`` off
 ``0x0578`` camera light   1400     ``[state]``                1 on, 0 off (also 0 at each
                                                               detection and periodically)
+``0x048C`` alarm delay    1164     ``[alarm_type, seconds]``  ``[6, 30]`` on a sensor's
+                                                              channel: the alarm sounds in
+                                                              30 s unless disarmed;
+                                                              ``[0, 0]``: the delay ended
 ========================  =======  =========================  =============================
 
 A tone or siren frame reports its alarm off when the event type is one of
@@ -38,12 +42,17 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
-from ..events import ALARM_OFF_TYPES, AlarmChanged, AlarmStopSource, EventSource
+from ..events import ALARM_OFF_TYPES, AlarmChanged, AlarmDelayChanged, AlarmStopSource, EventSource
 from .xzyh import Frame, FrameType
 
 #: The alarm frame types, each with the number of u32 values its body carries.
 ALARM_FRAME_VALUES: Final[Mapping[int, int]] = MappingProxyType(
-    {FrameType.ALARM_TONE_NOTIFY: 2, FrameType.SIREN_NOTIFY: 2, FrameType.LIGHT_NOTIFY: 1}
+    {
+        FrameType.ALARM_TONE_NOTIFY: 2,
+        FrameType.SIREN_NOTIFY: 2,
+        FrameType.LIGHT_NOTIFY: 1,
+        FrameType.ALARM_DELAY_NOTIFY: 2,
+    }
 )
 _CHANNEL_BYTE: Final = 2
 
@@ -111,6 +120,22 @@ class AlarmFrame:
             event_type=event_type or None,
             duration_s=(seconds or None) if alarming else None,
             stop_source=stop,
+            at=at,
+        )
+
+    def delay_change(self, station_sn: str, *, at: datetime) -> AlarmDelayChanged | None:
+        """The alarm delay an alarm-delay frame (1164) reports, by :attr:`alarm_state`:
+        a start with the seconds left, an end, or None (no state; any other frame).
+        ``at`` is when the frame arrived."""
+        state = self.alarm_state if self.param_id == FrameType.ALARM_DELAY_NOTIFY else None
+        if state is None:
+            return None
+        return AlarmDelayChanged(
+            station_sn=station_sn,
+            delaying=state,
+            channel=self.channel,
+            alarm_type=self.values[0] or None,
+            seconds=self.seconds_left if state else None,
             at=at,
         )
 

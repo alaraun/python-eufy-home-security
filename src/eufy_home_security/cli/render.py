@@ -19,6 +19,7 @@ from ..devices.types import model_for_serial
 from ..events import (
     AccountMismatch,
     AlarmChanged,
+    AlarmDelayChanged,
     CameraBusyChanged,
     CloudProblem,
     ConnectionChanged,
@@ -38,7 +39,7 @@ from ..events import (
     StorageChanged,
     ZoomChanged,
 )
-from ..models import STATION_CHANNEL, GuardMode
+from ..models import STATION_CHANNEL, GuardMode, ValueSource
 from ..network import LanPath, PathWarning, suggest_local_ports
 
 if TYPE_CHECKING:
@@ -915,12 +916,24 @@ def _alarm_line(event: AlarmChanged, show: bool) -> str:
     return "  ".join([f"{event.source}: {state}", *details, fmt_serial(event.station_sn, show)])
 
 
+@_renders(AlarmDelayChanged)
+def _alarm_delay_line(event: AlarmDelayChanged, show: bool) -> str:
+    state = f"alarm in {event.seconds}s" if event.delaying else "alarm delay ended"
+    details = [
+        f"{label} {value}"
+        for label, value in (("ch", event.channel), ("type", event.alarm_type))
+        if value is not None
+    ]
+    return "  ".join([state, *details, fmt_serial(event.station_sn, show)])
+
+
 @_renders(ParamChanged)
 def _param_line(event: ParamChanged, show: bool) -> str:
     where = "station" if event.channel == STATION_CHANNEL else f"ch {event.channel}"
+    via = "" if event.source is ValueSource.P2P else f" ({event.source})"
     return (
         f"param {where} {event.param_id} {command_name(event.param_id)}: "
-        f"{_truncate(event.old)} → {_truncate(event.new)}"
+        f"{_truncate(event.old)} → {_truncate(event.new)}{via}"
     )
 
 

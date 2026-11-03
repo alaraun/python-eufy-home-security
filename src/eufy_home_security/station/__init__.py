@@ -613,7 +613,7 @@ class StationState:
     setting) for every id :attr:`params` lacks. A value :attr:`params` holds only from
     this library's own write yields to a cloud value that changed after the write."""
     param_sources: Mapping[int, ValueSource] = field(default_factory=dict, repr=False)
-    """Where each value of :attr:`setting_params` came from (P2P or CLOUD)."""
+    """Where each value of :attr:`setting_params` came from (P2P, NOTIFY or CLOUD)."""
 
     @property
     def cloud_param_ids(self) -> tuple[int, ...]:
@@ -1785,7 +1785,7 @@ class Station:
             ):
                 continue
             values[pid] = value
-            sources[pid] = ValueSource.CLOUD if origin is ParamOrigin.CLOUD else ValueSource.P2P
+            sources[pid] = ValueSource.P2P if origin is None else origin.value_source
         return values, sources
 
     # ── writes ───────────────────────────────────────────────────────────────

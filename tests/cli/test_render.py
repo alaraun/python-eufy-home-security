@@ -15,6 +15,7 @@ from eufy_home_security.devices.recipes import PresetPosition
 from eufy_home_security.events import (
     AccountMismatch,
     AlarmChanged,
+    AlarmDelayChanged,
     AlarmStopSource,
     CameraBusyChanged,
     CloudProblem,
@@ -36,7 +37,7 @@ from eufy_home_security.events import (
     ZoomChanged,
 )
 from eufy_home_security.exceptions import CommunicationError, SessionReplacedError
-from eufy_home_security.models import FrameCipher, GuardMode
+from eufy_home_security.models import FrameCipher, GuardMode, ValueSource
 from eufy_home_security.network import HostSource, LanPath
 from eufy_home_security.p2p.did import Did
 from eufy_home_security.p2p.discovery import DiscoveredStation
@@ -635,6 +636,32 @@ def test_zoom_changed_renders_and_serialises() -> None:
     assert render.render_event(event, now=NOW, show_serials=False).endswith("zoom: 2.5x")
     data = json.loads(json.dumps(render.event_json(event)))
     assert (data["type"], data["zoom"]) == ("ZoomChanged", 2.5)
+
+
+def test_alarm_delay_changed_renders_and_serialises() -> None:
+    start = AlarmDelayChanged(
+        station_sn=SYNTHETIC.station_sn, delaying=True, channel=19, alarm_type=6, seconds=30
+    )
+    line = render.render_event(start, now=NOW, show_serials=False)
+    assert line.startswith("[03:04:05] alarm in 30s  ch 19  type 6")
+    end = AlarmDelayChanged(station_sn=SYNTHETIC.station_sn, delaying=False, channel=19)
+    assert "alarm delay ended  ch 19" in render.render_event(end, now=NOW, show_serials=False)
+    data = json.loads(json.dumps(render.event_json(start), default=str))
+    assert (data["type"], data["delaying"], data["seconds"]) == ("AlarmDelayChanged", True, 30)
+
+
+def test_a_notified_param_change_names_its_source() -> None:
+    event = ParamChanged(
+        station_sn=SYNTHETIC.station_sn,
+        channel=19,
+        param_id=1550,
+        old="0",
+        new="1",
+        source=ValueSource.NOTIFY,
+    )
+    line = render.render_event(event, now=NOW, show_serials=False)
+    assert line == "[03:04:05] param ch 19 1550 ENTRY_SENSOR_STATUS: 0 → 1 (notify)"
+    assert render.event_json(event)["source"] == "notify"
 
 
 def test_device_alarm_changed_renders_and_serialises() -> None:

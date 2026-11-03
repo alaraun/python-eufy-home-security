@@ -1,4 +1,4 @@
-"""Alarm frames (0x04B1 tone, 0x04B2 siren, 0x0578 light)."""
+"""Alarm frames (0x04B1 tone, 0x04B2 siren, 0x0578 light, 0x048C alarm delay)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from eufy_home_security.events import AlarmChanged, AlarmStopSource, EventSource
+from eufy_home_security.events import AlarmChanged, AlarmDelayChanged, AlarmStopSource, EventSource
 from eufy_home_security.p2p.alarm import AlarmFrame, decode_alarm_frame
 from eufy_home_security.p2p.xzyh import Frame, FrameCipher, FrameType
 from eufy_home_security.testing import SYNTHETIC
@@ -116,3 +116,33 @@ def test_the_state_needs_time_left_for_on_and_none_for_off(
 @pytest.mark.parametrize(("seconds", "left"), [(30, 30), (1000, 1000), (1001, 1), (30000, 30)])
 def test_a_time_left_above_1000_is_milliseconds(seconds: int, left: int) -> None:
     assert AlarmFrame(1202, 1, (10, seconds)).seconds_left == left
+
+
+def _delay(**fields: object) -> AlarmDelayChanged:
+    return AlarmDelayChanged(station_sn=SYNTHETIC.station_sn, at=_AT, **fields)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("values", "change"),
+    [
+        ((6, 30), _delay(delaying=True, channel=19, alarm_type=6, seconds=30)),
+        ((6, 30000), _delay(delaying=True, channel=19, alarm_type=6, seconds=30)),  # ms
+        ((0, 0), _delay(delaying=False, channel=19)),
+        ((16, 0), _delay(delaying=False, channel=19, alarm_type=16)),
+        ((6, 0), None),  # no time left: no state
+        ((0, 5), None),
+    ],
+)
+def test_an_alarm_delay_frame_starts_or_ends_the_delay(
+    values: tuple[int, int], change: AlarmDelayChanged | None
+) -> None:
+    """``[alarm type, seconds until the alarm]``: an on type with time left starts the
+    delay, an off type with none ends it, as the alarm tone reads."""
+    assert decode_alarm_frame(_frame(FrameType.ALARM_DELAY_NOTIFY, 19), _u32(*values)) == (
+        AlarmFrame(1164, 19, values)
+    )
+    assert AlarmFrame(1164, 19, values).delay_change(SYNTHETIC.station_sn, at=_AT) == change
+
+
+def test_only_the_delay_frame_reports_a_delay() -> None:
+    assert AlarmFrame(1201, 1, (3, 30)).delay_change(SYNTHETIC.station_sn, at=_AT) is None

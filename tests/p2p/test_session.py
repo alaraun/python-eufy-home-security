@@ -28,6 +28,7 @@ from eufy_home_security.devices.recipes import (
 from eufy_home_security.events import (
     AccountMismatch,
     AlarmChanged,
+    AlarmDelayChanged,
     AlarmStopSource,
     ConnectionChanged,
     DisconnectCause,
@@ -60,7 +61,7 @@ from eufy_home_security.exceptions import (
     StationUnreachableError,
     UnsupportedError,
 )
-from eufy_home_security.models import STATION_CHANNEL, GuardMode
+from eufy_home_security.models import STATION_CHANNEL, GuardMode, ValueSource
 from eufy_home_security.p2p import transport as transport_module
 from eufy_home_security.p2p.crypto import (
     CONN_INIT_ECC_VERSION,
@@ -619,6 +620,158 @@ async def test_alarm_frames_become_param_and_alarm_changes(
         ),
     ]
     assert session.stats().dropped_undecodable == 1
+
+
+async def test_an_alarm_delay_frame_announces_the_delay(
+    station: FakeStation, short_settle: None
+) -> None:
+    """``0x048C`` on the triggering channel starts the delay; the end comes once, after
+    a start; the frame's alarm type is filed as param 1164 of that channel."""
+    session = make_session(station, Provider(station))
+    events: list[Event] = []
+    delay = FrameType.ALARM_DELAY_NOTIFY
+    try:
+        await session.async_get_params()
+        session.subscribe(events.append)
+        station.send_alarm_frame(delay, 0, 0, channel=19)  # no delay running: no end
+        station.send_alarm_frame(delay, 6, 30, channel=19)
+        station.send_alarm_frame(delay, 0, 0, channel=19)
+        station.send_alarm_frame(delay, 0, 0, channel=19)
+        station.send_alarm_frame(delay, 6, 30, channel=19)
+        station.send_alarm_frame(FrameType.ALARM_TONE_NOTIFY, 6, 30, channel=19)  # the alarm
+        station.send_alarm_frame(delay, 0, 0, channel=19)
+        await wait_until(lambda: session.params.get((19, 1201)) == "6")
+        await asyncio.sleep(0.1)
+    finally:
+        await session.async_close()
+    delays = [
+        (e.delaying, e.channel, e.alarm_type, e.seconds)
+        for e in events
+        if isinstance(e, AlarmDelayChanged)
+    ]
+    assert delays == [(True, 19, 6, 30), (False, 19, None, None), (True, 19, 6, 30)]
+    assert session.params[(19, 1164)] == "0"
+
+
+_DOOR_OPEN_NOTIFIES = {
+    "sensor-status": {"cmd": 1829, "payload": {"params": [{"param_type": 1550, "param_value": 1}]}},
+    "entry-status": {"cmd": 1550, "payload": {"status": 1}},
+    "update-info": {"cmd": 1550, "payload": {"type": "updateCameraInfo", "value": "1"}},
+}
+
+
+@pytest.mark.parametrize("rsa", [False, True], ids=["gcm", "rsa"])
+@pytest.mark.parametrize("form", sorted(_DOOR_OPEN_NOTIFIES))
+async def test_a_parameter_notify_updates_the_held_parameter(
+    station: FakeStation, form: str, rsa: bool, short_settle: None
+) -> None:
+    """Each notify form files its value on the frame's channel, marked as a notify's,
+    emits ``ParamChanged`` with source ``NOTIFY`` and signals the dump listeners."""
+    station.params[16] = {1550: "0", 1141: "-60"}
+    session = make_rsa_session(station) if rsa else make_session(station, Provider(station))
+    events: list[Event] = []
+    signals: list[None] = []
+    try:
+        await session.async_get_params(expect_channels={0, 16})
+        session.subscribe(events.append)
+        session.add_dump_listener(lambda: signals.append(None))
+        station.send_json(FrameType.NOTIFY_PAYLOAD, _DOOR_OPEN_NOTIFIES[form], device_channel=16)
+        await wait_until(lambda: session.params.get((16, 1550)) == "1")
+        stats = session.stats()
+    finally:
+        await session.async_close()
+    changes = [e for e in events if isinstance(e, ParamChanged)]
+    assert changes == [
+        ParamChanged(
+            station_sn=SYNTHETIC.station_sn,
+            channel=16,
+            param_id=1550,
+            old="0",
+            new="1",
+            source=ValueSource.NOTIFY,
+        )
+    ]
+    assert session.param_origins[(16, 1550)] is ParamOrigin.NOTIFY
+    assert (16, 1141) not in session.param_origins
+    assert signals == [None]
+    assert sum(stats.state_frames_by_encryption.values()) > len(station.params)
+
+
+async def test_a_later_dump_replaces_a_notified_value(
+    station: FakeStation, short_settle: None
+) -> None:
+    """The station's next dump is its newer state: it wins over an earlier notify."""
+    station.params[16] = {1550: "0"}
+    session = make_session(station, Provider(station))
+    events: list[Event] = []
+    try:
+        await session.async_get_params(expect_channels={0, 16})
+        session.subscribe(events.append)
+        station.send_json(
+            FrameType.NOTIFY_PAYLOAD, {"cmd": 1550, "payload": {"status": 1}}, device_channel=16
+        )
+        await wait_until(lambda: session.params.get((16, 1550)) == "1")
+        await session.async_get_params(expect_channels={0, 16})
+    finally:
+        await session.async_close()
+    assert session.params[(16, 1550)] == "0"
+    assert (16, 1550) not in session.param_origins
+    changes = [(e.old, e.new, e.source) for e in events if isinstance(e, ParamChanged)]
+    assert changes == [("0", "1", ValueSource.NOTIFY), ("1", "0", ValueSource.P2P)]
+
+
+async def test_a_notified_value_is_not_replaced_by_an_older_cloud_value(
+    station: FakeStation,
+) -> None:
+    """A cloud snapshot dated before the notify does not overwrite it; a newer one does."""
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_get_params(expect_channels={0})
+        before = time.time()
+        station.send_json(
+            FrameType.NOTIFY_PAYLOAD, {"cmd": 1550, "payload": {"status": 1}}, device_channel=0
+        )
+        await wait_until(lambda: session.params.get((0, 1550)) == "1")
+        assert session.ingest_cloud_params(0, [(1550, "0", before - 60)]) == 0
+        assert session.params[(0, 1550)] == "1"
+        assert session.ingest_cloud_params(0, [(1550, "0", time.time() + 60)]) == 1
+    finally:
+        await session.async_close()
+    assert session.params[(0, 1550)] == "0"
+    assert session.param_origins[(0, 1550)] is ParamOrigin.CLOUD
+
+
+async def test_unusable_parameter_notifies_are_ignored_with_one_debug_line(
+    station: FakeStation, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A notify item without an id or value is left out, the rest filed; the skip is
+    logged once per notify kind."""
+    caplog.set_level(logging.DEBUG, logger=session_module.__name__)
+    session = make_session(station, Provider(station))
+    events: list[Event] = []
+    bad = {"cmd": 1829, "payload": {"params": [{"param_type": "x"}, {"param_type": 61015}]}}
+    try:
+        await session.async_get_params(expect_channels={0})
+        session.subscribe(events.append)
+        station.send_json(
+            FrameType.NOTIFY_PAYLOAD,
+            {"cmd": 1829, "payload": {"params": [{"param_type": 1550, "param_value": 1}]}},
+            device_channel=0,
+        )
+        for _ in range(2):
+            station.send_json(FrameType.NOTIFY_PAYLOAD, bad, device_channel=0)
+        await wait_until(lambda: (0, 1550) in session.params)
+        await wait_until(lambda: len(_messages(caplog, "parameter notify 1829")) == 1)
+        await asyncio.sleep(0.1)
+        stats = session.stats()
+    finally:
+        await session.async_close()
+    assert [(e.param_id, e.new) for e in events if isinstance(e, ParamChanged)] == [(1550, "1")]
+    assert (0, 61015) not in session.params
+    # the dump's blocks and the one notify that carried a value
+    assert sum(stats.state_frames_by_encryption.values()) == len(station.params) + 1
+    logged = _messages(caplog, "parameter notify 1829")
+    assert logged == [f"{session._log_name}: parameter notify 1829 ch0: 2 item(s) without a value"]
 
 
 async def test_an_ecb_mode_report_is_an_arms_result(station: FakeStation) -> None:
@@ -3729,6 +3882,39 @@ async def test_note_guard_mode_on_demand(station: FakeStation) -> None:
     session.note_guard_mode(GuardMode.HOME)
     assert session._param_state._params[(255, 1224)] == "1"
     assert session._param_state._param_at[(255, 1224)] > 10.0
+
+
+@pytest.mark.parametrize("device_channel", [0, 255, 7])
+async def test_a_standalone_devices_notify_is_its_own(device_channel: int) -> None:
+    """A standalone device's notify is filed on its own blocks (255 and its channel),
+    on whichever channel the frame names."""
+    station = FakeStation(receipt_len=STANDALONE_RECEIPT_LEN, params={46: {1101: "64"}})
+    await station.start()
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn,
+        provider,
+        host="127.0.0.1",
+        port=station.discovery_port,
+        block_aliases={46: (255, 0)},
+        expect_channels={0},
+    )
+    try:
+        await session.async_get_params(timeout=2.0)
+        station.send_json(
+            FrameType.NOTIFY_PAYLOAD,
+            {"cmd": 1101, "payload": {"type": "updateCameraInfo", "value": "63"}},
+            device_channel=device_channel,
+        )
+        await wait_until(lambda: session.params.get((0, 1101)) == "63")
+    finally:
+        await session.async_close()
+        station.stop()
+    assert session.params[(255, 1101)] == "63"
+    assert {dev for dev, pid in session.params if pid == 1101} == {0, 255}
 
 
 async def test_ingest_cloud_params_block_aliases_and_events(station: FakeStation) -> None:

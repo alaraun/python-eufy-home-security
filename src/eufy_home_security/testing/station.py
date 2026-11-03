@@ -1616,13 +1616,18 @@ class FakeStation:
         channel: int = 1,
         *,
         cipher: int = FrameCipher.GCM,
+        device_channel: int = STATION_CHANNEL,
     ) -> None:
+        """A JSON frame on DRW ``channel``, about ``device_channel`` (subheader byte 2)."""
         plain = json.dumps(obj).encode() + b"\x00\x00"
         if cipher == FrameCipher.ECB:
             body = ecb_encrypt(self.static_key, plain)
         else:
             body = self._seal(plain)
-        self.send_frame(ftype, body, cipher=cipher, channel=channel)
+        subheader = bytes([cipher, 0, device_channel, cipher, 0, 0])
+        self.send_frame(
+            ftype, body, cipher=cipher, channel=channel, subheader=subheader, sealed=True
+        )
 
     def send_zoom_report(self, zoom: float) -> None:
         """The camera's own zoom report (after a go-to or a live open): 6203 ``dstZoom``."""

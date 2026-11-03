@@ -246,6 +246,7 @@ subheader's byte 2 is the channel (255 = the station). Bodies are u32le values.
 | `0x04B2` (1202 `SET_DEVS_TONE_FILE`) | `[event_type, seconds]` | the camera's siren: `[25, 30]` on, `[0, 0]` off |
 | `0x0578` (1400 `FLOODLIGHT_MANUAL_SWITCH`, app enum `SET_FLOODLIGHT_MANUAL_SWITCH`) | `[0 \| 1]` | the camera's light: 1 on during the alarm; also 0 at each detection and periodically |
 | `0x047F` (1151) | u64le mode | the effective guard mode |
+| `0x048C` (1164 `GET_DELAY_ALARM`) | `[alarm_type, seconds]` | the alarm delay: `[6, 30]` on a sensor's channel, the alarm sounds in 30 s ([Alarm delay](#alarm-delay)) **[declared: app]** |
 
 The station's history records the same alarm as `msg_type 10` rows with
 `event_type` 3 and 25 (`str_extra`), matching the tone values. Timeline of one alarm:
@@ -272,6 +273,23 @@ app reads them. The tone frame (1201) also drives `AlarmChanged`, on transitions
 an event type that reads on starts the alarm (`duration_s` from the seconds), one that
 reads off ends it, `[16, 0]` with `stop_source` `APP`. The siren frame (1202) drives
 [`DeviceAlarmChanged`](#device-alarm-state).
+
+### Alarm delay
+
+**[declared: app]** When a trigger starts the station's alarm delay (an entry sensor's
+door opened while armed, with a delay configured for the mode), the station sends
+`0x048C` (1164 `GET_DELAY_ALARM`), u32le `[alarm_type, seconds]`, on the triggering
+device's channel (subheader byte 2), under the same encryption as the alarm frames.
+`seconds` is the time until the alarm sounds (above 1000: milliseconds); alarm type 6 is
+"a sensor triggered". An off type (0, 1, 15, 16, 17, as for the tone) with no time left
+ends the delay. On a HomeBase 3 it came within 0.1 s of the door's notify, and the alarm
+tone (`0x04B1`) 30 s later (one sample).
+
+The session caches the alarm type as param 1164 of that channel (`ParamChanged`) and
+emits `AlarmDelayChanged(station_sn, delaying, channel, alarm_type, seconds, at)`: a start
+for every frame that starts a countdown (a second trigger restarts it), an end only after
+a start. An alarm that starts (`AlarmChanged`) ends the delay without an end event; a
+disarm in time ends it as the station reports it.
 
 ### Device alarm state
 
@@ -330,11 +348,46 @@ the event is emitted:
 - **Cloud only:** an alarm that times out sends no push, so without a P2P session it
   stays on until a stop push or a disarm.
 
+### Parameter notifies
+
+**[declared: app]** Between dumps a station reports some parameter changes as a `0x0547`
+JSON notify about the device subheader byte 2 names (255 = the station). The eufy app
+writes each value into that device's parameters, so every status a handler reads from
+them (an entry sensor's door and tamper state, a battery warning) moves at once:
+
+| JSON | parameters set |
+|---|---|
+| `{"cmd": 1829, "payload": {"params": [{"param_type": t, "param_value": v}, …]}}` (a sensor's status list; `params` also as a JSON string of the list, or the list written `key=value`) | each `t` := `v` |
+| `{"cmd": 1550, "payload": {"status": s}}` (an entry sensor's door: 1 open, 0 closed) | 1550 := `s` |
+| `{"cmd": t, "payload": {"type": "updateCameraInfo", "value": v}}` | `t` := `v` |
+
+What the library does with them:
+
+- The session takes them under any encryption, like the other state frames, and files
+  each value on the device's block (a standalone device's own block, whichever channel
+  the frame names). An int value is filed as its decimal string, as a dump's.
+- Each value that moved emits `ParamChanged` with `source` `notify` (also a parameter's
+  first value: the station sent it because it moved), then the dump listeners run, so a
+  `Station` emits `StationStateChanged` when its state changed and `Station.state` and
+  every setting read see the value at once.
+- **Ordering:** the station's own reports apply in arrival order. The next dump is the
+  station's newer state and replaces a notified value, as it replaces any older one; a
+  cloud snapshot replaces it only when the snapshot's `update_time` is later than the
+  notify's arrival. A station setting's `setting_source` reads `notify` while its value
+  is a notify's.
+- An item without an id or a usable value (an object, a float, a boolean) is left out;
+  the rest of the list applies. One debug line per notify kind and session says so.
+- HomeBase 3 cameras send `updateCameraInfo` for param 60012 at each stream open; it is
+  filed like any other value. A value holding JSON is logged with its identifying fields
+  (network names, addresses) masked.
+
 ### Other station-initiated frames
 
 | frame | meaning |
 |---|---|
 | `0x044F` without a request | parameter-change push: a full or partial dump, to diff against state **[verified]**. The library emits `ParamChanged` per frame and one `StationStateChanged` once the dump completes, if the state changed ([commands.md](commands.md)) |
+| `0x0547` cmd 1829 / 1550 / `updateCameraInfo` | parameter notifies: single values between dumps ([Parameter notifies](#parameter-notifies)) |
+| `0x048C` (1164) | the alarm delay ([Alarm delay](#alarm-delay)) |
 | `0x051A` | "new rows in the event database". Pull with a 1306 query. |
 | `0x047F` | guard mode in force after any change (see below) |
 | `0x04B1`, `0x04B2`, `0x0578` | alarm tone, siren and light ([Alarm over P2P](#alarm-over-p2p)) |

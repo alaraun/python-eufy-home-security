@@ -1378,6 +1378,62 @@ def test_an_entry_sensors_read_only_door_status_reads_its_parameter(
     )  # not reported: unknown, never the default
 
 
+_ENTRY_SENSOR = CloudDevice(
+    device_sn="T90E0P0000000001",
+    device_type=2,
+    name="Door",
+    station_sn=SYNTHETIC.station_sn,
+    channel=16,
+)
+
+
+async def test_an_entry_sensors_door_status_follows_the_stations_notify(
+    fake: FakeStation, station: Station
+) -> None:
+    """A door notify moves the sensor's read-only status at once, without a dump, and the
+    station announces the new state."""
+    fake.params[16] = {1550: "0", 61015: "0"}
+    hub = Station(STATION, station.session, sub_devices=[CAMERA, _ENTRY_SENSOR])
+    serial = _ENTRY_SENSOR.device_sn
+    events: list[Event] = []
+    hub.subscribe(events.append)
+    try:
+        state = await hub.async_update()
+        assert state.setting("sensor_door_status", device_sn=serial) is False
+        fake.send_json(
+            FrameType.NOTIFY_PAYLOAD,
+            {"cmd": 1829, "payload": {"params": [{"param_type": 61015, "param_value": 1}]}},
+            device_channel=16,
+        )
+        fake.send_json(
+            FrameType.NOTIFY_PAYLOAD, {"cmd": 1550, "payload": {"status": 1}}, device_channel=16
+        )
+        async with asyncio.timeout(3):
+            while (now := hub.state) is None or not now.setting(
+                "sensor_door_status", device_sn=serial
+            ):
+                await asyncio.sleep(0.02)
+    finally:
+        await hub.async_close()
+    assert now.setting("sensor_disassemble_status", device_sn=serial) is True
+    assert _snapshots(events)[-1].setting("sensor_door_status", device_sn=serial) is True
+
+
+async def test_a_notified_station_setting_reads_as_the_notifys(
+    station: Station, fake: FakeStation
+) -> None:
+    fake.params[255][1235] = "20"
+    await station.async_update()
+    fake.send_json(
+        FrameType.NOTIFY_PAYLOAD,
+        {"cmd": 1235, "payload": {"type": "updateCameraInfo", "value": "26"}},
+    )
+    async with asyncio.timeout(3):
+        while (state := station.state) is None or state.setting("alarm_volume_value") != 26:
+            await asyncio.sleep(0.02)
+    assert state.setting_source("alarm_volume_value") is ValueSource.NOTIFY
+
+
 def test_setting_refuses_a_key_the_device_does_not_have() -> None:
     state = _settings_state()
     with pytest.raises(UnsupportedError, match="unknown setting"):

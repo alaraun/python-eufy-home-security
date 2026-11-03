@@ -127,6 +127,9 @@ class ValueSource(StrEnum):
     APP_DEFAULT = "app_default"
     """Neither carries the parameter: the setting's ``default``, which the eufy app
     shows in that case."""
+    NOTIFY = "notify"
+    """The station's parameter notify: a value it pushed between dumps
+    (docs/protocol/events.md § Parameter notifies)."""
 
 
 # Parameter ids (param_type) every paired device reports in the station's dump.

@@ -43,7 +43,7 @@ from .exceptions import (
     HandshakeError,
     RefreshCooldownError,
 )
-from .models import FrameCipher, GuardMode
+from .models import FrameCipher, GuardMode, ValueSource
 
 if TYPE_CHECKING:
     from .cloud.status import DeviceListSource
@@ -1071,6 +1071,31 @@ class AlarmChanged:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class AlarmDelayChanged:
+    """A station's alarm delay started or ended: the countdown before an armed station
+    sounds its alarm for a trigger (an entry sensor's door opened in Away).
+
+    Over P2P from the station's alarm-delay frame (``0x048C``, param 1164),
+    ``[alarm_type, seconds]`` on the triggering device's channel, as the eufy app reads
+    it: an alarm type outside :data:`ALARM_OFF_TYPES` with time left starts the delay
+    (``seconds`` until the alarm, a value above 1000 read as milliseconds), an off type
+    with none ends it. The end is emitted only after a start; an alarm that starts
+    (:class:`AlarmChanged`) ends the delay too, without an event of its own.
+
+    ``at`` is when the library saw the frame (UTC, the host clock); not part of equality.
+    """
+
+    station_sn: str
+    delaying: bool
+    channel: int | None = None
+    alarm_type: int | None = None
+    """The trigger's alarm type (6: a sensor triggered); None for an end without one."""
+    seconds: int | None = None
+    """Seconds until the alarm sounds, on a start."""
+    at: datetime = field(default_factory=lambda: datetime.now(UTC), compare=False)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class DeviceAlarmChanged:
     """A device's own alarm (siren, light or both) turned on or off.
 
@@ -1098,10 +1123,13 @@ class DeviceAlarmChanged:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ParamChanged:
-    """One station/sub-device parameter changed between two parameter dumps.
+    """One station/sub-device parameter changed.
 
     ``channel`` is the parameter's ``dev_type``: 255 is the station itself, other
-    values are paired sub-devices.
+    values are paired sub-devices. ``source`` is what delivered the new value: ``P2P``
+    a parameter dump, an alarm frame or this library's own write, ``NOTIFY`` the
+    station's parameter notify (a status that moved between dumps, such as an entry
+    sensor's door), ``CLOUD`` a cloud snapshot.
     """
 
     station_sn: str
@@ -1109,6 +1137,7 @@ class ParamChanged:
     param_id: int
     old: str | None
     new: str | None
+    source: ValueSource = ValueSource.P2P
 
 
 class DisconnectCause(StrEnum):
@@ -1720,6 +1749,7 @@ type Event = (
     SecurityEvent
     | GuardModeChanged
     | AlarmChanged
+    | AlarmDelayChanged
     | DeviceAlarmChanged
     | ParamChanged
     | ConnectionChanged

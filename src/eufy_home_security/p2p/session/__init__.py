@@ -173,6 +173,7 @@ from ..messages import (
 )
 from ..mode_actions import CMD_SET_ALL_ACTION, ModeTable
 from ..notify import decode_camera_push, stamped_accounts
+from ..param_notify import ParamNotify, decode_param_notify
 from ..params import ParamDump
 from ..pppp import DISCOVERY_PORT, DrwChunk
 from ..storage_info import (
@@ -545,6 +546,8 @@ class StationSession:
         self._alarm_listeners: list[Callable[[AlarmFrame], None]] = []
         self._alarming = False
         """Whether the last alarm-tone frame started the alarm (see :meth:`_handle_alarm`)."""
+        self._delaying = False
+        """Whether an alarm delay this session announced is running."""
         self._tone_waiters: list[tuple[bool, asyncio.Future[AlarmChanged]]] = []
         """SET_TONE_FILE writes waiting for an alarm-tone frame: (siren on?, result)."""
         self._siren_waiters: list[tuple[int, bool, asyncio.Future[None]]] = []
@@ -3181,6 +3184,10 @@ class StationSession:
             own = cipher is FrameCipher.GCM or self._keys.station_frame(inbound.frame)
             if own and self._note_storage(obj):
                 return
+            notify = decode_param_notify(obj)
+            if notify is not None:
+                self._take_param_notify(inbound.frame, obj, notify)
+                return
             event = decode_camera_push(
                 obj, station_sn=self.serial, frame_cipher=cipher, session_ecb=session_ecb
             )
@@ -3196,6 +3203,23 @@ class StationSession:
                 self._bus.emit(event)
                 if event.authenticated:
                     self._check_stamped_account(event.raw)
+
+    def _take_param_notify(self, frame: Frame, obj: Mapping[str, Any], notify: ParamNotify) -> None:
+        """File a parameter notify's values on the device the frame names (subheader
+        byte 2), under any encryption as the other station state."""
+        cmd = obj.get("cmd")
+        channel = frame.subheader[2]  # a decoded frame's subheader is 6 bytes
+        if notify.skipped and self._throttle.should_log(("param-notify-skipped", cmd)):
+            _LOGGER.debug(
+                "%s: parameter notify %s ch%d: %d item(s) without a value",
+                self._log_name,
+                cmd,
+                channel,
+                notify.skipped,
+            )
+        if notify.values:
+            self._take_state(frame)
+            self._param_state.apply_notify(channel, notify.values)
 
     def _note_storage(self, obj: Mapping[str, Any]) -> bool:
         """Keep a storage record (asked for or pushed); whether ``obj`` was one.
@@ -3260,10 +3284,11 @@ class StationSession:
             self._param_state.note_pushed_blocks(dump.devices, PARAM_SETTLE)
 
     def _handle_alarm(self, frame: Frame) -> None:
-        """An alarm frame (tone, siren, light): cache its value per channel, emit
-        :class:`ParamChanged` when it moved, hand it to the alarm listeners, and emit
-        :class:`AlarmChanged` when a tone frame starts or ends the alarm. Taken under any
-        encryption (:meth:`_take_state`)."""
+        """An alarm frame (tone, siren, light, delay): cache its value per channel, emit
+        :class:`ParamChanged` when it moved, hand it to the alarm listeners, emit
+        :class:`AlarmChanged` when a tone frame starts or ends the alarm and
+        :class:`AlarmDelayChanged` when a delay frame starts the delay or ends one that
+        runs. Taken under any encryption (:meth:`_take_state`)."""
         plain = self._state_body(frame)
         if plain is None:
             return
@@ -3290,15 +3315,27 @@ class StationSession:
             for channel, on, waiter in self._siren_waiters:
                 if channel == alarm.channel and alarm.alarm_state is on and not waiter.done():
                     waiter.set_result(None)
-        change = alarm.alarm_change(self.serial, at=datetime.now(UTC))
+        at = datetime.now(UTC)
+        change = alarm.alarm_change(self.serial, at=at)
         if change is not None:
             for alarming, future in self._tone_waiters:
                 if alarming == change.alarming and not future.done():
                     future.set_result(change)
         if change is not None and change.alarming != self._alarming:
             self._alarming = change.alarming
+            if change.alarming:
+                self._delaying = False  # the delay ran out into the alarm
             _LOGGER.debug("%s: alarm %s", self._log_name, "on" if change.alarming else "off")
             self._bus.emit(change)
+        delay = alarm.delay_change(self.serial, at=at)
+        if delay is not None and (delay.delaying or self._delaying):
+            self._delaying = delay.delaying
+            _LOGGER.debug(
+                "%s: alarm delay %s",
+                self._log_name,
+                f"{delay.seconds} s" if delay.delaying else "ended",
+            )
+            self._bus.emit(delay)
 
     def _note_mode_report(self, value: GuardMode | int) -> None:
         """A ``0x047F`` report: the effective mode.

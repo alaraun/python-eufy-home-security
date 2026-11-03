@@ -169,6 +169,21 @@ def test_param_info_identifying() -> None:
     assert info.raw("NewName") == "'NewName'"
 
 
+@pytest.mark.usefixtures("_secrets_restored")
+def test_a_json_value_is_shown_with_its_identifying_fields_masked() -> None:
+    """A value holding a JSON object (an access point's name and address) is logged with
+    its identifying fields redacted, in full only with secret logging on."""
+    value = '{"mode": 2, "ap_info": {"ssid": "Example-Net", "ip_addr": "192.0.2.10"}}'
+    info = param_info(60012, 0)
+    shown = info.raw(value)
+    assert "Example-Net" not in shown
+    assert "192.0.2.10" not in shown
+    assert '"mode": 2' in shown
+    assert info.raw("7") == "'7'"
+    set_secret_logging(True)
+    assert "Example-Net" in info.raw(value)
+
+
 def test_sub_device_settings_never_match_the_station_channel() -> None:
     assert param_info(1167, 0).label == "alarm_delay_away"
     assert param_info(1167, STATION_CHANNEL).label == "ALARM_DELAY_AWAY?"

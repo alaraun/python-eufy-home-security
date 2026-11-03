@@ -64,6 +64,8 @@ class FrameType(IntEnum):
     The app sends it every 3 s to a standalone device and about every 20 s to a HomeBase 3.
     """
     ALARM_MODE_NOTIFY = 0x047F
+    ALARM_DELAY_NOTIFY = 0x048C
+    """1164 ``GET_DELAY_ALARM``: the station's alarm delay (see :mod:`.alarm`)."""
     ALARM_TONE_NOTIFY = 0x04B1
     """1201 ``SET_TONE_FILE``: the station's alarm tone (see :mod:`.alarm`)."""
     SIREN_NOTIFY = 0x04B2
