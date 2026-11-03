@@ -52,7 +52,7 @@ class DetectionDelivery(StrEnum):
     UNKNOWN = "unknown"
     """The library cannot tell: no configuration yet, the mode in force unknown or
     without per-device actions, its table not reported, or a device without a
-    Notification action (the station itself, a keypad, an uncatalogued model)."""
+    Notification action (the station itself, a keypad, a device of unknown kind)."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -69,7 +69,8 @@ class DetectionDeliveryReport:
     sending_modes: tuple[GuardMode, ...]
     """The modes, in the app's order, whose table the station reports and in which the
     device's detections are sent (Notification on, or the device not listed). Empty when
-    nothing is known. Name them with :meth:`~.station_config.StationConfig.mode_name`."""
+    no reported table sends them, or when nothing is known. Name them with
+    :meth:`~.station_config.StationConfig.mode_name`."""
     reason: str
     """A sentence naming why, for a log line or a hint."""
 

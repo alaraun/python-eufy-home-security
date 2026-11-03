@@ -619,6 +619,10 @@ class StationState:
         default_factory=dict, repr=False, compare=False
     )
     """The same settings by the channel the cloud lists each device on."""
+    serials_by_channel: Mapping[int, str] = field(default_factory=dict, repr=False)
+    """The cloud serial on each channel the cloud lists a device on, whether or not this
+    dump has the device's block (an offline battery camera, a sensor); a channel that two
+    devices claim is absent."""
     setting_params: Mapping[int, str | None] = field(default_factory=dict, repr=False)
     """The station's own parameters as its settings read them: :attr:`params`, and the
     cloud's copy (the device list's ``params``, the ``time_zone`` field for the time-zone
@@ -1770,6 +1774,11 @@ class Station:
                 for channel, cloud in cloud_by_channel.items()
                 if cloud is not None and channel != STATION_CHANNEL
             },
+            serials_by_channel={
+                channel: cloud.device_sn
+                for channel, cloud in cloud_by_channel.items()
+                if cloud is not None and channel != STATION_CHANNEL
+            },
         )
 
     def _setting_params(
@@ -2620,18 +2629,24 @@ class Station:
             station.note,
         )
 
-    def detection_delivery(self, device_sn: str) -> DetectionDeliveryReport:
+    def detection_delivery(
+        self, device_sn: str, *, config: StationConfig | None = None
+    ) -> DetectionDeliveryReport:
         """Whether this station sends ``device_sn``'s detection pushes in the guard mode
         in force (:func:`~..detection_delivery.detection_delivery`): the Notification bit
         of the device's action in that mode's table. Off holds every detection push of
         the device back, over P2P and through the cloud, while the mode is in force.
 
         The mode in force is the session's latest (a dump, a mode report, a push), else
-        :attr:`config`'s. Every camera, doorbell and sensor whose kind has the
+        the configuration's. Every camera, doorbell and sensor whose kind has the
         Notification action (:func:`~..devices.settings.mode_action_flags`) is graded;
-        the station itself, a keypad, an uncatalogued model and a device not paired here
-        are ``UNKNOWN``. No I/O. Refresh on :class:`~..events.GuardModeChanged`,
+        the station itself, a keypad, a device of unknown kind and a device not paired
+        here are ``UNKNOWN``. No I/O. Refresh on :class:`~..events.GuardModeChanged`,
         :class:`~..events.StationConfigChanged` and :class:`~..events.DevicesChanged`.
+
+        ``config`` is a configuration already built from this station (:attr:`config`);
+        without one, each call builds it from :attr:`state`. A coordinator grading every
+        device per refresh builds it once and passes it to each call.
         """
         device = next(
             (d for d in (self.device, *self.sub_devices) if d.device_sn == device_sn), None
@@ -2648,7 +2663,8 @@ class Station:
         channel = self._channel_of(device)
         kind = None if channel is None else self._configuration._kind_on(channel)
         flags = mode_action_flags(scope_for_kind(kind), device.device_type)
-        config = self.config
+        if config is None:
+            config = self.config
         mode = self.session.active_mode
         if mode is None and config is not None:
             mode = config.effective_mode

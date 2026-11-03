@@ -422,7 +422,9 @@ def _mode_table(
     unreadable: dict[str, str],
 ) -> ModeTableView | None:
     name = f"mode_tables.{mode.name.lower()}"
-    serials = {ch: d.serial for ch, d in state.devices.items()}
+    # The cloud's channel map names the entries: a stored table also lists devices whose
+    # block the dump lacks (an offline battery camera, a sensor).
+    serials = state.serials_by_channel
     # The devices' own per-mode parameters first: a write's read-back updates them at
     # once, while the stored copy in the cloud list lags until the next list fetch.
     if mode in MODE_TABLE_MODES:

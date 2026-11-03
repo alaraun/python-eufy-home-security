@@ -165,6 +165,22 @@ def test_a_device_the_reported_table_lacks_reads_as_notifying() -> None:
     assert "read as on" in report.reason
 
 
+def test_a_stored_table_names_a_device_without_a_block_by_the_cloud_channel() -> None:
+    """A battery camera whose block the dump lacks is graded from the stored tables."""
+    config = _config(
+        {
+            1224: "0",
+            1158: _stored_table(int(GuardMode.AWAY), {0: 9, 2: 1}),
+            1157: _stored_table(int(GuardMode.HOME), {0: 1, 2: 9}),
+        },
+        {0: {1101: "100"}},
+    )
+    report = _report(config, GuardMode.AWAY, BATTERY_SN)
+    assert report.delivery is DetectionDelivery.NOT_SENT_IN_MODE
+    assert report.action == 1
+    assert report.sending_modes == (GuardMode.HOME,)
+
+
 def test_a_mode_without_a_reported_table_is_unknown_and_never_sends() -> None:
     config = _config({1224: "3", 1256: _CUSTOM_1_LISTED}, {0: {1239: "9", 1225: "1"}})
     assert config.mode_tables[GuardMode.CUSTOM_1] is None
@@ -254,6 +270,7 @@ async def fake() -> AsyncIterator[FakeStation]:
     station.params[1] = {1239: "9", 1225: "1"}
     station.params[16] = {1239: "8", 1225: "0"}
     station.params[17] = {1101: "100"}
+    station.params[3] = {1239: "9", 1225: "1"}
     await station.start()
     yield station
     station.stop()
@@ -267,7 +284,7 @@ async def station(fake: FakeStation) -> AsyncIterator[Station]:
     session = StationSession(
         SYNTHETIC.station_sn, credentials, host="127.0.0.1", port=fake.discovery_port
     )
-    st = Station(HUB, session, sub_devices=[CAMERA, INDOOR, SENSOR, KEYPAD])
+    st = Station(HUB, session, sub_devices=[CAMERA, INDOOR, SENSOR, KEYPAD, DOORBELL])
     yield st
     await st.async_close()
 
@@ -278,16 +295,37 @@ async def test_every_paired_device_with_a_notification_action_is_graded(
     await station.async_update()
     grades = {
         sn: station.detection_delivery(sn).delivery
-        for sn in (SYNTHETIC.camera_sn, INDOOR_SN, SENSOR_SN, KEYPAD_SN, SYNTHETIC.station_sn)
+        for sn in (
+            SYNTHETIC.camera_sn,
+            INDOOR_SN,
+            SENSOR_SN,
+            DOORBELL_SN,
+            KEYPAD_SN,
+            SYNTHETIC.station_sn,
+        )
     }
     assert grades == {
         SYNTHETIC.camera_sn: DetectionDelivery.NOT_SENT_IN_MODE,
         INDOOR_SN: DetectionDelivery.NOT_SENT_IN_MODE,
         SENSOR_SN: DetectionDelivery.NOT_SENT_IN_MODE,
+        DOORBELL_SN: DetectionDelivery.NOT_SENT_IN_MODE,
         KEYPAD_SN: DetectionDelivery.UNKNOWN,
         SYNTHETIC.station_sn: DetectionDelivery.UNKNOWN,
     }
     assert station.detection_delivery(SENSOR_SN).sending_modes == (GuardMode.AWAY,)
+    assert station.detection_delivery(DOORBELL_SN).sending_modes == (GuardMode.AWAY,)
+
+
+async def test_a_configuration_built_once_grades_every_device(station: Station) -> None:
+    await station.async_update()
+    config = station.config
+    assert config is not None
+    station.session.note_guard_mode(GuardMode.AWAY)
+    for sn in (SYNTHETIC.camera_sn, DOORBELL_SN):
+        assert station.detection_delivery(sn, config=config) == station.detection_delivery(sn)
+    stale = dataclasses.replace(config, mode_tables={})
+    report = station.detection_delivery(SYNTHETIC.camera_sn, config=stale)
+    assert report.delivery is DetectionDelivery.UNKNOWN
 
 
 async def test_a_device_not_paired_here_is_unknown(station: Station) -> None:

@@ -2754,13 +2754,16 @@ Without a `Station` (a config flow, a diagnostics dump), the same answers come f
 ### Detections held back by the guard mode
 
 Each camera, doorbell and sensor has an action per guard mode (the mode tables above):
-record, Notification, the camera's siren, the HomeBase alarm, the light. **Notification
-off holds every detection push of that device back while the mode is in force**: the
-station sends none, over P2P or through the cloud, so its motion, person and other
-detection entities stay unchanged however often it records. The eufy app shows the bit
-as the device's **Notification** switch in Security mode → the mode → the device, and
-the phone gets no eufy notification for it either. Turning Notification on there is the
-only remedy; it also notifies the phone.
+record, Notification, the camera's siren, the station alarm, the light. **Notification
+off holds the device's detection pushes back while the mode is in force**: the station
+sends none, over P2P or through the cloud, so its motion, person and other detection
+entities stay unchanged however often it records. Observed on a HomeBase 3 with
+eufyCam 3 cameras and reported on a second HomeBase 3 with an indoor and a battery
+camera; sensors and doorbells carry the same Notification bit in the eufy app, but their
+gating was not observed. The eufy app shows the bit as the device's **Notification**
+switch in Security mode → the mode → the device, and the phone gets no eufy notification
+for it either. Turning Notification on there is the only remedy; it also notifies the
+phone.
 
 ```python
 report = station.detection_delivery(device_sn)  # DetectionDeliveryReport, no I/O
@@ -2769,20 +2772,23 @@ report.mode  # the guard mode in force the answer is for (None: unknown)
 report.action  # the device's action mask in that mode (None: not listed)
 report.sending_modes  # the modes that do send it, app order; names: config.mode_name(m)
 report.reason  # a sentence for a log line
+
+config = station.config  # grading every device per refresh: build the config once
+reports = {sn: station.detection_delivery(sn, config=config) for sn in serials}
 ```
 
 | `delivery` | when | what HA does |
 |---|---|---|
 | `SENT` | Notification on in the mode in force, or the mode's table does not list the device (the eufy app reads that as on) | nothing |
 | `NOT_SENT_IN_MODE` | Notification off in the mode in force | tell the user (below); never mark entities unavailable: the device works and records |
-| `UNKNOWN` | no configuration yet, the mode in force unknown, Schedule without a slot mode, Geofencing, a mode whose table the station does not report; the station itself, a keypad, a model the library does not know (no Notification action); a device not paired here | nothing |
+| `UNKNOWN` | no configuration yet, the mode in force unknown, Schedule without a slot mode, Geofencing, a mode whose table the station does not report (on a HomeBase 3 a custom mode no device block carries and no stored table backs); the station itself, a keypad, a device of unknown kind (no Notification action); a device not paired here | nothing |
 
 - **Which mode.** The mode in force: the session's latest (a dump, a `0x047F` mode report,
   a push), else `config.effective_mode`. Off and Disarmed both read the Disarmed table
-  (param 1177); a schedule's slot mode reads that mode's table.
+  (param 1177 on a HomeBase 3, 61306 on a pro-alarm model); a schedule's slot mode reads
+  that mode's table.
 - **Every model.** The rule reads the mode tables, so it covers every station and device
-  that has them, with no per-model code. Measured on HomeBase 3 stations (eufyCam 3,
-  indoor and battery cameras); on the other stations it follows the eufy app's mode
+  that has them, with no per-model code. Other stations follow the eufy app's mode
   editor, not tested.
 - **Refresh on** `GuardModeChanged` (the mode in force: the report reads it at once),
   `StationConfigChanged` whose `fields` name `mode_tables`, `guard_mode` or
@@ -2792,12 +2798,16 @@ report.reason  # a sentence for a log line
 - **Surfacing it.** Suggested: a diagnostic enum sensor per device with a Notification
   action (`sent`, `not_sent_in_mode`, `unknown`), attributes `mode` and
   `sending_modes` by name; and one ignorable repair issue per station while any device is
-  `NOT_SENT_IN_MODE`, deleted when none is: "In *Home* mode the HomeBase sends no
-  detections for *Front, Garden*: their Notification action is off in this mode, so Home
-  Assistant gets no motion or person events from them until a mode that sends is in force
+  `NOT_SENT_IN_MODE` in an armed mode, deleted when none is. Skip the disarmed modes
+  (`GuardMode(report.mode).is_disarmed`): a station that sends nothing while disarmed is
+  what most users want. For example: "In *Home* mode the station sends no detections
+  for *Front, Garden*: their Notification action is off in this mode, so Home Assistant
+  gets no motion or person events from them until a mode that sends is in force
   (*Away*). To receive them in *Home*, turn on Notification for each camera in the eufy
   app: Security mode → *Home* → the camera → Notification (this also notifies your
-  phone)." A user who keeps a record-only mode on purpose ignores the issue.
+  phone)." With `sending_modes` empty, name no mode: "...no motion or person events
+  from them in any mode the station reports." A user who keeps a record-only mode on
+  purpose ignores the issue.
 - **Not covered.** Whether a detection happens at all (the device's detection switches and
   types) and the route (`local_detections_for`, cloud push) are separate: `SENT` says the
   mode holds nothing back, not that a push arrived.
