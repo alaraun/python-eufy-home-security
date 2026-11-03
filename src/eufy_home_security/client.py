@@ -59,6 +59,7 @@ from .events import (
     pic_url_kind,
 )
 from .exceptions import (
+    CipherKeyMissingError,
     CipherUnavailableError,
     CloudError,
     CommunicationError,
@@ -838,7 +839,7 @@ class EufySecurity:
                         keys = await cloud.async_get_cipher_keys(
                             station_sn, cipher_id, refresh=refresh
                         )
-                    except CipherUnavailableError:
+                    except (CipherUnavailableError, CipherKeyMissingError):
                         if not keys_optional:
                             raise
                         # The session runs under the static key: no problem to report.

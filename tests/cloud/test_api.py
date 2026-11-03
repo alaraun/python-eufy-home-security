@@ -20,6 +20,7 @@ from eufy_home_security.cloud.models import CloudFace
 from eufy_home_security.cloud.status import LoginNeed, SessionState
 from eufy_home_security.exceptions import (
     AuthenticationError,
+    CipherKeyMissingError,
     CipherUnavailableError,
     CloudApiError,
     CommunicationError,
@@ -1299,9 +1300,10 @@ async def test_cipher_fetch_keeps_the_rsa_private_key(
 
 
 async def test_a_cipher_entry_is_read_as_the_cipher_table_reads_it(
-    fake_mega: FakeMega, cache: SessionCache
+    fake_mega: FakeMega, cache: SessionCache, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A blank key is no key, and a ``cipher_id`` sent as text matches its number."""
+    """A blank key is no key (a :class:`CipherKeyMissingError`, not asked again within
+    the back-off), and a ``cipher_id`` sent as text matches its number."""
     fake_mega.devices = [{"device_sn": SYNTHETIC.station_sn, "device_type": 18}]
     fake_mega.cipher_objects = [{"cipher_id": 40, "ecc_private_key": "  ", "private_key": "\n"}]
     with aioresponses() as mock:
@@ -1312,6 +1314,16 @@ async def test_a_cipher_entry_is_read_as_the_cipher_table_reads_it(
             with pytest.raises(EmptyResponseError, match="no private key") as blank:
                 await api.async_get_cipher_keys(SYNTHETIC.station_sn)
             assert blank.value.device_sn == SYNTHETIC.station_sn
+            assert isinstance(blank.value, CipherKeyMissingError)
+            assert (blank.value.cipher_id, blank.value.retry_after) == (
+                40,
+                const.CIPHER_UNAVAILABLE_BACKOFF,
+            )
+            calls_before = len(fake_mega.calls)
+            with pytest.raises(CipherKeyMissingError):
+                await api.async_get_cipher_keys(SYNTHETIC.station_sn, refresh=True)
+            assert len(fake_mega.calls) == calls_before
+            monkeypatch.setattr(const, "CIPHER_UNAVAILABLE_BACKOFF", 0.0)
             fake_mega.cipher_objects = [{"cipher_id": "40", "ecc_private_key": f" {FAKE_ECC_KEY}"}]
             keys = await api.async_get_cipher_keys(SYNTHETIC.station_sn)
             (record,) = await api.async_list_ciphers(SYNTHETIC.station_sn, FAKE_OWNER_ID, [40])

@@ -60,7 +60,7 @@ from ..._logging import (
     register_secret_bytes,
     wire_logger,
 )
-from ...cloud.const import CIPHER_ID_P2P, KEY_REFRESH_SLOW_RETRY
+from ...cloud.const import CIPHER_ID_P2P, FORCED_REFRESH_COOLDOWN, KEY_REFRESH_SLOW_RETRY
 from ...devices.device_alarm import USER_NAME_SLOT
 from ...devices.live_open import LiveOpen, LiveStop
 from ...devices.live_view import LiveView
@@ -379,16 +379,18 @@ class CredentialProvider(Protocol):
 
     ``cipher_id`` is the cipher the station named in its CONN_INIT: the session asks
     after the handshake. None lets the provider pick (the cipher this station named
-    last, else :data:`~...cloud.const.CIPHER_ID_P2P`). ``keys_optional`` (the station
-    chose the RSA handshake): when the cloud serves no key for the cipher, return the
-    owner's credentials without keys instead of raising
-    :class:`~...exceptions.CipherUnavailableError`; the session then runs under the
-    static key. Any other failure still raises.
+    last, else :data:`~...cloud.const.CIPHER_ID_P2P`).
+
+    After a CONN_INIT of the RSA handshake the session also passes
+    ``keys_optional=True`` (never ``False``, so a provider without the keyword serves
+    ECIES stations): when the cloud serves no key for the cipher
+    (:class:`~...exceptions.CipherUnavailableError` or
+    :class:`~...exceptions.CipherKeyMissingError`), return the owner's credentials
+    without keys instead of raising; the session then runs under the static key. Any
+    other failure still raises.
     """
 
-    async def __call__(
-        self, *, refresh: bool, cipher_id: int | None, keys_optional: bool = False
-    ) -> P2PCredentials: ...
+    async def __call__(self, *, refresh: bool, cipher_id: int | None) -> P2PCredentials: ...
 
 
 class KeyRefreshLatch(Protocol):
@@ -516,6 +518,10 @@ class StationSession:
         self._keys = SessionKeys(self.serial)
         self._conn_init_version: int | None = None
         """The version (subheader byte 0) of the last CONN_INIT reply."""
+        self._rsa_keyless_at: tuple[int, float] | None = None
+        """(cipher id, monotonic time) of the last RSA handshake left without a key after
+        a re-fetch: until ``FORCED_REFRESH_COOLDOWN`` passes, that cipher is not
+        re-fetched again."""
         self._did: Did | None = None
         self._decoders: dict[int, StreamDecoder] = {}
         self._results_due: dict[int, list[tuple[float, int]]] = {}
@@ -943,10 +949,12 @@ class StationSession:
         :class:`KeyRejectedError`. An RSA key that does not parse at all is neither
         re-fetched (the cloud serves the same bytes again) nor latched: like the eufy app,
         the session runs under the static key (:attr:`static_key_session`). Credentials
-        without the key the station's handshake needs are re-fetched once (a re-fetch
-        refused by the cooldown counts as one); still without it, an RSA handshake runs
-        under the static key as the eufy app does, and an ECIES one raises
-        :class:`CipherUnusableError` (reason ``no_ecc_key``), neither with the latch. Credentials for
+        without the key the station's handshake needs are re-fetched once, an RSA
+        handshake's on the same link (a re-fetch refused by the cooldown counts as one).
+        Still without it, an RSA handshake runs under the static key as the eufy app does,
+        and its later connects skip the re-fetch for that cipher until
+        ``FORCED_REFRESH_COOLDOWN`` passes; an ECIES one raises
+        :class:`CipherUnusableError` (reason ``no_ecc_key``). Neither sets the latch. Credentials for
         another cipher than the station names are re-fetched once, and still for another
         cipher raise :class:`HandshakeError` without the latch. After
         :meth:`async_close` every call raises :class:`StationUnreachableError`: a closed
@@ -2757,10 +2765,15 @@ class StationSession:
             raise _CipherMismatchError(named, creds.cipher_id)
         missing = _MissingKeyError(named, rsa=conn_init.rsa, creds=creds)
         if not missing.held_by(creds):
-            if not (conn_init.rsa and refetched):
+            if not conn_init.rsa:
                 raise missing
-            # Re-fetched and still without an RSA key: the app sets no session key and
-            # keeps the static key.
+            if not refetched and not self._rsa_keyless_recently(named):
+                # Asked again on the same link, as the app does.
+                creds = await self._refetch_rejected_key(missing)
+                if not missing.held_by(creds):
+                    self._rsa_keyless_at = (named, time.monotonic())
+        if not missing.held_by(creds):
+            # Still without an RSA key: the app sets no session key and keeps the static key.
             _LOGGER.log(
                 logging.INFO
                 if self._throttle.should_log(("rsa-keyless", named))
@@ -2790,15 +2803,28 @@ class StationSession:
             self._keys.rsa_keyless = True
             return creds, conn_init, static
 
+    def _rsa_keyless_recently(self, cipher_id: int) -> bool:
+        """Whether an RSA handshake for ``cipher_id`` was left without a key after a
+        re-fetch within ``FORCED_REFRESH_COOLDOWN``."""
+        last = self._rsa_keyless_at
+        return (
+            last is not None
+            and last[0] == cipher_id
+            and time.monotonic() - last[1] < FORCED_REFRESH_COOLDOWN
+        )
+
     async def _refetch_rejected_key(self, err: HandshakeError) -> P2PCredentials:
-        """Re-fetch the credentials after ``err``, unless the stale-key latch holds it back."""
-        wait = self._key_refresh.retry_blocked_for()
+        """Re-fetch the credentials after ``err``, unless the stale-key latch holds it back.
+
+        A missing RSA key is no rejected key: the latch does not hold that re-fetch back.
+        """
+        rsa_missing = isinstance(err, _MissingKeyError) and err.rsa
+        wait = 0.0 if rsa_missing else self._key_refresh.retry_blocked_for()
         if wait > 0:
             raise KeyRejectedError(
                 f"the station rejects its cipher key, which was already re-fetched; "
                 f"no automatic re-fetch for {wait:.0f}s ({err})"
             ) from err
-        rsa_missing = isinstance(err, _MissingKeyError) and err.rsa
         _LOGGER.log(
             logging.DEBUG if rsa_missing else logging.WARNING,
             "%s: %s (%s); re-fetching the cipher key once",
@@ -2830,10 +2856,11 @@ class StationSession:
 
     async def _load_credentials(self, *, refresh: bool) -> P2PCredentials:
         version = self._conn_init_version
+        rsa = version is not None and version != CONN_INIT_ECC_VERSION
         creds = await self._credentials(
             refresh=refresh,
             cipher_id=self._cipher_id,
-            keys_optional=version is not None and version != CONN_INIT_ECC_VERSION,
+            **({"keys_optional": True} if rsa else {}),
         )
         _LOGGER.debug(
             "%s: credentials%s: owner account %s, user %s, cipher-%d private key %s, RSA key %s",
@@ -3843,7 +3870,6 @@ class _MissingKeyError(HandshakeError):
         self.rsa = rsa
         self.creds = creds
         """The credentials that lack the key."""
-        self.reason = "no_rsa_key" if rsa else "no_ecc_key"
         kind = "RSA" if rsa else "ECC"
         super().__init__(f"no {kind} private key held for cipher {cipher_id}")
 
@@ -3852,7 +3878,8 @@ class _MissingKeyError(HandshakeError):
         return bool(creds.rsa_private_key if self.rsa else creds.ecc_private_key)
 
     def unusable(self) -> CipherUnusableError:
-        return CipherUnusableError(str(self), cipher_id=self.cipher_id, reason=self.reason)
+        """The error for an ECIES handshake still without its key (RSA falls back)."""
+        return CipherUnusableError(str(self), cipher_id=self.cipher_id, reason="no_ecc_key")
 
 
 class _CipherMismatchError(HandshakeError):

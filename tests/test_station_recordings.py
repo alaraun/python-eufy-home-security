@@ -66,9 +66,7 @@ async def fake() -> AsyncIterator[FakeStation]:
 
 @pytest.fixture
 async def station(fake: FakeStation) -> AsyncIterator[Station]:
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -394,9 +392,7 @@ async def test_a_full_page_ending_on_rows_without_an_id_goes_on_after_its_last_i
 async def two_cameras(fake: FakeStation) -> AsyncIterator[Station]:
     """A station with :data:`CAMERA` and a second camera (:data:`OTHER_SN`) paired."""
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -465,9 +461,7 @@ async def test_a_standalone_device_pages_no_recordings() -> None:
         name="standalone",
     )
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         raise AssertionError("nothing connects")
 
     session = StationSession(SYNTHETIC.camera_sn, credentials, host="127.0.0.1", port=9)
@@ -490,9 +484,7 @@ async def test_a_homebase_2_pages_its_sequential_ids_by_their_station_day(
     fake.serial = HB2_SN
     fake.static_key = static_key(HB2_SN, fake.did)
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     day_before = today - timedelta(days=1)
@@ -531,9 +523,7 @@ async def hb2(fake: FakeStation) -> AsyncIterator[Station]:
     fake.serial = HB2_SN
     fake.static_key = static_key(HB2_SN, fake.did)
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(HB2_SN, credentials, host="127.0.0.1", port=fake.discovery_port)
@@ -675,9 +665,7 @@ async def test_a_standalone_device_finds_no_recording_by_ref() -> None:
         name="standalone",
     )
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         raise AssertionError("nothing connects")
 
     session = StationSession(SYNTHETIC.camera_sn, credentials, host="127.0.0.1", port=9)

@@ -48,6 +48,7 @@ from eufy_home_security.events import (
 )
 from eufy_home_security.exceptions import (
     AuthenticationError,
+    CipherKeyMissingError,
     CipherUnavailableError,
     CloudApiError,
     CloudError,
@@ -102,6 +103,7 @@ from eufy_home_security.testing.cloud import (
 OTHER_STATION_SN = "T8030P2000054321"
 OTHER_DID = "EUPRAMA-654321-ABCDE"
 OWNER_ID = "fedcba9876543210fedcba9876543210fedcba98"  # a station owner other than this account
+KEYS_OPTIONAL = {"keys_optional": True}  # as a session passes it after an RSA CONN_INIT
 
 
 def garage_device(did: str = SYNTHETIC.did) -> dict[str, Any]:
@@ -1720,13 +1722,24 @@ async def test_a_station_connects_with_the_cipher_it_names_and_no_other_is_asked
         fake.stop()
 
 
+@pytest.mark.parametrize(
+    ("records", "error_type"),
+    [({}, CipherUnavailableError), ({98: {}}, CipherKeyMissingError)],
+    ids=["no_record", "keyless_record"],
+)
 async def test_no_key_for_the_named_cipher_is_one_cloud_problem_and_no_fetch_storm(
     monkeypatch: pytest.MonkeyPatch,
+    records: dict[int, dict[str, str]],
+    error_type: type[EmptyResponseError],
 ) -> None:
+    """An ECIES station's cipher the cloud serves no key for (no record, or one without a
+    key): one CloudProblem of that empty answer, one request per back-off."""
     monkeypatch.setattr(session_module, "RECONNECT_BACKOFF", (0.05,))
     fake = FakeStation(cipher_id=98, account_id=OWNER_ID)  # owned by another account
     await fake.start()
-    cloud = replace(FakeCloud.for_stations(fake), cipher_keys={})  # the cloud has no key
+    cloud = replace(  # the cloud has no key
+        FakeCloud.for_stations(fake), cipher_keys={}, cipher_records=records
+    )
     store = warm_store(email=SYNTHETIC.email, cloud=cloud)
     eufy = build_eufy_security(
         email=SYNTHETIC.email,
@@ -1741,15 +1754,18 @@ async def test_no_key_for_the_named_cipher_is_one_cloud_problem_and_no_fetch_sto
         await eufy.async_discover()
         errors = await eufy.async_start(push=False)
         error = errors[fake.serial]
-        assert isinstance(error, CipherUnavailableError)
-        assert (error.cipher_id, error.owner_source) == (98, "member.admin_user_id")
+        assert type(error) is error_type
+        assert isinstance(error, (CipherUnavailableError, CipherKeyMissingError))
+        assert error.cipher_id == 98
+        if isinstance(error, CipherUnavailableError):
+            assert error.owner_source == "member.admin_user_id"
         assert eufy.cache.station_named_cipher_id(fake.serial) == 98  # kept despite the failure
 
         inits = fake.conn_inits
         await wait_for(lambda: fake.conn_inits >= inits + 3)  # the supervisor retried
         assert cloud.cipher_ids_requested == [98]  # once: the retries were refused locally
         problems = [e for e in events if isinstance(e, CloudProblem)]
-        assert [type(p.error) for p in problems] == [CipherUnavailableError]
+        assert [type(p.error) for p in problems] == [error_type]
         changes = [e for e in events if isinstance(e, ConnectionChanged)]
         assert {e.cause for e in changes} <= {DisconnectCause.CREDENTIALS_UNAVAILABLE}
     finally:
@@ -1757,18 +1773,29 @@ async def test_no_key_for_the_named_cipher_is_one_cloud_problem_and_no_fetch_sto
         fake.stop()
 
 
+@pytest.mark.parametrize(
+    ("served", "requested"),
+    [("none", [1]), ("keyless_record", [1]), ("ecc_only", [1, 1])],
+)
 async def test_an_rsa_station_without_a_served_key_runs_under_the_static_key(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, served: str, requested: list[int]
 ) -> None:
-    """A station answering the RSA CONN_INIT names a cipher the cloud serves no key for:
-    the session runs under the static key, as the eufy app does, with no CloudProblem,
-    and a reconnect inside the back-off asks the cloud no second time."""
+    """A station answering the RSA CONN_INIT names a cipher the cloud serves no RSA key
+    for (no record, a record without keys, one with only the ECC key): the session runs
+    under the static key, as the eufy app does: one CONN_INIT per connect, no handshake
+    failure, no CloudProblem, and reconnects inside the back-off ask the cloud nothing."""
     monkeypatch.setattr(session_module, "RECONNECT_BACKOFF", (0.05,))
     fake = FakeStation(
         cipher_id=1, account_id=OWNER_ID, conn_init_version=1, static_key_session=True
     )
     await fake.start()
-    cloud = replace(FakeCloud.for_stations(fake), cipher_keys={}, rsa_cipher_keys={})
+    base = FakeCloud.for_stations(fake)
+    cloud = replace(
+        base,
+        cipher_keys=base.cipher_keys if served == "ecc_only" else {},
+        rsa_cipher_keys={},
+        cipher_records={1: {}} if served == "keyless_record" else {},
+    )
     store = warm_store(email=SYNTHETIC.email, cloud=cloud)
     eufy = build_eufy_security(
         email=SYNTHETIC.email,
@@ -1784,11 +1811,18 @@ async def test_an_rsa_station_without_a_served_key_runs_under_the_static_key(
         assert await eufy.async_start(push=False) == {}
         session = eufy.stations[fake.serial].session
         assert session.static_key_session
-        inits = fake.conn_inits
-        session._teardown("test reconnect")
-        await wait_for(lambda: fake.conn_inits > inits and session.connected)
-        assert session.static_key_session
-        assert cloud.cipher_ids_requested == [1]
+        assert fake.conn_inits == 1
+        calls = list(cloud.calls)
+        for connects in (2, 3, 4):
+            session._teardown("test reconnect")
+            async with asyncio.timeout(10):
+                while not (fake.conn_inits >= connects and session.connected):
+                    await asyncio.sleep(0.02)
+            assert session.static_key_session
+            assert fake.conn_inits == connects
+        assert session.stats().handshake_failures == 0
+        assert cloud.cipher_ids_requested == requested
+        assert cloud.calls == calls  # no cloud request on a reconnect
         assert not [e for e in events if isinstance(e, CloudProblem)]
     finally:
         await eufy.async_close()
@@ -1806,8 +1840,8 @@ async def test_keys_optional_credentials_without_a_served_key_carry_the_owner_on
         eufy.subscribe(events.append)
         await eufy.async_login()
         provider = eufy._credential_provider(SYNTHETIC.station_sn)
-        creds = await provider(refresh=False, cipher_id=1, keys_optional=True)
-        again = await provider(refresh=True, cipher_id=1, keys_optional=True)
+        creds = await provider(refresh=False, cipher_id=1, **KEYS_OPTIONAL)
+        again = await provider(refresh=True, cipher_id=1, **KEYS_OPTIONAL)
         assert creds == again
         assert (creds.account_id, creds.cipher_id) == (OWNER_ID, 1)
         assert (creds.ecc_private_key, creds.rsa_private_key) == ("", None)
@@ -1815,6 +1849,32 @@ async def test_keys_optional_credentials_without_a_served_key_carry_the_owner_on
         assert not [e for e in events if isinstance(e, (CloudProblem, CredentialsRefreshed))]
         with pytest.raises(CipherUnavailableError):
             await provider(refresh=False, cipher_id=1)
+
+
+async def test_keys_optional_credentials_for_a_keyless_record_carry_the_owner_only() -> None:
+    """A ``get_ciphers`` record for the cipher that carries no key: with ``keys_optional``
+    the owner's credentials without keys, asked once per back-off; without it a
+    :class:`CipherKeyMissingError` (an ``EmptyResponseError``), again without a request."""
+    cloud = FakeCloud(owner_ids={SYNTHETIC.station_sn: OWNER_ID}, cipher_records={1: {}})
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        events: list[Event] = []
+        eufy.subscribe(events.append)
+        await eufy.async_login()
+        provider = eufy._credential_provider(SYNTHETIC.station_sn)
+        creds = await provider(refresh=False, cipher_id=1, **KEYS_OPTIONAL)
+        assert creds == await provider(refresh=True, cipher_id=1, **KEYS_OPTIONAL)
+        assert (creds.account_id, creds.ecc_private_key, creds.rsa_private_key) == (
+            OWNER_ID,
+            "",
+            None,
+        )
+        assert not [e for e in events if isinstance(e, CloudProblem)]
+        with pytest.raises(CipherKeyMissingError) as err:
+            await provider(refresh=False, cipher_id=1)
+        assert isinstance(err.value, EmptyResponseError)
+        assert err.value.retry_after > 0
+        assert cloud.cipher_ids_requested == [1]
 
 
 @pytest.mark.parametrize(
@@ -1839,7 +1899,7 @@ async def test_keys_optional_credentials_keep_a_failed_cipher_fetch_an_error(
         await eufy.cloud.async_get_station_owner_id(SYNTHETIC.station_sn)
         cloud.call_errors = [error]
         with pytest.raises(type(error)):
-            await provider(refresh=False, cipher_id=1, keys_optional=True)
+            await provider(refresh=False, cipher_id=1, **KEYS_OPTIONAL)
 
 
 async def test_keys_optional_credentials_still_need_the_owner_id() -> None:
@@ -1849,7 +1909,7 @@ async def test_keys_optional_credentials_still_need_the_owner_id() -> None:
         await eufy.async_login()
         provider = eufy._credential_provider(SYNTHETIC.station_sn)
         with pytest.raises(CloudApiError, match="not on this account"):
-            await provider(refresh=False, cipher_id=1, keys_optional=True)
+            await provider(refresh=False, cipher_id=1, **KEYS_OPTIONAL)
         assert cloud.cipher_ids_requested == []
 
 

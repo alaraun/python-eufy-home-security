@@ -72,9 +72,7 @@ def schedule(*slots: tuple[int, int, int, int]) -> str:
 def _offline_station(
     sub_devices: tuple[CloudDevice, ...] = (CAMERA,), *, pn: str | None = None
 ) -> Station:
-    async def no_credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def no_credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         raise AssertionError("not connecting")
 
     session = StationSession(SYNTHETIC.station_sn, no_credentials, host=None)
@@ -255,9 +253,7 @@ async def fake() -> AsyncIterator[FakeStation]:
 
 @pytest.fixture
 async def station(fake: FakeStation) -> AsyncIterator[Station]:
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -614,9 +610,7 @@ async def test_get_config_reads_a_station_without_state_first(
 async def test_get_config_refresh_reads_the_station_and_the_cloud_once(
     fake: FakeStation,
 ) -> None:
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(

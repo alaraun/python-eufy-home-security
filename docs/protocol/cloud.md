@@ -469,8 +469,11 @@ The empty answer does not tell "wrong user id" from "no such cipher under this o
 The library raises `CipherUnavailableError` for it (with the cipher id and whether the
 user id asked was the account's own or `member.admin_user_id`) and does not ask the
 same station and cipher again for an hour (`CIPHER_UNAVAILABLE_BACKOFF`), unless a
-refreshed device list names another owner id for the station. For a station on the
-RSA handshake the session runs under the static key instead
+refreshed device list names another owner id for the station. An answer with data in
+which no record of the cipher carries a key (neither `ecc_private_key` nor
+`private_key`) raises `CipherKeyMissingError` (an `EmptyResponseError`) under the same
+back-off. For a station on the RSA handshake the session runs under the static key
+instead in both cases
 ([session-crypto.md](session-crypto.md#static-key-rsa-sessions-declared-app)).
 
 `EufyCloudApi.async_list_ciphers` reads an owner's whole table this way (default ids

@@ -49,9 +49,7 @@ async def hb3() -> AsyncIterator[FakeStation]:
 
 
 def _session(station: FakeStation) -> StationSession:
-    async def provider(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
 
     return StationSession(station.serial, provider, host="127.0.0.1", port=station.discovery_port)

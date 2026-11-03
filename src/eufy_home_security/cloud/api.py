@@ -43,6 +43,7 @@ from .._logging import (
 )
 from ..exceptions import (
     AuthenticationError,
+    CipherKeyMissingError,
     CipherUnavailableError,
     CloudApiError,
     CommunicationError,
@@ -492,9 +493,10 @@ class EufyCloudApi:
         self._challenge_region: str | None = None
         """The scope whose login raised this instance's last unanswered challenge."""
         self._login_lock = asyncio.Lock()
-        self._cipher_unavailable: dict[tuple[str, int], tuple[float, str, str]] = {}
-        """(monotonic time, owner id source, owner id) of the last empty ``get_ciphers``
-        answer per (station, cipher id), for the back-off."""
+        self._cipher_unavailable: dict[tuple[str, int], tuple[float, str | None, str]] = {}
+        """(monotonic time, owner id source, owner id) of the last ``get_ciphers`` answer
+        without a key per (station, cipher id), for the back-off. The source is None when
+        the answer held records without a key, not none at all."""
 
     # ── public properties ────────────────────────────────────────────────────
 
@@ -2576,10 +2578,11 @@ class EufyCloudApi:
         for the same station, it raises :class:`RefreshCooldownError` (``code`` 0) rather
         than risk a login-shaped fetch that could lock the account.
 
-        An empty answer raises :class:`CipherUnavailableError`; for
-        :data:`~.const.CIPHER_UNAVAILABLE_BACKOFF` after it, the same station and cipher
-        raise it again without a request (``refresh`` included) while the station's
-        cached owner id is the one that was asked.
+        An empty answer raises :class:`CipherUnavailableError`, records of the cipher
+        without any key :class:`CipherKeyMissingError`; for
+        :data:`~.const.CIPHER_UNAVAILABLE_BACKOFF` after either, the same station and
+        cipher raise it again without a request (``refresh`` included) while the
+        station's cached owner id is the one that was asked.
         """
         if not refresh:
             cached = CipherKeys(
@@ -2611,10 +2614,10 @@ class EufyCloudApi:
         owner = await self.async_get_station_owner_id(station_sn)
         try:
             keys = await self._fetch_cipher(station_sn, cipher_id, owner)
-        except CipherUnavailableError as err:
+        except (CipherUnavailableError, CipherKeyMissingError) as err:
             self._cipher_unavailable[(station_sn, cipher_id)] = (
                 time.monotonic(),
-                err.owner_source,
+                err.owner_source if isinstance(err, CipherUnavailableError) else None,
                 owner,
             )
             raise
@@ -2663,9 +2666,12 @@ class EufyCloudApi:
                 and (record.ecc_private_key or record.rsa_private_key)
             ):
                 return CipherKeys(record.ecc_private_key, record.rsa_private_key)
-        raise EmptyResponseError(
-            _SUCCESS,
-            f"cipher {cipher_id} for {redact_serial(station_sn)} carried no private key",
+        backoff = const.CIPHER_UNAVAILABLE_BACKOFF
+        raise CipherKeyMissingError(
+            f"cipher {cipher_id} for {redact_serial(station_sn)} carried no private key; "
+            f"not asked again for {backoff:.0f}s",
+            cipher_id=cipher_id,
+            retry_after=backoff,
             endpoint=const.CIPHERS_PATH,
             device_sn=station_sn,
         )
@@ -2923,7 +2929,7 @@ class EufyCloudApi:
             )
 
     def _raise_if_cipher_unavailable(self, station_sn: str, cipher_id: int) -> None:
-        """Re-raise the empty answer for this station and cipher while its back-off runs;
+        """Re-raise the answer without a key for this station and cipher while its back-off runs;
         a different cached owner id since then ends the back-off."""
         key = (station_sn, cipher_id)
         last = self._cipher_unavailable.get(key)
@@ -2936,6 +2942,15 @@ class EufyCloudApi:
             del self._cipher_unavailable[key]
             return
         _LOGGER.debug("cipher %d refused locally: no key last time, %.0fs left", cipher_id, left)
+        if source is None:
+            raise CipherKeyMissingError(
+                f"cipher {cipher_id} of {redact_serial(station_sn)} carried no private key; "
+                f"not asked again for {left:.0f}s",
+                cipher_id=cipher_id,
+                retry_after=left,
+                endpoint=const.CIPHERS_PATH,
+                device_sn=station_sn,
+            )
         raise CipherUnavailableError(
             f"the cloud had no key for cipher {cipher_id} of {redact_serial(station_sn)} "
             f"under the owner id ({source}); not asked again for {left:.0f}s",

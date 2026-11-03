@@ -155,9 +155,7 @@ async def fake() -> AsyncIterator[FakeStation]:
 
 @pytest.fixture
 async def station(fake: FakeStation) -> AsyncIterator[Station]:
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -254,9 +252,7 @@ async def _child_station(fake: FakeStation, camera: CloudDevice) -> Station:
     fake.params[1] = fake.params.pop(0)
     fake.reply_to_settings = True
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -795,9 +791,7 @@ async def test_a_full_read_without_a_device_block_drops_that_device(
 
 
 def _unconnected_station(*, host: str | None, local_ip: str | None, local_port: int) -> Station:
-    async def no_credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def no_credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         raise AssertionError("not connecting")
 
     session = StationSession(SYNTHETIC.station_sn, no_credentials, host=host, local_port=local_port)
@@ -2008,9 +2002,7 @@ async def test_homebase2_camera_image_trigger_frame_plays_native_dat_recording(
     fake.serial = hb2_sn
     fake.static_key = static_key(hb2_sn, fake.did)
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(hb2_sn, credentials, host="127.0.0.1", port=fake.discovery_port)
@@ -2331,9 +2323,7 @@ async def test_a_standalone_station_is_its_own_device_on_its_channel() -> None:
     fake = FakeStation(params={48: {1224: "1", 1101: "51"}})
     await fake.start()
 
-    async def creds(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def creds(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -2383,9 +2373,7 @@ async def on_demand_pair() -> AsyncIterator[tuple[Station, FakeStation]]:
     )
     await fake.start()
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     device = CloudDevice(
@@ -2677,9 +2665,7 @@ async def _standalone(fake: FakeStation, serial: str) -> Station:
     fake.serial = serial
     fake.static_key = static_key(serial, fake.did)
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(serial, credentials, host="127.0.0.1", port=fake.discovery_port)
@@ -3648,9 +3634,7 @@ _FLOODLIGHT = CloudDevice(
 
 @pytest.fixture
 async def floodlight_hub(fake: FakeStation) -> AsyncIterator[Station]:
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -4129,9 +4113,7 @@ async def paired_ptz(fake: FakeStation) -> AsyncIterator[Station]:
     fake.params[2] = fake.params.pop(0)
     fake.relayed_channels = {2}
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
@@ -5097,9 +5079,7 @@ async def _station_of_model(fake: FakeStation, serial: str, firmware: str | None
     fake.serial = serial
     fake.static_key = static_key(serial, fake.did)
 
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(serial, credentials, host="127.0.0.1", port=fake.discovery_port)

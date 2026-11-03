@@ -27,9 +27,7 @@ async def fake() -> AsyncIterator[FakeStation]:
 
 
 def _session(fake: FakeStation) -> StationSession:
-    async def provider(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     return StationSession(

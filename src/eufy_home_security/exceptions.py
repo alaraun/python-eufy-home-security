@@ -114,6 +114,29 @@ class CipherUnavailableError(EmptyResponseError):
         super().__init__(0, message, endpoint=endpoint, device_sn=device_sn)
 
 
+class CipherKeyMissingError(EmptyResponseError):
+    """The cloud's answer for a station's cipher carries no key.
+
+    ``get_ciphers`` answered data, but no record of ``cipher_id`` holds an
+    ``ecc_private_key`` or an RSA ``private_key``. Retrying does not change that answer,
+    so the same station and cipher are not asked again for ``retry_after`` seconds: until
+    then this is raised without a request.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        cipher_id: int,
+        retry_after: float,
+        endpoint: str = "",
+        device_sn: str | None = None,
+    ) -> None:
+        self.cipher_id = cipher_id
+        self.retry_after = retry_after
+        super().__init__(0, message, endpoint=endpoint, device_sn=device_sn)
+
+
 class KeyExchangeRefusedError(CloudApiError):
     """The cloud gateway refused this client's key identity, and a new one did not help.
 
@@ -355,9 +378,9 @@ class CipherUnusableError(HandshakeError):
 
     Unlike a stale key (a well-formed key the station no longer accepts, which a
     re-fetch may cure), the key itself is unusable: it does not parse as a key, or the
-    cloud serves none for the station's handshake. A session raises it only for a
-    missing key: an RSA key that does not parse leaves the session under the static key,
-    as in the eufy app. The cloud serves the same bytes on every fetch, so the library
+    cloud serves no ``ecc_private_key`` for a station on the ECIES handshake. A session
+    raises it only for that missing ECIES key: a station on the RSA handshake whose key is
+    missing or does not parse runs under the static key, as in the eufy app. The cloud serves the same bytes on every fetch, so the library
     does **not** re-fetch a key that does not parse and sets **no** re-fetch latch; the cipher is tried again only after the library
     changes or the cached key is dropped. ``cipher_id`` is the cipher the station
     named (``None`` until the session attaches it); ``reason`` is a short machine tag.

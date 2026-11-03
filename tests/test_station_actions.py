@@ -60,9 +60,7 @@ async def fake() -> AsyncIterator[FakeStation]:
 
 
 def _station(fake: FakeStation, device: CloudDevice = HB3) -> Station:
-    async def credentials(
-        *, refresh: bool, cipher_id: int | None = None, keys_optional: bool = False
-    ) -> P2PCredentials:
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
         return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
 
     session = StationSession(
