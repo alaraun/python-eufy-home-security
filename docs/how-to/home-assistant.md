@@ -2769,7 +2769,7 @@ phone.
 report = station.detection_delivery(device_sn)  # DetectionDeliveryReport, no I/O
 report.delivery  # DetectionDelivery.SENT / NOT_SENT_IN_MODE / UNKNOWN
 report.mode  # the guard mode in force the answer is for (None: unknown)
-report.action  # the device's action mask in that mode (None: not listed)
+report.action  # the device's action mask in that mode (None: no table lists it)
 report.sending_modes  # the modes that do send it, app order; names: config.mode_name(m)
 report.reason  # a sentence for a log line
 
@@ -2779,9 +2779,9 @@ reports = {sn: station.detection_delivery(sn, config=config) for sn in serials}
 
 | `delivery` | when | what HA does |
 |---|---|---|
-| `SENT` | Notification on in the mode in force, or the mode's table does not list the device (the eufy app reads that as on) | nothing |
+| `SENT` | Notification on in the mode in force, or no action set for the device in that mode while its own actions are reported: its block in the dump or the stored table (the eufy app reads a missing action as on) | nothing |
 | `NOT_SENT_IN_MODE` | Notification off in the mode in force | tell the user (below); never mark entities unavailable: the device works and records |
-| `UNKNOWN` | no configuration yet, the mode in force unknown, Schedule without a slot mode, Geofencing, a mode whose table the station does not report (on a HomeBase 3 a custom mode no device block carries and no stored table backs); the station itself, a keypad, a device of unknown kind (no Notification action); a device not paired here | nothing |
+| `UNKNOWN` | no configuration yet, the mode in force unknown, Schedule without a slot mode, Geofencing, a mode whose table the station does not report (on a HomeBase 3 a custom mode no device block carries and no stored table backs); a device no table lists whose own actions are not reported (no block in the dump and no stored table); a device on a channel the cloud lists for several devices; the station itself, a keypad, a device of unknown kind (no Notification action); a device not paired here | nothing |
 
 - **Which mode.** The mode in force: the session's latest (a dump, a `0x047F` mode report,
   a push), else `config.effective_mode`. Off and Disarmed both read the Disarmed table
@@ -2805,8 +2805,9 @@ reports = {sn: station.detection_delivery(sn, config=config) for sn in serials}
   gets no motion or person events from them until a mode that sends is in force
   (*Away*). To receive them in *Home*, turn on Notification for each camera in the eufy
   app: Security mode → *Home* → the camera → Notification (this also notifies your
-  phone)." With `sending_modes` empty, name no mode: "...no motion or person events
-  from them in any mode the station reports." A user who keeps a record-only mode on
+  phone)." Name only the armed modes of `sending_modes`; with none (empty, or only
+  disarmed modes), name no mode: "...no motion or person events from them in any armed
+  mode the station reports." A user who keeps a record-only mode on
   purpose ignores the issue.
 - **Not covered.** Whether a detection happens at all (the device's detection switches and
   types) and the route (`local_detections_for`, cloud push) are separate: `SENT` says the

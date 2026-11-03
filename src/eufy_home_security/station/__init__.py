@@ -185,7 +185,7 @@ from ..p2p.session.stats import SessionStats
 from ..p2p.station_config_codecs import Schedule
 from ..p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
 from ..recordings import RecordingsPage
-from ..station_config import ModeInfo, StationConfig, stored_device_params
+from ..station_config import ModeInfo, StationConfig, build_station_config, stored_device_params
 from .alarms import AlarmWaits, StationAlarms
 from .base import _NOT_PAIRED, own_channel
 from .configuration import ConfigRules, StationConfiguration
@@ -622,7 +622,7 @@ class StationState:
     serials_by_channel: Mapping[int, str] = field(default_factory=dict, repr=False)
     """The cloud serial on each channel the cloud lists a device on, whether or not this
     dump has the device's block (an offline battery camera, a sensor); a channel that two
-    devices claim is absent."""
+    devices claim is absent, and so is :data:`~..models.STATION_CHANNEL`."""
     setting_params: Mapping[int, str | None] = field(default_factory=dict, repr=False)
     """The station's own parameters as its settings read them: :attr:`params`, and the
     cloud's copy (the device list's ``params``, the ``time_zone`` field for the time-zone
@@ -2640,8 +2640,9 @@ class Station:
         The mode in force is the session's latest (a dump, a mode report, a push), else
         the configuration's. Every camera, doorbell and sensor whose kind has the
         Notification action (:func:`~..devices.settings.mode_action_flags`) is graded;
-        the station itself, a keypad, a device of unknown kind and a device not paired
-        here are ``UNKNOWN``. No I/O. Refresh on :class:`~..events.GuardModeChanged`,
+        the station itself, a keypad, a device of unknown kind, a device on a channel the
+        cloud lists for several devices and a device not paired here are ``UNKNOWN``.
+        No I/O. Refresh on :class:`~..events.GuardModeChanged`,
         :class:`~..events.StationConfigChanged` and :class:`~..events.DevicesChanged`.
 
         ``config`` is a configuration already built from this station (:attr:`config`);
@@ -2663,13 +2664,19 @@ class Station:
         channel = self._channel_of(device)
         kind = None if channel is None else self._configuration._kind_on(channel)
         flags = mode_action_flags(scope_for_kind(kind), device.device_type)
+        state = self.state
         if config is None:
-            config = self.config
+            config = None if state is None else build_station_config(state)
         mode = self.session.active_mode
         if mode is None and config is not None:
             mode = config.effective_mode
         return detection_delivery(
-            config, device_sn, mode=mode, has_notification_action=NOTIFICATION_FLAG in flags
+            config,
+            device_sn,
+            mode=mode,
+            has_notification_action=NOTIFICATION_FLAG in flags,
+            state=state,
+            channel=channel,
         )
 
     def media_key_type(self, channel: int) -> MediaKeyType:

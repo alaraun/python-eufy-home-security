@@ -18,8 +18,8 @@ from eufy_home_security.events import Event, StationConfigChanged
 from eufy_home_security.models import STATION_CHANNEL, GuardMode
 from eufy_home_security.p2p.params import ParamDump
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
-from eufy_home_security.station import Station
-from eufy_home_security.station_config import StationConfig, build_station_config
+from eufy_home_security.station import Station, StationState
+from eufy_home_security.station_config import ModeTableView, StationConfig, build_station_config
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import FakeStation
 
@@ -96,10 +96,7 @@ def _offline(device: CloudDevice = HUB, sub_devices: tuple[CloudDevice, ...] = (
     return Station(device, session, sub_devices=sub_devices)
 
 
-def _config(
-    station: dict[int, str], blocks: dict[int, dict[int, str]] | None = None
-) -> StationConfig:
-    """The configuration of the synthetic HomeBase 3 from its own block and device blocks."""
+def _dump(station: dict[int, str], blocks: dict[int, dict[int, str]] | None = None) -> ParamDump:
     dump = ParamDump()
     dump.ingest(
         {
@@ -110,8 +107,25 @@ def _config(
             ]
         }
     )
-    hub = _offline(sub_devices=(CAMERA, INDOOR, BATTERY))
-    return build_station_config(hub._state(dump))
+    return dump
+
+
+_SUB_DEVICES = (CAMERA, INDOOR, BATTERY)
+
+
+def _config(
+    station: dict[int, str], blocks: dict[int, dict[int, str]] | None = None
+) -> tuple[StationConfig, StationState]:
+    """The configuration and state of the synthetic HomeBase 3 from its own block and
+    device blocks."""
+    state = _offline(sub_devices=_SUB_DEVICES)._state(_dump(station, blocks))
+    return build_station_config(state), state
+
+
+def _away_table(config: StationConfig) -> ModeTableView:
+    table = config.mode_tables[GuardMode.AWAY]
+    assert table is not None
+    return table
 
 
 # Two cameras behind a HomeBase 3: Away records and notifies (9), Home records only (1).
@@ -119,14 +133,20 @@ _HB3 = _config({1224: "0"}, {0: {1239: "9", 1225: "1"}, 1: {1239: "9", 1225: "1"
 
 
 def _report(
-    config: StationConfig | None,
+    built: tuple[StationConfig, StationState] | None,
     mode: GuardMode | int | None,
     serial: str = SYNTHETIC.camera_sn,
     *,
     notification_action: bool = True,
 ) -> DetectionDeliveryReport:
+    config, state = (None, None) if built is None else built
     return detection_delivery(
-        config, serial, mode=mode, has_notification_action=notification_action
+        config,
+        serial,
+        mode=mode,
+        has_notification_action=notification_action,
+        state=state,
+        channel=next(d.channel for d in _SUB_DEVICES if d.device_sn == serial),
     )
 
 
@@ -156,13 +176,87 @@ def test_bits_other_than_notification_do_not_count() -> None:
     assert _report(config, GuardMode.AWAY).delivery is DetectionDelivery.SENT
 
 
-def test_a_device_the_reported_table_lacks_reads_as_notifying() -> None:
+def test_a_device_whose_block_lacks_the_modes_action_reads_as_notifying() -> None:
     """As the eufy app reads a missing action: on."""
-    report = _report(_HB3, GuardMode.HOME, BATTERY_SN)
+    built = _config({1224: "1"}, {0: {1239: "9", 1225: "1"}, 2: {1101: "100"}})
+    report = _report(built, GuardMode.HOME, BATTERY_SN)
     assert report.delivery is DetectionDelivery.SENT
     assert report.action is None
     assert report.sending_modes == (GuardMode.HOME, GuardMode.AWAY)
     assert "read as on" in report.reason
+
+
+def test_a_device_no_reported_source_lists_is_unknown_and_never_sends() -> None:
+    """No block and no stored table: an unreported action is not a missing one."""
+    report = _report(_HB3, GuardMode.HOME, BATTERY_SN)
+    assert report.delivery is DetectionDelivery.UNKNOWN
+    assert report.action is None
+    assert report.sending_modes == ()
+    assert "no Home action is reported" in report.reason
+
+
+def test_without_a_state_an_unlisted_device_is_unknown() -> None:
+    config, _ = _HB3
+    report = detection_delivery(
+        config,
+        BATTERY_SN,
+        mode=GuardMode.AWAY,
+        has_notification_action=True,
+        state=None,
+        channel=None,
+    )
+    assert report.delivery is DetectionDelivery.UNKNOWN
+    assert report.sending_modes == ()
+
+
+def test_a_device_the_block_table_lacks_reads_the_stored_table() -> None:
+    """A table built from the device blocks falls back to the stored entry per channel."""
+    built = _config(
+        {
+            1224: "0",
+            1158: _stored_table(int(GuardMode.AWAY), {0: 1, 2: 1}),
+            1157: _stored_table(int(GuardMode.HOME), {0: 1, 2: 9}),
+        },
+        {0: {1239: "9", 1225: "1", 1101: "100"}},
+    )
+    config, _ = built
+    assert [d.channel for d in _away_table(config).devices] == [0]
+    battery = _report(built, GuardMode.AWAY, BATTERY_SN)
+    assert (battery.delivery, battery.action) == (DetectionDelivery.NOT_SENT_IN_MODE, 1)
+    assert battery.sending_modes == (GuardMode.HOME,)
+    # The block's own action wins over the stored copy.
+    camera = _report(built, GuardMode.AWAY)
+    assert (camera.delivery, camera.action) == (DetectionDelivery.SENT, 9)
+
+
+@pytest.mark.parametrize(
+    ("station", "blocks", "delivery", "sending"),
+    [
+        pytest.param(
+            {1224: "0", 1158: _stored_table(int(GuardMode.AWAY), {0: 9})},
+            {0: {1239: "9"}},
+            DetectionDelivery.SENT,
+            (GuardMode.AWAY,),
+            id="stored-table-without-the-channel",
+        ),
+        pytest.param(
+            {1224: "0", 1158: "not a table"},
+            {0: {1239: "9"}},
+            DetectionDelivery.UNKNOWN,
+            (),
+            id="stored-table-undecodable",
+        ),
+    ],
+)
+def test_a_stored_table_decides_an_unlisted_device_without_a_block(
+    station: dict[int, str],
+    blocks: dict[int, dict[int, str]],
+    delivery: DetectionDelivery,
+    sending: tuple[GuardMode, ...],
+) -> None:
+    report = _report(_config(station, blocks), GuardMode.AWAY, BATTERY_SN)
+    assert (report.delivery, report.action) == (delivery, None)
+    assert report.sending_modes == sending
 
 
 def test_a_stored_table_names_a_device_without_a_block_by_the_cloud_channel() -> None:
@@ -183,7 +277,7 @@ def test_a_stored_table_names_a_device_without_a_block_by_the_cloud_channel() ->
 
 def test_a_mode_without_a_reported_table_is_unknown_and_never_sends() -> None:
     config = _config({1224: "3", 1256: _CUSTOM_1_LISTED}, {0: {1239: "9", 1225: "1"}})
-    assert config.mode_tables[GuardMode.CUSTOM_1] is None
+    assert config[0].mode_tables[GuardMode.CUSTOM_1] is None
     report = _report(config, GuardMode.CUSTOM_1)
     assert report.delivery is DetectionDelivery.UNKNOWN
     assert report.action is None
@@ -208,7 +302,8 @@ def test_off_and_disarmed_read_the_disarmed_table(mode: GuardMode) -> None:
     assert (camera.mode, camera.action) == (mode, 0)
     indoor = _report(config, mode, INDOOR_SN)
     assert indoor.delivery is DetectionDelivery.SENT
-    assert indoor.sending_modes == (GuardMode.AWAY, GuardMode.DISARMED)
+    # No block and no stored Away table: Away is not known to send.
+    assert indoor.sending_modes == (GuardMode.DISARMED,)
 
 
 @pytest.mark.parametrize(
@@ -416,3 +511,69 @@ def test_a_standalone_camera_without_a_reported_table_is_unknown() -> None:
     assert report.delivery is DetectionDelivery.UNKNOWN
     assert report.mode is GuardMode.AWAY
     assert "reports no Away table" in report.reason
+
+
+_DUPLICATE_SN = "T8162P0000000002"
+
+
+def _serials_station() -> Station:
+    """A HomeBase 3 whose cloud lists two devices on channel 2 and one on the station's
+    own channel."""
+    return _offline(
+        sub_devices=(
+            CAMERA,
+            BATTERY,
+            _paired(_DUPLICATE_SN, 26, 2),
+            _paired("T8162P0000000003", 26, STATION_CHANNEL),
+        )
+    )
+
+
+def test_serials_by_channel_names_each_channel_one_cloud_device_claims() -> None:
+    state = _serials_station()._state(_dump({1224: "0"}))
+    assert state.serials_by_channel == {0: SYNTHETIC.camera_sn}
+
+
+def test_a_channel_the_cloud_lists_for_two_devices_grades_neither() -> None:
+    st = _serials_station()
+    dump = _dump(
+        {1224: "0", 1158: _stored_table(int(GuardMode.AWAY), {0: 9, 2: 9})},
+        # 1400 marks the block as a camera's: the kind is known without a serial.
+        {0: {1239: "9"}, 2: {1239: "9", 1400: "0"}},
+    )
+    st.session._param_state.merge_dump(dump, "test", 0.0)
+    st.session.note_guard_mode(GuardMode.AWAY)
+    config = st.config
+    assert config is not None
+    [entry] = [d for d in _away_table(config).devices if d.channel == 2]
+    assert entry.device_sn is None
+    for serial in (BATTERY_SN, _DUPLICATE_SN):
+        report = st.detection_delivery(serial)
+        assert report.delivery is DetectionDelivery.UNKNOWN
+        assert report.sending_modes == ()
+        assert "several devices on its channel" in report.reason
+    assert st.detection_delivery(SYNTHETIC.camera_sn).delivery is DetectionDelivery.SENT
+
+
+def test_a_standalone_camera_reads_its_own_channel_entry() -> None:
+    serial = "T8170P0000000000"
+    device = CloudDevice(
+        device_sn=serial,
+        station_sn=serial,
+        p2p_did=SYNTHETIC.did,
+        device_type=48,
+        channel=0,
+        name="standalone",
+    )
+    st = _offline(device)
+    st.session._param_state.merge_dump(_dump({1224: "0"}, {0: {1239: "1", 1225: "9"}}), "test", 0.0)
+    state = st.state
+    assert state is not None
+    assert state.serials_by_channel == {0: serial}
+    config = st.config
+    assert config is not None
+    assert [d.device_sn for d in _away_table(config).devices] == [serial]
+    st.session.note_guard_mode(GuardMode.AWAY)
+    report = st.detection_delivery(serial)
+    assert (report.delivery, report.action) == (DetectionDelivery.NOT_SENT_IN_MODE, 1)
+    assert report.sending_modes == (GuardMode.HOME,)
