@@ -8,7 +8,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "card"
   },
   "device_ability_data": {
    "access": "ro",
@@ -28,7 +29,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
@@ -36,7 +38,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "card"
   }
  },
  "source": {

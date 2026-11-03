@@ -15,6 +15,7 @@
    },
    "role": "setting",
    "section": "alarm",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1235,
@@ -38,7 +39,8 @@
     "param": 1256
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_keypad_set_cus_model": {
    "access": "ro",
@@ -47,7 +49,8 @@
    "page": "CUSButton",
    "read": null,
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -85,6 +88,7 @@
    "read": null,
    "role": "setting",
    "section": "modes",
+   "shown": "card",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -111,7 +115,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "card"
   },
   "arming_support_custom_mode": {
    "access": "ro",
@@ -186,7 +191,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_linkage_mode": {
    "access": "ro",
@@ -194,14 +200,16 @@
    "note": "handler rejects the probed values",
    "read": null,
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "page"
   },
   "device_model": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_name": {
    "access": "rw",
@@ -211,6 +219,7 @@
    "read": null,
    "role": "setting",
    "section": "system",
+   "shown": "card",
    "write": {
     "cmd": 1216,
     "params": {
@@ -248,6 +257,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 6287,
@@ -266,7 +276,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_wifi_name": {
    "access": "ro",
@@ -277,14 +288,16 @@
     "param": 6200
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "firmware_main_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "firmware_main_version_time": {
    "access": "ro",
@@ -292,7 +305,8 @@
    "page": "AboutDevice",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "firmware_sub_version": {
    "access": "ro",
@@ -300,21 +314,24 @@
    "page": "AboutDevice",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "storage"
+   "role": "diagnostic",
+   "section": "storage",
+   "shown": "card"
   },
   "ip_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "is_device_upgrade": {
    "access": "ro",
@@ -329,7 +346,8 @@
     "param": 1133
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "is_support_silent_ota_switch": {
    "access": "ro",
@@ -344,7 +362,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "notification_alarm_delay_value": {
    "access": "ro",
@@ -355,7 +374,8 @@
     "param": 1282
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "reset_device_mode": {
    "access": "ro",
@@ -386,6 +406,7 @@
    },
    "role": "setting",
    "section": "notifications",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 1283,
@@ -408,6 +429,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "write": {
     "cmd": 1253,
     "params": {
@@ -431,6 +453,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "write": {
     "cmd": 1215,
     "params": {

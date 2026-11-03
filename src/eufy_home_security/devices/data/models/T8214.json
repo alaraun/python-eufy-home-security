@@ -26,6 +26,7 @@
    "read": null,
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "values": [
     "sideNum",
     "normalized",
@@ -47,7 +48,8 @@
     "param": 1299
    },
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "card"
   },
   "aic_activityzone_config": {
    "access": "ro",
@@ -66,6 +68,7 @@
    "read": null,
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "values": [
     "sideNum",
     "normalized",
@@ -86,7 +89,8 @@
     "param": 1256
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -120,6 +124,7 @@
    "read": null,
    "role": "setting",
    "section": "modes",
+   "shown": "card",
    "write": {
     "cmd": 1224,
     "params": "$v",
@@ -144,7 +149,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "card"
   },
   "arming_support_custom_mode": {
    "access": "ro",
@@ -255,6 +261,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "write": {
     "cmd": 1700,
     "subCmd": 6012,
@@ -375,16 +382,18 @@
    "access": "ro",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "power"
+   "role": "diagnostic",
+   "section": "power",
+   "shown": "card"
   },
   "battery_value": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "power"
+   "role": "diagnostic",
+   "section": "power",
+   "shown": "card"
   },
   "bottom_spotlight_switch": {
    "access": "rw",
@@ -402,6 +411,7 @@
    },
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 6252,
@@ -440,6 +450,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "card",
    "write": {
     "cmd": 1035,
     "params": {
@@ -468,7 +479,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "change_wifi_is_press_sync": {
    "access": "ro",
@@ -484,15 +496,17 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "charging_status": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "power"
+   "role": "diagnostic",
+   "section": "power",
+   "shown": "card"
   },
   "detected_events": {
    "access": "ro",
@@ -562,6 +576,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1700,
@@ -633,6 +648,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "card",
    "values": [
     5,
     6
@@ -729,6 +745,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "card",
    "variant_of": "detection_type_set",
    "write": {
     "cmd": 1350,
@@ -770,6 +787,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "card",
    "variant_of": "detection_type_set",
    "write": {
     "cmd": 1350,
@@ -812,6 +830,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 6498,
@@ -843,6 +862,7 @@
    },
    "role": "setting",
    "section": "doorbell",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1708,
@@ -879,6 +899,7 @@
    },
    "role": "setting",
    "section": "doorbell",
+   "shown": "page",
    "write": {
     "cmd": 1702,
     "params": {
@@ -926,6 +947,7 @@
    },
    "role": "setting",
    "section": "doorbell",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -966,6 +988,7 @@
    },
    "role": "setting",
    "section": "doorbell",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -986,7 +1009,8 @@
    "note": "handler rejects the probed values",
    "read": null,
    "role": "setting",
-   "section": "doorbell"
+   "section": "doorbell",
+   "shown": "page"
   },
   "device_delivered_guard_switch": {
    "access": "rw",
@@ -1002,6 +1026,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 2723,
@@ -1049,7 +1074,8 @@
     "param": 2710
    },
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "page"
   },
   "device_event_thumb_process_type": {
    "access": "ro",
@@ -1100,6 +1126,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 2724,
@@ -1139,6 +1166,7 @@
    },
    "role": "setting",
    "section": "doorbell",
+   "shown": "page",
    "write": {
     "cmd": 1703,
     "params": {
@@ -1157,7 +1185,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "page"
   },
   "device_is_online": {
    "access": "ro",
@@ -1165,7 +1194,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_model": {
    "access": "ro",
@@ -1173,7 +1203,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_multiple_bridge_ap_type": {
    "access": "ro",
@@ -1182,7 +1213,8 @@
    "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_multiple_bridge_connect_fail_flag": {
    "access": "ro",
@@ -1191,14 +1223,16 @@
    "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_multiple_bridge_connected_ssid": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_multiple_bridge_mode": {
    "access": "rw",
@@ -1217,6 +1251,7 @@
    },
    "role": "setting",
    "section": "network",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -1258,6 +1293,7 @@
    },
    "role": "setting",
    "section": "network",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 60011,
@@ -1289,6 +1325,7 @@
    "read": null,
    "role": "setting",
    "section": "system",
+   "shown": "card",
    "write": {
     "cmd": 1217,
     "params": {
@@ -1314,7 +1351,8 @@
     "param": 2711
    },
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "page"
   },
   "device_packages_guard_switch": {
    "access": "rw",
@@ -1331,6 +1369,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 2709,
@@ -1358,6 +1397,7 @@
    "read": null,
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "write": {
     "storeToLocal": true,
     "localParams": {
@@ -1381,6 +1421,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 2714,
@@ -1409,6 +1450,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 2712,
@@ -1438,7 +1480,8 @@
     "param": 2713
    },
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "page"
   },
   "device_power_supply_mode": {
    "access": "ro",
@@ -1450,7 +1493,8 @@
    "page": "PowerManager",
    "read": null,
    "role": "setting",
-   "section": "power"
+   "section": "power",
+   "shown": "card"
   },
   "device_pre_recording_switch": {
    "access": "rw",
@@ -1468,6 +1512,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 6257,
@@ -1491,6 +1536,7 @@
    },
    "role": "setting",
    "section": "doorbell",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 6438,
@@ -1511,7 +1557,8 @@
    "page": "ResponseSettingScreen",
    "read": null,
    "role": "setting",
-   "section": "doorbell"
+   "section": "doorbell",
+   "shown": "page"
   },
   "device_response_timeout_switch": {
    "access": "rw",
@@ -1530,6 +1577,7 @@
    },
    "role": "setting",
    "section": "doorbell",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 6437,
@@ -1553,7 +1601,8 @@
     "param": 6439
    },
    "role": "setting",
-   "section": "doorbell"
+   "section": "doorbell",
+   "shown": "page"
   },
   "device_serial_number": {
    "access": "ro",
@@ -1578,6 +1627,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 6287,
@@ -1619,6 +1669,7 @@
    },
    "role": "setting",
    "section": "notifications",
+   "shown": "card",
    "values": [
     -1,
     0,
@@ -1666,6 +1717,7 @@
    "read": null,
    "role": "status",
    "section": "notifications",
+   "shown": "card",
    "variants": [
     {
      "id": "device_snooze_time_extra_type__v1",
@@ -1705,6 +1757,7 @@
    "read": null,
    "role": "status",
    "section": "notifications",
+   "shown": "card",
    "values": [
     0,
     2
@@ -1721,6 +1774,7 @@
    "read": null,
    "role": "status",
    "section": "notifications",
+   "shown": "card",
    "values": [
     0,
     1
@@ -1736,7 +1790,8 @@
     "param": 1131
    },
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_video_visitor_count": {
    "access": "ro",
@@ -1760,15 +1815,17 @@
     "param": 6200
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "network"
+   "role": "diagnostic",
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
@@ -1776,7 +1833,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "card"
   },
   "firmware_main_version": {
    "access": "ro",
@@ -1784,7 +1842,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "get_device_old_p2p_did": {
    "access": "ro",
@@ -1799,8 +1858,9 @@
    "access": "ro",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "storage"
+   "role": "diagnostic",
+   "section": "storage",
+   "shown": "card"
   },
   "homebase_connect_support": {
    "access": "ro",
@@ -1809,7 +1869,8 @@
    "page": "WiFiConnection",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "ip_address": {
    "access": "ro",
@@ -1818,7 +1879,8 @@
    "name": "IP address",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "is_device_upgrade": {
    "access": "ro",
@@ -1834,7 +1896,8 @@
     "param": 1134
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "is_support_main_auxiliary_camera": {
    "access": "ro",
@@ -1843,7 +1906,8 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "doorbell"
+   "section": "doorbell",
+   "shown": "page"
   },
   "is_support_multiple_bridge": {
    "access": "ro",
@@ -1852,6 +1916,7 @@
    "read": null,
    "role": "status",
    "section": "network",
+   "shown": "page",
    "variants": [
     {
      "id": "is_support_multiple_bridge__v1",
@@ -1977,6 +2042,7 @@
    "read": null,
    "role": "status",
    "section": "network",
+   "shown": "page",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v2": {
@@ -1986,6 +2052,7 @@
    "read": null,
    "role": "status",
    "section": "network",
+   "shown": "page",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v3": {
@@ -1995,6 +2062,7 @@
    "read": null,
    "role": "status",
    "section": "network",
+   "shown": "page",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v4": {
@@ -2004,6 +2072,7 @@
    "read": null,
    "role": "status",
    "section": "network",
+   "shown": "page",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v5": {
@@ -2013,6 +2082,7 @@
    "read": null,
    "role": "status",
    "section": "network",
+   "shown": "page",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_silent_ota_switch": {
@@ -2048,6 +2118,7 @@
    },
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 1716,
@@ -2075,6 +2146,7 @@
    },
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1410,
@@ -2167,6 +2239,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "values": [
     0,
     8,
@@ -2280,7 +2353,8 @@
    "name": "MAC address",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "microphone_on_off": {
    "access": "rw",
@@ -2298,6 +2372,7 @@
    },
    "role": "setting",
    "section": "audio",
+   "shown": "page",
    "write": {
     "cmd": 1240,
     "params": {
@@ -2316,7 +2391,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "detection"
+   "section": "detection",
+   "shown": "page"
   },
   "motion_detection_frequency_setting": {
    "access": "rw",
@@ -2423,6 +2499,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "card",
    "write": {
     "cmd": 1700,
     "subCmd": 6040,
@@ -2493,6 +2570,7 @@
    "read": null,
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "values": [
     2,
     6,
@@ -2583,6 +2661,7 @@
    "read": null,
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "values": [
     103,
     102,
@@ -2685,7 +2764,8 @@
    "note": "handler rejects the probed values",
    "read": null,
    "role": "setting",
-   "section": "notifications"
+   "section": "notifications",
+   "shown": "page"
   },
   "notification_ai_motion_switch": {
    "access": "ro",
@@ -2695,7 +2775,8 @@
    "note": "handler rejects the probed values",
    "read": null,
    "role": "setting",
-   "section": "notifications"
+   "section": "notifications",
+   "shown": "page"
   },
   "notification_jump_to": {
    "access": "ro",
@@ -2709,6 +2790,7 @@
    "read": null,
    "role": "setting",
    "section": "notifications",
+   "shown": "page",
    "values": [
     0,
     1
@@ -2732,6 +2814,7 @@
    "read": null,
    "role": "status",
    "section": "notifications",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -2753,7 +2836,8 @@
    "page": "SettingsHome",
    "read": null,
    "role": "setting",
-   "section": "notifications"
+   "section": "notifications",
+   "shown": "page"
   },
   "notification_ring_alert": {
    "access": "ro",
@@ -2773,6 +2857,7 @@
    "read": null,
    "role": "status",
    "section": "notifications",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -2795,7 +2880,8 @@
    "page": "SettingsHome",
    "read": null,
    "role": "setting",
-   "section": "notifications"
+   "section": "notifications",
+   "shown": "page"
   },
   "notification_type": {
    "access": "rw",
@@ -2847,6 +2933,7 @@
    },
    "role": "setting",
    "section": "notifications",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -2936,6 +3023,7 @@
    },
    "role": "setting",
    "section": "power",
+   "shown": "page",
    "values": [
     0,
     2,
@@ -3040,6 +3128,7 @@
    },
    "role": "setting",
    "section": "power",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -3097,6 +3186,7 @@
    },
    "role": "diagnostic",
    "section": "power",
+   "shown": "card",
    "values": [
     0,
     1,
@@ -3143,6 +3233,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "values": [
     5,
     2
@@ -3223,6 +3314,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "values": [
     0,
     5,
@@ -3301,6 +3393,7 @@
    "read": null,
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "values": [
     "sideNum",
     "normalized",
@@ -3353,6 +3446,7 @@
    "read": null,
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "values": [
     "sideNum",
     "normalized",
@@ -3387,6 +3481,7 @@
    },
    "role": "setting",
    "section": "audio",
+   "shown": "page",
    "write": {
     "cmd": 1241,
     "params": {
@@ -3449,6 +3544,7 @@
    },
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1401,
@@ -3478,6 +3574,7 @@
    },
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "write": {
     "cmd": 1403,
     "params": {
@@ -3541,6 +3638,7 @@
    },
    "role": "setting",
    "section": "picture",
+   "shown": "card",
    "write": {
     "cmd": 1700,
     "subCmd": 1400,
@@ -3586,6 +3684,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "values": [
     0,
     1
@@ -3613,6 +3712,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "write": {
     "cmd": 1215,
     "params": {
@@ -3644,6 +3744,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "step": 1,
    "unit": "s",
    "write": {
@@ -3685,6 +3786,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "step": 1,
    "unit": "s",
    "write": {
@@ -3782,6 +3884,7 @@
    "read": null,
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "write": {
     "cmd": 1704,
     "params": {
@@ -3852,6 +3955,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "card",
    "values": [
     0,
     1
@@ -3893,6 +3997,7 @@
    "read": null,
    "role": "setting",
    "section": "picture",
+   "shown": "card",
    "values": [
     2,
     3,
@@ -3907,7 +4012,8 @@
    "note": "handler ignores the value",
    "read": null,
    "role": "setting",
-   "section": "picture"
+   "section": "picture",
+   "shown": "page"
   },
   "watermark_set": {
    "access": "rw",
@@ -3925,6 +4031,7 @@
    },
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "write": {
     "cmd": 1214,
     "params": {

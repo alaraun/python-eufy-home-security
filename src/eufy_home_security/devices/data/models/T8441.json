@@ -18,6 +18,7 @@
    "read": null,
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "values": [
     "sideNum",
     "normalized",
@@ -38,7 +39,8 @@
     "param": 1256
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -76,6 +78,7 @@
    "read": null,
    "role": "setting",
    "section": "modes",
+   "shown": "card",
    "step": 1,
    "write": {
     "cmd": 1224,
@@ -101,7 +104,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "card"
   },
   "arming_support_custom_mode": {
    "access": "ro",
@@ -160,7 +164,8 @@
     "param": 1151
    },
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "audio_recording_on_off": {
    "access": "rw",
@@ -203,6 +208,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 1288,
@@ -232,6 +238,7 @@
    },
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "write": {
     "cmd": 1700,
     "subCmd": 6081,
@@ -311,6 +318,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "card",
    "write": {
     "cmd": 1035,
     "params": {
@@ -334,7 +342,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "change_wifi_is_press_sync": {
    "access": "ro",
@@ -350,7 +359,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "cloud_storage_support_trail": {
    "access": "ro",
@@ -373,6 +383,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1700,
@@ -407,6 +418,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "card",
    "write": {
     "cmd": 1700,
     "subCmd": 6045,
@@ -435,6 +447,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "card",
    "write": {
     "cmd": 1700,
     "subCmd": 6010,
@@ -463,6 +476,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "card",
    "values": [
     0,
     1
@@ -486,7 +500,8 @@
    "note": "handler rejects the probed values",
    "read": null,
    "role": "setting",
-   "section": "recording"
+   "section": "recording",
+   "shown": "card"
   },
   "device_is_battery_device": {
    "access": "ro",
@@ -494,7 +509,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "page"
   },
   "device_is_online": {
    "access": "ro",
@@ -502,7 +518,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_model": {
    "access": "ro",
@@ -510,7 +527,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_name": {
    "access": "rw",
@@ -521,6 +539,7 @@
    "read": null,
    "role": "setting",
    "section": "system",
+   "shown": "card",
    "write": {
     "cmd": 1217,
     "params": {
@@ -568,6 +587,7 @@
    },
    "role": "setting",
    "section": "notifications",
+   "shown": "card",
    "values": [
     0,
     1,
@@ -612,7 +632,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_storage_type": {
    "access": "ro",
@@ -625,6 +646,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -641,7 +663,8 @@
     "param": 6200
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
@@ -649,7 +672,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
@@ -657,7 +681,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "card"
   },
   "firmware_main_version": {
    "access": "ro",
@@ -665,21 +690,24 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "storage"
+   "role": "diagnostic",
+   "section": "storage",
+   "shown": "card"
   },
   "hb_connect_is_connected": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "storage"
+   "section": "storage",
+   "shown": "page"
   },
   "hb_connect_nas_storage_type": {
    "access": "rw",
@@ -694,6 +722,7 @@
    },
    "role": "setting",
    "section": "storage",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -720,6 +749,7 @@
    },
    "role": "setting",
    "section": "storage",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 1310,
@@ -747,6 +777,7 @@
    },
    "role": "setting",
    "section": "storage",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -774,14 +805,16 @@
     "param": 40005
    },
    "role": "status",
-   "section": "storage"
+   "section": "storage",
+   "shown": "page"
   },
   "hb_connect_support_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "storage"
+   "section": "storage",
+   "shown": "page"
   },
   "ip_address": {
    "access": "ro",
@@ -789,7 +822,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "is_device_upgrade": {
    "access": "ro",
@@ -797,7 +831,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "led_on_off": {
    "access": "rw",
@@ -814,6 +849,7 @@
    },
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "write": {
     "cmd": 1700,
     "subCmd": 6014,
@@ -894,6 +930,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "values": [
     0,
     10,

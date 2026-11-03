@@ -43,7 +43,8 @@
     "param": 61503
    },
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "page"
   },
   "ai_card_feature_switch": {
    "access": "rw",
@@ -54,6 +55,7 @@
    "read": null,
    "role": "setting",
    "section": "detection",
+   "shown": "card",
    "write": {
     "cmd": 1350,
     "subCmd": 61507,
@@ -71,7 +73,8 @@
    "note": "handler ignores the value",
    "read": null,
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "card"
   },
   "ai_support_service": {
    "access": "ro",
@@ -98,6 +101,7 @@
    "read": null,
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "values": [
     "sideNum",
     "normalized",
@@ -121,6 +125,7 @@
    },
    "role": "setting",
    "section": "alarm",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1235,
@@ -144,7 +149,8 @@
     "param": 1256
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_get_alarm_away_mode": {
    "access": "ro",
@@ -156,7 +162,8 @@
     "param": 61301
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_get_alarm_custom1_mode": {
    "access": "ro",
@@ -167,7 +174,8 @@
     "param": 61307
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_get_alarm_custom2_mode": {
    "access": "ro",
@@ -178,7 +186,8 @@
     "param": 61308
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_get_alarm_custom3_mode": {
    "access": "ro",
@@ -189,7 +198,8 @@
     "param": 61309
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_get_alarm_disarm_mode": {
    "access": "ro",
@@ -201,7 +211,8 @@
     "param": 61306
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_get_alarm_home_mode": {
    "access": "ro",
@@ -213,7 +224,8 @@
     "param": 61300
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_jump_to_platform_setting_page": {
    "access": "ro",
@@ -230,7 +242,8 @@
    "page": "CUSButton",
    "read": null,
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -268,6 +281,7 @@
    "read": null,
    "role": "setting",
    "section": "modes",
+   "shown": "card",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -294,7 +308,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "card"
   },
   "arming_support_custom_mode": {
    "access": "ro",
@@ -354,7 +369,8 @@
     "param": 1151
    },
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "battery_healthy": {
    "access": "ro",
@@ -366,7 +382,8 @@
     "param": 1314
    },
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "page"
   },
   "battery_residue_time": {
    "access": "ro",
@@ -378,15 +395,17 @@
     "param": 1313
    },
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "page"
   },
   "battery_value": {
    "access": "ro",
    "default": "100",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "power"
+   "role": "diagnostic",
+   "section": "power",
+   "shown": "card"
   },
   "bind_ai_card_info": {
    "access": "ro",
@@ -400,8 +419,9 @@
    "default": "0",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "power"
+   "role": "diagnostic",
+   "section": "power",
+   "shown": "card"
   },
   "database_synchronize": {
    "access": "ro",
@@ -641,7 +661,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_has_buzzer": {
    "access": "ro",
@@ -657,7 +678,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "page"
   },
   "device_is_online": {
    "access": "ro",
@@ -665,7 +687,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_linkage_mode": {
    "access": "ro",
@@ -673,7 +696,8 @@
    "note": "handler rejects the probed values",
    "read": null,
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "page"
   },
   "device_model": {
    "access": "ro",
@@ -681,7 +705,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_name": {
    "access": "rw",
@@ -713,6 +738,7 @@
    "read": null,
    "role": "setting",
    "section": "system",
+   "shown": "card",
    "write": {
     "cmd": 1217,
     "params": {
@@ -732,7 +758,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_pro_alarm_subscription_switch": {
    "access": "ro",
@@ -765,6 +792,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 6287,
@@ -787,7 +815,8 @@
     "param": 61401
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_simslot_info": {
    "access": "ro",
@@ -798,7 +827,8 @@
     "param": 61400
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_status": {
    "access": "ro",
@@ -809,8 +839,9 @@
     "no_default": true,
     "param": 1140
    },
-   "role": "status",
-   "section": "system"
+   "role": "diagnostic",
+   "section": "system",
+   "shown": "card"
   },
   "device_storage_medium": {
    "access": "ro",
@@ -830,6 +861,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
+   "shown": "page",
    "values": [
     0
    ]
@@ -844,15 +876,17 @@
     "param": 6200
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "network"
+   "role": "diagnostic",
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
@@ -860,7 +894,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "card"
   },
   "discover_third_party_device_switch": {
    "access": "rw",
@@ -873,6 +908,7 @@
    },
    "role": "setting",
    "section": "network",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 9306,
@@ -892,7 +928,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "firmware_main_version_time": {
    "access": "ro",
@@ -901,7 +938,8 @@
    "page": "AboutDevice",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "firmware_sub_version": {
    "access": "ro",
@@ -910,7 +948,8 @@
    "page": "AboutDevice",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "firmware_sub_version_time": {
    "access": "ro",
@@ -919,14 +958,16 @@
    "page": "AboutDevice",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "storage"
+   "role": "diagnostic",
+   "section": "storage",
+   "shown": "card"
   },
   "hb_aic_feature_available": {
    "access": "ro",
@@ -934,7 +975,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "detection"
+   "section": "detection",
+   "shown": "page"
   },
   "hb_keypad_is_password_set": {
    "access": "ro",
@@ -950,7 +992,8 @@
     "param": 1670
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "hb_keypad_switch_mode_with_access_code_switch": {
    "access": "rw",
@@ -968,6 +1011,7 @@
    },
    "role": "setting",
    "section": "modes",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 1664,
@@ -995,7 +1039,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "inserted_ai_card_info": {
    "access": "ro",
@@ -1015,7 +1060,8 @@
    "name": "IP address",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "is_connect_webrtc": {
    "access": "ro",
@@ -1039,7 +1085,8 @@
     "param": 1133
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "is_support_familiar_face": {
    "access": "ro",
@@ -1096,7 +1143,8 @@
    "name": "MAC address",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "notification_alarm_delay_value": {
    "access": "ro",
@@ -1108,7 +1156,8 @@
     "param": 1282
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "notification_ignore_switch": {
    "access": "rw",
@@ -1123,6 +1172,7 @@
    },
    "role": "setting",
    "section": "notifications",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 1283,
@@ -1146,7 +1196,8 @@
     "param": 9231
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "power_charge_mode": {
    "access": "ro",
@@ -1160,6 +1211,7 @@
    "read": null,
    "role": "setting",
    "section": "power",
+   "shown": "card",
    "values": [
     0,
     1
@@ -1186,6 +1238,7 @@
    },
    "role": "diagnostic",
    "section": "power",
+   "shown": "card",
    "values": [
     0,
     1,
@@ -1210,6 +1263,7 @@
    },
    "role": "setting",
    "section": "alarm",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -1258,7 +1312,8 @@
     "param": 1265
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "card"
   },
   "setting_model_config": {
    "access": "ro",
@@ -1278,14 +1333,16 @@
     "param": 6218
    },
    "role": "setting",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "sim_card_info": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "subnet_mask": {
    "access": "ro",
@@ -1297,7 +1354,8 @@
     "param": 1320
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "support_multiple_live_stream": {
    "access": "ro",
@@ -1333,6 +1391,7 @@
    },
    "role": "setting",
    "section": "notifications",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 1283,
@@ -1360,6 +1419,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "values": [
     0,
     1
@@ -1388,6 +1448,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "write": {
     "cmd": 1215,
     "params": {
@@ -1421,6 +1482,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "values": [
     0,
     1

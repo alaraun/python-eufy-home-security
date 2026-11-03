@@ -11,6 +11,7 @@
    },
    "role": "setting",
    "section": "alarm",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 1281,
@@ -37,6 +38,7 @@
    },
    "role": "setting",
    "section": "alarm",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1235,
@@ -60,7 +62,8 @@
     "param": 1256
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "arming_geofence_config": {
    "access": "ro",
@@ -102,6 +105,7 @@
    "read": null,
    "role": "setting",
    "section": "modes",
+   "shown": "card",
    "write": {
     "cmd": 1350,
     "subCmd": 1224,
@@ -125,7 +129,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "card"
   },
   "arming_support_custom_mode": {
    "access": "ro",
@@ -189,7 +194,8 @@
    "page": "RingtoneSettings",
    "read": null,
    "role": "setting",
-   "section": "doorbell"
+   "section": "doorbell",
+   "shown": "page"
   },
   "device_chime_hb_alert_tones": {
    "access": "ro",
@@ -211,6 +217,7 @@
    "read": null,
    "role": "setting",
    "section": "doorbell",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -235,6 +242,7 @@
    "read": null,
    "role": "setting",
    "section": "doorbell",
+   "shown": "page",
    "step": 1
   },
   "device_has_buzzer": {
@@ -250,7 +258,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_linkage_mode": {
    "access": "ro",
@@ -258,14 +267,16 @@
    "note": "handler rejects the probed values",
    "read": null,
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "page"
   },
   "device_model": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_name": {
    "access": "rw",
@@ -275,6 +286,7 @@
    "read": null,
    "role": "setting",
    "section": "system",
+   "shown": "card",
    "write": {
     "cmd": 1216,
     "params": {
@@ -312,6 +324,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 6287,
@@ -334,7 +347,8 @@
     "param": 6200
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
@@ -345,14 +359,16 @@
     "param": 1032
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "firmware_main_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "firmware_main_version_time": {
    "access": "ro",
@@ -360,7 +376,8 @@
    "page": "AboutDevice",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "firmware_sub_version": {
    "access": "ro",
@@ -368,21 +385,24 @@
    "page": "AboutDevice",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "storage"
+   "role": "diagnostic",
+   "section": "storage",
+   "shown": "card"
   },
   "ip_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "is_support_silent_ota_switch": {
    "access": "ro",
@@ -397,7 +417,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "notification_alarm_delay_value": {
    "access": "ro",
@@ -408,7 +429,8 @@
     "param": 1282
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "prompt_volume_value": {
    "access": "rw",
@@ -423,6 +445,7 @@
    },
    "role": "setting",
    "section": "alarm",
+   "shown": "page",
    "step": 1,
    "write": {
     "cmd": 1350,
@@ -459,6 +482,7 @@
    },
    "role": "setting",
    "section": "notifications",
+   "shown": "page",
    "write": {
     "cmd": 1350,
     "subCmd": 1283,
@@ -482,7 +506,8 @@
     "param": 1253
    },
    "role": "setting",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "timezone_set": {
    "access": "rw",
@@ -495,6 +520,7 @@
    },
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "write": {
     "cmd": 1215,
     "params": {

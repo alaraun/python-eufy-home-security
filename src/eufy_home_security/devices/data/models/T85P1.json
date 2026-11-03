@@ -16,7 +16,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "card"
   },
   "battery_level": {
    "access": "ro",
@@ -31,8 +32,9 @@
    "default": "100",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "power"
+   "role": "diagnostic",
+   "section": "power",
+   "shown": "card"
   },
   "device_ability_data": {
    "access": "ro",
@@ -68,7 +70,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "page"
   },
   "device_is_online": {
    "access": "ro",
@@ -76,7 +79,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_name": {
    "access": "ro",
@@ -88,7 +92,8 @@
     "param": 1217
    },
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_power_saving_mode": {
    "access": "ro",
@@ -117,7 +122,8 @@
     "param": 6287
    },
    "role": "setting",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_text_event_data_type": {
    "access": "ro",
@@ -132,8 +138,9 @@
    "default": "0",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "network"
+   "role": "diagnostic",
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
@@ -141,7 +148,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "card"
   },
   "is_device_upgrade": {
    "access": "ro",
@@ -157,7 +165,8 @@
     "param": 1134
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "is_support_live_entry_open_smart_lock": {
    "access": "ro",
@@ -262,7 +271,8 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "notifications"
+   "section": "notifications",
+   "shown": "page"
   },
   "smart_lock_notification_switch": {
    "access": "ro",
@@ -280,7 +290,8 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "notifications"
+   "section": "notifications",
+   "shown": "page"
   },
   "smart_lock_one_touch_locking_type": {
    "access": "ro",
@@ -296,7 +307,8 @@
    "note": "handler rejects the probed values",
    "read": null,
    "role": "setting",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "smart_lock_scramble_password_type": {
    "access": "ro",

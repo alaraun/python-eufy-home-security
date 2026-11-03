@@ -9,7 +9,8 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "card"
   },
   "battery_value": {
    "access": "ro",
@@ -21,7 +22,8 @@
     "param": 1101
    },
    "role": "diagnostic",
-   "section": "power"
+   "section": "power",
+   "shown": "card"
   },
   "camera_on_off": {
    "access": "ro",
@@ -30,15 +32,17 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "charging_status": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "power"
+   "role": "diagnostic",
+   "section": "power",
+   "shown": "card"
   },
   "cloud_storage_support_trail": {
    "access": "ro",
@@ -59,6 +63,7 @@
    "read": null,
    "role": "setting",
    "section": "detection",
+   "shown": "card",
    "values": [
     5,
     6
@@ -101,6 +106,7 @@
    "read": null,
    "role": "setting",
    "section": "detection",
+   "shown": "card",
    "values": [
     0,
     1,
@@ -135,7 +141,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "page"
   },
   "device_is_online": {
    "access": "ro",
@@ -143,7 +150,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_model": {
    "access": "ro",
@@ -151,7 +159,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_name": {
    "access": "ro",
@@ -163,7 +172,8 @@
     "param": 1217
    },
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_serial_number": {
    "access": "ro",
@@ -178,7 +188,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_storage_type": {
    "access": "ro",
@@ -190,6 +201,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
+   "shown": "page",
    "values": [
     0,
     1
@@ -213,15 +225,17 @@
     "param": 6200
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
    "default": "0",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "network"
+   "role": "diagnostic",
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
@@ -229,7 +243,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "card"
   },
   "firmware_main_version": {
    "access": "ro",
@@ -237,7 +252,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "firmware_main_version_time": {
    "access": "ro",
@@ -246,7 +262,8 @@
    "page": "AboutDevice",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "ip_address": {
    "access": "ro",
@@ -254,7 +271,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "is_device_upgrade": {
    "access": "ro",
@@ -270,7 +288,8 @@
     "param": 1134
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "is_support_ble": {
    "access": "ro",
@@ -285,7 +304,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "montion_detection_ui_show_type": {
    "access": "ro",
@@ -293,7 +313,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "detection"
+   "section": "detection",
+   "shown": "page"
   },
   "motion_detection_status": {
    "access": "ro",
@@ -332,7 +353,8 @@
     "param": 6040
    },
    "role": "setting",
-   "section": "detection"
+   "section": "detection",
+   "shown": "card"
   },
   "motion_stop_end_early": {
    "access": "ro",
@@ -355,7 +377,8 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "picture"
+   "section": "picture",
+   "shown": "page"
   },
   "notification_type": {
    "access": "ro",
@@ -370,6 +393,7 @@
    "read": null,
    "role": "setting",
    "section": "notifications",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -390,6 +414,7 @@
    "read": null,
    "role": "setting",
    "section": "power",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -403,8 +428,9 @@
     "default:0": "default:0"
    },
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "power",
+   "shown": "card",
    "values": [
     "default:0"
    ]
@@ -439,7 +465,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "time_format_set": {
    "access": "ro",
@@ -453,6 +480,7 @@
    "read": null,
    "role": "setting",
    "section": "system",
+   "shown": "page",
    "values": [
     0,
     1
@@ -473,6 +501,7 @@
    "read": null,
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "step": 1
   },
   "watermark_set": {
@@ -482,7 +511,8 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "picture"
+   "section": "picture",
+   "shown": "page"
   }
  },
  "source": {

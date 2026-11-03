@@ -20,7 +20,8 @@
     "param": 1281
    },
    "role": "setting",
-   "section": "alarm"
+   "section": "alarm",
+   "shown": "page"
   },
   "alarm_volume_value": {
    "access": "ro",
@@ -36,6 +37,7 @@
    },
    "role": "setting",
    "section": "alarm",
+   "shown": "page",
    "step": 1
   },
   "arming_geofence_config": {
@@ -82,7 +84,8 @@
     "param": 1224
    },
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "shown": "card"
   },
   "arming_support_arm_delay": {
    "access": "ro",
@@ -96,7 +99,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "card"
   },
   "arming_support_custom_mode": {
    "access": "ro",
@@ -146,7 +150,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_ability_data": {
    "access": "ro",
@@ -165,14 +170,16 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_model": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_name": {
    "access": "ro",
@@ -184,7 +191,8 @@
     "param": 1217
    },
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_not_disturb_config": {
    "access": "ro",
@@ -192,7 +200,8 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "notifications"
+   "section": "notifications",
+   "shown": "page"
   },
   "device_serial_number": {
    "access": "ro",
@@ -216,7 +225,8 @@
     "param": 6287
    },
    "role": "setting",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_sync_data_on_repetor": {
    "access": "ro",
@@ -234,14 +244,16 @@
     "param": 6200
    },
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "device_wifi_signal_strength_level": {
    "access": "ro",
@@ -249,28 +261,32 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "card"
   },
   "firmware_main_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "firmware_main_version_time": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
-   "role": "status",
-   "section": "storage"
+   "role": "diagnostic",
+   "section": "storage",
+   "shown": "card"
   },
   "ignore_no_sd_card_alarm": {
    "access": "ro",
@@ -278,14 +294,16 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "storage"
+   "section": "storage",
+   "shown": "card"
   },
   "ip_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "is_device_upgrade": {
    "access": "ro",
@@ -301,7 +319,8 @@
     "param": 1134
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "is_support_mqtt": {
    "access": "ro",
@@ -334,14 +353,16 @@
     "param": 1045
    },
    "role": "setting",
-   "section": "picture"
+   "section": "picture",
+   "shown": "page"
   },
   "mac_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "page"
   },
   "notification_alarm_delay_value": {
    "access": "ro",
@@ -352,7 +373,8 @@
     "param": 1282
    },
    "role": "status",
-   "section": "modes"
+   "section": "modes",
+   "shown": "page"
   },
   "prompt_volume_value": {
    "access": "ro",
@@ -368,6 +390,7 @@
    },
    "role": "setting",
    "section": "alarm",
+   "shown": "page",
    "step": 1
   },
   "sdk_model_config": {
@@ -401,6 +424,7 @@
    "read": null,
    "role": "setting",
    "section": "notifications",
+   "shown": "page",
    "values": [
     0,
     2,
@@ -419,7 +443,8 @@
     "param": 1215
    },
    "role": "setting",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "timezone_set_redirect": {
    "access": "ro",

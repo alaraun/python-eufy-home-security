@@ -12,7 +12,8 @@
     "param": 8001
    },
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "card"
   },
   "device_ability_data": {
    "access": "ro",
@@ -28,7 +29,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_name": {
    "access": "ro",
@@ -36,7 +38,8 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "firmware_main_version": {
    "access": "ro",
@@ -48,7 +51,8 @@
     "param": 8003
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "is_device_upgrade": {
    "access": "ro",
@@ -56,7 +60,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   }
  },
  "source": {

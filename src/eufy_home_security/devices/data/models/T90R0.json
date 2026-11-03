@@ -23,6 +23,7 @@
    },
    "role": "setting",
    "section": "alarm",
+   "shown": "page",
    "values": [
     1,
     2,
@@ -59,7 +60,8 @@
     "param": 1101
    },
    "role": "diagnostic",
-   "section": "power"
+   "section": "power",
+   "shown": "card"
   },
   "device_ability_data": {
    "access": "ro",
@@ -79,7 +81,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_model": {
    "access": "ro",
@@ -87,7 +90,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "device_name": {
    "access": "rw",
@@ -97,6 +101,7 @@
    "read": null,
    "role": "setting",
    "section": "system",
+   "shown": "card",
    "write": {
     "cmd": 1217,
     "params": {
@@ -121,7 +126,8 @@
     "param": 1131
    },
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_to_hb_connect_type": {
    "access": "ro",
@@ -137,7 +143,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "network"
+   "section": "network",
+   "shown": "card"
   },
   "firmware_main_version": {
    "access": "ro",
@@ -145,7 +152,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "firmware_main_version_time": {
    "access": "ro",
@@ -154,7 +162,8 @@
    "page": "AboutDevice",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "is_device_upgrade": {
    "access": "ro",
@@ -170,7 +179,8 @@
     "param": 1134
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "notification_jump_to_mode_page": {
    "access": "ro",
@@ -203,6 +213,7 @@
    },
    "role": "setting",
    "section": "alarm",
+   "shown": "page",
    "values": [
     0,
     1,
@@ -242,7 +253,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "card"
   },
   "sensor_siren_ring_status": {
    "access": "ro",
@@ -258,7 +270,8 @@
     "param": 61008
    },
    "role": "status",
-   "section": "alarm"
+   "section": "alarm",
+   "shown": "card"
   }
  },
  "source": {

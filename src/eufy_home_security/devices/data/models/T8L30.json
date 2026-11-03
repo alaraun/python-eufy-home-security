@@ -29,7 +29,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_light_brightness": {
    "access": "ro",
@@ -191,7 +192,8 @@
    "kind": "other",
    "read": null,
    "role": "status",
-   "section": "picture"
+   "section": "picture",
+   "shown": "card"
   }
  },
  "source": {

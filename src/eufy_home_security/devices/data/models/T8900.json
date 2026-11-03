@@ -36,7 +36,8 @@
    "kind": "bool",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "device_name": {
    "access": "rw",
@@ -46,6 +47,7 @@
    "read": null,
    "role": "setting",
    "section": "system",
+   "shown": "card",
    "write": {
     "cmd": 1217,
     "params": {
@@ -70,7 +72,8 @@
     "param": 1131
    },
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "firmware_main_version": {
    "access": "ro",
@@ -78,7 +81,8 @@
    "kind": "string",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "firmware_main_version_time": {
    "access": "ro",
@@ -87,7 +91,8 @@
    "page": "AboutDevice",
    "read": null,
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "page"
   },
   "is_device_upgrade": {
    "access": "ro",
@@ -103,7 +108,8 @@
     "param": 1134
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "sensor_door_status": {
    "access": "ro",
@@ -119,7 +125,8 @@
     "param": 1550
    },
    "role": "status",
-   "section": "system"
+   "section": "system",
+   "shown": "card"
   },
   "sensor_is_low_power": {
    "access": "ro",
@@ -135,7 +142,8 @@
     "param": 1552
    },
    "role": "status",
-   "section": "power"
+   "section": "power",
+   "shown": "card"
   }
  },
  "source": {
