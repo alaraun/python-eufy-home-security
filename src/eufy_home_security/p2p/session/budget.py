@@ -200,25 +200,26 @@ class SessionBudget:
                 stream = await short.async_open_recording(
                     path, channel, first_frame_timeout=first_frame_timeout
                 )
-                seen = 0
-                last_keyframe: bytes | None = None
+                seen = 0  # keyframes so far; parts holds the latest picture group
                 async for frame in stream:
                     if frame.kind is not MediaKind.VIDEO:
                         continue
                     if frame.is_keyframe:
+                        if seen == keyframe_number:
+                            break  # the next keyframe starts another picture group
                         seen += 1
-                        last_keyframe = frame.data
-                        if seen < keyframe_number:
-                            continue
-                        if seen > keyframe_number:
-                            break  # never include frames from the next picture group
-                    if seen != keyframe_number:
-                        continue
-                    parts.append(frame.data)
-                    if len(parts) > trailing_frames:
+                        parts[:] = [frame.data]
+                    elif parts and len(parts) <= trailing_frames:
+                        parts.append(frame.data)
+                    if seen == keyframe_number and len(parts) > trailing_frames:
                         break
-                if not parts and last_keyframe is not None:
-                    parts.append(last_keyframe)  # a short clip: use its last keyframe
+                if parts and seen < keyframe_number:
+                    _LOGGER.debug(
+                        "%s: recording has %d keyframes, requested %d; using last",
+                        self._session._log_name,
+                        seen,
+                        keyframe_number,
+                    )
             finally:
                 await short.async_close()  # PPPP CLOSE: the station stops sending
                 _LOGGER.debug(

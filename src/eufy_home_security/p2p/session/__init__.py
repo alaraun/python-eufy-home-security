@@ -2313,13 +2313,15 @@ class StationSession:
         keyframe_number: int = 1,
         first_frame_timeout: float | None = None,
     ) -> bytes:
-        """A recording's first keyframe, the moment that triggered the event, as Annex-B in
-        the camera's codec (:func:`~..media.picture_codec`).
+        """A selected recording keyframe as Annex-B in the camera's codec
+        (:func:`~..media.picture_codec`).
 
         ``keyframe_number`` selects a 1-based keyframe in recording order (default
-        1). If the recording has fewer, its last keyframe is returned. With
-        ``trailing_frames`` P-frames after the selected keyframe (never past the next
-        keyframe) are appended. The camera is not woken.
+        1). If the recording has fewer, its last keyframe is used. Up to
+        ``trailing_frames`` P-frames after that keyframe are appended, never past the
+        next keyframe. The camera is not woken. Asking for a later keyframe plays
+        more of the recording while holding the trigger-frame lock; asking past the
+        end plays the whole recording.
 
         No command stops a playback, so the recording (1025) is played on a
         **short-lived second session** to the same station, closed as soon as the

@@ -2651,7 +2651,7 @@ class Station:
         keyframe_number: int = 1,
         first_frame_timeout: float | None = None,
     ) -> bytes:
-        """A recording's trigger frame (its first keyframe) as Annex-B, by path, in the
+        """A recording's selected keyframe as Annex-B, by path, in the
         camera's codec (:func:`~..p2p.media.picture_codec` tells which).
 
         Played on a short-lived second session that is closed as soon as the frames
@@ -2839,7 +2839,8 @@ class Station:
         camera stays asleep. ``LIVE`` is a live keyframe now and wakes a battery camera.
         The image's ``record_id`` and ``recorded_at`` say which event it shows.
         ``keyframe_number`` selects the 1-based recording keyframe for
-        ``TRIGGER_FRAME`` only; the default is the original first keyframe.
+        ``TRIGGER_FRAME`` only; the default is the original first keyframe. Values
+        other than 1 with ``LIVE`` or ``THUMBNAIL`` raise :class:`ValueError`.
 
         ``wait`` applies to ``LIVE`` only (see :meth:`async_snapshot`): past the session
         budget it waits up to the first-frame timeout for a stream to end (the default),
@@ -2860,6 +2861,10 @@ class Station:
         """
         if days < 1:
             raise ValueError("days must be at least 1")
+        if keyframe_number < 1:
+            raise ValueError("keyframe_number must be at least 1")
+        if source is not ImageSource.TRIGGER_FRAME and keyframe_number != 1:
+            raise ValueError("keyframe_number requires TRIGGER_FRAME source")
         channel = self.channel_for(device_sn)
         if source is ImageSource.LIVE:
             return await self._live_image(

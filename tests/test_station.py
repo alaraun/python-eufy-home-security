@@ -120,6 +120,7 @@ from eufy_home_security.station import (
 from eufy_home_security.storage import MemoryStore, SessionCache
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import (
+    MEDIA_GOP,
     MEDIA_KEYFRAME,
     MEDIA_RECORDING_PFRAME,
     FakeStation,
@@ -1994,6 +1995,40 @@ async def test_async_camera_image_trigger_frame_plays_newest_recording(
     assert "wanted.zxvideo" in str(opens[0]["payload"])
 
 
+async def test_async_camera_image_passes_numbered_keyframe_to_station_session(
+    station: Station, fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The public camera-image API forwards the number through Station to P2P."""
+    today = int(datetime.now().astimezone().strftime("%Y%m%d"))
+    fake.rows = [
+        {
+            "record_id": today * HISTORY_RECORD_COUNTER + 7,
+            "device_sn": SYNTHETIC.camera_sn,
+            "storage_path": "/zx/numbered.zxvideo",
+            "start_time": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    ]
+    fake.recording_frames = MEDIA_GOP * 4
+    send = fake.send_video
+
+    def tagged(body: bytes, *, keyframe: bool, counter: int = 0, **kw: Any) -> None:
+        send(
+            body + bytes([counter]) if keyframe else body,
+            keyframe=keyframe,
+            counter=counter,
+            **kw,
+        )
+
+    monkeypatch.setattr(fake, "send_video", tagged)
+    image = await station.async_camera_image(
+        SYNTHETIC.camera_sn, source=ImageSource.TRIGGER_FRAME, keyframe_number=2
+    )
+    assert image.source is ImageSource.TRIGGER_FRAME
+    assert image.data == MEDIA_KEYFRAME + bytes([MEDIA_GOP + 1])
+    assert image.record_id == today * HISTORY_RECORD_COUNTER + 7
+    assert not fake.live_opens  # this is playback, not a camera wake
+
+
 async def test_homebase2_camera_image_trigger_frame_plays_native_dat_recording(
     fake: FakeStation,
 ) -> None:
@@ -2265,6 +2300,11 @@ async def test_async_camera_image_rejects_unpaired_and_invalid_days(
     sent_before = len(fake.received)
     with pytest.raises(ValueError, match="days must be at least 1"):
         await station.async_camera_image(SYNTHETIC.camera_sn, days=0)
+    with pytest.raises(ValueError, match="keyframe_number must be at least 1"):
+        await station.async_camera_image(SYNTHETIC.camera_sn, keyframe_number=0)
+    for source in (ImageSource.THUMBNAIL, ImageSource.LIVE):
+        with pytest.raises(ValueError, match="keyframe_number requires TRIGGER_FRAME"):
+            await station.async_camera_image(SYNTHETIC.camera_sn, source=source, keyframe_number=2)
     with pytest.raises(UnsupportedError, match="not paired"):
         await station.async_camera_image("T8160P2000099999")
     assert len(fake.received) == sent_before

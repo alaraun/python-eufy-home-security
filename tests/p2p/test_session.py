@@ -3217,23 +3217,43 @@ async def test_trigger_frame_plays_on_a_short_lived_session_and_closes_it(
 
 
 async def test_trigger_frame_selects_nth_keyframe_or_last_of_short_clip(
-    station: FakeStation,
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The requested GOP is chosen without opening live media or reading a full clip."""
-    station.recording_frames = MEDIA_GOP * 10
+    """Select the actual numbered GOP, keep its P-frames, and stop early."""
+    send = station.send_video
+
+    def tagged(body: bytes, *, keyframe: bool, counter: int = 0, **kw: Any) -> None:
+        send(
+            body + bytes([counter]) if keyframe else body,
+            keyframe=keyframe,
+            counter=counter,
+            **kw,
+        )
+
+    monkeypatch.setattr(station, "send_video", tagged)
+    station.recording_frames = MEDIA_GOP * 20
     session = make_session(station, Provider(station))
     try:
         await session.async_get_params()
         with pytest.raises(ValueError, match="keyframe_number"):
             await session.async_trigger_frame("/zx/clip.zxvideo", 1, keyframe_number=0)
-        frame = await session.async_trigger_frame("/zx/clip.zxvideo", 1, keyframe_number=3)
-        assert frame == MEDIA_KEYFRAME
-        assert station.media_frames_sent >= MEDIA_GOP * 2 + 1
+
+        first = await session.async_trigger_frame("/zx/clip.zxvideo", 1)
+        assert first == MEDIA_KEYFRAME + bytes([1])
+        selected = await session.async_trigger_frame(
+            "/zx/clip.zxvideo", 1, keyframe_number=2, trailing_frames=MEDIA_GOP * 2
+        )
+        assert selected == (
+            MEDIA_KEYFRAME + bytes([MEDIA_GOP + 1]) + MEDIA_RECORDING_PFRAME * (MEDIA_GOP - 1)
+        )
         assert station.media_frames_sent < station.recording_frames
-        station.recording_frames = MEDIA_GOP + 2  # only two keyframes
-        assert (
-            await session.async_trigger_frame("/zx/short.zxvideo", 1, keyframe_number=3)
-            == MEDIA_KEYFRAME
+
+        station.recording_frames = MEDIA_GOP * 3  # keyframes at counters 1, 5, 9
+        fallback = await session.async_trigger_frame(
+            "/zx/short.zxvideo", 1, keyframe_number=9, trailing_frames=2
+        )
+        assert fallback == (
+            MEDIA_KEYFRAME + bytes([MEDIA_GOP * 2 + 1]) + MEDIA_RECORDING_PFRAME * 2
         )
     finally:
         await session.async_close()
