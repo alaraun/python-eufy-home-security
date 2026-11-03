@@ -138,6 +138,10 @@ PARAM_DEV_STATUS = 1131
 online, ``0`` offline, and anything above ``1`` offline with a reason code the app
 renders but does not name. Only sub-device blocks carry it — the station's does not,
 because a dump is itself proof the station answered."""
+PARAM_HUB_STATUS = 1140
+"""A station's own status (``device_status`` on a station). The client reports a station's
+reachability as its session state (:attr:`Station.connected`, ``ConnectionChanged``)
+instead."""
 DEV_STATUS_ONLINE = 1
 """The one :data:`PARAM_DEV_STATUS` value that means online (the eufy app compares it
 against ``CameraParams.PARAM_ENABLE``)."""

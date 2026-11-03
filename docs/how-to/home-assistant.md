@@ -898,18 +898,25 @@ A closed session (`async_close`) never reconnects on its own — build a new
     = open), a tamper or low-battery flag. A status the device has not reported reads
     None, also on a station or a standalone device: its `default` never stands in (see
     `setting` below).
-  - `role` (`SettingRole`) says what the setting is to the user, from where the eufy app
-    shows it; map entities from it, never from per-key rules:
+  - `role` (`SettingRole`) says what the setting is to the user; `shown` (`SettingShown`
+    or None) says where the eufy app shows it: `CARD` on the device card or home page,
+    `PAGE` only on a settings page, None nowhere. The two are independent (a control can
+    sit on the card too); every `STATUS` has a `shown`. Map entities from them, never
+    from per-key rules. A read-only setting (`writable` False) gets an entity only when
+    it is `readable`: an unreadable one would always be unknown, so it gets none (most
+    statuses: the library has no read for them yet, and some only steer the app's own
+    pages).
 
-    | `role` | entity |
-    |---|---|
-    | `SETTING` | the control above when `writable`; when not, the app offers it as a control the library cannot write: when `readable`, a disabled diagnostic `sensor` (it keeps its identity once a write lands), else no entity |
-    | `STATUS` | read-only, shown by the app on the device card or a settings page: when `readable`, an enabled `sensor` (`binary_sensor` for a bool), not diagnostic; when not readable (most statuses: the library has no read for them yet, and some only steer the app's own pages), no entity. An entry sensor's `sensor_door_status` is its primary entity (device class `door`); a tamper or low-battery flag fits device class `tamper` / `battery` |
-    | `DIAGNOSTIC` | read-only and shown nowhere by the app, or a value the device fields already give (battery level, online status, counters, the active mode): when `readable`, a disabled diagnostic entity, or none; else no entity |
+    | `role` | `shown` | entity |
+    |---|---|---|
+    | `SETTING` | any | the control above when `writable`; when not, the app offers it as a control the library cannot write: a disabled diagnostic `sensor` (it keeps its identity once a write lands) |
+    | `STATUS` | `CARD` | an enabled primary entity, no entity category: a `sensor`, a `binary_sensor` for a bool. An entry sensor's `sensor_door_status` (device class `door`), a tamper or low-battery flag (`tamper` / `battery`) |
+    | `STATUS` | `PAGE` | an enabled entity with entity category diagnostic: listed in the device page's Diagnostic section, neither hidden nor disabled |
+    | `DIAGNOSTIC` | any | a disabled diagnostic entity, or none: the app shows it nowhere, or it is a value the device fields already give (battery level, online status, charging, a station's own status, counters, the active mode) |
 
-    A `STRING` or `OTHER` status can carry a JSON value, a string that can run past 255
-    characters (Home Assistant's state limit): show a value that long as an attribute,
-    not a state.
+    Never make raw JSON an entity's state: a `STRING` or `OTHER` status whose value is
+    JSON (`arming_get_alarm_*_mode`) goes into attributes, or waits for a library API
+    that decodes it. A state is also limited to 255 characters.
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
     bool for a bool, str for a string. `default` is the vendor default; a station setting
@@ -1192,7 +1199,7 @@ For the integration this means:
 - **Names and labels come from the library.** Name the entity from `setting.name` and
   show each value by its label; do not ship translations of vendor keys.
 - **Import the types from the package root:** `Setting`, `SettingKind`, `SettingControl`,
-  `SettingRole`, `SettingUnit`, `CommandOutcome` and `SettingsCoverage` are exported there; capability grades
+  `SettingRole`, `SettingShown`, `SettingUnit`, `CommandOutcome` and `SettingsCoverage` are exported there; capability grades
   (`Capability`, `Support`, `profile_for_serial`), `MODE_ACTION_FLAGS`,
   `MODE_ACTION_LABELS`, `MODE_ACTION_INVERTED`, `MODE_ACTION_CLEARS` and `mode_action_on`
   from `eufy_home_security.devices`.

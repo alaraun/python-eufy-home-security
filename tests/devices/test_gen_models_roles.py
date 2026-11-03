@@ -1,5 +1,5 @@
-"""``scripts/gen_models_roles.py``: each rule of a setting's role, and the role inputs
-``gen_models`` builds from the shown-property file and a settings tree."""
+"""``scripts/gen_models_roles.py``: each rule of a setting's role and where the app shows
+it, and the inputs ``gen_models`` builds from the shown-property file and a settings tree."""
 
 from __future__ import annotations
 
@@ -29,14 +29,22 @@ def _load(name: str) -> ModuleType:
 roles = _load("gen_models_roles")
 gen_models = _load("gen_models")
 
-STATE = (1101, 1131)  # parameters the library reads into device state
+STATE = (1101, 1131, 2111)  # parameters whose value the library already reports
 
 # A synthetic thing description: (identifier, access_mode).
 TD = [("volume", "RW"), ("door", "R"), ("ability", "R"), ("battery", "R"), ("schedule", "RW")]
 TD += [("password_set", "RW"), ("password_set__v1", "RW"), ("level__v1", "R"), ("wifi_name", "R")]
-# A synthetic shown-property file and settings tree.
-SHOWN_FILE = {"pages": {"wifi_name": ["WiFiScreen"]}, "cards": {"door": ["SensorCard"]}}
-TREE = {"positions": {"player_model_config": {"Live": ["level#C#2", "light#F#4"]}}}
+TD += [("charging", "R"), ("volume_card", "RW")]
+# A synthetic shown-property file and settings tree: "wifi_name" is on a page and in the
+# layout, "door" on a page and on the card, "volume_card" on the card and in the layout.
+SHOWN_FILE = {
+    "pages": {"wifi_name": ["WiFiScreen"], "door": ["SensorPage"]},
+    "cards": {"door": ["SensorCard"], "volume_card": ["CameraCard"], "charging": ["CameraCard"]},
+}
+TREE = {"positions": {"player_model_config": {"Live": ["level#C#2", "wifi_name#F#4"]}}}
+TREE["positions"]["setting_model_config"] = {"Main": ["volume_card#A#1"]}
+# The parameter the handler fills each property from (read or not).
+LOCATED = {"charging": 2111, "door": 1550, "schedule": 1400}
 
 
 def _entry(access: str = "ro", param: int | None = None, **extra: Any) -> dict[str, Any]:
@@ -54,7 +62,14 @@ SETTINGS: dict[str, dict[str, Any]] = {
     "password_set__v1": _entry(param=1671),
     "level__v1": _entry(param=1300),
     "wifi_name": _entry(param=1180),
+    "charging": _entry(),
+    "volume_card": _entry("rw", 1401),
 }
+
+
+def _places() -> dict[str, str]:
+    places: dict[str, str] = gen_models.model_shown(gen_models.shown_places(SHOWN_FILE), TREE)
+    return places
 
 
 def _assign(settings: dict[str, dict[str, Any]]) -> dict[str, int]:
@@ -62,32 +77,37 @@ def _assign(settings: dict[str, dict[str, Any]]) -> dict[str, int]:
         settings,
         td_writable={i for i, access in TD if "W" in access},
         app_read_only={"password_set"},
-        shown=gen_models.shown_identifiers(SHOWN_FILE) | gen_models.placed_identifiers(TREE),
+        shown=_places(),
         state_params=STATE,
+        located=LOCATED,
     )
     return counts
 
 
-def test_each_rule_gives_its_role() -> None:
+def test_each_rule_gives_its_role_and_place() -> None:
     settings = {k: dict(v) for k, v in SETTINGS.items()}
     counts = _assign(settings)
-    assert {k: e["role"] for k, e in settings.items()} == {
-        "volume": "setting",  # the library writes it
-        "door": "status",  # a device card reads it
-        "ability": "diagnostic",  # nothing the app shows reads it
-        "battery": "diagnostic",  # its parameter is a device state field
-        "schedule": "setting",  # writable in the thing description, no library write
-        "password_set": "status",  # writable in the thing description, the app only reads it
-        "password_set__v1": "status",  # listed through its base
-        "level__v1": "status",  # its base is placed in the app's layout
-        "wifi_name": "status",  # a settings page reads it
+    assert {k: (e["role"], e.get("shown")) for k, e in settings.items()} == {
+        "volume": ("setting", None),  # the library writes it; the app shows it nowhere
+        "door": ("status", "card"),  # a device card reads it (a page too: the card wins)
+        "ability": ("diagnostic", None),  # nothing the app shows reads it
+        "battery": ("diagnostic", None),  # its parameter is a device state field
+        "schedule": ("setting", None),  # writable in the thing description, no library write
+        "password_set": ("status", "page"),  # TD-writable, the app lists it as read-only
+        "password_set__v1": ("status", "page"),  # listed through its base
+        "level__v1": ("status", "page"),  # its base is placed in the app's layout
+        "wifi_name": ("status", "page"),  # a settings page reads it, the layout places it
+        "charging": ("diagnostic", "card"),  # on the card, filled from a device state field
+        "volume_card": ("setting", "card"),  # a written setting on the card (layout: a page)
     }
     assert counts == {
-        "role:setting:written": 1,
+        "role:setting:written": 2,
         "role:setting:app control": 1,
         "role:status:shown": 5,
         "role:diagnostic:not shown": 1,
-        "role:diagnostic:device state": 1,
+        "role:diagnostic:device state": 2,
+        "shown:card": 3,
+        "shown:page": 4,
     }
 
 
@@ -109,18 +129,50 @@ def test_a_device_state_field_wins_over_the_app_s_control() -> None:
     assert _role("schedule", _entry(param=1131)) == ("diagnostic", "device state")
 
 
+def test_a_status_the_handler_fills_from_a_device_state_field_is_a_diagnostic() -> None:
+    """No read (the handler converts the value), but its one parameter is device state."""
+    assert _role("door", _entry(), located={"door": 2111}) == ("diagnostic", "device state")
+    assert _role("door", _entry(), located={"door": 1550}) == ("status", "shown")
+    assert _role("door", _entry(), located={"other": 2111}) == ("status", "shown")
+
+
 def test_a_listed_status_is_a_status_without_being_shown() -> None:
-    assert _role("password_set", _entry(), shown=set()) == ("status", "shown")
+    assert _role("password_set", _entry(), shown={}) == ("status", "shown")
 
 
-def _role(ident: str, entry: dict[str, Any], *, shown: set[str] | None = None) -> tuple[str, str]:
+@pytest.mark.parametrize(
+    ("ident", "shown", "place"),
+    [
+        ("door", {"door": "card"}, "card"),
+        ("door", {"door": "page"}, "page"),
+        ("door", {}, None),
+        ("door__v2", {"door": "card"}, "card"),  # a variant is shown where its base is
+        ("door__v2", {"door__v2": "page", "door": "card"}, "card"),  # the card wins
+        ("door__v2", {"door__v2": "card", "door": "page"}, "card"),
+        ("password_set", {}, "page"),  # the app lists it as a status it only reads
+        ("password_set__v1", {}, "page"),
+        ("password_set", {"password_set": "card"}, "card"),
+    ],
+)
+def test_shown_of_prefers_the_card(ident: str, shown: dict[str, str], place: str | None) -> None:
+    assert roles.shown_of(ident, shown=shown, app_read_only={"password_set"}) == place
+
+
+def _role(
+    ident: str,
+    entry: dict[str, Any],
+    *,
+    shown: dict[str, str] | None = None,
+    located: dict[str, int] | None = None,
+) -> tuple[str, str]:
     found: tuple[str, str] = roles.role_of(
         ident,
         entry,
         td_writable={i for i, access in TD if "W" in access},
         app_read_only={"password_set"},
-        shown={"door"} if shown is None else shown,
+        shown={"door": "card"} if shown is None else shown,
         state_params=STATE,
+        located={} if located is None else located,
     )
     return found
 
@@ -133,9 +185,9 @@ def test_a_task_hands_its_shown_identifiers_to_generate(monkeypatch: pytest.Monk
         return {}, {}
 
     monkeypatch.setattr(gen_models, "generate", fake)
-    task = gen_models._Task("T9ZZ9", ROOT, None, None, "1", None, {}, (), frozenset({"door"}))
+    task = gen_models._Task("T9ZZ9", ROOT, None, None, "1", None, {}, (), {"door": "card"})
     gen_models._build(task)
-    assert seen["shown"] == frozenset({"door"})
+    assert seen["shown"] == {"door": "card"}
 
 
 def test_a_run_reads_the_shown_file_into_every_task(
@@ -161,7 +213,8 @@ def test_a_run_reads_the_shown_file_into_every_task(
         shown=data / "shown.json",
     )
     gen_models._generate_all(args, tmp_path, tmp_path / "out", quiet=True)
-    assert [t.shown for t in tasks] == [frozenset({"wifi_name", "door"})] * 2
+    expected = {"wifi_name": "page", "door": "card", "volume_card": "card", "charging": "card"}
+    assert [t.shown for t in tasks] == [expected] * 2
 
 
 def test_placed_identifiers_read_every_layout_of_the_tree() -> None:
@@ -170,7 +223,19 @@ def test_placed_identifiers_read_every_layout_of_the_tree() -> None:
     assert gen_models.placed_identifiers(None) == set()
 
 
+def test_a_model_s_layout_adds_pages_but_never_hides_a_card() -> None:
+    tree = {"positions": {"a": {"P": ["x#C#1", "y#C#2", "z#C#3"]}}}
+    got = gen_models.model_shown({"x": "card", "y": "page", "w": "card"}, tree)
+    assert got == {"x": "card", "y": "page", "z": "page", "w": "card"}
+    assert gen_models.model_shown({"w": "page"}, None) == {"w": "page"}
+
+
 @pytest.mark.parametrize("doc", [{"pages": {}}, {"cards": {}}, {"pages": [], "cards": {}}])
-def test_shown_identifiers_need_both_objects(doc: dict[str, Any]) -> None:
+def test_shown_places_need_both_objects(doc: dict[str, Any]) -> None:
     with pytest.raises(gen_models.GeneratorError, match="shown-property data"):
-        gen_models.shown_identifiers(doc)
+        gen_models.shown_places(doc)
+
+
+def test_a_card_identifier_is_a_card_even_when_a_page_reads_it() -> None:
+    assert gen_models.shown_places(SHOWN_FILE)["door"] == "card"
+    assert gen_models.shown_places(SHOWN_FILE)["wifi_name"] == "page"

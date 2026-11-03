@@ -116,6 +116,8 @@ module.exports.deviceStatus = function (s) {
     if (prop === "both_open") out.both_open = asBoolean(find(1203)) && asBoolean(find(1204));
     if (prop === "digits") out.digits = /^[0-9]+$/.test(find(1320)) ? find(1320) : null;
     if (prop === "volume") out.volume = parseInt(find(1401), 10);
+    if (prop === "charging") out.charging = ["0", "2", undefined].indexOf(find(2111)) < 0 ? "1" : "0";
+    if (prop === "hub") out.hub = find(1140) || "";
   }
   return JSON.stringify({ data: { p2p: out } });
 };
@@ -148,9 +150,18 @@ PROPS: list[dict[str, Any]] = [
     _prop("volume", RANGE_0_3, "RW"),
     _prop("both_open", {"type": "bool"}),
     _prop("digits", {"type": "int"}),
+    _prop("charging", {"type": "text"}),
+    _prop("hub", {"type": "text"}),
 ]
 
-SHOWN = frozenset({"door_open", "label", "mode_num"})  # what the app's card and pages read
+# Where the app's cards and pages read each property.
+SHOWN = {
+    "door_open": "card",
+    "label": "page",
+    "mode_num": "page",
+    "charging": "card",
+    "hub": "card",
+}
 TREE = {"positions": {"setting_model_config": {"AboutDevice": ["ability#A#1"]}}}
 TITLES: dict[str, Any] = {"read_only": {"nick": {}}}  # a status the app only reads
 
@@ -198,7 +209,7 @@ def test_each_property_is_placed_on_the_parameter_its_handler_reads(tmp_path: Pa
     )
     by_property = {"label": 1105, "doubled": 1300, "ability": 1103, "enc_type": 1103}
     by_property |= {"mode_num": 1151, "ai_level": 1299, "raw_level": 1298}
-    by_property |= {"nick": 1106, "volume": 1401, "digits": 1320}
+    by_property |= {"nick": 1106, "volume": 1401, "digits": 1320, "charging": 2111, "hub": 1140}
     by_command = {"door_open": 61016, "door_open_count": 1550, "bypass": 1560, "ring": 1561}
     by_command |= {"power_mode": 1700}
     assert located == {
@@ -207,7 +218,7 @@ def test_each_property_is_placed_on_the_parameter_its_handler_reads(tmp_path: Pa
     }
     # either_open, both_open: two parameters turn them; low_power: two fill it, the last
     # one met wins.
-    assert counts == {"locate:property": 10, "locate:command": 5}
+    assert counts == {"locate:property": 12, "locate:command": 5}
 
 
 @pytest.mark.timeout(120)
@@ -252,7 +263,7 @@ def test_a_read_only_bool_reads_its_command_parameter(generated: dict[str, Any])
 def test_read_only_values_read_as_is_from_their_parameter(generated: dict[str, Any]) -> None:
     settings = generated["settings"]
     as_is = {"door_open_count": 1550, "label": 1105, "ability": 1103, "mode_num": 1151}
-    as_is |= {"ai_level": 1299, "nick": 1106}
+    as_is |= {"ai_level": 1299, "nick": 1106, "hub": 1140}
     for ident, param in as_is.items():
         assert settings[ident]["read"] == {"param": param, "map": None, "no_default": True}
 
@@ -272,6 +283,7 @@ def test_read_only_values_read_as_is_from_their_parameter(generated: dict[str, A
         "enc_type",  # a JSON field of a parameter another property reads as is
         "raw_level",  # a number, but a JSON value reads as one of its fields
         "digits",  # neither as is nor a number
+        "charging",  # a text the handler derives from its parameter
     ],
 )
 def test_a_property_no_parameter_reports_as_is_stays_unreadable(
@@ -290,20 +302,22 @@ def test_a_writable_setting_keeps_its_write_round_trip(generated: dict[str, Any]
 
 
 @pytest.mark.timeout(120)
-def test_every_setting_gets_its_role(generated: dict[str, Any]) -> None:
-    got = {k: e["role"] for k, e in generated["settings"].items()}
+def test_every_setting_gets_its_role_and_place(generated: dict[str, Any]) -> None:
+    got = {k: (e["role"], e.get("shown")) for k, e in generated["settings"].items()}
     named = {
-        "door_open": "status",  # shown, read-only
-        "label": "status",
-        "ability": "status",  # placed in the app's layout
-        "mode_num": "diagnostic",  # shown, but it reads the active mode, a device state field
-        "volume": "setting",  # written
-        "power_mode": "setting",  # writable in the thing description, no library write
-        "nick": "status",  # writable in the thing description, the app only reads it
+        "door_open": ("status", "card"),  # read-only, on the device card
+        "label": ("status", "page"),  # read-only, a settings page reads it
+        "ability": ("status", "page"),  # placed in the app's layout
+        "mode_num": ("diagnostic", "page"),  # shown, but it reads the active mode
+        "charging": ("diagnostic", "card"),  # unreadable, filled from the power source
+        "hub": ("diagnostic", "card"),  # a station's status: the library has its session
+        "volume": ("setting", None),  # written
+        "power_mode": ("setting", None),  # writable in the thing description, no library write
+        "nick": ("status", "page"),  # writable in the thing description, the app only reads it
     }
     assert {k: got[k] for k in named} == named
     # The rest are read-only and shown nowhere.
-    assert {r for k, r in got.items() if k not in named} == {"diagnostic"}
+    assert {r for k, r in got.items() if k not in named} == {("diagnostic", None)}
 
 
 @pytest.mark.timeout(120)
@@ -325,5 +339,8 @@ def test_the_generated_file_reads_through_the_library(generated: dict[str, Any])
     assert door.role is model_settings.SettingRole.STATUS
     assert settings["volume"].role is model_settings.SettingRole.SETTING
     assert settings["door_open_count"].role is model_settings.SettingRole.DIAGNOSTIC
+    assert door.shown is model_settings.SettingShown.CARD
+    assert settings["label"].shown is model_settings.SettingShown.PAGE
+    assert settings["door_open_count"].shown is None
     assert not settings["status_text"].readable
     assert settings["status_text"].decode("1") is None

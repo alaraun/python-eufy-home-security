@@ -56,6 +56,7 @@ __all__ = [
     "SettingControl",
     "SettingKind",
     "SettingRole",
+    "SettingShown",
     "Value",
     "WireCommand",
     "WriteContext",
@@ -151,6 +152,16 @@ class SettingRole(StrEnum):
     DIAGNOSTIC = "diagnostic"
     """A read-only value the app shows nowhere (capability data, configuration JSON), or
     one the library already reports as a device state field (battery, online, counters)."""
+
+
+class SettingShown(StrEnum):
+    """Where the eufy app shows a setting, whatever its :class:`SettingRole`."""
+
+    CARD = "card"
+    """On the device card or the home page (an entry sensor's door state, a camera's
+    battery), read there by the app."""
+    PAGE = "page"
+    """Only on a settings page: a page reads it or the app's layout places it there."""
 
 
 #: The controls each kind may carry (a ``STRING`` with a :attr:`Setting.domain` is a select).
@@ -250,7 +261,9 @@ class Setting:
 
     ``role`` says what the setting is to the user (:class:`SettingRole`): a control, a
     status the app shows, or a diagnostic value. A setting listed from a thing description
-    alone (no bundled file) is a diagnostic.
+    alone (no bundled file) is a diagnostic. ``shown`` says where the app shows it
+    (:class:`SettingShown`: device card or settings page), or None where it shows it
+    nowhere.
 
     ``domain`` names a library table a ``STRING`` setting's values come from
     (:data:`~.timezones.TIMEZONE_DOMAIN`: the app's device time zones). Such a setting is
@@ -277,6 +290,7 @@ class Setting:
     page: str | None = None
     section: str = OTHER_SECTION
     role: SettingRole = SettingRole.SETTING
+    shown: SettingShown | None = None
     applies_when: tuple[str, Value] | None = None
     note: str | None = None
     variant_of: str | None = None
@@ -1328,6 +1342,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     if section not in _SECTION_ORDER:
         raise ValueError(f"section {section!r} is not in the catalogue")
     role = SettingRole(entry["role"])
+    shown = None if entry.get("shown") is None else SettingShown(entry["shown"])
     default = entry.get("default")
     name = _optional_str(entry, "name")
     variant_of = _optional_str(entry, "variant_of")
@@ -1377,6 +1392,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         page=_optional_str(entry, "page"),
         section=section,
         role=role,
+        shown=shown,
         applies_when=applies_when,
         note=note,
         variant_of=variant_of,

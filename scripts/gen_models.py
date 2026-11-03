@@ -7,7 +7,7 @@ codecs (``scripts/gen_models_codec.py``), feed each written recipe's parameter d
 to getProperty for the read codec (a setting without a write: the parameter getProperty
 fills it from, ``locate_params``), join the app's labels and settings layout
 (``scripts/gen_models_join.py``) with the app's setting titles, units and variant pairs,
-give each setting its role from the properties the app shows (``--shown``,
+give each setting its role and where the app shows it (``--shown``,
 ``scripts/gen_models_roles.py``), and write ``<out>/<PN>.json``, then ``<out>/INDEX.json``,
 the sorted list of every ``<PN>.json`` in ``<out>``.
 
@@ -1389,7 +1389,7 @@ def generate(
     reference: list[dict[str, Any]] | None = None,
     titles: dict[str, Any] | None = None,
     released: Collection[str] = (),
-    shown: Collection[str] = (),
+    shown: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, int]]:
     """The settings-file object of one model and its counters (the base context's).
 
@@ -1398,8 +1398,9 @@ def generate(
     (``child`` rows check the base context, ``standalone`` rows the standalone one);
     ``titles`` the app setting-title file (None: no names, app units or variants);
     ``released`` the model's keys in the released-keys manifest (never dropped);
-    ``shown`` the identifiers the app's device cards, home page and settings pages read
-    (:func:`shown_identifiers`; the model's tree adds the ones its layout places).
+    ``shown`` where the app's device cards, home page and settings pages read each
+    identifier (:func:`shown_places`; the model's tree adds the ones its layout places
+    as pages).
     Raises CheckError when a codec does not reproduce a swept recipe or an unaccepted
     reference row.
     """
@@ -1501,8 +1502,9 @@ def generate(
         merged,
         td_writable={p["identifier"] for p in props if "W" in (p.get("access_mode") or "")},
         app_read_only=set((titles or {}).get("read_only") or {}),
-        shown=set(shown) | placed_identifiers(tree),
+        shown=model_shown(shown or {}, tree),
         state_params=STATE_PARAM_INFO.keys(),
+        located={ident: where.param for ident, where in located.items()},
     ).items():
         _count(counts, key, n)
     for entry in merged.values():
@@ -1528,17 +1530,26 @@ def placed_identifiers(tree: Mapping[str, Any] | None) -> set[str]:
     return out
 
 
-def shown_identifiers(shown: Mapping[str, Any]) -> frozenset[str]:
-    """Every identifier of the shown-property file: ``pages`` (settings screens that read
-    it) and ``cards`` (device card and home page code that reads it), each
-    ``{identifier: [where, ...]}``; raises GeneratorError on another shape."""
-    out: set[str] = set()
-    for part in ("pages", "cards"):
+def model_shown(shown: Mapping[str, str], tree: Mapping[str, Any] | None) -> dict[str, str]:
+    """Where the app shows each identifier on one model: ``shown`` (:func:`shown_places`),
+    and ``page`` for every other identifier the model's ``tree`` places."""
+    out: dict[str, str] = dict.fromkeys(placed_identifiers(tree), roles.PAGE)
+    out.update(shown)
+    return out
+
+
+def shown_places(shown: Mapping[str, Any]) -> dict[str, str]:
+    """Identifier -> ``card`` or ``page`` from the shown-property file: ``cards`` (device
+    card and home page code that reads it, which wins) and ``pages`` (settings screens
+    that read it), each ``{identifier: [where, ...]}``; raises GeneratorError on another
+    shape."""
+    out: dict[str, str] = {}
+    for part, place in (("pages", roles.PAGE), ("cards", roles.CARD)):
         block = shown.get(part)
         if not isinstance(block, dict):
             raise GeneratorError(f"shown-property data has no {part} object")
-        out.update(block)
-    return frozenset(out)
+        out.update(dict.fromkeys(block, place))
+    return out
 
 
 def app_wire_values(
@@ -1827,7 +1838,7 @@ class _Task:
     reference: list[dict[str, Any]] | None
     titles: dict[str, Any]
     released: Collection[str]
-    shown: Collection[str] = ()
+    shown: Mapping[str, str] | None = None
 
 
 type _Result = tuple[str, str | None, dict[str, int], str]
@@ -1936,7 +1947,7 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     labels = _read_json(args.labels)
     trees = _read_json(args.trees)
     titles = _read_json(args.titles)
-    shown = shown_identifiers(_read_json(args.shown))
+    shown = shown_places(_read_json(args.shown))
     released = _read_json(args.released)
     reference = load_reference()
     pns = args.product_codes or sorted(d.name for d in cache.iterdir() if d.is_dir())

@@ -2,7 +2,7 @@
 
 A station parameter (or the command of the same number) is described from, in order:
 the per-mode settings (:data:`~.settings.MODE_TABLE_SETTINGS`: key, description, flags
-and unit), the parameters the library reads into device state itself, and the
+and unit), the parameters whose value the library reports itself (device state), and the
 app's name for the id (:data:`~.command_types.COMMAND_NAMES`, a lead rather than a
 meaning). An id none of them names is ``unknown``. Values that identify the account or
 the house (names, the cross-camera tracking serials, the LAN address) are never shown in clear unless
@@ -29,6 +29,7 @@ from ..models import (
     PARAM_EMMC_USED_PERCENT,
     PARAM_FIRMWARE,
     PARAM_HUB_NAME,
+    PARAM_HUB_STATUS,
     PARAM_LAN_IP,
     PARAM_PIR_EVENT_MS,
     PARAM_POWER_SOURCE,
@@ -99,7 +100,8 @@ class _StateParam:
     render: Callable[[str], str] | None = None
 
 
-#: Parameters the library reads into device state rather than through a setting.
+#: Parameters whose value the library reports outside the settings: read into device
+#: state, or (a station's own status) given by the station's session state.
 STATE_PARAM_INFO: Final[Mapping[int, _StateParam]] = MappingProxyType(
     {
         PARAM_BATTERY: _StateParam("battery", "battery level", _number("%")),
@@ -112,6 +114,7 @@ STATE_PARAM_INFO: Final[Mapping[int, _StateParam]] = MappingProxyType(
         PARAM_LAN_IP: _StateParam("lan_ip", "station LAN address", _address),
         PARAM_EMMC_USED_PERCENT: _StateParam("emmc_used_percent", "eMMC used", _number("%")),
         PARAM_HUB_NAME: _StateParam("hub_name", "station name", _identifier),
+        PARAM_HUB_STATUS: _StateParam("hub_status", "station status (the session state)"),
         GUARD_MODE_PARAM: _StateParam("guard_mode", "selected guard mode", _guard_mode),
         ACTIVE_MODE_PARAM: _StateParam("active_mode", "guard mode in force", _guard_mode),
         PARAM_SUB_DEVICE_SERIALS: _StateParam(
