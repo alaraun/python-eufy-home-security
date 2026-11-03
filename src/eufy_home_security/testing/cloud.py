@@ -33,6 +33,7 @@ from ..exceptions import (
     RefreshCooldownError,
 )
 from ..inclusion import Reach
+from ..models import PARAM_HUB_STATUS
 from ..storage import MemoryStore, SessionCache, Store
 from .station import FakeStation
 from .synthetic import SYNTHETIC
@@ -175,8 +176,8 @@ def station_device(
         "p2p_did": did,
         "local_ip": SYNTHETIC.station_ip,
         "main_sw_version": "3.8.7.4",
-        # A station's entry always carries a parameter snapshot; 1140 no setting reads.
-        "params": _param_list({1140: "0", **(params or {})}),
+        # A station's cloud entry always carries a parameter snapshot, its own status included.
+        "params": _param_list({PARAM_HUB_STATUS: "0", **(params or {})}),
     }
 
 

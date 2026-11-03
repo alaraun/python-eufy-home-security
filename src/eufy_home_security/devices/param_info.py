@@ -114,7 +114,9 @@ STATE_PARAM_INFO: Final[Mapping[int, _StateParam]] = MappingProxyType(
         PARAM_LAN_IP: _StateParam("lan_ip", "station LAN address", _address),
         PARAM_EMMC_USED_PERCENT: _StateParam("emmc_used_percent", "eMMC used", _number("%")),
         PARAM_HUB_NAME: _StateParam("hub_name", "station name", _identifier),
-        PARAM_HUB_STATUS: _StateParam("hub_status", "station status (the session state)"),
+        PARAM_HUB_STATUS: _StateParam(
+            "hub_status", "station status (cloud); reachability: Station.connected"
+        ),
         GUARD_MODE_PARAM: _StateParam("guard_mode", "selected guard mode", _guard_mode),
         ACTIVE_MODE_PARAM: _StateParam("active_mode", "guard mode in force", _guard_mode),
         PARAM_SUB_DEVICE_SERIALS: _StateParam(
