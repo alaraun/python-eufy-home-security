@@ -903,9 +903,9 @@ A closed session (`async_close`) never reconnects on its own — build a new
 
     | `role` | entity |
     |---|---|
-    | `SETTING` | the control above when `writable`; when not, the app offers it as a control the library cannot write: no entity, or a disabled diagnostic `sensor` |
-    | `STATUS` | read-only, shown by the app on the device card or a settings page: an enabled `sensor` (`binary_sensor` for a bool), not diagnostic. An entry sensor's `sensor_door_status` is its primary entity (device class `door`); a tamper or low-battery flag fits device class `tamper` / `battery` |
-    | `DIAGNOSTIC` | read-only and shown nowhere by the app, or a value the device fields already give (battery level, online status, counters, the active mode): a disabled diagnostic entity, or none |
+    | `SETTING` | the control above when `writable`; when not, the app offers it as a control the library cannot write: when `readable`, a disabled diagnostic `sensor` (it keeps its identity once a write lands), else no entity |
+    | `STATUS` | read-only, shown by the app on the device card or a settings page: when `readable`, an enabled `sensor` (`binary_sensor` for a bool), not diagnostic; when not readable (most statuses: the library has no read for them yet, and some only steer the app's own pages), no entity. An entry sensor's `sensor_door_status` is its primary entity (device class `door`); a tamper or low-battery flag fits device class `tamper` / `battery` |
+    | `DIAGNOSTIC` | read-only and shown nowhere by the app, or a value the device fields already give (battery level, online status, counters, the active mode): when `readable`, a disabled diagnostic entity, or none; else no entity |
 
     A `STRING` or `OTHER` status can carry a JSON value, a string that can run past 255
     characters (Home Assistant's state limit): show a value that long as an attribute,
