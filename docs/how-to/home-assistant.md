@@ -3015,12 +3015,12 @@ counts the state frames taken by encryption (`"type2"`, `"type1"`, `"clear"`, `"
 clear or under the static key (an RSA station such as a T8414 sends its state under the
 static key), True once it came under a key only the session holds, None before any.
 Both are information only: state counts under any encryption, as in the eufy app.
-`lens_lists_by_channel` (only on `Station.stats()`) gives, per channel of a camera sent a
+`lens_lists_by_channel` (filled only by `Station.stats()`; empty from the session's own `stats()`) gives, per channel of a camera sent a
 layout (a multi-camera open behind a HomeBase 3), a `LensReport(count, source)`: its lens
 count and where the list came from (`LensSource.STATION`, `CLOUD` or `NONE`); other
 cameras and standalone devices have no entry. For "a multi-lens camera shows one lens",
-look there; for an RSA station whose cipher key eufy does not serve, at
-`static_key_session`.
+look there; for `state_authenticated` False on an RSA station, or unauthenticated pushes,
+at `static_key_session`.
 
 ## Testing the integration
 
