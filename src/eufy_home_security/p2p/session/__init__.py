@@ -3220,7 +3220,7 @@ class StationSession:
         others = notify.dev_types - {channel}
         if others and self._throttle.should_log(("param-notify-dev-type", cmd)):
             _LOGGER.debug(
-                "%s: parameter notify %s ch%d: items name dev_type %s, filed on ch%d",
+                "%s: parameter notify %s ch%d: items name dev_type %s, subheader ch%d",
                 self._log_name,
                 cmd,
                 channel,

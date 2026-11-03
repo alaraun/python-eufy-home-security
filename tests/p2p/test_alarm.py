@@ -125,10 +125,10 @@ def _delay(**fields: object) -> AlarmDelayChanged:
 @pytest.mark.parametrize(
     ("values", "change"),
     [
-        ((6, 30), _delay(delaying=True, channel=19, alarm_type=6, seconds=30)),
-        ((6, 30000), _delay(delaying=True, channel=19, alarm_type=6, seconds=30)),  # ms
-        ((0, 0), _delay(delaying=False, channel=19)),
-        ((16, 0), _delay(delaying=False, channel=19, alarm_type=16)),
+        ((6, 30), _delay(delaying=True, channel=255, alarm_type=6, seconds=30)),
+        ((6, 30000), _delay(delaying=True, channel=255, alarm_type=6, seconds=30)),  # ms
+        ((0, 0), _delay(delaying=False, channel=255)),
+        ((16, 0), _delay(delaying=False, channel=255, alarm_type=16)),
         ((6, 0), None),  # no time left: no state
         ((0, 5), None),
     ],
@@ -138,10 +138,10 @@ def test_an_alarm_delay_frame_starts_or_ends_the_delay(
 ) -> None:
     """``[alarm type, seconds until the alarm]``: an on type with time left starts the
     delay, an off type with none ends it, as the alarm tone reads."""
-    assert decode_alarm_frame(_frame(FrameType.ALARM_DELAY_NOTIFY, 19), _u32(*values)) == (
-        AlarmFrame(1164, 19, values)
+    assert decode_alarm_frame(_frame(FrameType.ALARM_DELAY_NOTIFY, 255), _u32(*values)) == (
+        AlarmFrame(1164, 255, values)
     )
-    assert AlarmFrame(1164, 19, values).delay_change(SYNTHETIC.station_sn, at=_AT) == change
+    assert AlarmFrame(1164, 255, values).delay_change(SYNTHETIC.station_sn, at=_AT) == change
 
 
 def test_only_the_delay_frame_reports_a_delay() -> None:

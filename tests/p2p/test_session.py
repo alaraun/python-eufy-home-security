@@ -3995,7 +3995,7 @@ async def test_a_status_item_naming_another_device_is_logged_once(
     assert not any(pid == 1550 for ch, pid in session.params if ch == 21)
     logged = _messages(caplog, "items name dev_type")
     assert logged == [
-        f"{session._log_name}: parameter notify 1829 ch19: items name dev_type 21, filed on ch19"
+        f"{session._log_name}: parameter notify 1829 ch19: items name dev_type 21, subheader ch19"
     ]
 
 

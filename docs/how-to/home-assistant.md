@@ -856,7 +856,7 @@ A closed session (`async_close`) never reconnects on its own — build a new
   station sends no end frame, it goes into the alarm (`AlarmChanged`) or a disarm ends
   it. A second trigger sends another start with fresh seconds. `channel` is the frame's
   channel, 255 (the station) on a HomeBase 3: the frame does not carry the triggering
-  device. Take the sensor from the `ParamChanged` with `source` `NOTIFY` just before it
+  device. Take the sensor from the `ParamChanged` with `source` `ValueSource.NOTIFY` just before it
   (its door state) or, once the alarm starts, from the alarm. On the cloud push it is
   `SecurityEvent.alarm_phase is AlarmPhase.DELAY` for `alarm_delay` seconds (msg_type 16,
   unverified). For `changed_by`, use

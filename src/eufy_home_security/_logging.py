@@ -150,7 +150,7 @@ IDENTIFYING_KEYS: Final = frozenset(
         "p2pdid", "hddlabel", "curstoragelabel", "oldstoragelabel",
         "name", "devicename", "stationname", "devicealiasname", "homename", "roomname",
         "houseid", "homeid", "roomid", "mac", "btmac", "wifimac", "ssid", "wifissid",
-        "appconn", "p2pconn", "ip", "ipaddr", "localip", "androidid", "fid", "housename",
+        "appconn", "p2pconn", "ip", "ipaddr", "macaddr", "bssid", "localip", "androidid", "fid", "housename",
         # the house's location
         "address", "houseaddress", "location", "latitude", "longitude", "lat", "lng", "lon",
         # media on the station's disk
@@ -162,9 +162,11 @@ IDENTIFYING_KEYS: Final = frozenset(
 
 #: Last words of a key that identify its value whatever the prefix (``ap_ssid``,
 #: ``ap_ip``, ``apMac``, ``hub_sn``, ``router_addr``); words split at ``_``, ``-`` and
-#: a lower-to-upper case change. Not ``name``: ``table_name`` and ``app-name`` name no one.
-IDENTIFYING_KEY_SUFFIXES: Final = frozenset({"ssid", "ip", "mac", "sn", "addr", "address", "did"})
-_KEY_WORDS = re.compile(r"[_\-]+|(?<=[a-z0-9])(?=[A-Z])")
+#: a case change (``apMac``, ``APMac``). Not ``name``: ``table_name`` and ``app-name`` name no one.
+IDENTIFYING_KEY_SUFFIXES: Final = frozenset(
+    {"ssid", "bssid", "ip", "ipv4", "ipv6", "mac", "sn", "addr", "address", "did"}
+)
+_KEY_WORDS = re.compile(r"[_\-]+|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 _IDENTIFYING_PARAM_TEXT: Final = frozenset(str(param) for param in IDENTIFYING_PARAMS)
 _SERIAL = re.compile(r"(?<![A-Z0-9])T[0-9A-Z]{15}(?![A-Z0-9])")

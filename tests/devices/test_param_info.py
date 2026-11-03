@@ -183,12 +183,16 @@ def test_a_json_value_is_shown_with_its_identifying_fields_masked() -> None:
             "ap_ip": "192.0.2.11",
             "apMac": "02:00:00:00:00:01",
             "router-addr": "Example Street 1",
+            "APMac": "02:00:00:00:00:02",
+            "wifi_bssid": "02:00:00:00:00:03",
+            "wan_ipv4": "192.0.2.12",
+            "macaddr": "02:00:00:00:00:04",
             "_": "kept",
         }
     )
     info = param_info(60012, 0)
     shown = info.raw(value)
-    for private in ("Example-Net", "192.0.2.1", "02:00:00:00:00:01", "Example Street"):
+    for private in ("Example-Net", "192.0.2.1", "02:00:00:00:00:0", "Example Street"):
         assert private not in shown
     assert '"mode": 2' in shown
     assert '"ap_mode": 1' in shown

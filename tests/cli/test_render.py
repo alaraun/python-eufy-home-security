@@ -640,12 +640,12 @@ def test_zoom_changed_renders_and_serialises() -> None:
 
 def test_alarm_delay_changed_renders_and_serialises() -> None:
     start = AlarmDelayChanged(
-        station_sn=SYNTHETIC.station_sn, delaying=True, channel=19, alarm_type=6, seconds=30
+        station_sn=SYNTHETIC.station_sn, delaying=True, channel=255, alarm_type=6, seconds=30
     )
     line = render.render_event(start, now=NOW, show_serials=False)
-    assert line.startswith("[03:04:05] alarm in 30s  ch 19  type 6")
-    end = AlarmDelayChanged(station_sn=SYNTHETIC.station_sn, delaying=False, channel=19)
-    assert "alarm delay ended  ch 19" in render.render_event(end, now=NOW, show_serials=False)
+    assert line.startswith("[03:04:05] alarm in 30s  ch 255  type 6")
+    end = AlarmDelayChanged(station_sn=SYNTHETIC.station_sn, delaying=False, channel=255)
+    assert "alarm delay ended  ch 255" in render.render_event(end, now=NOW, show_serials=False)
     data = json.loads(json.dumps(render.event_json(start), default=str))
     assert (data["type"], data["delaying"], data["seconds"]) == ("AlarmDelayChanged", True, 30)
 
