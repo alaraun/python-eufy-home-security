@@ -105,7 +105,7 @@ class _StateParam:
 
 #: Parameters whose value the library reports outside the settings: read into device
 #: state, given by the station's session state (a station's own status), or a cloud
-#: device field (``Device.camera_info``).
+#: device field (``CloudDevice.camera_info``).
 STATE_PARAM_INFO: Final[Mapping[int, _StateParam]] = MappingProxyType(
     {
         PARAM_BATTERY: _StateParam("battery", "battery level", _number("%")),
