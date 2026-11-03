@@ -16,6 +16,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection",
    "values": [
     "sideNum",
@@ -32,6 +33,7 @@
    "default": "{ \t\"routeConfigForDeviceSetup\": { \t\t\"steps\": [{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLSetDeviceNameLocationScreen\" \t\t}, \t\t{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLSetCustomNameScreen\" \t\t}, \t\t{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLCalibrateLockScreen\" \t\t} \t\t] \t} }",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "ai_empower": {
@@ -44,6 +46,7 @@
     "no_default": true,
     "param": 1299
    },
+   "role": "setting",
    "section": "detection"
   },
   "arming_cust_mode_config": {
@@ -55,18 +58,21 @@
     "no_default": true,
     "param": 1256
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_modedetail_devices_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_schedule_config": {
@@ -78,12 +84,14 @@
     "no_default": true,
     "param": 1254
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_selected_mode": {
    "access": "rw",
    "kind": "other",
    "read": null,
+   "role": "setting",
    "section": "modes",
    "write": {
     "cmd": 1224,
@@ -100,6 +108,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_arming": {
@@ -107,6 +116,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "modes"
   },
   "arming_support_custom_mode": {
@@ -114,6 +124,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_geofence": {
@@ -121,6 +132,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_off_mode": {
@@ -128,6 +140,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_query_working_mode": {
@@ -135,6 +148,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_show_user_name": {
@@ -142,6 +156,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "audio_recording_on_off": {
@@ -211,6 +226,7 @@
     },
     "param": 6012
    },
+   "role": "setting",
    "section": "recording",
    "write": {
     "cmd": 1700,
@@ -230,6 +246,7 @@
    "default": " 4",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "power"
   },
   "backup_battery_mode": {
@@ -237,6 +254,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "power"
   },
   "backup_battery_value": {
@@ -245,6 +263,7 @@
    "kind": "other",
    "page": "SLPowerDuoPowerSupplySystemScreen",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "battery_level": {
@@ -252,6 +271,7 @@
    "default": " 4",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "power"
   },
   "battery_value": {
@@ -259,6 +279,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "camera_on_off": {
@@ -325,6 +346,7 @@
     },
     "param": 1035
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1035,
@@ -359,6 +381,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "cloud_storage_support_trail": {
@@ -366,6 +389,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "storage"
   },
   "detected_events": {
@@ -379,6 +403,7 @@
     "no_default": true,
     "param": 1192
    },
+   "role": "diagnostic",
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -391,6 +416,7 @@
    "min": 15,
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection",
    "step": 5
   },
@@ -402,6 +428,7 @@
    "min": 2,
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection",
    "step": 2
   },
@@ -415,6 +442,7 @@
     "no_default": true,
     "param": 2706
    },
+   "role": "setting",
    "section": "detection"
   },
   "detection_radar_mode": {
@@ -428,6 +456,7 @@
    },
    "note": "handler ignores the value",
    "read": null,
+   "role": "setting",
    "section": "detection",
    "values": [
     0,
@@ -440,6 +469,7 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "detection"
   },
   "detection_type_set": {
@@ -458,6 +488,7 @@
     },
     "param": 1298
    },
+   "role": "setting",
    "section": "detection",
    "values": [
     5,
@@ -497,6 +528,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_audio_ringtone_volume": {
@@ -510,6 +542,7 @@
     "map": null,
     "param": 2022
    },
+   "role": "setting",
    "section": "doorbell",
    "step": 1,
    "write": {
@@ -537,6 +570,7 @@
     "no_default": true,
     "param": 6492
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_backup_battery_type": {
@@ -548,6 +582,7 @@
     "1": "Dry Battery"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "power",
    "values": [
     0,
@@ -558,6 +593,7 @@
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "power"
   },
   "device_chime_hb_alert_switch": {
@@ -574,6 +610,7 @@
     },
     "param": 1702
    },
+   "role": "setting",
    "section": "doorbell",
    "write": {
     "cmd": 1702,
@@ -620,6 +657,7 @@
     },
     "param": 1718
    },
+   "role": "setting",
    "section": "doorbell",
    "values": [
     0,
@@ -659,6 +697,7 @@
     "map": null,
     "param": 1717
    },
+   "role": "setting",
    "section": "doorbell",
    "step": 1,
    "write": {
@@ -679,6 +718,7 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "doorbell"
   },
   "device_connect_wifi_ssid": {
@@ -689,6 +729,7 @@
     "no_default": true,
     "param": 60001
    },
+   "role": "diagnostic",
    "section": "network"
   },
   "device_delivery_guard_quick_response": {
@@ -696,6 +737,7 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "detection"
   },
   "device_delivery_guard_support_ignored_zone": {
@@ -703,6 +745,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "detection"
   },
   "device_event_thumb_process_type": {
@@ -710,6 +753,7 @@
    "default": "2",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "recording"
   },
   "device_indoor_chime_switch": {
@@ -718,6 +762,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "doorbell"
   },
   "device_is_battery_device": {
@@ -725,6 +770,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "device_is_online": {
@@ -732,12 +778,14 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_linked_matter_list": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "device_live_view_switch": {
@@ -753,6 +801,7 @@
     },
     "param": 6491
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1350,
@@ -776,6 +825,7 @@
     "no_default": true,
     "param": 2715
    },
+   "role": "setting",
    "section": "detection"
   },
   "device_model": {
@@ -783,6 +833,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_motion_detection": {
@@ -794,6 +845,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection",
    "values": [
     5,
@@ -833,6 +885,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection",
    "values": [
     0,
@@ -848,6 +901,7 @@
    "kind": "bool",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1350,
@@ -881,6 +935,7 @@
     "no_default": true,
     "param": 60009
    },
+   "role": "diagnostic",
    "section": "network"
   },
   "device_name": {
@@ -889,6 +944,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -917,6 +973,7 @@
     },
     "param": 2733
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1350,
@@ -958,6 +1015,7 @@
     "no_default": true,
     "param": 2711
    },
+   "role": "setting",
    "section": "detection"
   },
   "device_packages_guard_switch": {
@@ -966,6 +1024,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "detection"
   },
   "device_packages_live_check_swich": {
@@ -975,6 +1034,7 @@
    "note": "no handler write path",
    "page": "PackageLiveCheckAssistance",
    "read": null,
+   "role": "setting",
    "section": "detection"
   },
   "device_packages_uncollected_alert_swich": {
@@ -990,6 +1050,7 @@
     },
     "param": 2712
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1350,
@@ -1019,6 +1080,7 @@
     "no_default": true,
     "param": 2713
    },
+   "role": "setting",
    "section": "detection"
   },
   "device_response_timeout_schedule": {
@@ -1027,12 +1089,14 @@
    "note": "handler ignores the value",
    "page": "ResponseSettingScreen",
    "read": null,
+   "role": "setting",
    "section": "doorbell"
   },
   "device_serial_number": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "device_silent_ota_switch": {
@@ -1048,6 +1112,7 @@
     },
     "param": 6287
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1350,
@@ -1087,6 +1152,7 @@
     },
     "param": 1271
    },
+   "role": "setting",
    "section": "notifications",
    "values": [
     -1,
@@ -1133,6 +1199,7 @@
     "0": "Motion notify onoff"
    },
    "read": null,
+   "role": "status",
    "section": "notifications",
    "values": [
     0
@@ -1161,6 +1228,7 @@
     "2": "HomeBase onoff"
    },
    "read": null,
+   "role": "status",
    "section": "notifications",
    "values": [
     0,
@@ -1177,6 +1245,7 @@
     "no_default": true,
     "param": 1131
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_storage_type": {
@@ -1186,6 +1255,7 @@
     "0": "Local"
    },
    "read": null,
+   "role": "status",
    "section": "storage",
    "values": [
     0
@@ -1215,6 +1285,7 @@
     "1": "Cloud"
    },
    "read": null,
+   "role": "status",
    "section": "storage",
    "values": [
     0,
@@ -1229,6 +1300,7 @@
     "1": "Human"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "detection",
    "values": [
     1
@@ -1258,6 +1330,7 @@
     "3": "Pet"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "detection",
    "values": [
     1,
@@ -1271,6 +1344,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "device_wifi_name": {
@@ -1281,6 +1355,7 @@
     "no_default": true,
     "param": 6200
    },
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -1288,6 +1363,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength_level": {
@@ -1295,6 +1371,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "door_close_remind_countdown": {
@@ -1302,6 +1379,7 @@
    "default": "2,5,10,15,20,30,60,90,120,150,180,300",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   },
   "door_open_remind_countdown": {
@@ -1309,6 +1387,7 @@
    "default": "2,5,10,15,20,30,60,90,120,150,180,300,600,1800,3600",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   },
   "firmware_main_version": {
@@ -1316,6 +1395,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
@@ -1324,6 +1404,7 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_sub_version": {
@@ -1332,6 +1413,7 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_sub_version_time": {
@@ -1340,24 +1422,28 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "hb_connect_is_connected": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "hb_connect_support_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "homebase_connect_support": {
@@ -1366,6 +1452,7 @@
    "kind": "bool",
    "page": "WiFiConnection",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "ip_address": {
@@ -1374,6 +1461,7 @@
    "kind": "string",
    "name": "IP address",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "is_connect_webrtc": {
@@ -1381,6 +1469,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "is_device_upgrade": {
@@ -1396,6 +1485,7 @@
     "no_default": true,
     "param": 1134
    },
+   "role": "status",
    "section": "system"
   },
   "is_support_check_door_status": {
@@ -1403,6 +1493,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "is_support_homekey": {
@@ -1411,6 +1502,7 @@
    "kind": "bool",
    "page": "SLMatterIntroScreen",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "is_support_mqtt": {
@@ -1418,6 +1510,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "is_support_multiple_bridge": {
@@ -1425,6 +1518,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "is_support_silent_ota_switch": {
@@ -1432,6 +1526,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "live_bottom_hor_toolbar_list": {
@@ -1446,6 +1541,7 @@
     "4": "Sound"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "system",
    "values": [
     1,
@@ -1468,6 +1564,7 @@
     "4": "Sound"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "system",
    "values": [
     0,
@@ -1577,6 +1674,7 @@
     },
     "param": 2730
    },
+   "role": "setting",
    "section": "recording",
    "values": [
     0,
@@ -1619,12 +1717,14 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "live_support_long_time_watch": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "live_support_mute": {
@@ -1632,6 +1732,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "live_support_record": {
@@ -1639,6 +1740,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "live_support_screenshot": {
@@ -1646,6 +1748,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "live_top_hor_toolbar_list": {
@@ -1655,6 +1758,7 @@
     "1": "Setting"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "system",
    "values": [
     1
@@ -1668,6 +1772,7 @@
     "1": "Setting"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "system",
    "values": [
     0,
@@ -1680,6 +1785,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "other"
   },
   "mac_address": {
@@ -1688,6 +1794,7 @@
    "kind": "string",
    "name": "MAC address",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "microphone_on_off": {
@@ -1704,6 +1811,7 @@
     },
     "param": 1240
    },
+   "role": "setting",
    "section": "audio",
    "write": {
     "cmd": 1240,
@@ -1722,6 +1830,7 @@
    "default": "{\"HB3+AI\": 1}",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "detection"
   },
   "motion_detection_leaving_detection_reactions": {
@@ -1733,6 +1842,7 @@
     "no_default": true,
     "param": 2727
    },
+   "role": "setting",
    "section": "detection"
   },
   "motion_detection_leaving_detection_switch": {
@@ -1745,6 +1855,7 @@
     "no_default": true,
     "param": 2726
    },
+   "role": "setting",
    "section": "detection"
   },
   "motion_detection_status": {
@@ -1801,6 +1912,7 @@
     },
     "param": 6040
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1700,
@@ -1834,6 +1946,7 @@
     },
     "param": 1251
    },
+   "role": "setting",
    "section": "recording",
    "write": {
     "cmd": 1251,
@@ -1884,6 +1997,7 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "detection"
   },
   "nightvision_type": {
@@ -1900,6 +2014,7 @@
     },
     "param": 1277
    },
+   "role": "setting",
    "section": "picture",
    "write": {
     "cmd": 1350,
@@ -1925,6 +2040,7 @@
     "map": null,
     "param": 6027
    },
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1350,
@@ -1960,6 +2076,7 @@
     },
     "param": 6027
    },
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1350,
@@ -2000,6 +2117,7 @@
     },
     "param": 6027
    },
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1350,
@@ -2045,6 +2163,7 @@
     "1": "Live view"
    },
    "read": null,
+   "role": "status",
    "section": "notifications",
    "values": [
     0,
@@ -2059,6 +2178,7 @@
    "note": "handler rejects the probed values",
    "page": "SettingsHome",
    "read": null,
+   "role": "setting",
    "section": "notifications"
   },
   "notification_ring_alert": {
@@ -2078,6 +2198,7 @@
     "9": "Presto"
    },
    "read": null,
+   "role": "status",
    "section": "notifications",
    "values": [
     0,
@@ -2100,6 +2221,7 @@
    "note": "handler rejects the probed values",
    "page": "SettingsHome",
    "read": null,
+   "role": "setting",
    "section": "notifications"
   },
   "notification_type": {
@@ -2148,6 +2270,7 @@
     },
     "param": 6020
    },
+   "role": "setting",
    "section": "notifications",
    "values": [
     0,
@@ -2184,6 +2307,7 @@
    "default": "60",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "network",
    "unit": "s"
   },
@@ -2192,6 +2316,7 @@
    "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"play_quickresponse#F#1\", \"media_record#F#2\", \"event_device_intercom#F#3\", \"lock_unlock#F#4\", \"media_screenshot#G#1\", \"nightvision_type#G#2\", \"live_streaming_resolution#G#3\"]}, \"style\": {\"nightvision_type\": \"v1\"}, \"config\": {\"SingleResolution\": \"9:16\", \"isSupportRotation\": true, \"showLiveWatermark\": true, \"isSupportPortraitPrivacyZone\": true,\"isSupportPortraitActivityZone\":true}}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "recording"
   },
   "power_manager_mode": {
@@ -2217,6 +2342,7 @@
     },
     "param": 1246
    },
+   "role": "setting",
    "section": "power",
    "values": [
     0,
@@ -2283,6 +2409,7 @@
     "default:0": "default:0"
    },
    "read": null,
+   "role": "status",
    "section": "power",
    "values": [
     "default:0"
@@ -2293,6 +2420,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "doorbell"
   },
   "record_resolution": {
@@ -2318,6 +2446,7 @@
      }
     }
    },
+   "role": "setting",
    "section": "recording",
    "values": [
     5,
@@ -2350,6 +2479,7 @@
     "no_default": true,
     "param": 1193
    },
+   "role": "diagnostic",
    "section": "recording",
    "step": 1,
    "unit": "d"
@@ -2359,6 +2489,7 @@
    "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"read\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"service\":\"8c850001-0302-41c5-b46e-cf057c562025\", \"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"syncHeartBeat\":true}}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "set_privacy_zone": {
@@ -2375,6 +2506,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection",
    "values": [
     "sideNum",
@@ -2391,6 +2523,7 @@
    "default": "{\"config\":{\"ota_time\":18,\"skip_press_sync_change_wifi\":true,\"useCloudDeviceImage\":true},\"style\":{\"detection_sensitivity\":\"v3\",\"notification_type\":\"v4\",\"detection_type_set\":\"v2\",\"nightvision_type\":\"v3\"},\"position\":{\"SettingsNotification\":[\"detection_notified##\",\"doorbell_pressed##\",\"notification_jump_view##\",\"notification_type##\",\"app_alert##\",\"ring_alert##\"],\"MotionDetection\":[\"detection_sensitivity##\",\"detection_type_set##\"],\"VideoSettings\":[\"nightvision_type##\"]}}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_auto_lock_type": {
@@ -2398,6 +2531,7 @@
    "default": "3",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_calibrate_status": {
@@ -2411,6 +2545,7 @@
     "no_default": true,
     "param": 6609
    },
+   "role": "diagnostic",
    "section": "system",
    "step": 1
   },
@@ -2419,6 +2554,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "smart_lock_enable_voip_switch": {
@@ -2434,6 +2570,7 @@
     },
     "param": 6458
    },
+   "role": "setting",
    "section": "doorbell",
    "write": {
     "cmd": 1350,
@@ -2453,6 +2590,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_integrate_with_doorbell_or_camera": {
@@ -2460,6 +2598,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_is_support_new_schedule_ui": {
@@ -2467,6 +2606,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_is_support_one_time_user": {
@@ -2474,6 +2614,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_is_support_temporary_pw": {
@@ -2481,6 +2622,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_night_vision_open_direction": {
@@ -2489,6 +2631,7 @@
    "kind": "other",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "picture"
   },
   "smart_lock_night_vision_optimization": {
@@ -2497,6 +2640,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "picture"
   },
   "smart_lock_no_recording_while_unlocked": {
@@ -2531,6 +2675,7 @@
     "no_default": true,
     "param": 1920
    },
+   "role": "setting",
    "section": "power"
   },
   "smart_lock_notification_locked_switch": {
@@ -2576,6 +2721,7 @@
    "name": "Door locked",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "notifications"
   },
   "smart_lock_notification_switch": {
@@ -2614,6 +2760,7 @@
     "no_default": true,
     "param": 1919
    },
+   "role": "setting",
    "section": "notifications"
   },
   "smart_lock_notification_unlocked_switch": {
@@ -2645,6 +2792,7 @@
    "name": "Door unlocked",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "notifications"
   },
   "smart_lock_one_touch_locking_type": {
@@ -2652,12 +2800,14 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_onoff_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "smart_lock_rain_mode_switch": {
@@ -2666,6 +2816,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "detection"
   },
   "smart_lock_scramble_password_type": {
@@ -2673,6 +2824,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_set_back_screen": {
@@ -2684,6 +2836,7 @@
     "no_default": true,
     "param": 6466
    },
+   "role": "setting",
    "section": "system"
   },
   "smart_lock_setting_manage_access": {
@@ -2691,6 +2844,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "speaker_on_off": {
@@ -2707,6 +2861,7 @@
     },
     "param": 1241
    },
+   "role": "setting",
    "section": "audio",
    "write": {
     "cmd": 1241,
@@ -2731,6 +2886,7 @@
     "map": null,
     "param": 1230
    },
+   "role": "setting",
    "section": "audio",
    "step": 1,
    "write": {
@@ -2753,6 +2909,7 @@
     "1": "H265"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "recording",
    "values": [
     0,
@@ -2772,6 +2929,7 @@
     "map": null,
     "param": 1253
    },
+   "role": "setting",
    "section": "system",
    "values": [
     0,
@@ -2799,6 +2957,7 @@
     "map": null,
     "param": 1215
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1215,
@@ -2829,6 +2988,7 @@
     "map": null,
     "param": 1250
    },
+   "role": "setting",
    "section": "recording",
    "step": 1,
    "unit": "s",
@@ -2850,6 +3010,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "video_clip_length": {
@@ -2869,6 +3030,7 @@
     "map": null,
     "param": 1249
    },
+   "role": "setting",
    "section": "recording",
    "step": 1,
    "unit": "s",
@@ -2890,6 +3052,7 @@
    "default": "0",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "audio"
   },
   "video_intercom_duplex": {
@@ -2897,6 +3060,7 @@
    "default": "0",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "audio"
   },
   "watermark_set": {
@@ -2913,6 +3077,7 @@
     },
     "param": 1214
    },
+   "role": "setting",
    "section": "picture",
    "write": {
     "cmd": 1214,
@@ -2947,6 +3112,7 @@
     "no_default": true,
     "param": 1191
    },
+   "role": "diagnostic",
    "section": "recording",
    "step": 1,
    "unit": "d"

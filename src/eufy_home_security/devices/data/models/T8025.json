@@ -9,6 +9,7 @@
    "max": 120,
    "min": 10,
    "read": null,
+   "role": "diagnostic",
    "section": "network",
    "step": 1,
    "unit": "d"
@@ -23,6 +24,7 @@
     "no_default": true,
     "param": 1299
    },
+   "role": "setting",
    "section": "detection"
   },
   "alarm_tones_mode": {
@@ -37,6 +39,7 @@
     "map": null,
     "param": 1281
    },
+   "role": "setting",
    "section": "alarm",
    "values": [
     1,
@@ -66,6 +69,7 @@
     "map": null,
     "param": 1235
    },
+   "role": "setting",
    "section": "alarm",
    "step": 1,
    "write": {
@@ -89,6 +93,7 @@
     "no_default": true,
     "param": 1256
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_get_alarm_home_mode": {
@@ -99,6 +104,7 @@
     "no_default": true,
     "param": 1157
    },
+   "role": "status",
    "section": "modes"
   },
   "arming_keypad_set_cus_model": {
@@ -107,18 +113,21 @@
    "note": "handler ignores the value",
    "page": "CUSButton",
    "read": null,
+   "role": "setting",
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_modedetail_devices_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_schedule_config": {
@@ -130,6 +139,7 @@
     "no_default": true,
     "param": 1254
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -140,6 +150,7 @@
    "max": 100,
    "min": -1,
    "read": null,
+   "role": "setting",
    "section": "modes",
    "step": 1,
    "write": {
@@ -157,18 +168,21 @@
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_arming": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "modes"
   },
   "arming_support_custom_mode": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_geofence": {
@@ -176,6 +190,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_off_mode": {
@@ -183,18 +198,21 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_query_working_mode": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_show_user_name": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_working_mode": {
@@ -205,6 +223,7 @@
     "no_default": true,
     "param": 1151
    },
+   "role": "diagnostic",
    "section": "modes"
   },
   "automation_config": {
@@ -212,6 +231,7 @@
    "default": "{\"trigger\":[3,4],\"action\":[]}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "battery_healthy": {
@@ -219,6 +239,7 @@
    "kind": "other",
    "page": "PowerManager",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "battery_residue_time": {
@@ -226,6 +247,7 @@
    "kind": "other",
    "page": "PowerManager",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "database_synchronize": {
@@ -233,6 +255,7 @@
    "kind": "string",
    "note": "handler ignores the value",
    "read": null,
+   "role": "setting",
    "section": "storage"
   },
   "device_ability_data": {
@@ -244,6 +267,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_cross_cam_assistance_switch": {
@@ -255,6 +279,7 @@
     "map": null,
     "param": 1069
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1350,
@@ -278,6 +303,7 @@
     "no_default": true,
     "param": 1073
    },
+   "role": "diagnostic",
    "section": "detection"
   },
   "device_cross_cam_interval": {
@@ -306,6 +332,7 @@
     },
     "param": 1070
    },
+   "role": "setting",
    "section": "detection",
    "values": [
     0,
@@ -358,6 +385,7 @@
     "no_default": true,
     "param": 1072
    },
+   "role": "diagnostic",
    "section": "detection"
   },
   "device_cross_cam_tracking_swtich": {
@@ -369,6 +397,7 @@
     "map": null,
     "param": 1065
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1350,
@@ -388,6 +417,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "alarm"
   },
   "device_is_battery_device": {
@@ -395,12 +425,14 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "device_is_online": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_linkage_mode": {
@@ -408,12 +440,14 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection"
   },
   "device_model": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -444,6 +478,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -463,6 +498,7 @@
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_silent_ota_switch": {
@@ -477,6 +513,7 @@
     },
     "param": 6287
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1350,
@@ -499,6 +536,7 @@
     "no_default": true,
     "param": 1140
    },
+   "role": "status",
    "section": "system"
   },
   "device_storage_medium": {
@@ -506,6 +544,7 @@
    "default": "[0,2]",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "storage"
   },
   "device_storage_type": {
@@ -518,6 +557,7 @@
     "2": "NAS"
    },
    "read": null,
+   "role": "status",
    "section": "storage",
    "values": [
     0,
@@ -549,6 +589,7 @@
     "2": "NAS"
    },
    "read": null,
+   "role": "status",
    "section": "storage",
    "values": [
     0,
@@ -561,6 +602,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength_level": {
@@ -572,6 +614,7 @@
     "no_default": true,
     "param": 1266
    },
+   "role": "status",
    "section": "network"
   },
   "encrypt_playback_version": {
@@ -579,12 +622,14 @@
    "default": "2",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "recording"
   },
   "firmware_main_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
@@ -592,6 +637,7 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_sub_version": {
@@ -599,6 +645,7 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "get_device_old_p2p_did": {
@@ -607,6 +654,7 @@
    "kind": "bool",
    "note": "handler ignores the value",
    "read": null,
+   "role": "setting",
    "section": "network"
   },
   "hb_keypad_is_password_set": {
@@ -621,18 +669,21 @@
     },
     "param": 1670
    },
+   "role": "status",
    "section": "modes"
   },
   "homekit_device_connect_homekit_status": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "ip_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "is_connect_webrtc": {
@@ -640,6 +691,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "is_connect_webrtc_sub_device_list": {
@@ -647,6 +699,7 @@
    "default": "[\"T8223\",\"T8224\",\"T8215\"]",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "network",
    "variants": [
     {
@@ -674,6 +727,7 @@
    "default": "[\"T8223\",\"T8224\",\"T8215\",\"T8L60\",\"T85M1\",\"T8532\",\"T8404\",\"T8180\",\"T8217\"]",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "network",
    "variant_of": "is_connect_webrtc_sub_device_list"
   },
@@ -689,6 +743,7 @@
     "no_default": true,
     "param": 1133
    },
+   "role": "status",
    "section": "system"
   },
   "is_support_familiar_face": {
@@ -696,6 +751,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "detection"
   },
   "is_support_silent_ota_switch": {
@@ -703,12 +759,14 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "mac_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "notification_alarm_delay_value": {
@@ -719,6 +777,7 @@
     "no_default": true,
     "param": 1282
    },
+   "role": "status",
    "section": "modes"
   },
   "notification_ignore_switch": {
@@ -730,6 +789,7 @@
     "map": null,
     "param": 1283
    },
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1350,
@@ -748,6 +808,7 @@
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "power_source_mode": {
@@ -758,6 +819,7 @@
     "no_default": true,
     "param": 2111
    },
+   "role": "diagnostic",
    "section": "power"
   },
   "prompt_volume_value": {
@@ -771,6 +833,7 @@
     "map": null,
     "param": 1292
    },
+   "role": "setting",
    "section": "alarm",
    "step": 1,
    "write": {
@@ -791,6 +854,7 @@
    "default": "10011",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "sd_card_max_capacity": {
@@ -798,12 +862,14 @@
    "default": "1000",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "sd_card_repair_status": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "storage"
   },
   "setting_current_connection_type": {
@@ -814,6 +880,7 @@
     "no_default": true,
     "param": 1265
    },
+   "role": "status",
    "section": "network"
   },
   "setting_model_config": {
@@ -821,6 +888,7 @@
    "default": "{\"config\":{\"hb_migration_supported_list\":{\"T8010\":{\"T8134\":\"3.3.2.1\",\"T8224\":\"3.4.5.8\",\"T8170\":\"3.2.5.3\",\"T8223\":\"3.3.5.8\",\"T8160P0\":\"3.4.2.8\",\"T8160P1\":\"3.4.2.8\",\"T8160P2\":\"3.4.2.8\",\"T8160T2\":\"3.4.2.8\",\"T8160T1\":\"3.4.2.8\",\"T8160T3\":\"1.6.1.3\",\"T8144\":\"1.0.3.4\"},\"T8030\":{\"T8134\":\"3.3.2.1\",\"T8170\":\"3.2.5.3\",\"T8425\":\"1.6.0.6\",\"T8162\":\"3.1.2.2\",\"T8160P0\":\"3.4.2.8\",\"T8160P1\":\"3.4.2.8\",\"T8160P2\":\"3.4.2.8\",\"T8160T2\":\"3.4.2.8\",\"T8160T1\":\"3.4.2.8\",\"T8160T3\":\"1.6.1.3\",\"T8144\":\"1.0.3.4\"}}}}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "switching_notification": {
@@ -843,6 +911,7 @@
     "map": null,
     "param": 1283
    },
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1350,
@@ -870,6 +939,7 @@
     "map": null,
     "param": 1253
    },
+   "role": "setting",
    "section": "system",
    "values": [
     0,
@@ -896,6 +966,7 @@
     "map": null,
     "param": 1215
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1215,
@@ -928,6 +999,7 @@
     },
     "param": 1296
    },
+   "role": "setting",
    "section": "system",
    "values": [
     0,

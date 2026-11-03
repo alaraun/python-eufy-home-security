@@ -7,6 +7,7 @@
    "default": "{\"trigger\":[6,7],\"action\":[]}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "battery_low_threshold": {
@@ -14,6 +15,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "power"
   },
   "device_ability_data": {
@@ -25,6 +27,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_is_online": {
@@ -32,6 +35,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -40,6 +44,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -64,6 +69,7 @@
     "no_default": true,
     "param": 1131
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "firmware_main_version": {
@@ -71,6 +77,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
@@ -79,6 +86,7 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "is_device_upgrade": {
@@ -94,6 +102,7 @@
     "no_default": true,
     "param": 1134
    },
+   "role": "status",
    "section": "system"
   },
   "sensor_door_status": {
@@ -109,6 +118,7 @@
     "no_default": true,
     "param": 1550
    },
+   "role": "status",
    "section": "system"
   },
   "sensor_is_low_power": {
@@ -124,6 +134,7 @@
     "no_default": true,
     "param": 1552
    },
+   "role": "status",
    "section": "power"
   }
  },

@@ -9,6 +9,7 @@
     "map": null,
     "param": 1281
    },
+   "role": "setting",
    "section": "alarm",
    "write": {
     "cmd": 1350,
@@ -34,6 +35,7 @@
     "map": null,
     "param": 1235
    },
+   "role": "setting",
    "section": "alarm",
    "step": 1,
    "write": {
@@ -57,6 +59,7 @@
     "no_default": true,
     "param": 1256
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_geofence_config": {
@@ -64,18 +67,21 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_modedetail_devices_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_schedule_config": {
@@ -87,12 +93,14 @@
     "no_default": true,
     "param": 1254
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_selected_mode": {
    "access": "rw",
    "kind": "other",
    "read": null,
+   "role": "setting",
    "section": "modes",
    "write": {
     "cmd": 1350,
@@ -109,48 +117,56 @@
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_arming": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "modes"
   },
   "arming_support_custom_mode": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_geofence": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_off_mode": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_privacy": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_query_working_mode": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_show_user_name": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "device_ability_data": {
@@ -162,6 +178,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_chime_hb_alert_switch": {
@@ -171,6 +188,7 @@
    "note": "no handler write path",
    "page": "RingtoneSettings",
    "read": null,
+   "role": "setting",
    "section": "doorbell"
   },
   "device_chime_hb_alert_tones": {
@@ -191,6 +209,7 @@
    "note": "no handler write path",
    "page": "RingtoneSettings",
    "read": null,
+   "role": "setting",
    "section": "doorbell",
    "values": [
     0,
@@ -214,6 +233,7 @@
    "note": "no handler write path",
    "page": "RingtoneSettings",
    "read": null,
+   "role": "setting",
    "section": "doorbell",
    "step": 1
   },
@@ -222,12 +242,14 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "alarm"
   },
   "device_is_online": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_linkage_mode": {
@@ -235,12 +257,14 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection"
   },
   "device_model": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -249,6 +273,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1216,
@@ -269,6 +294,7 @@
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "device_silent_ota_switch": {
@@ -284,6 +310,7 @@
     },
     "param": 6287
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1350,
@@ -306,6 +333,7 @@
     "no_default": true,
     "param": 6200
    },
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -316,12 +344,14 @@
     "no_default": true,
     "param": 1032
    },
+   "role": "status",
    "section": "network"
   },
   "firmware_main_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
@@ -329,6 +359,7 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_sub_version": {
@@ -336,18 +367,21 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "ip_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "is_support_silent_ota_switch": {
@@ -355,12 +389,14 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "mac_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "notification_alarm_delay_value": {
@@ -371,6 +407,7 @@
     "no_default": true,
     "param": 1282
    },
+   "role": "status",
    "section": "modes"
   },
   "prompt_volume_value": {
@@ -384,6 +421,7 @@
     "map": null,
     "param": 1292
    },
+   "role": "setting",
    "section": "alarm",
    "step": 1,
    "write": {
@@ -419,6 +457,7 @@
     "map": null,
     "param": 1283
    },
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1350,
@@ -442,6 +481,7 @@
     "no_default": true,
     "param": 1253
    },
+   "role": "setting",
    "section": "system"
   },
   "timezone_set": {
@@ -453,6 +493,7 @@
     "map": null,
     "param": 1215
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1215,

@@ -6,12 +6,14 @@
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "detection"
   },
   "radar_sn": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "detection"
   }
  },

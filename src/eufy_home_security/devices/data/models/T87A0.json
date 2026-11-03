@@ -11,6 +11,7 @@
     "no_default": true,
     "param": 8001
    },
+   "role": "status",
    "section": "power"
   },
   "device_ability_data": {
@@ -18,6 +19,7 @@
    "default": " 0",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "device_is_online": {
@@ -25,6 +27,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -32,6 +35,7 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "system"
   },
   "firmware_main_version": {
@@ -43,6 +47,7 @@
     "no_default": true,
     "param": 8003
    },
+   "role": "status",
    "section": "system"
   },
   "is_device_upgrade": {
@@ -50,6 +55,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   }
  },

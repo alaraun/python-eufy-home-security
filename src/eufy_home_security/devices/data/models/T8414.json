@@ -16,6 +16,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection",
    "values": [
     "sideNum",
@@ -37,6 +38,7 @@
     "no_default": true,
     "param": 1299
    },
+   "role": "setting",
    "section": "detection"
   },
   "alarm_manual_pop_alert": {
@@ -44,6 +46,7 @@
    "default": "true",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "alarm"
   },
   "arming_cust_mode_config": {
@@ -55,18 +58,21 @@
     "no_default": true,
     "param": 1256
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_modedetail_devices_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_schedule_config": {
@@ -78,6 +84,7 @@
     "no_default": true,
     "param": 1254
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -88,6 +95,7 @@
    "max": 10,
    "min": 0,
    "read": null,
+   "role": "setting",
    "section": "modes",
    "step": 1,
    "write": {
@@ -105,6 +113,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_arming": {
@@ -112,6 +121,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "modes"
   },
   "arming_support_custom_mode": {
@@ -119,6 +129,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_geofence": {
@@ -126,6 +137,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_off_mode": {
@@ -133,6 +145,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_privacy": {
@@ -140,6 +153,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_query_working_mode": {
@@ -147,6 +161,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_show_user_name": {
@@ -154,6 +169,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_working_mode": {
@@ -164,6 +180,7 @@
     "no_default": true,
     "param": 1151
    },
+   "role": "diagnostic",
    "section": "modes"
   },
   "audio_recording_on_off": {
@@ -233,6 +250,7 @@
     },
     "param": 6012
    },
+   "role": "setting",
    "section": "recording",
    "write": {
     "cmd": 1700,
@@ -252,6 +270,7 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "ptz"
   },
   "automation_config": {
@@ -259,6 +278,7 @@
    "default": "{\"trigger\":[12,13],\"action\":[3,5]}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "automation_detect_trigger_type": {
@@ -269,6 +289,7 @@
     "4": "Detected motion"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "modes",
    "values": [
     0,
@@ -308,6 +329,7 @@
     "4": "Detected motion"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "modes",
    "values": [
     0,
@@ -324,6 +346,7 @@
     "1": "Other"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "modes",
    "values": [
     1
@@ -393,6 +416,7 @@
     },
     "param": 2001
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1700,
@@ -422,6 +446,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "change_wifi_is_check_same_lan": {
@@ -429,6 +454,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "change_wifi_is_press_sync": {
@@ -436,6 +462,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "change_wifi_is_support": {
@@ -443,6 +470,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "cloud_storage_support_show_device": {
@@ -450,6 +478,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "storage"
   },
   "cloud_storage_support_trail": {
@@ -457,6 +486,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "storage"
   },
   "default_angle_idle_time": {
@@ -547,6 +577,7 @@
     },
     "param": 6094
    },
+   "role": "setting",
    "section": "ptz",
    "values": [
     0,
@@ -641,6 +672,7 @@
     },
     "param": 6093
    },
+   "role": "setting",
    "section": "ptz",
    "write": {
     "cmd": 1700,
@@ -704,6 +736,7 @@
     "map": null,
     "param": 6041
    },
+   "role": "setting",
    "section": "detection",
    "step": 1,
    "write": {
@@ -743,6 +776,7 @@
     "map": null,
     "param": 6045
    },
+   "role": "setting",
    "section": "detection",
    "variants": [
     {
@@ -802,6 +836,7 @@
     "map": null,
     "param": 1298
    },
+   "role": "setting",
    "section": "detection",
    "variant_of": "detection_type_set",
    "write": {
@@ -828,6 +863,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_continuous_recording_switch": {
@@ -844,6 +880,7 @@
     },
     "param": 6010
    },
+   "role": "setting",
    "section": "recording",
    "write": {
     "cmd": 1700,
@@ -874,6 +911,7 @@
     },
     "param": 6011
    },
+   "role": "setting",
    "section": "recording",
    "values": [
     "default:00",
@@ -907,6 +945,7 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "recording"
   },
   "device_is_battery_device": {
@@ -914,6 +953,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "device_is_online": {
@@ -921,6 +961,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_model": {
@@ -928,6 +969,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_multiple_bridge_style": {
@@ -935,6 +977,7 @@
    "default": "v1",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "device_name": {
@@ -944,6 +987,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -967,6 +1011,7 @@
     "no_default": true,
     "param": 40008
    },
+   "role": "diagnostic",
    "section": "network"
   },
   "device_rtsp_record_type": {
@@ -979,6 +1024,7 @@
    },
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "network",
    "values": [
     0,
@@ -991,12 +1037,14 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "network"
   },
   "device_serial_number": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "device_silent_ota_switch": {
@@ -1012,6 +1060,7 @@
     },
     "param": 6287
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1350,
@@ -1050,6 +1099,7 @@
     },
     "param": 1271
    },
+   "role": "setting",
    "section": "notifications",
    "values": [
     0,
@@ -1094,6 +1144,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_storage_type": {
@@ -1105,6 +1156,7 @@
     "2": "NAS"
    },
    "read": null,
+   "role": "status",
    "section": "storage",
    "values": [
     0,
@@ -1121,6 +1173,7 @@
     "no_default": true,
     "param": 6200
    },
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -1128,6 +1181,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength_level": {
@@ -1135,6 +1189,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "firmware_main_version": {
@@ -1142,6 +1197,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
@@ -1150,18 +1206,21 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "hb_connect_is_connected": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "hb_connect_nas_storage_type": {
@@ -1175,6 +1234,7 @@
     "map": null,
     "param": 40004
    },
+   "role": "setting",
    "section": "storage",
    "step": 1,
    "write": {
@@ -1200,6 +1260,7 @@
     "map": null,
     "param": 40003
    },
+   "role": "setting",
    "section": "storage",
    "write": {
     "cmd": 1350,
@@ -1226,6 +1287,7 @@
     "map": null,
     "param": 3103
    },
+   "role": "setting",
    "section": "storage",
    "step": 1,
    "write": {
@@ -1253,12 +1315,14 @@
     "no_default": true,
     "param": 40005
    },
+   "role": "status",
    "section": "storage"
   },
   "hb_connect_support_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "ip_address": {
@@ -1267,6 +1331,7 @@
    "kind": "string",
    "name": "IP address",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "is_device_upgrade": {
@@ -1274,6 +1339,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "is_support_multiple_bridge": {
@@ -1281,6 +1347,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network",
    "variants": [
     {
@@ -1365,6 +1432,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network",
    "variant_of": "is_support_multiple_bridge"
   },
@@ -1373,6 +1441,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network",
    "variant_of": "is_support_multiple_bridge"
   },
@@ -1381,6 +1450,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "led_on_off": {
@@ -1437,6 +1507,7 @@
     },
     "param": 6014
    },
+   "role": "setting",
    "section": "picture",
    "write": {
     "cmd": 1700,
@@ -1461,6 +1532,7 @@
     "4": "Sound"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "system",
    "values": [
     4,
@@ -1486,6 +1558,7 @@
     "9": "Playback"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "system",
    "values": [
     0,
@@ -1583,6 +1656,7 @@
     },
     "param": 1020
    },
+   "role": "setting",
    "section": "recording",
    "values": [
     0,
@@ -1621,6 +1695,7 @@
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "live_top_hor_toolbar_list": {
@@ -1630,6 +1705,7 @@
     "0": "Alarm"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "system",
    "values": [
     0
@@ -1643,6 +1719,7 @@
     "1": "Setting"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "system",
    "values": [
     0,
@@ -1654,6 +1731,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "ptz"
   },
   "mac_address": {
@@ -1662,6 +1740,7 @@
    "kind": "string",
    "name": "MAC address",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "microphone_on_off": {
@@ -1678,6 +1757,7 @@
     },
     "param": 1240
    },
+   "role": "setting",
    "section": "audio",
    "write": {
     "cmd": 1240,
@@ -1696,6 +1776,7 @@
    "default": "{\"HB3+AI\": 1,\"HB3\": 1,\"SINGLE\": 1}",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "detection"
   },
   "motion_detection_status": {
@@ -1752,6 +1833,7 @@
     },
     "param": 6040
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1700,
@@ -1776,6 +1858,7 @@
     "map": null,
     "param": 6016
    },
+   "role": "setting",
    "section": "ptz",
    "write": {
     "cmd": 1700,
@@ -1803,6 +1886,7 @@
     "map": null,
     "param": 6050
    },
+   "role": "setting",
    "section": "storage",
    "values": [
     0,
@@ -1849,6 +1933,7 @@
     },
     "param": 1145
    },
+   "role": "setting",
    "section": "storage",
    "write": {
     "cmd": 1145,
@@ -1875,6 +1960,7 @@
     },
     "param": 1013
    },
+   "role": "setting",
    "section": "picture",
    "write": {
     "cmd": 1013,
@@ -1944,6 +2030,7 @@
     },
     "param": 6023
    },
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1700,
@@ -2010,6 +2097,7 @@
     },
     "param": 6022
    },
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1700,
@@ -2076,6 +2164,7 @@
     },
     "param": 6025
    },
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1700,
@@ -2115,6 +2204,7 @@
     },
     "param": 1250
    },
+   "role": "setting",
    "section": "notifications",
    "values": [
     0,
@@ -2242,6 +2332,7 @@
     },
     "param": 6020
    },
+   "role": "setting",
    "section": "notifications",
    "values": [
     0,
@@ -2288,6 +2379,7 @@
     "no_default": true,
     "param": 6001
    },
+   "role": "setting",
    "section": "recording",
    "values": [
     0,
@@ -2301,6 +2393,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "recording"
   },
   "ptz_turn_speed": {
@@ -2315,6 +2408,7 @@
     "map": null,
     "param": 6015
    },
+   "role": "setting",
    "section": "ptz",
    "step": 1,
    "write": {
@@ -2409,6 +2503,7 @@
     },
     "param": 1023
    },
+   "role": "setting",
    "section": "recording",
    "values": [
     5,
@@ -2441,6 +2536,7 @@
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "rotate_image_180_on_off": {
@@ -2456,6 +2552,7 @@
     },
     "param": 1207
    },
+   "role": "setting",
    "section": "picture",
    "write": {
     "cmd": 1207,
@@ -2525,6 +2622,7 @@
     },
     "param": 6095
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1700,
@@ -2551,6 +2649,7 @@
     "map": null,
     "param": 6044
    },
+   "role": "setting",
    "section": "detection",
    "step": 1,
    "write": {
@@ -2581,6 +2680,7 @@
     },
     "param": 6043
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1700,
@@ -2609,6 +2709,7 @@
     },
     "param": 1241
    },
+   "role": "setting",
    "section": "audio",
    "write": {
     "cmd": 1241,
@@ -2633,6 +2734,7 @@
     "map": null,
     "param": 2003
    },
+   "role": "setting",
    "section": "audio",
    "step": 1,
    "write": {
@@ -2664,6 +2766,7 @@
     "0": "H264"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "recording",
    "values": [
     0
@@ -2682,6 +2785,7 @@
     },
     "param": 1283
    },
+   "role": "setting",
    "section": "notifications",
    "values": [
     2
@@ -2712,6 +2816,7 @@
     "map": null,
     "param": 1253
    },
+   "role": "setting",
    "section": "system",
    "values": [
     0,
@@ -2739,6 +2844,7 @@
     "map": null,
     "param": 1215
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1215,
@@ -2757,6 +2863,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "video_intercom_audio_type": {
@@ -2764,6 +2871,7 @@
    "default": "0",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "audio"
   },
   "video_intercom_duplex": {
@@ -2771,6 +2879,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "audio"
   },
   "watermark_set": {
@@ -2792,6 +2901,7 @@
     },
     "param": 1214
    },
+   "role": "setting",
    "section": "picture",
    "values": [
     0,

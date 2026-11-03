@@ -11,6 +11,7 @@
     "no_default": true,
     "param": 1101
    },
+   "role": "diagnostic",
    "section": "power"
   },
   "device_ability_data": {
@@ -22,6 +23,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_is_battery_device": {
@@ -29,6 +31,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "device_is_online": {
@@ -36,6 +39,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -44,6 +48,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -72,6 +77,7 @@
     },
     "param": 6287
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1350,
@@ -91,6 +97,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "device_wifi_signal_strength": {
@@ -98,6 +105,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength_level": {
@@ -105,6 +113,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_wifi_switch": {
@@ -113,6 +122,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "network"
   },
   "is_device_upgrade": {
@@ -128,6 +138,7 @@
     "no_default": true,
     "param": 1134
    },
+   "role": "status",
    "section": "system"
   },
   "is_support_live_entry_open_smart_lock": {
@@ -135,6 +146,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "is_support_silent_ota_switch": {
@@ -142,6 +154,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_add_fingerprint_nums": {
@@ -149,6 +162,7 @@
    "default": "8",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_auto_lock_type": {
@@ -156,6 +170,7 @@
    "default": "3",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_calibrate_ui_show_type": {
@@ -163,6 +178,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_get_event_type": {
@@ -170,6 +186,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_integrate_with_doorbell_or_camera": {
@@ -177,6 +194,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_is_support_new_schedule_ui": {
@@ -184,6 +202,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_is_support_one_time_user": {
@@ -191,6 +210,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_is_support_temporary_pw": {
@@ -198,6 +218,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_notification_locked_switch": {
@@ -206,6 +227,7 @@
    "kind": "other",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1350,
@@ -226,6 +248,7 @@
    "kind": "other",
    "note": "handler ignores the value",
    "read": null,
+   "role": "setting",
    "section": "notifications"
   },
   "smart_lock_notification_unlocked_switch": {
@@ -234,6 +257,7 @@
    "kind": "other",
    "note": "handler ignores the value",
    "read": null,
+   "role": "setting",
    "section": "notifications"
   },
   "smart_lock_one_touch_locking_type": {
@@ -241,6 +265,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_onoff_status": {
@@ -261,6 +286,7 @@
     "no_default": true,
     "param": 1912
    },
+   "role": "status",
    "section": "system"
   },
   "smart_lock_scramble_password_type": {
@@ -268,6 +294,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_set_setting_params": {
@@ -275,6 +302,7 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "system"
   },
   "smart_lock_setting_manage_access": {
@@ -282,6 +310,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "timezone_set": {
@@ -294,6 +323,7 @@
     "map": null,
     "param": 1215
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1215,

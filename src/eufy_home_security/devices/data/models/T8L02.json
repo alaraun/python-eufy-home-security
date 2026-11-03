@@ -6,18 +6,21 @@
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   },
   "cloud_light_effect_id": {
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   },
   "color_gradient_switch": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   },
   "device_is_online": {
@@ -25,18 +28,21 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_light_brightness": {
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   },
   "device_light_led_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   },
   "is_support_ble": {
@@ -44,6 +50,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "is_support_mqtt": {
@@ -51,6 +58,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "is_support_music_rhythm": {
@@ -58,6 +66,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "is_support_share": {
@@ -65,18 +74,21 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "light_effect_id": {
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "picture"
   },
   "light_effect_mode": {
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "picture"
   },
   "light_effect_version": {
@@ -84,6 +96,7 @@
    "default": "2",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "picture"
   },
   "light_led_detection_status": {
@@ -91,24 +104,28 @@
    "default": "-1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "picture"
   },
   "light_length": {
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "picture"
   },
   "light_music_rhythm_switch": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "picture"
   },
   "light_regulator": {
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "picture"
   },
   "matter_category": {
@@ -116,12 +133,14 @@
    "default": "Alexa,GoogleHome,AppleHome,SmartThing",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   },
   "ota_status": {
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   },
   "ota_timeout": {
@@ -129,12 +148,14 @@
    "default": "450",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   },
   "power_light_effect_switch": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "power"
   },
   "sdk_model_config": {
@@ -142,12 +163,14 @@
    "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c5620225\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"syncHeartBeat\":true}}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "spotlight_switch": {
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "picture"
   }
  },

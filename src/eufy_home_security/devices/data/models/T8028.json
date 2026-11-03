@@ -7,6 +7,7 @@
    "default": "{\"routeConfigForDeviceSetup\":{\"steps\":[{\"props\":{},\"route\":\"SignalTestScreen\"},{\"props\":{},\"route\":\"WorksAsIndoorChime\"}]}}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "alarm_tones_mode": {
@@ -18,6 +19,7 @@
     "no_default": true,
     "param": 1281
    },
+   "role": "setting",
    "section": "alarm"
   },
   "alarm_volume_value": {
@@ -32,6 +34,7 @@
     "no_default": true,
     "param": 1235
    },
+   "role": "setting",
    "section": "alarm",
    "step": 1
   },
@@ -40,18 +43,21 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_modedetail_devices_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_schedule_config": {
@@ -63,6 +69,7 @@
     "no_default": true,
     "param": 1254
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -74,54 +81,63 @@
     "no_default": true,
     "param": 1224
    },
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_arm_delay": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_arming": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "modes"
   },
   "arming_support_custom_mode": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_geofence": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_off_mode": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_privacy": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_query_working_mode": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_show_user_name": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "change_wifi_is_support": {
@@ -129,6 +145,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_ability_data": {
@@ -140,18 +157,21 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_is_online": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_model": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -163,6 +183,7 @@
     "no_default": true,
     "param": 1217
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_not_disturb_config": {
@@ -170,12 +191,14 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "notifications"
   },
   "device_serial_number": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "device_silent_ota_switch": {
@@ -192,12 +215,14 @@
     "no_default": true,
     "param": 6287
    },
+   "role": "setting",
    "section": "system"
   },
   "device_sync_data_on_repetor": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "device_wifi_name": {
@@ -208,12 +233,14 @@
     "no_default": true,
     "param": 6200
    },
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength_level": {
@@ -221,24 +248,28 @@
    "default": "4",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "firmware_main_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "ignore_no_sd_card_alarm": {
@@ -246,12 +277,14 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "ip_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "is_device_upgrade": {
@@ -267,6 +300,7 @@
     "no_default": true,
     "param": 1134
    },
+   "role": "status",
    "section": "system"
   },
   "is_support_mqtt": {
@@ -274,6 +308,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "is_support_silent_ota_switch": {
@@ -281,6 +316,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "led_on_off": {
@@ -297,12 +333,14 @@
     "no_default": true,
     "param": 1045
    },
+   "role": "setting",
    "section": "picture"
   },
   "mac_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "notification_alarm_delay_value": {
@@ -313,6 +351,7 @@
     "no_default": true,
     "param": 1282
    },
+   "role": "status",
    "section": "modes"
   },
   "prompt_volume_value": {
@@ -327,6 +366,7 @@
     "no_default": true,
     "param": 1292
    },
+   "role": "setting",
    "section": "alarm",
    "step": 1
   },
@@ -335,6 +375,7 @@
    "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"supportedWifiTypes\":[\"Open\",\"WPA\",\"WPA2\",\"WPA3\",\"AUTO\"],\"wifiAuthTypeMap\":{\"Open\":0,\"WEP\":1,\"WPA\":2,\"WPA2\":3,\"WPA3\":4,\"AUTO\":5},\"encryptTypeMap\":{\"Open\":1,\"WPA\":1,\"WPA2\":1,\"WPA3\":1,\"AUTO\":1},\"encryptParam\":{\"ecc256\":false,\"aes128V1\":true,\"ecdhV1\":false,\"rsa1024\":false,\"aes128V2\":false,\"ecdhV2\":false}}}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "setting_model_config": {
@@ -342,6 +383,7 @@
    "default": "{\"config\":{\"useCloudDeviceImage\":true,\"max_chime_association_count\":7}}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "switching_notification": {
@@ -357,6 +399,7 @@
    },
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "notifications",
    "values": [
     0,
@@ -375,6 +418,7 @@
     "no_default": true,
     "param": 1215
    },
+   "role": "setting",
    "section": "system"
   },
   "timezone_set_redirect": {
@@ -383,6 +427,7 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "other"
   }
  },

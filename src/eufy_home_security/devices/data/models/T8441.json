@@ -16,6 +16,7 @@
    },
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection",
    "values": [
     "sideNum",
@@ -36,18 +37,21 @@
     "no_default": true,
     "param": 1256
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_modedetail_devices_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_schedule_config": {
@@ -59,6 +63,7 @@
     "no_default": true,
     "param": 1254
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -69,6 +74,7 @@
    "max": 10,
    "min": 0,
    "read": null,
+   "role": "setting",
    "section": "modes",
    "step": 1,
    "write": {
@@ -86,6 +92,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_arming": {
@@ -93,6 +100,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "modes"
   },
   "arming_support_custom_mode": {
@@ -100,6 +108,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_geofence": {
@@ -107,6 +116,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_off_mode": {
@@ -114,6 +124,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_privacy": {
@@ -121,6 +132,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_query_working_mode": {
@@ -128,6 +140,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_show_user_name": {
@@ -135,6 +148,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_working_mode": {
@@ -145,6 +159,7 @@
     "no_default": true,
     "param": 1151
    },
+   "role": "diagnostic",
    "section": "modes"
   },
   "audio_recording_on_off": {
@@ -186,6 +201,7 @@
     "map": null,
     "param": 1288
    },
+   "role": "setting",
    "section": "recording",
    "write": {
     "cmd": 1350,
@@ -214,6 +230,7 @@
     },
     "param": 6081
    },
+   "role": "setting",
    "section": "picture",
    "write": {
     "cmd": 1700,
@@ -292,6 +309,7 @@
     },
     "param": 2001
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1035,
@@ -315,6 +333,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "change_wifi_is_press_sync": {
@@ -322,6 +341,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "change_wifi_is_support": {
@@ -329,6 +349,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "cloud_storage_support_trail": {
@@ -336,6 +357,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "storage"
   },
   "detection_sensitivity": {
@@ -349,6 +371,7 @@
     "map": null,
     "param": 6041
    },
+   "role": "setting",
    "section": "detection",
    "step": 1,
    "write": {
@@ -382,6 +405,7 @@
     "map": null,
     "param": 6045
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1700,
@@ -409,6 +433,7 @@
     },
     "param": 6010
    },
+   "role": "setting",
    "section": "recording",
    "write": {
     "cmd": 1700,
@@ -436,6 +461,7 @@
     "map": null,
     "param": 6011
    },
+   "role": "setting",
    "section": "recording",
    "values": [
     0,
@@ -459,6 +485,7 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "recording"
   },
   "device_is_battery_device": {
@@ -466,6 +493,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "device_is_online": {
@@ -473,6 +501,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_model": {
@@ -480,6 +509,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -489,6 +519,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -508,6 +539,7 @@
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "device_snooze_time": {
@@ -534,6 +566,7 @@
     },
     "param": 1271
    },
+   "role": "setting",
    "section": "notifications",
    "values": [
     0,
@@ -578,6 +611,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_storage_type": {
@@ -589,6 +623,7 @@
     "2": "NAS"
    },
    "read": null,
+   "role": "status",
    "section": "storage",
    "values": [
     0,
@@ -605,6 +640,7 @@
     "no_default": true,
     "param": 6200
    },
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -612,6 +648,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength_level": {
@@ -619,6 +656,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "firmware_main_version": {
@@ -626,18 +664,21 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "get_storage_status": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "hb_connect_is_connected": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "hb_connect_nas_storage_type": {
@@ -651,6 +692,7 @@
     "map": null,
     "param": 40004
    },
+   "role": "setting",
    "section": "storage",
    "step": 1,
    "write": {
@@ -676,6 +718,7 @@
     "map": null,
     "param": 40003
    },
+   "role": "setting",
    "section": "storage",
    "write": {
     "cmd": 1350,
@@ -702,6 +745,7 @@
     "map": null,
     "param": 3103
    },
+   "role": "setting",
    "section": "storage",
    "step": 1,
    "write": {
@@ -729,12 +773,14 @@
     "no_default": true,
     "param": 40005
    },
+   "role": "status",
    "section": "storage"
   },
   "hb_connect_support_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "ip_address": {
@@ -742,6 +788,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "is_device_upgrade": {
@@ -749,6 +796,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "led_on_off": {
@@ -764,6 +812,7 @@
     },
     "param": 6014
    },
+   "role": "setting",
    "section": "picture",
    "write": {
     "cmd": 1700,
@@ -787,6 +836,7 @@
     "4": "Sound"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "system",
    "values": [
     0,
@@ -808,6 +858,7 @@
     "9": "Playback"
    },
    "read": null,
+   "role": "diagnostic",
    "section": "system",
    "values": [
     0,
@@ -841,6 +892,7 @@
     },
     "param": 2031
    },
+   "role": "setting",
    "section": "recording",
    "values": [
     0,
@@ -880,6 +932,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "live_support_long_time_watch": {
@@ -887,6 +940,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "live_support_mute": {
@@ -894,6 +948,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "live_support_record": {
@@ -901,6 +956,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   }
  },

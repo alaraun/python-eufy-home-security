@@ -15,6 +15,7 @@
     },
     "param": 2735
    },
+   "role": "setting",
    "section": "alarm",
    "write": {
     "cmd": 1350,
@@ -38,6 +39,7 @@
     "no_default": true,
     "param": 1101
    },
+   "role": "diagnostic",
    "section": "power"
   },
   "breathing_light_schedule_config": {
@@ -52,6 +54,7 @@
     },
     "param": 1421
    },
+   "role": "setting",
    "section": "picture",
    "write": {
     "cmd": 1350,
@@ -118,6 +121,7 @@
     },
     "param": 1276
    },
+   "role": "setting",
    "section": "detection",
    "values": [
     0,
@@ -155,6 +159,7 @@
    "control": "text",
    "kind": "string",
    "read": null,
+   "role": "setting",
    "section": "alarm",
    "write": {
     "cmd": 1350,
@@ -169,6 +174,7 @@
     "map": null,
     "param": 7023
    },
+   "role": "setting",
    "section": "alarm",
    "write": {
     "cmd": 1350,
@@ -188,6 +194,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "device_is_online": {
@@ -195,6 +202,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_model": {
@@ -202,6 +210,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -210,6 +219,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -238,6 +248,7 @@
     },
     "param": 1035
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1035,
@@ -266,6 +277,7 @@
     "map": null,
     "param": 9251
    },
+   "role": "setting",
    "section": "alarm",
    "values": [
     2,
@@ -295,6 +307,7 @@
     "no_default": true,
     "param": 1131
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_wifi_signal_strength": {
@@ -302,6 +315,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength_level": {
@@ -309,6 +323,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "firmware_main_version": {
@@ -316,6 +331,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
@@ -323,6 +339,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_sub_version": {
@@ -330,6 +347,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_sub_version_time": {
@@ -337,6 +355,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "ignore_set_alarm": {
@@ -344,6 +363,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "alarm"
   },
   "is_device_upgrade": {
@@ -359,6 +379,7 @@
     "no_default": true,
     "param": 1134
    },
+   "role": "status",
    "section": "system"
   },
   "light_setting_schedule_list": {
@@ -366,6 +387,7 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "picture"
   },
   "motion_activated_light_setting": {
@@ -373,6 +395,7 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "picture"
   },
   "motion_detection_status": {
@@ -388,6 +411,7 @@
     },
     "param": 6040
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1700,
@@ -411,6 +435,7 @@
     "no_default": true,
     "param": 6275
    },
+   "role": "setting",
    "section": "detection"
   },
   "power_manager_mode": {
@@ -425,6 +450,7 @@
    },
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "power",
    "values": [
     0,
@@ -452,6 +478,7 @@
     "no_default": true,
     "param": 2111
    },
+   "role": "diagnostic",
    "section": "power",
    "values": [
     0,
@@ -469,6 +496,7 @@
    "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"read\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"service\":\"8c850001-0302-41c5-b46e-cf057c562025\", \"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"syncHeartBeat\":true}}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "setting_model_config": {
@@ -476,6 +504,7 @@
    "default": "{\"config\":{\"useCloudDeviceImage\":true}}",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "speaker_on_off": {
@@ -491,6 +520,7 @@
     },
     "param": 1241
    },
+   "role": "setting",
    "section": "audio",
    "write": {
     "cmd": 1241,
@@ -518,6 +548,7 @@
     "map": null,
     "param": 2003
    },
+   "role": "setting",
    "section": "audio",
    "values": [
     2,
@@ -557,6 +588,7 @@
     "map": null,
     "param": 1401
    },
+   "role": "setting",
    "section": "picture",
    "step": 1,
    "write": {
@@ -584,6 +616,7 @@
     },
     "param": 1403
    },
+   "role": "setting",
    "section": "picture",
    "write": {
     "cmd": 1403,
@@ -605,6 +638,7 @@
    "kind": "bool",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "picture",
    "write": {
     "cmd": 1700,
@@ -635,6 +669,7 @@
     },
     "param": 9500
    },
+   "role": "setting",
    "section": "detection",
    "write": {
     "cmd": 1350,
@@ -654,6 +689,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "other"
   }
  },

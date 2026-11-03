@@ -13,6 +13,7 @@
    },
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "alarm",
    "values": [
     0,
@@ -29,6 +30,7 @@
     "no_default": true,
     "param": 1101
    },
+   "role": "diagnostic",
    "section": "power"
   },
   "device_ability_data": {
@@ -40,6 +42,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_is_online": {
@@ -47,6 +50,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_model": {
@@ -54,6 +58,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -62,6 +67,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -86,6 +92,7 @@
     "no_default": true,
     "param": 1131
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_wifi_signal_strength_level": {
@@ -93,6 +100,7 @@
    "default": "0",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "firmware_main_version": {
@@ -100,6 +108,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
@@ -108,6 +117,7 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "is_device_upgrade": {
@@ -123,6 +133,7 @@
     "no_default": true,
     "param": 1134
    },
+   "role": "status",
    "section": "system"
   },
   "sensor_alarm_timeout": {
@@ -130,6 +141,7 @@
    "kind": "other",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "alarm"
   },
   "sensor_is_low_power": {
@@ -137,6 +149,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "sensor_siren_ring_status": {
@@ -144,6 +157,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "alarm"
   },
   "sensor_siren_ring_time": {
@@ -151,6 +165,7 @@
    "kind": "other",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "alarm"
   }
  },

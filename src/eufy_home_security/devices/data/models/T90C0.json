@@ -7,6 +7,7 @@
    "default": "100",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "device_ability_data": {
@@ -18,6 +19,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_model": {
@@ -25,6 +27,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_wifi_signal_strength_level": {
@@ -32,6 +35,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "network"
   }
  },

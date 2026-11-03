@@ -7,6 +7,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "battery_value": {
@@ -18,6 +19,7 @@
     "no_default": true,
     "param": 1101
    },
+   "role": "diagnostic",
    "section": "power"
   },
   "device_ability_data": {
@@ -29,6 +31,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_is_online": {
@@ -36,6 +39,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_model": {
@@ -43,6 +47,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -51,6 +56,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -80,6 +86,7 @@
     },
     "param": 61214
    },
+   "role": "setting",
    "section": "alarm",
    "write": {
     "cmd": 1350,
@@ -103,6 +110,7 @@
     "no_default": true,
     "param": 1131
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_to_hb_connect_type": {
@@ -110,6 +118,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "network"
   },
   "device_wifi_signal_strength_level": {
@@ -117,6 +126,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "firmware_main_version": {
@@ -124,6 +134,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
@@ -132,6 +143,7 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "is_device_upgrade": {
@@ -147,6 +159,7 @@
     "no_default": true,
     "param": 1134
    },
+   "role": "status",
    "section": "system"
   },
   "notification_jump_to_mode_page": {
@@ -154,6 +167,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "notifications"
   },
   "sensor_is_low_power": {
@@ -161,6 +175,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "sensor_panic_status": {
@@ -171,6 +186,7 @@
     "no_default": true,
     "param": 61013
    },
+   "role": "diagnostic",
    "section": "alarm"
   },
   "sensor_panic_trigger_type": {
@@ -188,6 +204,7 @@
     "map": null,
     "param": 61012
    },
+   "role": "setting",
    "section": "alarm",
    "values": [
     0,

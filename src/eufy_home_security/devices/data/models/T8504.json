@@ -11,6 +11,7 @@
     "no_default": true,
     "param": 1101
    },
+   "role": "diagnostic",
    "section": "power"
   },
   "change_wifi_is_support": {
@@ -18,6 +19,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "device_ability_data": {
@@ -29,6 +31,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_is_battery_device": {
@@ -36,6 +39,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "power"
   },
   "device_is_online": {
@@ -43,6 +47,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_model": {
@@ -50,6 +55,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -58,6 +64,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -78,6 +85,7 @@
    "default": "-",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "device_silent_ota_switch": {
@@ -93,6 +101,7 @@
     },
     "param": 6287
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1350,
@@ -112,6 +121,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_text_event_data_type": {
@@ -119,6 +129,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "device_wifi_name": {
@@ -130,6 +141,7 @@
     "no_default": true,
     "param": 6200
    },
+   "role": "status",
    "section": "network"
   },
   "device_wifi_signal_strength": {
@@ -137,6 +149,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "firmware_main_version": {
@@ -144,6 +157,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
@@ -151,6 +165,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_sub_version": {
@@ -158,6 +173,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_sub_version_time": {
@@ -165,6 +181,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "is_support_silent_ota_switch": {
@@ -172,6 +189,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "mac_address": {
@@ -179,6 +197,7 @@
    "default": "0",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "smart_lock_add_fingerprint_nums": {
@@ -186,6 +205,7 @@
    "default": "8",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_auto_lock_schedule_switch": {
@@ -194,6 +214,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "system"
   },
   "smart_lock_get_event_type": {
@@ -201,6 +222,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_integrate_with_doorbell_or_camera": {
@@ -208,6 +230,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_is_support_temporary_pw": {
@@ -215,6 +238,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_lock_sound_switch": {
@@ -223,6 +247,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "audio"
   },
   "smart_lock_notification_locked_switch": {
@@ -231,6 +256,7 @@
    "kind": "other",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "notifications"
   },
   "smart_lock_notification_switch": {
@@ -239,6 +265,7 @@
    "kind": "other",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "notifications"
   },
   "smart_lock_notification_unlocked_switch": {
@@ -247,6 +274,7 @@
    "kind": "other",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "notifications"
   },
   "smart_lock_one_touch_locking_switch": {
@@ -255,6 +283,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "system"
   },
   "smart_lock_onoff_status": {
@@ -275,6 +304,7 @@
     "no_default": true,
     "param": 1912
    },
+   "role": "status",
    "section": "system"
   },
   "smart_lock_scramble_password_switch": {
@@ -283,6 +313,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "system"
   },
   "smart_lock_set_setting_params": {
@@ -290,6 +321,7 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "system"
   },
   "smart_lock_setting_manage_access": {
@@ -297,6 +329,7 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "smart_lock_wrong_try_protection_attempts": {
@@ -307,6 +340,7 @@
    "min": 3,
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "system",
    "step": 1
   },
@@ -318,6 +352,7 @@
    "min": 1,
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "system",
    "step": 1
   },
@@ -327,6 +362,7 @@
    "kind": "bool",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "system"
   },
   "time_format_set": {
@@ -341,6 +377,7 @@
     "map": null,
     "param": 1253
    },
+   "role": "setting",
    "section": "system",
    "values": [
     0,
@@ -368,6 +405,7 @@
     "map": null,
     "param": 1215
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1215,

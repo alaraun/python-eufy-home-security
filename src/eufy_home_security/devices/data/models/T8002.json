@@ -12,6 +12,7 @@
     "no_default": true,
     "param": 1299
    },
+   "role": "setting",
    "section": "detection"
   },
   "alarm_status": {
@@ -19,6 +20,7 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "alarm"
   },
   "alarm_tones_mode": {
@@ -29,6 +31,7 @@
     "map": null,
     "param": 1281
    },
+   "role": "setting",
    "section": "alarm",
    "write": {
     "cmd": 1350,
@@ -54,6 +57,7 @@
     "map": null,
     "param": 1235
    },
+   "role": "setting",
    "section": "alarm",
    "step": 1,
    "write": {
@@ -77,6 +81,7 @@
     "no_default": true,
     "param": 1256
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_geofence_config": {
@@ -84,18 +89,21 @@
    "kind": "string",
    "note": "no handler write path",
    "read": null,
+   "role": "setting",
    "section": "modes"
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_modedetail_devices_rules": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_schedule_config": {
@@ -107,6 +115,7 @@
     "no_default": true,
     "param": 1254
    },
+   "role": "setting",
    "section": "modes"
   },
   "arming_selected_mode": {
@@ -114,6 +123,7 @@
    "control": "text",
    "kind": "string",
    "read": null,
+   "role": "setting",
    "section": "modes",
    "write": {
     "cmd": 1350,
@@ -130,6 +140,7 @@
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_arming": {
@@ -137,6 +148,7 @@
    "default": " true",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "modes"
   },
   "arming_support_custom_mode": {
@@ -144,6 +156,7 @@
    "default": " true",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_geofence": {
@@ -151,6 +164,7 @@
    "default": " false",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_off_mode": {
@@ -158,24 +172,28 @@
    "default": " false",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_privacy": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_query_working_mode": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_support_show_user_name": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "arming_working_mode": {
@@ -186,6 +204,7 @@
     "no_default": true,
     "param": 1151
    },
+   "role": "diagnostic",
    "section": "modes"
   },
   "database_synchronize": {
@@ -193,6 +212,7 @@
    "kind": "string",
    "note": "handler ignores the value",
    "read": null,
+   "role": "setting",
    "section": "storage"
   },
   "device_ability_data": {
@@ -204,6 +224,7 @@
     "no_default": true,
     "param": 1103
    },
+   "role": "diagnostic",
    "section": "system"
   },
   "device_has_buzzer": {
@@ -211,6 +232,7 @@
    "default": true,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "alarm"
   },
   "device_is_online": {
@@ -218,6 +240,7 @@
    "default": " false",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_linkage_mode": {
@@ -225,12 +248,14 @@
    "kind": "string",
    "note": "handler rejects the probed values",
    "read": null,
+   "role": "setting",
    "section": "detection"
   },
   "device_model": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "device_name": {
@@ -239,6 +264,7 @@
    "kind": "string",
    "note": "round trip does not return the written value",
    "read": null,
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1217,
@@ -267,6 +293,7 @@
     },
     "param": 6287
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1350,
@@ -289,24 +316,28 @@
     "no_default": true,
     "param": 1140
    },
+   "role": "status",
    "section": "system"
   },
   "device_storage_type": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "storage"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "firmware_main_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_main_version_time": {
@@ -314,6 +345,7 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "firmware_sub_version": {
@@ -321,24 +353,28 @@
    "kind": "string",
    "page": "AboutDevice",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "homekit_device_connect_homekit_status": {
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "ip_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "is_device_upgrade": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "system"
   },
   "is_support_silent_ota_switch": {
@@ -346,12 +382,14 @@
    "default": false,
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "system"
   },
   "mac_address": {
    "access": "ro",
    "kind": "string",
    "read": null,
+   "role": "status",
    "section": "network"
   },
   "notification_alarm_delay_value": {
@@ -362,12 +400,14 @@
     "no_default": true,
     "param": 1282
    },
+   "role": "status",
    "section": "modes"
   },
   "ordered_trigger_actions": {
    "access": "ro",
    "kind": "other",
    "read": null,
+   "role": "diagnostic",
    "section": "modes"
   },
   "prompt_volume_value": {
@@ -381,6 +421,7 @@
     "map": null,
     "param": 1292
    },
+   "role": "setting",
    "section": "alarm",
    "step": 1,
    "write": {
@@ -400,6 +441,7 @@
    "access": "ro",
    "kind": "bool",
    "read": null,
+   "role": "diagnostic",
    "section": "storage"
   },
   "switching_notification": {
@@ -422,6 +464,7 @@
     "map": null,
     "param": 1283
    },
+   "role": "setting",
    "section": "notifications",
    "write": {
     "cmd": 1350,
@@ -445,6 +488,7 @@
     "no_default": true,
     "param": 1253
    },
+   "role": "setting",
    "section": "system"
   },
   "timezone_set": {
@@ -456,6 +500,7 @@
     "map": null,
     "param": 1215
    },
+   "role": "setting",
    "section": "system",
    "write": {
     "cmd": 1215,
@@ -474,6 +519,7 @@
    "kind": "string",
    "note": "handler ignores the value",
    "read": null,
+   "role": "setting",
    "section": "system"
   }
  },
