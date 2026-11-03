@@ -1122,7 +1122,7 @@
     "no_default": true,
     "param": 1134
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "system",
    "shown": "card"
   },
