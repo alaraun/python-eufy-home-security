@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         SessionState,
         StationRefreshStatus,
     )
+    from .detection_delivery import DetectionDelivery, DetectionDeliveryReport
     from .devices.device_alarm import DeviceAlarm
     from .devices.live_view import Lens, LensReport, LensSource, LensView
     from .devices.model_settings import (
@@ -200,6 +201,7 @@ _EXPORTS: dict[str, str] = {
         ("redact", "redact_serial", "set_secret_logging", "set_wire_logging"), "_logging"
     ),
     **dict.fromkeys(("EufySecurity", "ModelStatus", "SkippedDevice"), "client"),
+    **dict.fromkeys(("DetectionDelivery", "DetectionDeliveryReport"), "detection_delivery"),
     **dict.fromkeys(
         (
             "ArmingActivation",
@@ -480,6 +482,8 @@ __all__ = [
     "ConnectionChanged",
     "CredentialsRefreshed",
     "CrossCameraConfig",
+    "DetectionDelivery",
+    "DetectionDeliveryReport",
     "DetectionType",
     "DeviceAlarm",
     "DeviceAlarmChanged",

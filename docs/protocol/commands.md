@@ -676,7 +676,7 @@ by a receipt (code 0) and no `0x0547`.
   | 1 | `BIT_RECORD` | record video |
   | 2 | `BIT_ALARM` | the camera's own siren ("sound alarm") |
   | 4 | `BIT_STATION_ALARM` | the HomeBase alarm |
-  | 8 | `BIT_NOTIFICATION` | push notification |
+  | 8 | `BIT_NOTIFICATION` | push notification: the device's detection pushes leave the station in this mode (below) |
   | 16, 256 | `BIT_PRAVACY_ON`, `BIT_PRIVACY_ON_NEW` | privacy (camera off in this mode) |
   | 32 | `BIT_MOTION_SENSOR_RESPOND` | respond to the motion sensor |
   | 64 | `BIT_REPORT_MONITOR_CENTER` | report to professional monitoring |
@@ -686,6 +686,14 @@ by a receipt (code 0) and no `0x0547`.
   HomeBase alarm, light) raised the camera siren (`0x04B2`), the HomeBase tone
   (`0x04B1`) and its light (`0x0578`) when it triggered in Away, while a camera at 9
   (record, notify) raised nothing. Its bit names are **[app]**.
+- **Notification (8) gates the detection pushes [verified: HomeBase 3].** While a mode
+  is in force, the station sends a device's detection pushes (the P2P `2037` push and the
+  cloud push alike) only when that device's action for the mode has bit 8; with it clear
+  the device still records, and nothing is pushed. Measured on a HomeBase 3 with two
+  eufyCam 3 (12 of 12 records pushed in a mode at 9, none of 214 in a mode at 1) and on a
+  second HomeBase 3 with an indoor and a battery camera (pushes, P2P included, only after
+  bit 8 was set). A device a mode's table does not list reads as on, as the eufy app reads
+  it. Off and Disarmed read 1177. `Station.detection_delivery` reports it per device.
 - The table carries every device of the mode, so a client must write back the other
   devices' current actions and the delays unchanged.
 - Which bits a device has depends on its type **[app]**: a camera

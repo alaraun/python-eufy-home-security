@@ -18,6 +18,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .._logging import LogThrottle, redact_serial
 from ..cloud.const import scope_country
 from ..cloud.models import CloudDevice
+from ..detection_delivery import (
+    NOTIFICATION_FLAG,
+    DetectionDelivery,
+    DetectionDeliveryReport,
+    detection_delivery,
+)
 from ..devices.capabilities import (
     Capability,
     DeviceProfile,
@@ -71,7 +77,13 @@ from ..devices.recipes import (
     connect_type,
     goto_preset,
 )
-from ..devices.settings import VIEW_MODE_PARAM, Scope, report_value, scope_for_kind
+from ..devices.settings import (
+    VIEW_MODE_PARAM,
+    Scope,
+    mode_action_flags,
+    report_value,
+    scope_for_kind,
+)
 from ..devices.station_config_support import StationFeature, restart_command, station_config_models
 from ..devices.station_config_support import config_support as station_config_support
 from ..devices.support import Evidence, Support
@@ -2606,6 +2618,42 @@ class Station:
             station.support,
             f"{station.source}; extended to {model.model}, which the eufy app shows as a camera",
             station.note,
+        )
+
+    def detection_delivery(self, device_sn: str) -> DetectionDeliveryReport:
+        """Whether this station sends ``device_sn``'s detection pushes in the guard mode
+        in force (:func:`~..detection_delivery.detection_delivery`): the Notification bit
+        of the device's action in that mode's table. Off holds every detection push of
+        the device back, over P2P and through the cloud, while the mode is in force.
+
+        The mode in force is the session's latest (a dump, a mode report, a push), else
+        :attr:`config`'s. Every camera, doorbell and sensor whose kind has the
+        Notification action (:func:`~..devices.settings.mode_action_flags`) is graded;
+        the station itself, a keypad, an uncatalogued model and a device not paired here
+        are ``UNKNOWN``. No I/O. Refresh on :class:`~..events.GuardModeChanged`,
+        :class:`~..events.StationConfigChanged` and :class:`~..events.DevicesChanged`.
+        """
+        device = next(
+            (d for d in (self.device, *self.sub_devices) if d.device_sn == device_sn), None
+        )
+        if device is None:
+            return DetectionDeliveryReport(
+                device_sn=device_sn,
+                delivery=DetectionDelivery.UNKNOWN,
+                mode=None,
+                action=None,
+                sending_modes=(),
+                reason=_NOT_PAIRED,
+            )
+        channel = self._channel_of(device)
+        kind = None if channel is None else self._configuration._kind_on(channel)
+        flags = mode_action_flags(scope_for_kind(kind), device.device_type)
+        config = self.config
+        mode = self.session.active_mode
+        if mode is None and config is not None:
+            mode = config.effective_mode
+        return detection_delivery(
+            config, device_sn, mode=mode, has_notification_action=NOTIFICATION_FLAG in flags
         )
 
     def media_key_type(self, channel: int) -> MediaKeyType:
