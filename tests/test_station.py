@@ -1431,6 +1431,17 @@ def test_a_standalone_devices_unreported_read_only_status_has_no_default() -> No
     assert reported.setting_source("battery_value") is ValueSource.P2P
 
 
+def test_an_unreported_read_only_status_the_app_lists_keeps_its_default() -> None:
+    """A read-only status the model data lists with a default (the keypad password flag,
+    default False) reads that default while unreported."""
+    station = _station_of("T9000" + SYNTHETIC.station_sn[5:], 0)
+    flag = station.setting("hb_keypad_is_password_set")
+    assert (flag.writable, flag.readable, flag.default) == (False, True, False)
+    state = station._state(_dump_of({255: {6014: "1"}}))
+    assert state.setting("hb_keypad_is_password_set") is False
+    assert state.setting_source("hb_keypad_is_password_set") is ValueSource.APP_DEFAULT
+
+
 def _mode_table_blocks(fake: FakeStation) -> None:
     """The synthetic camera (0) and a motion sensor known only by its markers (16)."""
     fake.params[0].update({1400: "0", 1239: "9", 1167: "0", 1172: "0", 1225: "1", 1166: "30"})
