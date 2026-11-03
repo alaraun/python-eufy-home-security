@@ -625,21 +625,22 @@ async def test_alarm_frames_become_param_and_alarm_changes(
 async def test_an_alarm_delay_frame_announces_the_delay(
     station: FakeStation, short_settle: None
 ) -> None:
-    """``0x048C`` on the triggering channel starts the delay; the end comes once, after
-    a start; the frame's alarm type is filed as param 1164 of that channel."""
+    """``0x048C`` starts the delay on the frame's channel (255: station-wide, as a
+    HomeBase 3 sends it; the alarm's tone then comes on the sensor's channel); the end
+    comes once, after a start; the alarm type is filed as param 1164 of that channel."""
     session = make_session(station, Provider(station))
     events: list[Event] = []
     delay = FrameType.ALARM_DELAY_NOTIFY
     try:
         await session.async_get_params()
         session.subscribe(events.append)
-        station.send_alarm_frame(delay, 0, 0, channel=19)  # no delay running: no end
-        station.send_alarm_frame(delay, 6, 30, channel=19)
-        station.send_alarm_frame(delay, 0, 0, channel=19)
-        station.send_alarm_frame(delay, 0, 0, channel=19)
-        station.send_alarm_frame(delay, 6, 30, channel=19)
+        station.send_alarm_frame(delay, 0, 0, channel=255)  # no delay running: no end
+        station.send_alarm_frame(delay, 6, 30, channel=255)
+        station.send_alarm_frame(delay, 0, 0, channel=255)
+        station.send_alarm_frame(delay, 0, 0, channel=255)
+        station.send_alarm_frame(delay, 6, 30, channel=255)
         station.send_alarm_frame(FrameType.ALARM_TONE_NOTIFY, 6, 30, channel=19)  # the alarm
-        station.send_alarm_frame(delay, 0, 0, channel=19)
+        station.send_alarm_frame(delay, 0, 0, channel=255)
         await wait_until(lambda: session.params.get((19, 1201)) == "6")
         await asyncio.sleep(0.1)
     finally:
@@ -649,8 +650,9 @@ async def test_an_alarm_delay_frame_announces_the_delay(
         for e in events
         if isinstance(e, AlarmDelayChanged)
     ]
-    assert delays == [(True, 19, 6, 30), (False, 19, None, None), (True, 19, 6, 30)]
-    assert session.params[(19, 1164)] == "0"
+    assert delays == [(True, 255, 6, 30), (False, 255, None, None), (True, 255, 6, 30)]
+    assert session.params[(255, 1164)] == "0"
+    assert (19, 1164) not in session.params
 
 
 _DOOR_OPEN_NOTIFIES = {
@@ -3915,6 +3917,86 @@ async def test_a_standalone_devices_notify_is_its_own(device_channel: int) -> No
         station.stop()
     assert session.params[(255, 1101)] == "63"
     assert {dev for dev, pid in session.params if pid == 1101} == {0, 255}
+
+
+async def test_a_notify_about_a_standalone_devices_paired_device_is_that_devices() -> None:
+    """On a standalone device with a paired device, a notify on the paired device's
+    channel is that device's; one on the standalone device's channel stays its own."""
+    station = FakeStation(
+        receipt_len=STANDALONE_RECEIPT_LEN, params={46: {1101: "64"}, 1: {1101: "90"}}
+    )
+    await station.start()
+
+    async def provider(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn,
+        provider,
+        host="127.0.0.1",
+        port=station.discovery_port,
+        block_aliases={46: (255, 0)},
+        expect_channels={0, 1},
+    )
+
+    def battery(value: str, device_channel: int) -> None:
+        station.send_json(
+            FrameType.NOTIFY_PAYLOAD,
+            {"cmd": 1101, "payload": {"type": "updateCameraInfo", "value": value}},
+            device_channel=device_channel,
+        )
+
+    try:
+        await session.async_get_params(timeout=2.0)
+        battery("63", 1)
+        await wait_until(lambda: session.params.get((1, 1101)) == "63")
+        battery("62", 0)
+        await wait_until(lambda: session.params.get((0, 1101)) == "62")
+    finally:
+        await session.async_close()
+        station.stop()
+    assert session.params[(255, 1101)] == "62"
+    assert session.params[(1, 1101)] == "63"
+
+
+def _status_list(dev_type: int, door: str) -> dict[str, Any]:
+    """A sensor's 1829 status list as a HomeBase 3 sends it: string values, each item
+    naming its device."""
+    items = [(1101, "100"), (1601, "0"), (1141, "-61"), (1243, "2"), (61016, "0"), (1550, door)]
+    return {
+        "cmd": 1829,
+        "payload": {
+            "params": [
+                {"dev_type": dev_type, "param_type": pid, "param_value": value}
+                for pid, value in items
+            ]
+        },
+    }
+
+
+async def test_a_status_item_naming_another_device_is_logged_once(
+    station: FakeStation, caplog: pytest.LogCaptureFixture, short_settle: None
+) -> None:
+    """A status list is filed on the subheader's channel; items whose ``dev_type``
+    differs from it are logged once per notify kind."""
+    caplog.set_level(logging.DEBUG, logger=session_module.__name__)
+    station.params[19] = {1550: "0", 1101: "100"}
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_get_params(expect_channels={0, 19})
+        station.send_json(FrameType.NOTIFY_PAYLOAD, _status_list(19, "1"), device_channel=19)
+        await wait_until(lambda: session.params.get((19, 1550)) == "1")
+        for door in ("0", "1"):
+            station.send_json(FrameType.NOTIFY_PAYLOAD, _status_list(21, door), device_channel=19)
+            await wait_until(lambda door=door: session.params.get((19, 1550)) == door)
+    finally:
+        await session.async_close()
+    assert session.params[(19, 1550)] == "1"
+    assert not any(pid == 1550 for ch, pid in session.params if ch == 21)
+    logged = _messages(caplog, "items name dev_type")
+    assert logged == [
+        f"{session._log_name}: parameter notify 1829 ch19: items name dev_type 21, filed on ch19"
+    ]
 
 
 async def test_ingest_cloud_params_block_aliases_and_events(station: FakeStation) -> None:

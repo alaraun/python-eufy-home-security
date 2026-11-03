@@ -1076,11 +1076,15 @@ class AlarmDelayChanged:
     sounds its alarm for a trigger (an entry sensor's door opened in Away).
 
     Over P2P from the station's alarm-delay frame (``0x048C``, param 1164),
-    ``[alarm_type, seconds]`` on the triggering device's channel, as the eufy app reads
-    it: an alarm type outside :data:`ALARM_OFF_TYPES` with time left starts the delay
-    (``seconds`` until the alarm, a value above 1000 read as milliseconds), an off type
-    with none ends it. The end is emitted only after a start; an alarm that starts
-    (:class:`AlarmChanged`) ends the delay too, without an event of its own.
+    ``[alarm_type, seconds]``, as the eufy app reads it: an alarm type outside
+    :data:`ALARM_OFF_TYPES` with time left starts the delay (``seconds`` until the alarm,
+    a value above 1000 read as milliseconds), an off type with none ends it. The end is
+    emitted only after a start; an alarm that starts (:class:`AlarmChanged`) ends the
+    delay too, without an event of its own.
+
+    ``channel`` is the frame's channel: 255 (the station) on a HomeBase 3. The frame does
+    not name the triggering device; the parameter notify just before it names the sensor
+    that moved, and the alarm's tone frame its channel once the alarm starts.
 
     ``at`` is when the library saw the frame (UTC, the host clock); not part of equality.
     """

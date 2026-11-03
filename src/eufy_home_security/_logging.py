@@ -160,6 +160,12 @@ IDENTIFYING_KEYS: Final = frozenset(
     }
 )  # fmt: skip
 
+#: Last words of a key that identify its value whatever the prefix (``ap_ssid``,
+#: ``ap_ip``, ``apMac``, ``hub_sn``, ``router_addr``); words split at ``_``, ``-`` and
+#: a lower-to-upper case change. Not ``name``: ``table_name`` and ``app-name`` name no one.
+IDENTIFYING_KEY_SUFFIXES: Final = frozenset({"ssid", "ip", "mac", "sn", "addr", "address", "did"})
+_KEY_WORDS = re.compile(r"[_\-]+|(?<=[a-z0-9])(?=[A-Z])")
+
 _IDENTIFYING_PARAM_TEXT: Final = frozenset(str(param) for param in IDENTIFYING_PARAMS)
 _SERIAL = re.compile(r"(?<![A-Z0-9])T[0-9A-Z]{15}(?![A-Z0-9])")
 _ACCOUNT_ID = re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{40}(?![0-9a-fA-F])")
@@ -284,14 +290,18 @@ def _credential(key: str) -> bool:
 
 
 def _identifying(key: str) -> bool:
-    return key.lower().replace("_", "").replace("-", "") in IDENTIFYING_KEYS
+    if key.lower().replace("_", "").replace("-", "") in IDENTIFYING_KEYS:
+        return True
+    words = [word for word in _KEY_WORDS.split(key) if word]
+    return bool(words) and words[-1].lower() in IDENTIFYING_KEY_SUFFIXES
 
 
 class Payload:
     """A request/response body or header map as a logging argument, rendered as JSON.
 
     Values under a sensitive key (:data:`SENSITIVE_KEY_PARTS`) go through
-    :class:`Secret`; values under an identifying key (:data:`IDENTIFYING_KEYS`) and
+    :class:`Secret`; values under an identifying key (:data:`IDENTIFYING_KEYS`, or one
+    ending in a word of :data:`IDENTIFYING_KEY_SUFFIXES`) and
     serials, account ids, e-mail addresses and media paths anywhere in a string are redacted
     unless secret logging is on. A string holding a JSON object is decoded so its
     fields are masked too. Long renderings are cut at ``limit`` characters.

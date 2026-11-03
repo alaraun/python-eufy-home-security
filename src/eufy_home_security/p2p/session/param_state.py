@@ -191,13 +191,16 @@ class ParamState:
     def apply_notify(self, channel: int, values: Mapping[int, str]) -> None:
         """Merge the values of a parameter notify about ``channel`` (the frame's device).
 
-        A standalone device's notify is its own, whichever channel the frame names, as a
-        dump's lone block is (:meth:`ingest_dump`).
+        On a standalone device a notify about one of its paired devices' channels is that
+        device's; any other is the standalone device's own, whichever channel the frame
+        names, as a dump's lone block is (:meth:`ingest_dump`).
         """
-        block = next(
+        own = next(
             (dev for dev, targets in self._block_aliases.items() if STATION_CHANNEL in targets),
-            channel,
+            None,
         )
+        paired = channel in self._expect_channels and channel not in self._station_blocks
+        block = channel if own is None or paired else own
         self._apply_values(block, values, "notify", ParamOrigin.NOTIFY)
 
     def _apply_values(

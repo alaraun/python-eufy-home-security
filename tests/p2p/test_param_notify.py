@@ -22,6 +22,23 @@ def test_a_sensor_status_list_sets_each_listed_parameter() -> None:
     assert decode_param_notify(obj) == ParamNotify(values={1550: "1", 61015: "0"}, skipped=0)
 
 
+def test_a_status_list_in_the_stations_shape_is_read_with_its_dev_types() -> None:
+    """The list as a HomeBase 3 sends it: string values, each item naming its device."""
+    items = {1101: "100", 1601: "0", 1141: "-61", 1243: "2", 61015: "0", 61016: "0", 1550: "1"}
+    obj = {
+        "cmd": 1829,
+        "payload": {
+            "params": [
+                {"dev_type": 19, "param_type": pid, "param_value": value}
+                for pid, value in items.items()
+            ]
+        },
+    }
+    assert decode_param_notify(obj) == ParamNotify(
+        values=items, skipped=0, dev_types=frozenset({19})
+    )
+
+
 @pytest.mark.parametrize(
     "params",
     [

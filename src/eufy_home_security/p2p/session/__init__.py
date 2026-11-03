@@ -3217,6 +3217,16 @@ class StationSession:
                 channel,
                 notify.skipped,
             )
+        others = notify.dev_types - {channel}
+        if others and self._throttle.should_log(("param-notify-dev-type", cmd)):
+            _LOGGER.debug(
+                "%s: parameter notify %s ch%d: items name dev_type %s, filed on ch%d",
+                self._log_name,
+                cmd,
+                channel,
+                ", ".join(map(str, sorted(others))),
+                channel,
+            )
         if notify.values:
             self._take_state(frame)
             self._param_state.apply_notify(channel, notify.values)

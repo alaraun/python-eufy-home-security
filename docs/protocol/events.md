@@ -246,7 +246,7 @@ subheader's byte 2 is the channel (255 = the station). Bodies are u32le values.
 | `0x04B2` (1202 `SET_DEVS_TONE_FILE`) | `[event_type, seconds]` | the camera's siren: `[25, 30]` on, `[0, 0]` off |
 | `0x0578` (1400 `FLOODLIGHT_MANUAL_SWITCH`, app enum `SET_FLOODLIGHT_MANUAL_SWITCH`) | `[0 \| 1]` | the camera's light: 1 on during the alarm; also 0 at each detection and periodically |
 | `0x047F` (1151) | u64le mode | the effective guard mode |
-| `0x048C` (1164 `GET_DELAY_ALARM`) | `[alarm_type, seconds]` | the alarm delay: `[6, 30]` on a sensor's channel, the alarm sounds in 30 s ([Alarm delay](#alarm-delay)) **[declared: app]** |
+| `0x048C` (1164 `GET_DELAY_ALARM`) | `[alarm_type, seconds]` | the alarm delay: `[6, 30]`, the alarm sounds in 30 s; on channel 255, not the trigger's ([Alarm delay](#alarm-delay)) **[declared: app]** |
 
 The station's history records the same alarm as `msg_type 10` rows with
 `event_type` 3 and 25 (`str_extra`), matching the tone values. Timeline of one alarm:
@@ -278,18 +278,23 @@ reads off ends it, `[16, 0]` with `stop_source` `APP`. The siren frame (1202) dr
 
 **[declared: app]** When a trigger starts the station's alarm delay (an entry sensor's
 door opened while armed, with a delay configured for the mode), the station sends
-`0x048C` (1164 `GET_DELAY_ALARM`), u32le `[alarm_type, seconds]`, on the triggering
-device's channel (subheader byte 2), under the same encryption as the alarm frames.
-`seconds` is the time until the alarm sounds (above 1000: milliseconds); alarm type 6 is
-"a sensor triggered". An off type (0, 1, 15, 16, 17, as for the tone) with no time left
-ends the delay. On a HomeBase 3 it came within 0.1 s of the door's notify, and the alarm
-tone (`0x04B1`) 30 s later (one sample).
+`0x048C` (1164 `GET_DELAY_ALARM`), u32le `[alarm_type, seconds]`, under the same
+encryption as the alarm frames. `seconds` is the time until the alarm sounds (above 1000:
+milliseconds); alarm type 6 is "a sensor triggered". An off type (0, 1, 15, 16, 17, as for
+the tone) with no time left ends the delay.
 
-The session caches the alarm type as param 1164 of that channel (`ParamChanged`) and
-emits `AlarmDelayChanged(station_sn, delaying, channel, alarm_type, seconds, at)`: a start
-for every frame that starts a countdown (a second trigger restarts it), an end only after
-a start. An alarm that starts (`AlarmChanged`) ends the delay without an end event; a
-disarm in time ends it as the station reports it.
+The frame is station-wide: on a HomeBase 3 its subheader byte 2 is 255, not the
+triggering sensor's channel, and nothing in it names the trigger. The sensor's parameter
+notify ([Parameter notifies](#parameter-notifies), cmd 1829 with its door state) came
+within 30 ms before it, and the alarm tone (`0x04B1`, `[6, 30]` on the sensor's channel)
+30 s later (one sample). No end frame was seen when the delay ran out into the alarm.
+
+The session caches the alarm type as param 1164 of the frame's channel (`ParamChanged`)
+and emits `AlarmDelayChanged(station_sn, delaying, channel, alarm_type, seconds, at)` with
+that channel: a start for every frame that starts a countdown (a second trigger restarts
+it), an end only after a start. An alarm that starts (`AlarmChanged`) ends the delay
+without an end event; a disarm in time ends it as the station reports it. The library
+does not infer the triggering device.
 
 ### Device alarm state
 
@@ -357,15 +362,19 @@ them (an entry sensor's door and tamper state, a battery warning) moves at once:
 
 | JSON | parameters set |
 |---|---|
-| `{"cmd": 1829, "payload": {"params": [{"param_type": t, "param_value": v}, …]}}` (a sensor's status list; `params` also as a JSON string of the list, or the list written `key=value`) | each `t` := `v` |
+| `{"cmd": 1829, "payload": {"params": [{"dev_type": d, "param_type": t, "param_value": v}, …]}}` (a sensor's status list, values as strings on a HomeBase 3; `params` also as a JSON string of the list, or the list written `key=value`) | each `t` := `v` |
 | `{"cmd": 1550, "payload": {"status": s}}` (an entry sensor's door: 1 open, 0 closed) | 1550 := `s` |
 | `{"cmd": t, "payload": {"type": "updateCameraInfo", "value": v}}` | `t` := `v` |
 
 What the library does with them:
 
 - The session takes them under any encryption, like the other state frames, and files
-  each value on the device's block (a standalone device's own block, whichever channel
-  the frame names). An int value is filed as its decimal string, as a dump's.
+  each value on the block of the device subheader byte 2 names. On a standalone device a
+  notify about one of its paired devices' channels goes to that device, any other to the
+  standalone device's own block, whichever channel the frame names. A status list item's
+  `dev_type` names the same device; one that differs is logged once per notify kind and
+  session, and the value is still filed by the subheader. An int value is filed as its
+  decimal string, as a dump's.
 - Each value that moved emits `ParamChanged` with `source` `notify` (also a parameter's
   first value: the station sent it because it moved), then the dump listeners run, so a
   `Station` emits `StationStateChanged` when its state changed and `Station.state` and
@@ -379,7 +388,8 @@ What the library does with them:
   the rest of the list applies. One debug line per notify kind and session says so.
 - HomeBase 3 cameras send `updateCameraInfo` for param 60012 at each stream open; it is
   filed like any other value. A value holding JSON is logged with its identifying fields
-  (network names, addresses) masked.
+  (network names, addresses; also by a key's last word, such as `ap_ssid` or `ap_ip`)
+  masked.
 
 ### Other station-initiated frames
 

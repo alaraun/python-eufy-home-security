@@ -16,10 +16,11 @@ frame                     param    body                       meaning
 ``0x04B2`` camera siren   1202     ``[event_type, seconds]``  ``[25, 30]`` on, ``[0, 0]`` off
 ``0x0578`` camera light   1400     ``[state]``                1 on, 0 off (also 0 at each
                                                               detection and periodically)
-``0x048C`` alarm delay    1164     ``[alarm_type, seconds]``  ``[6, 30]`` on a sensor's
-                                                              channel: the alarm sounds in
-                                                              30 s unless disarmed;
-                                                              ``[0, 0]``: the delay ended
+``0x048C`` alarm delay    1164     ``[alarm_type, seconds]``  ``[6, 30]``: the alarm sounds
+                                                              in 30 s unless disarmed;
+                                                              ``[0, 0]``: the delay ended.
+                                                              Station-wide (255 on a
+                                                              HomeBase 3), not the trigger's
 ========================  =======  =========================  =============================
 
 A tone or siren frame reports its alarm off when the event type is one of

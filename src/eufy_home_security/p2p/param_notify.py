@@ -4,9 +4,10 @@ A station reports some parameter changes between dumps as a JSON notify. The dev
 the frame's subheader byte 2 (255 = the station); the forms, as the eufy app reads them
 (see docs/protocol/events.md § Parameter notifies):
 
-* a sensor's status list, ``{"cmd": 1829, "payload": {"params": [{"param_type": t,
-  "param_value": v}, ...]}}``: each ``t`` := ``v``. ``params`` may also be a JSON string
-  of the list, or the list written ``key=value``;
+* a sensor's status list, ``{"cmd": 1829, "payload": {"params": [{"dev_type": d,
+  "param_type": t, "param_value": v}, ...]}}``: each ``t`` := ``v``. ``params`` may also
+  be a JSON string of the list, or the list written ``key=value``; an item's ``dev_type``
+  names the same device as the subheader and is not read for filing;
 * an entry sensor's door state, ``{"cmd": 1550, "payload": {"status": s}}``: 1550 := ``s``;
 * ``{"cmd": t, "payload": {"type": "updateCameraInfo", "value": v}}``: ``t`` := ``v``.
 
@@ -41,6 +42,8 @@ class ParamNotify:
     values: Mapping[int, str] = field(default_factory=dict)
     skipped: int = 0
     """Items (or a whole notify) that carry no usable id or value, left out."""
+    dev_types: frozenset[int] = frozenset()
+    """The ``dev_type`` values the status list's items carry."""
 
 
 def _value(raw: object) -> str | None:
@@ -82,6 +85,11 @@ def _sensor_status(payload: Mapping[str, Any] | None) -> ParamNotify:
         return ParamNotify(skipped=1)
     values: dict[int, str] = {}
     skipped = 0
+    dev_types = {
+        dev_type
+        for item in items
+        if isinstance(item, Mapping) and (dev_type := json_int(item.get("dev_type"))) is not None
+    }
     for item in items:
         pid = json_int(item.get("param_type")) if isinstance(item, Mapping) else None
         value = _value(item.get("param_value")) if isinstance(item, Mapping) else None
@@ -89,7 +97,7 @@ def _sensor_status(payload: Mapping[str, Any] | None) -> ParamNotify:
             skipped += 1
             continue
         values[pid] = value
-    return ParamNotify(values=values, skipped=skipped)
+    return ParamNotify(values=values, skipped=skipped, dev_types=frozenset(dev_types))
 
 
 def _single(pid: int, raw: object) -> ParamNotify:

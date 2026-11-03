@@ -850,10 +850,14 @@ A closed session (`async_close`) never reconnects on its own — build a new
   `AlarmChanged`, None before any), already set when a subscriber receives the event, so
   a panel or card reads it at setup and on any later refresh instead of keeping a copy.
   The alarm delay (pending) comes over P2P as **`AlarmDelayChanged`**: `delaying=True`
-  with `seconds` until the alarm and the triggering device's `channel` (`alarm_type` 6:
-  a sensor triggered) → `pending` for that long; `delaying=False` → back to the armed
-  state; an `AlarmChanged` start ends it too (no end event then). A second trigger
-  sends another start with fresh seconds. On the cloud push it is
+  with `seconds` until the alarm (`alarm_type` 6: a sensor triggered) → `pending`;
+  `delaying=False` → back to the armed state; an `AlarmChanged` start ends it too (no end
+  event then). Let the countdown expire after `seconds` on its own: when it runs out the
+  station sends no end frame, it goes into the alarm (`AlarmChanged`) or a disarm ends
+  it. A second trigger sends another start with fresh seconds. `channel` is the frame's
+  channel, 255 (the station) on a HomeBase 3: the frame does not carry the triggering
+  device. Take the sensor from the `ParamChanged` with `source` `NOTIFY` just before it
+  (its door state) or, once the alarm starts, from the alarm. On the cloud push it is
   `SecurityEvent.alarm_phase is AlarmPhase.DELAY` for `alarm_delay` seconds (msg_type 16,
   unverified). For `changed_by`, use
   `arming_source` (keypad, key fob, app; `None` when not authenticated) and `user_name`
