@@ -119,10 +119,12 @@ from ..models import (
     PARAM_BATTERY_TEMPERATURE,
     PARAM_DETECTED_EVENTS,
     PARAM_DEV_STATUS,
+    PARAM_DEV_UPGRADE,
     PARAM_DEVICE_NAME,
     PARAM_EMMC_USED_PERCENT,
     PARAM_FIRMWARE,
     PARAM_HUB_NAME,
+    PARAM_HUB_UPGRADE,
     PARAM_LAN_IP,
     PARAM_PIR_EVENT_MS,
     PARAM_POWER_SOURCE,
@@ -403,6 +405,9 @@ class SubDeviceState:
     only the modes the block reports."""
     low_battery: bool | None = None
     """A motion sensor's low-battery flag (param 1601, handler ``sensor_is_low_power``)."""
+    upgrading: bool | None = None
+    """Whether a firmware update is being installed (param 1134, the flag the eufy app's
+    device card shows as upgrading); None when the block omits it."""
     pir_sensitivity_raw: int | None = None
     """A motion sensor's raw PIR sensitivity (param 1609). The handler maps only 0-2
     to a level; other values (a T8910 reported 8) have no vendor meaning."""
@@ -459,6 +464,9 @@ class SubDeviceState:
         return _read(self.settings, key, self.params, self.stored_mode_params)
 
 
+#: A station's own firmware-update flag: a hub's, then a standalone device's.
+UPGRADE_PARAMS: Final = (PARAM_HUB_UPGRADE, PARAM_DEV_UPGRADE)
+
 #: Parameters the library reads into :class:`StationState` itself rather than through
 #: a setting, per scope. Coverage reports subtract them, so an "unread"
 #: parameter means one nothing in the library reads at all.
@@ -472,6 +480,7 @@ STATE_PARAMS: Final[Mapping[Scope, frozenset[int]]] = {
             PARAM_HUB_NAME,
             PARAM_STORAGE_STATUS,
             PARAM_SD_INFO,
+            *UPGRADE_PARAMS,
             *SUBSYSTEM_FIRMWARE_PARAMS,
         }
     ),
@@ -493,6 +502,7 @@ STATE_PARAMS: Final[Mapping[Scope, frozenset[int]]] = {
             *SIREN_ACTION_PARAMS.values(),
             PARAM_SENSOR_LOW_BATTERY,
             PARAM_SENSOR_PIR_SENSITIVITY,
+            PARAM_DEV_UPGRADE,
         }
     ),
 }
@@ -575,6 +585,10 @@ class StationState:
     """Internal eMMC storage used, 0-100 (param 1190; 0 is a real value)."""
     storage_status: int | None = None
     """The raw storage status code (param 1135, ``GET_TFCARD_STATUS``)."""
+    upgrading: bool | None = None
+    """Whether the station is installing a firmware update: the first of
+    :data:`UPGRADE_PARAMS` it reports (P2P dump, else the cloud's copy), the flag the eufy
+    app's device card shows as upgrading; None when neither carries one."""
     sd_info: int | None = None
     """Param 1102 (``SDINFO``) as an integer. No vendor code decodes it; use
     :meth:`Station.async_get_storage` for disk figures."""
@@ -1695,6 +1709,7 @@ class Station:
                     if (action := _count_or_none(params.get(pid))) is not None
                 },
                 low_battery=_flag_or_none(params.get(PARAM_SENSOR_LOW_BATTERY)),
+                upgrading=_flag_or_none(params.get(PARAM_DEV_UPGRADE)),
                 pir_sensitivity_raw=_count_or_none(params.get(PARAM_SENSOR_PIR_SENSITIVITY)),
                 params=dict(params),
                 stored_mode_params=stored.get(channel, {}),
@@ -1722,6 +1737,10 @@ class Station:
             emmc_used_percent=_percent_or_none(station.get(PARAM_EMMC_USED_PERCENT)),
             storage_status=_count_or_none(station.get(PARAM_STORAGE_STATUS)),
             sd_info=_int_or_none(station.get(PARAM_SD_INFO)),
+            upgrading=next(
+                (_flag_or_none(setting_params[p]) for p in UPGRADE_PARAMS if p in setting_params),
+                None,
+            ),
             subsystem_firmware={
                 pid: version
                 for pid in SUBSYSTEM_FIRMWARE_PARAMS

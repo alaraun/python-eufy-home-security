@@ -179,6 +179,12 @@ SIREN_ACTION_PARAMS: Final[Mapping[GuardMode, int]] = MappingProxyType(
 PARAM_SENSOR_LOW_BATTERY = 1601
 """Motion sensor low-battery flag (handler ``sensor_is_low_power``: 1 = low)."""
 PARAM_SENSOR_PIR_SENSITIVITY = 1609
+PARAM_DEV_UPGRADE = 1134
+"""A device's firmware-update flag (``GET_DEV_UPGRADE``; handler ``is_device_upgrade``):
+``1`` while a firmware update is being installed, which the eufy app's device card
+shows as upgrading. A standalone device reports it on its own block."""
+PARAM_HUB_UPGRADE = 1133
+"""The same flag for a station itself (``GET_HUB_UPGRADE``)."""
 
 # Parameter ids on the station's own block (dev_type 255).
 PARAM_LAN_IP = 1176

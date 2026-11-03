@@ -897,7 +897,7 @@ A closed session (`async_close`) never reconnects on its own — build a new
     | `SETTING` | any | the control above when `writable`; when not, the app offers it as a control the library cannot write: a disabled diagnostic `sensor` (it keeps its identity once a write lands) |
     | `STATUS` | `CARD` | an enabled primary entity, no entity category: a `sensor`, a `binary_sensor` for a bool. An entry sensor's `sensor_door_status` (device class `door`), a tamper or low-battery flag (`tamper` / `battery`) |
     | `STATUS` | `PAGE` | an enabled entity with entity category diagnostic: listed in the device page's Diagnostic section, neither hidden nor disabled |
-    | `DIAGNOSTIC` | any | a disabled diagnostic entity, or none: the app shows it nowhere, or it is a value the device fields already give (battery level, online status, charging, a station's own status, counters, the active mode). That last test ignores scope: on a camera paired to a HomeBase the storage status, and on a station that is not standalone its battery, charging and Wi-Fi values, are diagnostic though no device field carries them; none of these is readable today |
+    | `DIAGNOSTIC` | any | a disabled diagnostic entity, or none: the app shows it nowhere, or it is a value the device fields already give (battery level, online status, charging, a station's own status, counters, the active mode, a firmware update in progress). That last test ignores scope: on a camera paired to a HomeBase the storage status, and on a station that is not standalone its battery, charging and Wi-Fi values, are diagnostic though no device field carries them; none of these is readable today |
 
     Never make raw JSON an entity's state: a `STRING` or `OTHER` status whose value is
     JSON (`arming_get_alarm_*_mode`) goes into attributes, or waits for a library API
@@ -1135,6 +1135,10 @@ A closed session (`async_close`) never reconnects on its own — build a new
   - Motion sensor: `low_battery` (param 1601) is the sensor's own low-battery flag, a
     battery binary sensor beside `battery`. `pir_sensitivity_raw` (1609) is raw; the
     handler names only 0-2, so do not expose it as the sensitivity setting.
+  - `upgrading` (`SubDeviceState` param 1134; `StationState` 1133, or 1134 on a
+    standalone device): True while a firmware update is being installed, the flag the
+    eufy app's device card shows as upgrading (*declared*). The `update` entity's
+    `in_progress`, not an entity of its own.
   - Station: `storage_status` (param 1135, raw) with `storage_ok` (the codes the app
     shows as normal), a diagnostic problem sensor; `subsystem_firmware` (5006-5012,
     version strings by param id, the subsystems unnamed): attributes on the station's
@@ -2069,7 +2073,9 @@ that is no verdict, the usual cloud errors otherwise): keep the entities' last s
 
 The **installed** version is not on `FirmwareUpdate` — it comes from the device you
 already have: `StationState.firmware` for the station, and the per-device entry for a
-camera. Only devices whose installed version is known are checked at all.
+camera. Only devices whose installed version is known are checked at all. Whether an
+update is being installed right now is `StationState.upgrading` /
+`SubDeviceState.upgrading`: the entity's `in_progress`.
 
 **The library never installs firmware, and neither should the integration.** Set
 `UpdateEntityFeature.INSTALL` only if you have a verified install path — the library

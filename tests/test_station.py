@@ -1014,6 +1014,26 @@ def test_sensor_low_battery_flag(raw: str, low: bool | None) -> None:
     assert sensor.pir_sensitivity_raw == 8
 
 
+@pytest.mark.parametrize(("raw", "upgrading"), [("0", False), ("1", True), ("", None)])
+def test_the_upgrade_flag_of_a_device_and_of_its_station(raw: str, upgrading: bool | None) -> None:
+    state = _state_of({0: {1400: "0", 1134: raw}, 255: {1133: raw}})
+    assert state.devices[0].upgrading is upgrading
+    assert state.upgrading is upgrading
+
+
+def test_a_station_s_upgrade_flag_is_its_hub_flag_then_its_device_flag() -> None:
+    """A standalone device reports its own flag on the station block."""
+    assert _state_of({255: {1134: "1"}}).upgrading is True
+    assert _state_of({255: {1133: "0", 1134: "1"}}).upgrading is False
+    assert _state_of({255: {1224: "0"}}).upgrading is None
+
+
+def test_a_station_s_upgrade_flag_falls_back_to_the_cloud_copy() -> None:
+    station = _unconnected_station(host=None, local_ip=None, local_port=0)
+    station.apply_cloud_device(_cloud_entry({1133: "1"}))
+    assert station._state(ParamDump()).upgrading is True
+
+
 def test_an_offline_sensor_keeps_serving_its_last_battery_and_signal() -> None:
     """The shape verified on hardware: the station answers for a sensor that stopped
     reporting long ago, still quoting 30 % and -76 dBm, and only 1131 separates it from
@@ -1122,8 +1142,8 @@ def test_coverage_counts_the_power_and_storage_fields_as_parsed_state() -> None:
     state = _state_of(
         {
             0: {1400: "0", 1138: "21", 1191: "1", 1192: "2", 1193: "3", 2111: "4", 1309: "0"},
-            16: {1601: "0", 1609: "8", 1509: "0", 1513: "0"},
-            255: {1224: "0", 1102: "1", 1135: "0", 5006: "1", 5012: "1"},
+            16: {1601: "0", 1609: "8", 1509: "0", 1513: "0", 1134: "0"},
+            255: {1224: "0", 1102: "1", 1135: "0", 5006: "1", 5012: "1", 1134: "0"},
         }
     )
     # 1400 only marks the block as a camera; nothing reads its value.

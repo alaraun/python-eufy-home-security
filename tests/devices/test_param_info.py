@@ -174,5 +174,15 @@ def test_sub_device_settings_never_match_the_station_channel() -> None:
     assert param_info(1167, STATION_CHANNEL).label == "ALARM_DELAY_AWAY?"
 
 
+@pytest.mark.parametrize(
+    ("param_id", "channel", "label"),
+    [(1134, 0, "upgrading"), (1133, STATION_CHANNEL, "hub_upgrading"), (1103, 0, "camera_info")],
+)
+def test_a_param_the_library_reports_elsewhere_is_named_by_its_field(
+    param_id: int, channel: int, label: str
+) -> None:
+    assert param_info(param_id, channel).label == label
+
+
 def test_a_station_param_outside_the_mode_tables_has_the_apps_name() -> None:
     assert param_info(1235, STATION_CHANNEL).label == "SET_HUB_SPK_VOLUME?"

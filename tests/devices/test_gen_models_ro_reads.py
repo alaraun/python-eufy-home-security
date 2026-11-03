@@ -307,7 +307,7 @@ def test_every_setting_gets_its_role_and_place(generated: dict[str, Any]) -> Non
     named = {
         "door_open": ("status", "card"),  # read-only, on the device card
         "label": ("status", "page"),  # read-only, a settings page reads it
-        "ability": ("status", "page"),  # placed in the app's layout
+        "ability": ("diagnostic", "page"),  # placed, but read from the camera info (1103)
         "mode_num": ("diagnostic", "page"),  # shown, but it reads the active mode
         "charging": ("diagnostic", "card"),  # unreadable, filled from the power source
         "hub": ("diagnostic", "card"),  # a station's status: the library has its session

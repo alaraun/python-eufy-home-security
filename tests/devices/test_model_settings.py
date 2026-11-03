@@ -28,6 +28,7 @@ from eufy_home_security.devices.model_settings import (
     product_code_of,
     settings_of,
 )
+from eufy_home_security.devices.param_info import STATE_PARAM_INFO
 from eufy_home_security.devices.recipes import ConnectType
 from eufy_home_security.devices.settings import Scope, SettingUnit, mode_table_setting
 from eufy_home_security.exceptions import ModelDataError, UnsupportedError
@@ -68,6 +69,20 @@ def test_power_manager_mode_round_trip() -> None:
 )
 def test_a_bundled_entry_sensor_carries_each_role(key: str, role: SettingRole) -> None:
     assert _setting("T90E0", key).role is role
+
+
+@pytest.mark.parametrize(
+    ("code", "key"),
+    [
+        ("T8030", "is_device_upgrade"),  # the station's flag: StationState.upgrading
+        ("T8900", "is_device_upgrade"),  # a device's flag: SubDeviceState.upgrading
+        ("T81A0", "device_status"),  # filled from the camera info: CloudDevice.camera_info
+    ],
+)
+def test_a_card_status_the_library_already_reports_is_a_diagnostic(code: str, key: str) -> None:
+    setting = _setting(code, key)
+    assert setting.read_param in STATE_PARAM_INFO
+    assert (setting.role, setting.shown) == (SettingRole.DIAGNOSTIC, SettingShown.CARD)
 
 
 @pytest.mark.parametrize("code", ["T90E0", "T8900"])

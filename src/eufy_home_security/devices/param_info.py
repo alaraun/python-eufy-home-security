@@ -18,6 +18,7 @@ from types import MappingProxyType
 from typing import Final
 
 from .._logging import Address, Identifier
+from ..cloud.models import CAMERA_INFO_PARAM
 from ..models import (
     DEV_STATUS_ONLINE,
     IDENTIFYING_PARAMS,
@@ -25,11 +26,13 @@ from ..models import (
     PARAM_BATTERY_TEMPERATURE,
     PARAM_DETECTED_EVENTS,
     PARAM_DEV_STATUS,
+    PARAM_DEV_UPGRADE,
     PARAM_DEVICE_NAME,
     PARAM_EMMC_USED_PERCENT,
     PARAM_FIRMWARE,
     PARAM_HUB_NAME,
     PARAM_HUB_STATUS,
+    PARAM_HUB_UPGRADE,
     PARAM_LAN_IP,
     PARAM_PIR_EVENT_MS,
     PARAM_POWER_SOURCE,
@@ -101,7 +104,8 @@ class _StateParam:
 
 
 #: Parameters whose value the library reports outside the settings: read into device
-#: state, or (a station's own status) given by the station's session state.
+#: state, given by the station's session state (a station's own status), or a cloud
+#: device field (``Device.camera_info``).
 STATE_PARAM_INFO: Final[Mapping[int, _StateParam]] = MappingProxyType(
     {
         PARAM_BATTERY: _StateParam("battery", "battery level", _number("%")),
@@ -137,6 +141,9 @@ STATE_PARAM_INFO: Final[Mapping[int, _StateParam]] = MappingProxyType(
         },
         PARAM_SENSOR_LOW_BATTERY: _StateParam("low_battery", "sensor low-battery flag"),
         PARAM_SENSOR_PIR_SENSITIVITY: _StateParam("pir_sensitivity_raw", "raw PIR sensitivity"),
+        PARAM_DEV_UPGRADE: _StateParam("upgrading", "firmware update being installed"),
+        PARAM_HUB_UPGRADE: _StateParam("hub_upgrading", "station firmware update being installed"),
+        CAMERA_INFO_PARAM: _StateParam("camera_info", "camera media ability"),
         PARAM_STORAGE_STATUS: _StateParam("storage_status", "storage status code"),
         PARAM_SD_INFO: _StateParam("sd_info", "SDINFO value"),
         **{
