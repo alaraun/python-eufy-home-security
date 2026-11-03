@@ -54,7 +54,8 @@ import sys
 import tempfile
 import threading
 import traceback
-from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
+from collections import Counter
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -83,6 +84,11 @@ PROBE_PARAMS = range(1000, 65536)  # the parameter ids locate_params() looks amo
 # Ids held at once: getProperty matches every held id against its commandId list.
 PROBE_CHUNK = 9000
 PROBE_ON, PROBE_OFF = "1", "0"  # the two values a held parameter takes while locating
+# A number literal of handler source: decimal, decimal with exponent (7e3) or hex.
+JS_NUMBER = re.compile(r"(?<![\w$.])(?:0[xX][0-9a-fA-F]+|\d+(?:[eE]\d{1,2})?)(?![\w$])")
+# Probes of an open-kind read beyond its domain: a multi-digit number and a JSON object.
+OPEN_NUMBER_PROBE, OPEN_JSON_PROBE = "4321", '{"probe":1}'
+BOOL_EXTRA_PROBE = "2"  # a parameter value no bool form names
 
 
 def _load(name: str) -> ModuleType:
@@ -257,6 +263,22 @@ def _answer(reply: Any, ident: str) -> str:
     return _canon(values[ident]) if ident in values else ""
 
 
+def _held_request(
+    product_code: str,
+    context: codec.Context,
+    idents: Sequence[str],
+    params: Mapping[int, str],
+    *,
+    as_command: bool,
+) -> dict[str, Any]:
+    """getProperty for ``idents`` on a device holding ``params`` (their ids as command ids
+    too when ``as_command``)."""
+    device = context.device(product_code)
+    device["params"] = [{"param_type": p, "param_value": v} for p, v in params.items()]
+    cmds = list(params) if as_command else []
+    return {"kind": "get", "cmds": cmds, "device": device, "props": list(idents)}
+
+
 def _held_block(
     product_code: str,
     handler: Path,
@@ -267,12 +289,24 @@ def _held_block(
     as_command: bool,
 ) -> dict[str, str]:
     """getProperty for ``idents`` on a device holding ``params``, by identifier (``_answer``)."""
-    device = context.device(product_code)
-    device["params"] = [{"param_type": p, "param_value": v} for p, v in params.items()]
-    cmds = list(params) if as_command else []
-    request = {"kind": "get", "cmds": cmds, "device": device, "props": list(idents)}
+    request = _held_request(product_code, context, idents, params, as_command=as_command)
     (reply,) = run_driver(product_code, handler, [request])
     return {i: _answer(reply, i) for i in idents}
+
+
+def handler_param_ids(handler: Path) -> list[int]:
+    """The ids of :data:`PROBE_PARAMS` the handler's source writes as a number literal,
+    ascending: the only parameter ids its property table and parsers compare against."""
+    ids: set[int] = set()
+    for literal in JS_NUMBER.findall(handler.read_text(encoding="utf-8", errors="replace")):
+        if literal[:2].lower() == "0x":
+            value = int(literal, 16)
+        else:
+            mantissa, _, exponent = literal.lower().partition("e")
+            value = int(mantissa) * 10 ** int(exponent or 0)
+        if value in PROBE_PARAMS:
+            ids.add(value)
+    return sorted(ids)
 
 
 def _locate_in_block(
@@ -280,37 +314,69 @@ def _locate_in_block(
     handler: Path,
     context: codec.Context,
     idents: Sequence[str],
-    block: range,
+    block: Sequence[int],
     *,
     as_command: bool,
 ) -> dict[str, Located]:
     """The identifiers of ``idents`` one parameter of ``block`` decides (see
     :func:`locate_params`), each with that parameter."""
 
-    def held(on: Callable[[int], bool], asked: Sequence[str]) -> dict[str, str]:
-        params = {p: PROBE_ON if on(p) else PROBE_OFF for p in block}
+    def held(
+        on: Callable[[int], bool], asked: Sequence[str], *, descending: bool = False
+    ) -> dict[str, str]:
+        order = range(len(block) - 1, -1, -1) if descending else range(len(block))
+        params = {block[n]: PROBE_ON if on(n) else PROBE_OFF for n in order}
         return _held_block(product_code, handler, context, asked, params, as_command=as_command)
+
+    def search(asked: Sequence[str], *, descending: bool) -> dict[str, int]:
+        """Per identifier, the position in ``block`` of the parameter that decides it."""
+        index = dict.fromkeys(asked, 0)
+        for bit in range((len(block) - 1).bit_length()):
+            if not index:
+                break
+            answer = held(lambda n, bit=bit: bool(n >> bit & 1), list(index), descending=descending)
+            for ident in index:
+                if answer[ident] == high[ident]:
+                    index[ident] |= 1 << bit
+        return index
 
     high = held(lambda _: True, idents)
     low = held(lambda _: False, idents)
-    param = {i: 0 for i in idents if high[i] != low[i]}
-    for bit in range(block[-1].bit_length()):
-        if not param:
-            break
-        answer = held(lambda p, bit=bit: bool(p >> bit & 1), list(param))
-        for ident in param:
-            if answer[ident] == high[ident]:
-                param[ident] |= 1 << bit
-    candidates = {i: Located(p, as_command) for i, p in param.items() if p in block}
+    up = search([i for i in idents if high[i] != low[i]], descending=False)
+    up = {i: n for i, n in up.items() if n < len(block)}
+    # Held in the other order, the search must find the same parameter: when it does
+    # not, several parameters fill the property and the one the handler meets last wins.
+    down = search(list(up), descending=True)
+    candidates = {i: n for i, n in up.items() if down[i] == n}
     asks = [(i, raw) for i in candidates for raw in (PROBE_ON, PROBE_OFF)]
-    requests = [candidates[i].request(product_code, context, i, raw) for i, raw in asks]
+    requests = [
+        Located(block[candidates[i]], as_command).request(product_code, context, i, raw)
+        for i, raw in asks
+    ]
+    # The block with only the found id at PROBE_OFF: no other id may turn the value.
+    requests += [
+        _held_request(
+            product_code,
+            context,
+            [i],
+            {p: PROBE_OFF if k == n else PROBE_ON for k, p in enumerate(block)},
+            as_command=as_command,
+        )
+        for i, n in candidates.items()
+    ]
     replies = run_driver(product_code, handler, requests) if requests else []
-    alone = {key: _answer(reply, key[0]) for key, reply in zip(asks, replies, strict=True)}
-    # Held alone, the parameter must decide the value as it did in the block.
+    alone = {
+        key: _answer(reply, key[0]) for key, reply in zip(asks, replies[: len(asks)], strict=True)
+    }
+    others_on = {
+        i: _answer(reply, i) for i, reply in zip(candidates, replies[len(asks) :], strict=True)
+    }
+    # Held alone, the parameter must decide the value as it did in the block, and the
+    # block with only it off must read as the block all off.
     return {
-        i: where
-        for i, where in candidates.items()
-        if (alone[i, PROBE_ON], alone[i, PROBE_OFF]) == (high[i], low[i])
+        i: Located(block[n], as_command)
+        for i, n in candidates.items()
+        if (alone[i, PROBE_ON], alone[i, PROBE_OFF], others_on[i]) == (high[i], low[i], low[i])
     }
 
 
@@ -321,21 +387,24 @@ def locate_params(
     idents: Sequence[str],
     counts: dict[str, int],
 ) -> dict[str, Located]:
-    """Per identifier, the parameter of :data:`PROBE_PARAMS` getProperty reads it from in
-    ``context``; an identifier no single parameter decides is left out.
+    """Per identifier, the parameter getProperty reads it from in ``context``, among the
+    ids :func:`handler_param_ids` lists; an identifier no single parameter decides is
+    left out.
 
     The device holds a block of ids at :data:`PROBE_ON`, then at :data:`PROBE_OFF`; for
-    an identifier whose value differs between the two, each bit of the deciding id is
-    the answer with only the ids that have that bit at :data:`PROBE_ON`, and the id held
-    alone must give both values again. Asked for the properties alone, as the app asks
+    an identifier whose value differs between the two, each bit of the deciding id's
+    position in the block is the answer with only the ids at positions that have that
+    bit at :data:`PROBE_ON`. The search runs again with the block in descending order and
+    must find the same id (else several parameters fill the property, the last one met
+    winning); the id held alone must give both values again, and the block with only
+    that id at :data:`PROBE_OFF` the value of the block all off (else another id turns
+    the value too). Asked for the properties alone, as the app asks
     for them, then with the held ids as command ids for those still unplaced; the first
     block that places an identifier wins.
     """
     found: dict[str, Located] = {}
-    blocks = [
-        range(start, min(start + PROBE_CHUNK, PROBE_PARAMS.stop))
-        for start in range(PROBE_PARAMS.start, PROBE_PARAMS.stop, PROBE_CHUNK)
-    ]
+    ids = handler_param_ids(handler)
+    blocks = [ids[start : start + PROBE_CHUNK] for start in range(0, len(ids), PROBE_CHUNK)]
     for as_command in (False, True):
         for block in blocks:
             pending = [i for i in idents if i not in found]
@@ -350,6 +419,79 @@ def locate_params(
     return found
 
 
+def _stored(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    ident: str,
+    *,
+    param: int,
+    value: str,
+) -> str | None:
+    """The text the handler's write of ``value`` to ``ident`` stores in ``param``
+    (``update`` or ``extUpdates``); None when it stores none there."""
+    device = context.device(product_code)
+    request = {"kind": "set", "identifier": ident, "payload": value, "device": device}
+    (reply,) = run_driver(product_code, handler, [request])
+    hits = [d["param_value"] for d in _param_dump(p2p(reply)) if d["param_type"] == param]
+    return variants.text(hits[0]) if hits else None
+
+
+def held_texts(kind: str, values: Sequence[codec.Value]) -> list[str]:
+    """The texts a located parameter is held at to read a property of ``kind`` with
+    domain ``values``: each value's text form, plus :data:`OPEN_NUMBER_PROBE` and
+    :data:`OPEN_JSON_PROBE` for an open kind and :data:`BOOL_EXTRA_PROBE` for a bool."""
+    extra: tuple[str, ...] = ()
+    if kind in codec.SINGLE_PROBE_KINDS:
+        extra = (OPEN_NUMBER_PROBE, OPEN_JSON_PROBE)
+    elif kind == "bool":
+        extra = (BOOL_EXTRA_PROBE,)
+    return list(dict.fromkeys([*(codec.str_form(v) for v in values), *extra]))
+
+
+def _reads_as_is(answers: Mapping[str, Any]) -> bool:
+    """getProperty gave back every held text unchanged."""
+    return all(
+        a is not codec.MISSING and not isinstance(a, dict | list) and variants.text(a) == raw
+        for raw, a in answers.items()
+    )
+
+
+def _reads_as_number(answers: Mapping[str, Any]) -> bool:
+    """getProperty gave every held integer text back as that integer, and the held JSON
+    object parsed whole (a JSON parse of the whole value) or not at all, never as
+    another structure (a field of it)."""
+    for raw, a in answers.items():
+        if raw == OPEN_JSON_PROBE:
+            if isinstance(a, dict | list) and a != json.loads(raw):
+                return False
+        elif type(a) is not int or str(a) != raw:
+            return False
+    return True
+
+
+def open_read_ok(
+    kind: str,
+    answers: Mapping[str, Any],
+    *,
+    shared: bool,
+    stores_as_is: Callable[[Sequence[str]], bool],
+) -> bool:
+    """Whether a located parameter is an open-kind property's value (``answers``: held
+    text -> getProperty's value, :func:`held_texts`): every text reads back unchanged,
+    or, for ``other``, every integer text reads back as that integer (a numeric parse,
+    :func:`_reads_as_number`) while no other property is read from the parameter
+    (``shared``: it holds a structure) and the handler's own write, if any, stores each
+    integer text in it as is (``stores_as_is``). A handler that reads one field of a JSON
+    value fails both: the JSON probe does not read back as itself, and its numbers are
+    fields of a structure another property or its own write shows."""
+    if _reads_as_is(answers):
+        return True
+    if kind != "other" or shared or not _reads_as_number(answers):
+        return False
+    return stores_as_is([raw for raw in answers if raw != OPEN_JSON_PROBE])
+
+
 def reported_param(
     product_code: str,
     handler: Path,
@@ -358,33 +500,37 @@ def reported_param(
     values: Collection[str],
     *,
     located: Mapping[str, Located],
+    kind: str | None = None,
 ) -> int | None:
     """The device parameter getProperty reports ``ident`` from as is, in ``context``:
     the one :func:`locate_params` placed it on (``located``), which reads each of
-    ``values`` back unchanged and which the handler's own write of ``ident`` (if any)
-    stores each of them in as is; None when there is none.
+    ``values`` back unchanged, which the handler's own write of ``ident`` (if any)
+    stores each of them in as is, and, for an open ``kind``, which :func:`open_read_ok`
+    accepts; None when there is none.
     """
     where = located.get(ident)
     if where is None:
         return None
 
-    def read(value: str) -> str:
+    def read(value: str) -> Any:
         request = where.request(product_code, context, ident, value)
         (reply,) = run_driver(product_code, handler, [request])
-        return variants.text(_property_values(reply).get(ident, codec.MISSING))
+        return _property_values(reply).get(ident, codec.MISSING)
 
-    def stored(value: str) -> str | None:
-        """The text the handler's write of ``value`` stores in the parameter (``update``
-        or ``extUpdates``); None when it stores none there."""
-        device = context.device(product_code)
-        request = {"kind": "set", "identifier": ident, "payload": value, "device": device}
-        (reply,) = run_driver(product_code, handler, [request])
-        hits = [d["param_value"] for d in _param_dump(p2p(reply)) if d["param_type"] == where.param]
-        return variants.text(hits[0]) if hits else None
+    def stores_as_is(texts: Iterable[str]) -> bool:
+        return all(
+            _stored(product_code, handler, context, ident, param=where.param, value=v) in (None, v)
+            for v in texts
+        )
 
-    if all(read(v) == v for v in values) and all(stored(v) in (None, v) for v in values):
-        return where.param
-    return None
+    if not all(variants.text(read(v)) == v for v in values) or not stores_as_is(values):
+        return None
+    if kind in codec.SINGLE_PROBE_KINDS:
+        answers = {raw: read(raw) for raw in held_texts(kind, [])}
+        shared = sum(w.param == where.param for w in located.values()) > 1
+        if not open_read_ok(kind, answers, shared=shared, stores_as_is=stores_as_is):
+            return None
+    return where.param
 
 
 def located_reads(
@@ -399,29 +545,49 @@ def located_reads(
 ) -> dict[str, dict[str, Any]]:
     """The read codec of each of ``props`` (identifier -> property) from the parameter
     :func:`locate_params` placed it on, in ``context``: the device holds the parameter at
-    the text form of each value of the property's domain (``codec.str_form``), and the
-    codec is inferred from those round trips as a write's is (``codec.infer_read``)."""
+    each text of :func:`held_texts`, and the codec is inferred from the domain values'
+    round trips as a write's is (``codec.infer_read``), marked ``no_default``. A bool
+    reads only when getProperty
+    gives a boolean for every held text; an open kind only when :func:`open_read_ok`
+    accepts the answers."""
     asks = [
-        (ident, v, where)
+        (ident, raw, where)
         for ident, prop in sorted(props.items())
         if (where := located.get(ident)) is not None
-        for v in codec.domain(prop)[1]
+        for raw in held_texts(*codec.domain(prop))
     ]
-    requests = [
-        where.request(product_code, context, ident, codec.str_form(v)) for ident, v, where in asks
-    ]
+    requests = [where.request(product_code, context, ident, raw) for ident, raw, where in asks]
     replies = run_driver(product_code, handler, requests, wire) if requests else []
-    rows: dict[str, list[Any]] = {}
-    for (ident, v, where), reply in zip(asks, replies, strict=True):
-        decoded = _property_values(reply).get(ident, codec.MISSING)
-        rows.setdefault(ident, []).append(
-            codec.ReadSample(v, where.param, codec.str_form(v), decoded)
-        )
+    answers: dict[str, dict[str, Any]] = {}
+    for (ident, raw, _), reply in zip(asks, replies, strict=True):
+        answers.setdefault(ident, {})[raw] = _property_values(reply).get(ident, codec.MISSING)
+    holders = Counter(where.param for where in located.values())
     out: dict[str, dict[str, Any]] = {}
-    for ident, samples in rows.items():
-        read, _ = codec.infer_read(codec.domain(props[ident])[0], samples)
+    for ident, got in answers.items():
+        kind, values = codec.domain(props[ident])
+        where = located[ident]
+        if kind == "bool" and not all(isinstance(a, bool) for a in got.values()):
+            _count(counts, "read:handler parameter not a bool")
+            continue
+        if kind in codec.SINGLE_PROBE_KINDS and not open_read_ok(
+            kind,
+            got,
+            shared=holders[where.param] > 1,
+            stores_as_is=lambda texts, ident=ident, param=where.param: all(
+                _stored(product_code, handler, context, ident, param=param, value=v) in (None, v)
+                for v in texts
+            ),
+        ):
+            _count(counts, "read:handler parameter parsed")
+            continue
+        samples = [
+            codec.ReadSample(v, where.param, codec.str_form(v), got[codec.str_form(v)])
+            for v in values
+        ]
+        read, _ = codec.infer_read(kind, samples)
         if read is not None:
-            out[ident] = read
+            # A status only the device reports: nothing reported reads None, no default.
+            out[ident] = {**read, "no_default": True}
             _count(counts, "read:handler parameter")
     return out
 
@@ -1271,6 +1437,7 @@ def generate(
     located = locate_params(
         product_code, handler, contexts[BASE], [p["identifier"] for p in props], located_counts
     )
+    kinds = {p["identifier"]: codec.kind_of(p) for p in props}
     for name, ctx in contexts.items():
         wanted = {BASE: "child", STANDALONE: "standalone"}.get(name)
         references[name] = [r for r in rows if r["context"] == wanted]
@@ -1309,7 +1476,13 @@ def generate(
         props,
         drop,
         lambda ident, values: reported_param(
-            product_code, handler, contexts[BASE], ident, values, located=located
+            product_code,
+            handler,
+            contexts[BASE],
+            ident,
+            values,
+            located=located,
+            kind=kinds[ident],
         ),
         counts,
     )

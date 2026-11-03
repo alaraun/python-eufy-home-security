@@ -273,6 +273,8 @@ class Setting:
         default=None, repr=False
     )
     """A per-view read: which view the report's quality comes from, and quality -> value."""
+    _no_default: bool = field(default=False, repr=False)
+    """A status only the device reports: unreported, it reads None, never ``default``."""
     _write_params: frozenset[int] = field(default=frozenset(), repr=False)
     _mode_table: SettingDef | None = field(default=None, repr=False)
     """The hand-written mode-table entry a mode-table setting is written through."""
@@ -1260,6 +1262,14 @@ def _setting(code: str, key: str, entry: Any) -> Setting:
         raise type(err)(f"{key}: {err}") from err
 
 
+def _no_default(read: Any) -> bool:
+    """A read's ``no_default`` flag (False when absent): a status only the device reports."""
+    flag = read.get("no_default", False) if isinstance(read, dict) else False
+    if not isinstance(flag, bool):
+        raise TypeError("read.no_default is not a bool")
+    return flag
+
+
 def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     kind = SettingKind(entry["kind"])
     access = entry["access"]
@@ -1357,6 +1367,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         _write_table=table,
         _read_param=read_param,
         _read_map=None if read_map is None else MappingProxyType(read_map),
+        _no_default=_no_default(read),
         _read_view=read_view,
         _write_params=_template_params([write, *(table or {}).values()]),
         _variants=_variant_rules(entry.get("variants")),

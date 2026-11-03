@@ -223,7 +223,10 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
                 assert len(arg) == 2
     read = s.get("read")
     if read is not None:
-        assert {"param", "map"} <= set(read) <= {"param", "map", "view"}
+        assert {"param", "map"} <= set(read) <= {"param", "map", "view", "no_default"}
+        if "no_default" in read:
+            assert read["no_default"] is True
+            assert s["access"] == "ro"  # a status only the device reports
         assert isinstance(read["param"], int)
         assert not isinstance(read["param"], bool)
         assert read["map"] is None or isinstance(read["map"], dict)
