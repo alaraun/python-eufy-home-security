@@ -419,21 +419,6 @@ the invitation from *inviter* to *home* in the eufy app, then rescan". `house_na
 `inviter` are for that message only: keep them out of logs and diagnostics
 (`as_redacted_dict()` has neither).
 
-Each station's `stats()` (`SessionStats`) also carries `conn_init_version` (8: ECIES,
-anything else: the legacy RSA handshake) and the `cipher_id` it named, once a CONN_INIT
-reply arrived. `static_key_session` is True on an RSA session whose key is the static key
-(cipher 0, a station that wraps its static key, or a cipher the cloud serves no usable
-RSA key for): it works, but none of its pushes is
-authenticated (see `docs/protocol/session-crypto.md`). `state_frames_by_encryption`
-counts the state frames taken by encryption (`"type2"`, `"type1"`, `"clear"`, `"gcm"`,
-`"ecb"`, …), and `state_authenticated` is False while the station's state came only in
-clear or under the static key (an RSA station such as a T8414 sends its state under the
-static key), True once it came under a key only the session holds, None before any.
-Both are information only: state counts under any encryption, as in the eufy app.
-`lens_lists_by_channel` gives, per channel of a camera sent a layout (a multi-camera open
-behind a HomeBase 3), its lens count and where the list came from (`station`, `cloud`,
-`none`); other cameras and standalone devices have no entry.
-
 ### Firmware updates
 
 `await eufy.async_firmware_updates()` asks the cloud OTA whether any device has a newer
@@ -1218,7 +1203,8 @@ for the others and None when the library cannot tell yet (no device list or stat
 the device, or an input it lacks such as the account's country). Enable by default the
 member in use and register the others disabled; on None, fall back to the primary. Ask
 again after a firmware update or a state change (`StationStateChanged`): the answer can
-change; leave alone an entity the user changed. The firmware it compares is the device
+change; leave alone an entity the user changed. A key not in `settings_for(device_sn)`
+raises `UnsupportedError`, as `setting()` does. The firmware it compares is the device
 list's, the country the one the library logs in with (which can differ from the
 account's registered country), and a HomeBase 2-generation station's firmware is
 compared as listed: see [models-schema.md § Variants](../reference/models-schema.md#variants)
@@ -3017,6 +3003,24 @@ async def async_get_config_entry_diagnostics(hass, entry):
   `state_frames_by_encryption`, `dropped_undecodable` and `wrong_port_drops`; for a flapping
   station, `reconnects`, `handshake_failures`, `key_refreshes` and `last_error` (a class
   name, kept after recovery). Add `eufy.push_running` and the deduplicator's counters.
+
+Each station's `stats()` (`SessionStats`) also carries `conn_init_version` (8: ECIES,
+anything else: the legacy RSA handshake) and the `cipher_id` it named, once a CONN_INIT
+reply arrived. `static_key_session` is True on an RSA session whose key is the static key
+(cipher 0, a station that wraps its static key, or a cipher the cloud serves no usable
+RSA key for): it works, but none of its pushes is
+authenticated (see `docs/protocol/session-crypto.md`). `state_frames_by_encryption`
+counts the state frames taken by encryption (`"type2"`, `"type1"`, `"clear"`, `"gcm"`,
+`"ecb"`, …), and `state_authenticated` is False while the station's state came only in
+clear or under the static key (an RSA station such as a T8414 sends its state under the
+static key), True once it came under a key only the session holds, None before any.
+Both are information only: state counts under any encryption, as in the eufy app.
+`lens_lists_by_channel` (only on `Station.stats()`) gives, per channel of a camera sent a
+layout (a multi-camera open behind a HomeBase 3), a `LensReport(count, source)`: its lens
+count and where the list came from (`LensSource.STATION`, `CLOUD` or `NONE`); other
+cameras and standalone devices have no entry. For "a multi-lens camera shows one lens",
+look there; for an RSA station whose cipher key eufy does not serve, at
+`static_key_session`.
 
 ## Testing the integration
 
