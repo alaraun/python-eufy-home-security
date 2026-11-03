@@ -3240,6 +3240,7 @@ async def test_trigger_frame_selects_nth_keyframe_or_last_of_short_clip(
 
         first = await session.async_trigger_frame("/zx/clip.zxvideo", 1)
         assert first == MEDIA_KEYFRAME + bytes([1])
+        assert station.media_frames_sent <= MEDIA_GOP  # stopped before the next keyframe
         selected = await session.async_trigger_frame(
             "/zx/clip.zxvideo", 1, keyframe_number=2, trailing_frames=MEDIA_GOP * 2
         )
