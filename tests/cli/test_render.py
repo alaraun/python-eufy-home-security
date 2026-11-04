@@ -26,6 +26,8 @@ from eufy_home_security.events import (
     Event,
     EventSource,
     GuardModeChanged,
+    MotionDetected,
+    MotionRecorded,
     ParamChanged,
     PresetsChanged,
     PushChanged,
@@ -157,6 +159,30 @@ def test_security_event_line_names_the_recognised_person() -> None:
 )
 def test_security_event_line_with_unknown_codes(event: SecurityEvent, line: str) -> None:
     assert render.render_event(event, now=NOW, show_serials=False) == line
+
+
+def test_motion_activity_monitor_lines() -> None:
+    detection = MotionDetected(
+        station_sn=SYNTHETIC.station_sn,
+        device_sn=SYNTHETIC.camera_sn,
+        source="counter",
+        count=3,
+        observed_at=NOW,
+    )
+    line = render.render_event(detection, now=NOW, show_serials=False)
+    assert "motion detected (aggregate +3)" in line
+    assert SYNTHETIC.camera_sn not in line
+    assert render.event_json(detection)["type"] == "MotionDetected"
+
+    recorded = MotionRecorded(
+        station_sn=SYNTHETIC.station_sn,
+        device_sn=SYNTHETIC.camera_sn,
+        count=2,
+        observed_at=NOW,
+    )
+    line = render.render_event(recorded, now=NOW, show_serials=False)
+    assert "recorded (aggregate +2)" in line
+    assert SYNTHETIC.camera_sn not in line
 
 
 def test_every_event_type_has_a_monitor_line() -> None:

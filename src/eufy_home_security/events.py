@@ -29,7 +29,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta, timezone
 from enum import IntEnum, StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Final, TypeGuard
+from typing import TYPE_CHECKING, Any, Final, Literal, TypeGuard
 
 from ._logging import LogThrottle, redact_serial
 from .devices.recipes import PresetPosition
@@ -1346,6 +1346,35 @@ class StationsChanged:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class MotionDetected:
+    """One motion occurrence from a push, or a polled aggregate observation.
+
+    ``source='counter'`` means one observation, NOT ``count`` timestamped events.
+    ``observed_at`` is the host time and does not claim to be the detection time.
+    """
+
+    station_sn: str
+    device_sn: str
+    source: Literal["push", "counter"]
+    count: int
+    observed_at: datetime
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MotionRecorded:
+    """One observation of a rising local recorded-events counter.
+
+    A delta of N means N newly counted recordings between observations, not
+    N individually timestamped clips. This does not assert media finalisation.
+    """
+
+    station_sn: str
+    device_sn: str
+    count: int
+    observed_at: datetime
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class StationStateChanged:
     """A completed parameter dump changed a station's built state.
 
@@ -1784,6 +1813,8 @@ type Event = (
     | DevicesChanged
     | StationsChanged
     | StationStateChanged
+    | MotionDetected
+    | MotionRecorded
     | StationConfigChanged
     | StorageChanged
     | CameraBusyChanged

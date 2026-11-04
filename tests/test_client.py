@@ -36,12 +36,14 @@ from eufy_home_security.events import (
     CloudProblem,
     ConnectionChanged,
     CredentialsRefreshed,
+    DetectionType,
     DevicesChanged,
     DisconnectCause,
     Event,
     EventSource,
     GuardModeChanged,
     GuardModeOrigin,
+    MotionDetected,
     PushChanged,
     PushPictureSource,
     SecurityEvent,
@@ -71,7 +73,7 @@ from eufy_home_security.identity import StationClaims
 from eufy_home_security.images import JPEG_CONTENT_TYPE, PushImage
 from eufy_home_security.inclusion import Reach
 from eufy_home_security.install import InstallState
-from eufy_home_security.models import GuardMode
+from eufy_home_security.models import PARAM_DETECTED_EVENTS, GuardMode
 from eufy_home_security.network import PathWarning
 from eufy_home_security.p2p import discovery as discovery_module
 from eufy_home_security.p2p import session as session_module
@@ -968,6 +970,97 @@ async def test_both_channels_deliver_each_occurrence_once_across_reconnects(rig:
     assert detections()[1].thumb_path == "/zx/Camera00/thumb.jpg"
     assert dedupe is not None
     assert (dedupe.dropped_duplicates, dedupe.dropped_repeats) == (2, 1)
+
+
+async def test_admitted_camera_pushes_fall_back_only_without_a_detection_counter(
+    rig: KeyRig,
+) -> None:
+    """Only admitted occurrences produce push fallback; a usable counter takes over."""
+    rig.good = True
+    rig.fake.params[0].pop(PARAM_DETECTED_EVENTS, None)
+    events: list[Event] = []
+
+    def motions() -> list[MotionDetected]:
+        return [event for event in events if isinstance(event, MotionDetected)]
+
+    def detections() -> list[SecurityEvent]:
+        return [event for event in events if isinstance(event, SecurityEvent)]
+
+    async with aiohttp.ClientSession() as http:
+        eufy = rig.client(http, MemoryStore())
+        eufy.subscribe(events.append)
+
+        await eufy.async_login()
+        await eufy.async_discover()
+        await eufy.async_start()
+
+        station = eufy.stations[SYNTHETIC.station_sn]
+        await wait_for(lambda: station.session.announced)
+        initial = await station.async_update()
+
+        assert initial.devices[0].detected_events is None
+
+        push = StubPush.instances[0]
+        first = SecurityEvent(
+            source=EventSource.CLOUD,
+            station_sn=SYNTHETIC.station_sn,
+            device_sn=SYNTHETIC.camera_sn,
+            msg_type=18,
+            event_type=int(DetectionType.MOTION),
+            event_time_ms=1_700_000_000_000,
+            unique_id="activity-first",
+        )
+
+        push.callback(first)
+
+        assert [(e.source, e.count) for e in motions()] == [("push", 1)]
+        assert detections() == [first]
+
+        # A duplicate must not create another activity event.
+        push.callback(first)
+        assert len(motions()) == 1
+        assert len(detections()) == 1
+
+        # A second channel can enrich the occurrence without recounting it.
+        push.callback(
+            replace(
+                first,
+                source=EventSource.P2P,
+                thumb_path="/zx/Camera00/thumb.jpg",
+            )
+        )
+        assert len(motions()) == 1
+        assert len(detections()) == 2
+        assert detections()[-1].enriches
+
+        # The first numeric counter establishes a baseline.
+        rig.fake.params[0][PARAM_DETECTED_EVENTS] = "20"
+        await station.async_update()
+        assert len(motions()) == 1
+
+        # An admitted new detection remains a SecurityEvent, but the
+        # available counter now suppresses the push-derived activity.
+        second = replace(
+            first,
+            unique_id="activity-second",
+            event_time_ms=1_700_000_001_000,
+        )
+        push.callback(second)
+
+        assert len(motions()) == 1
+        assert detections()[-1] == second
+        assert len(detections()) == 3
+
+        # The existing parameter-read path now owns the activity signal.
+        rig.fake.params[0][PARAM_DETECTED_EVENTS] = "21"
+        await station.async_update()
+
+        assert [(e.source, e.count) for e in motions()] == [
+            ("push", 1),
+            ("counter", 1),
+        ]
+
+        await eufy.async_close()
 
 
 @pytest.mark.parametrize(("deduplicate", "delivered"), [(True, 1), (False, 2)])
