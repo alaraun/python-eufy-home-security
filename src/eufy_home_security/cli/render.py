@@ -25,6 +25,7 @@ from ..events import (
     CloudProblem,
     ConnectionChanged,
     CredentialsRefreshed,
+    DetectedEventsCounted,
     DeviceAlarmChanged,
     DevicesChanged,
     Event,
@@ -33,6 +34,7 @@ from ..events import (
     PresetsChanged,
     PushChanged,
     PushMessageType,
+    RecordedEventsCounted,
     SecurityEvent,
     StationConfigChanged,
     StationsChanged,
@@ -1011,6 +1013,16 @@ def _alarm_delay_line(event: AlarmDelayChanged, show: bool) -> str:
         if value is not None
     ]
     return "  ".join([state, *details, fmt_serial(event.station_sn, show)])
+
+
+@_renders(DetectedEventsCounted)
+def _detected_events_counted_line(event: DetectedEventsCounted, show: bool) -> str:
+    return _on_serial(event.device_sn, show, f"detected events counted (aggregate +{event.count})")
+
+
+@_renders(RecordedEventsCounted)
+def _recorded_events_counted_line(event: RecordedEventsCounted, show: bool) -> str:
+    return _on_serial(event.device_sn, show, f"recorded events counted (aggregate +{event.count})")
 
 
 @_renders(ParamChanged)

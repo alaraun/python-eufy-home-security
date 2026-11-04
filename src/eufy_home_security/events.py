@@ -1347,6 +1347,40 @@ class StationsChanged:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class DetectedEventsCounted:
+    """An observed increase in a camera's Detected Events counter (1192).
+
+    Counter 1192 includes triggers the camera subsequently discards, so this is
+    NOT an accepted or classified detection. A delta of N emits one event with
+    ``count=N``, not N individually timestamped events. ``observed_at`` is
+    the host observation time, not the actual trigger time. First readings,
+    unavailable counters, offline devices and resets do not emit events.
+    """
+
+    station_sn: str
+    device_sn: str
+    count: int
+    observed_at: datetime
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RecordedEventsCounted:
+    """An observed increase in a camera's Recorded Events counter (1193).
+
+    A delta of N emits one event with ``count=N``, not N individually
+    timestamped recording events. ``observed_at`` is the host observation
+    time. This is not proof that media has finished recording or is available
+    for playback. First readings, unavailable counters, offline devices and
+    resets do not emit events.
+    """
+
+    station_sn: str
+    device_sn: str
+    count: int
+    observed_at: datetime
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class StationStateChanged:
     """A completed parameter dump changed a station's built state.
 
@@ -1785,6 +1819,8 @@ type Event = (
     | DevicesChanged
     | StationsChanged
     | StationStateChanged
+    | DetectedEventsCounted
+    | RecordedEventsCounted
     | StationConfigChanged
     | StorageChanged
     | CameraBusyChanged

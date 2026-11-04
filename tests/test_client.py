@@ -44,6 +44,8 @@ from eufy_home_security.events import (
     CloudProblem,
     ConnectionChanged,
     CredentialsRefreshed,
+    DetectedEventsCounted,
+    DetectionType,
     DevicesChanged,
     DisconnectCause,
     Event,
@@ -80,7 +82,7 @@ from eufy_home_security.identity import StationClaims
 from eufy_home_security.images import JPEG_CONTENT_TYPE, PushImage
 from eufy_home_security.inclusion import Reach
 from eufy_home_security.install import InstallState
-from eufy_home_security.models import PARAM_LAN_IP, GuardMode
+from eufy_home_security.models import PARAM_DETECTED_EVENTS, PARAM_LAN_IP, GuardMode
 from eufy_home_security.network import HostSource, PathWarning
 from eufy_home_security.p2p import discovery as discovery_module
 from eufy_home_security.p2p import netif
@@ -1010,6 +1012,69 @@ async def test_both_channels_deliver_each_occurrence_once_across_reconnects(rig:
     assert detections()[1].thumb_path == "/zx/Camera00/thumb.jpg"
     assert dedupe is not None
     assert (dedupe.dropped_duplicates, dedupe.dropped_repeats) == (2, 1)
+
+
+async def test_admitted_pushes_do_not_create_counter_events(rig: KeyRig) -> None:
+    """Pushes remain SecurityEvents even when the detected-events counter is absent."""
+    rig.good = True
+    rig.fake.params[0].pop(PARAM_DETECTED_EVENTS, None)
+    events: list[Event] = []
+
+    def counted() -> list[DetectedEventsCounted]:
+        return [event for event in events if isinstance(event, DetectedEventsCounted)]
+
+    def detections() -> list[SecurityEvent]:
+        return [event for event in events if isinstance(event, SecurityEvent)]
+
+    async with aiohttp.ClientSession() as http:
+        eufy = rig.client(http, MemoryStore())
+        eufy.subscribe(events.append)
+
+        await eufy.async_login()
+        await eufy.async_discover()
+        await eufy.async_start()
+
+        station = eufy.stations[SYNTHETIC.station_sn]
+        await wait_for(lambda: station.session.announced)
+        initial = await station.async_update()
+        assert initial.devices[0].detected_events is None
+
+        push = StubPush.instances[0]
+        first = SecurityEvent(
+            source=EventSource.CLOUD,
+            station_sn=SYNTHETIC.station_sn,
+            device_sn=SYNTHETIC.camera_sn,
+            msg_type=18,
+            event_type=int(DetectionType.MOTION),
+            event_time_ms=1_700_000_000_000,
+            unique_id="activity-first",
+        )
+        push.callback(first)
+        assert counted() == []
+        assert detections() == [first]
+
+        push.callback(first)  # duplicate
+        assert len(detections()) == 1
+        push.callback(
+            replace(first, source=EventSource.P2P, thumb_path="/zx/Camera00/thumb.jpg")
+        )  # enrichment
+        assert len(detections()) == 2
+        assert detections()[-1].enriches
+        assert counted() == []
+
+        rig.fake.params[0][PARAM_DETECTED_EVENTS] = "20"
+        await station.async_update()  # new counter starts a baseline
+        assert counted() == []
+
+        second = replace(first, unique_id="activity-second", event_time_ms=1_700_000_001_000)
+        push.callback(second)
+        assert detections()[-1] == second
+        assert counted() == []
+
+        rig.fake.params[0][PARAM_DETECTED_EVENTS] = "21"
+        await station.async_update()
+        assert [event.count for event in counted()] == [1]
+        await eufy.async_close()
 
 
 @pytest.mark.parametrize(("deduplicate", "delivered"), [(True, 1), (False, 2)])

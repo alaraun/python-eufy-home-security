@@ -197,6 +197,7 @@ from ..p2p.storage_info import (
 )
 from ..recordings import RecordingsPage
 from ..station_config import ModeInfo, StationConfig, build_station_config, stored_device_params
+from .activity import StationActivity
 from .alarms import AlarmWaits, StationAlarms
 from .base import _NOT_PAIRED, own_channel
 from .configuration import ConfigRules, StationConfiguration
@@ -1047,6 +1048,7 @@ class Station:
         self._login_country = login_country
         self._log_name = redact_serial(device.device_sn)
         self._bus = EventBus()
+        self._activity = StationActivity(self, self._bus.emit)
         self._ptz = StationPtz(self)
         self._throttle = LogThrottle()
         self._emitted_state: StationState | None = None
@@ -1448,7 +1450,9 @@ class Station:
         :class:`~..events.StationStateChanged`, :class:`~..events.StationConfigChanged`,
         :class:`~..events.CameraBusyChanged`,
         :class:`~..events.PresetsChanged`, :class:`~..events.ZoomChanged`,
-        :class:`~..events.DeviceAlarmChanged`); returns the unsubscribe callable."""
+        :class:`~..events.DeviceAlarmChanged`,
+        :class:`~..events.DetectedEventsCounted` and :class:`~..events.RecordedEventsCounted`);
+        returns the unsubscribe callable."""
         unsubscribes = (self.session.subscribe(callback), self._bus.subscribe(callback))
 
         def unsubscribe() -> None:
@@ -1483,12 +1487,16 @@ class Station:
             self.note_alarm(event)
         # A camera that loses its link has gone idle, and an idle camera returns to 1x.
         if isinstance(event, ConnectionChanged) and not event.connected:
+            self._activity.reopen()
             for device_sn in list(self._ptz.zooms):
                 self._ptz.keep_zoom(device_sn, MIN_ZOOM)
 
     def _on_dump_complete(self) -> None:
         state = self.state
-        if state is None or state == self._emitted_state:
+        if state is None:
+            return
+        self._activity.observe(state)
+        if state == self._emitted_state:
             return
         self._emitted_state = state
         self._bus.emit(StationStateChanged(station_sn=self.serial, state=state))
@@ -1497,6 +1505,7 @@ class Station:
     async def async_start(self) -> None:
         """Load the model settings, connect, take a baseline parameter dump, and keep the
         session healthy."""
+        self._activity.reopen()
         await self.async_load_settings()
         await self.session.async_start()
 
@@ -1505,6 +1514,7 @@ class Station:
         try:
             await self.session.async_close()
         finally:
+            await self._activity.close()
             for timer in self._alarms.siren_expiry.values():
                 timer.cancel()
             self._alarms.siren_expiry.clear()
