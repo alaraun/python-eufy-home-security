@@ -288,6 +288,9 @@ triggering sensor's channel, and nothing in it names the trigger. The sensor's p
 notify ([Parameter notifies](#parameter-notifies), cmd 1829 with its door state) came
 within 30 ms before it, and the alarm tone (`0x04B1`, `[6, 30]` on the sensor's channel)
 30 s later (one sample). No end frame was seen when the delay ran out into the alarm.
+The tone can arrive just after `at + seconds` (9 to 83 ms later in one HomeBase 3 log), so
+a consumer expires its pending state a little after `seconds` (a grace of about 2 s), not
+exactly at it.
 
 The session caches the alarm type as param 1164 of the frame's channel (`ParamChanged`)
 and emits `AlarmDelayChanged(station_sn, delaying, channel, alarm_type, seconds, at)` with
@@ -412,7 +415,7 @@ What the library does with them:
   (Custom 1, Disarmed, Away) made through a P2P session emitted a `0x047F` report under
   GCM about 1 s before the matching cloud push, and a separate, passive session on the
   same station received it too. The library emits it as `GuardModeChanged` with source
-  P2P. Setting the mode already in force sends no report.
+  P2P and origin `REPORT`. Setting the mode already in force sends no report.
 - **Changes from the app and from a schedule are announced too [verified, fw
   3.8.7.4, app 6.1.00].** Three app arms/disarms each produced one `0x047F` on the
   library's sessions within a second, and each schedule slot boundary produced one
@@ -475,6 +478,11 @@ them per station:
   from the last one emitted for that station. A change seen on both channels is emitted once, with the
   source of the channel that delivered it first; the `SecurityEvent` of each arming
   push that passes is still delivered.
+- **`GuardModeChanged.origin`** says which of the two it came from:
+  `GuardModeOrigin.REPORT` (the station's own state, over P2P or as the device list's
+  copy of its parameters) or `GuardModeOrigin.PUSH` (an arming push, cloud or P2P,
+  emitted right after its `SecurityEvent`). `source` stays the channel, so a P2P arming
+  push is `source=P2P, origin=PUSH`.
 - Stamps only move forward and persist in the session cache (`push.guard_event_ms`),
   so a push redelivered after a restart is still ordered. The last mode is not
   persisted: the first mode after a start is always emitted.
@@ -502,7 +510,9 @@ fw 3.8.7.4), so in practice a push is always the cloud's.
   delivered only there: the station's `ConnectionChanged` carries
   `cause=CREDENTIALS_UNAVAILABLE` with `error=None`. The library's own cipher-refresh
   cooldown (`RefreshCooldownError`) is not a cloud problem and stays on
-  `ConnectionChanged.error`. A re-fetched cipher key emits `CredentialsRefreshed`; a
+  `ConnectionChanged.error`. A re-fetched cipher key emits `CredentialsRefreshed` when the
+  fetch returned the key the station's handshake uses (none for an RSA station left on
+  its static key); a
   key rejected again is `KeyRejectedError` (`cause=KEY_REJECTED`) until the
   key-refresh latch lifts ([cloud.md](cloud.md)).
 - **Diff the first dump after a reconnect against state kept from before.**

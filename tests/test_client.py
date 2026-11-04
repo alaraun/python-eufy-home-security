@@ -41,6 +41,7 @@ from eufy_home_security.events import (
     Event,
     EventSource,
     GuardModeChanged,
+    GuardModeOrigin,
     PushChanged,
     PushPictureSource,
     SecurityEvent,
@@ -625,8 +626,11 @@ async def test_guard_mode_from_both_channels_is_ordered_and_changes_once() -> No
         push.callback(_arming(EventSource.CLOUD, 0, p2p_ms // 1000 * 1000))  # its cloud copy
         await eufy.async_close()
     assert push.stopped
-    changes = [(e.mode, e.source) for e in events if isinstance(e, GuardModeChanged)]
-    assert changes == [(GuardMode.HOME, EventSource.P2P), (GuardMode.AWAY, EventSource.P2P)]
+    changes = [(e.mode, e.source, e.origin) for e in events if isinstance(e, GuardModeChanged)]
+    assert changes == [
+        (GuardMode.HOME, EventSource.P2P, GuardModeOrigin.REPORT),
+        (GuardMode.AWAY, EventSource.P2P, GuardModeOrigin.PUSH),  # the P2P arming push
+    ]
     armings = [(e.source, e.guard_mode) for e in events if isinstance(e, SecurityEvent)]
     assert armings == [(EventSource.CLOUD, 1), (EventSource.P2P, 0), (EventSource.CLOUD, 0)]
     assert store.data is not None
@@ -648,11 +652,11 @@ async def test_a_report_moving_back_after_a_pushed_change_is_delivered() -> None
         assert session.guard_mode == GuardMode.HOME
         session._note_mode_report(GuardMode.AWAY)  # the station reports it moved back
         await eufy.async_close()
-    changes = [(e.mode, e.source) for e in events if isinstance(e, GuardModeChanged)]
+    changes = [(e.mode, e.source, e.origin) for e in events if isinstance(e, GuardModeChanged)]
     assert changes == [
-        (GuardMode.AWAY, EventSource.P2P),
-        (GuardMode.HOME, EventSource.CLOUD),
-        (GuardMode.AWAY, EventSource.P2P),
+        (GuardMode.AWAY, EventSource.P2P, GuardModeOrigin.REPORT),
+        (GuardMode.HOME, EventSource.CLOUD, GuardModeOrigin.PUSH),
+        (GuardMode.AWAY, EventSource.P2P, GuardModeOrigin.REPORT),
     ]
 
 
@@ -1823,7 +1827,7 @@ async def test_an_rsa_station_without_a_served_key_runs_under_the_static_key(
         assert session.stats().handshake_failures == 0
         assert cloud.cipher_ids_requested == requested
         assert cloud.calls == calls  # no cloud request on a reconnect
-        assert not [e for e in events if isinstance(e, CloudProblem)]
+        assert not [e for e in events if isinstance(e, (CloudProblem, CredentialsRefreshed))]
     finally:
         await eufy.async_close()
         fake.stop()
@@ -1911,6 +1915,41 @@ async def test_keys_optional_credentials_still_need_the_owner_id() -> None:
         with pytest.raises(CloudApiError, match="not on this account"):
             await provider(refresh=False, cipher_id=1, **KEYS_OPTIONAL)
         assert cloud.cipher_ids_requested == []
+
+
+@pytest.mark.parametrize(
+    ("rsa_handshake", "served", "refreshed"),
+    [
+        (False, ("ecc", "rsa"), True),
+        (True, ("ecc", "rsa"), True),
+        (True, ("rsa",), True),
+        (True, ("ecc",), False),
+        (False, ("rsa",), False),
+    ],
+    ids=["ecies", "rsa", "rsa_only", "rsa_handshake_ecc_only", "ecies_rsa_only"],
+)
+async def test_a_refresh_is_announced_only_when_the_handshake_key_came_back(
+    rsa_handshake: bool, served: tuple[str, ...], refreshed: bool
+) -> None:
+    """``CredentialsRefreshed`` follows a forced fetch that returned the key the
+    handshake uses: the RSA key after an RSA CONN_INIT (``keys_optional``), else the
+    ECC key. A fetch without it (an RSA station left on the static key) announces none."""
+    cloud = FakeCloud(
+        owner_ids={SYNTHETIC.station_sn: OWNER_ID},
+        cipher_keys={SYNTHETIC.station_sn: "11" * 32} if "ecc" in served else {},
+        rsa_cipher_keys={SYNTHETIC.station_sn: "rsa key"} if "rsa" in served else {},
+    )
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        events: list[Event] = []
+        eufy.subscribe(events.append)
+        await eufy.async_login()
+        provider = eufy._credential_provider(SYNTHETIC.station_sn)
+        await provider(refresh=True, cipher_id=1, **(KEYS_OPTIONAL if rsa_handshake else {}))
+        assert cloud.cipher_ids_requested == [1]
+        assert [e.station_sn for e in events if isinstance(e, CredentialsRefreshed)] == (
+            [SYNTHETIC.station_sn] if refreshed else []
+        )
 
 
 async def test_discover_builds_a_standalone_station_that_reads_its_one_block() -> None:

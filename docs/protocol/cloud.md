@@ -607,7 +607,9 @@ set, a rejected key raises `KeyRejectedError` without contacting the cloud. One 
 automatic fetch is allowed once `KEY_REFRESH_SLOW_RETRY` (24 h) has passed, and that
 fetch re-stamps the latch. The latch clears when a handshake succeeds, on
 `async_reset_key_refresh(serial)` (the release), and on `async_reauthenticate`. Each
-fetch that returned a key emits `CredentialsRefreshed`.
+fetch that returned the key the handshake uses (the RSA key for the RSA handshake, else
+the ECC key) emits `CredentialsRefreshed`; one that leaves an RSA station on its static
+key emits none.
 
 The limits themselves are not published. Reports put a "too fast" block (`250999`,
 "The request is too fast. Please stop and have a rest", or HTTP 429) at 30–60 min per

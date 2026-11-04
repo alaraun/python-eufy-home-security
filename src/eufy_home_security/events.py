@@ -61,6 +61,18 @@ class EventSource(StrEnum):
     CLOUD = "cloud"
 
 
+class GuardModeOrigin(StrEnum):
+    """What a :class:`GuardModeChanged` was taken from (see :class:`GuardModeTracker`)."""
+
+    REPORT = "report"
+    """The station's own state: over P2P its ``0x047F`` mode report, a parameter dump
+    or notify, an arm's result or read-back; over the cloud the device list's copy of
+    its parameters. Never dropped as stale."""
+    PUSH = "push"
+    """An arming push (:attr:`SecurityEvent.guard_mode`), cloud or P2P: dated by its
+    event time, which can lie before the moment it arrives."""
+
+
 _APP_PUSH_ENUM: Final = Evidence(Support.DECLARED, "eufy app push message enum")
 _CUS_PUSH_MODE: Final = Evidence(
     Support.DECLARED, "eufy app CusPushMode", "no msg_type 16 push captured on any channel"
@@ -1027,12 +1039,17 @@ class GuardModeChanged:
     the cloud push's ``mode``): the mode in force, which is the schedule slot's mode
     while Schedule is selected and equals ``mode`` otherwise; None while unknown.
     Emitted once when either value changes.
+
+    ``source`` is the channel that delivered it, ``origin`` what it was taken from: the
+    station's own state (``REPORT``; with ``source`` P2P a live report) or an arming
+    push (``PUSH``, either channel).
     """
 
     station_sn: str
     mode: GuardMode | int
     source: EventSource
     active_mode: GuardMode | int | None = None
+    origin: GuardModeOrigin = GuardModeOrigin.REPORT
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -1264,6 +1281,9 @@ class CredentialsRefreshed:
 
     At most one automatic refresh per station until a handshake succeeds, the slow
     retry window passes, or the latch is released (``async_reset_key_refresh``).
+    Emitted only when the fetch returned the key the station's handshake uses (the RSA
+    key for the RSA handshake, else the ECC key): a fetch that leaves an RSA station on
+    its static key emits none.
     """
 
     station_sn: str

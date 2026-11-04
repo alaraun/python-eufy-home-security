@@ -575,9 +575,17 @@ A `DataUpdateCoordinator[StationState]` per station:
     same change as typed state. `source` says what delivered it: `ValueSource.NOTIFY` is
     the station's parameter notify, a status that moved between dumps (an entry
     sensor's door, a tamper flag; see `docs/protocol/events.md` § Parameter notifies).
-    For such an event, refresh the entities of the device on `channel` from
-    `station.state` at once (the session's merged values, no cloud call) instead of
-    waiting for the next poll; the `StationStateChanged` that follows carries the same.
+    Use it for per-value reactions and logging, not to refresh entities.
+  - **Refresh on `StationStateChanged` alone.** A notify (every form, one value or a
+    list) is merged in one synchronous call: a `ParamChanged` per value, then the
+    `GuardModeChanged` when it carries the mode, then one `StationStateChanged` with all
+    of them (when the state changed), before the callback chain returns. A dump (a read,
+    an unsolicited one, an on-demand station's cloud snapshot) emits its `ParamChanged`
+    per frame as it merges, and one `StationStateChanged` once the dump completes.
+    Refreshing on each `ParamChanged` applies partial states (n rebuilds for an n-value
+    notify) and is then repeated by the `StationStateChanged`. An alarm frame's
+    `ParamChanged` (the tone, the alarm delay) comes with no `StationStateChanged`: its
+    own events are `AlarmChanged` and `AlarmDelayChanged`.
   - `ConnectionChanged(connected=False)`: `coordinator.async_set_update_error(...)`.
 - **A battery station (`station.connects_on_demand`) must not be polled over P2P.** A
   held session keeps a battery camera awake, so the library holds none for it (a T8170
@@ -673,8 +681,8 @@ So arming, disarming and motion reach HA immediately; the poll only reconciles.
 
 **Live guard mode over P2P.** The station reports a real guard-mode change on the P2P
 channel: a `0x047f` report, about 1 s before the cloud push, which every open session
-receives. The library delivers it as `GuardModeChanged(source=EventSource.P2P)`, with no
-cloud and no push opt-in. What is covered:
+receives. The library delivers it as `GuardModeChanged(source=EventSource.P2P,
+origin=GuardModeOrigin.REPORT)`, with no cloud and no push opt-in. What is covered:
 
 | change made by | reaches HA live over P2P |
 |---|---|
@@ -710,6 +718,13 @@ cloud and no push opt-in. What is covered:
   first, and drops a guard-mode push older than the last mode applied for that station,
   so a late or redelivered push never moves the panel back. The integration does no
   ordering of its own.
+- **`origin` tells a report from a push.** `GuardModeChanged.origin` is
+  `GuardModeOrigin.REPORT` for the station's own state (the `0x047f` report, a parameter
+  dump or notify, an arm's result or read-back; with `source` CLOUD the device list's
+  copy of its parameters) and `GuardModeOrigin.PUSH` for an arming push, on either
+  channel. `source=P2P` with `REPORT` is live: end a pending entry delay on it at once. A
+  `PUSH` is dated by its arming `SecurityEvent` (`event_time_ms`, delivered just before
+  it), which can lie before its arrival: order it against the alarm by that time.
 - **Schedule mode is two values, and the library keeps both.** `GuardModeChanged.mode`
   (and `StationState.guard_mode`) is the **selected** mode: `SCHEDULE` while a schedule
   runs. `GuardModeChanged.active_mode` (and `StationState.active_mode`) is the mode **in
@@ -856,9 +871,12 @@ A closed session (`async_close`) never reconnects on its own — build a new
   The alarm delay (pending) comes over P2P as **`AlarmDelayChanged`**: `delaying=True`
   with `seconds` until the alarm (`alarm_type` 6: a sensor triggered) → `pending`;
   `delaying=False` → back to the armed state; an `AlarmChanged` start ends it too (no end
-  event then). Let the countdown expire after `seconds` on its own: when it runs out the
-  station sends no end frame, it goes into the alarm (`AlarmChanged`) or a disarm ends
-  it. A second trigger sends another start with fresh seconds. `channel` is the frame's
+  event then). When the countdown runs out the station sends no end frame: it goes into
+  the alarm (`AlarmChanged`) or a disarm ends it. So expire the pending state on your
+  own, a little after `seconds` (a grace of about 2 s), not exactly at `at + seconds`:
+  the alarm can arrive just after it (up to about 0.1 s later on a HomeBase 3), and
+  expiring at the mark shows the armed state for a moment before the alarm. A second
+  trigger sends another start with fresh seconds. `channel` is the frame's
   channel, 255 (the station) on a HomeBase 3: the frame does not carry the triggering
   device. Take the sensor from the `ParamChanged` with `source` `ValueSource.NOTIFY` just before it
   (its door state) or, once the alarm starts, from the alarm. On the cloud push it is
@@ -2854,7 +2872,7 @@ arrive on `eufy.subscribe` instead:
 | `CloudProblem(error=LoginLimitedError / RateLimitedError)` | the limited repair issue, using `error.retry_after` |
 | `CloudProblem(error=KeyExchangeRefusedError)` | as in the table above: retry later, a repair issue only if it persists |
 | `CloudProblem(error=CipherUnavailableError)` | the repair issue of the table above |
-| `CredentialsRefreshed(station_sn, cipher, owner_id, login)` | a persistent, non-fixable repair issue telling the user a key or owner id was fetched (and whether it cost a login) |
+| `CredentialsRefreshed(station_sn, cipher, owner_id, login)` | a persistent, non-fixable repair issue telling the user a key or owner id was fetched (and whether it cost a login); not emitted for a fetch that leaves an RSA station on its static key |
 | `ConnectionChanged(connected=True)` | clear that station's repair issues |
 
 A `CloudProblem` is emitted at most once per error type until the next successful login,

@@ -65,6 +65,7 @@ from eufy_home_security.events import (
     DevicesChanged,
     Event,
     EventSource,
+    ParamChanged,
     PresetsChanged,
     SecurityEvent,
     StationStateChanged,
@@ -1418,6 +1419,36 @@ async def test_an_entry_sensors_door_status_follows_the_stations_notify(
         await hub.async_close()
     assert now.setting("sensor_disassemble_status", device_sn=serial) is True
     assert _snapshots(events)[-1].setting("sensor_door_status", device_sn=serial) is True
+
+
+async def test_a_notify_emits_its_param_changes_then_one_snapshot(
+    fake: FakeStation, station: Station
+) -> None:
+    """A notify of several values emits a ParamChanged per value, then one
+    StationStateChanged that carries all of them."""
+    fake.params[16] = {1550: "0", 61015: "0"}
+    hub = Station(STATION, station.session, sub_devices=[CAMERA, _ENTRY_SENSOR])
+    serial = _ENTRY_SENSOR.device_sn
+    events: list[Event] = []
+    try:
+        await hub.async_update()
+        hub.subscribe(events.append)
+        values = [{"param_type": 61015, "param_value": 1}, {"param_type": 1550, "param_value": 1}]
+        fake.send_json(
+            FrameType.NOTIFY_PAYLOAD,
+            {"cmd": 1829, "payload": {"params": values}},
+            device_channel=16,
+        )
+        async with asyncio.timeout(3):
+            while not _snapshots(events):
+                await asyncio.sleep(0.02)
+    finally:
+        await hub.async_close()
+    order = [type(e) for e in events if isinstance(e, (ParamChanged, StationStateChanged))]
+    assert order == [ParamChanged, ParamChanged, StationStateChanged]
+    (snapshot,) = _snapshots(events)
+    assert snapshot.setting("sensor_door_status", device_sn=serial) is True
+    assert snapshot.setting("sensor_disassemble_status", device_sn=serial) is True
 
 
 async def test_a_notified_station_setting_reads_as_the_notifys(

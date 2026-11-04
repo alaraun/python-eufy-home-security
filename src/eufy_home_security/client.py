@@ -49,6 +49,7 @@ from .events import (
     EventCallback,
     EventDeduplicator,
     GuardModeChanged,
+    GuardModeOrigin,
     GuardModeTracker,
     PushChanged,
     PushPictureSource,
@@ -805,8 +806,9 @@ class EufySecurity:
     def _credential_provider(self, station_sn: str) -> CredentialProvider:
         """The station's credentials; a cloud failure inside it becomes a ``CloudProblem``.
 
-        A forced refresh that returns a key emits ``CredentialsRefreshed`` and counts as
-        a successful cloud call.
+        A forced refresh counts as a successful cloud call; it emits
+        ``CredentialsRefreshed`` only when it returned the key the handshake uses (the
+        RSA key after an RSA CONN_INIT, else the ECC key).
         """
         cloud, cache = self.cloud, self.cache
 
@@ -859,6 +861,9 @@ class EufySecurity:
                 raise
             if refresh:
                 self._cloud_succeeded()
+            # keys_optional marks the RSA handshake (CredentialProvider): announce a
+            # refresh only when the key that handshake uses came back.
+            if refresh and (keys.rsa_private_key if keys_optional else keys.ecc_private_key):
                 age = cache.seconds_since_refresh("owner")
                 self._bus.emit(
                     CredentialsRefreshed(
@@ -1329,6 +1334,7 @@ class EufySecurity:
                     mode=mode,
                     active_mode=active,
                     source=admitted.source,
+                    origin=GuardModeOrigin.PUSH,
                 )
             )
 

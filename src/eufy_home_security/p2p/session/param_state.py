@@ -13,7 +13,14 @@ from typing import Any
 
 from ..._logging import LogThrottle
 from ...devices.param_info import ParamInfo
-from ...events import EventBus, EventSource, GuardModeChanged, ParamChanged, Unsubscribe
+from ...events import (
+    EventBus,
+    EventSource,
+    GuardModeChanged,
+    GuardModeOrigin,
+    ParamChanged,
+    Unsubscribe,
+)
 from ...models import STATION_CHANNEL, GuardMode, ValueSource
 from ..params import ACTIVE_MODE_PARAM, GUARD_MODE_PARAM, ParamDump
 
@@ -437,5 +444,6 @@ class ParamState:
                 mode=self._guard_mode,
                 active_mode=self._active_mode,
                 source=source,
+                origin=GuardModeOrigin.REPORT,
             )
         )
