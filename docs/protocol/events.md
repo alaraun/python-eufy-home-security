@@ -287,8 +287,8 @@ The frame is station-wide: on a HomeBase 3 its subheader byte 2 is 255, not the
 triggering sensor's channel, and nothing in it names the trigger. The sensor's parameter
 notify ([Parameter notifies](#parameter-notifies), cmd 1829 with its door state) came
 within 30 ms before it, and the alarm tone (`0x04B1`, `[6, 30]` on the sensor's channel)
-30 s later (one sample). No end frame was seen when the delay ran out into the alarm.
-The tone can arrive just after `at + seconds` (9 to 83 ms later in one HomeBase 3 log), so
+about 30 s later. No end frame was seen when the delay ran out into the alarm.
+The tone can arrive just after `at + seconds` (up to about 0.1 s later in the HomeBase 3 logs seen), so
 a consumer expires its pending state a little after `seconds` (a grace of about 2 s), not
 exactly at it.
 
@@ -455,7 +455,7 @@ What the library does with them:
   the app) sends the same report. Outside Schedule, or before the selection is known,
   the selected mode follows the report. A report of the mode the session's own arm asks
   for is that arm's.
-- A cloud arming push is `GuardModeChanged(mode=arming, active_mode=mode)`; a push
+- A cloud arming push is `GuardModeChanged(mode=arming, active_mode=mode, origin=PUSH)`; a push
   without `mode` takes `arming` as the effective mode outside Schedule, else the last one
   known.
 - `async_set_guard_mode(GuardMode.SCHEDULE)` is confirmed by reading param 1224 back:

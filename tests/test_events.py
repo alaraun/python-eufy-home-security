@@ -26,6 +26,8 @@ from eufy_home_security.events import (
     EventBus,
     EventDeduplicator,
     EventSource,
+    GuardModeChanged,
+    GuardModeOrigin,
     GuardModeTracker,
     HistoryRecord,
     PushChanged,
@@ -946,3 +948,10 @@ def test_homebase2_doorbell_prefixed_recording_path(camera: str, prefix: str) ->
 )
 def test_reject_bad_doorbell_recording_filename(filename: str) -> None:
     assert not is_station_recording_path(f"/media/mmcblk0p1/Camera05/{filename}")
+
+
+def test_a_guard_mode_change_is_a_report_unless_named_a_push() -> None:
+    event = GuardModeChanged(
+        station_sn=SYNTHETIC.station_sn, mode=GuardMode.HOME, source=EventSource.P2P
+    )
+    assert event.origin is GuardModeOrigin.REPORT

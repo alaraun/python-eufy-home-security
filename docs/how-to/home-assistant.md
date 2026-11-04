@@ -576,7 +576,8 @@ A `DataUpdateCoordinator[StationState]` per station:
     the station's parameter notify, a status that moved between dumps (an entry
     sensor's door, a tamper flag; see `docs/protocol/events.md` § Parameter notifies).
     Use it for per-value reactions and logging, not to refresh entities.
-  - **Refresh on `StationStateChanged` alone.** A notify (every form, one value or a
+  - **Refresh entities on `StationStateChanged`, not on each `ParamChanged`**
+    (`GuardModeChanged` still applies at once, above). A notify (every form, one value or a
     list) is merged in one synchronous call: a `ParamChanged` per value, then the
     `GuardModeChanged` when it carries the mode, then one `StationStateChanged` with all
     of them (when the state changed), before the callback chain returns. A dump (a read,
@@ -2872,7 +2873,7 @@ arrive on `eufy.subscribe` instead:
 | `CloudProblem(error=LoginLimitedError / RateLimitedError)` | the limited repair issue, using `error.retry_after` |
 | `CloudProblem(error=KeyExchangeRefusedError)` | as in the table above: retry later, a repair issue only if it persists |
 | `CloudProblem(error=CipherUnavailableError)` | the repair issue of the table above |
-| `CredentialsRefreshed(station_sn, cipher, owner_id, login)` | a persistent, non-fixable repair issue telling the user a key or owner id was fetched (and whether it cost a login); not emitted for a fetch that leaves an RSA station on its static key |
+| `CredentialsRefreshed(station_sn, cipher, owner_id, login)` | a persistent, non-fixable repair issue telling the user a key or owner id was fetched (and whether it cost a login); emitted only when the fetch returned the key the station's handshake uses, so none for an RSA station left on its static key |
 | `ConnectionChanged(connected=True)` | clear that station's repair issues |
 
 A `CloudProblem` is emitted at most once per error type until the next successful login,
