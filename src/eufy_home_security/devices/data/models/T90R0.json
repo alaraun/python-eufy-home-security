@@ -48,7 +48,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "battery_value": {
    "access": "ro",
@@ -142,7 +143,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },

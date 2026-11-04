@@ -337,7 +337,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -523,7 +523,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "setting_model_config": {
    "access": "ro",
@@ -531,7 +532,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "speaker_on_off": {
    "access": "rw",

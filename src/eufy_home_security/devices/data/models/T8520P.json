@@ -119,7 +119,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -296,7 +296,7 @@
     "no_default": true,
     "param": 1912
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "system",
    "shown": "card"
   },

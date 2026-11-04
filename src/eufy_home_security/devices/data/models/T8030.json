@@ -21,7 +21,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "ai_support_service": {
    "access": "ro",
@@ -101,7 +102,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_get_alarm_home_mode": {
    "access": "ro",
@@ -111,9 +113,10 @@
     "no_default": true,
     "param": 1157
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_jump_to_platform_setting_page": {
    "access": "ro",
@@ -157,7 +160,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -247,7 +251,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "battery_healthy": {
    "access": "ro",
@@ -321,7 +326,8 @@
     "param": 1073
    },
    "role": "diagnostic",
-   "section": "detection"
+   "section": "detection",
+   "structured": true
   },
   "device_cross_cam_interval": {
    "access": "rw",
@@ -403,7 +409,8 @@
     "param": 1072
    },
    "role": "diagnostic",
-   "section": "detection"
+   "section": "detection",
+   "structured": true
   },
   "device_cross_cam_tracking_swtich": {
    "access": "rw",
@@ -452,7 +459,8 @@
    "read": null,
    "role": "setting",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "device_model": {
    "access": "ro",
@@ -563,7 +571,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "storage"
+   "section": "storage",
+   "structured": true
   },
   "device_storage_type": {
    "access": "ro",
@@ -606,7 +615,7 @@
     "no_default": true,
     "param": 1266
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -682,9 +691,10 @@
    "default": "{\"home_status\":1,\"chls\":[]}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "ip_address": {
    "access": "ro",
@@ -738,6 +748,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "network",
+   "structured": true,
    "variants": [
     {
      "id": "is_connect_webrtc_sub_device_list__v1",
@@ -789,6 +800,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "network",
+   "structured": true,
    "variant_of": "is_connect_webrtc_sub_device_list"
   },
   "is_connect_webrtc_sub_device_list__v2": {
@@ -798,6 +810,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "network",
+   "structured": true,
    "variant_of": "is_connect_webrtc_sub_device_list"
   },
   "is_device_upgrade": {
@@ -955,7 +968,7 @@
     "no_default": true,
     "param": 1265
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },

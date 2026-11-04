@@ -8,7 +8,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "alarm_tones_mode": {
    "access": "ro",
@@ -72,7 +73,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "ro",
@@ -260,7 +262,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -399,7 +401,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "setting_model_config": {
    "access": "ro",
@@ -407,7 +410,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "switching_notification": {
    "access": "ro",

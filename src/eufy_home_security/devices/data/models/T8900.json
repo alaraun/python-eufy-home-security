@@ -8,7 +8,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "battery_low_threshold": {
    "access": "ro",

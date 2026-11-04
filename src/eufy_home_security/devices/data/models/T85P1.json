@@ -15,7 +15,7 @@
    "default": "0",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "power",
    "shown": "card"
   },
@@ -147,7 +147,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },

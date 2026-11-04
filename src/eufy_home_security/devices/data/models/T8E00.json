@@ -41,7 +41,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "ai_tracking_status": {
    "access": "rw",
@@ -136,7 +137,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "audio_recording_on_off": {
    "access": "rw",
@@ -195,7 +197,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "automation_detect_trigger_type": {
    "access": "ro",
@@ -345,7 +348,7 @@
     "no_default": true,
     "param": 9235
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "system",
    "shown": "card"
   },
@@ -392,7 +395,8 @@
    "read": null,
    "role": "setting",
    "section": "recording",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "device_event_create_switch": {
    "access": "rw",
@@ -852,7 +856,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1005,7 +1009,8 @@
    "read": null,
    "role": "setting",
    "section": "picture",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "live_ai_box_toolbar_list": {
    "access": "ro",
@@ -1279,9 +1284,10 @@
    "kind": "string",
    "page": "IPCRecordingQualityScreen",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "recording",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_activated_light_setting": {
    "access": "ro",
@@ -1291,7 +1297,8 @@
    "read": null,
    "role": "setting",
    "section": "picture",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_detection_follow_global_setting": {
    "access": "ro",
@@ -1740,7 +1747,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "structured": true
   },
   "preset_positions_calibrate_time": {
    "access": "ro",
@@ -1838,7 +1846,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "set_privacy_zone": {
    "access": "ro",
@@ -1873,7 +1882,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "speaker_on_off": {
    "access": "rw",

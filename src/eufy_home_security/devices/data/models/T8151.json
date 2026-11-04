@@ -49,7 +49,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "anti_theft_detection_switch": {
    "access": "rw",
@@ -90,7 +91,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_modedetail_devices_rules": {
    "access": "ro",
@@ -109,7 +111,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -781,7 +784,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1514,7 +1517,7 @@
     "no_default": true,
     "param": 6206
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },

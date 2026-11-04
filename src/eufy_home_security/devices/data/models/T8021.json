@@ -89,7 +89,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "system",
    "shown": "card"
   },

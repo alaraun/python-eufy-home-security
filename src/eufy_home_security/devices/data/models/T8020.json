@@ -40,7 +40,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_keypad_set_cus_model": {
    "access": "ro",
@@ -76,7 +77,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -201,7 +203,8 @@
    "read": null,
    "role": "setting",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "device_model": {
    "access": "ro",
@@ -275,7 +278,7 @@
    "access": "ro",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "system",
    "shown": "card"
   },

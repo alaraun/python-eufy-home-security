@@ -177,7 +177,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "system",
    "shown": "card"
   },
@@ -232,7 +232,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -302,9 +302,10 @@
    "default": "{\"HB3+AI\": 1}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_detection_status": {
    "access": "ro",

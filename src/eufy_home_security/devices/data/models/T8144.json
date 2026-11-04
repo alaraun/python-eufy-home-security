@@ -41,7 +41,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "anti_theft_detection_switch": {
    "access": "rw",
@@ -82,7 +83,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -108,7 +110,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -258,6 +261,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "modes",
+   "structured": true,
    "variants": [
     {
      "id": "automation_config__v1",
@@ -281,6 +285,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "modes",
+   "structured": true,
    "variant_of": "automation_config"
   },
   "automation_detect_motion_trigger": {
@@ -961,7 +966,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1091,9 +1096,10 @@
    "default": "{\"model\":\"T8144\",\"manufacturer\":\"Anker\"}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "is_connected_solar_panel": {
    "access": "ro",
@@ -1506,9 +1512,10 @@
    "default": "{\"HB3+AI\": 1,\"HB3\": 1, \"SINGLE\":1,\"HB2\":1}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_activated_light_setting": {
    "access": "ro",
@@ -1879,7 +1886,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "structured": true
   },
   "power_charge_history": {
    "access": "ro",
@@ -2196,7 +2204,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "solar_intensity": {
    "access": "ro",

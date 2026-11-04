@@ -49,7 +49,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "ai_tracking_status": {
    "access": "rw",
@@ -88,7 +89,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -107,7 +109,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -266,7 +269,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "automation_detect_trigger_type": {
    "access": "ro",
@@ -846,7 +850,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1266,9 +1270,10 @@
    "default": "{\"HB3+AI\": 1,\"HB3\": 1,\"SINGLE\": 1}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_dection_day_night_optimization_switch": {
    "access": "rw",
@@ -1572,7 +1577,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "structured": true
   },
   "power_charge_mode": {
    "access": "rw",
@@ -1839,7 +1845,7 @@
     "no_default": true,
     "param": 6206
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },

@@ -41,7 +41,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "ai_tracking_status": {
    "access": "rw",
@@ -79,7 +80,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -105,7 +107,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -295,7 +298,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "automation_detect_trigger_type": {
    "access": "ro",
@@ -322,7 +326,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "battery_value": {
    "access": "ro",
@@ -538,7 +543,8 @@
    "read": null,
    "role": "setting",
    "section": "recording",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "device_event_create_switch": {
    "access": "rw",
@@ -1020,7 +1026,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1139,9 +1145,10 @@
    "default": "{\"model\":\"T86C1\",\"manufacturer\":\"Anker\"}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "ip_address": {
    "access": "ro",
@@ -1674,9 +1681,10 @@
    "default": "{\"HB3+AI\": 1,\"HB3\": 1,\"SINGLE\": 1}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_activated_light_setting": {
    "access": "ro",
@@ -1685,7 +1693,8 @@
    "read": null,
    "role": "setting",
    "section": "picture",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_detection_status": {
    "access": "rw",
@@ -2165,7 +2174,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "structured": true
   },
   "power_manager_mode": {
    "access": "rw",
@@ -2434,7 +2444,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "set_privacy_zone": {
    "access": "ro",
@@ -2469,7 +2480,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "smart_lock_night_vision_optimization": {
    "access": "rw",

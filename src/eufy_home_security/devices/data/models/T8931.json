@@ -8,7 +8,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "device_ability_data": {
    "access": "ro",

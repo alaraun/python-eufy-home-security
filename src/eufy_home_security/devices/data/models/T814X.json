@@ -35,7 +35,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "ai_empower": {
    "access": "ro",
@@ -49,7 +50,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "ai_tracking_status": {
    "access": "rw",
@@ -87,7 +89,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_geofence_config": {
    "access": "ro",
@@ -121,7 +124,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -311,7 +315,8 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "automation_detect_trigger_type": {
    "access": "ro",
@@ -1067,7 +1072,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1597,9 +1602,10 @@
    "default": "{\"SINGLE\": 1}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_activated_light_setting": {
    "access": "ro",
@@ -2091,6 +2097,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "recording",
+   "structured": true,
    "variants": [
     {
      "id": "player_model_config__v1",
@@ -2114,6 +2121,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "recording",
+   "structured": true,
    "variant_of": "player_model_config"
   },
   "power_charge_mode": {
@@ -2386,7 +2394,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "speaker_on_off": {
    "access": "rw",

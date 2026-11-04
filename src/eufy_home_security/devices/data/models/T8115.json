@@ -35,7 +35,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "ai_empower": {
    "access": "ro",
@@ -88,7 +89,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_geofence_config": {
    "access": "ro",
@@ -122,7 +124,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -929,7 +932,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1540,9 +1543,10 @@
    "default": "{\"SINGLE\": 1}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_activated_light_setting": {
    "access": "ro",
@@ -2048,7 +2052,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "structured": true
   },
   "power_charge_mode": {
    "access": "rw",
@@ -2352,7 +2357,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "speaker_on_off": {
    "access": "rw",

@@ -12,7 +12,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "battery_value": {
    "access": "ro",
@@ -136,7 +137,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "system",
    "shown": "card"
   },
@@ -175,7 +176,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -320,7 +321,7 @@
     "no_default": true,
     "param": 1912
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "system",
    "shown": "card"
   },

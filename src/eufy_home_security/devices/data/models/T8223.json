@@ -41,7 +41,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "arming_cust_mode_config": {
    "access": "ro",
@@ -54,7 +55,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_keypad_set_cus_model": {
    "access": "ro",
@@ -90,7 +92,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -236,6 +239,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "modes",
+   "structured": true,
    "variants": [
     {
      "id": "automation_config__v1",
@@ -259,6 +263,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "modes",
+   "structured": true,
    "variant_of": "automation_config"
   },
   "automation_detect_trigger_type": {
@@ -722,7 +727,8 @@
    "read": null,
    "role": "setting",
    "section": "recording",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "device_indoor_chime_switch": {
    "access": "rw",
@@ -897,7 +903,8 @@
    "read": null,
    "role": "setting",
    "section": "doorbell",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "device_response_timeout_switch": {
    "access": "rw",
@@ -1049,7 +1056,7 @@
    "access": "ro",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "notifications",
    "shown": "card",
    "variants": [
@@ -1170,7 +1177,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1763,9 +1770,10 @@
    "default": "{\"HB3+AI\":1,\"HB3\":1,\"SINGLE\":0}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_detection_status": {
    "access": "rw",
@@ -2216,7 +2224,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "structured": true
   },
   "power_manager_mode": {
    "access": "rw",

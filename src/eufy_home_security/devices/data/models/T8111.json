@@ -41,7 +41,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "alerts_detection_type": {
    "access": "rw",
@@ -133,7 +134,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -159,7 +161,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -309,6 +312,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "modes",
+   "structured": true,
    "variants": [
     {
      "id": "automation_config__v1",
@@ -332,6 +336,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "modes",
+   "structured": true,
    "variant_of": "automation_config"
   },
   "automation_detect_motion_trigger": {
@@ -847,7 +852,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1137,9 +1142,10 @@
    "default": "{\"HB3+AI\": 1}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_detection_status": {
    "access": "rw",
@@ -1347,7 +1353,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "structured": true
   },
   "power_charge_mode": {
    "access": "rw",

@@ -14,7 +14,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "alarm_status": {
    "access": "ro",
@@ -85,7 +86,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_get_alarm_home_mode": {
    "access": "ro",
@@ -95,9 +97,10 @@
     "no_default": true,
     "param": 1157
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -123,7 +126,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -215,7 +219,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "database_synchronize": {
    "access": "ro",
@@ -261,7 +266,8 @@
    "read": null,
    "role": "setting",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "device_model": {
    "access": "ro",
@@ -591,7 +597,7 @@
     "no_default": true,
     "param": 1265
    },
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },

@@ -35,7 +35,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "ai_empower": {
    "access": "ro",
@@ -49,7 +50,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "arming_cust_mode_config": {
    "access": "ro",
@@ -62,7 +64,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_keypad_set_cus_model": {
    "access": "ro",
@@ -97,7 +100,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -241,7 +245,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "automation_detect_trigger_type": {
    "access": "ro",
@@ -769,7 +774,8 @@
    "read": null,
    "role": "setting",
    "section": "recording",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "device_delivered_guard_switch": {
    "access": "rw",
@@ -1307,7 +1313,8 @@
    "read": null,
    "role": "setting",
    "section": "doorbell",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "device_response_timeout_switch": {
    "access": "rw",
@@ -1459,7 +1466,7 @@
    "access": "ro",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "notifications",
    "shown": "card",
    "variants": [
@@ -1544,7 +1551,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "storage"
+   "section": "storage",
+   "structured": true
   },
   "device_storage_type": {
    "access": "ro",
@@ -1602,7 +1610,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -2059,9 +2067,10 @@
    "default": "{\"HB3+AI\":1,\"HB3\":1,\"SINGLE\":1}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_dection_doorbell_notification_switch": {
    "access": "ro",
@@ -2836,7 +2845,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "structured": true
   },
   "power_charge_history": {
    "access": "ro",
@@ -3155,7 +3165,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "set_ignore_object": {
    "access": "ro",
@@ -3217,7 +3228,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "smart_lock_enable_voip_switch": {
    "access": "rw",

@@ -41,7 +41,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "ai_tracking_status": {
    "access": "rw",
@@ -79,7 +80,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -105,7 +107,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -606,7 +609,8 @@
    "read": null,
    "role": "setting",
    "section": "recording",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "device_indoor_temperatur_alarm_max_value": {
    "access": "rw",
@@ -896,7 +900,7 @@
    "default": "1",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "system",
    "shown": "card"
   },
@@ -973,7 +977,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "audio"
+   "section": "audio",
+   "structured": true
   },
   "device_white_noise_play_info": {
    "access": "ro",
@@ -1063,7 +1068,7 @@
    "default": "0",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1612,9 +1617,10 @@
    "default": "{\"HB3+AI\": 1,\"HB3\": 1,\"SINGLE\": 1}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_detection_status": {
    "access": "rw",
@@ -2202,7 +2208,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "structured": true
   },
   "ptz_turn_speed": {
    "access": "rw",
@@ -2374,7 +2381,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "sound_detection_round_look_switch": {
    "access": "rw",

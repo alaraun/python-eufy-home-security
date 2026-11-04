@@ -35,7 +35,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "ai_empower": {
    "access": "ro",
@@ -49,7 +50,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "arming_cust_mode_config": {
    "access": "ro",
@@ -62,7 +64,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_modedetail_alarm_rules": {
    "access": "ro",
@@ -88,7 +91,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -269,7 +273,7 @@
    "kind": "other",
    "page": "SLPowerDuoPowerSupplySystemScreen",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "power",
    "shown": "card"
   },
@@ -1078,7 +1082,8 @@
    "read": null,
    "role": "setting",
    "section": "doorbell",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "device_serial_number": {
    "access": "ro",
@@ -1336,7 +1341,7 @@
    "default": "4",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "network",
    "shown": "card"
   },
@@ -1880,9 +1885,10 @@
    "default": "{\"HB3+AI\": 1}",
    "kind": "string",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_detection_leaving_detection_reactions": {
    "access": "ro",
@@ -2427,7 +2433,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "structured": true
   },
   "power_manager_mode": {
    "access": "rw",
@@ -2603,7 +2610,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "setting_model_config": {
    "access": "ro",
@@ -2611,7 +2619,8 @@
    "kind": "string",
    "read": null,
    "role": "diagnostic",
-   "section": "system"
+   "section": "system",
+   "structured": true
   },
   "smart_lock_auto_lock_type": {
    "access": "ro",

@@ -14,7 +14,8 @@
    },
    "role": "setting",
    "section": "detection",
-   "shown": "card"
+   "shown": "card",
+   "structured": true
   },
   "alarm_status": {
    "access": "ro",
@@ -86,7 +87,8 @@
    },
    "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "arming_geofence_config": {
    "access": "ro",
@@ -120,7 +122,8 @@
     "param": 1254
    },
    "role": "setting",
-   "section": "modes"
+   "section": "modes",
+   "structured": true
   },
   "arming_selected_mode": {
    "access": "rw",
@@ -258,7 +261,8 @@
    "read": null,
    "role": "setting",
    "section": "detection",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "device_model": {
    "access": "ro",
