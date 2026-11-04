@@ -14,8 +14,13 @@ The first role rule that applies decides, from the eufy app's own data:
    the value from the device already.
 3. ``setting``: the thing description declares it writable and the app does not list it
    as a status it only reads: the app's control, for which the library has no write.
-4. ``status``: the app shows it (``shown`` is ``card`` or ``page``).
-5. ``diagnostic``: otherwise.
+4. ``diagnostic``: its value is structured (``structured``: JSON the app decodes itself),
+   which a consumer cannot show as a state.
+5. ``diagnostic``: the device card shows it and its value is a bare code: an ``other``
+   (a number the thing description gives no choices or bounds for) without labels or
+   unit. The card turns such a code into an icon or a gate, never shows the number.
+6. ``status``: the app shows it (``shown`` is ``card`` or ``page``).
+7. ``diagnostic``: otherwise.
 
 A ``<base>__v<n>`` variant is also looked up under its base: the app shows it in the
 base's place. Pure; see docs/reference/models-schema.md.
@@ -56,6 +61,11 @@ def _read_params(entry: Mapping[str, Any]) -> set[int]:
         if isinstance(read, dict) and isinstance(read.get("param"), int):
             out.add(read["param"])
     return out
+
+
+def _bare_code(entry: Mapping[str, Any]) -> bool:
+    """A number with no meaning the model data gives: ``other``, no labels, no unit."""
+    return entry.get("kind") == "other" and not entry.get("labels") and not entry.get("unit")
 
 
 def _names(ident: str) -> tuple[str, ...]:
@@ -108,7 +118,12 @@ def role_of(
     listed = any(name in app_read_only for name in _names(ident))
     if ident in td_writable and not listed:
         return SETTING, "app control"
-    if shown_of(ident, shown=shown, app_read_only=app_read_only) is not None:
+    if entry.get("structured"):
+        return DIAGNOSTIC, "structured"
+    place = shown_of(ident, shown=shown, app_read_only=app_read_only)
+    if place == CARD and _bare_code(entry):
+        return DIAGNOSTIC, "bare code"
+    if place is not None:
         return STATUS, "shown"
     return DIAGNOSTIC, "not shown"
 

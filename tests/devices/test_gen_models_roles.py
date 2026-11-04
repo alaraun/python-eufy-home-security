@@ -239,3 +239,48 @@ def test_shown_places_need_both_objects(doc: dict[str, Any]) -> None:
 def test_a_card_identifier_is_a_card_even_when_a_page_reads_it() -> None:
     assert gen_models.shown_places(SHOWN_FILE)["door"] == "card"
     assert gen_models.shown_places(SHOWN_FILE)["wifi_name"] == "page"
+
+
+def test_a_structured_status_is_a_diagnostic() -> None:
+    assert _role("door", _entry(param=1550, structured=True)) == ("diagnostic", "structured")
+    assert _role("ability", _entry(param=1103, structured=True)) == ("diagnostic", "structured")
+
+
+def test_a_structured_value_keeps_its_control_role() -> None:
+    """The flag says how to show a value; a control stays a control."""
+    assert _role("volume", _entry("rw", 1400, structured=True)) == ("setting", "written")
+    assert _role("schedule", _entry(structured=True)) == ("setting", "app control")
+    assert _role("battery", _entry(param=1101, structured=True)) == ("diagnostic", "device state")
+
+
+@pytest.mark.parametrize(
+    ("extra", "shown", "role"),
+    [
+        ({"kind": "other"}, {"door": "card"}, ("diagnostic", "bare code")),
+        ({"kind": "other"}, {"door": "page"}, ("status", "shown")),  # a page shows its value
+        ({"kind": "other", "labels": {"1": "Wi-Fi"}}, {"door": "card"}, ("status", "shown")),
+        ({"kind": "other", "unit": "s"}, {"door": "card"}, ("status", "shown")),
+        ({"kind": "bool"}, {"door": "card"}, ("status", "shown")),
+        ({"kind": "string"}, {"door": "card"}, ("status", "shown")),
+    ],
+)
+def test_a_card_status_that_is_a_bare_code_is_a_diagnostic(
+    extra: dict[str, Any], shown: dict[str, str], role: tuple[str, str]
+) -> None:
+    assert _role("door", _entry(param=1550, **extra), shown=shown) == role
+
+
+def test_a_bare_code_variant_on_the_card_through_its_base_is_a_diagnostic() -> None:
+    entry = _entry(param=1550, kind="other")
+    assert _role("door__v1", entry, shown={"door": "card"}) == ("diagnostic", "bare code")
+
+
+def test_a_structure_probe_holds_the_read_parameter_then_the_located_one() -> None:
+    located = gen_models.Located(1257, as_command=False)
+    probe = gen_models._probe_param
+    in_context = _entry(contexts=[{"names": ["HB3"], "entry": {"read": {"param": 1300}}}])
+    assert probe(_entry(param=1257), located) == located  # asked as it was located
+    assert probe(_entry(param=1300), located) == gen_models.Located(1300, as_command=True)
+    assert probe(in_context, None) == gen_models.Located(1300, as_command=True)
+    assert probe(_entry(), located) == located
+    assert probe(_entry(), None) is None

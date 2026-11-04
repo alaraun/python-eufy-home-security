@@ -49,11 +49,21 @@ PN = "T9ZZ9"  # a product code named nowhere in the library
 # an int (1 when it is none); ai_level: 1299 parsed as JSON; raw_level: 1298 a number,
 # a JSON object read as its field "items" (a list); nick: 1106 as is, its write stores another form; volume: written to
 # 1400, read from 1401; both_open: true when 1203 and 1204 say "1"; digits: 1320 when
-# it is digits, else null.
+# it is digits, else null; alarm_rules: 1257 decoded from base64 when it is base64;
+# link_type: 1265 parsed as an int; rules, motto: nothing fills them (defaults: a JSON
+# object, a JSON number).
 HANDLER = """
 function parse(s) { return JSON.parse(s.slice(0, s.lastIndexOf("EOF;"))); }
 function asBoolean(v) { return v === true || v === 1 || v === "true" || v === "1"; }
 function json(v) { try { return JSON.parse(v); } catch (e) { return undefined; } }
+function b64(v) {
+  const t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  if (!/^[A-Za-z0-9+/]+=*$/.test(v) || v.length % 4) return v;
+  let bits = "", out = "";
+  for (const c of v.replace(/=+$/, "")) bits += t.indexOf(c).toString(2).padStart(6, "0");
+  for (let i = 0; i + 8 <= bits.length; i += 8) out += String.fromCharCode(parseInt(bits.slice(i, i + 8), 2));
+  return out;
+}
 function recipe(cmd, value) {
   return { data: { p2p: { cmd: 1350, payload: { value }, update: { cmd, paramValue: value } } } };
 }
@@ -118,6 +128,8 @@ module.exports.deviceStatus = function (s) {
     if (prop === "volume") out.volume = parseInt(find(1401), 10);
     if (prop === "charging") out.charging = ["0", "2", undefined].indexOf(find(2111)) < 0 ? "1" : "0";
     if (prop === "hub") out.hub = find(1140) || "";
+    if (prop === "alarm_rules") out.alarm_rules = b64(find(1257) || "");
+    if (prop === "link_type") out.link_type = parseInt(find(1265), 10);
   }
   return JSON.stringify({ data: { p2p: out } });
 };
@@ -152,6 +164,10 @@ PROPS: list[dict[str, Any]] = [
     _prop("digits", {"type": "int"}),
     _prop("charging", {"type": "text"}),
     _prop("hub", {"type": "text"}),
+    _prop("alarm_rules", {"type": "text"}),
+    _prop("link_type", {"type": "int"}),
+    _prop("rules", {"type": "text", "specs": {"defaultValue": '{"trigger":[3]}'}}),
+    _prop("motto", {"type": "text", "specs": {"defaultValue": "3"}}),
 ]
 
 # Where the app's cards and pages read each property.
@@ -161,6 +177,8 @@ SHOWN = {
     "mode_num": "page",
     "charging": "card",
     "hub": "card",
+    "alarm_rules": "page",
+    "link_type": "card",
 }
 TREE = {"positions": {"setting_model_config": {"AboutDevice": ["ability#A#1"]}}}
 TITLES: dict[str, Any] = {"read_only": {"nick": {}}}  # a status the app only reads
@@ -210,6 +228,7 @@ def test_each_property_is_placed_on_the_parameter_its_handler_reads(tmp_path: Pa
     by_property = {"label": 1105, "doubled": 1300, "ability": 1103, "enc_type": 1103}
     by_property |= {"mode_num": 1151, "ai_level": 1299, "raw_level": 1298}
     by_property |= {"nick": 1106, "volume": 1401, "digits": 1320, "charging": 2111, "hub": 1140}
+    by_property |= {"alarm_rules": 1257, "link_type": 1265}
     by_command = {"door_open": 61016, "door_open_count": 1550, "bypass": 1560, "ring": 1561}
     by_command |= {"power_mode": 1700}
     assert located == {
@@ -218,7 +237,7 @@ def test_each_property_is_placed_on_the_parameter_its_handler_reads(tmp_path: Pa
     }
     # either_open, both_open: two parameters turn them; low_power: two fill it, the last
     # one met wins.
-    assert counts == {"locate:property": 12, "locate:command": 5}
+    assert counts == {"locate:property": 14, "locate:command": 5}
 
 
 @pytest.mark.timeout(120)
@@ -314,6 +333,8 @@ def test_every_setting_gets_its_role_and_place(generated: dict[str, Any]) -> Non
         "volume": ("setting", None),  # written
         "power_mode": ("setting", None),  # writable in the thing description, no library write
         "nick": ("status", "page"),  # writable in the thing description, the app only reads it
+        "alarm_rules": ("diagnostic", "page"),  # shown, but its value is structured
+        "link_type": ("diagnostic", "card"),  # on the card, a bare code
     }
     assert {k: got[k] for k in named} == named
     # The rest are read-only and shown nowhere.
@@ -344,3 +365,15 @@ def test_the_generated_file_reads_through_the_library(generated: dict[str, Any])
     assert settings["door_open_count"].shown is None
     assert not settings["status_text"].readable
     assert settings["status_text"].decode("1") is None
+
+
+@pytest.mark.timeout(120)
+def test_a_value_the_handler_decodes_as_json_is_structured(generated: dict[str, Any]) -> None:
+    settings = generated["settings"]
+    flagged = {k for k, e in settings.items() if e.get("structured")}
+    # alarm_rules: base64 JSON decoded; ai_level: the whole value parsed as JSON; rules:
+    # unreadable, its default is a JSON object (motto's, a number, is none). label passes
+    # JSON text through as is; power_mode and raw_level read one field of it.
+    assert flagged == {"alarm_rules", "ai_level", "rules"}
+    assert settings["rules"]["read"] is None
+    assert all(settings[k]["structured"] is True for k in flagged)

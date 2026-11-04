@@ -67,6 +67,7 @@ SETTING_KEYS = {
     "name",
     "variant_of",
     "advanced",
+    "structured",
     "control",
     "flags",
     "bit",
@@ -196,6 +197,9 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
         assert "control" not in s, ident
     keys = {_key(v) for v in s.get("values", [])} if kind == "enum" else {"false", "true"}
     present = [k for k in WRITE_KEYS if k in s]
+    if "structured" in s:
+        assert s["structured"] is True, ident
+        assert kind in {"string", "other"}, ident  # an open value holds the structure
     if "advanced" in s:
         assert s["advanced"] is True, ident
         assert s.get("note"), ident  # the app's warning

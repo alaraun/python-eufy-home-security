@@ -263,7 +263,8 @@ class Setting:
     status the app shows, or a diagnostic value. A setting listed from a thing description
     alone (no bundled file) is a diagnostic. ``shown`` says where the app shows it
     (:class:`SettingShown`: device card or settings page), or None where it shows it
-    nowhere.
+    nowhere. ``structured`` marks a value that is a JSON structure (an object or array,
+    or its text, as the device reports it): never an entity's state.
 
     ``domain`` names a library table a ``STRING`` setting's values come from
     (:data:`~.timezones.TIMEZONE_DOMAIN`: the app's device time zones). Such a setting is
@@ -291,6 +292,7 @@ class Setting:
     section: str = OTHER_SECTION
     role: SettingRole = SettingRole.SETTING
     shown: SettingShown | None = None
+    structured: bool = False
     applies_when: tuple[str, Value] | None = None
     note: str | None = None
     variant_of: str | None = None
@@ -1304,6 +1306,14 @@ def _no_default(read: Any) -> bool:
     return flag
 
 
+def _flag(entry: dict[str, Any], name: str) -> bool:
+    """An optional bool field (False when absent)."""
+    value = entry.get(name, False)
+    if not isinstance(value, bool):
+        raise TypeError(f"{name} is not a bool")
+    return value
+
+
 def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     kind = SettingKind(entry["kind"])
     access = entry["access"]
@@ -1348,9 +1358,8 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     variant_of = _optional_str(entry, "variant_of")
     if variant_of is not None and (variant_of == key or not IDENTIFIER.fullmatch(variant_of)):
         raise ValueError(f"variant_of {variant_of!r}")
-    advanced = entry.get("advanced", False)
-    if not isinstance(advanced, bool):
-        raise TypeError("advanced is not a bool")
+    advanced = _flag(entry, "advanced")
+    structured = _flag(entry, "structured")
     write = _recipe(entry, "write")
     table = _table(entry, "write_table")
     writable = access == "rw"
@@ -1393,6 +1402,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         section=section,
         role=role,
         shown=shown,
+        structured=structured,
         applies_when=applies_when,
         note=note,
         variant_of=variant_of,

@@ -85,6 +85,47 @@ def test_a_card_status_the_library_already_reports_is_a_diagnostic(code: str, ke
     assert (setting.role, setting.shown) == (SettingRole.DIAGNOSTIC, SettingShown.CARD)
 
 
+@pytest.mark.parametrize(
+    ("code", "key"),
+    [
+        ("T9000", "arming_get_alarm_home_mode"),  # base64 JSON the handler decodes
+        ("T8030", "arming_get_alarm_home_mode"),
+        ("T9000", "device_simslot_info"),
+    ],
+)
+def test_a_structured_status_is_a_diagnostic(code: str, key: str) -> None:
+    setting = _setting(code, key)
+    assert setting.readable
+    assert setting.structured
+    assert (setting.role, setting.shown) == (SettingRole.DIAGNOSTIC, SettingShown.PAGE)
+
+
+@pytest.mark.parametrize(
+    ("code", "key"),
+    [
+        ("T8030", "setting_current_connection_type"),  # the card's 4G icon
+        ("T8030", "device_wifi_signal_strength_level"),  # the card's Wi-Fi icon
+        ("T8E00", "device_connect_type"),
+        ("T7000", "general_device_plugin_type"),
+        ("T85V0", "device_radar_rain_level"),
+    ],
+)
+def test_a_card_status_that_is_a_bare_code_is_a_diagnostic(code: str, key: str) -> None:
+    setting = _setting(code, key)
+    assert setting.readable
+    assert (setting.kind, setting.labels, setting.unit) == (SettingKind.OTHER, {}, None)
+    assert (setting.role, setting.shown) == (SettingRole.DIAGNOSTIC, SettingShown.CARD)
+
+
+def test_a_card_bool_stays_a_status() -> None:
+    setting = _setting("T90R0", "sensor_siren_ring_status")
+    assert (setting.role, setting.shown, setting.structured) == (
+        SettingRole.STATUS,
+        SettingShown.CARD,
+        False,
+    )
+
+
 @pytest.mark.parametrize("code", ["T90E0", "T8900"])
 def test_an_entry_sensor_s_door_state_is_on_its_device_card(code: str) -> None:
     setting = _setting(code, "sensor_door_status")
@@ -570,6 +611,19 @@ def test_advanced_comes_from_the_file_and_defaults_to_false(data_root: Path) -> 
     _write_model(data_root, {"mode": GOOD_ENTRY, "radio": {**GOOD_ENTRY, "advanced": True}})
     loaded = settings_of("T0001")
     assert (loaded["radio"].advanced, loaded["mode"].advanced) == (True, False)
+
+
+def test_structured_comes_from_the_file_and_defaults_to_false(data_root: Path) -> None:
+    _write_model(data_root, {"mode": GOOD_ENTRY, "rules": {**GOOD_ENTRY, "structured": True}})
+    loaded = settings_of("T0001")
+    assert (loaded["rules"].structured, loaded["mode"].structured) == (True, False)
+
+
+@pytest.mark.parametrize("value", ["yes", 1, None])
+def test_structured_must_be_a_bool(data_root: Path, value: object) -> None:
+    _write_model(data_root, {"mode": {**GOOD_ENTRY, "structured": value}})
+    with pytest.raises(ModelDataError, match=r"T0001\.json.*structured"):
+        settings_of("T0001")
 
 
 @pytest.mark.parametrize("value", ["yes", 1, None])

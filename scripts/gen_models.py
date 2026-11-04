@@ -596,6 +596,70 @@ def located_reads(
     return out
 
 
+def _json_structure(raw: Any) -> bool:
+    """``raw`` is a JSON object or array, or the JSON text of one."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return False
+    return isinstance(raw, dict | list)
+
+
+def _probe_param(entry: Mapping[str, Any], located: Located | None) -> Located | None:
+    """Where to hold a setting's value: its read parameter (the first context that reads
+    one), else the one the handler fills it from. A read parameter other than the located
+    one is also named as a command id."""
+    for form in (entry, *(item["entry"] for item in entry.get("contexts") or ())):
+        read = form.get("read")
+        if isinstance(read, dict) and isinstance(read.get("param"), int):
+            if located is not None and located.param == read["param"]:
+                return located
+            return Located(read["param"], as_command=True)
+    return located
+
+
+def structured_values(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    settings: dict[str, Any],
+    located: Mapping[str, Located],
+    *,
+    counts: dict[str, int],
+) -> None:
+    """Mark ``structured`` on each open-kind setting whose value is a JSON structure: held
+    at a JSON object, its parameter reads back as that object parsed, or held at the
+    object's base64, as the object or its JSON text (the handler decodes structured
+    data); or, unreadable, its default is the JSON text of an object or array."""
+    probe = json.loads(OPEN_JSON_PROBE)
+    held = (OPEN_JSON_PROBE, _b64_json(probe))
+    asks: list[tuple[str, str, Located]] = []
+    for ident, entry in sorted(settings.items()):
+        if entry.get("kind") not in codec.SINGLE_PROBE_KINDS:
+            continue
+        where = _probe_param(entry, located.get(ident))
+        if where is None:
+            if _json_structure(entry.get("default")):
+                entry["structured"] = True
+                _count(counts, "structured:default")
+            continue
+        asks += [(ident, raw, where) for raw in held]
+    requests = [where.request(product_code, context, ident, raw) for ident, raw, where in asks]
+    replies = run_driver(product_code, handler, requests) if requests else []
+    found: set[str] = set()
+    for (ident, raw, _), reply in zip(asks, replies, strict=True):
+        got = _property_values(reply).get(ident, codec.MISSING)
+        if isinstance(got, str) and raw != OPEN_JSON_PROBE:
+            with contextlib.suppress(ValueError):
+                got = json.loads(got)  # the handler decoded the base64 to JSON text
+        if isinstance(got, dict | list) and got == probe:
+            found.add(ident)
+    for ident in sorted(found):
+        settings[ident]["structured"] = True
+        _count(counts, "structured:handler")
+
+
 def p2p(reply: Any) -> dict[str, Any] | None:
     """The recipe of a handler reply: ``data.p2p`` when it is a dict without ``error``."""
     data = reply.get("data") if isinstance(reply, dict) else None
@@ -1494,6 +1558,7 @@ def generate(
         ),
         counts,
     )
+    structured_values(product_code, handler, contexts[BASE], merged, located, counts=counts)
     model = model_for_serial(product_code)
     station = model is not None and model.kind is DeviceKind.STATION
     for key, n in sections.assign(merged, station=station).items():
