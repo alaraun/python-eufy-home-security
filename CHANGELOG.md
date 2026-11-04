@@ -4,6 +4,34 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.10](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.9...v0.4.10) (2026-11-04)
+
+
+### Features
+
+* **devices:** every setting carries a role (setting, status or diagnostic) and where the eufy app shows it (card or page), so a consumer can tell states from diagnostics ([5477f5a](https://github.com/alaraun/python-eufy-home-security/commit/5477f5a038bd5d36343041c2a4fda54244789d9b))
+* **devices:** read-only statuses read from the device's parameters, such as an entry sensor's door state ([issue 154](https://github.com/alaraun/homeassistant-eufy-home-security/issues/154)) ([5477f5a](https://github.com/alaraun/python-eufy-home-security/commit/5477f5a038bd5d36343041c2a4fda54244789d9b))
+* **events:** GuardModeChanged.origin tells the station's own mode report from an arming push ([ca8a085](https://github.com/alaraun/python-eufy-home-security/commit/ca8a085e5c2d28a2d0eeb054b9072cec977076df))
+* **p2p:** an event image can come from a later keyframe of the recording (`keyframe_number`, 1-based, the first by default; the last one when the clip is shorter), for scenes whose first picture is taken before the infrared light has settled, by [@screamerbg](https://github.com/screamerbg) in [#170](https://github.com/alaraun/python-eufy-home-security/issues/170) ([a68927a](https://github.com/alaraun/python-eufy-home-security/commit/a68927a780cfab5c8c9e30ed040b58520eb861f1))
+* **p2p:** apply the station's parameter notifies at once (an entry sensor's door and tamper state) and report the alarm delay as AlarmDelayChanged ([issue 154](https://github.com/alaraun/homeassistant-eufy-home-security/issues/154)) ([f12a8b9](https://github.com/alaraun/python-eufy-home-security/commit/f12a8b94c56d03fbfeba84f12cca1f2026018888))
+* **station:** Station.detection_delivery reports devices whose detections the guard mode in force holds back (Notification off in the mode's action) ([issue 175](https://github.com/alaraun/python-eufy-home-security/issues/175)) ([f28818a](https://github.com/alaraun/python-eufy-home-security/commit/f28818ac244f43395ea192c65c495f341f51e60d))
+
+
+### Bug Fixes
+
+* **client:** emit CredentialsRefreshed only when the fetch returned the key the handshake uses, none for a station left on its static key ([ca8a085](https://github.com/alaraun/python-eufy-home-security/commit/ca8a085e5c2d28a2d0eeb054b9072cec977076df))
+* **devices:** Setting.structured marks JSON values; read-only structured values and card statuses that are bare codes are diagnostic settings ([d8d9126](https://github.com/alaraun/python-eufy-home-security/commit/d8d91262b0160168426c5fc63d6d17412d4133cc))
+* **devices:** StationState/SubDeviceState.upgrading report a firmware update in progress; is_device_upgrade and a T81A0's device_status are diagnostic settings ([992c008](https://github.com/alaraun/python-eufy-home-security/commit/992c008ded155e9b28c6c5b42687e497c779d54a))
+* **p2p:** a mid-stream video-codec change restarts the live stream at the new codec without waking the camera again ([issue 149](https://github.com/alaraun/homeassistant-eufy-home-security/issues/149)) ([3cf9fd6](https://github.com/alaraun/python-eufy-home-security/commit/3cf9fd6aeddfc816ba33cc7779458db94d3ffdef))
+* **p2p:** run an RSA station whose cipher key eufy does not serve under the static key, as the eufy app does ([issue 155](https://github.com/alaraun/homeassistant-eufy-home-security/issues/155)) ([8e66f67](https://github.com/alaraun/python-eufy-home-security/commit/8e66f67c4648f0983e746f8f14d60b3ef1109981))
+
+
+### Documentation
+
+* **home-assistant:** expire the alarm delay a little after `seconds`; refresh on StationStateChanged ([ca8a085](https://github.com/alaraun/python-eufy-home-security/commit/ca8a085e5c2d28a2d0eeb054b9072cec977076df))
+* **home-assistant:** list the station session stats under Diagnostics with their triage use ([e7b30e2](https://github.com/alaraun/python-eufy-home-security/commit/e7b30e27133ff4bc805682ca315204c837930056))
+* point Home Assistant users to the integration at the top of the README ([#168](https://github.com/alaraun/python-eufy-home-security/issues/168)) ([ab26fd7](https://github.com/alaraun/python-eufy-home-security/commit/ab26fd7ba38fb17f01c3b5edfa77254f0c7d5a52))
+
 ## [0.4.9](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.8...v0.4.9) (2026-10-30)
 
 
