@@ -212,7 +212,7 @@ Both are framed by the magic `ba ab ba ab` **[verified on captures]**:
   `ALIVE_ACK` and DRW acknowledgements stay on the event loop; the station retransmits
   what the hold left unacknowledged. The thread stops with the session, or after 60 s
   without a keepalive check from the event loop (a loop that is gone or stuck does not
-  keep the station's session slot). A keepalive check that ends 2 s or more late logs
+  keep the station's session slot); the loop's next check restarts it. A keepalive check that ends 2 s or more late logs
   `the event loop was held` at DEBUG and judges the link on the next check, after the
   datagrams queued during the hold are read; a check right after a deferred one always
   judges.

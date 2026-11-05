@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import errno
+import gc
 import logging
 import socket
 import threading
 import time
+import warnings
 from collections.abc import AsyncIterator, Iterator
 from types import SimpleNamespace
 from typing import Any, cast
@@ -492,8 +494,11 @@ async def test_a_socket_lost_before_the_link_is_up_fails_the_connect(
 def test_the_alive_thread_ends_with_the_event_loop(peer: ThreadedPeer) -> None:
     """An event loop that ends without close() does not keep the station's session slot."""
 
+    left: list[PPPPTransport] = []
+
     async def connect_and_leave() -> None:
-        await make_transport().connect("127.0.0.1", port=peer.port)
+        left.append(make_transport())
+        await left[0].connect("127.0.0.1", port=peer.port)
         await asyncio.sleep(0.1)
 
     asyncio.run(connect_and_leave())
@@ -502,6 +507,10 @@ def test_the_alive_thread_ends_with_the_event_loop(peer: ThreadedPeer) -> None:
     sent = len(peer.alive_at)
     time.sleep(0.3)
     assert len(peer.alive_at) == sent
+    with warnings.catch_warnings():  # the loop is gone: its socket can no longer close cleanly
+        warnings.simplefilter("ignore", ResourceWarning)
+        left.clear()
+        gc.collect()
 
 
 async def test_the_alive_thread_ends_when_the_loop_is_held_too_long(
@@ -511,11 +520,69 @@ async def test_the_alive_thread_ends_when_the_loop_is_held_too_long(
     transport = make_transport()
     try:
         await transport.connect("127.0.0.1", port=peer.port)
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.6)  # past the limit, the loop ticking: the thread goes on
+        assert _alive_threads()
         start, end = _hold_the_loop(1.0)
         during = peer.alives_between(start, end)
         assert len(during) >= 3
         assert max(during) < start + 0.3 + 0.15  # none after the limit
         assert not _alive_threads()
+        await asyncio.sleep(0.3)  # the next tick restarts it
+        assert _alive_threads()
+        assert peer.alives_between(end, time.monotonic())
+        assert transport.is_open
     finally:
         transport.close()
+
+
+async def test_an_alive_thread_that_cannot_restart_ends_the_link(
+    peer: ThreadedPeer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(transport_module, "ALIVE_HOLD_LIMIT", 0.3)
+    lost: list[Exception] = []
+    transport = PPPPTransport(on_chunk=lambda _c: None, on_lost=lost.append)
+    try:
+        await transport.connect("127.0.0.1", port=peer.port)
+        await asyncio.sleep(0.1)
+
+        def no_start(_peer: tuple[str, int]) -> None:
+            raise RuntimeError("can't start new thread")
+
+        monkeypatch.setattr(transport, "_start_alive_thread", no_start)
+        _hold_the_loop(0.6)
+        async with asyncio.timeout(3):
+            while not lost:
+                await asyncio.sleep(0.01)
+        assert type(lost[0]) is StationUnreachableError
+        assert "cannot restart the ALIVE thread" in str(lost[0])
+    finally:
+        transport.close()
+
+
+async def test_a_close_during_the_ready_wait_fails_the_connect(
+    peer: ThreadedPeer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    peer.punch_reply = None  # no P2P_RDY: the connect waits it out
+    monkeypatch.setattr(transport_module, "READY_TIMEOUT", 0.5)
+    lost: list[Exception] = []
+    transport = PPPPTransport(on_chunk=lambda _c: None, on_lost=lost.append)
+    asyncio.get_running_loop().call_later(0.2, transport.close)
+    with pytest.raises(StationUnreachableError):
+        await transport.connect("127.0.0.1", port=peer.port)
+    assert not lost
+    assert not _alive_threads()
+
+
+async def test_an_on_time_loop_logs_no_hold(
+    peer: ThreadedPeer, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(transport_module, "KEEPALIVE_INTERVAL", 0.3)
+    monkeypatch.setattr(transport_module, "LOOP_HELD_REPORT", 0.2)
+    caplog.set_level(logging.DEBUG, logger=transport_module.__name__)
+    transport = make_transport()
+    try:
+        await transport.connect("127.0.0.1", port=peer.port)
+        await asyncio.sleep(1.0)
+    finally:
+        transport.close()
+    assert not any("the event loop was held" in r.getMessage() for r in caplog.records)

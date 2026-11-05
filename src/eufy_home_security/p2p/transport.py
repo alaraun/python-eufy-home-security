@@ -72,7 +72,7 @@ LOOP_HELD_REPORT = 2.0
 """A keepalive tick ending at least this late (seconds) means the event loop was held."""
 ALIVE_HOLD_LIMIT = 60.0
 """The ALIVE thread ends after this long (seconds) without a keepalive tick: a loop held
-that long, or gone, does not keep the station's session slot."""
+that long, or gone, does not keep the station's session slot. The next tick restarts it."""
 ALIVE_THREAD_NAME = "pppp-alive"
 BIND_RETRIES = 5
 BIND_RETRY_DELAY = 0.1
@@ -554,13 +554,26 @@ class PPPPTransport(asyncio.DatagramProtocol):
         thread stops with this task, also when the event loop ends without :meth:`close`."""
         try:
             while not self._closed and self._peer is not None:
-                started = self._tick_at = time.monotonic()
+                started = time.monotonic()
                 await asyncio.sleep(KEEPALIVE_INTERVAL)
                 self._tick_at = time.monotonic()
+                self._restart_alive_thread()
                 if not self._link_alive(self._tick_at - started - KEEPALIVE_INTERVAL):
                     return
         finally:
             self._alive_stop.set()
+
+    def _restart_alive_thread(self) -> None:
+        """Restart the ``ALIVE`` thread when it ended at :data:`ALIVE_HOLD_LIMIT`; a thread
+        that cannot start ends the link."""
+        thread = self._alive_thread
+        if thread is None or thread.is_alive() or self._peer is None:
+            return
+        _LOGGER.debug("the ALIVE thread stopped while the event loop was held; restarting it")
+        try:
+            self._start_alive_thread(self._peer)
+        except (OSError, RuntimeError) as err:
+            self._report_lost(StationUnreachableError(f"cannot restart the ALIVE thread: {err}"))
 
     def _link_alive(self, late: float) -> bool:
         """Judge the link after a keepalive tick that ended ``late`` seconds late.
