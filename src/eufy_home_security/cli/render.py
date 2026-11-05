@@ -28,6 +28,8 @@ from ..events import (
     DevicesChanged,
     Event,
     GuardModeChanged,
+    MotionDetected,
+    MotionRecorded,
     ParamChanged,
     PresetsChanged,
     PushChanged,
@@ -925,6 +927,17 @@ def _alarm_delay_line(event: AlarmDelayChanged, show: bool) -> str:
         if value is not None
     ]
     return "  ".join([state, *details, fmt_serial(event.station_sn, show)])
+
+
+@_renders(MotionDetected)
+def _motion_detected_line(event: MotionDetected, show: bool) -> str:
+    detail = f"aggregate +{event.count}" if event.source == "counter" else "pushed"
+    return _on_serial(event.device_sn, show, f"motion detected ({detail})")
+
+
+@_renders(MotionRecorded)
+def _motion_recorded_line(event: MotionRecorded, show: bool) -> str:
+    return _on_serial(event.device_sn, show, f"recorded (aggregate +{event.count})")
 
 
 @_renders(ParamChanged)
