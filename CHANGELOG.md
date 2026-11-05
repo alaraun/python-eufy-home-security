@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.11](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.10...v0.4.11) (2026-11-05)
+
+
+### Bug Fixes
+
+* **p2p:** keep sending ALIVE while the event loop is held ([#183](https://github.com/alaraun/python-eufy-home-security/issues/183)) ([6836a70](https://github.com/alaraun/python-eufy-home-security/commit/6836a70412eb24b1eb626263922e4d9b74b0cab7))
+
 ## [0.4.10](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.9...v0.4.10) (2026-11-04)
 
 
