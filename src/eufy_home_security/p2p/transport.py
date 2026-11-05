@@ -20,15 +20,21 @@ Wire facts that shape it:
 * The station answers ``ALIVE`` whether or not the encrypted session above still
   works, so packets arriving prove only that the link is up. Application-level
   liveness is the session's job.
+* A HomeBase 3 ends a session (``CLOSE``) that sends no ``ALIVE`` for 5 to 7 s, so
+  ``ALIVE`` goes out from a thread of its own, on a duplicate of the session's socket:
+  a host that holds the event loop longer (a busy Home Assistant start) does not end
+  the session. Everything else, reading included, stays on the event loop.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import errno
 import ipaddress
 import logging
 import socket
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -62,6 +68,9 @@ RETRANSMIT_AFTER = 1.5
 MAX_RETRANSMITS = 3
 SILENCE_TIMEOUT = 15.0
 """Declare the link lost after this long without any datagram from the station."""
+LOOP_HELD_REPORT = 2.0
+"""A keepalive tick ending at least this late (seconds) means the event loop was held."""
+ALIVE_THREAD_NAME = "pppp-alive"
 BIND_RETRIES = 5
 BIND_RETRY_DELAY = 0.1
 """A pinned ``local_port`` can still be held for a moment by the socket of the session
@@ -159,6 +168,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
         self._last_rx = 0.0
         self._closed = False
         self._lost_reported = False
+        self._alive_stop = threading.Event()
+        self._alive_thread: threading.Thread | None = None
         self._wrong_port_drops = 0
         self._throttle = LogThrottle()
 
@@ -295,6 +306,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
             except TimeoutError:
                 # Not fatal: the station often skips P2P_RDY on the LAN and talks anyway.
                 _LOGGER.debug("no P2P_RDY from %s; continuing", Address(addr[0]))
+            self._start_alive_thread(addr)
             self._spawn(self._keepalive_loop())
             self._spawn(self._retransmit_loop())
         except BaseException:
@@ -332,6 +344,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
             _LOGGER.debug(
                 "closing link to %s:%d%s", *self._peer, " (sending CLOSE)" if send_close else ""
             )
+        self._stop_alive_thread()  # no ALIVE after the CLOSE
         if send_close and self._peer is not None:
             self._sendto(encode_packet(MsgType.CLOSE), self._peer)
         for task in self._tasks:
@@ -498,16 +511,59 @@ class PPPPTransport(asyncio.DatagramProtocol):
         while len(self._acked) > ACKED_MEMORY:
             del self._acked[next(iter(self._acked))]
 
+    def _start_alive_thread(self, peer: tuple[str, int]) -> None:
+        """Start sending ``ALIVE`` to ``peer`` every :data:`KEEPALIVE_INTERVAL` from a
+        daemon thread, until :meth:`close`."""
+        if self._transport is None:
+            return
+        sock = cast(socket.socket, self._transport.get_extra_info("socket")).dup()
+        thread = threading.Thread(
+            target=_send_alive,
+            args=(sock, peer, self._alive_stop),
+            name=ALIVE_THREAD_NAME,
+            daemon=True,
+        )
+        try:
+            thread.start()
+        except BaseException:
+            sock.close()
+            raise
+        self._alive_thread = thread
+
+    def _stop_alive_thread(self) -> None:
+        self._alive_stop.set()
+        if self._alive_thread is not None:
+            self._alive_thread.join()  # wakes at once; a send does not block
+            self._alive_thread = None
+
     async def _keepalive_loop(self) -> None:
-        alive = encode_packet(MsgType.ALIVE)
+        """Watch the link while the thread sends ``ALIVE``: see :meth:`_link_alive`."""
         while not self._closed and self._peer is not None:
-            self._sendto(alive, self._peer)
-            if self.seconds_since_rx > SILENCE_TIMEOUT:
-                self._report_lost(
-                    SilentLinkError(f"no datagram from the station for {SILENCE_TIMEOUT:.0f}s")
-                )
-                return
+            started = time.monotonic()
             await asyncio.sleep(KEEPALIVE_INTERVAL)
+            if not self._link_alive(time.monotonic() - started - KEEPALIVE_INTERVAL):
+                return
+
+    def _link_alive(self, late: float) -> bool:
+        """Judge the link after a keepalive tick that ended ``late`` seconds late.
+
+        After :data:`SILENCE_TIMEOUT` without a datagram the link is reported lost. A
+        tick at least :data:`LOOP_HELD_REPORT` late means the event loop was held: it is
+        logged, and the verdict waits for the next tick, since this one can run before
+        the datagrams queued during the hold are read.
+        """
+        if late >= LOOP_HELD_REPORT:
+            _LOGGER.debug(
+                "the event loop was held %.1fs; ALIVE went on from its thread",
+                late + KEEPALIVE_INTERVAL,
+            )
+            return True
+        if self.seconds_since_rx > SILENCE_TIMEOUT:
+            self._report_lost(
+                SilentLinkError(f"no datagram from the station for {SILENCE_TIMEOUT:.0f}s")
+            )
+            return False
+        return True
 
     async def _retransmit_loop(self) -> None:
         while not self._closed and self._peer is not None:
@@ -544,3 +600,17 @@ class PPPPTransport(asyncio.DatagramProtocol):
         _LOGGER.debug("P2P link down: %s", exc)
         self.close(send_close=False)
         self._on_lost(exc)
+
+
+def _send_alive(sock: socket.socket, peer: tuple[str, int], stop: threading.Event) -> None:
+    """Send ``ALIVE`` to ``peer`` on ``sock`` every :data:`KEEPALIVE_INTERVAL` until
+    ``stop``; closes ``sock``. Runs in its own thread."""
+    alive = encode_packet(MsgType.ALIVE)
+    with sock:
+        while not stop.is_set():
+            if _WIRE.isEnabledFor(logging.DEBUG):
+                _WIRE.debug("tx %s:%d %s", Address(peer[0]), peer[1], HexDump(alive))
+            # A failed send is dropped: the event loop's silence check reports a dead link.
+            with contextlib.suppress(OSError):
+                sock.sendto(alive, peer)
+            stop.wait(KEEPALIVE_INTERVAL)
