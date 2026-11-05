@@ -101,7 +101,10 @@ def encode_lookup(did_struct: bytes, ip: str, port: int, dsk: str) -> bytes:
     struct, the caller's :func:`encode_sockaddr`, four constant bytes, and the DSK
     padded to :data:`DSK_FIELD_LEN`. Sent to the station's rendezvous servers
     (:func:`decode_init_string`) on UDP 32100 until the station punches back."""
-    key = dsk.encode("ascii")
+    try:
+        key = dsk.encode("ascii")
+    except UnicodeEncodeError as err:
+        raise ProtocolError("DSK for a LOOKUP is not ASCII") from err
     if len(key) > DSK_FIELD_LEN:
         raise ProtocolError(f"DSK too long for a LOOKUP: {len(key)} bytes")
     return did_struct + encode_sockaddr(ip, port) + _LOOKUP_TAIL + key.ljust(DSK_FIELD_LEN, b"\x00")

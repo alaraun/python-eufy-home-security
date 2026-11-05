@@ -83,6 +83,7 @@ ACKED_MEMORY = 4096
 
 #: The UDP port a station's rendezvous servers listen on for a wake ``LOOKUP``.
 RENDEZVOUS_PORT = 32100
+ANY_ADDRESS = "0.0.0.0"  # noqa: S104 - the LOOKUP's address when this host's is not known
 
 type ChunkHandler = Callable[[DrwChunk], None]
 type LostHandler = Callable[[Exception], None]
@@ -112,24 +113,21 @@ def _local_ip_towards(host: str) -> str:
     ``host`` must already be an IP address: connecting a UDP socket to a literal only
     consults the routing table, but a *name* would resolve here, and a slow resolver
     would block the event loop for its whole timeout. Callers resolve first. Without a
-    route, or without a socket to ask with, ``0.0.0.0``: the server then uses the punch
-    source address.
+    route, or without a socket to ask with, ``0.0.0.0`` (best effort: a ``LOOKUP`` naming
+    it may not bring the station's punch to this host).
     """
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
             probe.connect((host, RENDEZVOUS_PORT))
             return str(probe.getsockname()[0])
     except OSError:
-        return "0.0.0.0"  # noqa: S104 - the server will fall back to the punch source
+        return ANY_ADDRESS
 
 
-async def _resolve(host: str) -> str:
-    """``host`` as an IPv4 address, resolving a name off the event loop.
-
-    Rendezvous servers arrive from the cloud's ``app_conn`` and may be names. Returns
-    the input unchanged when it cannot be resolved; the caller then falls back to
-    ``0.0.0.0`` and the server uses the punch source address.
-    """
+async def _resolve(host: str) -> str | None:
+    """``host`` as an IPv4 address, resolving a name off the event loop; None when it
+    does not resolve. Rendezvous servers arrive from the cloud's ``app_conn`` and may be
+    names; a name must never reach a socket call, which would resolve it on the loop."""
     try:
         ipaddress.ip_address(host)
     except ValueError:
@@ -140,9 +138,9 @@ async def _resolve(host: str) -> str:
         infos = await asyncio.get_running_loop().getaddrinfo(
             host, RENDEZVOUS_PORT, family=socket.AF_INET, type=socket.SOCK_DGRAM
         )
-    except (OSError, socket.gaierror):
-        return host
-    return str(infos[0][4][0]) if infos else host
+    except OSError:
+        return None
+    return str(infos[0][4][0]) if infos else None
 
 
 @dataclass(slots=True)
@@ -274,8 +272,10 @@ class PPPPTransport(asyncio.DatagramProtocol):
         search = encode_packet(MsgType.LAN_SEARCH)
         target = (host or BROADCAST, port)
         try:
-            lookup = (
-                await self._prepare_wake(wake, wake_did) if wake is not None and wake_did else None
+            lookup, servers = (
+                await self._prepare_wake(wake, wake_did)
+                if wake is not None and wake_did
+                else (None, ())
             )
             deadline = loop.time() + timeout
             searches = 0
@@ -291,8 +291,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
                 searches += 1
                 _LOGGER.debug("LAN_SEARCH #%d to %s:%d", searches, Address(target[0]), target[1])
                 self._sendto(search, target)
-                if lookup is not None and wake is not None:
-                    for server in wake.servers:
+                if lookup is not None:
+                    for server in servers:
                         self._sendto(lookup, (server, RENDEZVOUS_PORT))
                 await asyncio.wait({self._punch}, timeout=min(DISCOVERY_RETRY_INTERVAL, remaining))
             did, body, addr = self._punch.result()
@@ -334,22 +334,26 @@ class PPPPTransport(asyncio.DatagramProtocol):
         )
         return did
 
-    async def _prepare_wake(self, wake: Wake, did: Did) -> bytes:
-        """Send HELLO to each rendezvous server and return the LOOKUP to poke them with."""
-        server = wake.servers[0] if wake.servers else BROADCAST
-        our_ip = _local_ip_towards(await _resolve(server))
+    async def _prepare_wake(self, wake: Wake, did: Did) -> tuple[bytes, tuple[str, ...]]:
+        """Send HELLO to each rendezvous server; return the LOOKUP to poke them with and the
+        servers' addresses. A server whose name does not resolve is left out."""
+        resolved = [await _resolve(host) for host in wake.servers]
+        servers = tuple(ip for ip in resolved if ip is not None)
+        our_ip = _local_ip_towards(servers[0]) if servers else ANY_ADDRESS
         _LOGGER.debug(
-            "waking via %d rendezvous server(s); our LAN endpoint %s:%s",
+            "waking via %d of %d rendezvous server(s); our LAN endpoint %s:%s",
+            len(servers),
             len(wake.servers),
             Address(our_ip),
             self.local_port,
         )
         hello = encode_packet(MsgType.HELLO)
-        for host in wake.servers:
-            self._sendto(hello, (host, RENDEZVOUS_PORT))
-        return encode_packet(
+        for ip in servers:
+            self._sendto(hello, (ip, RENDEZVOUS_PORT))
+        lookup = encode_packet(
             MsgType.LOOKUP, encode_lookup(did.to_struct(), our_ip, self.local_port or 0, wake.dsk)
         )
+        return lookup, servers
 
     def close(self, *, send_close: bool = True) -> None:
         """Tear the session down (idempotent)."""
