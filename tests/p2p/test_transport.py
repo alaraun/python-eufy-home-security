@@ -604,3 +604,42 @@ async def test_a_socket_that_cannot_be_duplicated_fails_the_connect(
     assert isinstance(caught.value.__cause__, OSError)
     assert not transport.is_open
     assert not _alive_threads()
+
+
+def test_no_socket_for_the_route_lookup_falls_back_to_any_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def no_socket(*_args: object) -> socket.socket:
+        raise OSError(errno.EMFILE, "too many open files")
+
+    monkeypatch.setattr(socket, "socket", no_socket)
+    assert transport_module._local_ip_towards("127.0.0.1") == "0.0.0.0"  # noqa: S104
+
+
+async def test_a_wake_cancelled_while_resolving_closes_the_socket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolving = asyncio.Event()
+
+    async def hang(_host: str) -> str:
+        resolving.set()
+        await asyncio.Event().wait()
+        return _host
+
+    monkeypatch.setattr(transport_module, "_resolve", hang)
+    transport = make_transport()
+    task = asyncio.create_task(
+        transport.connect(
+            "127.0.0.1",
+            port=59999,
+            expected_did=Did.parse(SYNTHETIC.did),
+            wake=Wake(servers=("rendezvous.example",), dsk="x" * 8),
+        )
+    )
+    async with asyncio.timeout(3):
+        await resolving.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert transport._transport is not None
+    assert transport._transport.is_closing()

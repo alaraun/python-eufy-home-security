@@ -111,14 +111,16 @@ def _local_ip_towards(host: str) -> str:
 
     ``host`` must already be an IP address: connecting a UDP socket to a literal only
     consults the routing table, but a *name* would resolve here, and a slow resolver
-    would block the event loop for its whole timeout. Callers resolve first.
+    would block the event loop for its whole timeout. Callers resolve first. Without a
+    route, or without a socket to ask with, ``0.0.0.0``: the server then uses the punch
+    source address.
     """
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
-        try:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
             probe.connect((host, RENDEZVOUS_PORT))
             return str(probe.getsockname()[0])
-        except OSError:
-            return "0.0.0.0"  # noqa: S104 - the server will fall back to the punch source
+    except OSError:
+        return "0.0.0.0"  # noqa: S104 - the server will fall back to the punch source
 
 
 async def _resolve(host: str) -> str:
@@ -271,10 +273,12 @@ class PPPPTransport(asyncio.DatagramProtocol):
         self._punch = loop.create_future()
         search = encode_packet(MsgType.LAN_SEARCH)
         target = (host or BROADCAST, port)
-        lookup = await self._prepare_wake(wake, wake_did) if wake is not None and wake_did else None
-        deadline = loop.time() + timeout
-        searches = 0
         try:
+            lookup = (
+                await self._prepare_wake(wake, wake_did) if wake is not None and wake_did else None
+            )
+            deadline = loop.time() + timeout
+            searches = 0
             while not self._punch.done():
                 remaining = deadline - loop.time()
                 if remaining <= 0:
