@@ -1082,13 +1082,15 @@ class BatteryRead:
     None: no level."""
 
     def level(self, raw: str) -> int | None:
-        """The level ``raw`` reads as; None for no level or a value that is no number."""
+        """The level ``raw`` reads as; None for no level, a value that is no number, or a
+        negative one (the eufy app's no-level value is -1)."""
         if raw in self.levels:
             return self.levels[raw]
         try:
-            return int(raw)
+            level = int(raw)
         except ValueError:
             return None
+        return level if level >= 0 else None
 
 
 DEFAULT_BATTERY_READS: Final = (BatteryRead(PARAM_BATTERY),)

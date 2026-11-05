@@ -60,6 +60,8 @@ def test_the_file_names_the_battery_parameters_in_order(data_root: Path) -> None
         ({1101: "0"}, None),  # a raw value the file reads as no level
         ({1101: "200"}, 100),  # a raw value the file reads as another level
         ({1101: "abc"}, None),
+        ({1101: "-1"}, None),  # the app's no-level value
+        ({1101: "", 6001: "40"}, None),  # the first listed one decides, even when empty
         ({6001: "40"}, 40),  # the second parameter when the first is not reported
         ({1101: "30", 6001: "40"}, 30),  # the first one listed wins
         ({1101: "0", 6001: "40"}, None),  # even when it reads as no level
@@ -79,6 +81,7 @@ def test_the_level_is_the_first_listed_parameter_the_device_reports(
 def test_a_model_without_a_file_reads_1101_as_reported(code: str | None) -> None:
     assert battery_reads(code) == DEFAULT_BATTERY_READS == (BatteryRead(1101),)
     assert battery_level(code, {1101: "255", 6001: "40"}) == 255
+    assert battery_level(code, {1101: "-1"}) is None
 
 
 def test_a_file_without_a_battery_reads_1101_as_reported(data_root: Path) -> None:
