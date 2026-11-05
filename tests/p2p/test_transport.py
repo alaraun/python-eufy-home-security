@@ -653,7 +653,7 @@ async def test_a_server_name_that_does_not_resolve_is_never_sent_to(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A name reaching a socket call would be resolved on the event loop."""
-    addresses = {"10.0.0.1": "10.0.0.1", "rendezvous.example": None}
+    addresses = {"10.0.0.1": "10.0.0.1", "rendezvous.example": None, "alias.example": "10.0.0.1"}
 
     async def resolve(host: str) -> str | None:
         return addresses[host]
@@ -680,15 +680,16 @@ async def test_a_server_name_that_does_not_resolve_is_never_sent_to(
                 port=59999,
                 expected_did=Did.parse(SYNTHETIC.did),
                 timeout=0.3,
-                wake=Wake(servers=("rendezvous.example", "10.0.0.1"), dsk="x" * 8),
+                wake=Wake(servers=("rendezvous.example", "10.0.0.1", "alias.example"), dsk="x" * 8),
             )
     finally:
         transport.close()
     assert looked_up == ["10.0.0.1"]
-    to_servers = {(msg, addr) for msg, addr in sent if addr[1] == RENDEZVOUS_PORT}
-    assert to_servers == {
-        (MsgType.HELLO, ("10.0.0.1", RENDEZVOUS_PORT)),
-        (MsgType.LOOKUP, ("10.0.0.1", RENDEZVOUS_PORT)),
+    to_servers = [(msg, addr) for msg, addr in sent if addr[1] == RENDEZVOUS_PORT]
+    hellos = [addr for msg, addr in to_servers if msg == MsgType.HELLO]
+    assert hellos == [("10.0.0.1", RENDEZVOUS_PORT)]  # one per address, not per name
+    assert {addr for msg, addr in to_servers if msg == MsgType.LOOKUP} == {
+        ("10.0.0.1", RENDEZVOUS_PORT)
     }
 
 
@@ -732,9 +733,16 @@ async def test_resolve_gives_none_for_a_name_that_does_not_resolve(
     async def fail(*_args: object, **_kwargs: object) -> list[object]:
         raise socket.gaierror(socket.EAI_NONAME, "no such name")
 
-    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", fail)
+    async def nothing(*_args: object, **_kwargs: object) -> list[object]:
+        return []
+
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(loop, "getaddrinfo", fail)
+    assert await transport_module._resolve("rendezvous.example") is None
+    monkeypatch.setattr(loop, "getaddrinfo", nothing)
     assert await transport_module._resolve("rendezvous.example") is None
     assert await transport_module._resolve("10.0.0.1") == "10.0.0.1"
+    assert await transport_module._resolve("::1") is None  # the LOOKUP and socket are IPv4
 
 
 async def test_a_dsk_that_is_not_ascii_fails_the_connect_typed() -> None:

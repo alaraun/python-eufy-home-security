@@ -129,11 +129,11 @@ async def _resolve(host: str) -> str | None:
     does not resolve. Rendezvous servers arrive from the cloud's ``app_conn`` and may be
     names; a name must never reach a socket call, which would resolve it on the loop."""
     try:
-        ipaddress.ip_address(host)
+        literal = ipaddress.ip_address(host)
     except ValueError:
         pass
     else:
-        return host
+        return host if isinstance(literal, ipaddress.IPv4Address) else None
     try:
         infos = await asyncio.get_running_loop().getaddrinfo(
             host, RENDEZVOUS_PORT, family=socket.AF_INET, type=socket.SOCK_DGRAM
@@ -338,7 +338,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
         """Send HELLO to each rendezvous server; return the LOOKUP to poke them with and the
         servers' addresses. A server whose name does not resolve is left out."""
         resolved = [await _resolve(host) for host in wake.servers]
-        servers = tuple(ip for ip in resolved if ip is not None)
+        servers = tuple(dict.fromkeys(ip for ip in resolved if ip is not None))
         our_ip = _local_ip_towards(servers[0]) if servers else ANY_ADDRESS
         _LOGGER.debug(
             "waking via %d of %d rendezvous server(s); our LAN endpoint %s:%s",
