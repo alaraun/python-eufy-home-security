@@ -830,9 +830,12 @@ same state on demand. Map it:
 
 `station_closed` is the station's own PPPP `CLOSE`: a HomeBase ends a session of its
 own accord when more clients hold sessions than it serves (a HomeBase 3: 9, a T8170: 4; it then closes
-one of them, not always the oldest) and when it reboots. A held event loop does not cause
-it: the library keeps sending `ALIVE` from a thread ([p2p-transport.md](../protocol/p2p-transport.md#keepalive-and-liveness)),
-and a hold of 2 s or more is logged at DEBUG as `the event loop was held`. `link_silent` is 15 s without a
+one of them, not always the oldest) and when it reboots. A HomeBase 3 also ends a session
+that sends no `ALIVE` for 5 to 7 s; the library sends `ALIVE` from a thread, so a held event
+loop keeps the session (measured on a HomeBase 3 for holds up to 25 s; the thread stops after
+60 s without the loop), and a keepalive check that ends 2 s or more late logs `the event loop
+was held` at DEBUG ([p2p-transport.md](../protocol/p2p-transport.md#keepalive-and-liveness)).
+`link_silent` is 15 s without a
 datagram and no `CLOSE`: the station or the network in between went quiet. The
 supervisor reconnects either way, within a second (its backoff of 5 s, 15 s, 60 s and
 300 s applies only after a failed attempt). Neither is held back by

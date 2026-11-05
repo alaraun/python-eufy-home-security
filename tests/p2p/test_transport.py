@@ -8,11 +8,15 @@ import threading
 import time
 from collections.abc import AsyncIterator, Iterator
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
-from eufy_home_security.exceptions import ProtocolError
+from eufy_home_security.exceptions import (
+    CommunicationError,
+    ProtocolError,
+    StationUnreachableError,
+)
 from eufy_home_security.p2p import transport as transport_module
 from eufy_home_security.p2p.did import Did
 from eufy_home_security.p2p.pppp import (
@@ -27,6 +31,7 @@ from eufy_home_security.p2p.transport import (
     RENDEZVOUS_PORT,
     PPPPTransport,
     SilentLinkError,
+    StationClosedLinkError,
     Wake,
 )
 from eufy_home_security.testing import SYNTHETIC, FakeStation
@@ -229,6 +234,8 @@ class ThreadedPeer:
         self.alive_at: list[float] = []
         self.answer = True
         """Whether ``ALIVE`` gets an ``ALIVE_ACK``."""
+        self.punch_reply: MsgType | None = MsgType.P2P_RDY
+        """What a client's ``PUNCH_PKT`` gets (None: nothing)."""
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -243,8 +250,8 @@ class ThreadedPeer:
             if msg == MsgType.LAN_SEARCH:
                 did = Did.parse(SYNTHETIC.did)
                 self.sock.sendto(encode_packet(MsgType.PUNCH_PKT, did.to_struct()), addr)
-            elif msg == MsgType.PUNCH_PKT:
-                self.sock.sendto(encode_packet(MsgType.P2P_RDY), addr)
+            elif msg == MsgType.PUNCH_PKT and self.punch_reply is not None:
+                self.sock.sendto(encode_packet(self.punch_reply), addr)
             elif msg == MsgType.ALIVE:
                 self.alive_at.append(time.monotonic())
                 if self.answer:
@@ -290,7 +297,14 @@ async def test_alive_keeps_going_while_the_event_loop_is_held(peer: ThreadedPeer
         transport.close()
 
 
-async def test_no_alive_after_close(peer: ThreadedPeer) -> None:
+async def test_no_alive_after_close(peer: ThreadedPeer, monkeypatch: pytest.MonkeyPatch) -> None:
+    send_alive = transport_module._send_alive
+
+    def slow_to_end(*args: Any) -> None:
+        send_alive(*args)
+        time.sleep(0.1)  # close() must wait for the thread, not only signal it
+
+    monkeypatch.setattr(transport_module, "_send_alive", slow_to_end)
     transport = make_transport()
     await transport.connect("127.0.0.1", port=peer.port)
     await asyncio.sleep(0.2)
@@ -377,6 +391,22 @@ def test_a_held_tick_defers_the_silence_verdict(late: float, verdict_waits: bool
     assert bool(lost) is not verdict_waits
 
 
+@pytest.mark.parametrize("on_time_between", [False, True])
+def test_only_one_verdict_in_a_row_waits(on_time_between: bool) -> None:
+    """Holds at every tick do not hide a silent station; an on-time tick allows the next wait."""
+    lost: list[Exception] = []
+    transport = PPPPTransport(on_chunk=lambda _c: None, on_lost=lost.append)
+    transport._peer = PEER
+    held = transport_module.LOOP_HELD_REPORT
+    assert transport._link_alive(held)
+    if on_time_between:
+        transport._last_rx = time.monotonic()  # the queued answers were read
+        assert transport._link_alive(0.0)
+    transport._last_rx = time.monotonic() - 60
+    assert transport._link_alive(held) is on_time_between
+    assert bool(lost) is not on_time_between
+
+
 class _FlakySocket:
     """A socket whose first send fails, as on a network that is briefly down."""
 
@@ -404,7 +434,7 @@ def test_a_failed_send_does_not_end_the_alive_sender(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(transport_module, "KEEPALIVE_INTERVAL", 0.01)
     stop = threading.Event()
     sock = _FlakySocket(stop)
-    transport_module._send_alive(cast(socket.socket, sock), PEER, stop)
+    transport_module._send_alive(cast(socket.socket, sock), PEER, stop, time.monotonic)
     assert (sock.failed, sock.sent) == (1, 2)
 
 
@@ -414,8 +444,11 @@ async def test_a_sender_that_cannot_start_fails_the_connect(
     socks: list[socket.socket] = []
 
     class NoThread(threading.Thread):
+        def __init__(self, *, args: tuple[Any, ...], **kwargs: Any) -> None:
+            socks.append(args[0])
+            super().__init__(args=args, **kwargs)
+
         def start(self) -> None:
-            socks.append(self._args[0])  # type: ignore[attr-defined]
             raise RuntimeError("can't start new thread")
 
     fake_threading = SimpleNamespace(Thread=NoThread, Event=threading.Event)
@@ -427,3 +460,62 @@ async def test_a_sender_that_cannot_start_fails_the_connect(
     assert transport._transport is not None
     assert transport._transport.is_closing()
     assert socks[0].fileno() == -1  # the duplicate socket is closed too
+
+
+async def test_a_close_before_the_link_is_up_fails_the_connect(peer: ThreadedPeer) -> None:
+    peer.punch_reply = MsgType.CLOSE
+    transport = make_transport()
+    with pytest.raises(StationClosedLinkError):
+        await transport.connect("127.0.0.1", port=peer.port)
+    assert not transport.is_open
+    assert not _alive_threads()
+
+
+async def test_a_socket_lost_before_the_link_is_up_fails_the_connect(
+    peer: ThreadedPeer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    peer.punch_reply = None  # no P2P_RDY: the connect waits it out
+    monkeypatch.setattr(transport_module, "READY_TIMEOUT", 0.5)
+    transport = make_transport()
+
+    def lose_the_socket() -> None:
+        assert transport._transport is not None
+        transport._transport.close()
+
+    asyncio.get_running_loop().call_later(0.2, lose_the_socket)
+    with pytest.raises(StationUnreachableError) as caught:
+        await transport.connect("127.0.0.1", port=peer.port)
+    assert isinstance(caught.value.__cause__, CommunicationError)
+    assert not _alive_threads()
+
+
+def test_the_alive_thread_ends_with_the_event_loop(peer: ThreadedPeer) -> None:
+    """An event loop that ends without close() does not keep the station's session slot."""
+
+    async def connect_and_leave() -> None:
+        await make_transport().connect("127.0.0.1", port=peer.port)
+        await asyncio.sleep(0.1)
+
+    asyncio.run(connect_and_leave())
+    time.sleep(0.1)
+    assert not _alive_threads()
+    sent = len(peer.alive_at)
+    time.sleep(0.3)
+    assert len(peer.alive_at) == sent
+
+
+async def test_the_alive_thread_ends_when_the_loop_is_held_too_long(
+    peer: ThreadedPeer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(transport_module, "ALIVE_HOLD_LIMIT", 0.3)
+    transport = make_transport()
+    try:
+        await transport.connect("127.0.0.1", port=peer.port)
+        await asyncio.sleep(0.1)
+        start, end = _hold_the_loop(1.0)
+        during = peer.alives_between(start, end)
+        assert len(during) >= 3
+        assert max(during) < start + 0.3 + 0.15  # none after the limit
+        assert not _alive_threads()
+    finally:
+        transport.close()

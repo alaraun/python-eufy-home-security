@@ -70,6 +70,9 @@ SILENCE_TIMEOUT = 15.0
 """Declare the link lost after this long without any datagram from the station."""
 LOOP_HELD_REPORT = 2.0
 """A keepalive tick ending at least this late (seconds) means the event loop was held."""
+ALIVE_HOLD_LIMIT = 60.0
+"""The ALIVE thread ends after this long (seconds) without a keepalive tick: a loop held
+that long, or gone, does not keep the station's session slot."""
 ALIVE_THREAD_NAME = "pppp-alive"
 BIND_RETRIES = 5
 BIND_RETRY_DELAY = 0.1
@@ -168,8 +171,11 @@ class PPPPTransport(asyncio.DatagramProtocol):
         self._last_rx = 0.0
         self._closed = False
         self._lost_reported = False
+        self._lost_error: Exception | None = None
         self._alive_stop = threading.Event()
         self._alive_thread: threading.Thread | None = None
+        self._tick_at = 0.0
+        self._verdict_deferred = False
         self._wrong_port_drops = 0
         self._throttle = LogThrottle()
 
@@ -306,6 +312,12 @@ class PPPPTransport(asyncio.DatagramProtocol):
             except TimeoutError:
                 # Not fatal: the station often skips P2P_RDY on the LAN and talks anyway.
                 _LOGGER.debug("no P2P_RDY from %s; continuing", Address(addr[0]))
+            if self._closed:  # the station or the socket ended the link meanwhile
+                if isinstance(self._lost_error, StationUnreachableError):
+                    raise self._lost_error
+                raise StationUnreachableError(
+                    "the P2P link closed while it was set up"
+                ) from self._lost_error
             self._start_alive_thread(addr)
             self._spawn(self._keepalive_loop())
             self._spawn(self._retransmit_loop())
@@ -517,9 +529,10 @@ class PPPPTransport(asyncio.DatagramProtocol):
         if self._transport is None:
             return
         sock = cast(socket.socket, self._transport.get_extra_info("socket")).dup()
+        self._tick_at = time.monotonic()
         thread = threading.Thread(
             target=_send_alive,
-            args=(sock, peer, self._alive_stop),
+            args=(sock, peer, self._alive_stop, lambda: self._tick_at),
             name=ALIVE_THREAD_NAME,
             daemon=True,
         )
@@ -537,12 +550,17 @@ class PPPPTransport(asyncio.DatagramProtocol):
             self._alive_thread = None
 
     async def _keepalive_loop(self) -> None:
-        """Watch the link while the thread sends ``ALIVE``: see :meth:`_link_alive`."""
-        while not self._closed and self._peer is not None:
-            started = time.monotonic()
-            await asyncio.sleep(KEEPALIVE_INTERVAL)
-            if not self._link_alive(time.monotonic() - started - KEEPALIVE_INTERVAL):
-                return
+        """Watch the link while the thread sends ``ALIVE`` (see :meth:`_link_alive`); the
+        thread stops with this task, also when the event loop ends without :meth:`close`."""
+        try:
+            while not self._closed and self._peer is not None:
+                started = self._tick_at = time.monotonic()
+                await asyncio.sleep(KEEPALIVE_INTERVAL)
+                self._tick_at = time.monotonic()
+                if not self._link_alive(self._tick_at - started - KEEPALIVE_INTERVAL):
+                    return
+        finally:
+            self._alive_stop.set()
 
     def _link_alive(self, late: float) -> bool:
         """Judge the link after a keepalive tick that ended ``late`` seconds late.
@@ -550,14 +568,20 @@ class PPPPTransport(asyncio.DatagramProtocol):
         After :data:`SILENCE_TIMEOUT` without a datagram the link is reported lost. A
         tick at least :data:`LOOP_HELD_REPORT` late means the event loop was held: it is
         logged, and the verdict waits for the next tick, since this one can run before
-        the datagrams queued during the hold are read.
+        the datagrams queued during the hold are read. Only one verdict in a row waits,
+        so holds at every tick do not hide a silent station.
         """
-        if late >= LOOP_HELD_REPORT:
+        held = late >= LOOP_HELD_REPORT
+        if held:
             _LOGGER.debug(
-                "the event loop was held %.1fs; ALIVE went on from its thread",
-                late + KEEPALIVE_INTERVAL,
+                "the event loop was held: a keepalive check ran %.1fs late; "
+                "ALIVE went on from its thread",
+                late,
             )
-            return True
+            if not self._verdict_deferred:
+                self._verdict_deferred = True
+                return True
+        self._verdict_deferred = False
         if self.seconds_since_rx > SILENCE_TIMEOUT:
             self._report_lost(
                 SilentLinkError(f"no datagram from the station for {SILENCE_TIMEOUT:.0f}s")
@@ -597,17 +621,24 @@ class PPPPTransport(asyncio.DatagramProtocol):
         if self._lost_reported:
             return
         self._lost_reported = True
+        self._lost_error = exc
         _LOGGER.debug("P2P link down: %s", exc)
         self.close(send_close=False)
         self._on_lost(exc)
 
 
-def _send_alive(sock: socket.socket, peer: tuple[str, int], stop: threading.Event) -> None:
+def _send_alive(
+    sock: socket.socket,
+    peer: tuple[str, int],
+    stop: threading.Event,
+    tick_at: Callable[[], float],
+) -> None:
     """Send ``ALIVE`` to ``peer`` on ``sock`` every :data:`KEEPALIVE_INTERVAL` until
-    ``stop``; closes ``sock``. Runs in its own thread."""
+    ``stop``, or until the event loop's last keepalive tick (``tick_at``, monotonic) is
+    :data:`ALIVE_HOLD_LIMIT` old; closes ``sock``. Runs in its own thread."""
     alive = encode_packet(MsgType.ALIVE)
     with sock:
-        while not stop.is_set():
+        while not stop.is_set() and time.monotonic() - tick_at() < ALIVE_HOLD_LIMIT:
             if _WIRE.isEnabledFor(logging.DEBUG):
                 _WIRE.debug("tx %s:%d %s", Address(peer[0]), peer[1], HexDump(alive))
             # A failed send is dropped: the event loop's silence check reports a dead link.
