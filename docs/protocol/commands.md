@@ -362,7 +362,7 @@ chunks:
 | 1135 `GET_TFCARD_STATUS` | 255 | storage status code; the handlers show 0, 25 and 30 as normal (`StationState.storage_ok`) |
 | 5006–5012 | 255 | subsystem version strings; no vendor code names the subsystems |
 | 14000 | 255 | ISO country code |
-| 1101 `BATTERY_VALUE` (app enum `GET_BATTERY`), 1138 battery temp | sub-device | battery; 1138 in °C by its range |
+| 1101 `BATTERY_VALUE` (app enum `GET_BATTERY`), 1138 battery temp | sub-device | battery; 1138 in °C by its range. Some models read the level from other parameters (6001 too) or read some raw values as no level (0 and 255): the model's settings file names them (`battery`, [models-schema.md](../reference/models-schema.md#top-level)) **[declared]** |
 | 1142 `GET_WIFI_RSSI`, 1141 sub-GHz RSSI | sub-device | signal |
 | 1113 `GET_IRMODE` | camera | night vision currently on |
 | 1191 working days, 1192 PIR count, 1193 record count | camera | the app's power-manager figures since the last USB charge |

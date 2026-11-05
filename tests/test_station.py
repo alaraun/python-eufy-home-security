@@ -953,6 +953,27 @@ def test_sensor_signal_is_sub1g_and_pir_time_is_opt_in() -> None:
         sensor.pir_quiet_for(now_ms=NOW_MS, max_age_s=-1)
 
 
+_LOCK_A_SN, _LOCK_B_SN = "T85V0P0000000001", "T8503P0000000001"
+
+
+@pytest.mark.parametrize(
+    ("block", "battery"),
+    [
+        ({1: {1101: "255"}, 2: {6001: "40"}}, (None, 40, None)),
+        ({1: {1101: "57"}, 2: {1101: "30", 6001: "40"}}, (57, 30, None)),
+        ({1: {1101: "0"}, 2: {1101: "0"}, 3: {1101: "255", 6001: "40"}}, (None, 0, 255)),
+    ],
+)
+def test_a_sub_device_battery_reads_the_parameters_its_model_names(
+    block: dict[int, dict[int, str]], battery: tuple[int | None, ...]
+) -> None:
+    """Channel 1 reads 0 and 255 as no level, channel 2 also reads 6001, channel 3 (a
+    device the cloud does not list) reads 1101 as reported."""
+    subs = (_sub(_LOCK_A_SN, 203, 1), _sub(_LOCK_B_SN, 54, 2))
+    devices = _state_of({**block, 255: {1224: "0"}}, sub_devices=subs).devices
+    assert tuple(devices[ch].battery if ch in devices else None for ch in (1, 2, 3)) == battery
+
+
 @pytest.mark.parametrize(
     ("raw", "online", "code"),
     [("1", True, None), ("0", False, None), ("3", False, 3), ("255", False, 255)],

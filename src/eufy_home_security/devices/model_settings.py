@@ -28,6 +28,7 @@ from types import MappingProxyType
 from typing import Any, Final, cast
 
 from ..exceptions import ModelDataError, UnsupportedError
+from ..models import PARAM_BATTERY
 from ..p2p.mode_actions import ACTION_FLAGS
 from .conditions import Groups, groups_of
 from .labels import setting_name
@@ -50,8 +51,10 @@ from .timezones import TIMEZONE_DOMAIN, decode_zone, encode_zone, zone_ids
 from .types import model_for_serial, serial_product_code
 
 __all__ = [
+    "DEFAULT_BATTERY_READS",
     "IDENTIFIER",
     "PARENTLESS_ONLY",
+    "BatteryRead",
     "Setting",
     "SettingControl",
     "SettingKind",
@@ -61,6 +64,8 @@ __all__ = [
     "WireCommand",
     "WriteContext",
     "WritePath",
+    "battery_level",
+    "battery_reads",
     "bundled_codes",
     "bundled_td_version",
     "canonical_code",
@@ -1067,9 +1072,54 @@ def bundled_td_version(product_code: str) -> int | None:
 
 
 @dataclass(frozen=True, slots=True)
+class BatteryRead:
+    """One parameter a model's battery level is read from **[declared]** (the settings
+    file's ``battery``, see docs/reference/models-schema.md)."""
+
+    param: int
+    levels: Mapping[str, int | None] = field(default_factory=lambda: MappingProxyType({}))
+    """The level of each raw value the eufy app reads as another level than its number;
+    None: no level."""
+
+    def level(self, raw: str) -> int | None:
+        """The level ``raw`` reads as; None for no level or a value that is no number."""
+        if raw in self.levels:
+            return self.levels[raw]
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+
+
+DEFAULT_BATTERY_READS: Final = (BatteryRead(PARAM_BATTERY),)
+"""The battery read of a model whose file names none: param 1101 as reported."""
+
+
+def battery_reads(product_code: str | None) -> tuple[BatteryRead, ...]:
+    """The parameters a device of ``product_code`` reports its battery level in, first
+    one first; :data:`DEFAULT_BATTERY_READS` without a code, a file or a ``battery`` in
+    it. Reads like :func:`settings_of` (same memo) and raises like it."""
+    if product_code is None or not _PRODUCT_CODE.fullmatch(product_code):
+        return DEFAULT_BATTERY_READS
+    return _load(product_code.upper()).battery or DEFAULT_BATTERY_READS
+
+
+def battery_level(product_code: str | None, params: Mapping[int, str | None]) -> int | None:
+    """The battery level of a device of ``product_code`` from its reported ``params``,
+    as the eufy app reads it: the first of :func:`battery_reads` the device reports,
+    through its levels. None when it reports none, or no level."""
+    for read in battery_reads(product_code):
+        raw = params.get(read.param)
+        if raw is not None:
+            return read.level(raw)
+    return None
+
+
+@dataclass(frozen=True, slots=True)
 class _Model:
     entries: Mapping[str, Mapping[str, Any]]
     td_version: int | None
+    battery: tuple[BatteryRead, ...] = ()
 
 
 _NO_MODEL: Final = _Model(MappingProxyType({}), None)
@@ -1091,9 +1141,31 @@ def _load(code: str) -> _Model:
         entries = _entries(code, data)
         for context in (None, *_context_names(entries)):
             _parse(code, entries, context)
+        battery = _battery_of(data.get("battery", []))
     except (KeyError, TypeError, ValueError) as err:
         raise ModelDataError(f"{name}: {err}") from err
-    return _Model(MappingProxyType(entries), _source_version(data))
+    return _Model(MappingProxyType(entries), _source_version(data), battery)
+
+
+def _battery_of(items: object) -> tuple[BatteryRead, ...]:
+    """The checked ``battery`` list of a settings file."""
+    if not isinstance(items, list):
+        raise TypeError("battery is not a list")
+    reads: list[BatteryRead] = []
+    for item in items:
+        if not isinstance(item, dict) or set(item) - {"param", "levels"}:
+            raise TypeError("a battery read is not {param, levels}")
+        param, levels = item.get("param"), item.get("levels", {})
+        if type(param) is not int or not 0 < param < 2**16:
+            raise ValueError(f"battery param {param!r} is no parameter id")
+        if not isinstance(levels, dict) or not all(
+            v is None or type(v) is int for v in levels.values()
+        ):
+            raise TypeError(f"battery levels of {param} are not text -> level or null")
+        if any(r.param == param for r in reads):
+            raise ValueError(f"battery param {param} listed twice")
+        reads.append(BatteryRead(param, MappingProxyType(dict(levels))))
+    return tuple(reads)
 
 
 @functools.cache

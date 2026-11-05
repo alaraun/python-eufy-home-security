@@ -61,6 +61,7 @@ from ..devices.model_settings import (
     WriteContext,
     WritePath,
     arms_by_scalar,
+    battery_level,
     mode_table_settings,
     product_code_of,
     settings_of,
@@ -372,6 +373,9 @@ class SubDeviceState:
     kind: DeviceKind | None = None
     name: str | None
     battery: int | None
+    """Battery level in %, from the parameters the model's settings file names (1101
+    when it names none, see :func:`~..devices.model_settings.battery_level`); None
+    when the block reports none of them or a value the model reads as no level."""
     wifi_rssi: int | None = None
     """Wi-Fi signal in dBm (param 1142), reported by cameras."""
     sub1g_rssi: int | None = None
@@ -1714,7 +1718,7 @@ class Station:
                 serial_source=source,
                 kind=model.kind if model else kind_from_params(params),
                 name=params.get(PARAM_DEVICE_NAME) or (cloud.name if cloud else None),
-                battery=_int_or_none(params.get(PARAM_BATTERY)),
+                battery=battery_level(self._product_code(serial) if serial else None, params),
                 wifi_rssi=wifi_rssi,
                 sub1g_rssi=None if wifi_rssi is not None and sub1g_rssi == 0 else sub1g_rssi,
                 firmware=(dump_firmware if serial == self.serial else None)
