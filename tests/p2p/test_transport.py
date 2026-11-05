@@ -456,8 +456,9 @@ async def test_a_sender_that_cannot_start_fails_the_connect(
     fake_threading = SimpleNamespace(Thread=NoThread, Event=threading.Event)
     monkeypatch.setattr(transport_module, "threading", fake_threading)
     transport = make_transport()
-    with pytest.raises(RuntimeError):
+    with pytest.raises(CommunicationError, match="cannot start the ALIVE thread") as caught:
         await transport.connect("127.0.0.1", port=peer.port)
+    assert isinstance(caught.value.__cause__, RuntimeError)
     assert not transport.is_open
     assert transport._transport is not None
     assert transport._transport.is_closing()
@@ -545,16 +546,18 @@ async def test_an_alive_thread_that_cannot_restart_ends_the_link(
         await transport.connect("127.0.0.1", port=peer.port)
         await asyncio.sleep(0.1)
 
-        def no_start(_peer: tuple[str, int]) -> None:
-            raise RuntimeError("can't start new thread")
+        class NoThread(threading.Thread):
+            def start(self) -> None:
+                raise RuntimeError("can't start new thread")
 
-        monkeypatch.setattr(transport, "_start_alive_thread", no_start)
+        fake_threading = SimpleNamespace(Thread=NoThread, Event=threading.Event)
+        monkeypatch.setattr(transport_module, "threading", fake_threading)
         _hold_the_loop(0.6)
         async with asyncio.timeout(3):
             while not lost:
                 await asyncio.sleep(0.01)
-        assert type(lost[0]) is StationUnreachableError
-        assert "cannot restart the ALIVE thread" in str(lost[0])
+        assert type(lost[0]) is CommunicationError
+        assert "cannot start the ALIVE thread" in str(lost[0])
     finally:
         transport.close()
 
@@ -586,3 +589,18 @@ async def test_an_on_time_loop_logs_no_hold(
     finally:
         transport.close()
     assert not any("the event loop was held" in r.getMessage() for r in caplog.records)
+
+
+async def test_a_socket_that_cannot_be_duplicated_fails_the_connect(
+    peer: ThreadedPeer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_dup(_sock: socket.socket) -> socket.socket:
+        raise OSError(errno.EMFILE, "too many open files")
+
+    monkeypatch.setattr(socket.socket, "dup", no_dup)
+    transport = make_transport()
+    with pytest.raises(CommunicationError, match="cannot duplicate the socket") as caught:
+        await transport.connect("127.0.0.1", port=peer.port)
+    assert isinstance(caught.value.__cause__, OSError)
+    assert not transport.is_open
+    assert not _alive_threads()

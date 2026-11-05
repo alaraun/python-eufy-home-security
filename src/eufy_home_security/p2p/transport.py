@@ -525,10 +525,17 @@ class PPPPTransport(asyncio.DatagramProtocol):
 
     def _start_alive_thread(self, peer: tuple[str, int]) -> None:
         """Start sending ``ALIVE`` to ``peer`` every :data:`KEEPALIVE_INTERVAL` from a
-        daemon thread, until :meth:`close`."""
+        daemon thread, until :meth:`close`.
+
+        Raises :class:`CommunicationError` when the socket cannot be duplicated or the
+        thread cannot start (the process is out of file descriptors or threads).
+        """
         if self._transport is None:
             return
-        sock = cast(socket.socket, self._transport.get_extra_info("socket")).dup()
+        try:
+            sock = cast(socket.socket, self._transport.get_extra_info("socket")).dup()
+        except OSError as err:
+            raise CommunicationError(f"cannot duplicate the socket for ALIVE: {err}") from err
         self._tick_at = time.monotonic()
         thread = threading.Thread(
             target=_send_alive,
@@ -538,9 +545,9 @@ class PPPPTransport(asyncio.DatagramProtocol):
         )
         try:
             thread.start()
-        except BaseException:
+        except RuntimeError as err:
             sock.close()
-            raise
+            raise CommunicationError(f"cannot start the ALIVE thread: {err}") from err
         self._alive_thread = thread
 
     def _stop_alive_thread(self) -> None:
@@ -572,8 +579,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
         _LOGGER.debug("the ALIVE thread stopped while the event loop was held; restarting it")
         try:
             self._start_alive_thread(self._peer)
-        except (OSError, RuntimeError) as err:
-            self._report_lost(StationUnreachableError(f"cannot restart the ALIVE thread: {err}"))
+        except CommunicationError as err:
+            self._report_lost(err)
 
     def _link_alive(self, late: float) -> bool:
         """Judge the link after a keepalive tick that ended ``late`` seconds late.
