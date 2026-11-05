@@ -557,9 +557,9 @@ class PPPPTransport(asyncio.DatagramProtocol):
                 started = time.monotonic()
                 await asyncio.sleep(KEEPALIVE_INTERVAL)
                 self._tick_at = time.monotonic()
-                self._restart_alive_thread()
                 if not self._link_alive(self._tick_at - started - KEEPALIVE_INTERVAL):
                     return
+                self._restart_alive_thread()
         finally:
             self._alive_stop.set()
 
