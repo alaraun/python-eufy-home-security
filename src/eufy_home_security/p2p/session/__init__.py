@@ -3861,7 +3861,7 @@ def _lost_cause(exc: Exception, *, asleep: bool) -> DisconnectCause:
         return DisconnectCause.STATION_CLOSED
     if isinstance(exc, SilentLinkError):
         return DisconnectCause.LINK_SILENT
-    return DisconnectCause.UNREACHABLE  # the local socket closed
+    return DisconnectCause.UNREACHABLE  # a local failure: the socket or the ALIVE thread
 
 
 def _log_camera_push(log_name: str, event: SecurityEvent, cipher: FrameCipher) -> None:
