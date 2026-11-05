@@ -1,4 +1,9 @@
 {
+ "battery": [
+  {
+   "param": 1101
+  }
+ ],
  "product_code": "T8160",
  "schema_version": 3,
  "settings": {

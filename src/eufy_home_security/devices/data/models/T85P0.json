@@ -1,4 +1,13 @@
 {
+ "battery": [
+  {
+   "levels": {
+    "0": null,
+    "255": null
+   },
+   "param": 1101
+  }
+ ],
  "product_code": "T85P0",
  "schema_version": 3,
  "settings": {

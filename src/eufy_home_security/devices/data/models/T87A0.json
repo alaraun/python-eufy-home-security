@@ -1,4 +1,9 @@
 {
+ "battery": [
+  {
+   "param": 8001
+  }
+ ],
  "product_code": "T87A0",
  "schema_version": 3,
  "settings": {

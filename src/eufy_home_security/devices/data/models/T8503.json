@@ -1,4 +1,12 @@
 {
+ "battery": [
+  {
+   "param": 1101
+  },
+  {
+   "param": 6001
+  }
+ ],
  "product_code": "T8503",
  "schema_version": 3,
  "settings": {

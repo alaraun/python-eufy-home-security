@@ -1,4 +1,9 @@
 {
+ "battery": [
+  {
+   "param": 1101
+  }
+ ],
  "product_code": "T90S0",
  "schema_version": 3,
  "settings": {
