@@ -1181,6 +1181,7 @@ def test_a_device_with_no_firmware_anywhere_has_none() -> None:
         ({"main_sw_version": "3.3.5.5"}, {7013: "3.3.5.4"}, "3.3.5.3", "3.3.5.5"),
         ({}, {7013: "3.3.5.4"}, "3.3.5.3", "3.3.5.4"),
         ({}, {}, "3.3.5.3", "3.3.5.3"),
+        ({"main_sw_version": " "}, {7013: "3.3.5.4"}, "3.3.5.3", "3.3.5.4"),
     ],
 )
 def test_a_standalone_device_shows_the_dump_s_own_firmware_first(

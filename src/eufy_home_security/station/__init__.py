@@ -378,11 +378,13 @@ class SubDeviceState:
     """Sub-1 GHz signal in dBm (param 1141), the motion sensor's only signal; None
     when a Wi-Fi value is present and this one is 0 (not applicable)."""
     firmware: str | None
-    """The firmware the device runs, as the eufy app shows it: for the device that sent the
-    dump (a standalone device on its own channel) the dump's ``main_sw_version``; else the
-    station's report for the device (param 7013); else the device's cloud record
-    (``main_sw_version``), the only source for devices whose block has no 7013 (a motion
-    sensor). None when none of them names one."""
+    """The firmware the device runs: for the device that sent the dump (a standalone device
+    on its own channel) the dump's ``main_sw_version``; else the station's report for the
+    device (param 7013); else the device's cloud record (``main_sw_version``), the only
+    source for devices whose block has no 7013 (a motion sensor). None when none of them
+    names one. The eufy app shows the dump's field, else the cloud record; the station's
+    report comes before the record here because the cached record goes stale between
+    device-list refreshes."""
     pir_event_ms: int | None = None
     """Param 1605 in epoch ms, which the app names ``MOTION_SENSOR_PIR_EVT``: read
     as the time of the last PIR event (declared, not proven to move on motion). It is
