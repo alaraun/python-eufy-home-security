@@ -70,7 +70,8 @@ class DetectionDeliveryReport:
     device_sn: str
     delivery: DetectionDelivery
     mode: GuardMode | int | None
-    """The guard mode in force the answer is for; None when it is not known."""
+    """The guard mode the answer is for: the mode in force unless the caller named one;
+    None when it is not known."""
     action: int | None
     """The device's action mask in :attr:`mode`'s table; None when no reported table
     lists the device."""

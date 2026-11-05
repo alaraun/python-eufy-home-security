@@ -462,6 +462,27 @@ async def test_the_mode_the_session_last_saw_wins_over_the_last_dump(station: St
     assert (report.mode, report.delivery) == (GuardMode.AWAY, DetectionDelivery.SENT)
 
 
+async def test_a_mode_not_in_force_is_graded_from_its_own_table(station: Station) -> None:
+    """Asking for a mode reads that mode's table, whatever the mode in force."""
+    await station.async_update()
+    config = station.config
+    assert config is not None
+    assert config.effective_mode is GuardMode.HOME
+    in_force = station.detection_delivery(SYNTHETIC.camera_sn)
+    assert (in_force.mode, in_force.delivery) == (
+        GuardMode.HOME,
+        DetectionDelivery.NOT_SENT_IN_MODE,
+    )
+    away = station.detection_delivery(SYNTHETIC.camera_sn, mode=GuardMode.AWAY)
+    assert (away.mode, away.delivery) == (GuardMode.AWAY, DetectionDelivery.SENT)
+    assert station.detection_delivery(SYNTHETIC.camera_sn, mode=GuardMode.HOME) == in_force
+    station.session.note_guard_mode(GuardMode.AWAY)  # the asked mode wins over the session's
+    home = station.detection_delivery(SYNTHETIC.camera_sn, mode=GuardMode.HOME)
+    assert (home.mode, home.delivery) == (GuardMode.HOME, DetectionDelivery.NOT_SENT_IN_MODE)
+    schedule = station.detection_delivery(SYNTHETIC.camera_sn, mode=GuardMode.SCHEDULE)
+    assert (schedule.mode, schedule.delivery) == (GuardMode.SCHEDULE, DetectionDelivery.UNKNOWN)
+
+
 def test_without_a_state_a_paired_camera_is_unknown() -> None:
     report = _offline(sub_devices=(CAMERA,)).detection_delivery(SYNTHETIC.camera_sn)
     assert report.delivery is DetectionDelivery.UNKNOWN

@@ -2630,15 +2630,22 @@ class Station:
         )
 
     def detection_delivery(
-        self, device_sn: str, *, config: StationConfig | None = None
+        self,
+        device_sn: str,
+        *,
+        mode: GuardMode | int | None = None,
+        config: StationConfig | None = None,
     ) -> DetectionDeliveryReport:
         """Whether this station sends ``device_sn``'s detection pushes in the guard mode
-        in force (:func:`~..detection_delivery.detection_delivery`): the Notification bit
-        of the device's action in that mode's table. Off holds every detection push of
-        the device back, over P2P and through the cloud, while the mode is in force.
+        in force, or in ``mode`` (:func:`~..detection_delivery.detection_delivery`): the
+        Notification bit of the device's action in that mode's table. Off holds every
+        detection push of the device back, over P2P and through the cloud, while the mode
+        is in force.
 
-        The mode in force is the session's latest (a dump, a mode report, a push), else
-        the configuration's. Every camera, doorbell and sensor whose kind has the
+        Without ``mode`` the answer is for the mode in force: the session's latest (a
+        dump, a mode report, a push), else the configuration's. With ``mode`` it is for
+        that mode, read from the same table the station applies once the mode is in force,
+        whether or not it is in force now. Every camera, doorbell and sensor whose kind has the
         Notification action (:func:`~..devices.settings.mode_action_flags`) is graded;
         the station itself, a keypad, a device of unknown kind, a device on a channel the
         cloud lists for several devices and a device not paired here are ``UNKNOWN``.
@@ -2667,7 +2674,8 @@ class Station:
         state = self.state
         if config is None:
             config = None if state is None else build_station_config(state)
-        mode = self.session.active_mode
+        if mode is None:
+            mode = self.session.active_mode
         if mode is None and config is not None:
             mode = config.effective_mode
         return detection_delivery(

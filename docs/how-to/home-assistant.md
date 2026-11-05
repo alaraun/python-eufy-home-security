@@ -2794,13 +2794,14 @@ phone.
 ```python
 report = station.detection_delivery(device_sn)  # DetectionDeliveryReport, no I/O
 report.delivery  # DetectionDelivery.SENT / NOT_SENT_IN_MODE / UNKNOWN
-report.mode  # the guard mode in force the answer is for (None: unknown)
+report.mode  # the guard mode the answer is for (None: unknown)
 report.action  # the device's action mask in that mode (None: no table lists it)
 report.sending_modes  # the modes that do send it, app order; names: config.mode_name(m)
 report.reason  # a sentence for a log line
 
 config = station.config  # grading every device per refresh: build the config once
 reports = {sn: station.detection_delivery(sn, config=config) for sn in serials}
+away = station.detection_delivery(device_sn, mode=GuardMode.AWAY)  # a mode not in force
 ```
 
 | `delivery` | when | what HA does |
@@ -2810,7 +2811,9 @@ reports = {sn: station.detection_delivery(sn, config=config) for sn in serials}
 | `UNKNOWN` | no configuration yet, the mode in force unknown, Schedule without a slot mode, Geofencing, a mode whose table the station does not report (on a HomeBase 3 a custom mode no device block carries and no stored table backs); a device no table lists whose own actions are not reported (no block in the dump and no stored table); a device on a channel the cloud lists for several devices; the station itself, a keypad, a device of unknown kind (no Notification action); a device not paired here | nothing |
 
 - **Which mode.** The mode in force: the session's latest (a dump, a `0x047F` mode report,
-  a push), else `config.effective_mode`. Off and Disarmed both read the Disarmed table
+  a push), else `config.effective_mode`. `mode=` grades another mode from its own table,
+  the one the station applies once that mode is in force; a repair kept per held-back
+  mode can then stay open (and ignored) while that mode is not in force. Off and Disarmed both read the Disarmed table
   (param 1177 on a HomeBase 3, 61306 on a pro-alarm model); a schedule's slot mode reads
   that mode's table.
 - **Every model.** The rule reads the mode tables, so it covers every station and device
