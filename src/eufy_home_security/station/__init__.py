@@ -2644,9 +2644,9 @@ class Station:
 
         Without ``mode`` the answer is for the mode in force: the session's latest (a
         dump, a mode report, a push), else the configuration's. With ``mode`` it is for
-        that mode, read from the same table the station applies once the mode is in force,
-        whether or not it is in force now. Every camera, doorbell and sensor whose kind has the
-        Notification action (:func:`~..devices.settings.mode_action_flags`) is graded;
+        that mode, read from the same table the station applies once the mode is in
+        force, whether or not it is in force now. Every camera, doorbell and sensor whose
+        kind has the Notification action (:func:`~..devices.settings.mode_action_flags`) is graded;
         the station itself, a keypad, a device of unknown kind, a device on a channel the
         cloud lists for several devices and a device not paired here are ``UNKNOWN``.
         No I/O. Refresh on :class:`~..events.GuardModeChanged`,

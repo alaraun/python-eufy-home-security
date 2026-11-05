@@ -1,4 +1,4 @@
-"""Whether a device's detections are sent in the station's guard mode in force (pure).
+"""Whether a device's detections are sent in a guard mode of its station (pure).
 
 Each camera, doorbell and sensor paired to a station has an action mask per guard mode
 (the mode tables, ``docs/protocol/commands.md`` § Mode actions). Its Notification bit
@@ -8,8 +8,8 @@ station sends none, neither over P2P nor through the cloud. The app's mode edito
 the bit as the device's Notification switch, and the app reads a device whose action for
 the mode is missing as on.
 
-:func:`detection_delivery` reads the bit of the mode in force from a
-:class:`~.station_config.StationConfig`; :meth:`~.station.Station.detection_delivery`
+:func:`detection_delivery` reads the bit of a mode (the one in force, or one asked for)
+from a :class:`~.station_config.StationConfig`; :meth:`~.station.Station.detection_delivery`
 is the call a consumer makes. See ``docs/how-to/home-assistant.md`` § Detections held
 back by the guard mode.
 """
@@ -46,17 +46,18 @@ _TABLE_MODES: Final = frozenset({*MODE_TABLE_MODES, GuardMode.DISARMED})
 
 
 class DetectionDelivery(StrEnum):
-    """What the mode in force does to a device's detection pushes."""
+    """What the graded mode (:attr:`DetectionDeliveryReport.mode`) does to a device's
+    detection pushes while it is in force."""
 
     SENT = "sent"
-    """The device's action in the mode in force has Notification on (or the station
+    """The device's action in the graded mode has Notification on (or the station
     reports the device's actions and none is set for that mode, which reads as on): the
     mode holds nothing back."""
     NOT_SENT_IN_MODE = "not_sent_in_mode"
-    """The device's action in the mode in force has Notification off: the station sends
+    """The device's action in the graded mode has Notification off: the station sends
     no detection push for it, over P2P or through the cloud, while that mode is in force."""
     UNKNOWN = "unknown"
-    """The library cannot tell: no configuration yet, the mode in force unknown or
+    """The library cannot tell: no configuration yet, the graded mode unknown or
     without per-device actions, its table not reported, the device's own actions not
     reported, a device on a channel the cloud lists for several devices, or a device
     without a Notification action (the station itself, a keypad, a device of unknown
@@ -65,7 +66,7 @@ class DetectionDelivery(StrEnum):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class DetectionDeliveryReport:
-    """Whether the station sends a device's detections in the guard mode in force."""
+    """Whether the station sends a device's detections in a guard mode (:attr:`mode`)."""
 
     device_sn: str
     delivery: DetectionDelivery

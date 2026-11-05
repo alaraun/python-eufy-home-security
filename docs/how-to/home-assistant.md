@@ -2806,16 +2806,19 @@ away = station.detection_delivery(device_sn, mode=GuardMode.AWAY)  # a mode not 
 
 | `delivery` | when | what HA does |
 |---|---|---|
-| `SENT` | Notification on in the mode in force, or no action set for the device in that mode while its own actions are reported: its block in the dump or the stored table (the eufy app reads a missing action as on) | nothing |
-| `NOT_SENT_IN_MODE` | Notification off in the mode in force | tell the user (below); never mark entities unavailable: the device works and records |
-| `UNKNOWN` | no configuration yet, the mode in force unknown, Schedule without a slot mode, Geofencing, a mode whose table the station does not report (on a HomeBase 3 a custom mode no device block carries and no stored table backs); a device no table lists whose own actions are not reported (no block in the dump and no stored table); a device on a channel the cloud lists for several devices; the station itself, a keypad, a device of unknown kind (no Notification action); a device not paired here | nothing |
+| `SENT` | Notification on in the graded mode (`report.mode`), or no action set for the device in that mode while its own actions are reported: its block in the dump or the stored table (the eufy app reads a missing action as on) | nothing |
+| `NOT_SENT_IN_MODE` | Notification off in the graded mode | tell the user (below); never mark entities unavailable: the device works and records |
+| `UNKNOWN` | no configuration yet, the graded mode unknown, Schedule without a slot mode, Geofencing, a mode whose table the station does not report (on a HomeBase 3 a custom mode no device block carries and no stored table backs); a device no table lists whose own actions are not reported (no block in the dump and no stored table); a device on a channel the cloud lists for several devices; the station itself, a keypad, a device of unknown kind (no Notification action); a device not paired here | nothing |
 
 - **Which mode.** The mode in force: the session's latest (a dump, a `0x047F` mode report,
-  a push), else `config.effective_mode`. `mode=` grades another mode from its own table,
-  the one the station applies once that mode is in force; a repair kept per held-back
-  mode can then stay open (and ignored) while that mode is not in force. Off and Disarmed both read the Disarmed table
+  a push), else `config.effective_mode`. Off and Disarmed both read the Disarmed table
   (param 1177 on a HomeBase 3, 61306 on a pro-alarm model); a schedule's slot mode reads
   that mode's table.
+- **Another mode.** `mode=` grades a mode from its own table, the one the station applies
+  once that mode is in force, so a repair kept per held-back mode can stay open (and
+  ignored) while that mode is not in force. An asked Schedule or Geofencing is `UNKNOWN`
+  (ask for the slot's mode); so is a custom mode the station does not list as defined
+  while it is not in force (no table is reported for it).
 - **Every model.** The rule reads the mode tables, so it covers every station and device
   that has them, with no per-model code. Other stations follow the eufy app's mode
   editor, not tested.
