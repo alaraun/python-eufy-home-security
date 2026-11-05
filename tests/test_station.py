@@ -839,6 +839,12 @@ def _state_of(
     meta: dict[str, str] | None = None,
     cloud_sec_firmware: str | None = None,
 ) -> StationState:
+    station = _unconnected_station(host=None, local_ip=None, local_port=0)
+    device = dataclasses.replace(station.device, sec_sw_version=cloud_sec_firmware)
+    return Station(device, station.session, sub_devices=sub_devices)._state(_dump_of(blocks, meta))
+
+
+def _dump_of(blocks: dict[int, dict[int, str]], meta: dict[str, str] | None = None) -> ParamDump:
     dump = ParamDump()
     dump.ingest(
         {
@@ -850,9 +856,7 @@ def _state_of(
             ],
         }
     )
-    station = _unconnected_station(host=None, local_ip=None, local_port=0)
-    device = dataclasses.replace(station.device, sec_sw_version=cloud_sec_firmware)
-    return Station(device, station.session, sub_devices=sub_devices)._state(dump)
+    return dump
 
 
 def _sub_device_blocks() -> dict[int, dict[int, str]]:
@@ -1130,6 +1134,65 @@ def test_station_diagnostics_fall_back_or_stay_unknown() -> None:
     bare = _state_of({255: {1189: "250", 1176: "::"}})
     assert bare.emmc_used_percent is None
     assert bare.lan_ip is None
+
+
+def _sensor(firmware: str | None) -> CloudDevice:
+    return CloudDevice(
+        device_sn=SENSOR_SN,
+        device_type=10,
+        name="Hall",
+        station_sn=SYNTHETIC.station_sn,
+        channel=16,
+        main_sw_version=firmware,
+    )
+
+
+def test_a_paired_device_without_7013_shows_its_cloud_firmware() -> None:
+    """A block without 7013 (a motion sensor's) takes the device's cloud record."""
+    state = _state_of({16: {1601: "0"}}, sub_devices=(_sensor("2.0.1.1"),))
+    assert state.devices[16].firmware == "2.0.1.1"
+
+
+@pytest.mark.parametrize("reported", ["", "  "])
+def test_a_blank_7013_is_no_firmware(reported: str) -> None:
+    state = _state_of({16: {1601: "0", 7013: reported}}, sub_devices=(_sensor("2.0.1.1"),))
+    assert state.devices[16].firmware == "2.0.1.1"
+
+
+def test_a_paired_device_s_7013_wins_over_its_cloud_record_and_the_dump_field() -> None:
+    """The station's live report beats a cached record; the dump's own field is the station's."""
+    state = _state_of(
+        {0: {1400: "0", 7013: "3.4.3.0"}},
+        sub_devices=(dataclasses.replace(_camera(CAM_A, 0), main_sw_version="3.4.2.9"),),
+        meta={"main_sw_version": "3.8.8.0"},
+    )
+    assert state.devices[0].firmware == "3.4.3.0"
+    assert state.firmware == "3.8.8.0"
+
+
+def test_a_device_with_no_firmware_anywhere_has_none() -> None:
+    assert _state_of({16: {1601: "0"}}, sub_devices=(_sensor(None),)).devices[16].firmware is None
+    assert _state_of({3: {1101: "50"}}).devices[3].firmware is None  # no cloud record
+
+
+@pytest.mark.parametrize(
+    ("meta", "block", "cloud", "expected"),
+    [
+        ({"main_sw_version": "3.3.5.5"}, {7013: "3.3.5.4"}, "3.3.5.3", "3.3.5.5"),
+        ({}, {7013: "3.3.5.4"}, "3.3.5.3", "3.3.5.4"),
+        ({}, {}, "3.3.5.3", "3.3.5.3"),
+    ],
+)
+def test_a_standalone_device_shows_the_dump_s_own_firmware_first(
+    meta: dict[str, str], block: dict[int, str], cloud: str, expected: str
+) -> None:
+    """The device that sent the dump shows its frame-level ``main_sw_version``, as the
+    station does, then its block's 7013, then its cloud record."""
+    base = _standalone_t8170()
+    station = Station(dataclasses.replace(base.device, main_sw_version=cloud), base.session)
+    state = station._state(_dump_of({0: {1400: "0", **block}}, meta))
+    assert state.devices[0].serial == _T8170_SN
+    assert state.devices[0].firmware == expected
 
 
 @pytest.mark.parametrize(("raw", "ok"), [("0", True), ("25", True), ("1", False), ("x", None)])
@@ -5389,20 +5452,6 @@ async def test_a_t8170_quality_write_reads_back_through_its_per_view_report(
     assert state is not None
     assert state.setting("live_streaming_resolution") == 2  # the cached write
     assert (await station.async_update()).setting("live_streaming_resolution") == 2  # the dump
-
-
-def _dump_of(blocks: dict[int, dict[int, str]]) -> ParamDump:
-    dump = ParamDump()
-    dump.ingest(
-        {
-            "params": [
-                {"dev_type": dev, "param_type": pid, "param_value": value}
-                for dev, params in blocks.items()
-                for pid, value in params.items()
-            ]
-        }
-    )
-    return dump
 
 
 def _camera_of(code: str, *, params: dict[int, str] | None = None, **fields: Any) -> CloudDevice:

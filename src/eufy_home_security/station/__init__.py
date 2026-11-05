@@ -378,6 +378,11 @@ class SubDeviceState:
     """Sub-1 GHz signal in dBm (param 1141), the motion sensor's only signal; None
     when a Wi-Fi value is present and this one is 0 (not applicable)."""
     firmware: str | None
+    """The firmware the device runs, as the eufy app shows it: for the device that sent the
+    dump (a standalone device on its own channel) the dump's ``main_sw_version``; else the
+    station's report for the device (param 7013); else the device's cloud record
+    (``main_sw_version``), the only source for devices whose block has no 7013 (a motion
+    sensor). None when none of them names one."""
     pir_event_ms: int | None = None
     """Param 1605 in epoch ms, which the app names ``MOTION_SENSOR_PIR_EVT``: read
     as the time of the last PIR event (declared, not proven to move on motion). It is
@@ -1687,6 +1692,7 @@ class Station:
         setting_params, param_sources = self._setting_params(station, own_settings)
         product_code = self._product_code(self.serial)
         stored = stored_device_params(setting_params, product_code, blocks)
+        dump_firmware = _text_or_none(dump.meta.get("main_sw_version"))
         devices = {}
         for channel, params in blocks.items():
             cloud = cloud_by_channel.get(channel)
@@ -1709,7 +1715,9 @@ class Station:
                 battery=_int_or_none(params.get(PARAM_BATTERY)),
                 wifi_rssi=wifi_rssi,
                 sub1g_rssi=None if wifi_rssi is not None and sub1g_rssi == 0 else sub1g_rssi,
-                firmware=params.get(PARAM_FIRMWARE),
+                firmware=(dump_firmware if serial == self.serial else None)
+                or _text_or_none(params.get(PARAM_FIRMWARE))
+                or (cloud.main_sw_version if cloud else None),
                 pir_event_ms=_epoch_ms_or_none(params.get(PARAM_PIR_EVENT_MS)),
                 online=None if status is None else status == DEV_STATUS_ONLINE,
                 offline_code=status if status is not None and status > DEV_STATUS_ONLINE else None,
@@ -1743,7 +1751,7 @@ class Station:
             product_code=product_code,
             guard_mode=guard_mode,
             active_mode=active_mode,
-            firmware=_text_or_none(dump.meta.get("main_sw_version")) or self.device.main_sw_version,
+            firmware=dump_firmware or self.device.main_sw_version,
             devices=devices,
             params=dict(station),
             name=_text_or_none(station.get(PARAM_HUB_NAME)) or self.device.name,

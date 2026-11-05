@@ -1201,11 +1201,11 @@ A closed session (`async_close`) never reconnects on its own — build a new
     most, and do not map it to text.
   - The station's own reachability is not part of this: a `StationState` exists only
     because a dump arrived. Use `ConnectionChanged` for the station.
-- **`update`** — firmware from the live dump: `StationState.firmware` and
-  `SubDeviceState.firmware`. Fall back to `CloudDevice.main_sw_version` /
-  `sec_sw_version` only when the dump has none: those come from the cached device list
-  and go stale between refreshes. A motion sensor (T8910) reports no firmware in the
-  dump, so for it the cloud value is the only source.
+- **`update`** — firmware: `StationState.firmware` and `SubDeviceState.firmware`, which
+  already fall back to the device's cloud record when the dump names none (a motion
+  sensor reports no firmware in the dump). Prefer them over `CloudDevice.main_sw_version`
+  / `sec_sw_version`, the cached device list's values, which go stale between list
+  refreshes (a station that updated since shows its old version there).
 - **`camera`** — see [Camera images](#camera-images) and [Live streaming](#live-streaming) below.
 
 ### Settings per model
