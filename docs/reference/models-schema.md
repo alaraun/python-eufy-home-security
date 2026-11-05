@@ -17,6 +17,7 @@ ship in the wheel.
 | `product_code` | The file stem, e.g. `T8160` |
 | `source` | `td_version` (int), `handler` (file name), `handler_date` (`YYYY-MM-DD`, from the handler's plugin path), `app_version` (the app build the labels and layout come from) |
 | `settings` | Object keyed by the TD identifier (`[a-z0-9_]+`, verbatim) |
+| `battery` | Present when the model's TD has `battery_value` and its handler fills it from a parameter: the parameters a device's battery level is read from (`SubDeviceState.battery`), first one first, each `{"param": <id>}` plus `levels`, `{"<raw value>": <level or null>}`, for the raw values 0-255 the handler reads as another level than their number (null: below 0, no level). The generator lists each parameter the handler fills the property from alone (named as a command id, in the base context), and reads each at 0-255; a parameter that wins over another whichever the device lists first comes first, and where the device's list order decides (the handler takes the one listed last) the lower id comes first. A model without it reads 1101 as reported; a device that reports none of the parameters has no level |
 
 Keys are sorted, except inside recipe objects, where the handler's key order is kept. Files
 are 1-space-indented JSON with a trailing newline, and a re-run gives the same bytes.

@@ -63,6 +63,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from eufy_home_security.devices.model_settings import BATTERY_PROPERTY
 from eufy_home_security.devices.param_info import STATE_PARAM_INFO
 from eufy_home_security.devices.settings import DUAL_VIEW, VIEW_MODE_PARAM
 from eufy_home_security.devices.types import DeviceKind, model_for_serial
@@ -92,6 +93,9 @@ JS_NUMBER = re.compile(r"(?<![\w$.])(?:0[xX][0-9a-fA-F]+|\d+(?:[eE]\d{1,2})?)(?!
 # Probes of an open-kind read beyond its domain: a multi-digit number and a JSON object.
 OPEN_NUMBER_PROBE, OPEN_JSON_PROBE = "4321", '{"probe":1}'
 BOOL_EXTRA_PROBE = "2"  # a parameter value no bool form names
+BATTERY_PROBE = "57"  # the value a candidate battery parameter is listed at
+BATTERY_SAMPLES = range(256)  # the raw levels a battery parameter is read at
+BATTERY_LEVEL_TEXT = re.compile(r"-?[0-9]+")
 
 
 def _load(name: str) -> ModuleType:
@@ -594,6 +598,132 @@ def located_reads(
             out[ident] = {**read, "no_default": True}
             _count(counts, "read:handler parameter")
     return out
+
+
+def _level(answer: Any) -> int | None:
+    """A getProperty value as a battery level: an integer, or the text of one."""
+    if type(answer) is int:
+        return answer
+    if isinstance(answer, str) and BATTERY_LEVEL_TEXT.fullmatch(answer):
+        return int(answer)
+    return None
+
+
+def _battery_request(
+    product_code: str, context: codec.Context, params: Sequence[tuple[int, str]]
+) -> dict[str, Any]:
+    """getProperty for the battery on a device listing ``params`` in that order, their ids
+    also as command ids."""
+    device = context.device(product_code)
+    device["params"] = [{"param_type": p, "param_value": v} for p, v in params]
+    cmds = [p for p, _ in params]
+    return {"kind": "get", "cmds": cmds, "device": device, "props": [BATTERY_PROPERTY]}
+
+
+def battery_sources(product_code: str, handler: Path, context: codec.Context) -> list[int]:
+    """The parameters of :func:`handler_param_ids` each of which, listed alone at
+    :data:`BATTERY_PROBE`, gives the battery property another value than a device
+    listing none, ascending. Found by halving the id list: a half is split again while
+    it changes the value."""
+    ids = handler_param_ids(handler)
+
+    def ask(groups: list[list[int]]) -> list[str]:
+        requests = [
+            _battery_request(product_code, context, [(p, BATTERY_PROBE) for p in g]) for g in groups
+        ]
+        return [_answer(r, BATTERY_PROPERTY) for r in run_driver(product_code, handler, requests)]
+
+    (none,) = ask([[]])
+    found: list[int] = []
+    pending = [ids] if ids else []
+    while pending:
+        split: list[list[int]] = []
+        for group, answer in zip(pending, ask(pending), strict=True):
+            if answer == none:
+                continue
+            if len(group) == 1:
+                found.extend(group)
+            else:
+                split += [group[: len(group) // 2], group[len(group) // 2 :]]
+        pending = split
+    return sorted(found)
+
+
+def battery_reads(
+    product_code: str, handler: Path, context: codec.Context, counts: dict[str, int]
+) -> list[dict[str, Any]]:
+    """The model's battery reads (the settings file's ``battery``): each parameter of
+    :func:`battery_sources` with ``levels``, the level getProperty gives for each held
+    text of :data:`BATTERY_SAMPLES` where it is not that number (null for a level below
+    0, the handler's no level), in the handler's precedence
+    (:func:`battery_precedence`). Empty when no parameter fills the battery, or when one
+    gives a value that is no level (counted)."""
+    sources = battery_sources(product_code, handler, context)
+    if not sources:
+        return []
+    texts = [str(n) for n in BATTERY_SAMPLES]
+    asks = [(p, t) for p in sources for t in texts]
+    replies = run_driver(
+        product_code, handler, [_battery_request(product_code, context, [a]) for a in asks]
+    )
+    levels: dict[int, dict[str, int | None]] = {p: {} for p in sources}
+    for (param, text), reply in zip(asks, replies, strict=True):
+        level = _level(_property_values(reply).get(BATTERY_PROPERTY))
+        if level is None:
+            _count(counts, "battery:not a level")
+            return []
+        if level != int(text):
+            levels[param][text] = None if level < 0 else level
+    _count(counts, "battery", len(sources))
+    return [
+        {"param": p, **({"levels": levels[p]} if levels[p] else {})}
+        for p in battery_precedence(product_code, handler, context, sources, levels)
+    ]
+
+
+def battery_precedence(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    sources: Sequence[int],
+    levels: Mapping[int, Mapping[str, Any]],
+) -> list[int]:
+    """``sources`` in the order the handler prefers them: by how many others each wins
+    over when listed first (its value is read although another follows it), then
+    ascending. A handler that takes the one the device lists last (or first) prefers
+    none, so its order is ascending."""
+    if len(sources) < 2:
+        return list(sources)
+    plain = [str(n) for n in BATTERY_SAMPLES if all(str(n) not in m for m in levels.values())]
+    if len(plain) < 2:
+        raise GeneratorError(f"{product_code}: no two battery levels every source reads as is")
+    first, second = plain[:2]
+    pairs = [(a, b) for a in sources for b in sources if a != b]
+    requests = [
+        _battery_request(product_code, context, [(a, first), (b, second)]) for a, b in pairs
+    ]
+    replies = run_driver(product_code, handler, requests)
+    beats = Counter(
+        a
+        for (a, _), r in zip(pairs, replies, strict=True)
+        if _level(_property_values(r).get(BATTERY_PROPERTY)) == int(first)
+    )
+    return sorted(sources, key=lambda p: (-beats[p], p))
+
+
+def battery_block(
+    product_code: str,
+    handler: Path,
+    props: Sequence[Mapping[str, Any]],
+    context: codec.Context,
+    counts: dict[str, int],
+) -> dict[str, Any]:
+    """The settings file's ``battery`` (:func:`battery_reads`) for a model whose thing
+    description has the battery property; empty when it has none or no read is found."""
+    if not any(p["identifier"] == BATTERY_PROPERTY for p in props):
+        return {}
+    reads = battery_reads(product_code, handler, context, counts)
+    return {"battery": reads} if reads else {}
 
 
 def _json_structure(raw: Any) -> bool:
@@ -1581,6 +1711,7 @@ def generate(
         "product_code": product_code,
         "source": joiner.source_block(td, app_version),
         "settings": merged,
+        **battery_block(product_code, handler, props, contexts[BASE], counts),
     }
     return doc, counts
 

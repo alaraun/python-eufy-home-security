@@ -304,7 +304,7 @@ def test_model_file_matches_the_schema(code: str) -> None:
     assert path.is_file()
     text = path.read_text(encoding="utf-8")
     doc = json.loads(text, object_pairs_hook=dict)
-    assert set(doc) == {"schema_version", "product_code", "source", "settings"}
+    assert set(doc) - {"battery"} == {"schema_version", "product_code", "source", "settings"}
     assert doc["schema_version"] == 3
     assert doc["product_code"] == code
     source = doc["source"]
@@ -333,8 +333,32 @@ def test_model_file_matches_the_schema(code: str) -> None:
         resolved = {k: _in_context(v, context) for k, v in settings.items()}
         for ident, setting in resolved.items():
             _check_setting(ident, setting, resolved)
+    if "battery" in doc:
+        _check_battery(doc["battery"], settings)
     assert text == codec.dump(doc)
     assert [s for s in _strings(doc) if SERIAL.search(s)] == []
+
+
+def _check_battery(battery: Any, settings: dict[str, Any]) -> None:
+    """A non-empty list of distinct parameters, each with the levels of raw values 0-255
+    that read as another level (0-100) or as none, for a model with a battery."""
+    assert "battery_value" in settings
+    assert isinstance(battery, list)
+    assert battery
+    assert len({r["param"] for r in battery}) == len(battery)
+    for read in battery:
+        assert set(read) <= {"param", "levels"}
+        assert type(read["param"]) is int
+        assert 1000 <= read["param"] < 65536
+        levels = read.get("levels")
+        if levels is None:
+            continue
+        assert levels
+        for raw, level in levels.items():
+            assert raw.isdigit()
+            assert int(raw) <= 255
+            assert str(int(raw)) == raw
+            assert level is None or (type(level) is int and 0 <= level <= 100 and level != int(raw))
 
 
 def test_models_holds_exactly_the_indexed_codes() -> None:
