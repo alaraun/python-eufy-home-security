@@ -4,6 +4,20 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.12](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.11...v0.4.12) (2026-11-05)
+
+
+### Features
+
+* **station:** grade detection delivery for a guard mode not in force ([issue 175](https://github.com/alaraun/python-eufy-home-security/issues/175)) ([aa8b2d5](https://github.com/alaraun/python-eufy-home-security/commit/aa8b2d56c0cbf6d73e0f45cdce086096466fbd15))
+
+
+### Bug Fixes
+
+* **p2p:** a wake resolves its rendezvous servers off the event loop and closes its socket on failure ([8b1c982](https://github.com/alaraun/python-eufy-home-security/commit/8b1c982b817b19a2c85af258f6e227330634eed6))
+* **station:** fall back to the cloud firmware for a device the dump names none for ([8e49b7c](https://github.com/alaraun/python-eufy-home-security/commit/8e49b7cd7bc727f97313e8ce72ff7df87033ea90))
+* **station:** read a device's battery from the parameters its model names, as the eufy app does ([627a95e](https://github.com/alaraun/python-eufy-home-security/commit/627a95edcd6c1172400f8fe90f54b2b9c5f7ecd2))
+
 ## [0.4.11](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.10...v0.4.11) (2026-11-05)
 
 
