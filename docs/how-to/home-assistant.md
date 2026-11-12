@@ -1955,6 +1955,7 @@ video and AAC untouched, starting at a keyframe) written through the integration
 | | call | camera | typical (T8160, 3840×2160) |
 |---|---|---|---|
 | a stored recording | `station.async_download_recording(record, write)` | stays asleep (off the station's disk) | 6–11 s clips in 4.9–6.6 s |
+| a stored recording, for a viewer | `station.async_play_recording(record, write)` | stays asleep (off the station's disk) | the recording's own length, from its first keyframe |
 | the live stream now | `broadcast.async_capture(seconds, write)` | **wakes a battery camera**, shared with live viewers | `seconds` plus the camera's start, about 2.5 s cold |
 
 `MediaClip`: `video_frames`, `audio_frames`, `keyframes`, `bytes_written`,
@@ -2044,6 +2045,32 @@ at a video-codec change), `stopped` (a capture ended by its `stop` event; comple
   `LiveStreamLimitError` instead of queueing. The station session's commands, polls
   and trigger frames are never held up. `session.stats().recording_downloads` counts
   them.
+
+#### Playing a recording without downloading it first
+
+`await station.async_play_recording(record, write, *, wait=True, realtime=True)` plays
+the same recording with the app's playback command and writes the same TS as a
+download, but as it arrives, so a viewer starts at the first keyframe instead of after
+the whole clip:
+
+- each frame's bytes go to `write` as soon as they are muxed (a download writes
+  512 KB chunks);
+- with `realtime` (the default) the frames go at the recording's own pace: the station
+  sends faster than that (about three times on a HomeBase 3) and the library holds what
+  arrives early in memory. A live-window consumer such as Home Assistant's HLS output
+  needs it, or the window slides past what the viewer has seen; `realtime=False`
+  writes as fast as the station sends;
+- it runs on an extra session from the live-stream budget like a download, but never
+  waits for a download of the same station; `wait=False` raises `LiveStreamLimitError`
+  instead of queueing for a free session;
+- **stop** by cancelling the call (the viewer went away): the extra session closes,
+  which is the only thing that stops a station's playback;
+- no seeking: the station sends the recording from its start;
+- `session.stats().recording_plays` counts them.
+
+Serve it as live view is served: the TS through the integration's own stream URL,
+repackaged by Home Assistant's stream machinery, no re-encode and no ffmpeg of the
+integration's.
 
 #### A live clip
 

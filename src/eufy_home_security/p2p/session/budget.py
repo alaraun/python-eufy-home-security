@@ -1,4 +1,4 @@
-"""A station's session budget: extra sessions, trigger frames, downloads (:class:`SessionBudget`)."""
+"""A station's session budget: extra sessions, trigger frames, downloads, plays (:class:`SessionBudget`)."""
 
 from __future__ import annotations
 
@@ -17,9 +17,10 @@ from ...exceptions import (
     LiveStreamLimitError,
     UnsupportedError,
 )
-from ..clip import ClipWriter, MediaClip, mux_frames
+from ..clip import CLIP_CHUNK_BYTES, ClipWriter, MediaClip, mux_frames
 from ..media import MediaKeyType, MediaKind
 from ..messages import DB_QUERY_LOCAL_EVENTS, history_query_verb
+from ..pacing import FramePacer
 from .media_stream import MediaStream
 from .stats import HealthCounters, MediaCounters
 from .wake import WakeBackoff
@@ -34,8 +35,8 @@ class SessionBudget:
     """How many sessions a station session holds to its station, and which.
 
     A station session keeps its own media slot and up to ``max_sessions - 2`` extra
-    sessions shared by live streams and recording downloads (one more session is the
-    trigger frame's). An extra session's own budget names its station session as
+    sessions shared by live streams, recording downloads and plays (one more session is
+    the trigger frame's). An extra session's own budget names its station session as
     :attr:`owner`; ending it returns it to that budget and wakes the opens waiting for
     capacity.
     """
@@ -46,7 +47,7 @@ class SessionBudget:
         """See :attr:`StationSession.max_sessions`."""
         self.extra_live: set[BudgetOwner] = set()
         """Extra sessions carrying (or opening) a live stream while this session's slot is
-        busy, or a recording download."""
+        busy, or a recording download or play."""
         self.capacity_waiters: list[asyncio.Future[None]] = []
         """Live opens and downloads waiting for this session's slot or an extra session."""
         self.owner: BudgetOwner | None = None
@@ -248,27 +249,85 @@ class SessionBudget:
             raise UnsupportedError("a standalone device lists no recordings to download")
         self._session._raise_if_closed()
         async with self.download_lock:
-            extra = cast(BudgetOwner, await self.reserve(first_frame_timeout, wait, slot=False))
+            return await self._recording_on_extra(
+                path,
+                channel,
+                write,
+                play=False,
+                download=history_query_verb(self._session.serial) == DB_QUERY_LOCAL_EVENTS,
+                first_frame_timeout=first_frame_timeout,
+                wait=wait,
+            )
+
+    async def play_recording(
+        self,
+        path: str,
+        channel: int,
+        write: ClipWriter,
+        *,
+        first_frame_timeout: float,
+        wait: bool = True,
+        realtime: bool = True,
+    ) -> MediaClip:
+        """See :meth:`StationSession.async_play_recording`."""
+        if self._session.standalone:
+            raise UnsupportedError("a standalone device lists no recordings to play")
+        self._session._raise_if_closed()
+        return await self._recording_on_extra(
+            path,
+            channel,
+            write,
+            play=True,
+            download=False,
+            first_frame_timeout=first_frame_timeout,
+            wait=wait,
+            realtime=realtime,
+        )
+
+    async def _recording_on_extra(
+        self,
+        path: str,
+        channel: int,
+        write: ClipWriter,
+        *,
+        play: bool,
+        download: bool,
+        first_frame_timeout: float,
+        wait: bool,
+        realtime: bool = False,
+    ) -> MediaClip:
+        """Mux a stored recording into ``write`` on an extra session, closed after.
+
+        A play writes each frame as it is muxed (paced to the stream clock with
+        ``realtime``); a download writes :data:`~..clip.CLIP_CHUNK_BYTES` chunks.
+        """
+        extra = cast(BudgetOwner, await self.reserve(first_frame_timeout, wait, slot=False))
+        if play:
+            self._session._health.recording_plays += 1
+        else:
             self._session._health.recording_downloads += 1
-            started = time.monotonic()
-            try:
-                await extra.async_connect()
-                stream = await extra.async_open_recording(
-                    path,
-                    channel,
-                    download=history_query_verb(self._session.serial) == DB_QUERY_LOCAL_EVENTS,
-                    first_frame_timeout=first_frame_timeout,
-                )
-                async with stream:
-                    muxer, _ = await mux_frames(aiter(stream), write)
-            finally:
-                extra._budget.end_extra_live()
-                _LOGGER.debug(
-                    "%s: recording on channel %d downloaded on an extra session in %.2fs",
-                    self._session._log_name,
-                    channel,
-                    time.monotonic() - started,
-                )
+        chunk_bytes = 0 if play else CLIP_CHUNK_BYTES
+        started = time.monotonic()
+        try:
+            await extra.async_connect()
+            stream = await extra.async_open_recording(
+                path, channel, download=download, first_frame_timeout=first_frame_timeout
+            )
+            async with stream:
+                if realtime:
+                    async with FramePacer(aiter(stream)) as paced:
+                        muxer, _ = await mux_frames(paced, write, chunk_bytes=chunk_bytes)
+                else:
+                    muxer, _ = await mux_frames(aiter(stream), write, chunk_bytes=chunk_bytes)
+        finally:
+            extra._budget.end_extra_live()
+            _LOGGER.debug(
+                "%s: recording on channel %d %s on an extra session in %.2fs",
+                self._session._log_name,
+                channel,
+                "played" if play else "downloaded",
+                time.monotonic() - started,
+            )
         if not muxer.started:
             raise DeviceTimeoutError("the recording ended before a keyframe arrived")
         return muxer.clip()

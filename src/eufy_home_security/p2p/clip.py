@@ -2,11 +2,13 @@
 
 A clip is what a consumer stores as a video file: a stored recording downloaded off the
 station's disk (:meth:`~eufy_home_security.station.Station.async_download_recording`)
-or a stretch of a live stream (:meth:`~.broadcast.StreamBroadcast.async_capture`). Both
-come as :class:`~.media.MediaFrame` sequences; this module muxes them with the same
-:class:`~.encoder.StreamEncoder` the live view uses (HEVC or H.264 and AAC carried untouched,
-starting at the first keyframe, following a picture-size change) and hands the bytes to
-the consumer's ``write`` coroutine in chunks of :data:`CLIP_CHUNK_BYTES`.
+or a stretch of a live stream (:meth:`~.broadcast.StreamBroadcast.async_capture`); a
+recording played for a viewer (:meth:`~eufy_home_security.station.Station.async_play_recording`)
+is muxed the same way. All come as :class:`~.media.MediaFrame` sequences; this module muxes
+them with the same :class:`~.encoder.StreamEncoder` the live view uses (HEVC or H.264 and AAC
+carried untouched, starting at the first keyframe, following a picture-size change) and hands
+the bytes to the consumer's ``write`` coroutine in chunks of :data:`CLIP_CHUNK_BYTES` (a
+playback: per frame).
 
 Remuxing the TS into MP4 is the consumer's (Home Assistant has ffmpeg): a stream copy,
 no decode.
@@ -82,8 +84,9 @@ class MediaClip:
 class _ClipMuxer:
     """Feed frames, collect chunks; :meth:`flush` writes what is left."""
 
-    def __init__(self, write: ClipWriter) -> None:
+    def __init__(self, write: ClipWriter, *, chunk_bytes: int = CLIP_CHUNK_BYTES) -> None:
         self._write = write
+        self._chunk_bytes = chunk_bytes
         self._encoder = StreamEncoder(
             audio=True, settle=0.0, follow_resize=True, fill_audio=True, tables_every=100
         )
@@ -122,7 +125,7 @@ class _ClipMuxer:
         else:
             self.audio_frames += 1
         self._pending += out.data
-        if len(self._pending) >= CLIP_CHUNK_BYTES:
+        if len(self._pending) >= self._chunk_bytes:
             await self.flush()
 
     async def flush(self) -> None:
@@ -162,9 +165,14 @@ class _ClipMuxer:
 
 
 async def mux_frames(
-    frames: AsyncIterator[MediaFrame], write: ClipWriter, *, max_ms: int | None = None
+    frames: AsyncIterator[MediaFrame],
+    write: ClipWriter,
+    *,
+    max_ms: int | None = None,
+    chunk_bytes: int = CLIP_CHUNK_BYTES,
 ) -> tuple[_ClipMuxer, bool]:
-    """Mux ``frames`` into ``write`` from the first keyframe on.
+    """Mux ``frames`` into ``write`` from the first keyframe on, in chunks of at least
+    ``chunk_bytes`` (0: each frame's bytes as soon as it is muxed).
 
     With ``max_ms`` it stops at the first video frame that many milliseconds of stream
     clock after the first keyframe (that frame is not written). A keyframe of another
@@ -172,7 +180,7 @@ async def mux_frames(
     counters; its clip is ``ended_early`` after a codec change) and whether ``max_ms`` was
     reached; the rest is flushed either way.
     """
-    muxer = _ClipMuxer(write)
+    muxer = _ClipMuxer(write, chunk_bytes=chunk_bytes)
     reached = False
     try:
         async for frame in frames:

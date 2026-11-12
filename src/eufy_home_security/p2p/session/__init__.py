@@ -924,6 +924,7 @@ class StationSession:
             extra_live_sessions=self._health.extra_live_opened,
             extra_live_sessions_open=len(self._budget.extra_live),
             recording_downloads=self._health.recording_downloads,
+            recording_plays=self._health.recording_plays,
             media_slot_channel=self.media_slot_channel,
             conn_init_version=self._conn_init_version,
             cipher_id=self._cipher_id,
@@ -2490,6 +2491,37 @@ class StationSession:
             write,
             first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
             wait=wait,
+        )
+
+    async def async_play_recording(
+        self,
+        path: str,
+        channel: int,
+        write: ClipWriter,
+        *,
+        first_frame_timeout: float | None = None,
+        wait: bool = True,
+        realtime: bool = True,
+    ) -> MediaClip:
+        """Play a stored recording for a viewer: MPEG-TS into ``write`` as it arrives.
+
+        The app's playback command (1025) on every station, on an extra session from the
+        live-stream budget, as :meth:`async_download_recording` does, but never queued
+        behind a download: ``write`` gets each frame's bytes as soon as it is muxed, the
+        first with the first keyframe. With ``realtime`` (the default) the frames go at
+        the recording's own pace (:class:`~..pacing.FramePacer`; the station sends faster
+        than that, the rest waits in memory), as a viewer of a live window needs it;
+        without it, as fast as they arrive. To stop early, cancel the call: the extra
+        session closes, which is the only thing that stops a playback. Raises what
+        :meth:`async_download_recording` raises.
+        """
+        return await self._budget.play_recording(
+            path,
+            channel,
+            write,
+            first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
+            wait=wait,
+            realtime=realtime,
         )
 
     def _send_native_recording(

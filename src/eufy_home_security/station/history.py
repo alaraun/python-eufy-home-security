@@ -231,14 +231,33 @@ class StationHistory:
         self, record: HistoryRecord, write: ClipWriter, *, wait: bool = True
     ) -> MediaClip:
         """See :meth:`Station.async_download_recording`."""
+        path, channel = self._recording_of(record)
+        clip = await self._station.session.async_download_recording(path, channel, write, wait=wait)
+        return await self._clip_of(record, clip)
+
+    async def play_recording(
+        self, record: HistoryRecord, write: ClipWriter, *, wait: bool = True, realtime: bool = True
+    ) -> MediaClip:
+        """See :meth:`Station.async_play_recording`."""
+        path, channel = self._recording_of(record)
+        clip = await self._station.session.async_play_recording(
+            path, channel, write, wait=wait, realtime=realtime
+        )
+        return await self._clip_of(record, clip)
+
+    def _recording_of(self, record: HistoryRecord) -> tuple[str, int]:
+        """The record's recording path and its camera's channel; raises
+        :class:`UnsupportedError` for a record without either."""
         path = record.video_path
         if path is None:
             raise UnsupportedError("the record carries no recording")
         if record.device_sn is None:
             raise UnsupportedError("the record names no camera")
-        channel = self._station.channel_for(record.device_sn)
-        clip = await self._station.session.async_download_recording(path, channel, write, wait=wait)
-        # Read the row again: a clip still recording when the download began has more
+        return path, self._station.channel_for(record.device_sn)
+
+    async def _clip_of(self, record: HistoryRecord, clip: MediaClip) -> MediaClip:
+        """``clip`` named after ``record``, held against its frame count read again."""
+        # Read the row again: a clip still recording when the transfer began has more
         # frames now than were delivered, and then the clip is not complete.
         expected = record.frame_count
         if record.record_id and record_id_day(record.record_id) is not None:

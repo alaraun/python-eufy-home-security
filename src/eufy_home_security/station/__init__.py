@@ -3801,3 +3801,26 @@ class Station:
         playback raises.
         """
         return await self._history.download_recording(record, write, wait=wait)
+
+    async def async_play_recording(
+        self,
+        record: HistoryRecord,
+        write: ClipWriter,
+        *,
+        wait: bool = True,
+        realtime: bool = True,
+    ) -> MediaClip:
+        """Play a history record's recording for a viewer, as MPEG-TS into ``write``.
+
+        The same TS as :meth:`async_download_recording` (the original video and AAC
+        untouched), played with the app's playback command on an extra session and
+        written as it arrives, from the first keyframe on, so a viewer starts without
+        waiting for the whole clip (see
+        :meth:`~..p2p.session.StationSession.async_play_recording`). With ``realtime``
+        (the default) frames go at the recording's own pace, as a live window such as
+        HLS needs it. Cancel the call to stop: the extra session closes and the station
+        stops sending. A play never waits for a download of this station.
+
+        Raises what :meth:`async_download_recording` raises.
+        """
+        return await self._history.play_recording(record, write, wait=wait, realtime=realtime)

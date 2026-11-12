@@ -126,11 +126,14 @@ class SessionStats:
     """Extra sessions opened for a live stream while this session's media slot was busy
     (their media is counted in the ``media_*`` fields above)."""
     extra_live_sessions_open: int
-    """Extra sessions open now, live streams and recording downloads together (at most
-    :attr:`StationSession.max_sessions` - 2)."""
+    """Extra sessions open now, live streams, recording downloads and plays together (at
+    most :attr:`StationSession.max_sessions` - 2)."""
     recording_downloads: int
     """Recordings downloaded on an extra session
     (:meth:`StationSession.async_download_recording`)."""
+    recording_plays: int
+    """Recordings played for a viewer on an extra session
+    (:meth:`StationSession.async_play_recording`)."""
     media_slot_channel: int | None
     """The camera channel of the live stream holding this session's own media slot, or
     ``None`` when the slot is free or held by a recording/playback (no camera channel)."""
@@ -229,6 +232,7 @@ class HealthCounters:
         "last_event_at",
         "receipts_by_code",
         "recording_downloads",
+        "recording_plays",
         "retired_wrong_port_drops",
         "state_frames",
         "stills_by_format",
@@ -253,6 +257,7 @@ class HealthCounters:
         self.trigger_frame_sessions = 0
         self.extra_live_opened = 0
         self.recording_downloads = 0
+        self.recording_plays = 0
 
 
 def count_capped(counter: Counter[str], key: str, *, limit: int = STAT_KEY_LIMIT) -> None:

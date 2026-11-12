@@ -712,8 +712,9 @@ def test_a_recording_settles_once_its_end_is_quiet() -> None:
     assert not Station.recording_settled(HistoryRecord(record_id=1))
 
 
-async def test_a_downloaded_recording_carries_its_record_and_completeness(
-    station: Station, fake: FakeStation, today: datetime
+@pytest.mark.parametrize("transfer", ["async_download_recording", "async_play_recording"])
+async def test_a_transferred_recording_carries_its_record_and_completeness(
+    station: Station, fake: FakeStation, today: datetime, transfer: str
 ) -> None:
     fake.recording_frames = 6
     fake.rows = [_row(today, 7, SYNTHETIC.camera_sn)]
@@ -723,7 +724,7 @@ async def test_a_downloaded_recording_carries_its_record_and_completeness(
     async def write(chunk: bytes) -> None:
         chunks.append(chunk)
 
-    clip = await station.async_download_recording(record, write)
+    clip = await getattr(station, transfer)(record, write)
     assert b"".join(chunks)[0] == 0x47
     assert len(b"".join(chunks)) % TS_PACKET_LEN == 0
     assert (clip.record_id, clip.device_sn) == (record.record_id, SYNTHETIC.camera_sn)
@@ -736,8 +737,9 @@ async def test_a_downloaded_recording_carries_its_record_and_completeness(
     assert record.video_path in str(opens[0]["payload"])
 
 
-async def test_a_clip_that_grew_during_its_download_is_not_complete(
-    station: Station, fake: FakeStation, today: datetime
+@pytest.mark.parametrize("transfer", ["async_download_recording", "async_play_recording"])
+async def test_a_clip_that_grew_during_its_transfer_is_not_complete(
+    station: Station, fake: FakeStation, today: datetime, transfer: str
 ) -> None:
     fake.recording_frames = 6
     fake.rows = [_row(today, 7, SYNTHETIC.camera_sn)]
@@ -747,7 +749,7 @@ async def test_a_clip_that_grew_during_its_download_is_not_complete(
     async def write(_chunk: bytes) -> None:
         return None
 
-    clip = await station.async_download_recording(record, write)
+    clip = await getattr(station, transfer)(record, write)
     assert clip.expected_frames == 40
     assert not clip.complete
 
@@ -773,6 +775,29 @@ async def test_a_download_passes_wait_to_the_session(
     assert waits == [False]
 
 
+async def test_a_play_passes_wait_and_realtime_to_the_session(
+    station: Station, fake: FakeStation, today: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake.rows = [_row(today, 7, SYNTHETIC.camera_sn)]
+    (record,) = await station.async_list_recordings()
+    play = station.session.async_play_recording
+    calls: list[tuple[str, int, bool, bool]] = []
+
+    async def spy(
+        path: str, channel: int, write: ClipWriter, *, wait: bool = True, realtime: bool = True
+    ) -> MediaClip:
+        calls.append((path, channel, wait, realtime))
+        return await play(path, channel, write, wait=wait, realtime=realtime)
+
+    async def write(_chunk: bytes) -> None:
+        return None
+
+    monkeypatch.setattr(station.session, "async_play_recording", spy)
+    await station.async_play_recording(record, write, wait=False, realtime=False)
+    await station.async_play_recording(record, write)
+    assert calls == [(record.video_path, 0, False, False), (record.video_path, 0, True, True)]
+
+
 @pytest.mark.parametrize(
     ("row", "match"),
     [
@@ -781,14 +806,15 @@ async def test_a_download_passes_wait_to_the_session(
         ({"record_id": 1, "device_sn": OTHER_SN, "storage_path": "/zx/a.zxvideo"}, "not paired"),
     ],
 )
+@pytest.mark.parametrize("transfer", ["async_download_recording", "async_play_recording"])
 async def test_a_record_without_a_downloadable_clip_is_refused_before_sending(
-    station: Station, fake: FakeStation, row: dict[str, object], match: str
+    station: Station, fake: FakeStation, row: dict[str, object], match: str, transfer: str
 ) -> None:
     async def write(_chunk: bytes) -> None:
         raise AssertionError("nothing is written")
 
     with pytest.raises(UnsupportedError, match=match):
-        await station.async_download_recording(HistoryRecord.from_row(row), write)
+        await getattr(station, transfer)(HistoryRecord.from_row(row), write)
     assert fake.sessions == 0
 
 
