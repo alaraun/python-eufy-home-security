@@ -1317,6 +1317,10 @@ class EufySecurity:
         admitted = self._admit(event)
         if admitted is None:
             return
+        if admitted.station_sn is not None:
+            station = self.stations.get(admitted.station_sn)
+            if station is not None:
+                station.note_security_event(admitted)
         self._bus.emit(admitted)
         if (alarm := self._alarms.push(admitted)) is not None:
             self._emit_alarm(alarm)

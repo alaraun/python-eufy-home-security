@@ -676,3 +676,36 @@ before anything reaches the deduplicator.
 The AWS IoT MQTT topics (`cmd/eufy_security/<PN>/<SN>/{req,res}`) carry the same
 envelope, but carry no camera event traffic, and no arming path exists
 over MQTT or REST **[app]**. Arming is P2P only.
+
+## Camera activity counters (observed, not individual detections)
+
+`StationActivity` watches the **existing** station parameter snapshots. A camera's
+`detected_events` (parameter **1192**) increasing emits `MotionDetected`, while
+`recorded_events` (parameter **1193**) increasing emits `MotionRecorded`. These
+observations cause **no additional station requests**, cloud reads or
+recording-history queries. The two counters are independent; recordings need not
+match detections 1:1.
+
+The first usable counter value after startup, after a station link loss, after a
+device disappears or is explicitly offline, or after a counter becomes unavailable
+establishes a baseline. Only camera-capable models from the existing catalogue
+are tracked. An absent online flag (`online=None`) is unknown, not offline; an
+explicit offline report (`online=False`) excludes the device. Only a **positive**
+change emits an event; a reset or decrease does not. A jump by N emits
+**one observation with `count=N`**, not N invented timestamps. `observed_at` is
+the UTC time the host noticed the counter
+change, not the time of any particular motion or recording.
+
+When a camera has **no usable detection counter in its observed state**, an admitted,
+non-enrichment detection push may produce `MotionDetected(source="push", count=1)`;
+with a usable counter, it does not, avoiding push/counter duplication. Here `source`
+means **observation mechanism** (`counter` or `push`), not the P2P/FCM transport in
+`SecurityEvent.source` (`EventSource`). Push fallback requires a previously
+observed camera that is not explicitly offline. The existing detailed
+`SecurityEvent` remains independent.
+
+A rise in 1193 is evidence that the station's recording *counter* increased; it is
+**not** proof that a media file is finalised, browsable or downloadable. It carries
+no clip id or path. Counter reporting can vary by model and firmware. HomeBase 2
+counter changes with notifications disabled have been observed; do not generalise
+this to all HomeBases or standalone cameras without hardware verification.
