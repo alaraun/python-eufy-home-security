@@ -4,6 +4,13 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.13](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.12...v0.4.13) (2026-11-12)
+
+
+### Features
+
+* **station:** play a stored recording for a viewer as it arrives, without downloading it first ([9a4cb4d](https://github.com/alaraun/python-eufy-home-security/commit/9a4cb4deb84af84cd8de49ed57a481daeeac6510))
+
 ## [0.4.12](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.11...v0.4.12) (2026-11-05)
 
 
