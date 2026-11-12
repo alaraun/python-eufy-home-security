@@ -17,7 +17,7 @@ from ...exceptions import (
     LiveStreamLimitError,
     UnsupportedError,
 )
-from ..clip import CLIP_CHUNK_BYTES, ClipWriter, MediaClip, mux_frames
+from ..clip import ClipWriter, MediaClip, mux_frames
 from ..media import MediaKeyType, MediaKind
 from ..messages import DB_QUERY_LOCAL_EVENTS, history_query_verb
 from ..pacing import FramePacer
@@ -298,35 +298,44 @@ class SessionBudget:
     ) -> MediaClip:
         """Mux a stored recording into ``write`` on an extra session, closed after.
 
-        A play writes each frame as it is muxed (paced to the stream clock with
-        ``realtime``); a download writes :data:`~..clip.CLIP_CHUNK_BYTES` chunks.
+        A download writes :data:`~..clip.CLIP_CHUNK_BYTES` chunks. A play writes each
+        frame as it is muxed, read ahead through a :class:`~..pacing.FramePacer` (paced
+        to the stream clock with ``realtime``): per-frame writes would let the stream's
+        queue fill and drop video for a slow writer. The stream ends, and with it the
+        extra session (:meth:`end_extra_live`), once the station has sent the whole
+        recording, while the frames read ahead are still being written.
         """
         extra = cast(BudgetOwner, await self.reserve(first_frame_timeout, wait, slot=False))
         if play:
             self._session._health.recording_plays += 1
         else:
             self._session._health.recording_downloads += 1
-        chunk_bytes = 0 if play else CLIP_CHUNK_BYTES
         started = time.monotonic()
+        ahead = 0
         try:
             await extra.async_connect()
             stream = await extra.async_open_recording(
                 path, channel, download=download, first_frame_timeout=first_frame_timeout
             )
             async with stream:
-                if realtime:
-                    async with FramePacer(aiter(stream)) as paced:
-                        muxer, _ = await mux_frames(paced, write, chunk_bytes=chunk_bytes)
+                if play:
+                    async with FramePacer(aiter(stream), pace=realtime) as paced:
+                        try:
+                            muxer, _ = await mux_frames(paced, write, chunk_bytes=0)
+                        finally:
+                            ahead = paced.peak_frames
                 else:
-                    muxer, _ = await mux_frames(aiter(stream), write, chunk_bytes=chunk_bytes)
+                    muxer, _ = await mux_frames(aiter(stream), write)
         finally:
             extra._budget.end_extra_live()
             _LOGGER.debug(
-                "%s: recording on channel %d %s on an extra session in %.2fs",
+                "%s: recording on channel %d %s on an extra session in %.2fs "
+                "(at most %d frame(s) read ahead)",
                 self._session._log_name,
                 channel,
                 "played" if play else "downloaded",
                 time.monotonic() - started,
+                ahead,
             )
         if not muxer.started:
             raise DeviceTimeoutError("the recording ended before a keyframe arrived")

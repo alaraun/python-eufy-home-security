@@ -2508,11 +2508,14 @@ class StationSession:
         The app's playback command (1025) on every station, on an extra session from the
         live-stream budget, as :meth:`async_download_recording` does, but never queued
         behind a download: ``write`` gets each frame's bytes as soon as it is muxed, the
-        first with the first keyframe. With ``realtime`` (the default) the frames go at
-        the recording's own pace (:class:`~..pacing.FramePacer`; the station sends faster
-        than that, the rest waits in memory), as a viewer of a live window needs it;
-        without it, as fast as they arrive. To stop early, cancel the call: the extra
-        session closes, which is the only thing that stops a playback. Raises what
+        first with the first keyframe. Every frame is read as it arrives and held in
+        memory until written (:class:`~..pacing.FramePacer`), so a slow ``write`` loses
+        nothing. With ``realtime`` (the default) the frames go at the recording's own
+        pace, as a viewer of a live window needs it; without it, as fast as ``write``
+        takes them. The extra session goes back to the budget as soon as the station
+        has sent the whole recording (a station sends faster than realtime), before
+        the last frames are written. To stop early, cancel the call: the extra session
+        closes, which is the only thing that stops a playback. Raises what
         :meth:`async_download_recording` raises.
         """
         return await self._budget.play_recording(

@@ -181,3 +181,17 @@ async def test_a_cancel_while_the_read_ahead_stops_is_not_swallowed() -> None:
             await task
     assert task.cancelled()
     await asyncio.sleep(0.3)  # let the read-ahead finish stopping
+
+
+async def test_unpaced_frames_go_as_soon_as_read() -> None:
+    clock = _Clock()
+    frames = [_video(0), _video(40), _video(5000)]
+    out: list[MediaFrame] = []
+    async with FramePacer(_source(frames), clock=clock, sleep=clock.sleep, pace=False) as paced:
+        out.extend([frame async for frame in paced])
+    assert (out, clock.sleeps) == (frames, [])
+
+
+async def test_a_pacer_is_read_only_inside_its_block() -> None:
+    with pytest.raises(RuntimeError, match="async with"):
+        await anext(FramePacer(_source([_video(0)])))

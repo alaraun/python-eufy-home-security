@@ -2055,14 +2055,16 @@ the whole clip:
 
 - each frame's bytes go to `write` as soon as they are muxed (a download writes
   512 KB chunks);
-- with `realtime` (the default) the frames go at the recording's own pace: the station
-  sends faster than that (about three times on a HomeBase 3) and the library holds what
-  arrives early in memory. A live-window consumer such as Home Assistant's HLS output
-  needs it, or the window slides past what the viewer has seen; `realtime=False`
-  writes as fast as the station sends;
+- every frame is read as it arrives and held in memory until it is written, so a slow
+  `write` loses nothing; with `realtime` (the default) the frames go at the
+  recording's own pace: the station sends faster than that (a HomeBase 3 sent a 26.5 s
+  recording in 9.2 s). A live-window consumer such as Home Assistant's HLS output needs
+  it, or the window slides past what the viewer has seen; `realtime=False` writes as
+  fast as `write` takes the frames;
 - it runs on an extra session from the live-stream budget like a download, but never
   waits for a download of the same station; `wait=False` raises `LiveStreamLimitError`
-  instead of queueing for a free session;
+  instead of queueing for a free session. The session goes back to the budget as soon
+  as the station has sent the whole recording, before the last frames are written;
 - **stop** by cancelling the call (the viewer went away): the extra session closes,
   which is the only thing that stops a station's playback;
 - no seeking: the station sends the recording from its start;

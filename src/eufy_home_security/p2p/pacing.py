@@ -1,7 +1,7 @@
 """Release a stored recording's frames at the pace they were recorded (:class:`FramePacer`).
 
-A station plays a recording off its disk faster than it was recorded (about three times
-on a HomeBase 3). A consumer that shows it as it arrives, such as a live HLS window,
+A station plays a recording off its disk faster than it was recorded (a HomeBase 3 sent
+a 26.5 s recording in 9.2 s). A consumer that shows it as it arrives, such as a live HLS window,
 needs it at the recorded pace, or the window slides past what the viewer has seen.
 """
 
@@ -26,6 +26,8 @@ a jump) is played as this long."""
 class FramePacer:
     """Read ``frames`` ahead as fast as they come; hand them out at the stream clock's pace.
 
+    With ``pace`` False the frames go as soon as they are read (read-ahead only).
+
     Every frame is read into memory at once (a :class:`~.session.MediaStream` drops video
     for a reader that falls behind), so the buffer holds what arrived ahead of its time,
     up to the whole recording. The first video frame goes at once; each later one when
@@ -45,8 +47,10 @@ class FramePacer:
         *,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
+        pace: bool = True,
     ) -> None:
         self._frames = frames
+        self._pace_frames = pace
         self._clock = clock
         self._sleep = sleep
         self._buffer: deque[MediaFrame] = deque()
@@ -84,6 +88,8 @@ class FramePacer:
         return self
 
     async def __anext__(self) -> MediaFrame:
+        if self._task is None and not self._done:
+            raise RuntimeError("iterate a FramePacer inside its 'async with' block")
         while not self._buffer:
             if self._done:
                 if self._error is not None:
@@ -93,7 +99,7 @@ class FramePacer:
             self._wake.clear()
             await self._wake.wait()
         frame = self._buffer.popleft()
-        if frame.kind is MediaKind.VIDEO:
+        if self._pace_frames and frame.kind is MediaKind.VIDEO:
             await self._pace(frame.timestamp_ms)
         return frame
 
