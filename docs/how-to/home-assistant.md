@@ -2063,8 +2063,9 @@ the whole clip:
   fast as `write` takes the frames;
 - it runs on an extra session from the live-stream budget like a download, but never
   waits for a download of the same station; `wait=False` raises `LiveStreamLimitError`
-  instead of queueing for a free session. The session goes back to the budget as soon
-  as the station has sent the whole recording, before the last frames are written;
+  instead of queueing for a free session. The session goes back to the budget once the
+  station has sent the whole recording, even while frames read ahead are still being
+  written;
 - **stop** by cancelling the call (the viewer went away): the extra session closes,
   which is the only thing that stops a station's playback;
 - no seeking: the station sends the recording from its start;

@@ -329,13 +329,12 @@ class SessionBudget:
         finally:
             extra._budget.end_extra_live()
             _LOGGER.debug(
-                "%s: recording on channel %d %s on an extra session in %.2fs "
-                "(at most %d frame(s) read ahead)",
+                "%s: recording on channel %d %s on an extra session in %.2fs%s",
                 self._session._log_name,
                 channel,
                 "played" if play else "downloaded",
                 time.monotonic() - started,
-                ahead,
+                f" (at most {ahead} frame(s) read ahead)" if play else "",
             )
         if not muxer.started:
             raise DeviceTimeoutError("the recording ended before a keyframe arrived")

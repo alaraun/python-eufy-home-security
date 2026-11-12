@@ -329,6 +329,7 @@ async def test_a_paced_play_returns_its_session_once_the_station_has_sent_all(
     try:
         await session.async_connect()
         task = asyncio.create_task(session.async_play_recording(CLIP, 0, write))
+        await _until(lambda: station.sessions == 2)  # the extra session is up
         await _until(lambda: station.sessions == 1)
         assert not task.done(), "still writing at the recording's pace"
         assert session.stats().extra_live_sessions_open == 0

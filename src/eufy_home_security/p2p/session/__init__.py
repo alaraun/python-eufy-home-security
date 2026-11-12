@@ -2512,9 +2512,9 @@ class StationSession:
         memory until written (:class:`~..pacing.FramePacer`), so a slow ``write`` loses
         nothing. With ``realtime`` (the default) the frames go at the recording's own
         pace, as a viewer of a live window needs it; without it, as fast as ``write``
-        takes them. The extra session goes back to the budget as soon as the station
-        has sent the whole recording (a station sends faster than realtime), before
-        the last frames are written. To stop early, cancel the call: the extra session
+        takes them. The extra session goes back to the budget once the station has
+        sent the whole recording (a station sends faster than realtime), even while
+        frames read ahead are still being written. To stop early, cancel the call: the extra session
         closes, which is the only thing that stops a playback. Raises what
         :meth:`async_download_recording` raises.
         """
