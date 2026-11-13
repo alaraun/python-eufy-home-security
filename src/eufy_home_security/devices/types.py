@@ -352,7 +352,7 @@ def product_name(serial: str, product_code: str | None = None) -> str | None:
 def connects_on_demand(serial: str) -> bool:
     """Whether a station is on the eufy app's on-demand list (:data:`ON_DEMAND_PREFIXES`):
     a battery device a held session would keep awake. The client also reaches a camera
-    or doorbell on demand when its settings declare a battery
+    or doorbell on demand when its bundled settings declare a battery
     (:func:`~.model_settings.declares_battery`); :attr:`Station.connects_on_demand
     <eufy_home_security.station.Station.connects_on_demand>` is the decision taken."""
     return serial_prefix(serial) in ON_DEMAND_PREFIXES
