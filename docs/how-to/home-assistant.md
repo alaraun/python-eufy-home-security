@@ -591,7 +591,9 @@ A `DataUpdateCoordinator[StationState]` per station:
 - **A battery station (`station.connects_on_demand`) must not be polled over P2P.** A
   held session keeps a battery camera awake, so the library holds none for it: the
   prefixes the eufy app does not reconnect (`ON_DEMAND_PREFIXES`, a T8170 among them)
-  and every camera or doorbell whose settings declare a battery (a T81A0):
+  and every camera or doorbell whose bundled settings declare a battery (a T81A0).
+  Gate polling on `station.connects_on_demand`, the decision taken, not on
+  `has_battery()`, which also reads a cloud-listed model the rule leaves held:
   - `station.async_update()` returns its state **without waking it** (the cloud
     snapshot, pushes, the last session); only `async_update(wake=True)` reads it live.
     Keep the same coordinator and poll interval: the call is free.
