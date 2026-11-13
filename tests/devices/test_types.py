@@ -210,6 +210,7 @@ def test_a_hand_written_entry_wins_over_the_generated_one() -> None:
 def test_connects_on_demand_on_demand_prefixes() -> None:
     assert connects_on_demand("T8170P0000000000") is True
     assert connects_on_demand(" t8170p0000000000") is True
+    assert connects_on_demand("T81A0P0000000000") is True
     assert connects_on_demand("T8030P0000000000") is False
     assert connects_on_demand("T8160P0000000000") is False
     assert connects_on_demand("T817") is False
