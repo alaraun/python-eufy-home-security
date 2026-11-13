@@ -227,10 +227,12 @@ _register(_models, *(_app_model(*row) for row in APP_MODELS if row[0] not in _mo
 
 MODELS: Final[Mapping[str, DeviceModel]] = MappingProxyType(_models)
 
-#: Serial prefixes the eufy app never keeps a P2P session to: it connects them only
-#: while the user has one open, and its watchdog does not reconnect them (battery
-#: SoloCams, battery doorbells, trackers, locks). A prefix, not a catalog model:
-#: most of them are not catalogued.
+#: Serial prefixes the eufy app leaves out of its P2P reconnect (battery SoloCams,
+#: battery doorbells, trackers, locks): it connects them when it comes to the
+#: foreground, but reconnects only the other stations when their session drops. A
+#: prefix, not a catalog model: most of them are not catalogued. The list leaves out
+#: newer battery models; the client adds those by their settings (see
+#: ``EufySecurity``'s on-demand rule).
 ON_DEMAND_PREFIXES: Final = frozenset(
     {
         "T7400", "T7401", "T8110", "T8115", "T8122", "T8123", "T8124", "T8130", "T8131",
@@ -289,6 +291,9 @@ def model_for_serial(serial: str) -> DeviceModel | None:
 
 
 def connects_on_demand(serial: str) -> bool:
-    """Whether a station is reached only on demand, never over a held session
-    (:data:`ON_DEMAND_PREFIXES`): a battery device a held session would keep awake."""
+    """Whether a station is on the eufy app's on-demand list (:data:`ON_DEMAND_PREFIXES`):
+    a battery device a held session would keep awake. The client also reaches a camera
+    or doorbell on demand when its bundled settings declare a battery
+    (:func:`~.model_settings.declares_battery`); :attr:`Station.connects_on_demand
+    <eufy_home_security.station.Station.connects_on_demand>` is the decision taken."""
     return serial_prefix(serial) in ON_DEMAND_PREFIXES

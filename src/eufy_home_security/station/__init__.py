@@ -9,7 +9,7 @@ import ipaddress
 import logging
 import time
 from collections import Counter
-from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
@@ -52,7 +52,6 @@ from ..devices.live_view import (
     parse_lenses,
 )
 from ..devices.model_settings import (
-    BATTERY_PROPERTY,
     PARENTLESS_ONLY,
     Setting,
     SettingKind,
@@ -62,6 +61,7 @@ from ..devices.model_settings import (
     WritePath,
     arms_by_scalar,
     battery_level,
+    declares_battery,
     mode_table_settings,
     product_code_of,
     settings_of,
@@ -240,8 +240,6 @@ PTZ_BUSY_ATTEMPTS: Final = 4
 """How often a preset command is re-sent while the camera answers :data:`PTZ_BUSY_CODE`."""
 PTZ_BUSY_DELAY: Final = 3.0
 """Wait between those attempts: a T8170 settles within a few seconds of a turn."""
-# The kinds the eufy app's battery display rule covers (the camera card).
-_BATTERY_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
 FRESH_KEYFRAME_WINDOW: Final = 0.5
 """After a live stream's first keyframe, wait this long for a second one and prefer it:
 a T8170 woken again may first replay its last keyframe of the previous stream (minutes
@@ -1227,13 +1225,12 @@ class Station:
         camera card's). Sync; raises ``UnsupportedError`` as :meth:`settings_for`.
         """
         serial = self.serial if device_sn in (None, self.serial) else device_sn
-        model = model_for_serial(serial)
-        if model is None or model.kind not in _BATTERY_KINDS:
-            return None
-        settings = self.settings_for(serial)
-        if not settings:
-            return None
-        return any(setting.key == BATTERY_PROPERTY for setting in settings)
+
+        def settings() -> Iterator[Setting]:
+            # Lazy: another kind returns None before settings_for can raise.
+            yield from self.settings_for(serial)
+
+        return declares_battery(serial, settings())
 
     def _settings_of(self, serial: str) -> tuple[Setting, ...]:
         """:meth:`settings_for` of ``serial``, paired or not (a dump can name a device
@@ -1600,10 +1597,12 @@ class Station:
 
     @property
     def connects_on_demand(self) -> bool:
-        """Whether this station is reached only on demand (a battery device, see
-        :func:`~..devices.types.connects_on_demand`): no held session, its state comes from
-        the cloud snapshot and pushes, and every command connects, then the link closes
-        after :data:`~..p2p.session.ON_DEMAND_IDLE_CLOSE` seconds idle."""
+        """Whether this station is reached only on demand (a battery device: on the eufy
+        app's list, :func:`~..devices.types.connects_on_demand`, or a camera or doorbell
+        whose bundled settings declare a battery, decided by the client when it builds
+        the station): no held session, its state comes from the cloud snapshot and
+        pushes, and every command connects, then the link closes after
+        :data:`~..p2p.session.ON_DEMAND_IDLE_CLOSE` seconds idle."""
         return self.session.on_demand
 
     @property

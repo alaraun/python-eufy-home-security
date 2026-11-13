@@ -1335,6 +1335,7 @@ def test_has_battery_follows_the_models_thing_description() -> None:
     assert hub.has_battery(SYNTHETIC.station_sn) is None
     with pytest.raises(UnsupportedError, match="not paired"):
         hub.has_battery("T8160P2000099999")
+    assert hub.has_battery("T8910P2000099999") is None  # another kind: None before pairing
     standalone = _standalone_t8170()
     assert standalone.has_battery() is True
     assert standalone.has_battery(_T8170_SN) is True

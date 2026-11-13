@@ -32,6 +32,7 @@ from .devices.model_settings import (
     bundled_codes,
     bundled_td_version,
     canonical_code,
+    declares_battery,
     product_code_of,
     settings_of,
 )
@@ -163,15 +164,24 @@ def _account_codes(devices: Sequence[CloudDevice]) -> tuple[str, ...]:
     return tuple(sorted(c for c in codes if c is not None))
 
 
-def _load_settings(devices: Sequence[CloudDevice]) -> None:
+def _load_settings(devices: Sequence[CloudDevice]) -> frozenset[str]:
     """Load the settings file of every device's model (blocking: package data, a worker
     thread only), so :meth:`Station.settings_for` reads no disk on the loop. A malformed
-    file is left for :meth:`Station.settings_for` to raise."""
+    file is left for :meth:`Station.settings_for` to raise.
+
+    Returns the serials whose bundled settings, as their own station, declare a battery
+    (:func:`~.devices.model_settings.declares_battery`); only a station reads it.
+    """
+    battery: set[str] = set()
     for device in devices:
         code = product_code_of(device.raw.get("device_new_pn"), device.device_sn)
-        if code is not None:
-            with contextlib.suppress(ModelDataError):
-                settings_of(code)
+        if code is None:
+            continue
+        with contextlib.suppress(ModelDataError):
+            settings_of(code)
+            if declares_battery(device.device_sn, settings_of(code, standalone=True).values()):
+                battery.add(device.device_sn)
+    return frozenset(battery)
 
 
 def _bundled_version(code: str) -> int | None:
@@ -283,8 +293,13 @@ class EufySecurity:
         cloud's alarm pushes become one :class:`~.events.AlarmChanged` per start and
         per end, and a change of guard mode to a disarmed mode ends an alarm.
 
-        A station reached on demand (a battery device,
-        :func:`~.devices.types.connects_on_demand`) holds no session. Its state comes from
+        A station reached on demand (a battery device: on the eufy app's list,
+        :func:`~.devices.types.connects_on_demand`, or a camera or doorbell whose bundled
+        settings declare a battery, :func:`~.devices.model_settings.declares_battery`)
+        holds no session. The battery part is the library's rule (the app holds no
+        session in the background at all, and its list leaves out newer battery models);
+        it goes by model, not by how a unit is powered, and is taken when the station is
+        built. A model without a bundled settings file keeps a held session. Its state comes from
         the cloud device list's parameter snapshot: kept in the cache, applied when the
         station is built, and fetched again every ``cloud_state_refresh`` seconds (one
         device-list call for the account) while :meth:`async_start` runs; pushes update it
@@ -598,7 +613,7 @@ class EufySecurity:
             served = self._claims.claim(self.cache.account, included)
         self.stations_served_elsewhere = tuple(d for d in included if d.device_sn not in served)
         self._not_served = frozenset(d.device_sn for d in candidates if d.device_sn not in served)
-        await asyncio.to_thread(_load_settings, devices)
+        battery_stations = await asyncio.to_thread(_load_settings, devices)
         await self._async_scan_models(devices, refresh=refresh or rescan_regions)
         for device in candidates:
             serial = device.device_sn
@@ -613,6 +628,8 @@ class EufySecurity:
             if self._reach(serial) is Reach.REMOTE:
                 self.remote_stations[serial] = RemoteStation(device=device, sub_devices=sub_devices)
                 continue
+            # The app's list, or the library's rule for a battery camera or doorbell.
+            on_demand = connects_on_demand(serial) or serial in battery_stations
             session = StationSession(
                 serial,
                 self._credential_provider(serial),
@@ -622,8 +639,8 @@ class EufySecurity:
                 did=device.p2p_did,
                 expect_channels=station_channels(device, sub_devices),
                 block_aliases=station_block_aliases(device),
-                on_demand=connects_on_demand(serial),
-                wake_provider=self._wake_provider(device) if connects_on_demand(serial) else None,
+                on_demand=on_demand,
+                wake_provider=self._wake_provider(device) if on_demand else None,
                 key_refresh=_CachedKeyRefreshLatch(self.cache, serial),
                 cloud_problems_reported=True,
                 max_sessions=self._max_sessions,
