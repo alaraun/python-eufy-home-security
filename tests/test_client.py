@@ -25,12 +25,14 @@ from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession, 
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices.model_settings import (
+    BATTERY_PROPERTY,
     PARENTLESS_ONLY,
     bundled_td_version,
     settings_of,
 )
 from eufy_home_security.devices.recipes import connect_type
 from eufy_home_security.devices.timezones import encode_zone, zone_ids
+from eufy_home_security.devices.types import MODELS
 from eufy_home_security.events import (
     AlarmChanged,
     CloudProblem,
@@ -58,6 +60,7 @@ from eufy_home_security.exceptions import (
     EufySecurityError,
     KeyExchangeRefusedError,
     KeyRejectedError,
+    ModelDataError,
     NoCachedSessionError,
     ProtocolError,
     RateLimitedError,
@@ -1993,21 +1996,30 @@ async def test_discover_builds_a_standalone_station_that_reads_its_one_block() -
         fake.stop()
 
 
-async def test_on_demand_station_discover_and_start() -> None:
-    sn = "T8170P0000000000"
-    device = {
+def standalone_device(sn: str, **extra: Any) -> dict[str, Any]:
+    """A device that is its own station, with its catalogued cloud device type."""
+    model = MODELS[sn[:5]]
+    return {
         "device_sn": sn,
-        "device_type": 48,
+        "device_type": model.cloud_device_type,
         "parent_sn": sn,
         "device_channel": 0,
         "device_name": "Solo",
         "p2p_did": SYNTHETIC.did,
         "local_ip": "127.0.0.1",
-        "params": [
+    } | extra
+
+
+# T8170: on the eufy app's on-demand list. T81A0: a battery camera the list leaves out.
+@pytest.mark.parametrize("sn", ["T8170P0000000000", "T81A0P0000000000"])
+async def test_on_demand_station_discover_and_start(sn: str) -> None:
+    device = standalone_device(
+        sn,
+        params=[
             {"param_type": 1101, "param_value": "87", "update_time": 1600000000.0},
             {"param_type": 1224, "param_value": "1", "update_time": 1600000000.0},
         ],
-    }
+    )
     async with aiohttp.ClientSession() as http:
         fake = FakeStation(serial=sn)
         await fake.start()
@@ -2029,6 +2041,29 @@ async def test_on_demand_station_discover_and_start() -> None:
             await client.async_close()
         finally:
             fake.stop()
+
+
+@pytest.mark.parametrize(
+    ("sn", "on_demand", "battery"),
+    [
+        ("T8170P0000000000", True, True),  # on the app's list
+        ("T8153P0000000000", True, None),  # on the app's list, no settings
+        ("T81A0P0000000000", True, True),  # off the list, settings declare a battery
+        ("T84A1P0000000000", False, False),  # wired wall light: settings without one
+        ("T8174P0000000000", False, None),  # a camera without settings: unknown
+        ("T8030P0000000000", False, None),  # a HomeBase: not a camera or doorbell
+    ],
+)
+async def test_a_station_is_reached_on_demand_by_the_app_list_or_a_declared_battery(
+    sn: str, on_demand: bool, battery: bool | None
+) -> None:
+    cloud = FakeCloud(devices=[standalone_device(sn)])
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        (station,) = await eufy.async_discover()
+        assert station.connects_on_demand is on_demand
+        assert station.has_battery() is battery
+        await eufy.async_close()
 
 
 async def test_a_hub_gets_the_cloud_refresh_loop_and_a_missing_copy_is_fetched_at_start() -> None:
@@ -2450,6 +2485,38 @@ async def test_an_unbundled_model_is_listed_read_only_after_one_request() -> Non
         await eufy.async_close()
     assert cloud.calls.count("things") == 1
     assert "login" not in cloud.calls
+
+
+async def test_a_malformed_settings_file_keeps_a_held_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def malformed(*_args: object, **_kwargs: object) -> Mapping[str, object]:
+        raise ModelDataError("malformed")
+
+    monkeypatch.setattr(client_module, "settings_of", malformed)
+    cloud = FakeCloud(devices=[standalone_device("T81A0P0000000000")])
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        (station,) = await eufy.async_discover()
+        assert station.connects_on_demand is False
+        await eufy.async_close()
+
+
+@pytest.mark.parametrize(("listed_battery", "on_demand"), [(True, True), (False, False)])
+async def test_an_unbundled_station_is_reached_on_demand_when_its_listing_has_a_battery(
+    listed_battery: bool, on_demand: bool
+) -> None:
+    td = unbundled_td()
+    if listed_battery:
+        td["properties"].append(range_property(BATTERY_PROPERTY, 0, 100, unit="%"))
+    device = standalone_device("T8174P0000000000", device_new_pn=UNBUNDLED)
+    cloud = FakeCloud(devices=[device], things={UNBUNDLED: td})
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        (station,) = await eufy.async_discover()
+        assert station.has_battery() is listed_battery
+        assert station.connects_on_demand is on_demand
+        await eufy.async_close()
 
 
 @pytest.fixture

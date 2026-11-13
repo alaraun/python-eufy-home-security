@@ -48,7 +48,7 @@ from .settings import (
     SettingUnit,
 )
 from .timezones import TIMEZONE_DOMAIN, decode_zone, encode_zone, zone_ids
-from .types import model_for_serial, serial_product_code
+from .types import DeviceKind, model_for_serial, serial_product_code
 
 __all__ = [
     "DEFAULT_BATTERY_READS",
@@ -69,6 +69,7 @@ __all__ = [
     "bundled_codes",
     "bundled_td_version",
     "canonical_code",
+    "declares_battery",
     "mode_table_settings",
     "product_code_of",
     "settings_of",
@@ -106,6 +107,11 @@ The eufy app shows a camera's battery and charging state only when its thing
 description has this property (and the product's feature flags allow it); a
 mains-powered camera or a wired doorbell, whose block reports a charging field too,
 gets a power-source icon instead. See :meth:`~..station.Station.has_battery`.
+"""
+BATTERY_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
+"""The device kinds whose battery :func:`declares_battery` reads from the settings list:
+the eufy app's rule is the camera card's. A sensor or keypad declares its battery
+differently, and a station model's :data:`BATTERY_PROPERTY` is not this rule's.
 """
 _PRODUCT_CODE: Final = re.compile(r"[A-Za-z0-9]{1,32}")
 _SN_SLOTS: Final = frozenset({"$device_sn", "$station_sn"})
@@ -1002,6 +1008,21 @@ def product_code_of(device_new_pn: object, serial: str) -> str | None:
         return code
     model = model_for_serial(serial)
     return model.model if model is not None else None
+
+
+def declares_battery(serial: str, settings: Iterable[Setting]) -> bool | None:
+    """Whether the camera or doorbell ``serial`` runs on a battery, as the eufy app
+    decides whether to show one **[declared]**: True when ``settings`` (its settings
+    list) has :data:`BATTERY_PROPERTY`, False when the list is not empty and lacks it.
+
+    None when ``serial`` is of another kind or no catalogued model
+    (:data:`BATTERY_KINDS`), and when ``settings`` is empty (unknown).
+    """
+    model = model_for_serial(serial)
+    if model is None or model.kind not in BATTERY_KINDS:
+        return None
+    keys = {setting.key for setting in settings}
+    return (BATTERY_PROPERTY in keys) if keys else None
 
 
 @functools.cache

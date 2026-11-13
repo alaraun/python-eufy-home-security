@@ -589,8 +589,9 @@ A `DataUpdateCoordinator[StationState]` per station:
     own events are `AlarmChanged` and `AlarmDelayChanged`.
   - `ConnectionChanged(connected=False)`: `coordinator.async_set_update_error(...)`.
 - **A battery station (`station.connects_on_demand`) must not be polled over P2P.** A
-  held session keeps a battery camera awake, so the library holds none for it (a T8170
-  and the other prefixes the eufy app never keeps connected, `ON_DEMAND_PREFIXES`):
+  held session keeps a battery camera awake, so the library holds none for it: the
+  prefixes the eufy app does not reconnect (`ON_DEMAND_PREFIXES`, a T8170 among them)
+  and every camera or doorbell whose settings declare a battery (a T81A0):
   - `station.async_update()` returns its state **without waking it** (the cloud
     snapshot, pushes, the last session); only `async_update(wake=True)` reads it live.
     Keep the same coordinator and poll interval: the call is free.

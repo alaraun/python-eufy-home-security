@@ -24,6 +24,7 @@ from eufy_home_security.devices.model_settings import (
     WritePath,
     arms_by_scalar,
     bundled_codes,
+    declares_battery,
     mode_table_settings,
     product_code_of,
     settings_of,
@@ -177,6 +178,25 @@ def test_without_a_cloud_code_the_serial_names_the_product(serial: str, code: st
 
 def test_the_cloud_code_wins_over_the_serial() -> None:
     assert product_code_of("t8410", "T8410X5000000001") == "T8410"
+
+
+@pytest.mark.parametrize(
+    ("serial", "code", "expected"),
+    [
+        ("T81A0P0000000001", "T81A0", True),  # a camera listing the battery property
+        ("T8213P0000000001", "T8213", True),  # a doorbell
+        ("T84A1P0000000001", "T84A1", False),  # a camera listing settings, no battery
+        ("T81A0P0000000001", "T9999", None),  # no settings: unknown
+        ("T9000P0000000001", "T9000", None),  # a station lists one: not this rule's
+        ("T8910P0000000001", "T8910", None),  # a sensor lists one: not this rule's
+        ("T0000P0000000001", "T81A0", None),  # an uncatalogued serial
+    ],
+)
+def test_declares_battery_reads_a_camera_or_doorbells_settings(
+    serial: str, code: str, expected: bool | None
+) -> None:
+    settings = settings_of(code, standalone=True).values()
+    assert declares_battery(serial, settings) is expected
 
 
 # ── decode ──────────────────────────────────────────────────────────────────
