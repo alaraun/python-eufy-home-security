@@ -164,15 +164,24 @@ def _account_codes(devices: Sequence[CloudDevice]) -> tuple[str, ...]:
     return tuple(sorted(c for c in codes if c is not None))
 
 
-def _load_settings(devices: Sequence[CloudDevice]) -> None:
+def _load_settings(devices: Sequence[CloudDevice]) -> frozenset[str]:
     """Load the settings file of every device's model (blocking: package data, a worker
     thread only), so :meth:`Station.settings_for` reads no disk on the loop. A malformed
-    file is left for :meth:`Station.settings_for` to raise."""
+    file is left for :meth:`Station.settings_for` to raise.
+
+    Returns the serials whose bundled settings, as their own station, declare a battery
+    (:func:`~.devices.model_settings.declares_battery`); only a station reads it.
+    """
+    battery: set[str] = set()
     for device in devices:
         code = product_code_of(device.raw.get("device_new_pn"), device.device_sn)
-        if code is not None:
-            with contextlib.suppress(ModelDataError):
-                settings_of(code)
+        if code is None:
+            continue
+        with contextlib.suppress(ModelDataError):
+            settings_of(code)
+            if declares_battery(device.device_sn, settings_of(code, standalone=True).values()):
+                battery.add(device.device_sn)
+    return frozenset(battery)
 
 
 def _bundled_version(code: str) -> int | None:
@@ -285,9 +294,12 @@ class EufySecurity:
         per end, and a change of guard mode to a disarmed mode ends an alarm.
 
         A station reached on demand (a battery device: on the eufy app's list,
-        :func:`~.devices.types.connects_on_demand`, or a camera or doorbell whose
+        :func:`~.devices.types.connects_on_demand`, or a camera or doorbell whose bundled
         settings declare a battery, :func:`~.devices.model_settings.declares_battery`)
-        holds no session. Its state comes from
+        holds no session. The battery part is the library's rule (the app holds no
+        session in the background at all, and its list leaves out newer battery models);
+        it goes by model, not by how a unit is powered, and is taken when the station is
+        built. A model without a bundled settings file keeps a held session. Its state comes from
         the cloud device list's parameter snapshot: kept in the cache, applied when the
         station is built, and fetched again every ``cloud_state_refresh`` seconds (one
         device-list call for the account) while :meth:`async_start` runs; pushes update it
@@ -601,7 +613,7 @@ class EufySecurity:
             served = self._claims.claim(self.cache.account, included)
         self.stations_served_elsewhere = tuple(d for d in included if d.device_sn not in served)
         self._not_served = frozenset(d.device_sn for d in candidates if d.device_sn not in served)
-        await asyncio.to_thread(_load_settings, devices)
+        battery_stations = await asyncio.to_thread(_load_settings, devices)
         await self._async_scan_models(devices, refresh=refresh or rescan_regions)
         for device in candidates:
             serial = device.device_sn
@@ -616,7 +628,8 @@ class EufySecurity:
             if self._reach(serial) is Reach.REMOTE:
                 self.remote_stations[serial] = RemoteStation(device=device, sub_devices=sub_devices)
                 continue
-            on_demand = self._reached_on_demand(device)
+            # The app's list, or the library's rule for a battery camera or doorbell.
+            on_demand = connects_on_demand(serial) or serial in battery_stations
             session = StationSession(
                 serial,
                 self._credential_provider(serial),
@@ -776,27 +789,6 @@ class EufySecurity:
             version = _bundled_version(code) if code in bundled else None
             out.append(ModelStatus(code, state, version, self._cloud_td.get(code)))
         return tuple(out)
-
-    def _reached_on_demand(self, device: CloudDevice) -> bool:
-        """Whether the station ``device`` gets no held session: on the eufy app's list
-        (:func:`~.devices.types.connects_on_demand`), or a camera or doorbell whose own
-        settings declare a battery (:func:`~.devices.model_settings.declares_battery`).
-
-        The battery part is the library's rule: the app holds no session while it is in
-        the background, and its list leaves out newer battery models. A model without
-        settings (unknown) or with a malformed file keeps a held session.
-        """
-        serial = device.device_sn
-        if connects_on_demand(serial):
-            return True
-        code = product_code_of(device.raw.get("device_new_pn"), serial)
-        if code is None:
-            return False
-        try:
-            settings = tuple(settings_of(code, standalone=True).values())
-        except ModelDataError:
-            return False
-        return declares_battery(serial, settings or self._listed_settings(code)) is True
 
     def _listed_settings(self, product_code: str) -> tuple[Setting, ...]:
         """The settings listed from the cloud TD for ``product_code``; ``()`` for none."""

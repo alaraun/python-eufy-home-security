@@ -240,7 +240,6 @@ PTZ_BUSY_ATTEMPTS: Final = 4
 """How often a preset command is re-sent while the camera answers :data:`PTZ_BUSY_CODE`."""
 PTZ_BUSY_DELAY: Final = 3.0
 """Wait between those attempts: a T8170 settles within a few seconds of a turn."""
-# The kinds the eufy app's battery display rule covers (the camera card).
 FRESH_KEYFRAME_WINDOW: Final = 0.5
 """After a live stream's first keyframe, wait this long for a second one and prefer it:
 a T8170 woken again may first replay its last keyframe of the previous stream (minutes
@@ -1600,9 +1599,10 @@ class Station:
     def connects_on_demand(self) -> bool:
         """Whether this station is reached only on demand (a battery device: on the eufy
         app's list, :func:`~..devices.types.connects_on_demand`, or a camera or doorbell
-        whose settings declare a battery, :meth:`has_battery`): no held session, its
-        state comes from the cloud snapshot and pushes, and every command connects, then
-        the link closes after :data:`~..p2p.session.ON_DEMAND_IDLE_CLOSE` seconds idle."""
+        whose bundled settings declare a battery, decided by the client when it builds
+        the station): no held session, its state comes from the cloud snapshot and
+        pushes, and every command connects, then the link closes after
+        :data:`~..p2p.session.ON_DEMAND_IDLE_CLOSE` seconds idle."""
         return self.session.on_demand
 
     @property

@@ -2502,10 +2502,12 @@ async def test_a_malformed_settings_file_keeps_a_held_session(
         await eufy.async_close()
 
 
-@pytest.mark.parametrize(("listed_battery", "on_demand"), [(True, True), (False, False)])
-async def test_an_unbundled_station_is_reached_on_demand_when_its_listing_has_a_battery(
-    listed_battery: bool, on_demand: bool
+@pytest.mark.parametrize("listed_battery", [True, False])
+async def test_an_unbundled_station_keeps_a_held_session_whatever_its_listing(
+    listed_battery: bool,
 ) -> None:
+    """The decision reads bundled settings only: a cloud listing that may arrive on a
+    later discovery cannot change it after the station is built."""
     td = unbundled_td()
     if listed_battery:
         td["properties"].append(range_property(BATTERY_PROPERTY, 0, 100, unit="%"))
@@ -2515,7 +2517,7 @@ async def test_an_unbundled_station_is_reached_on_demand_when_its_listing_has_a_
         eufy = account(http, cloud)
         (station,) = await eufy.async_discover()
         assert station.has_battery() is listed_battery
-        assert station.connects_on_demand is on_demand
+        assert station.connects_on_demand is False
         await eufy.async_close()
 
 
