@@ -46,6 +46,30 @@ def _setting(product_code: str, key: str) -> Setting:
     return settings_of(product_code)[key]
 
 
+@pytest.mark.parametrize(("enabled", "raw"), [(True, "1"), (False, "0")])
+def test_t84a1_manual_light_sends_legacy_p2p_command(enabled: bool, raw: str) -> None:
+    """The S100's standalone 1700/1400 manual light command was verified on hardware."""
+    setting = settings_of("T84A1", standalone=True)["spotlight_switch"]
+    assert setting.writable and setting.readable
+    assert setting.kind is SettingKind.BOOL
+    assert setting.control is SettingControl.SWITCH
+    assert setting.read_param == 1400
+    assert setting.decode(raw) is enabled
+
+    cmd = setting.encode(enabled, ALONE)
+    assert cmd.path is WritePath.RECIPE_1700
+    assert cmd.cmd == 1400
+    assert cmd.params == {"value": int(enabled)}
+    assert cmd.updates == ((1400, raw),)
+
+
+@pytest.mark.parametrize("connect", [ConnectType.HB2, ConnectType.HB4])
+def test_t84a1_manual_light_does_not_enable_homebase_contexts(connect: ConnectType) -> None:
+    setting = settings_of("T84A1", connect)["spotlight_switch"]
+    assert not setting.writable
+    assert setting.read_param is None
+
+
 def test_power_manager_mode_round_trip() -> None:
     """T8160 power_manager_mode 3 is ECB 1246 value 2; parameter "2" reads back as 3."""
     setting = _setting("T8160", "power_manager_mode")

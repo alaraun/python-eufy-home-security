@@ -105,6 +105,38 @@ def _mismatches() -> set[tuple[str, str]]:
     return out
 
 
+def test_t84a1_hardware_override_survives_model_regeneration() -> None:
+    """The manual light recipe is added after vendor generation, only for standalone."""
+    source = {
+        "access": "ro",
+        "kind": "string",
+        "read": None,
+        "contexts": [{"names": ["HB2"], "entry": {"note": "no handler write path"}}],
+    }
+    settings = {"spotlight_switch": source}
+    gen_models.apply_hardware_verified_overrides("T84A1", settings)
+
+    standalone, paired = source["contexts"]
+    assert standalone["names"] == ["standalone"]
+    assert paired["names"] == ["HB2"]
+    assert source["access"] == "ro"
+    assert source["read"] is None
+    assert standalone["entry"]["read"]["param"] == 1400
+    assert standalone["entry"]["write"] == {
+        "cmd": 1700,
+        "subCmd": 1400,
+        "params": {"value": "$v:int"},
+        "update": {
+            "needUpdate": True,
+            "cmd": 1400,
+            "paramValue": "$v:str",
+        },
+    }
+
+    with pytest.raises(gen_models.GeneratorError, match="spotlight_switch changed"):
+        gen_models.apply_hardware_verified_overrides("T84A1", settings)
+
+
 def test_every_v1_setting_exists_in_the_bundled_models() -> None:
     """Each v1 key is bundled, or absorbed by the key it duplicated."""
     pairs = {(r["product_code"], r["identifier"]) for r in REFERENCE["rows"]}

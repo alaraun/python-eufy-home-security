@@ -1455,6 +1455,60 @@ def merge_contexts(per_context: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def apply_hardware_verified_overrides(product_code: str, settings: dict[str, Any]) -> None:
+    """Retain P2P controls proven on hardware but absent from the eufy app handler.
+
+    The T84A1 S100's manual light works via standalone doorbell payload 1700/1400,
+    as in bropat/eufy-security-client Station.switchLight(). The current vendor
+    handler ignores spotlight_switch writes, so its generated setting is read-only.
+    The 1400 payload (value 0 or 1) was tested on an S100 with firmware 1.1.0.7.
+    Leave paired-station contexts and spotlight_status (1403) unchanged.
+    """
+    if product_code != "T84A1":
+        return
+
+    light = settings.get("spotlight_switch")
+    if (
+        light is None
+        or light.get("access") != "ro"
+        or light.get("kind") != "string"
+        or light.get("read") is not None
+        or any(STANDALONE in item["names"] for item in light.get("contexts", ()))
+    ):
+        raise GeneratorError(
+            "T84A1 spotlight_switch changed: review the legacy manual light override"
+        )
+
+    light.setdefault("contexts", []).insert(
+        0,
+        {
+            "names": [STANDALONE],
+            "entry": {
+                "access": "rw",
+                "kind": "bool",
+                "control": "switch",
+                "name": "Manual light",
+                "note": None,
+                "read": {
+                    "param": 1400,
+                    "map": {"0": False, "1": True},
+                    "no_default": True,
+                },
+                "write": {
+                    "cmd": 1700,
+                    "subCmd": 1400,
+                    "params": {"value": "$v:int"},
+                    "update": {
+                        "needUpdate": True,
+                        "cmd": 1400,
+                        "paramValue": "$v:str",
+                    },
+                },
+            },
+        },
+    )
+
+
 def apply_param_values(  # noqa: C901
     product_code: str,
     settings: dict[str, Any],
@@ -1702,6 +1756,7 @@ def generate(
         located={ident: where.param for ident, where in located.items()},
     ).items():
         _count(counts, key, n)
+    apply_hardware_verified_overrides(product_code, merged)
     for entry in merged.values():
         for item in entry.get("contexts", ()):
             for name in item["names"]:
