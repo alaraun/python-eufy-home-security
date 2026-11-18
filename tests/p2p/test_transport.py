@@ -1002,6 +1002,69 @@ async def test_lan_discovery_still_wins_when_the_station_answers_it(
         transport.close()
 
 
+# ── punch probe ─────────────────────────────────────────────────────────────
+
+
+async def test_a_punch_probe_ends_at_the_stations_first_punch_with_a_close(
+    rendezvous: _Rendezvous,
+) -> None:
+    """Success is the station's first PUNCH_PKT: no echo, no P2P_RDY wait, no ALIVE;
+    the station gets a CLOSE and the socket is closed."""
+    transport = make_transport()
+    rendezvous.route(transport)
+    peer = (CAMERA_LAN, rendezvous.camera_port)
+    assert (
+        await transport.punch_probe(
+            expected_did=rendezvous.did,
+            wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
+            timeout=3.0,
+        )
+        == peer
+    )
+    assert transport.path is ConnectPath.RENDEZVOUS
+    to_station = [msg for msg, addr, _ in rendezvous.sent if addr == peer]
+    assert to_station == [MsgType.PUNCH_PKT] * transport_module.PUNCH_BURST + [MsgType.CLOSE]
+    assert rendezvous.sent[-1][:2] == (MsgType.CLOSE, peer)
+    assert MsgType.LAN_SEARCH not in {msg for msg, _, _ in rendezvous.sent}
+    assert transport._alive_thread is None
+    assert not transport.is_open
+    assert transport._transport is not None
+    assert transport._transport.is_closing()
+
+
+async def test_an_unanswered_punch_probe_names_the_servers_and_closes_the_socket(
+    rendezvous: _Rendezvous,
+) -> None:
+    rendezvous.camera.did = Did.parse("EUPRAMA-654321-ZYXWV")  # its punch is refused
+    transport = make_transport()
+    rendezvous.route(transport)
+    with pytest.raises(
+        StationUnreachableError, match=r"^no punch through 1 rendezvous server within 1s$"
+    ):
+        await transport.punch_probe(
+            expected_did=rendezvous.did,
+            wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
+            timeout=1.0,
+        )
+    sent = {msg for msg, _, _ in rendezvous.sent}
+    assert MsgType.P2P_REQ_DSK in sent
+    assert not sent & {MsgType.LAN_SEARCH, MsgType.CLOSE}
+    assert transport._transport is not None
+    assert transport._transport.is_closing()
+
+
+@pytest.mark.parametrize(
+    ("servers", "text"),
+    [
+        ((), "0 rendezvous servers"),
+        (("a",), "1 rendezvous server"),
+        (("a", "b"), "2 rendezvous servers"),
+    ],
+)
+def test_an_unanswered_punch_probe_counts_its_servers(servers: tuple[str, ...], text: str) -> None:
+    assert transport_module._unpunched(servers, 5.0) == f"no punch through {text} within 5s"
+
+
 async def test_without_a_wake_nothing_goes_to_the_servers(station: FakeStation) -> None:
     transport = make_transport()
     sent: list[tuple[str, int]] = []

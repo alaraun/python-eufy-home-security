@@ -164,6 +164,14 @@ def _unanswered(
     return f"no LAN discovery reply from {searched}{rendezvous} within {timeout:.0f}s"
 
 
+def _unpunched(servers: Sequence[str], timeout: float) -> str:
+    """The message of a punch probe nobody answered (see :meth:`PPPPTransport.punch_probe`)."""
+    return (
+        f"no punch through {len(servers)} rendezvous server{'s' if len(servers) != 1 else ''} "
+        f"within {timeout:.0f}s"
+    )
+
+
 async def _resolve(host: str) -> str | None:
     """``host`` as an IPv4 address, resolving a name off the event loop; None when it
     does not resolve. Rendezvous servers arrive from the cloud's ``app_conn`` and may be
@@ -299,72 +307,16 @@ class PPPPTransport(asyncio.DatagramProtocol):
         from an address the client punched counts as rendezvous, even one it also searched:
         the punch is what a stateful gateway admits the reply by.
         """
-        if wake is not None and expected_did is None:
-            raise ProtocolError("a wake needs the station's DID to build its P2P_REQ_DSK")
-        wake_did = expected_did if wake is not None else None
-        loop = asyncio.get_running_loop()
-        for attempt in range(BIND_RETRIES + 1):
-            try:
-                await loop.create_datagram_endpoint(
-                    # All interfaces: LAN discovery is a broadcast, and the reply arrives
-                    # on whichever interface faces the station.
-                    lambda: self,
-                    local_addr=("0.0.0.0", local_port),  # noqa: S104
-                    allow_broadcast=True,
-                )
-            except OSError as err:
-                if local_port and err.errno == errno.EADDRINUSE and attempt < BIND_RETRIES:
-                    await asyncio.sleep(BIND_RETRY_DELAY)
-                    continue
-                raise CommunicationError(
-                    f"cannot bind local UDP port {local_port}: {err}; "
-                    "another client may be using it — choose another or use 0 (ephemeral)"
-                ) from err
-            break
-        _LOGGER.debug(
-            "bound UDP port %s; searching %s:%d for DID %s",
-            self.local_port,
-            Address(host or BROADCAST),
-            port,
-            Secret(expected_did) if expected_did else "(any)",
+        did, body, addr = await self._await_punch(
+            host,
+            port=port,
+            local_port=local_port,
+            timeout=timeout,
+            expected_did=expected_did,
+            wake=wake,
+            extra_hosts=extra_hosts,
+            search=True,
         )
-
-        self._discover_host = host
-        self._extra_hosts = tuple(dict.fromkeys(extra_hosts))
-        self._expected_did = expected_did
-        self._punch = loop.create_future()
-        search = encode_packet(MsgType.LAN_SEARCH)
-        target = (host or BROADCAST, port)
-        try:
-            request, servers = (
-                await self._prepare_wake(wake, wake_did)
-                if wake is not None and wake_did
-                else (None, ())
-            )
-            deadline = loop.time() + timeout
-            searches = 0
-            while not self._punch.done():
-                remaining = deadline - loop.time()
-                if remaining <= 0:
-                    _LOGGER.debug("no PUNCH_PKT after %d LAN_SEARCH(es)", searches)
-                    raise StationUnreachableError(
-                        _unanswered(host, self._extra_hosts, servers, timeout)
-                    )
-                searches += 1
-                self._search_round = searches
-                _LOGGER.debug("LAN_SEARCH #%d to %s:%d", searches, Address(target[0]), target[1])
-                self._sendto(search, target)
-                for extra in self._extra_hosts:
-                    self._sendto(search, (extra, port))
-                if request is not None:
-                    for server in servers:
-                        self._sendto(request, (server, RENDEZVOUS_PORT))
-                await asyncio.wait({self._punch}, timeout=min(DISCOVERY_RETRY_INTERVAL, remaining))
-            did, body, addr = self._punch.result()
-        except BaseException:
-            self.close(send_close=False)
-            raise
-
         self._peer = addr
         self._did = did
         self._last_rx = time.monotonic()
@@ -399,6 +351,122 @@ class PPPPTransport(asyncio.DatagramProtocol):
             "P2P link up to %s:%d (local port %s)", Address(addr[0]), addr[1], self.local_port
         )
         return did
+
+    async def punch_probe(
+        self, *, expected_did: Did, wake: Wake, timeout: float
+    ) -> tuple[str, int]:
+        """Whether the station answers a rendezvous connect, without a session.
+
+        Runs the rendezvous half of :meth:`connect` only (no ``LAN_SEARCH``) until the
+        first ``PUNCH_PKT`` with ``expected_did``, then sends the station a ``CLOSE``
+        and closes the socket: no punch echo, no ``P2P_RDY`` wait, no ``ALIVE``.
+        Returns the address the station punched from; raises
+        :class:`StationUnreachableError` when none arrives within ``timeout``. The
+        servers poke the station as for a connect, so this wakes a battery station.
+        """
+        did, _body, addr = await self._await_punch(
+            None,
+            port=DISCOVERY_PORT,
+            local_port=0,
+            timeout=timeout,
+            expected_did=expected_did,
+            wake=wake,
+            extra_hosts=(),
+            search=False,
+        )
+        self._did = did
+        _LOGGER.debug(
+            "punch probe: PUNCH_PKT from %s:%d (%s); sending CLOSE",
+            Address(addr[0]),
+            addr[1],
+            self._path,
+        )
+        self._sendto(encode_packet(MsgType.CLOSE), addr)
+        self.close(send_close=False)
+        return addr
+
+    async def _await_punch(
+        self,
+        host: str | None,
+        *,
+        port: int,
+        local_port: int,
+        timeout: float,
+        expected_did: Did | None,
+        wake: Wake | None,
+        extra_hosts: Sequence[str],
+        search: bool,
+    ) -> tuple[Did, bytes, tuple[str, int]]:
+        """Bind, then search (``search``) and run the rendezvous (``wake``) each round
+        until a ``PUNCH_PKT`` is taken; returns its DID, body and source address. On
+        failure the socket is closed (see :meth:`connect`)."""
+        if wake is not None and expected_did is None:
+            raise ProtocolError("a wake needs the station's DID to build its P2P_REQ_DSK")
+        wake_did = expected_did if wake is not None else None
+        loop = asyncio.get_running_loop()
+        for attempt in range(BIND_RETRIES + 1):
+            try:
+                await loop.create_datagram_endpoint(
+                    # All interfaces: LAN discovery is a broadcast, and the reply arrives
+                    # on whichever interface faces the station.
+                    lambda: self,
+                    local_addr=("0.0.0.0", local_port),  # noqa: S104
+                    allow_broadcast=True,
+                )
+            except OSError as err:
+                if local_port and err.errno == errno.EADDRINUSE and attempt < BIND_RETRIES:
+                    await asyncio.sleep(BIND_RETRY_DELAY)
+                    continue
+                raise CommunicationError(
+                    f"cannot bind local UDP port {local_port}: {err}; "
+                    "another client may be using it — choose another or use 0 (ephemeral)"
+                ) from err
+            break
+        _LOGGER.debug(
+            "bound UDP port %s; %s for DID %s",
+            self.local_port,
+            f"searching {Address(host or BROADCAST)}:{port}" if search else "no LAN search",
+            Secret(expected_did) if expected_did else "(any)",
+        )
+
+        self._discover_host = host
+        self._extra_hosts = tuple(dict.fromkeys(extra_hosts))
+        self._expected_did = expected_did
+        self._punch = loop.create_future()
+        lan_search = encode_packet(MsgType.LAN_SEARCH)
+        target = (host or BROADCAST, port)
+        try:
+            request, servers = (
+                await self._prepare_wake(wake, wake_did)
+                if wake is not None and wake_did
+                else (None, ())
+            )
+            deadline = loop.time() + timeout
+            rounds = 0
+            while not self._punch.done():
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    _LOGGER.debug("no PUNCH_PKT after %d discovery round(s)", rounds)
+                    raise StationUnreachableError(
+                        _unanswered(host, self._extra_hosts, servers, timeout)
+                        if search
+                        else _unpunched(servers, timeout)
+                    )
+                rounds += 1
+                self._search_round = rounds
+                if search:
+                    _LOGGER.debug("LAN_SEARCH #%d to %s:%d", rounds, Address(target[0]), target[1])
+                    self._sendto(lan_search, target)
+                    for extra in self._extra_hosts:
+                        self._sendto(lan_search, (extra, port))
+                if request is not None:
+                    for server in servers:
+                        self._sendto(request, (server, RENDEZVOUS_PORT))
+                await asyncio.wait({self._punch}, timeout=min(DISCOVERY_RETRY_INTERVAL, remaining))
+            return self._punch.result()
+        except BaseException:
+            self.close(send_close=False)
+            raise
 
     async def _prepare_wake(self, wake: Wake, did: Did) -> tuple[bytes, tuple[str, ...]]:
         """Send HELLO to each rendezvous server; return the P2P_REQ_DSK to poke them with and the
