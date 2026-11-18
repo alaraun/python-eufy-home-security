@@ -26,7 +26,7 @@ from eufy_home_security.p2p.pppp import (
     MsgType,
     decode_packet,
     encode_drw_ack,
-    encode_lookup,
+    encode_p2p_req_dsk,
     encode_packet,
 )
 from eufy_home_security.p2p.transport import (
@@ -164,7 +164,7 @@ def test_acknowledgements_are_bounded_oldest_first_and_cleared_on_resend() -> No
 
 
 class _FakeRendezvous(asyncio.DatagramProtocol):
-    """A rendezvous server that records the wake LOOKUP and punches back on it."""
+    """A rendezvous server that records the wake P2P_REQ_DSK and punches back on it."""
 
     def __init__(self, did: Did) -> None:
         self._did = did
@@ -177,7 +177,7 @@ class _FakeRendezvous(asyncio.DatagramProtocol):
     def datagram_received(self, data: bytes, addr: tuple[str | int, int]) -> None:
 
         msg, payload = decode_packet(data)
-        if msg == MsgType.LOOKUP and self._transport is not None:
+        if msg == MsgType.P2P_REQ_DSK and self._transport is not None:
             self.lookups.append(payload)
             # Stand in for the station punching the caller back over the LAN.
             self._transport.sendto(encode_packet(MsgType.PUNCH_PKT, self._did.to_struct()), addr)
@@ -195,7 +195,7 @@ async def test_wake_sends_a_lookup_and_punches_on_the_reply() -> None:
     orig_sendto = transport._sendto
 
     def route(packet: bytes, addr: tuple[str, int]) -> None:
-        # Send the LOOKUP to the fake server instead of the real rendezvous port.
+        # Send the P2P_REQ_DSK to the fake server instead of the real rendezvous port.
         orig_sendto(packet, ("127.0.0.1", server_port) if addr[1] == RENDEZVOUS_PORT else addr)
 
     transport._sendto = route  # type: ignore[method-assign]
@@ -688,7 +688,7 @@ async def test_a_server_name_that_does_not_resolve_is_never_sent_to(
     to_servers = [(msg, addr) for msg, addr in sent if addr[1] == RENDEZVOUS_PORT]
     hellos = [addr for msg, addr in to_servers if msg == MsgType.HELLO]
     assert hellos == [("10.0.0.1", RENDEZVOUS_PORT)]  # one per address, not per name
-    assert {addr for msg, addr in to_servers if msg == MsgType.LOOKUP} == {
+    assert {addr for msg, addr in to_servers if msg == MsgType.P2P_REQ_DSK} == {
         ("10.0.0.1", RENDEZVOUS_PORT)
     }
 
@@ -723,8 +723,8 @@ async def test_no_server_resolves_and_the_lookup_names_any_address(
         transport.close()
     assert (servers, payloads, looked_up) == ((), [], [])
     did = Did.parse(SYNTHETIC.did)
-    any_address = encode_lookup(did.to_struct(), transport_module.ANY_ADDRESS, 0, "x" * 8)
-    assert lookup == encode_packet(MsgType.LOOKUP, any_address)
+    any_address = encode_p2p_req_dsk(did.to_struct(), transport_module.ANY_ADDRESS, 0, "x" * 8)
+    assert lookup == encode_packet(MsgType.P2P_REQ_DSK, any_address)
 
 
 async def test_resolve_gives_none_for_a_name_that_does_not_resolve(
@@ -742,7 +742,7 @@ async def test_resolve_gives_none_for_a_name_that_does_not_resolve(
     monkeypatch.setattr(loop, "getaddrinfo", nothing)
     assert await transport_module._resolve("rendezvous.example") is None
     assert await transport_module._resolve("10.0.0.1") == "10.0.0.1"
-    assert await transport_module._resolve("::1") is None  # the LOOKUP and socket are IPv4
+    assert await transport_module._resolve("::1") is None  # the P2P_REQ_DSK and socket are IPv4
 
 
 async def test_a_dsk_that_is_not_ascii_fails_the_connect_typed() -> None:

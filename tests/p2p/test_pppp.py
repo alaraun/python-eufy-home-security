@@ -131,10 +131,10 @@ def test_encode_sockaddr_matches_the_app_layout() -> None:
     assert pppp.encode_sockaddr("203.0.113.5", 15238).hex() == "0002863b057100cb0000000000000000"
 
 
-def test_encode_lookup_layout_and_dsk_padding() -> None:
+def test_encode_p2p_req_dsk_layout_and_dsk_padding() -> None:
 
     did = Did.parse("EUPRAMA-123456-ABCDE")
-    body = pppp.encode_lookup(did.to_struct(), "203.0.113.5", 15238, "XaDbKBfe4sMgsUFo91nw")
+    body = pppp.encode_p2p_req_dsk(did.to_struct(), "203.0.113.5", 15238, "XaDbKBfe4sMgsUFo91nw")
     assert len(body) == 20 + 16 + 4 + pppp.DSK_FIELD_LEN
     assert body[:20] == did.to_struct()
     assert body[20:36] == pppp.encode_sockaddr("203.0.113.5", 15238)
@@ -142,11 +142,11 @@ def test_encode_lookup_layout_and_dsk_padding() -> None:
     assert body[40:].rstrip(b"\x00") == b"XaDbKBfe4sMgsUFo91nw"
 
 
-def test_encode_lookup_rejects_an_oversize_dsk() -> None:
+def test_encode_p2p_req_dsk_rejects_an_oversize_dsk() -> None:
 
     did = Did.parse("EUPRAMA-123456-ABCDE")
     with pytest.raises(ProtocolError):
-        pppp.encode_lookup(did.to_struct(), "203.0.113.5", 1, "x" * (pppp.DSK_FIELD_LEN + 1))
+        pppp.encode_p2p_req_dsk(did.to_struct(), "203.0.113.5", 1, "x" * (pppp.DSK_FIELD_LEN + 1))
 
 
 def test_decode_init_string_round_trips_through_the_app_transform() -> None:

@@ -53,7 +53,7 @@ from .pppp import (
     decode_packet,
     encode_drw,
     encode_drw_ack,
-    encode_lookup,
+    encode_p2p_req_dsk,
     encode_packet,
 )
 
@@ -81,9 +81,9 @@ just closed; retry the bind this many times, this far apart, before giving up.""
 ACKED_MEMORY = 4096
 """Acknowledged (channel, index) pairs remembered for :meth:`PPPPTransport.is_acked`."""
 
-#: The UDP port a station's rendezvous servers listen on for a wake ``LOOKUP``.
+#: The UDP port a station's rendezvous servers listen on for a wake ``P2P_REQ_DSK``.
 RENDEZVOUS_PORT = 32100
-ANY_ADDRESS = "0.0.0.0"  # noqa: S104 - the LOOKUP's address when this host's is not known
+ANY_ADDRESS = "0.0.0.0"  # noqa: S104 - the P2P_REQ_DSK's address when this host's is not known
 
 type ChunkHandler = Callable[[DrwChunk], None]
 type LostHandler = Callable[[Exception], None]
@@ -113,7 +113,7 @@ def _local_ip_towards(host: str) -> str:
     ``host`` must already be an IP address: connecting a UDP socket to a literal only
     consults the routing table, but a *name* would resolve here, and a slow resolver
     would block the event loop for its whole timeout. Callers resolve first. Without a
-    route, or without a socket to ask with, ``0.0.0.0`` (best effort: a ``LOOKUP`` naming
+    route, or without a socket to ask with, ``0.0.0.0`` (best effort: a ``P2P_REQ_DSK`` naming
     it may not bring the station's punch to this host).
     """
     try:
@@ -232,12 +232,12 @@ class PPPPTransport(asyncio.DatagramProtocol):
         within ``timeout``.
 
         ``wake`` (a battery station, which does not answer a plain ``LAN_SEARCH``
-        while asleep) also sends the station's rendezvous servers a ``LOOKUP`` each
+        while asleep) also sends the station's rendezvous servers a ``P2P_REQ_DSK`` each
         round; the server pokes the station over its standing cloud link and it
         punches back over the LAN. ``expected_did`` is required with it.
         """
         if wake is not None and expected_did is None:
-            raise ProtocolError("a wake needs the station's DID to build its LOOKUP")
+            raise ProtocolError("a wake needs the station's DID to build its P2P_REQ_DSK")
         wake_did = expected_did if wake is not None else None
         loop = asyncio.get_running_loop()
         for attempt in range(BIND_RETRIES + 1):
@@ -272,7 +272,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
         search = encode_packet(MsgType.LAN_SEARCH)
         target = (host or BROADCAST, port)
         try:
-            lookup, servers = (
+            request, servers = (
                 await self._prepare_wake(wake, wake_did)
                 if wake is not None and wake_did
                 else (None, ())
@@ -291,9 +291,9 @@ class PPPPTransport(asyncio.DatagramProtocol):
                 searches += 1
                 _LOGGER.debug("LAN_SEARCH #%d to %s:%d", searches, Address(target[0]), target[1])
                 self._sendto(search, target)
-                if lookup is not None:
+                if request is not None:
                     for server in servers:
-                        self._sendto(lookup, (server, RENDEZVOUS_PORT))
+                        self._sendto(request, (server, RENDEZVOUS_PORT))
                 await asyncio.wait({self._punch}, timeout=min(DISCOVERY_RETRY_INTERVAL, remaining))
             did, body, addr = self._punch.result()
         except BaseException:
@@ -335,7 +335,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
         return did
 
     async def _prepare_wake(self, wake: Wake, did: Did) -> tuple[bytes, tuple[str, ...]]:
-        """Send HELLO to each rendezvous server; return the LOOKUP to poke them with and the
+        """Send HELLO to each rendezvous server; return the P2P_REQ_DSK to poke them with and the
         servers' addresses. A server whose name does not resolve is left out."""
         resolved = [await _resolve(host) for host in wake.servers]
         servers = tuple(dict.fromkeys(ip for ip in resolved if ip is not None))
@@ -350,10 +350,11 @@ class PPPPTransport(asyncio.DatagramProtocol):
         hello = encode_packet(MsgType.HELLO)
         for ip in servers:
             self._sendto(hello, (ip, RENDEZVOUS_PORT))
-        lookup = encode_packet(
-            MsgType.LOOKUP, encode_lookup(did.to_struct(), our_ip, self.local_port or 0, wake.dsk)
+        request = encode_packet(
+            MsgType.P2P_REQ_DSK,
+            encode_p2p_req_dsk(did.to_struct(), our_ip, self.local_port or 0, wake.dsk),
         )
-        return lookup, servers
+        return request, servers
 
     def close(self, *, send_close: bool = True) -> None:
         """Tear the session down (idempotent)."""

@@ -26,15 +26,16 @@ the length fits.
 | `0x30` | LAN_SEARCH | client → station :32108 (unicast or broadcast) | none | **[verified]** |
 | `0x41` | PUNCH_PKT | both | 20-byte DID struct | **[verified]** |
 | `0x42` | P2P_RDY | station → client | DID struct | **[verified]**, often skipped on the LAN |
-| `0x43` | PUNCH_SUCCESS | station → client | peer sockaddr | **[app]** |
+| `0x43` | TRY_LAN_TCP | station → client | | **[app]** name only, not implemented |
 | `0xD0` | DRW | both | DRW sub-header + chunk | **[verified]** |
 | `0xD1` | DRW_ACK | both | ACK sub-header + indices | **[verified]** |
 | `0xE0` | ALIVE | both | none | **[verified]** |
 | `0xE1` | ALIVE_ACK | both | none | **[verified]** |
 | `0xF0` | CLOSE | both | none | **[verified]** |
 | `0x00`/`0x01` | HELLO / HELLO_ACK | client ↔ master :32100 | NAT-reflected address | seen in app traffic, not implemented |
-| `0x20`/`0x21`, `0x40`, `0xF9` | P2P_REQ/ACK, PUNCH_TO, RLY_HELLO | master / relay path | | seen in app traffic, not implemented |
-| `0x26` | LOOKUP | client → rendezvous server :32100 | DID + the client's sockaddr + `02 05 01 05` + DSK | **[verified]** the wake ([below](#waking-a-battery-station-verified)) |
+| `0x20`/`0x21`, `0x40` | P2P_REQ/ACK, PUNCH_TO | master path | | seen in app traffic, not implemented |
+| `0xF9` | REPORT_SESSION_RDY | client → rendezvous server, after the punch | encrypted | seen in app traffic, not implemented |
+| `0x26` | P2P_REQ_DSK | client → rendezvous server :32100 | DID + the client's sockaddr + `02 05 01 05` + DSK | **[verified]** the wake ([below](#waking-a-battery-station-verified)) |
 
 Only the LAN path is implemented. Off-LAN operation needs the master/relay handshake
 and the `p2p_did`, `p2p_license` and `signaling_servers` fields from the device list
@@ -95,16 +96,16 @@ exactly as the app does:
    `PPPP_DecodeString` — see `p2p/pppp.py: decode_init_string`.
 2. Fetch the station's **device session key (DSK)** from the cloud ([cloud.md](cloud.md)):
    a 20-character key, valid ~1 h, one per client.
-3. To each server on UDP **32100**: one `HELLO` (`0xF1 0x00`), then a `LOOKUP` (`0x26`)
-   every second. The 64-byte LOOKUP body is the 20-byte DID struct, the client's own
+3. To each server on UDP **32100**: one `HELLO` (`0xF1 0x00`), then a `P2P_REQ_DSK` (`0x26`)
+   every second. The 64-byte P2P_REQ_DSK body is the 20-byte DID struct, the client's own
    `sockaddr_in` (family `0x0002` big-endian, port little-endian, IPv4 reversed, 8 zero
    bytes), the four bytes `02 05 01 05`, and the DSK zero-padded to 24.
 4. The server pokes the station over its cloud link; the station **punches back over the
    LAN** with the usual `PUNCH_PKT` (from a fresh high port), and the session proceeds
    exactly as after a `LAN_SEARCH`. On the T8170 the punch arrived ~1.8–3 s after the
-   first LOOKUP; a `status` from cold sleep completed in 6.5 s.
+   first P2P_REQ_DSK; a `status` from cold sleep completed in 6.5 s.
 
-The library sends the `LAN_SEARCH` and the LOOKUPs together each discovery round
+The library sends the `LAN_SEARCH` and the P2P_REQ_DSKs together each discovery round
 (`transport.connect(wake=Wake(servers, dsk))`), so a station that happens to be awake is
 still caught by the search. The DSK is a secret: it is starred out of wire hexdumps.
 

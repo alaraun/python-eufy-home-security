@@ -55,18 +55,18 @@ class MsgType(IntEnum):
     HELLO_ACK = 0x01
     P2P_REQ = 0x20
     P2P_REQ_ACK = 0x21
-    LOOKUP = 0x26
+    P2P_REQ_DSK = 0x26
     LAN_SEARCH = 0x30
     PUNCH_TO = 0x40
     PUNCH_PKT = 0x41
     P2P_RDY = 0x42
-    PUNCH_SUCCESS = 0x43
+    TRY_LAN_TCP = 0x43
     DRW = 0xD0
     DRW_ACK = 0xD1
     ALIVE = 0xE0
     ALIVE_ACK = 0xE1
     CLOSE = 0xF0
-    RLY_HELLO = 0xF9
+    REPORT_SESSION_RDY = 0xF9
 
 
 def encode_packet(msg_type: int, payload: bytes = b"") -> bytes:
@@ -78,11 +78,11 @@ def encode_packet(msg_type: int, payload: bytes = b"") -> bytes:
     return struct.pack(">BBH", PPPP_MAGIC, msg_type, len(payload)) + payload
 
 
-#: The length a device session key (DSK) occupies in a LOOKUP, zero-padded.
+#: The length a device session key (DSK) occupies in a P2P_REQ_DSK, zero-padded.
 DSK_FIELD_LEN = 24
-#: The 4 constant bytes a LOOKUP carries between the sockaddr and the DSK, as the app's
+#: The 4 constant bytes a P2P_REQ_DSK carries between the sockaddr and the DSK, as the app's
 #: wake request carries them (meaning unknown; the same in every request seen).
-_LOOKUP_TAIL = bytes([0x02, 0x05, 0x01, 0x05])
+_P2P_REQ_DSK_TAIL = bytes([0x02, 0x05, 0x01, 0x05])
 
 
 def encode_sockaddr(ip: str, port: int) -> bytes:
@@ -90,24 +90,29 @@ def encode_sockaddr(ip: str, port: int) -> bytes:
     (little-endian), the IPv4 address in reversed byte order, then 8 zero bytes.
 
     This is the caller's own LAN endpoint, told to the rendezvous servers so the
-    station knows where to punch (see :func:`encode_lookup`).
+    station knows where to punch (see :func:`encode_p2p_req_dsk`).
     """
     packed = ipaddress.IPv4Address(ip).packed
     return struct.pack(">H", 2) + struct.pack("<H", port) + packed[::-1] + bytes(8)
 
 
-def encode_lookup(did_struct: bytes, ip: str, port: int, dsk: str) -> bytes:
-    """A ``LOOKUP`` (0x26) payload that wakes a battery station: the 20-byte DID
+def encode_p2p_req_dsk(did_struct: bytes, ip: str, port: int, dsk: str) -> bytes:
+    """A ``P2P_REQ_DSK`` (0x26) payload that wakes a battery station: the 20-byte DID
     struct, the caller's :func:`encode_sockaddr`, four constant bytes, and the DSK
     padded to :data:`DSK_FIELD_LEN`. Sent to the station's rendezvous servers
     (:func:`decode_init_string`) on UDP 32100 until the station punches back."""
     try:
         key = dsk.encode("ascii")
     except UnicodeEncodeError as err:
-        raise ProtocolError("DSK for a LOOKUP is not ASCII") from err
+        raise ProtocolError("DSK for a P2P_REQ_DSK is not ASCII") from err
     if len(key) > DSK_FIELD_LEN:
-        raise ProtocolError(f"DSK too long for a LOOKUP: {len(key)} bytes")
-    return did_struct + encode_sockaddr(ip, port) + _LOOKUP_TAIL + key.ljust(DSK_FIELD_LEN, b"\x00")
+        raise ProtocolError(f"DSK too long for a P2P_REQ_DSK: {len(key)} bytes")
+    return (
+        did_struct
+        + encode_sockaddr(ip, port)
+        + _P2P_REQ_DSK_TAIL
+        + key.ljust(DSK_FIELD_LEN, b"\x00")
+    )
 
 
 #: The substitution table of the app's ``PPPP_DecodeString``.
