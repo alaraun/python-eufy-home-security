@@ -352,7 +352,7 @@ class CloudDevice:
         """This station's PPPP rendezvous hosts, decoded from ``app_conn`` (see
         :func:`~..p2p.pppp.decode_init_string`); ``()`` when absent or malformed.
 
-        A battery station is woken by sending these servers a ``LOOKUP`` (see
+        A battery station is woken by sending these servers a ``P2P_REQ_DSK`` (see
         :class:`~..p2p.session.StationSession`)."""
         from ..p2p.pppp import decode_init_string  # noqa: PLC0415 - avoids a cloud→p2p import cycle
 

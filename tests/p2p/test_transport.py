@@ -168,7 +168,7 @@ class _FakeRendezvous(asyncio.DatagramProtocol):
 
     def __init__(self, did: Did) -> None:
         self._did = did
-        self.lookups: list[bytes] = []
+        self.requests: list[bytes] = []
         self._transport: asyncio.DatagramTransport | None = None
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
@@ -178,12 +178,12 @@ class _FakeRendezvous(asyncio.DatagramProtocol):
 
         msg, payload = decode_packet(data)
         if msg == MsgType.P2P_REQ_DSK and self._transport is not None:
-            self.lookups.append(payload)
+            self.requests.append(payload)
             # Stand in for the station punching the caller back over the LAN.
             self._transport.sendto(encode_packet(MsgType.PUNCH_PKT, self._did.to_struct()), addr)
 
 
-async def test_wake_sends_a_lookup_and_punches_on_the_reply() -> None:
+async def test_wake_sends_a_p2p_req_dsk_and_punches_on_the_reply() -> None:
 
     loop = asyncio.get_running_loop()
     did = Did.parse(SYNTHETIC.did)
@@ -208,8 +208,8 @@ async def test_wake_sends_a_lookup_and_punches_on_the_reply() -> None:
             wake=Wake(servers=("10.0.0.1",), dsk="XaDbKBfe4sMgsUFo91nw"),
         )
         assert did_out == did
-        assert server.lookups
-        assert server.lookups[0][40:].rstrip(b"\x00") == b"XaDbKBfe4sMgsUFo91nw"
+        assert server.requests
+        assert server.requests[0][40:].rstrip(b"\x00") == b"XaDbKBfe4sMgsUFo91nw"
     finally:
         transport.close()
         server_tr.close()
@@ -693,7 +693,7 @@ async def test_a_server_name_that_does_not_resolve_is_never_sent_to(
     }
 
 
-async def test_no_server_resolves_and_the_lookup_names_any_address(
+async def test_no_server_resolves_and_the_request_names_any_address(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def resolve(_host: str) -> str | None:
@@ -716,7 +716,7 @@ async def test_no_server_resolves_and_the_lookup_names_any_address(
 
     transport._sendto = record  # type: ignore[method-assign]
     try:
-        lookup, servers = await transport._prepare_wake(
+        request, servers = await transport._prepare_wake(
             Wake(servers=("rendezvous.example",), dsk="x" * 8), Did.parse(SYNTHETIC.did)
         )
     finally:
@@ -724,7 +724,7 @@ async def test_no_server_resolves_and_the_lookup_names_any_address(
     assert (servers, payloads, looked_up) == ((), [], [])
     did = Did.parse(SYNTHETIC.did)
     any_address = encode_p2p_req_dsk(did.to_struct(), transport_module.ANY_ADDRESS, 0, "x" * 8)
-    assert lookup == encode_packet(MsgType.P2P_REQ_DSK, any_address)
+    assert request == encode_packet(MsgType.P2P_REQ_DSK, any_address)
 
 
 async def test_resolve_gives_none_for_a_name_that_does_not_resolve(

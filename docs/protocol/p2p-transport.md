@@ -26,7 +26,7 @@ the length fits.
 | `0x30` | LAN_SEARCH | client → station :32108 (unicast or broadcast) | none | **[verified]** |
 | `0x41` | PUNCH_PKT | both | 20-byte DID struct | **[verified]** |
 | `0x42` | P2P_RDY | station → client | DID struct | **[verified]**, often skipped on the LAN |
-| `0x43` | TRY_LAN_TCP | station → client | | **[app]** name only, not implemented |
+| `0x43` | TRY_LAN_TCP | station → client, after P2P_RDY | | **[verified]** seen from a standalone camera; ignored |
 | `0xD0` | DRW | both | DRW sub-header + chunk | **[verified]** |
 | `0xD1` | DRW_ACK | both | ACK sub-header + indices | **[verified]** |
 | `0xE0` | ALIVE | both | none | **[verified]** |
