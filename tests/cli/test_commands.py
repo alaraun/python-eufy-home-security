@@ -18,6 +18,7 @@ from unittest.mock import Mock
 import pytest
 
 from eufy_home_security import client as client_module
+from eufy_home_security import network as network_module
 from eufy_home_security.cli import commands
 from eufy_home_security.cli.commands import Context, date_window, select_station
 from eufy_home_security.cli.config import UsageError, parse_args
@@ -26,6 +27,7 @@ from eufy_home_security.cloud.models import CloudDevice, CloudInvite
 from eufy_home_security.exceptions import LoginChallengeError
 from eufy_home_security.models import GuardMode
 from eufy_home_security.network import LanPath
+from eufy_home_security.p2p import pppp
 from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p.pppp import DISCOVERY_PORT
 from eufy_home_security.push import fcm as fcm_module
@@ -539,8 +541,14 @@ async def test_select_refreshing_refetches_once_when_a_named_station_is_not_cach
 
 
 async def test_login_and_network_say_what_the_firewall_must_allow(
-    fake: FakeStation, tmp_path: Any, capsys: pytest.CaptureFixture[str]
+    fake: FakeStation,
+    tmp_path: Any,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The fake station's loopback address stands in for the cloud's LAN address.
+    lan = pppp.is_lan_address
+    monkeypatch.setattr(network_module, "is_lan_address", lambda ip: ip == "127.0.0.1" or lan(ip))
     assert await run(["login"], tmp_path) == 0
     out = capsys.readouterr().out
     assert "Logged in" in out

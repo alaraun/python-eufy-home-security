@@ -99,6 +99,19 @@ def encode_sockaddr(ip: str, port: int) -> bytes:
     return struct.pack(">H", _AF_INET) + struct.pack("<H", port) + packed[::-1] + bytes(8)
 
 
+def is_lan_address(ip: str) -> bool:
+    """Whether ``ip`` is an IPv4 unicast LAN address: private (no multicast address
+    is), and not unspecified, loopback, link-local or reserved (the limited broadcast
+    included). Discovery is IPv4 only, so an IPv6 address is never one."""
+    try:
+        addr = ipaddress.IPv4Address(ip)
+    except ValueError:
+        return False
+    return addr.is_private and not (
+        addr.is_unspecified or addr.is_loopback or addr.is_link_local or addr.is_reserved
+    )
+
+
 def decode_sockaddr(data: bytes) -> tuple[str, int]:
     """``(ip, port)`` from the first 16 bytes of ``data``, laid out as
     :func:`encode_sockaddr` writes them: a ``PUNCH_TO`` names an address to punch this

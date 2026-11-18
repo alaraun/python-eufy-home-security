@@ -51,6 +51,31 @@ def test_public_local_ip_is_not_used_for_lan_discovery() -> None:
     assert lan_address(None) is None
 
 
+@pytest.mark.parametrize(
+    ("value", "lan"),
+    [
+        ("192.168.7.21", True),
+        ("172.16.0.9", True),
+        ("0.0.0.0", False),  # noqa: S104 - names no host
+        ("255.255.255.255", False),
+        ("127.0.0.1", False),
+        ("169.254.3.4", False),
+        ("224.0.0.251", False),
+        ("240.0.0.1", False),
+        ("100.64.0.9", False),
+        ("fd00::21", False),  # IPv6: discovery is IPv4 only
+        ("fe80::1", False),
+        ("::1", False),
+    ],
+)
+def test_only_an_ipv4_unicast_lan_address_is_searched(value: str, lan: bool) -> None:
+    """The cloud's ``local_ip`` and the address a station reports pass one rule."""
+    want = value if lan else None
+    assert lan_address(value) == want
+    assert extra_search_hosts(_device(None, value), None) == ((value,) if lan else ())
+    assert lan_path_for(_device(value, None), search_host=None, local_port=0).cloud_ip == want
+
+
 def test_a_pinned_cloud_addressed_path_needs_nothing() -> None:
     assert _path().warnings == ()
     assert _path().station_ip == SYNTHETIC.station_ip

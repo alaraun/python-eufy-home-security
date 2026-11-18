@@ -25,14 +25,13 @@ into advice.
 
 from __future__ import annotations
 
-import ipaddress
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
 from .models import PARAM_LAN_IP
-from .p2p.pppp import DISCOVERY_PORT
+from .p2p.pppp import DISCOVERY_PORT, is_lan_address
 
 if TYPE_CHECKING:
     from .cloud.models import CloudDevice
@@ -175,17 +174,13 @@ def extra_search_hosts(device: CloudDevice, search_host: str | None) -> tuple[st
 
 
 def lan_address(local_ip: str | None) -> str | None:
-    """The cloud's ``local_ip`` when it is a private address, else None.
+    """``local_ip`` (the cloud's, or the one a station reports) when it is an IPv4
+    unicast LAN address (:func:`~.p2p.pppp.is_lan_address`), else None.
 
-    For some devices the field carries the home's public WAN address, which a LAN
-    discovery must not be pointed at.
+    For some devices the cloud's field carries the home's public WAN address, which a
+    LAN discovery must not be pointed at.
     """
-    if not local_ip:
-        return None
-    try:
-        return local_ip if ipaddress.ip_address(local_ip).is_private else None
-    except ValueError:
-        return None
+    return local_ip if local_ip and is_lan_address(local_ip) else None
 
 
 def check_local_ports(ports: Mapping[str, int]) -> None:
