@@ -822,6 +822,8 @@ class EufySecurity:
             if not servers:
                 return None
             await self._ensure_cache_loaded()
+            if dsk := cloud.cached_dsk_key(serial):
+                return Wake(servers=servers, dsk=dsk)  # no cloud call: no success either
             try:
                 dsk = await cloud.async_get_dsk_key(serial)
             except SessionReplacedError as err:

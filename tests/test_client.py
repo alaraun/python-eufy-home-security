@@ -83,6 +83,7 @@ from eufy_home_security.p2p.discovery import DiscoveredStation
 from eufy_home_security.p2p.media import Still, StillFormat
 from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN
 from eufy_home_security.p2p.pppp import BROADCAST
+from eufy_home_security.p2p.transport import Wake
 from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.push import fcm as fcm_module
 from eufy_home_security.station import Station
@@ -2413,6 +2414,64 @@ async def test_a_latched_session_fails_an_on_demand_wake_at_once(
             await wake()
         assert cloud.calls == sent  # refused locally
         assert [type(p.error) for p in _problems(events)] == [SessionReplacedError]
+        await eufy.async_close()
+
+
+async def test_only_a_fetched_dsk_counts_as_a_cloud_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A DSK from the cache made no cloud call: it leaves a reported cloud problem
+    reported, so the same failure again stays quiet. A fetched one makes it news."""
+    monkeypatch.setattr(CloudDevice, "rendezvous_servers", ("192.0.2.1",))
+    async with aiohttp.ClientSession() as http:
+        cloud = FakeCloud()
+        eufy = account(http, cloud)
+        events: list[Event] = []
+        eufy.subscribe(events.append)
+        wake = eufy._wake_provider(CloudDevice.from_api(station_device()))
+        serial = SYNTHETIC.station_sn
+
+        async def failing_fetch() -> None:
+            eufy.cache.drop_dsk_key(serial)
+            cloud.call_errors = [FakeCloud.refusal(200, 26050, "no dsk")]
+            assert await wake() is None
+
+        await failing_fetch()
+        assert len(_problems(events)) == 1
+        eufy.cache.set_dsk_key(serial, "cached-dsk", time.time() + 3600)
+        assert (await wake()) == Wake(servers=("192.0.2.1",), dsk="cached-dsk")
+        await failing_fetch()
+        assert len(_problems(events)) == 1  # the cache hit was no success
+        eufy.cache.drop_dsk_key(serial)
+        assert await wake() is not None  # fetched
+        await failing_fetch()
+        assert len(_problems(events)) == 2
+        await eufy.async_close()
+
+
+async def test_concurrent_connects_fetch_one_dsk_per_station(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A held and a short-lived session of one station, and a second station, all
+    connecting at once: one ``get_dsk_keys`` per station."""
+    monkeypatch.setattr(CloudDevice, "rendezvous_servers", ("192.0.2.1",))
+    fetch = EufyCloudApi._fetch_dsk
+
+    async def slow_fetch(api: EufyCloudApi, station_sn: str, **kwargs: Any) -> Any:
+        await asyncio.sleep(0.01)  # the request is in flight while the others ask
+        return await fetch(api, station_sn, **kwargs)
+
+    monkeypatch.setattr(EufyCloudApi, "_fetch_dsk", slow_fetch)
+    async with aiohttp.ClientSession() as http:
+        cloud = FakeCloud()
+        eufy = account(http, cloud)
+        home = eufy._wake_provider(CloudDevice.from_api(station_device()))
+        other = eufy._wake_provider(CloudDevice.from_api(garage_device()))
+        await asyncio.gather(home(), home(), home(), other(), other())
+        fetches = [call for call in cloud.calls if call.startswith("dsk:")]
+        assert sorted(fetches) == sorted(
+            f"dsk:{redact_serial(sn)}" for sn in (SYNTHETIC.station_sn, OTHER_STATION_SN)
+        )
         await eufy.async_close()
 
 

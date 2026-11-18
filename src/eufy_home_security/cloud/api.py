@@ -509,6 +509,7 @@ class EufyCloudApi:
         self._challenge_region: str | None = None
         """The scope whose login raised this instance's last unanswered challenge."""
         self._login_lock = asyncio.Lock()
+        self._dsk_locks: dict[str, asyncio.Lock] = {}
         self._cipher_unavailable: dict[tuple[str, int], tuple[float, str | None, str]] = {}
         """(monotonic time, owner id source, owner id) of the last ``get_ciphers`` answer
         without a key per (station, cipher id), for the back-off. The source is None when
@@ -2536,28 +2537,38 @@ class EufyCloudApi:
         :class:`~..p2p.session.StationSession`): the app fetches one per client and it
         lasts about an hour. The cache is used while at least ``margin`` seconds remain;
         ``refresh`` (or a stale cache) fetches a fresh one and passes the old key as
-        ``invalid_dsk`` so the server rotates it.
+        ``invalid_dsk`` so the server rotates it. One fetch per station runs at a time:
+        a caller that waited for it takes its key from the cache.
         """
-        cached = self._cache.dsk_key(station_sn)
-        stale = cached[0] if cached else ""
-        if not refresh and cached and cached[1] - time.time() > margin:
+        async with self._dsk_locks.setdefault(station_sn, asyncio.Lock()):
+            if not refresh and (key := self.cached_dsk_key(station_sn, margin=margin)):
+                return key
+            cached = self._cache.dsk_key(station_sn)
+            stale = cached[0] if cached and refresh else ""
+            key, expiration = await self._fetch_dsk(station_sn, invalid_dsk=stale)
             _LOGGER.debug(
-                "DSK for %s from the cache (expires in %.0fs): %s",
+                "DSK for %s fetched (expires in %.0fs): %s",
                 redact_serial(station_sn),
-                cached[1] - time.time(),
-                Secret(cached[0]),
+                expiration - time.time(),
+                Secret(key),
             )
-            return cached[0]
-        key, expiration = await self._fetch_dsk(station_sn, invalid_dsk=stale if refresh else "")
+            self._cache.set_dsk_key(station_sn, key, expiration)
+            await self._cache.async_save()
+            return key
+
+    def cached_dsk_key(self, station_sn: str, *, margin: float = DSK_REFRESH_MARGIN) -> str | None:
+        """The station's cached DSK while at least ``margin`` seconds of it remain,
+        else None; no I/O (see :meth:`async_get_dsk_key`)."""
+        cached = self._cache.dsk_key(station_sn)
+        if cached is None or cached[1] - time.time() <= margin:
+            return None
         _LOGGER.debug(
-            "DSK for %s fetched (expires in %.0fs): %s",
+            "DSK for %s from the cache (expires in %.0fs): %s",
             redact_serial(station_sn),
-            expiration - time.time(),
-            Secret(key),
+            cached[1] - time.time(),
+            Secret(cached[0]),
         )
-        self._cache.set_dsk_key(station_sn, key, expiration)
-        await self._cache.async_save()
-        return key
+        return cached[0]
 
     async def _fetch_dsk(self, station_sn: str, *, invalid_dsk: str) -> tuple[str, float]:
         """Fetch the DSK and its expiration (epoch s) from ``get_dsk_keys``."""
