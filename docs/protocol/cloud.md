@@ -554,7 +554,10 @@ Whether a guest (`member_type` 0) is served is untested **[open]**.
 enabled, about_to_be_replaced, category}`. The DSK wakes a battery station over its
 rendezvous servers ([p2p-transport.md](p2p-transport.md#waking-a-battery-station-verified)).
 Each client gets its own key; pass a stale one as `invalid_dsk` to force a rotation. The
-library caches it per station until ~5 min before it expires **[verified]**.
+library caches it per station until ~5 min before it expires **[verified]**, then fetches
+a new one with an empty `invalid_dsk`; it names a key invalid only when a caller rejects
+it (`refresh=True`). One fetch per station runs at a time, and concurrent callers share
+its key or its error.
 
 ## Firmware (OTA)
 
