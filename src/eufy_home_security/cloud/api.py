@@ -2530,7 +2530,12 @@ class EufyCloudApi:
     # ── device session key (DSK) ───────────────────────────────────────────
 
     async def async_get_dsk_key(
-        self, station_sn: str, *, refresh: bool = False, margin: float = DSK_REFRESH_MARGIN
+        self,
+        station_sn: str,
+        *,
+        refresh: bool = False,
+        margin: float = DSK_REFRESH_MARGIN,
+        login: bool = True,
     ) -> str:
         """The station's device session key (DSK), cached per station until it expires.
 
@@ -2547,6 +2552,10 @@ class EufyCloudApi:
         again after one it waited for only when the caller running it was cancelled
         before the key was cached, or, with ``refresh``, when it brought back the
         rejected key. A caller cancelled while it waits leaves the fetch running.
+
+        Without ``login`` nothing logs in (:meth:`_with_session`): no usable session
+        raises :class:`NoCachedSessionError`. A caller that may log in and waited for
+        such a fetch fetches again itself.
         """
         known = self._cache.dsk_key(station_sn)
         rejected = known[0] if refresh and known else None
@@ -2557,21 +2566,25 @@ class EufyCloudApi:
                 await asyncio.wait((pending,))
                 if pending.cancelled():
                     continue  # the caller running it was cancelled: fetch again
+                if login and isinstance(pending.exception(), NoCachedSessionError):
+                    continue  # a fetch that would not log in: this caller may
                 key = pending.result()
                 if key != rejected:
                     return key
                 continue
             if not refresh and (fresh := self.cached_dsk_key(station_sn, margin=margin)):
                 return fresh
-            return await self._fetch_dsk_shared(station_sn, invalid_dsk=rejected or "")
+            return await self._fetch_dsk_shared(station_sn, invalid_dsk=rejected or "", login=login)
 
-    async def _fetch_dsk_shared(self, station_sn: str, *, invalid_dsk: str) -> str:
+    async def _fetch_dsk_shared(self, station_sn: str, *, invalid_dsk: str, login: bool) -> str:
         """Fetch and cache the station's DSK as its one fetch in flight, whose outcome
         callers arriving meanwhile share (see :meth:`async_get_dsk_key`)."""
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
         self._dsk_fetches[station_sn] = future
         try:
-            key, expiration = await self._fetch_dsk(station_sn, invalid_dsk=invalid_dsk)
+            key, expiration = await self._fetch_dsk(
+                station_sn, invalid_dsk=invalid_dsk, login=login
+            )
             _LOGGER.debug(
                 "DSK for %s fetched (expires in %.0fs): %s",
                 redact_serial(station_sn),
@@ -2606,7 +2619,9 @@ class EufyCloudApi:
         )
         return cached[0]
 
-    async def _fetch_dsk(self, station_sn: str, *, invalid_dsk: str) -> tuple[str, float]:
+    async def _fetch_dsk(
+        self, station_sn: str, *, invalid_dsk: str, login: bool
+    ) -> tuple[str, float]:
         """Fetch the DSK and its expiration (epoch s) from ``get_dsk_keys``."""
         payload = {
             "device_dsks": [
@@ -2624,7 +2639,7 @@ class EufyCloudApi:
             )
             return data
 
-        data = await self._with_session(fetch, region)
+        data = await self._with_session(fetch, region, login=login)
         items = _mapping(data, const.DSK_KEYS_PATH).get("device_dsks")
         if not isinstance(items, list):
             raise ProtocolError(f"cloud response to {const.DSK_KEYS_PATH} has no device_dsks list")

@@ -31,6 +31,7 @@ from eufy_home_security.exceptions import (
     LoginChallengeError,
     LoginLimitedError,
     LoginVerificationError,
+    NoCachedSessionError,
     ProtocolError,
     RateLimitedError,
     RefreshCooldownError,
@@ -2170,22 +2171,31 @@ async def test_empty_dsk_response_is_an_empty_response_error(
 class DskFetches:
     """Stands in for ``EufyCloudApi._fetch_dsk``: records each request's station and
     ``invalid_dsk``, holds it until ``release`` is set (when given), then answers
-    ``key{n}`` for the n-th request, or raises ``error``."""
+    ``key{n}`` for the n-th request, or raises the next of ``errors`` (each once), else
+    ``error``."""
 
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.sent: list[tuple[str, str]] = []
+        self.logins: list[bool] = []
+        """Each request's ``login``, in order."""
         self.started = asyncio.Event()
         self.release: dict[str, asyncio.Event] = {}
         self.keys: list[str] = []
+        self.errors: list[Exception] = []
         self.error: Exception | None = None
 
-        async def fetch(api: EufyCloudApi, station_sn: str, *, invalid_dsk: str) -> Any:
+        async def fetch(
+            api: EufyCloudApi, station_sn: str, *, invalid_dsk: str, login: bool
+        ) -> Any:
             self.sent.append((station_sn, invalid_dsk))
+            self.logins.append(login)
             number = len(self.sent)
             self.started.set()
             if (gate := self.release.get(station_sn)) is not None:
                 await gate.wait()
             await asyncio.sleep(0)
+            if self.errors:
+                raise self.errors.pop(0)
             if self.error is not None:
                 raise self.error
             key = self.keys.pop(0) if self.keys else f"key{number}"
@@ -2227,6 +2237,56 @@ async def test_dsk_fetches_of_two_stations_run_at_once(
         assert not held.done()
         fetches.release[SYNTHETIC.station_sn].set()
         assert (await held, other) == ("key1", "key2")
+
+
+async def test_a_dsk_fetch_without_login_never_logs_in(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """No session: refused before sending; an expired one: no login, the token kept."""
+    fake_mega.dsk_objects = [
+        {"device_sn": SYNTHETIC.station_sn, "dsk_key": "k", "expiration": time.time() + 3600}
+    ]
+    with aioresponses() as mock:
+        fake_mega.install(mock)
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            await cache.async_load()
+            with pytest.raises(NoCachedSessionError):
+                await api.async_get_dsk_key(SYNTHETIC.station_sn, login=False)
+            assert fake_mega.calls == []
+            await api.async_login()
+            fake_mega.code_once["dsk"] = int(const.CloudCode.SESSION_TIMEOUT)
+            with pytest.raises(NoCachedSessionError):
+                await api.async_get_dsk_key(SYNTHETIC.station_sn, login=False)
+            assert await api.async_get_dsk_key(SYNTHETIC.station_sn, login=False) == "k"
+    assert fake_mega.login_calls == 1
+
+
+@pytest.mark.parametrize("login", [True, False])
+async def test_a_caller_that_may_log_in_fetches_again_after_a_shared_fetch_that_may_not(
+    monkeypatch: pytest.MonkeyPatch, cache: SessionCache, login: bool
+) -> None:
+    """A fetch started with ``login=False`` that found no session is no answer for a
+    caller allowed to log in: it fetches again with a login. One that may not log in
+    either shares the refusal."""
+    fetches = DskFetches(monkeypatch)
+    fetches.errors = [NoCachedSessionError("no session")]
+    gate = fetches.release[SYNTHETIC.station_sn] = asyncio.Event()
+    async with aiohttp.ClientSession() as session:
+        api = _api(session, cache)
+        first = asyncio.create_task(api.async_get_dsk_key(SYNTHETIC.station_sn, login=False))
+        await fetches.started.wait()
+        second = asyncio.create_task(api.async_get_dsk_key(SYNTHETIC.station_sn, login=login))
+        await asyncio.sleep(0)
+        gate.set()
+        results = await asyncio.gather(first, second, return_exceptions=True)
+    assert isinstance(results[0], NoCachedSessionError)
+    if login:
+        assert results[1] == "key2"
+        assert fetches.logins == [False, True]
+    else:
+        assert isinstance(results[1], NoCachedSessionError)
+        assert fetches.logins == [False]
 
 
 async def test_a_cancelled_dsk_fetch_is_redone_by_a_waiting_caller(
