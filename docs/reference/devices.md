@@ -17,12 +17,12 @@ Support legend (models, capabilities and guard modes):
 | T280B | T280B | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
 | T2880 | T2880 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
 | T600P | T600P | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T6010 | Station 6010 | station | 108 | declared | eufy app 6.1.10 model list: STATION_6010; device-type map (108) (no app product category; kind read from the constant's name) |
+| T6010 | Bottle Washer S1 | station | 108 | declared | eufy app 6.1.10 model list: STATION_6010; device-type map (108) (no app product category; kind read from the constant's name) |
 | T6060 | Baby Mom Device Breast Pump 2 | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_2 (no app product category; kind read from the constant's name) |
 | T6310 | T6310 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
 | T6311 | T6311 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T7000 | Station T7000 | station |  | declared | eufy app 6.1.10 model list: STATION_T7000 (app product category: HomeBase) |
-| T7100 | T7100 | camera |  | declared | eufy app 6.1.10 model list (app product category: Camera) |
+| T7000 | Network Video Recorder E5 | station |  | declared | eufy app 6.1.10 model list: STATION_T7000 (app product category: HomeBase) |
+| T7100 | PoE Camera | camera |  | declared | eufy app 6.1.10 model list (app product category: Camera) |
 | T7200 | Dogcam | camera |  | declared | eufy app 6.1.10 model list: DOGCAM (app product category: PetCamera > Camera) |
 | T7203 | Dogcam Low | camera |  | declared | eufy app 6.1.10 model list: DOGCAM_LOW (app product category: PetCamera > Camera) |
 | T7260 | T7260 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
@@ -31,71 +31,71 @@ Support legend (models, capabilities and guard modes):
 | T7402 | Smart Safe 7402 | other |  | declared | eufy app 6.1.10 model list: SMART_SAFE_7402 (no app product category; kind read from the constant's name) |
 | T7403 | Smart Safe 7403 | other |  | declared | eufy app 6.1.10 model list: SMART_SAFE_7403 (no app product category; kind read from the constant's name) |
 | T7901 | T7901 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T8001 | Station | station | 0 | declared | eufy app 6.1.10 model list: STATION; device-type map (0) (app product category: HomeBase) |
-| T8002 | HomeBase 1 | station | 0 | declared | eufy app model list: STATION_AI; eufy app device-type map (0) (the eufy app constant calls this prefix STATION_AI) |
+| T8001 | HomeBase | station | 0 | declared | eufy app 6.1.10 model list: STATION; device-type map (0) (app product category: HomeBase) |
+| T8002 | HomeBase E | station | 0 | declared | eufy app model list: STATION_AI; eufy app device-type map (0) (the eufy app constant calls this prefix STATION_AI) |
 | T8010 | HomeBase 2 | station | 0 | declared | eufy app model list: STATION_2; eufy app device-type map (0) (the map files T8001/T8002/T8010/T8020 under one shared type 0) |
 | T8011 | T8011 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
 | T8012 | T8012 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T8020 | Station S | station | 0 | declared | eufy app 6.1.10 model list: STATION_S; device-type map (0) (no app product category; kind read from the constant's name) |
-| T8021 | Station 8021 | station |  | declared | eufy app 6.1.10 model list: STATION_8021 (no app product category; kind read from the constant's name) |
-| T8023 | Station 8023 | station |  | declared | eufy app 6.1.10 model list: STATION_8023 (no app product category; kind read from the constant's name) |
-| T8024 | Station 8024 | station |  | declared | eufy app 6.1.10 model list: STATION_8024 (app product category: HomeBase) |
-| T8025 | Station 8025 | station |  | declared | eufy app 6.1.10 model list: STATION_8025 (app product category: HomeBase) |
-| T8026 | Station 8026 | station | 600 | declared | eufy app 6.1.10 model list: STATION_8026; device-type map (600) (no app product category; kind read from the constant's name) |
-| T8028 | Doorbell Chime 8028 | other | 601 | declared | eufy app 6.1.10 model list: DOORBELL_CHIME_8028; device-type map (601) (no app product category; kind read from the constant's name) |
-| T8030 | HomeBase 3 (S380) | station | 18 | verified | live P2P sessions, HomeBase 3 fw 3.8.6.0 and 3.8.7.4 (device_type 18 is from the cloud device list; event-push and event-database records for the same station carry device_type 43) |
-| T8040 | Station 4 | station |  | declared | eufy app 6.1.10 model list: STATION_4 (app product category: HomeBase) |
+| T8020 | Wi-Fi Doorbell Chime | station | 0 | declared | eufy app 6.1.10 model list: STATION_S; device-type map (0) (no app product category; kind read from the constant's name) |
+| T8021 | Wi-Fi Bridge & Doorbell Chime | station |  | declared | eufy app 6.1.10 model list: STATION_8021 (no app product category; kind read from the constant's name) |
+| T8023 | MiniBase Chime | station |  | declared | eufy app 6.1.10 model list: STATION_8023 (no app product category; kind read from the constant's name) |
+| T8024 | Repeater | station |  | declared | eufy app 6.1.10 model list: STATION_8024 (app product category: HomeBase) |
+| T8025 | HomeBase Mini | station |  | declared | eufy app 6.1.10 model list: STATION_8025 (app product category: HomeBase) |
+| T8026 | Wi-Fi Doorbell Chime 2 | station | 600 | declared | eufy app 6.1.10 model list: STATION_8026; device-type map (600) (no app product category; kind read from the constant's name) |
+| T8028 | eufy Doorbell Chime mini | other | 601 | declared | eufy app 6.1.10 model list: DOORBELL_CHIME_8028; device-type map (601) (no app product category; kind read from the constant's name) |
+| T8030 | HomeBase 3 | station | 18 | verified | live P2P sessions, HomeBase 3 fw 3.8.6.0 and 3.8.7.4 (device_type 18 is from the cloud device list; event-push and event-database records for the same station carry device_type 43) |
+| T8040 | MindBase | station |  | declared | eufy app 6.1.10 model list: STATION_4 (app product category: HomeBase) |
 | T8101 | Camera 101 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_101 (no app product category; kind read from the constant's name) |
 | T8102 | Camera E 102 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_E_102 (no app product category; kind read from the constant's name) |
-| T8110 | Battery Solo Cam 8110 | camera | 10035 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8110; device-type map (10035) (app product category: BatteryCamera > Camera) |
-| T8111 | Camera | camera | 1 | declared | eufy app 6.1.10 model list: CAMERA; device-type map (1) (app product category: BatteryCamera > Camera) |
-| T8112 | Camera E | camera | 1 | declared | eufy app 6.1.10 model list: CAMERA_E; device-type map (1) (app product category: BatteryCamera > Camera) |
-| T8113 | Camera 2C | camera | 8 | declared | eufy app 6.1.10 model list: CAMERA2C; device-type map (8) (app product category: BatteryCamera > Camera) |
-| T8114 | Camera 2 | camera | 9 | declared | eufy app 6.1.10 model list: CAMERA2; device-type map (9) (app product category: BatteryCamera > Camera) |
-| T8115 | Battery Solo Cam 8115 | camera | 10038 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8115; device-type map (10038) (app product category: BatteryCamera > Camera) |
-| T8119 | Battery Solo C 33 | camera | 10033 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_C33; device-type map (10033) (app product category: BatteryCamera > Camera) |
-| T8122 | Battery Solo Cam Spotlight 1080 | camera | 60 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_1080; device-type map (60) (app product category: BatteryCamera > Camera) |
-| T8123 | Battery Solo Cam Spotlight 2K | camera | 61 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_2K; device-type map (61) (app product category: BatteryCamera > Camera) |
-| T8124 | Battery Solo Cam Spotlight Solar 8124 | camera | 62 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_SOLAR_8124; device-type map (62) (app product category: BatteryCamera > Camera) |
-| T8126 | T8126 | camera |  | declared | eufy app 6.1.10 model list (app product category: LteCamera > BatteryCamera > Camera) |
-| T8130 | Battery Solo Cam 8130 | camera | 32 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8130; device-type map (32) (app product category: BatteryCamera > Camera) |
-| T8131 | Battery Solo Cam Pro | camera | 33 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_PRO; device-type map (33) (app product category: BatteryCamera > Camera) |
-| T8134 | Battery Solo Cam 8134 | camera | 63 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8134; device-type map (63) (app product category: BatteryCamera > Camera) |
-| T8140 | Camera 2 Pro | camera | 14 | declared | eufy app 6.1.10 model list: CAMERA2_PRO; device-type map (14) (app product category: BatteryCamera > Camera) |
-| T8142 | Camera 2C Pro | camera | 15 | declared | eufy app 6.1.10 model list: CAMERA2C_PRO; device-type map (15) (app product category: BatteryCamera > Camera) |
-| T8144 | Camera 8144 | camera | 49 | declared | eufy app 6.1.10 model list: CAMERA_8144; device-type map (49) (app product category: BatteryCamera > Camera) |
-| T814X | Battery Solo Cam 814X | camera | 10037 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_814X; device-type map (10037) (app product category: WiredCamera > Camera) |
-| T8150 | Cam 4G | camera |  | declared | eufy app 6.1.10 model list: CAM_4G (app product category: LteCamera > BatteryCamera > Camera) |
-| T8151 | Cam 4G EU | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_EU (app product category: LteCamera > BatteryCamera > Camera) |
+| T8110 | eufyCam C35 | camera | 10035 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8110; device-type map (10035) (app product category: BatteryCamera > Camera) |
+| T8111 | eufyCam | camera | 1 | declared | eufy app 6.1.10 model list: CAMERA; device-type map (1) (app product category: BatteryCamera > Camera) |
+| T8112 | eufyCam E | camera | 1 | declared | eufy app 6.1.10 model list: CAMERA_E; device-type map (1) (app product category: BatteryCamera > Camera) |
+| T8113 | eufyCam 2C | camera | 8 | declared | eufy app 6.1.10 model list: CAMERA2C; device-type map (8) (app product category: BatteryCamera > Camera) |
+| T8114 | eufyCam 2 | camera | 9 | declared | eufy app 6.1.10 model list: CAMERA2; device-type map (9) (app product category: BatteryCamera > Camera) |
+| T8115 | eufyCam C38 | camera | 10038 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8115; device-type map (10038) (app product category: BatteryCamera > Camera) |
+| T8119 | eufyCam C33 | camera | 10033 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_C33; device-type map (10033) (app product category: BatteryCamera > Camera) |
+| T8122 | SoloCam L20 | camera | 60 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_1080; device-type map (60) (app product category: BatteryCamera > Camera) |
+| T8123 | SoloCam L40 | camera | 61 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_2K; device-type map (61) (app product category: BatteryCamera > Camera) |
+| T8124 | SoloCam S40 / SoloCam S230 | camera | 62 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_SPOTLIGHT_SOLAR_8124; device-type map (62) (app product category: BatteryCamera > Camera) |
+| T8126 | eufy 4G LTE Cam E10 | camera |  | declared | eufy app 6.1.10 model list (app product category: LteCamera > BatteryCamera > Camera) |
+| T8130 | SoloCam E20 | camera | 32 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8130; device-type map (32) (app product category: BatteryCamera > Camera) |
+| T8131 | SoloCam E40 | camera | 33 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_PRO; device-type map (33) (app product category: BatteryCamera > Camera) |
+| T8134 | SoloCam C20 | camera | 63 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8134; device-type map (63) (app product category: BatteryCamera > Camera) |
+| T8140 | eufyCam 2 Pro | camera | 14 | declared | eufy app 6.1.10 model list: CAMERA2_PRO; device-type map (14) (app product category: BatteryCamera > Camera) |
+| T8142 | eufyCam 2C Pro | camera | 15 | declared | eufy app 6.1.10 model list: CAMERA2C_PRO; device-type map (15) (app product category: BatteryCamera > Camera) |
+| T8144 | eufyCam E40 | camera | 49 | declared | eufy app 6.1.10 model list: CAMERA_8144; device-type map (49) (app product category: BatteryCamera > Camera) |
+| T814X | eufyCam C37 | camera | 10037 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_814X; device-type map (10037) (app product category: WiredCamera > Camera) |
+| T8150 | 4G Starlight Camera | camera |  | declared | eufy app 6.1.10 model list: CAM_4G (app product category: LteCamera > BatteryCamera > Camera) |
+| T8151 | 4G Starlight Camera | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_EU (app product category: LteCamera > BatteryCamera > Camera) |
 | T8152 | Cam 4G AUS | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_AUS (app product category: LteCamera > BatteryCamera > Camera) |
 | T8153 | Cam 4G TMO | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_TMO (app product category: LteCamera > BatteryCamera > Camera) |
-| T8160 | eufyCam 3 (S330) | camera | 19 | verified | live settings write+read-back and media on T8030 HomeBase 3, camera fw 3.4.3.0 (device_type 19 is carried by live event pushes and matches the eufy app device-type map) |
+| T8160 | eufyCam 3 | camera | 19 | verified | live settings write+read-back and media on T8030 HomeBase 3, camera fw 3.4.3.0 (device_type 19 is carried by live event pushes and matches the eufy app device-type map) |
 | T8161 | eufyCam 3C | camera | 23 | declared | eufy app model list: CAMERA3C; eufy app device-type map (23) |
-| T8162 | Camera 3 Pro | camera | 26 | declared | eufy app 6.1.10 model list: CAMERA3_PRO; device-type map (26) (app product category: BatteryCamera > Camera) |
-| T8165 | Battery Solo Cam 8165 | camera |  | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8165 (no app product category; kind read from the constant's name) |
-| T8170 | Battery SoloCam (T8170) | camera | 48 | declared | eufy app model list: BATTERY_SOLO_CAM_8170; eufy app device-type map (48) (a standalone camera, its own station; the cloud device list reports device_type 48 and the parameter dump labels its block 48) |
-| T8171 | Battery Solo Cam 8171 | camera | 88 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8171; device-type map (88) (app product category: BatteryCamera > Camera) |
-| T8172 | Battery Solo Cam 8172 | camera | 89 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8172; device-type map (89) (app product category: BatteryCamera > Camera) |
-| T8173 | Battery Solo Cam 8173 | camera | 98 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8173; device-type map (98) (app product category: BatteryCamera > Camera) |
-| T8174 | Solo Camera 8174 | camera | 316 | declared | eufy app 6.1.10 model list: SOLO_CAMERA_8174; device-type map (316) (app product category: BatteryCamera > Camera) |
-| T817L | Battery Solo Cam 817L | camera | 10031 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_817L; device-type map (10031) (app product category: IndoorCamera > WiredCamera > Camera) |
-| T8180 | Battery Solo Cam 8180 | camera | 315 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8180; device-type map (315) (app product category: BatteryCamera > Camera) |
-| T81A0 | Walllight T81A0 | camera | 10005 | declared | eufy app 6.1.10 model list: WALLLIGHT_T81A0; device-type map (10005) (app product category: WallLightCamera > Camera) |
-| T8200 | Doorbell 2K | doorbell | 5 | declared | eufy app 6.1.10 model list: DOORBELL_2K; device-type map (5) (app product category: VideoDoorbell > Camera) |
-| T8201 | Wired Doorbell 1080P | doorbell | 5 | declared | eufy app 6.1.10 model list: WIRED_DOORBELL_1080P; device-type map (5) (app product category: VideoDoorbell > Camera) |
-| T8202 | Wired Doorbell 8202 | doorbell | 5 | declared | eufy app 6.1.10 model list: WIRED_DOORBELL_8202; device-type map (5) (app product category: VideoDoorbell > Camera) |
-| T8203 | Battery Doorbell 8203 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8203 (app product category: VideoDoorbell > Camera) |
-| T8210 | Battery Doorbell 8210 | doorbell | 7 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8210; device-type map (7) (app product category: VideoDoorbell > Camera) |
+| T8162 | eufyCam S3 Pro | camera | 26 | declared | eufy app 6.1.10 model list: CAMERA3_PRO; device-type map (26) (app product category: BatteryCamera > Camera) |
+| T8165 | eufyCam C39 | camera |  | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8165 (no app product category; kind read from the constant's name) |
+| T8170 | Battery Solo Cam 8170 | camera | 48 | declared | eufy app model list: BATTERY_SOLO_CAM_8170; eufy app device-type map (48) (a standalone camera, its own station; the cloud device list reports device_type 48 and the parameter dump labels its block 48) |
+| T8171 | eufy SoloCam E30 | camera | 88 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8171; device-type map (88) (app product category: BatteryCamera > Camera) |
+| T8172 | eufyCam S4 | camera | 89 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8172; device-type map (89) (app product category: BatteryCamera > Camera) |
+| T8173 | SoloCam E42 | camera | 98 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8173; device-type map (98) (app product category: BatteryCamera > Camera) |
+| T8174 | eufyCam E52 | camera | 316 | declared | eufy app 6.1.10 model list: SOLO_CAMERA_8174; device-type map (316) (app product category: BatteryCamera > Camera) |
+| T817L | eufyCam C31 | camera | 10031 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_817L; device-type map (10031) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8180 | SoloCam E50 | camera | 315 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8180; device-type map (315) (app product category: BatteryCamera > Camera) |
+| T81A0 | Solar Wall Light Cam S120 | camera | 10005 | declared | eufy app 6.1.10 model list: WALLLIGHT_T81A0; device-type map (10005) (app product category: WallLightCamera > Camera) |
+| T8200 | Video Doorbell 2K | doorbell | 5 | declared | eufy app 6.1.10 model list: DOORBELL_2K; device-type map (5) (app product category: VideoDoorbell > Camera) |
+| T8201 | Video Doorbell 1080p | doorbell | 5 | declared | eufy app 6.1.10 model list: WIRED_DOORBELL_1080P; device-type map (5) (app product category: VideoDoorbell > Camera) |
+| T8202 | Video Doorbell 2C | doorbell | 5 | declared | eufy app 6.1.10 model list: WIRED_DOORBELL_8202; device-type map (5) (app product category: VideoDoorbell > Camera) |
+| T8203 | Video Doorbell Dual (Wired) | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8203 (app product category: VideoDoorbell > Camera) |
+| T8210 | Video Doorbell 2K | doorbell | 7 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8210; device-type map (7) (app product category: VideoDoorbell > Camera) |
 | T8212 | Battery Doorbell 8212 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8212 (no app product category; kind read from the constant's name) |
-| T8213 | Battery Doorbell 8213 | doorbell | 91 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8213; device-type map (91) (app product category: VideoDoorbell > Camera) |
-| T8214 | Battery Doorbell T8214 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_T8214 (app product category: VideoDoorbell > Camera) |
-| T8215 | Battery Doorbell T8215 | doorbell | 97 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_T8215; device-type map (97) (app product category: VideoDoorbell > Camera) |
-| T8217 | Battery Doorbell Solo 8217 | doorbell | 312 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_SOLO_8217; device-type map (312) (app product category: VideoDoorbell > Camera) |
-| T8220 | Battery Doorbell 8220 | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8220; device-type map (16) (app product category: VideoDoorbell > Camera) |
-| T8221 | Battery Doorbell 8221 | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8221; device-type map (16) (app product category: VideoDoorbell > Camera) |
-| T8222 | Battery Doorbell 8222 | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8222; device-type map (16) (app product category: VideoDoorbell > Camera) |
-| T8223 | Battery Doorbell 8223 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8223 (app product category: VideoDoorbell > Camera) |
-| T8224 | Battery Doorbell 8224 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8224 (app product category: VideoDoorbell > Camera) |
+| T8213 | Video Doorbell Dual S330 | doorbell | 91 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8213; device-type map (91) (app product category: VideoDoorbell > Camera) |
+| T8214 | Video Doorbell E340 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_T8214 (app product category: VideoDoorbell > Camera) |
+| T8215 | Video Doorbell S4 | doorbell | 97 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_T8215; device-type map (97) (app product category: VideoDoorbell > Camera) |
+| T8217 | Video doorbell C45 | doorbell | 312 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_SOLO_8217; device-type map (312) (app product category: VideoDoorbell > Camera) |
+| T8220 | Video Doorbell 1080p slim | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8220; device-type map (16) (app product category: VideoDoorbell > Camera) |
+| T8221 | Video Doorbell 2E | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8221; device-type map (16) (app product category: VideoDoorbell > Camera) |
+| T8222 | Video Doorbell 1080p | doorbell | 16 | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8222; device-type map (16) (app product category: VideoDoorbell > Camera) |
+| T8223 | Video Doorbell C31 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8223 (app product category: VideoDoorbell > Camera) |
+| T8224 | Video Doorbell C30 | doorbell |  | declared | eufy app 6.1.10 model list: BATTERY_DOORBELL_8224 (app product category: VideoDoorbell > Camera) |
 | T82B0 | T82B0 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
 | T8340 | Babycare Sock | other |  | declared | eufy app 6.1.10 model list: BABYCARE_SOCK (app product category: BabySock) |
 | T8350 | Babycare Monitor | other |  | declared | eufy app 6.1.10 model list: BABYCARE_MONITOR (no app product category; kind read from the constant's name) |
@@ -104,78 +104,78 @@ Support legend (models, capabilities and guard modes):
 | T8353 | Babycare 8353 | other |  | declared | eufy app 6.1.10 model list: BABYCARE_8353 (no app product category; kind read from the constant's name) |
 | T8354 | Babycare 8354 | camera |  | declared | eufy app 6.1.10 model list: BABYCARE_8354 (app product category: BabyCamera > Camera) |
 | T8360 | Babycare Camera | camera |  | declared | eufy app 6.1.10 model list: BABYCARE_CAMERA (app product category: BabyCamera > Camera) |
-| T8400 | Indoor Camera | camera | 30 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA; device-type map (30) (app product category: IndoorCamera > WiredCamera > Camera) |
-| T8401 | Indoor Camera 1080 | camera | 34 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_1080; device-type map (34) (app product category: IndoorCamera > WiredCamera > Camera) |
-| T8404 | Camera 8404 | camera | 314 | declared | eufy app 6.1.10 model list: CAMERA_8404; device-type map (314) (app product category: IndoorCamera > WiredCamera > Camera) |
-| T8410 | Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24) | camera | 31 | declared | eufy app model list: INDOOR_CAMERA_PT; eufy app device-type map (31) (a standalone camera, its own station; a serial with '5' at index 6 is the app's separate product T8410C, with its own thing description and handler) |
-| T8411 | Indoor Camera PT 1080 | camera | 35 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_PT_1080; device-type map (35) (app product category: IndoorCamera > WiredCamera > Camera) |
-| T8414 | Indoor Camera Costdown T8414 | camera | 100 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_COSTDOWN_T8414; device-type map (100) (app product category: IndoorCamera > WiredCamera > Camera) |
-| T8416 | Indoor Camera 8416 | camera | 104 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8416; device-type map (104) (app product category: IndoorCamera > WiredCamera > Camera) |
-| T8417 | Indoor Camera 8417 | camera | 105 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8417; device-type map (105) (app product category: IndoorCamera > WiredCamera > Camera) |
-| T8419 | Indoor Camera T8419 | camera | 10009 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_T8419; device-type map (10009) (app product category: IndoorCamera > WiredCamera > Camera) |
-| T8420 | Floodlight | camera | 3 | declared | eufy app 6.1.10 model list: FLOODLIGHT; device-type map (3) (app product category: FloodlightCamera > Camera) |
+| T8400 | Indoor Cam 2K | camera | 30 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA; device-type map (30) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8401 | Indoor Cam 1080p | camera | 34 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_1080; device-type map (34) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8404 | Window Camera E10 | camera | 314 | declared | eufy app 6.1.10 model list: CAMERA_8404; device-type map (314) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8410 | Indoor Cam Pan&Tilt 2K | camera | 31 | declared | eufy app model list: INDOOR_CAMERA_PT; eufy app device-type map (31) (a standalone camera, its own station; a serial with '5' at index 6 is the app's separate product T8410C, with its own thing description and handler) |
+| T8411 | Indoor Cam Pan&Tilt 1080p | camera | 35 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_PT_1080; device-type map (35) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8414 | Indoor Cam Mini | camera | 100 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_COSTDOWN_T8414; device-type map (100) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8416 | 4K Indoor Cam Dual | camera | 104 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8416; device-type map (104) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8417 | Indoor Cam E30 | camera | 105 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8417; device-type map (105) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8419 | IndoorCam C210 | camera | 10009 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_T8419; device-type map (10009) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T8420 | Floodlight Cam 1080p | camera | 3 | declared | eufy app 6.1.10 model list: FLOODLIGHT; device-type map (3) (app product category: FloodlightCamera > Camera) |
 | T8421 | T8421 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T8422 | Floodlight E 2K | camera | 37 | declared | eufy app 6.1.10 model list: FLOODLIGHT_E_2K; device-type map (37) (app product category: FloodlightCamera > Camera) |
-| T8423 | Floodlight 2 | camera | 38 | declared | eufy app 6.1.10 model list: FLOODLIGHT2; device-type map (38) (app product category: FloodlightCamera > Camera) |
+| T8422 | Floodlight Cam E | camera | 37 | declared | eufy app 6.1.10 model list: FLOODLIGHT_E_2K; device-type map (37) (app product category: FloodlightCamera > Camera) |
+| T8423 | Floodlight Cam 2 Pro | camera | 38 | declared | eufy app 6.1.10 model list: FLOODLIGHT2; device-type map (38) (app product category: FloodlightCamera > Camera) |
 | T8424 | Floodlight Cam 2K | camera | 39 | declared | eufy app 6.1.10 model list: FLOODLIGHT_CAM_2K; device-type map (39) (app product category: FloodlightCamera > Camera) |
-| T8425 | Floodlight 8425 | camera | 47 | declared | eufy app 6.1.10 model list: FLOODLIGHT_8425; device-type map (47) (app product category: FloodlightCamera > Camera) |
-| T8426 | Floodlight 8426 | camera | 87 | declared | eufy app 6.1.10 model list: FLOODLIGHT_8426; device-type map (87) (app product category: FloodlightCamera > Camera) |
+| T8425 | Floodlight Cam Dual 3K | camera | 47 | declared | eufy app 6.1.10 model list: FLOODLIGHT_8425; device-type map (47) (app product category: FloodlightCamera > Camera) |
+| T8426 | Floodlight Cam 2K | camera | 87 | declared | eufy app 6.1.10 model list: FLOODLIGHT_8426; device-type map (87) (app product category: FloodlightCamera > Camera) |
 | T8440 | Indoor Outdoor Camera 1080P No Light | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_1080P_NO_LIGHT (app product category: WiredCamera > Camera) |
-| T8441 | Indoor Outdoor Camera 2K | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_2K (app product category: WiredCamera > Camera) |
-| T8442 | Indoor Outdoor Camera 1080P | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_1080P (app product category: WiredCamera > Camera) |
-| T8450 | T8450 | camera |  | declared | eufy app 6.1.10 model list (app product category: GarageCamera > Camera) |
+| T8441 | Outdoor Cam Pro | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_2K (app product category: WiredCamera > Camera) |
+| T8442 | Outdoor Cam | camera |  | declared | eufy app 6.1.10 model list: INDOOR_OUTDOOR_CAMERA_1080P (app product category: WiredCamera > Camera) |
+| T8450 | Garage Door Sensor | camera |  | declared | eufy app 6.1.10 model list (app product category: GarageCamera > Camera) |
 | T8451 | T8451 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T8452 | T8452 | camera | 132 | declared | eufy app 6.1.10 model list; device-type map (132) (app product category: GarageCamera > Camera) |
-| T8453 | T8453 | camera | 133 | declared | eufy app 6.1.10 model list; device-type map (133) (app product category: GarageCamera > Camera) |
-| T8480 | T8480 | camera |  | declared | eufy app 6.1.10 model list (app product category: BatteryCamera > Camera) |
+| T8452 | Floodlight Cam 2 Pro | camera | 132 | declared | eufy app 6.1.10 model list; device-type map (132) (app product category: GarageCamera > Camera) |
+| T8453 | Garage-Control Cam Plus | camera | 133 | declared | eufy app 6.1.10 model list; device-type map (133) (app product category: GarageCamera > Camera) |
+| T8480 | Things Cam X7 | camera |  | declared | eufy app 6.1.10 model list (app product category: BatteryCamera > Camera) |
 | T84A0 | T84A0 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T84A1 | Walllight T84A1 | camera | 151 | declared | eufy app 6.1.10 model list: WALLLIGHT_T84A1; device-type map (151) (app product category: WallLightCamera > Camera) |
+| T84A1 | Wall Light Cam S100 | camera | 151 | declared | eufy app 6.1.10 model list: WALLLIGHT_T84A1; device-type map (151) (app product category: WallLightCamera > Camera) |
 | T84B1 | T84B1 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T8500 | BLE Lock No Finger | lock | 52 | declared | eufy app 6.1.10 model list: BLE_LOCK_NO_FINGER; device-type map (52) (app product category: SmartLock) |
-| T8501 | Wifi Lock No Finger | lock | 53 | declared | eufy app 6.1.10 model list: WIFI_LOCK_NO_FINGER; device-type map (53) (app product category: SmartLock) |
-| T8502 | Lock 8502 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8502 (app product category: SmartLock) |
-| T8503 | Lock 8503 | lock | 54 | declared | eufy app 6.1.10 model list: LOCK_8503; device-type map (54) (app product category: SmartLock) |
-| T8504 | Lock 8504 | lock | 58 | declared | eufy app 6.1.10 model list: LOCK_8504; device-type map (58) (app product category: SmartLock) |
-| T8506 | Lock 8506 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8506 (app product category: SmartLock) |
-| T8510 | BLE Lock | lock | 50 | declared | eufy app 6.1.10 model list: BLE_LOCK; device-type map (50) (app product category: SmartLock) |
-| T8520 | Wifi Lock | lock | 51 | declared | eufy app 6.1.10 model list: WIFI_LOCK; device-type map (51) (app product category: SmartLock) |
+| T8500 | Smart Lock C100 | lock | 52 | declared | eufy app 6.1.10 model list: BLE_LOCK_NO_FINGER; device-type map (52) (app product category: SmartLock) |
+| T8501 | Smart Lock C110 | lock | 53 | declared | eufy app 6.1.10 model list: WIFI_LOCK_NO_FINGER; device-type map (53) (app product category: SmartLock) |
+| T8502 | Smart Lock C210 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8502 (app product category: SmartLock) |
+| T8503 | Retrofit Smart Lock R10 | lock | 54 | declared | eufy app 6.1.10 model list: LOCK_8503; device-type map (54) (app product category: SmartLock) |
+| T8504 | Retrofit Smart Lock R20 | lock | 58 | declared | eufy app 6.1.10 model list: LOCK_8504; device-type map (58) (app product category: SmartLock) |
+| T8506 | Smart Lock C220 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8506 (app product category: SmartLock) |
+| T8510 | Smart Lock E130 | lock | 50 | declared | eufy app 6.1.10 model list: BLE_LOCK; device-type map (50) (app product category: SmartLock) |
+| T8520 | Smart Lock S230 | lock | 51 | declared | eufy app 6.1.10 model list: WIFI_LOCK; device-type map (51) (app product category: SmartLock) |
 | T8522 | T8522 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T8530 | Lock 8530 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8530 (app product category: VideoSmartLock > Camera) |
-| T8531 | Lock 8531 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8531 (app product category: VideoSmartLock > Camera) |
-| T8532 | T8532 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
-| T853A | T853A | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
+| T8530 | Video Smart Lock S330 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8530 (app product category: VideoSmartLock > Camera) |
+| T8531 | Video Smart Lock E330 | lock |  | declared | eufy app 6.1.10 model list: LOCK_8531 (app product category: VideoSmartLock > Camera) |
+| T8532 | Smart Lock E38 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
+| T853A | Video Smart Lock S330 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
 | T8592 | Keypad 8592 | keypad |  | declared | eufy app 6.1.10 model list: KEYPAD_8592 (no app product category; kind read from the constant's name) |
 | T85A3 | Keypad 85A3 | keypad |  | declared | eufy app 6.1.10 model list: KEYPAD_85A3 (no app product category; kind read from the constant's name) |
 | T85A4 | Keypad 85A4 | keypad |  | declared | eufy app 6.1.10 model list: KEYPAD_85A4 (no app product category; kind read from the constant's name) |
 | T85B0 | T85B0 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T85D0 | Lock 85D0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85D0 (app product category: SmartLock) |
+| T85D0 | Smart Lock C30 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85D0 (app product category: SmartLock) |
 | T85D1 | T85D1 | lock |  | declared | eufy app 6.1.10 model list (app product category: SmartLock) |
-| T85D2 | Lock 85D2 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85D2 (app product category: SmartLock) |
-| T85F0 | Lock 85F0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85F0 (app product category: SmartLock) |
-| T85F1 | Lock 85F1 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85F1 (app product category: SmartLock) |
+| T85D2 | Smart Lock C34 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85D2 (app product category: SmartLock) |
+| T85F0 | Smart Lock E31 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85F0 (app product category: SmartLock) |
+| T85F1 | Smart Lock E30 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85F1 (app product category: SmartLock) |
 | T85F2 | T85F2 | lock |  | declared | eufy app 6.1.10 model list (app product category: SmartLock) |
-| T85F3 | T85F3 | lock |  | declared | eufy app 6.1.10 model list (app product category: SmartLock) |
-| T85L0 | Lock 85L0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85L0 (app product category: SmartLock) |
-| T85L1 | T85L1 | lock |  | declared | eufy app 6.1.10 model list (app product category: SmartLock) |
-| T85M0 | T85M0 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
-| T85M1 | T85M1 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
+| T85F3 | Smart Lock E33 | lock |  | declared | eufy app 6.1.10 model list (app product category: SmartLock) |
+| T85L0 | Lever Smart Lock C33 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85L0 (app product category: SmartLock) |
+| T85L1 | Smart Lock C32 | lock |  | declared | eufy app 6.1.10 model list (app product category: SmartLock) |
+| T85M0 | FamiLock E40 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
+| T85M1 | Smart Lock S4 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
 | T85M2 | T85M2 | lock |  | declared | eufy app 6.1.10 model list (app product category: VideoSmartLock > Camera) |
-| T85P0 | Lock 85P0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85P0 (app product category: SmartLock) |
-| T85P1 | Lock 85P1 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85P1 (app product category: SmartLock) |
-| T85V0 | Lock 85V0 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85V0 (app product category: VideoSmartLock > Camera) |
+| T85P0 | FamiLock E34 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85P0 (app product category: SmartLock) |
+| T85P1 | FamiLock E35 | lock |  | declared | eufy app 6.1.10 model list: LOCK_85P1 (app product category: SmartLock) |
+| T85V0 | FamiLock S3 Max | lock |  | declared | eufy app 6.1.10 model list: LOCK_85V0 (app product category: VideoSmartLock > Camera) |
 | T85V1 | T85V1 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
 | T85V2 | T85V2 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T8600 | Camera 8600 | camera | 24 | declared | eufy app 6.1.10 model list: CAMERA_8600; device-type map (24) (app product category: WiredCamera > Camera) |
+| T8600 | eufyCam(Professional) solo | camera | 24 | declared | eufy app 6.1.10 model list: CAMERA_8600; device-type map (24) (app product category: WiredCamera > Camera) |
 | T86C0 | T86C0 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T86C1 | Camera 86C1 | camera | 298 | declared | eufy app 6.1.10 model list: CAMERA_86C1; device-type map (298) (app product category: WallLightCamera > Camera) |
-| T86P2 | Cam 4G PT | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_PT (app product category: LteCamera > BatteryCamera > Camera) |
+| T86C1 | eufy Wall Light Cam S4 | camera | 298 | declared | eufy app 6.1.10 model list: CAMERA_86C1; device-type map (298) (app product category: WallLightCamera > Camera) |
+| T86P2 | 4G&Wi-Fi Spotlight Cam | camera |  | declared | eufy app 6.1.10 model list: CAM_4G_PT (app product category: LteCamera > BatteryCamera > Camera) |
 | T86P3 | T86P3 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
 | T86P4 | T86P4 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
 | T870G | Sensor 870G | sensor |  | declared | eufy app 6.1.10 model list: SENSOR_870G (app product category: Sensor) |
 | T8740 | Chime 433 | other |  | declared | eufy app 6.1.10 model list: CHIME_433 (no app product category; kind read from the constant's name) |
 | T8790 | Box SPB | camera |  | declared | eufy app 6.1.10 model list: BOX_SPB (app product category: Camera) |
 | T8791 | T8791 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T87A0 | T87A0 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
+| T87A0 | eufy Smart Display E10 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
 | T87B0 | Tracker 87B0 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B0 (app product category: SmartTracker) |
 | T87B1 | Tracker 87B1 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B1 (app product category: SmartTracker) |
 | T87B2 | Tracker 87B2 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B2 (app product category: SmartTracker) |
@@ -184,18 +184,18 @@ Support legend (models, capabilities and guard modes):
 | T87B5 | Tracker 87B5 | other |  | declared | eufy app 6.1.10 model list: TRACKER_87B5 (app product category: SmartTracker) |
 | T87C0 | Baby Mom Breast Pump Charging Chamber | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_BREAST_PUMP_CHARGING_CHAMBER (no app product category; kind read from the constant's name) |
 | T8900 | Entry Sensor | sensor | 2 | declared | eufy app 6.1.10 model list: ENTRY_SENSOR; device-type map (2) (app product category: EntrySensor > Sensor) |
-| T8910 | Motion sensor | sensor | 10 | declared | eufy app model list: MOTION_SENSOR; eufy app device-type map (10) (a T8910 paired to a HomeBase 3 reports device_type 10 in the cloud device list; its battery is in the station's parameter dump) |
-| T8920 | Water Sensor | sensor |  | declared | eufy app 6.1.10 model list: WATER_SENSOR (app product category: FloodSensor > Sensor) |
-| T8931 | Smoke Sensor | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR (app product category: SmokeSensor > Sensor) |
+| T8910 | Motion Sensor | sensor | 10 | declared | eufy app model list: MOTION_SENSOR; eufy app device-type map (10) (a T8910 paired to a HomeBase 3 reports device_type 10 in the cloud device list; its battery is in the station's parameter dump) |
+| T8920 | Water and Freeze Sensor | sensor |  | declared | eufy app 6.1.10 model list: WATER_SENSOR (app product category: FloodSensor > Sensor) |
+| T8931 | Smoke Alarm Listener | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR (app product category: SmokeSensor > Sensor) |
 | T8960 | Keypad | keypad | 11 | declared | eufy app 6.1.10 model list: KEYPAD; device-type map (11) (app product category: Sensor) |
-| T8970 | Siren Sensor | other |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR (app product category: SirenSensor > Sensor) |
-| T8B00 | Battery Solo Cam 8B00 | camera | 64 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8B00; device-type map (64) (app product category: BatteryCamera > Camera) |
+| T8970 | Siren | other |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR (app product category: SirenSensor > Sensor) |
+| T8B00 | SoloCam C210 | camera | 64 | declared | eufy app 6.1.10 model list: BATTERY_SOLO_CAM_8B00; device-type map (64) (app product category: BatteryCamera > Camera) |
 | T8C00 | T8C00 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
 | T8D00 | Baby Mom Device Breast Pump Both | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_BOTH (no app product category; kind read from the constant's name) |
 | T8D02 | Baby Mom Device Breast Pump With Heating | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_WITH_HEATING (app product category: BreastPump) |
 | T8D03 | Baby Mom Device Breast Pump | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP (app product category: BreastPump) |
 | T8D04 | Baby Mom Device Breast Pump S | other |  | declared | eufy app 6.1.10 model list: BABY_MOM_DEVICE_BREAST_PUMP_S (app product category: BreastPump) |
-| T8E00 | Camera T8E00 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8E00 (app product category: Camera) |
+| T8E00 | PoE Cam S4 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8E00 (app product category: Camera) |
 | T8L00 | Light 8L00 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L00 (no app product category; kind read from the constant's name) |
 | T8L01 | Light 8L01 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L01 (no app product category; kind read from the constant's name) |
 | T8L02 | Light 8L02 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L02 (no app product category; kind read from the constant's name) |
@@ -205,22 +205,22 @@ Support legend (models, capabilities and guard modes):
 | T8L30 | Light 8L30 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L30 (no app product category; kind read from the constant's name) |
 | T8L40 | Light 8L40 | other |  | declared | eufy app 6.1.10 model list: LIGHT_8L40 (no app product category; kind read from the constant's name) |
 | T8L50 | T8L50 | other |  | declared | eufy app 6.1.10 model list (no app product category or constant) |
-| T8L60 | Camera 8L60 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_8L60 (app product category: FloodlightCamera > Camera) |
-| T8N00 | Station NVR | station |  | declared | eufy app 6.1.10 model list: STATION_NVR (app product category: HomeBase) |
-| T8P00 | Camera T8P00 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8P00 (app product category: Camera) |
-| T8P10 | Camera T8P10 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8P10 (app product category: Camera) |
-| T8W11 | Indoor Camera 8W11 | camera | 10006 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8W11; device-type map (10006) (app product category: IndoorCamera > WiredCamera > Camera) |
-| T9000 | Station T9000 | station |  | declared | eufy app 6.1.10 model list: STATION_T9000 (app product category: HomeBase) |
+| T8L60 | eufy TrackLight Cam S1 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_8L60 (app product category: FloodlightCamera > Camera) |
+| T8N00 | Network Video Recorder S4 | station |  | declared | eufy app 6.1.10 model list: STATION_NVR (app product category: HomeBase) |
+| T8P00 | PoE Cam E40 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8P00 (app product category: Camera) |
+| T8P10 | PoE Cam E41 | camera |  | declared | eufy app 6.1.10 model list: CAMERA_T8P10 (app product category: Camera) |
+| T8W11 | IndoorCam C220 | camera | 10006 | declared | eufy app 6.1.10 model list: INDOOR_CAMERA_8W11; device-type map (10006) (app product category: IndoorCamera > WiredCamera > Camera) |
+| T9000 | HomeBase Professional S1 | station |  | declared | eufy app 6.1.10 model list: STATION_T9000 (app product category: HomeBase) |
 | T90C0 | Smoke Sensor T90C0 | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR_T90C0 (app product category: SmokeSensor > Sensor) |
-| T90E0 | Entry Sensor T90E0 | sensor |  | declared | eufy app 6.1.10 model list: ENTRY_SENSOR_T90E0 (app product category: EntrySensor > Sensor) |
-| T90F0 | Water Sensor T90F0 | sensor |  | declared | eufy app 6.1.10 model list: WATER_SENSOR_T90F0 (app product category: FloodSensor > Sensor) |
-| T90G0 | Glass Break Sensor | sensor |  | declared | eufy app 6.1.10 model list: GLASS_BREAK_SENSOR (app product category: GlassSensor > Sensor) |
-| T90K0 | Keyfor Sensor T90K0 | sensor |  | declared | eufy app 6.1.10 model list: KEYFOR_SENSOR_T90K0 (app product category: PanicSensor > Sensor) |
-| T90M0 | Motion Sensor T90M0 | sensor |  | declared | eufy app 6.1.10 model list: MOTION_SENSOR_T90M0 (app product category: MotionSensor > Sensor) |
-| T90P0 | Panic Sensor T90P0 | sensor |  | declared | eufy app 6.1.10 model list: PANIC_SENSOR_T90P0 (app product category: PanicSensor > Sensor) |
-| T90R0 | Siren Sensor T90R0 | other |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR_T90R0 (app product category: SirenSensor > Sensor) |
-| T90R1 | Outdoor Siren Sensor | other |  | declared | eufy app 6.1.10 model list: OUTDOOR_SIREN_SENSOR (app product category: SirenSensor > Sensor) |
-| T90S0 | Smoke Sensor T90S0 | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR_T90S0 (app product category: SmokeSensor > Sensor) |
+| T90E0 | eufy Entry Sensor E20 | sensor |  | declared | eufy app 6.1.10 model list: ENTRY_SENSOR_T90E0 (app product category: EntrySensor > Sensor) |
+| T90F0 | eufy Flood&Freeze Sensor E20 | sensor |  | declared | eufy app 6.1.10 model list: WATER_SENSOR_T90F0 (app product category: FloodSensor > Sensor) |
+| T90G0 | eufy Glass Break Sensor E10 | sensor |  | declared | eufy app 6.1.10 model list: GLASS_BREAK_SENSOR (app product category: GlassSensor > Sensor) |
+| T90K0 | eufy Key Fob E10 | sensor |  | declared | eufy app 6.1.10 model list: KEYFOR_SENSOR_T90K0 (app product category: PanicSensor > Sensor) |
+| T90M0 | eufy Motion Sensor E20 | sensor |  | declared | eufy app 6.1.10 model list: MOTION_SENSOR_T90M0 (app product category: MotionSensor > Sensor) |
+| T90P0 | eufy Panic Button E10 | sensor |  | declared | eufy app 6.1.10 model list: PANIC_SENSOR_T90P0 (app product category: PanicSensor > Sensor) |
+| T90R0 | eufy Indoor Siren E20 | other |  | declared | eufy app 6.1.10 model list: SIREN_SENSOR_T90R0 (app product category: SirenSensor > Sensor) |
+| T90R1 | Outdoor Siren E20 | other |  | declared | eufy app 6.1.10 model list: OUTDOOR_SIREN_SENSOR (app product category: SirenSensor > Sensor) |
+| T90S0 | eufy Smoke Sensor E10 | sensor |  | declared | eufy app 6.1.10 model list: SMOKE_SENSOR_T90S0 (app product category: SmokeSensor > Sensor) |
 | T9120 | T9120 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
 | T9130 | T9130 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
 | T9140 | T9140 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
@@ -229,6 +229,35 @@ Support legend (models, capabilities and guard modes):
 | T9148 | T9148 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
 | T9149 | T9149 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
 | T9150 | T9150 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
+
+Model names are the product names the eufy app shows; a model its name tables do not name keeps a name read from its app constant. The app names some units by their serial instead (`product_name`): the first rule of the unit's product that matches wins (serial characters count from 0).
+
+| product | serial | name |
+|---|---|---|
+| T8110 | character 6 is `5` | eufyCam C34 |
+| T8134 | characters 8-11 are `2609` | SoloCam C10 |
+| T8134 | character 7 is `2` | SoloCam C10 |
+| T8134 | character 7 is `A` | eufy-C323WB-O |
+| T814X | character 6 is `9` | eufyCam C37 4K Edition |
+| T814X | character 6 is `1` | eufyCam C37 |
+| T814X | character 6 is `6` | eufyCam C36 4K Edition |
+| T814X | character 6 is `5` | eufyCam C36 |
+| T8170 | character 7 is `A` | eufy-C5453WB-O |
+| T8170 | character 5 is `5` and character 6 is `3` and character 10 is `2` and character 11 is `7` | SoloCam S3n |
+| T8170 | character 6 is `3` and character 7 is `2` | SoloCam S3n |
+| T8170 | character 6 is `3` and character 7 is `0` | SoloCam S340 |
+| T8170 | character 7 is `0` | SoloCam S340 |
+| T8170 | character 7 is `1` | eufyCam Solo S3 |
+| T8172 | character 6 is `1` | eufyCam S4 |
+| T8172 | character 6 is `2` | eufyCam Solo S4 |
+| T8224 | character 7 is `A` | eufy-VD33128B |
+| T8417 | character 7 is `A` | eufy-C548W |
+| T8506 | character 6 is `5` | Smart Lock C22 |
+| T8506 | character 7 is `A` | eufy-L520WB |
+| T8E00 | character 7 is `A` | eufy-C7588P-O |
+| T8N00 | character 7 is `A` | eufy-N7161/8P |
+| T8P00 | character 7 is `A` | eufy-C528P-O |
+| T8P10 | character 7 is `A` | eufy-C538P-O |
 
 Each table below is a model's own profile. For every catalogued model, with or without one, `profile_for_serial` adds `live_stream`, `live_keyframe` and the pan/tilt/zoom capabilities as *declared* where the model's handler sends what the library sends (per station: `Station.live_support`, `Station.ptz_support`), and `doorbell_ring` as *declared* for a video doorbell or a video smart lock (`ring_evidence`). Any other capability of a model without a profile is *unknown*.
 
@@ -243,7 +272,7 @@ Settings: rw 10 / ro 40, see [Settings of T8010 HomeBase 2](#settings-of-t8010-h
 | parameter | id |
 |---|---|
 
-## T8030 HomeBase 3 (S380)
+## T8030 HomeBase 3
 
 | capability | support | source |
 |---|---|---|
@@ -255,7 +284,7 @@ Settings: rw 10 / ro 40, see [Settings of T8010 HomeBase 2](#settings-of-t8010-h
 | event_history | verified | live CMD_DATABASE 1306 query 10000 on history_record_info, T8030 HomeBase 3 fw 3.8.7.4 (a firmware update clears the history; query 10017 answers ERROR_NO_SUPPORT) |
 | settings_write | verified | live write+read-back of time_system, T8030 HomeBase 3 fw 3.8.7.4 (the write+read-back proves the value persists; its meaning is confirmed by the eufy app showing the 24-hour clock while the station reported 1253 = 1 (seen in the eufy app)) |
 
-Settings: rw 12 / ro 62, see [Settings of T8030 HomeBase 3 (S380)](#settings-of-t8030-homebase-3-s380)
+Settings: rw 12 / ro 62, see [Settings of T8030 HomeBase 3](#settings-of-t8030-homebase-3)
 
 | parameter | id |
 |---|---|
@@ -266,7 +295,7 @@ Settings: rw 12 / ro 62, see [Settings of T8030 HomeBase 3 (S380)](#settings-of-
 | name | 1216 |
 | sub_device_serials | 1072 |
 
-## T8160 eufyCam 3 (S330)
+## T8160 eufyCam 3
 
 | capability | support | source |
 |---|---|---|
@@ -280,7 +309,7 @@ Settings: rw 12 / ro 62, see [Settings of T8030 HomeBase 3 (S380)](#settings-of-
 | battery | verified | live parameter dump (param 1101), T8160 eufyCam 3 fw 3.4.3.0 |
 | rssi | verified | live parameter dump (param 1142), T8160 eufyCam 3 fw 3.4.3.0 |
 
-Settings: rw 32 / ro 69, see [Settings of T8160 eufyCam 3 (S330)](#settings-of-t8160-eufycam-3-s330)
+Settings: rw 32 / ro 69, see [Settings of T8160 eufyCam 3](#settings-of-t8160-eufycam-3)
 
 Kind markers (a block without a known serial): 1400, 1401
 
@@ -314,7 +343,7 @@ Settings: rw 30 / ro 62, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-e
 | name | 1217 |
 | wifi_rssi | 1142 |
 
-## T8170 Battery SoloCam (T8170)
+## T8170 Battery Solo Cam 8170
 
 | capability | support | source |
 |---|---|---|
@@ -332,12 +361,12 @@ Settings: rw 30 / ro 62, see [Settings of T8161 eufyCam 3C](#settings-of-t8161-e
 | preset action default_preset_positions | verified | live default change (6242) with a preset read-back and restore, T8170 Battery SoloCam, standalone, fw 3.3.5.4 |
 | preset action get_preset_position_pic | verified | live slot picture read (6097), decoded to the slot's JPEG, T8170 Battery SoloCam, standalone, fw 3.3.5.4 |
 
-Settings: rw 41 / ro 104, see [Settings of T8170 Battery SoloCam (T8170)](#settings-of-t8170-battery-solocam-t8170)
+Settings: rw 41 / ro 104, see [Settings of T8170 Battery Solo Cam 8170](#settings-of-t8170-battery-solo-cam-8170)
 
 | parameter | id |
 |---|---|
 
-## T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)
+## T8410 Indoor Cam Pan&Tilt 2K
 
 | capability | support | source |
 |---|---|---|
@@ -345,12 +374,12 @@ Settings: rw 41 / ro 104, see [Settings of T8170 Battery SoloCam (T8170)](#setti
 | live_stream | declared | T8410 handler open_live_stream: the 1700/1000 open without extValue, and a bare 1004 stop (reached over the RSA session variant, CONN_INIT version 1; not verified on hardware) |
 | ptz_control | declared | T8410 handler ptz_action_control: 1700/6030 with cmd_type and rotate_type only (no zoom, no ivalue) (one pan/tilt step only: the handler has no preset or picture-zoom actions; reached over the RSA session variant, CONN_INIT version 1; not verified on hardware) |
 
-Settings: rw 43 / ro 84, see [Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)](#settings-of-t8410-indoor-cam-2k-pan--tilt-solo-indoorcam-p24)
+Settings: rw 43 / ro 84, see [Settings of T8410 Indoor Cam Pan&Tilt 2K](#settings-of-t8410-indoor-cam-pantilt-2k)
 
 | parameter | id |
 |---|---|
 
-## T8910 Motion sensor
+## T8910 Motion Sensor
 
 | capability | support | source |
 |---|---|---|
@@ -358,7 +387,7 @@ Settings: rw 43 / ro 84, see [Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo I
 | rssi | declared | eufy app GET_SUB1G_RSSI (param 1141), the sensor's only signal parameter (three live parameter dumps of a T8910 on a T8030 HomeBase 3 fw 3.8.7.4, from a sensor offline for months: the value never changed, so it is not proven to track) |
 | pir_event_time | declared | eufy app MOTION_SENSOR_PIR_EVT (param 1605) (epoch ms on the sensor's block only in the same dumps; whether it moves on motion past a working sensor is untested, so it is no last-seen time) |
 
-Settings: rw 2 / ro 9, see [Settings of T8910 Motion sensor](#settings-of-t8910-motion-sensor)
+Settings: rw 2 / ro 9, see [Settings of T8910 Motion Sensor](#settings-of-t8910-motion-sensor)
 
 Kind markers (a block without a known serial): 1601, 1605, 1609
 
@@ -398,7 +427,7 @@ Which station configuration features each station model offers (`Station.config_
 | sound_alarm | yes | unknown | declared | declared | declared | declared | declared | declared | unknown | declared | unknown | unknown | verified | unknown | unknown | unknown |
 | working_mode | no | unknown | declared | declared | declared | unknown | unknown | unknown | unknown | declared | unknown | unknown | declared | unknown | unknown | unknown |
 
-### Station configuration of T7000 Station T7000
+### Station configuration of T7000 Network Video Recorder E5
 
 Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, custom_3 61309, disarmed 61306)
 
@@ -416,7 +445,7 @@ Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, 
 | sound_alarm | unknown | - | the T7000 thing description declares no set_alarm_type |
 | working_mode | unknown | - | the eufy app sends working_mode_value to a T7000 over WebRTC, which this library does not implement |
 
-### Station configuration of T8001 Station
+### Station configuration of T8001 HomeBase
 
 Mode tables: action_params (away 1239, home 1225, custom_1 1148, custom_2 1149, custom_3 1150, disarmed 1177)
 
@@ -436,7 +465,7 @@ Restart: 1034
 | sound_alarm | declared | - | the T8001 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | declared | - | the T8001 handler builds working_mode_value as 1296 (eufy app 6.1.10) |
 
-### Station configuration of T8002 HomeBase 1
+### Station configuration of T8002 HomeBase E
 
 Mode tables: action_params (away 1239, home 1225, custom_1 1148, custom_2 1149, custom_3 1150, disarmed 1177)
 
@@ -476,7 +505,7 @@ Restart: 1034
 | sound_alarm | declared | - | the T8010 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | declared | - | the T8010 handler builds working_mode_value as 1296 (eufy app 6.1.10) |
 
-### Station configuration of T8020 Station S
+### Station configuration of T8020 Wi-Fi Doorbell Chime
 
 Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, custom_3 61309, disarmed 61306)
 
@@ -496,7 +525,7 @@ Restart: 1034
 | sound_alarm | declared | - | the T8020 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | unknown | - | the T8020 thing description declares no working_mode_value |
 
-### Station configuration of T8021 Station 8021
+### Station configuration of T8021 Wi-Fi Bridge & Doorbell Chime
 
 | feature | support | min firmware | source |
 |---|---|---|---|
@@ -512,7 +541,7 @@ Restart: 1034
 | sound_alarm | declared | - | the T8021 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | unknown | - | the T8021 thing description declares no working_mode_value |
 
-### Station configuration of T8023 Station 8023
+### Station configuration of T8023 MiniBase Chime
 
 Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, custom_3 61309, disarmed 61306)
 
@@ -530,7 +559,7 @@ Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, 
 | sound_alarm | declared | - | the T8023 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | unknown | - | the T8023 thing description declares no working_mode_value |
 
-### Station configuration of T8024 Station 8024
+### Station configuration of T8024 Repeater
 
 Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, custom_3 61309, disarmed 61306)
 
@@ -548,7 +577,7 @@ Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, 
 | sound_alarm | unknown | - | the T8024 thing description declares no set_alarm_type |
 | working_mode | unknown | - | the T8024 thing description declares no working_mode_value |
 
-### Station configuration of T8025 Station 8025
+### Station configuration of T8025 HomeBase Mini
 
 Mode tables: action_params (away 1239, home 1225, custom_1 1148, custom_2 1149, custom_3 1150, disarmed 1177)
 
@@ -570,7 +599,7 @@ Restart: 1034
 | sound_alarm | declared | - | the T8025 handler builds set_alarm_type as 1201 (eufy app 6.1.10) |
 | working_mode | declared | - | the T8025 handler builds working_mode_value as 1296 (eufy app 6.1.10) |
 
-### Station configuration of T8026 Station 8026
+### Station configuration of T8026 Wi-Fi Doorbell Chime 2
 
 Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, custom_3 61309, disarmed 61306)
 
@@ -590,7 +619,7 @@ Restart: 1034
 | sound_alarm | unknown | - | the T8026 thing description declares no set_alarm_type |
 | working_mode | unknown | - | the T8026 thing description declares no working_mode_value |
 
-### Station configuration of T8028 Doorbell Chime 8028
+### Station configuration of T8028 eufy Doorbell Chime mini
 
 | feature | support | min firmware | source |
 |---|---|---|---|
@@ -606,7 +635,7 @@ Restart: 1034
 | sound_alarm | unknown | - | the T8028 thing description declares no set_alarm_type |
 | working_mode | unknown | - | the T8028 thing description declares no working_mode_value |
 
-### Station configuration of T8030 HomeBase 3 (S380)
+### Station configuration of T8030 HomeBase 3
 
 Mode tables: hb3_tables (away 1158, home 1157, custom_1 1159, custom_2 1160, custom_3 1161, disarmed 1177)
 
@@ -628,7 +657,7 @@ Restart: 1034
 | sound_alarm | verified | - | live library 1201 sound (30 s) and stop, each confirmed by the station's alarm-tone frame, the siren heard and then silent, T8030 HomeBase 3 fw 3.8.7.4 (the station acknowledges 1201 without a result) |
 | working_mode | declared | - | the T8030 handler builds working_mode_value as 1296 (eufy app 6.1.10) |
 
-### Station configuration of T8040 Station 4
+### Station configuration of T8040 MindBase
 
 Mode tables: action_params (away 1239, home 1225, custom_1 1148, custom_2 1149, custom_3 1150, disarmed 1177)
 
@@ -646,7 +675,7 @@ Mode tables: action_params (away 1239, home 1225, custom_1 1148, custom_2 1149, 
 | sound_alarm | unknown | - | the eufy app sends set_alarm_type to a T8040 over WebRTC, which this library does not implement |
 | working_mode | unknown | - | the eufy app sends working_mode_value to a T8040 over WebRTC, which this library does not implement |
 
-### Station configuration of T8N00 Station NVR
+### Station configuration of T8N00 Network Video Recorder S4
 
 Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, custom_3 61309, disarmed 61306)
 
@@ -664,7 +693,7 @@ Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, 
 | sound_alarm | unknown | - | the T8N00 thing description declares no set_alarm_type |
 | working_mode | unknown | - | the eufy app sends working_mode_value to a T8N00 over WebRTC, which this library does not implement |
 
-### Station configuration of T9000 Station T9000
+### Station configuration of T9000 HomeBase Professional S1
 
 Mode tables: pro_alarm (away 61301, home 61300, custom_1 61307, custom_2 61308, custom_3 61309, disarmed 61306)
 
@@ -1554,7 +1583,7 @@ rw 0 / ro 280
 | `ecl_support_function` | string | - | - | no | - | - |
 | `ecl_support_siri` | other | - | - | no | - | - |
 
-### Settings of T6010 Station 6010
+### Settings of T6010 Bottle Washer S1
 
 rw 0 / ro 45
 
@@ -1736,7 +1765,7 @@ rw 48 / ro 75
 | `view_mode` | enum | 0, 1,  | - | yes | select | =, 0=Dual, 1=Single |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T7000 Station T7000
+### Settings of T7000 Network Video Recorder E5
 
 rw 17 / ro 78
 
@@ -1838,7 +1867,7 @@ rw 17 / ro 78
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
-### Settings of T7100 T7100
+### Settings of T7100 PoE Camera
 
 rw 32 / ro 68
 
@@ -2038,7 +2067,7 @@ rw 0 / ro 40
 | `trigger_interval_time` | range | 5..60 step 1 | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T8001 Station
+### Settings of T8001 HomeBase
 
 rw 6 / ro 40
 
@@ -2091,7 +2120,7 @@ rw 6 / ro 40
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | string | - | - | no | - | - |
 
-### Settings of T8002 HomeBase 1
+### Settings of T8002 HomeBase E
 
 rw 6 / ro 40
 
@@ -2201,7 +2230,7 @@ rw 10 / ro 40
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
-### Settings of T8020 Station S
+### Settings of T8020 Wi-Fi Doorbell Chime
 
 rw 5 / ro 33
 
@@ -2246,7 +2275,7 @@ rw 5 / ro 33
 | `time_format_set` | other | - | - | yes | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8021 Station 8021
+### Settings of T8021 Wi-Fi Bridge & Doorbell Chime
 
 rw 1 / ro 10
 
@@ -2264,7 +2293,7 @@ rw 1 / ro 10
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 
-### Settings of T8023 Station 8023
+### Settings of T8023 MiniBase Chime
 
 rw 6 / ro 35
 
@@ -2312,7 +2341,7 @@ rw 6 / ro 35
 | `time_format_set` | string | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8024 Station 8024
+### Settings of T8024 Repeater
 
 rw 7 / ro 39
 
@@ -2365,7 +2394,7 @@ rw 7 / ro 39
 | `time_format_set` | string | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8025 Station 8025
+### Settings of T8025 HomeBase Mini
 
 rw 12 / ro 60
 
@@ -2444,7 +2473,7 @@ rw 12 / ro 60
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
-### Settings of T8026 Station 8026
+### Settings of T8026 Wi-Fi Doorbell Chime 2
 
 rw 7 / ro 37
 
@@ -2495,7 +2524,7 @@ rw 7 / ro 37
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8028 Doorbell Chime 8028
+### Settings of T8028 eufy Doorbell Chime mini
 
 rw 0 / ro 45
 
@@ -2547,7 +2576,7 @@ rw 0 / ro 45
 | `timezone_set` | string | - | - | no | - | - |
 | `timezone_set_redirect` | string | - | - | no | - | - |
 
-### Settings of T8030 HomeBase 3 (S380)
+### Settings of T8030 HomeBase 3
 
 rw 12 / ro 62
 
@@ -2628,7 +2657,7 @@ rw 12 / ro 62
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
-### Settings of T8040 Station 4
+### Settings of T8040 MindBase
 
 rw 19 / ro 81
 
@@ -2735,7 +2764,7 @@ rw 19 / ro 81
 | `vehicle_detection_switch` | other | - | - | yes | - | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
-### Settings of T8110 Battery Solo Cam 8110
+### Settings of T8110 eufyCam C35
 
 rw 38 / ro 84
 
@@ -2864,7 +2893,7 @@ rw 38 / ro 84
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8111 Camera
+### Settings of T8111 eufyCam
 
 rw 25 / ro 58
 
@@ -2954,7 +2983,7 @@ rw 25 / ro 58
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8112 Camera E
+### Settings of T8112 eufyCam E
 
 rw 26 / ro 56
 
@@ -3043,7 +3072,7 @@ rw 26 / ro 56
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8113 Camera 2C
+### Settings of T8113 eufyCam 2C
 
 rw 27 / ro 67
 
@@ -3144,7 +3173,7 @@ rw 27 / ro 67
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8114 Camera 2
+### Settings of T8114 eufyCam 2
 
 rw 26 / ro 60
 
@@ -3237,7 +3266,7 @@ rw 26 / ro 60
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8115 Battery Solo Cam 8115
+### Settings of T8115 eufyCam C38
 
 rw 39 / ro 82
 
@@ -3365,7 +3394,7 @@ rw 39 / ro 82
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8119 Battery Solo C 33
+### Settings of T8119 eufyCam C33
 
 rw 39 / ro 84
 
@@ -3495,7 +3524,7 @@ rw 39 / ro 84
 | `watermark_set` | enum | 0, 1, 3 | - | yes | select | 0=Off, 1=Timestamp, 3=Logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8122 Battery Solo Cam Spotlight 1080
+### Settings of T8122 SoloCam L20
 
 rw 31 / ro 62
 
@@ -3595,7 +3624,7 @@ rw 31 / ro 62
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8123 Battery Solo Cam Spotlight 2K
+### Settings of T8123 SoloCam L40
 
 rw 33 / ro 61
 
@@ -3696,7 +3725,7 @@ rw 33 / ro 61
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8124 Battery Solo Cam Spotlight Solar 8124
+### Settings of T8124 SoloCam S40 / SoloCam S230
 
 rw 31 / ro 64
 
@@ -3902,7 +3931,7 @@ rw 33 / ro 64
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8130 Battery Solo Cam 8130
+### Settings of T8130 SoloCam E20
 
 rw 27 / ro 60
 
@@ -3996,7 +4025,7 @@ rw 27 / ro 60
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8131 Battery Solo Cam Pro
+### Settings of T8131 SoloCam E40
 
 rw 28 / ro 64
 
@@ -4095,7 +4124,7 @@ rw 28 / ro 64
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8134 Battery Solo Cam 8134
+### Settings of T8134 SoloCam C20
 
 rw 31 / ro 77
 
@@ -4210,7 +4239,7 @@ rw 31 / ro 77
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8140 Camera 2 Pro
+### Settings of T8140 eufyCam 2 Pro
 
 rw 29 / ro 65
 
@@ -4311,7 +4340,7 @@ rw 29 / ro 65
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8142 Camera 2C Pro
+### Settings of T8142 eufyCam 2C Pro
 
 rw 30 / ro 64
 
@@ -4412,7 +4441,7 @@ rw 30 / ro 64
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8144 Camera 8144
+### Settings of T8144 eufyCam E40
 
 rw 36 / ro 80
 
@@ -4535,7 +4564,7 @@ rw 36 / ro 80
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T814X Battery Solo Cam 814X
+### Settings of T814X eufyCam C37
 
 rw 38 / ro 87
 
@@ -4667,7 +4696,7 @@ rw 38 / ro 87
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8150 Cam 4G
+### Settings of T8150 4G Starlight Camera
 
 rw 27 / ro 45
 
@@ -4746,7 +4775,7 @@ rw 27 / ro 45
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8151 Cam 4G EU
+### Settings of T8151 4G Starlight Camera
 
 rw 27 / ro 49
 
@@ -4912,7 +4941,7 @@ rw 27 / ro 49
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8160 eufyCam 3 (S330)
+### Settings of T8160 eufyCam 3
 
 rw 32 / ro 69
 
@@ -5229,7 +5258,7 @@ rw 30 / ro 62
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8162 Camera 3 Pro
+### Settings of T8162 eufyCam S3 Pro
 
 rw 40 / ro 87
 
@@ -5363,7 +5392,7 @@ rw 40 / ro 87
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8170 Battery SoloCam (T8170)
+### Settings of T8170 Battery Solo Cam 8170
 
 rw 41 / ro 104
 
@@ -5515,7 +5544,7 @@ rw 41 / ro 104
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8171 Battery Solo Cam 8171
+### Settings of T8171 eufy SoloCam E30
 
 rw 36 / ro 102
 
@@ -5660,7 +5689,7 @@ rw 36 / ro 102
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8172 Battery Solo Cam 8172
+### Settings of T8172 eufyCam S4
 
 rw 51 / ro 116
 
@@ -5834,7 +5863,7 @@ rw 51 / ro 116
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8173 Battery Solo Cam 8173
+### Settings of T8173 SoloCam E42
 
 rw 38 / ro 98
 
@@ -5977,7 +6006,7 @@ rw 38 / ro 98
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T817L Battery Solo Cam 817L
+### Settings of T817L eufyCam C31
 
 rw 52 / ro 95
 
@@ -6131,7 +6160,7 @@ rw 52 / ro 95
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8180 Battery Solo Cam 8180
+### Settings of T8180 SoloCam E50
 
 rw 44 / ro 101
 
@@ -6283,7 +6312,7 @@ rw 44 / ro 101
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T81A0 Walllight T81A0
+### Settings of T81A0 Solar Wall Light Cam S120
 
 rw 15 / ro 83
 
@@ -6388,7 +6417,7 @@ rw 15 / ro 83
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T8200 Doorbell 2K
+### Settings of T8200 Video Doorbell 2K
 
 rw 19 / ro 53
 
@@ -6544,7 +6573,7 @@ rw 18 / ro 52
 | `video_quality_hdr_switch` | bool | - | - | yes | switch | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8201 Wired Doorbell 1080P
+### Settings of T8201 Video Doorbell 1080p
 
 rw 19 / ro 53
 
@@ -6701,7 +6730,7 @@ rw 18 / ro 53
 | `video_quality_hdr_switch` | bool | - | - | yes | switch | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8202 Wired Doorbell 8202
+### Settings of T8202 Video Doorbell 2C
 
 rw 21 / ro 56
 
@@ -6785,7 +6814,7 @@ rw 21 / ro 56
 | `video_quality_when_recoding_clips` | enum | 0, 1 | - | yes | select | 0=Recording quality, 1=Streaming quality |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8203 Battery Doorbell 8203
+### Settings of T8203 Video Doorbell Dual (Wired)
 
 rw 20 / ro 62
 
@@ -6874,7 +6903,7 @@ rw 20 / ro 62
 | `view_mode` | enum | 0, 1 | - | yes | select | 0=Dual, 1=Single |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8210 Battery Doorbell 8210
+### Settings of T8210 Video Doorbell 2K
 
 rw 28 / ro 56
 
@@ -7048,7 +7077,7 @@ rw 28 / ro 48
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8213 Battery Doorbell 8213
+### Settings of T8213 Video Doorbell Dual S330
 
 rw 35 / ro 63
 
@@ -7153,7 +7182,7 @@ rw 35 / ro 63
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8214 Battery Doorbell T8214
+### Settings of T8214 Video Doorbell E340
 
 rw 50 / ro 109
 
@@ -7319,7 +7348,7 @@ rw 50 / ro 109
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8215 Battery Doorbell T8215
+### Settings of T8215 Video Doorbell S4
 
 rw 54 / ro 124
 
@@ -7504,7 +7533,7 @@ rw 54 / ro 124
 | `watermark_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off, 1=Time, 2=Time and logo, 3=Logo |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8217 Battery Doorbell Solo 8217
+### Settings of T8217 Video doorbell C45
 
 rw 47 / ro 109
 
@@ -7667,7 +7696,7 @@ rw 47 / ro 109
 | `watermark_set` | enum | 0, 1, 3 | - | yes | select | 0=Off, 1=Time, 3=Logo |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8220 Battery Doorbell 8220
+### Settings of T8220 Video Doorbell 1080p slim
 
 rw 23 / ro 49
 
@@ -7746,7 +7775,7 @@ rw 23 / ro 49
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8221 Battery Doorbell 8221
+### Settings of T8221 Video Doorbell 2E
 
 rw 22 / ro 49
 
@@ -7824,7 +7853,7 @@ rw 22 / ro 49
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8222 Battery Doorbell 8222
+### Settings of T8222 Video Doorbell 1080p
 
 rw 23 / ro 52
 
@@ -7906,7 +7935,7 @@ rw 23 / ro 52
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8223 Battery Doorbell 8223
+### Settings of T8223 Video Doorbell C31
 
 rw 32 / ro 92
 
@@ -8037,7 +8066,7 @@ rw 32 / ro 92
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8224 Battery Doorbell 8224
+### Settings of T8224 Video Doorbell C30
 
 rw 32 / ro 86
 
@@ -8424,7 +8453,7 @@ rw 48 / ro 76
 | `view_mode` | enum | 0, 1,  | - | yes | select | =, 0=Dual, 1=Single |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8400 Indoor Camera
+### Settings of T8400 Indoor Cam 2K
 
 rw 39 / ro 78
 
@@ -8548,7 +8577,7 @@ rw 39 / ro 78
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8401 Indoor Camera 1080
+### Settings of T8401 Indoor Cam 1080p
 
 rw 39 / ro 78
 
@@ -8672,7 +8701,7 @@ rw 39 / ro 78
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8404 Camera 8404
+### Settings of T8404 Window Camera E10
 
 rw 34 / ro 105
 
@@ -8818,7 +8847,7 @@ rw 34 / ro 105
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T8410 Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)
+### Settings of T8410 Indoor Cam Pan&Tilt 2K
 
 rw 43 / ro 84
 
@@ -9089,7 +9118,7 @@ rw 46 / ro 84
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8411 Indoor Camera PT 1080
+### Settings of T8411 Indoor Cam Pan&Tilt 1080p
 
 rw 39 / ro 77
 
@@ -9212,7 +9241,7 @@ rw 39 / ro 77
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8414 Indoor Camera Costdown T8414
+### Settings of T8414 Indoor Cam Mini
 
 rw 38 / ro 72
 
@@ -9329,7 +9358,7 @@ rw 38 / ro 72
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8416 Indoor Camera 8416
+### Settings of T8416 4K Indoor Cam Dual
 
 rw 48 / ro 91
 
@@ -9475,7 +9504,7 @@ rw 48 / ro 91
 | `view_mode` | enum | 0, 1,  | - | yes | select | =, 0=Dual, 1=Single |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8417 Indoor Camera 8417
+### Settings of T8417 Indoor Cam E30
 
 rw 48 / ro 85
 
@@ -9615,7 +9644,7 @@ rw 48 / ro 85
 | `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8419 Indoor Camera T8419
+### Settings of T8419 IndoorCam C210
 
 rw 39 / ro 77
 
@@ -9738,7 +9767,7 @@ rw 39 / ro 77
 | `video_setting_flickers_adjustment` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=50 Hz, 2=60 Hz |
 | `watermark_set` | enum | 0, 1, 2,  | - | yes | select | =, 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8420 Floodlight
+### Settings of T8420 Floodlight Cam 1080p
 
 rw 20 / ro 54
 
@@ -9899,7 +9928,7 @@ rw 25 / ro 48
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8422 Floodlight E 2K
+### Settings of T8422 Floodlight Cam E
 
 rw 26 / ro 51
 
@@ -9983,7 +10012,7 @@ rw 26 / ro 51
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8423 Floodlight 2
+### Settings of T8423 Floodlight Cam 2 Pro
 
 rw 31 / ro 63
 
@@ -10168,7 +10197,7 @@ rw 27 / ro 50
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8425 Floodlight 8425
+### Settings of T8425 Floodlight Cam Dual 3K
 
 rw 43 / ro 79
 
@@ -10297,7 +10326,7 @@ rw 43 / ro 79
 | `view_mode` | enum | 0, 1 | - | yes | select | 0=Dual, 1=Single |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8426 Floodlight 8426
+### Settings of T8426 Floodlight Cam 2K
 
 rw 41 / ro 76
 
@@ -10534,7 +10563,7 @@ rw 37 / ro 69
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8441 Indoor Outdoor Camera 2K
+### Settings of T8441 Outdoor Cam Pro
 
 rw 13 / ro 43
 
@@ -10597,7 +10626,7 @@ rw 13 / ro 43
 | `live_support_mute` | bool | - | - | no | - | - |
 | `live_support_record` | bool | - | - | no | - | - |
 
-### Settings of T8442 Indoor Outdoor Camera 1080P
+### Settings of T8442 Outdoor Cam
 
 rw 41 / ro 76
 
@@ -10721,7 +10750,7 @@ rw 41 / ro 76
 | `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T8452 T8452
+### Settings of T8452 Floodlight Cam 2 Pro
 
 rw 20 / ro 63
 
@@ -10811,7 +10840,7 @@ rw 20 / ro 63
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T8453 T8453
+### Settings of T8453 Garage-Control Cam Plus
 
 rw 20 / ro 64
 
@@ -10902,7 +10931,7 @@ rw 20 / ro 64
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T84A1 Walllight T84A1
+### Settings of T84A1 Wall Light Cam S100
 
 rw 13 / ro 73
 
@@ -10995,7 +11024,7 @@ rw 13 / ro 73
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T8500 BLE Lock No Finger
+### Settings of T8500 Smart Lock C100
 
 rw 2 / ro 45
 
@@ -11049,7 +11078,7 @@ rw 2 / ro 45
 | `smart_lock_wrong_try_protection_lockdown` | range | 1..5 step 1 | - | no | - | - |
 | `smart_lock_wrong_try_protection_switch` | bool | - | - | no | - | - |
 
-### Settings of T8501 Wifi Lock No Finger
+### Settings of T8501 Smart Lock C110
 
 rw 1 / ro 14
 
@@ -11071,7 +11100,7 @@ rw 1 / ro 14
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `smart_lock_onoff_status` | string | - | - | no | - | - |
 
-### Settings of T8502 Lock 8502
+### Settings of T8502 Smart Lock C210
 
 rw 3 / ro 15
 
@@ -11096,7 +11125,7 @@ rw 3 / ro 15
 | `smart_lock_set_setting_params` | string | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8503 Lock 8503
+### Settings of T8503 Retrofit Smart Lock R10
 
 rw 3 / ro 34
 
@@ -11140,7 +11169,7 @@ rw 3 / ro 34
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8504 Lock 8504
+### Settings of T8504 Retrofit Smart Lock R20
 
 rw 3 / ro 35
 
@@ -11185,7 +11214,7 @@ rw 3 / ro 35
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8506 Lock 8506
+### Settings of T8506 Smart Lock C220
 
 rw 3 / ro 23
 
@@ -11218,7 +11247,7 @@ rw 3 / ro 23
 | `smart_lock_set_setting_params` | string | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8510 BLE Lock
+### Settings of T8510 Smart Lock E130
 
 rw 2 / ro 26
 
@@ -11288,7 +11317,7 @@ rw 3 / ro 25
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8520 Wifi Lock
+### Settings of T8520 Smart Lock S230
 
 rw 1 / ro 19
 
@@ -11352,7 +11381,7 @@ rw 3 / ro 27
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 | `timezone_set` | string | - | - | yes | select | - |
 
-### Settings of T8530 Lock 8530
+### Settings of T8530 Video Smart Lock S330
 
 rw 10 / ro 78
 
@@ -11447,7 +11476,7 @@ rw 10 / ro 78
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T8531 Lock 8531
+### Settings of T8531 Video Smart Lock E330
 
 rw 21 / ro 73
 
@@ -11548,7 +11577,7 @@ rw 21 / ro 73
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
 
-### Settings of T8532 T8532
+### Settings of T8532 Smart Lock E38
 
 rw 33 / ro 129
 
@@ -11717,7 +11746,7 @@ rw 33 / ro 129
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T85D0 Lock 85D0
+### Settings of T85D0 Smart Lock C30
 
 rw 0 / ro 30
 
@@ -11754,7 +11783,7 @@ rw 0 / ro 30
 | `smart_lock_set_timezone` | string | - | - | no | - | - |
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 
-### Settings of T85D2 Lock 85D2
+### Settings of T85D2 Smart Lock C34
 
 rw 0 / ro 30
 
@@ -11791,7 +11820,7 @@ rw 0 / ro 30
 | `smart_lock_set_timezone` | string | - | - | no | - | - |
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 
-### Settings of T85F0 Lock 85F0
+### Settings of T85F0 Smart Lock E31
 
 rw 0 / ro 30
 
@@ -11828,7 +11857,7 @@ rw 0 / ro 30
 | `smart_lock_set_timezone` | string | - | - | no | - | - |
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 
-### Settings of T85F1 Lock 85F1
+### Settings of T85F1 Smart Lock E30
 
 rw 0 / ro 28
 
@@ -11863,7 +11892,7 @@ rw 0 / ro 28
 | `smart_lock_set_timezone` | string | - | - | no | - | - |
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 
-### Settings of T85L0 Lock 85L0
+### Settings of T85L0 Lever Smart Lock C33
 
 rw 0 / ro 32
 
@@ -11902,7 +11931,7 @@ rw 0 / ro 32
 | `smart_lock_set_timezone` | string | - | - | no | - | - |
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 
-### Settings of T85L1 T85L1
+### Settings of T85L1 Smart Lock C32
 
 rw 0 / ro 31
 
@@ -11940,7 +11969,7 @@ rw 0 / ro 31
 | `smart_lock_set_timezone` | string | - | - | no | - | - |
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 
-### Settings of T85M0 T85M0
+### Settings of T85M0 FamiLock E40
 
 rw 31 / ro 128
 
@@ -12106,7 +12135,7 @@ rw 31 / ro 128
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T85M1 T85M1
+### Settings of T85M1 Smart Lock S4
 
 rw 32 / ro 134
 
@@ -12279,7 +12308,7 @@ rw 32 / ro 134
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T85P0 Lock 85P0
+### Settings of T85P0 FamiLock E34
 
 rw 0 / ro 35
 
@@ -12321,7 +12350,7 @@ rw 0 / ro 35
 | `smart_lock_set_timezone` | string | - | - | no | - | - |
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 
-### Settings of T85P1 Lock 85P1
+### Settings of T85P1 FamiLock E35
 
 rw 0 / ro 35
 
@@ -12363,7 +12392,7 @@ rw 0 / ro 35
 | `smart_lock_set_timezone` | string | - | - | no | - | - |
 | `smart_lock_setting_manage_access` | bool | - | - | no | - | - |
 
-### Settings of T85V0 Lock 85V0
+### Settings of T85V0 FamiLock S3 Max
 
 rw 25 / ro 110
 
@@ -12505,7 +12534,7 @@ rw 25 / ro 110
 | `video_quality_hdr_switch` | bool | - | - | yes | switch | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
-### Settings of T8600 Camera 8600
+### Settings of T8600 eufyCam(Professional) solo
 
 rw 37 / ro 71
 
@@ -12620,7 +12649,7 @@ rw 37 / ro 71
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 | `working_days` | other | - | - | no | - | - |
 
-### Settings of T86C1 Camera 86C1
+### Settings of T86C1 eufy Wall Light Cam S4
 
 rw 37 / ro 104
 
@@ -12768,7 +12797,7 @@ rw 37 / ro 104
 | `watermark_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo, 3=Logo |
 | `working_days` | range | 10..120 step 1 | d | no | - | - |
 
-### Settings of T86P2 Cam 4G PT
+### Settings of T86P2 4G&Wi-Fi Spotlight Cam
 
 rw 31 / ro 60
 
@@ -12977,7 +13006,7 @@ rw 3 / ro 58
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | no | - | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T87A0 T87A0
+### Settings of T87A0 eufy Smart Display E10
 
 rw 0 / ro 6
 
@@ -13008,7 +13037,7 @@ rw 0 / ro 11
 | `sensor_door_status` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 
-### Settings of T8910 Motion sensor
+### Settings of T8910 Motion Sensor
 
 rw 2 / ro 9
 
@@ -13026,7 +13055,7 @@ rw 2 / ro 9
 | `sensor_motion_pet_setting` | bool | - | - | yes | switch | - |
 | `sensor_motion_trigger_time` | string | - | - | no | - | - |
 
-### Settings of T8920 Water Sensor
+### Settings of T8920 Water and Freeze Sensor
 
 rw 1 / ro 11
 
@@ -13045,7 +13074,7 @@ rw 1 / ro 11
 | `sensor_temperature_low_status` | bool | - | - | no | - | - |
 | `sensor_water_status` | bool | - | - | no | - | - |
 
-### Settings of T8931 Smoke Sensor
+### Settings of T8931 Smoke Alarm Listener
 
 rw 0 / ro 10
 
@@ -13081,7 +13110,7 @@ rw 1 / ro 11
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 
-### Settings of T8970 Siren Sensor
+### Settings of T8970 Siren
 
 rw 1 / ro 9
 
@@ -13098,7 +13127,7 @@ rw 1 / ro 9
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 
-### Settings of T8B00 Battery Solo Cam 8B00
+### Settings of T8B00 SoloCam C210
 
 rw 29 / ro 66
 
@@ -13209,7 +13238,7 @@ rw 0 / ro 2
 | `radar_mac` | string | - | - | no | - | - |
 | `radar_sn` | string | - | - | no | - | - |
 
-### Settings of T8E00 Camera T8E00
+### Settings of T8E00 PoE Cam S4
 
 rw 35 / ro 70
 
@@ -13582,7 +13611,7 @@ rw 0 / ro 26
 | `sdk_model_config` | string | - | - | no | - | - |
 | `spotlight_switch` | other | - | - | no | - | - |
 
-### Settings of T8L60 Camera 8L60
+### Settings of T8L60 eufy TrackLight Cam S1
 
 rw 46 / ro 109
 
@@ -13744,7 +13773,7 @@ rw 46 / ro 109
 | `zoom_spotlight_brightness_level` | range | 0..100 step 1 | - | no | - | - |
 | `zoom_spotlight_switch` | bool | - | - | yes | switch | - |
 
-### Settings of T8N00 Station NVR
+### Settings of T8N00 Network Video Recorder S4
 
 rw 17 / ro 93
 
@@ -13861,7 +13890,7 @@ rw 17 / ro 93
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
-### Settings of T8P00 Camera T8P00
+### Settings of T8P00 PoE Cam E40
 
 rw 30 / ro 60
 
@@ -13958,7 +13987,7 @@ rw 30 / ro 60
 | `video_setting_image_effect_set` | string | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 3, 4 | - | yes | select | 0=Off, 1=Timestamp, 3=Logo, 4=Name |
 
-### Settings of T8P10 Camera T8P10
+### Settings of T8P10 PoE Cam E41
 
 rw 30 / ro 63
 
@@ -14058,7 +14087,7 @@ rw 30 / ro 63
 | `video_watch_view_mode` | string | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 3, 4 | - | yes | select | 0=Off, 1=Timestamp, 3=Logo, 4=Name |
 
-### Settings of T8W11 Indoor Camera 8W11
+### Settings of T8W11 IndoorCam C220
 
 rw 31 / ro 56
 
@@ -14276,7 +14305,7 @@ rw 33 / ro 84
 | `video_setting_flickers_adjustment` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=50 Hz, 2=60 Hz |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
 
-### Settings of T9000 Station T9000
+### Settings of T9000 HomeBase Professional S1
 
 rw 14 / ro 90
 
@@ -14398,7 +14427,7 @@ rw 0 / ro 4
 | `device_model` | string | - | - | no | - | - |
 | `device_wifi_signal_strength_level` | other | - | - | no | - | - |
 
-### Settings of T90E0 Entry Sensor T90E0
+### Settings of T90E0 eufy Entry Sensor E20
 
 rw 2 / ro 19
 
@@ -14426,7 +14455,7 @@ rw 2 / ro 19
 | `sensor_door_status` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 
-### Settings of T90F0 Water Sensor T90F0
+### Settings of T90F0 eufy Flood&Freeze Sensor E20
 
 rw 2 / ro 18
 
@@ -14453,7 +14482,7 @@ rw 2 / ro 18
 | `sensor_temperature_low_status` | bool | - | - | no | - | - |
 | `sensor_water_status` | bool | - | - | no | - | - |
 
-### Settings of T90G0 Glass Break Sensor
+### Settings of T90G0 eufy Glass Break Sensor E10
 
 rw 1 / ro 19
 
@@ -14480,7 +14509,7 @@ rw 1 / ro 19
 | `sensor_grass_testing_break_event` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 
-### Settings of T90K0 Keyfor Sensor T90K0
+### Settings of T90K0 eufy Key Fob E10
 
 rw 2 / ro 13
 
@@ -14502,7 +14531,7 @@ rw 2 / ro 13
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 | `sensor_panic_trigger_type` | enum | 0, 2, 3 | - | yes | select | 0=Police Alarm, 2=Fire, 3=Medical |
 
-### Settings of T90M0 Motion Sensor T90M0
+### Settings of T90M0 eufy Motion Sensor E20
 
 rw 2 / ro 18
 
@@ -14529,7 +14558,7 @@ rw 2 / ro 18
 | `sensor_motion_pet_setting` | bool | - | - | yes | switch | - |
 | `sensor_motion_trigger_time` | string | - | - | no | - | - |
 
-### Settings of T90P0 Panic Sensor T90P0
+### Settings of T90P0 eufy Panic Button E10
 
 rw 2 / ro 15
 
@@ -14553,7 +14582,7 @@ rw 2 / ro 15
 | `sensor_panic_status` | other | - | - | no | - | - |
 | `sensor_panic_trigger_type` | enum | 0, 1, 2, 3 | - | yes | select | 0=Audible Alarm, 1=Silent Alarm, 2=Fire, 3=Medical |
 
-### Settings of T90R0 Siren Sensor T90R0
+### Settings of T90R0 eufy Indoor Siren E20
 
 rw 2 / ro 15
 
@@ -14577,7 +14606,7 @@ rw 2 / ro 15
 | `sensor_is_low_power` | bool | - | - | no | - | - |
 | `sensor_siren_ring_status` | bool | - | - | no | - | - |
 
-### Settings of T90R1 Outdoor Siren Sensor
+### Settings of T90R1 Outdoor Siren E20
 
 rw 0 / ro 15
 
@@ -14599,7 +14628,7 @@ rw 0 / ro 15
 | `sensor_siren_ring_status` | bool | - | - | no | - | - |
 | `sensor_siren_ring_time` | other | - | - | no | - | - |
 
-### Settings of T90S0 Smoke Sensor T90S0
+### Settings of T90S0 eufy Smoke Sensor E10
 
 rw 1 / ro 16
 

@@ -15,6 +15,7 @@ from eufy_home_security.devices.types import (
     DeviceKind,
     connects_on_demand,
     model_for_serial,
+    product_name,
     serial_prefix,
 )
 from eufy_home_security.testing import SYNTHETIC
@@ -86,14 +87,14 @@ def test_every_model_but_the_live_proven_is_declared_from_the_app() -> None:
 @pytest.mark.parametrize(
     ("model", "kind", "device_type", "name"),
     [
-        ("T8113", DeviceKind.CAMERA, 8, "Camera 2C"),
-        ("T8142", DeviceKind.CAMERA, 15, "Camera 2C Pro"),
-        ("T8123", DeviceKind.CAMERA, 61, "Battery Solo Cam Spotlight 2K"),
+        ("T8113", DeviceKind.CAMERA, 8, "eufyCam 2C"),
+        ("T8142", DeviceKind.CAMERA, 15, "eufyCam 2C Pro"),
+        ("T8123", DeviceKind.CAMERA, 61, "SoloCam L40"),
         ("T8960", DeviceKind.KEYPAD, 11, "Keypad"),
-        ("T8200", DeviceKind.DOORBELL, 5, "Doorbell 2K"),
-        ("T8500", DeviceKind.LOCK, 52, "BLE Lock No Finger"),
-        ("T90R0", DeviceKind.OTHER, None, "Siren Sensor T90R0"),
-        ("T90K0", DeviceKind.SENSOR, None, "Keyfor Sensor T90K0"),
+        ("T8200", DeviceKind.DOORBELL, 5, "Video Doorbell 2K"),
+        ("T8500", DeviceKind.LOCK, 52, "Smart Lock C100"),
+        ("T90R0", DeviceKind.OTHER, None, "eufy Indoor Siren E20"),
+        ("T90K0", DeviceKind.SENSOR, None, "eufy Key Fob E10"),
         ("T87B0", DeviceKind.OTHER, None, "Tracker 87B0"),
     ],
 )
@@ -133,13 +134,12 @@ def test_a_model_takes_its_kind_from_the_apps_product_category(
     assert found.evidence.support is Support.DECLARED
 
 
-def test_a_model_without_a_constant_is_named_by_its_device_type_or_its_code() -> None:
-    assert (MODELS["T8162"].name, MODELS["T8162"].cloud_device_type) == ("Camera 3 Pro", 26)
+def test_a_model_without_a_constant_is_sourced_by_its_device_type() -> None:
+    assert MODELS["T8162"].cloud_device_type == 26
     assert (
         MODELS["T8162"].evidence.source
         == "eufy app 6.1.10 model list: CAMERA3_PRO; device-type map (26)"
     )
-    assert MODELS["T8452"].name == "T8452"
     assert MODELS["T8452"].evidence.source == "eufy app 6.1.10 model list; device-type map (132)"
     assert MODELS["T87A0"].evidence.note == "no app product category or constant"
 
@@ -203,7 +203,7 @@ def test_every_bundled_or_live_open_product_is_catalogued() -> None:
 
 
 def test_a_hand_written_entry_wins_over_the_generated_one() -> None:
-    assert MODELS["T8030"].name == "HomeBase 3 (S380)"
+    assert MODELS["T8030"].evidence.support is Support.VERIFIED
     assert MODELS["T8910"].evidence.source.endswith("MOTION_SENSOR; eufy app device-type map (10)")
 
 
@@ -227,7 +227,7 @@ def test_t8170_in_models() -> None:
 def test_the_t8410_is_the_apps_pan_tilt_indoor_cam_of_type_31() -> None:
     found = model_for_serial("T8410P0000000000")
     assert found is not None
-    assert found.name == "Indoor Cam 2K Pan & Tilt (Solo IndoorCam P24)"
+    assert found.name == "Indoor Cam Pan&Tilt 2K"
     assert found.cloud_device_type == 31
     assert found.evidence.support is Support.DECLARED
     assert "INDOOR_CAMERA_PT" in found.evidence.source
@@ -246,3 +246,68 @@ def test_every_product_code_a_serial_rule_gives_has_a_bundled_settings_file() ->
 def test_no_exception_for_a_bundled_or_ruleless_product_code() -> None:
     codes = {code for _start, _sixth, code in SERIAL_PRODUCT_CODES}
     assert NO_BUNDLED_SETTINGS.keys() <= codes - set(bundled_codes())
+
+
+def _unit(prefix: str, **chars: str) -> str:
+    """A synthetic serial of ``prefix``: ``c6="5"`` puts ``5`` at index 6, ``Z`` elsewhere."""
+    serial = list(prefix + "Z" * 11)
+    for key, text in chars.items():
+        pos = int(key[1:])
+        serial[pos : pos + len(text)] = text
+    return "".join(serial)
+
+
+def test_a_model_is_named_as_the_app_names_its_product() -> None:
+    """T817L and T814X are named by the generated names alone, not by library code."""
+    assert MODELS["T817L"].name == "eufyCam C31"
+    assert MODELS["T814X"].name == "eufyCam C37"
+
+
+def test_a_hand_written_entry_takes_the_apps_product_name() -> None:
+    assert MODELS["T8030"].name == "HomeBase 3"
+    assert MODELS["T8160"].name == "eufyCam 3"
+
+
+@pytest.mark.parametrize(
+    ("model", "name"),
+    [
+        ("T7200", "Dogcam"),  # the app's constant DOGCAM
+        ("T8170", "Battery Solo Cam 8170"),  # the names hold only serial rules for it
+        ("T1206", "T1206"),  # no name and no constant
+    ],
+)
+def test_a_model_the_apps_names_lack_is_named_by_its_constant_or_code(
+    model: str, name: str
+) -> None:
+    assert MODELS[model].name == name
+
+
+@pytest.mark.parametrize(
+    ("serial", "code", "name"),
+    [
+        (_unit("T814X"), None, "eufyCam C37"),
+        (_unit("T814X", c6="5"), None, "eufyCam C36"),
+        (_unit("T814X", c6="9"), None, "eufyCam C37 4K Edition"),
+        (" " + _unit("t814x", c6="6").lower(), None, "eufyCam C36 4K Edition"),
+        (" " + _unit("T8134", c7="A").lower(), None, "eufy-C323WB-O"),
+        (_unit("T8134", c7="A"), None, "eufy-C323WB-O"),
+        (_unit("T8134", c7="A", c8="2609"), None, "SoloCam C10"),  # first rule wins
+        (_unit("T8170", c6="3", c7="0"), None, "SoloCam S340"),
+        (_unit("T8170", c6="3", c7="5"), None, "Battery Solo Cam 8170"),  # all must hold
+        (_unit("T8124"), None, "SoloCam S40 / SoloCam S230"),
+        (_unit("T8124"), "T8124R", "SoloCam S40"),
+        (_unit("T8124"), " t8124r", "SoloCam S40"),
+        (_unit("T8124"), "T8410C", "SoloCam S40 / SoloCam S230"),  # another prefix's code
+        (_unit("T8124"), "T8124X", "SoloCam S40 / SoloCam S230"),  # a code without names
+        (_unit("T8191"), None, "SoloCam E60"),  # named by the app, not catalogued
+        (_unit("T7200"), None, "Dogcam"),
+        ("T814X", None, "eufyCam C37"),  # shorter than any rule's position
+        (_unit("T9999"), None, None),
+        ("T80", None, None),
+        ("", None, None),
+    ],
+)
+def test_product_name_is_the_name_the_app_shows_for_the_unit(
+    serial: str, code: str | None, name: str | None
+) -> None:
+    assert product_name(serial, code) == name

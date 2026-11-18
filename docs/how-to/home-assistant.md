@@ -3054,7 +3054,7 @@ station's serials, so the ids below never collide between accounts:
 | device `identifiers` | `{(DOMAIN, serial)}`: the station's serial, or the camera's or sensor's own serial |
 | device parent | `via_device_id` = the station's device, from `device_registry.async_get_device_by_identifier((DOMAIN, station.serial), entry.entry_id)`; register the station first. `DeviceInfo["via_device"]` is deprecated since 2026.8 |
 | device `manufacturer` | `"eufy"` |
-| device `model` | `CloudDevice.model_name`: the catalogued display name (`"eufyCam 3 (S330)"`); `None` for a model the catalog does not know |
+| device `model` | `CloudDevice.model_name`: the product name the eufy app shows for the unit (`"eufyCam 3"`; by product code, and by serial where the app names single units, `product_name`); `None` for a model neither the app's names nor the catalog know |
 | device `model_id` | `CloudDevice.model_id`: the serial's 5-character prefix (`"T8160"`), set for uncatalogued models too |
 | device `serial_number`, `sw_version` | `CloudDevice.device_sn`, `CloudDevice.main_sw_version` |
 | entity `unique_id` | `entity_unique_id(serial, key)`: `key` is the setting's `Setting.key` for settings, or a fixed lower-case name for the rest (`"guard_mode"`, `"battery"`, `"camera"`) |

@@ -98,7 +98,15 @@ def test_a_profile_links_its_models_settings_section() -> None:
     text = render_support_matrix()
     profile = text.split("\n## T8160 ", 1)[1].split("\n## ", 1)[0]
     assert "Settings: rw 32 / ro 69, see [Settings of T8160 " in profile
-    assert "(#settings-of-t8160-eufycam-3-s330)" in profile
+    assert "(#settings-of-t8160-eufycam-3)" in profile
+
+
+def test_the_units_the_app_names_by_serial_are_listed() -> None:
+    text = render_support_matrix()
+    assert "| T817L | eufyCam C31 | camera |" in text
+    assert "| T814X | character 6 is `5` | eufyCam C36 |" in text
+    assert "| T8134 | characters 8-11 are `2609` | SoloCam C10 |" in text
+    assert "| T8170 | character 6 is `3` and character 7 is `0` | SoloCam S340 |" in text
 
 
 def test_a_profile_lists_its_graded_preset_actions() -> None:

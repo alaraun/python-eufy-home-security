@@ -75,6 +75,7 @@ from .types import (
     DeviceModel,
     connects_on_demand,
     model_for_serial,
+    product_name,
     serial_prefix,
     serial_product_code,
 )
@@ -138,6 +139,7 @@ __all__ = [
     "mode_table_params",
     "mode_table_storage",
     "model_for_serial",
+    "product_name",
     "profile_for_serial",
     "scope_for_kind",
     "serial_prefix",

@@ -77,7 +77,24 @@ def test_model_of_a_catalogued_camera() -> None:
     assert camera.model is not None
     assert camera.model.model == "T8160"
     assert camera.model_id == "T8160"
-    assert camera.model_name == "eufyCam 3 (S330)"
+    assert camera.model_name == "eufyCam 3"
+
+
+@pytest.mark.parametrize(
+    ("serial", "new_pn", "name"),
+    [
+        ("T814XZ5ZZZZZZZZZ", None, "eufyCam C36"),
+        ("T8124ZZZZZZZZZZZ", None, "SoloCam S40 / SoloCam S230"),
+        ("T8124ZZZZZZZZZZZ", "T8124R", "SoloCam S40"),
+    ],
+)
+def test_model_name_is_the_apps_name_for_the_unit(
+    serial: str, new_pn: str | None, name: str
+) -> None:
+    entry = {"device_sn": serial, "device_type": 0}
+    if new_pn is not None:
+        entry["device_new_pn"] = new_pn
+    assert CloudDevice.from_api(entry).model_name == name
 
 
 def test_model_of_an_uncatalogued_device_keeps_the_prefix() -> None:
@@ -169,7 +186,7 @@ def test_redacted_dict_is_json_safe_and_carries_no_identifier() -> None:
         "has_local_ip": True,
         "has_owner_user_id": True,
         "model_id": "T8030",
-        "model_name": "HomeBase 3 (S380)",
+        "model_name": "HomeBase 3",
     }
     assert camera.as_redacted_dict()["station_sn"] == "T8030***2345"
     assert camera.as_redacted_dict()["channel"] == 0

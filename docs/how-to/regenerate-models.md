@@ -92,6 +92,17 @@ uv run python scripts/gen_live_open.py           # rewrite the table
 uv run python scripts/gen_live_open.py --check   # compare, write nothing
 ```
 
+The product names (`devices/_model_names_data.py`: per product code the name the app
+shows and the serial rules that name single units, read by `DeviceModel.name` and
+`product_name`) come from the name table each product handler carries. The generator
+parses the tables, then checks the parse against every handler that declares
+`device_model` (Node), and writes nothing when one disagrees:
+
+```
+uv run python scripts/gen_model_names.py           # rewrite the table
+uv run python scripts/gen_model_names.py --check   # compare, write nothing
+```
+
 The WebRTC route inputs (`devices/_webrtc_routing_data.py`: every product's
 `is_connect_webrtc*` properties with their default and conditions, read by
 `devices.webrtc`) come from the thing descriptions alone (no Node):

@@ -26,6 +26,7 @@ SCRIPTS = Path(__file__).resolve().parent
 CHECKS: Mapping[str, tuple[str, ...]] = {
     "gen_models": ("--check",),
     "gen_live_open": ("--check",),
+    "gen_model_names": ("--check",),
     "gen_ptz": ("--check",),
     "gen_device_alarm": ("--check",),
     "gen_station_config": ("--check",),
