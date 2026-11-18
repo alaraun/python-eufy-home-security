@@ -169,10 +169,12 @@ one `get_dsk_keys` per station per expiry while connecting). Without one (a clou
 error) the attempt is LAN discovery only; a replaced cloud session fails an on-demand
 station's connect at once and leaves a held station on LAN discovery.
 `SessionStats.connect_path` (`"lan"` / `"rendezvous"`) and `connects_by_path` say which
-way the links came up: `"lan"` when the `PUNCH_PKT` came from a host searched by unicast
-(even one the client also punched, so a station on the LAN does not stay on the
-rendezvous path) or, during a broadcast, from a LAN address it did not punch;
-`"rendezvous"` otherwise. A link's address becomes the next search's host when it is a
+way the links came up: `"rendezvous"` when the `PUNCH_PKT` came from an address the client punched (even a
+host it also searched by unicast: behind a stateful gateway the punch is what admits
+the reply), `"lan"` otherwise. A held station whose last link counted as rendezvous
+runs the rendezvous connect from its first attempt, so it skips the LAN attempt that
+cannot answer; a station on the LAN usually answers the search before any `PUNCH_TO`
+and counts as `"lan"` again on its next link. A link's address becomes the next search's host when it is a
 LAN address or one discovery already searches by unicast; a public one does not.
 
 A station with no configured address and no private cloud `local_ip` is also searched

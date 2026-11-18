@@ -1092,11 +1092,14 @@ PUBLIC_SOURCE = ("100.64.0.60", 4000)
         (None, (), ("127.0.0.1", 4000), None, None),
         (None, (), LAN_SOURCE, LAN_SOURCE, ConnectPath.RENDEZVOUS),
         (None, (), PUBLIC_SOURCE, PUBLIC_SOURCE, ConnectPath.RENDEZVOUS),
-        # A host searched by unicast answers the search, punched or not.
+        # A host searched by unicast answers the search; punched first, it counts as
+        # rendezvous (the punch admits the reply through a stateful gateway).
         (LAN_SOURCE[0], (), LAN_SOURCE, None, ConnectPath.LAN),
-        (LAN_SOURCE[0], (), LAN_SOURCE, LAN_SOURCE, ConnectPath.LAN),
+        (LAN_SOURCE[0], (), LAN_SOURCE, LAN_SOURCE, ConnectPath.RENDEZVOUS),
+        (LAN_SOURCE[0], (), LAN_SOURCE, (LAN_SOURCE[0], 4001), ConnectPath.LAN),
         (PUBLIC_SOURCE[0], (), PUBLIC_SOURCE, None, ConnectPath.LAN),
-        (None, (LAN_SOURCE[0],), LAN_SOURCE, LAN_SOURCE, ConnectPath.LAN),
+        (None, (LAN_SOURCE[0],), LAN_SOURCE, LAN_SOURCE, ConnectPath.RENDEZVOUS),
+        (None, (LAN_SOURCE[0],), LAN_SOURCE, None, ConnectPath.LAN),
         (SEARCHED, (LAN_SOURCE[0],), LAN_SOURCE, None, ConnectPath.LAN),
         # Any other source counts only once punched, at that port.
         (SEARCHED, (), LAN_SOURCE, None, None),

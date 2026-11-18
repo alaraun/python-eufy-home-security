@@ -294,7 +294,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
         addresses; the client punches each one that names a remote host, and a
         ``PUNCH_PKT`` with the station's DID from a punched address is taken too.
         ``expected_did`` is required with it. :attr:`path` says which way won: a reply
-        from a host searched by unicast counts as LAN even when it was also punched.
+        from an address the client punched counts as rendezvous, even one it also searched:
+        the punch is what a stateful gateway admits the reply by.
         """
         if wake is not None and expected_did is None:
             raise ProtocolError("a wake needs the station's DID to build its P2P_REQ_DSK")
@@ -559,7 +560,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
                 "ignoring discovery reply from another station (%s)", Identifier(str(did))
             )
             return
-        self._path = ConnectPath.LAN if lan else ConnectPath.RENDEZVOUS
+        self._path = ConnectPath.RENDEZVOUS if addr in self._punched else ConnectPath.LAN
         self._punch.set_result((did, payload, addr))
 
     def _answers_search(self, addr: tuple[str, int]) -> bool:
