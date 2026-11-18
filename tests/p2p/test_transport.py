@@ -1051,7 +1051,7 @@ def _discovering(transport: PPPPTransport, *, servers: frozenset[str]) -> list[t
     [
         (encode_sockaddr("203.0.113.9", 4000), True),
         (encode_sockaddr("203.0.113.9", 4000) + b"\x00\x00", True),  # trailing bytes
-        (encode_sockaddr("100.64.0.9", 4000), True),  # public
+        (encode_sockaddr("192.88.99.9", 4000), True),  # public
         (encode_sockaddr(OUR_ENDPOINT[0], 4000), True),  # this host, another port
         (encode_sockaddr("0.0.0.0", 4000), False),  # noqa: S104 - names no address
         (encode_sockaddr("255.255.255.255", 4000), False),
@@ -1078,8 +1078,10 @@ async def test_which_punch_to_entries_are_punched(body: bytes, punches: bool) ->
 
 
 LAN_SOURCE = ("192.0.2.60", 4000)
-PUBLIC_SOURCE = ("100.64.0.60", 4000)
-"""Not a LAN address (``is_private`` is False for it)."""
+CGNAT_SOURCE = ("100.64.0.60", 4000)
+"""A LAN numbered from the shared address space."""
+PUBLIC_SOURCE = ("192.88.99.60", 4000)
+"""Not a LAN address (:func:`~eufy_home_security.p2p.pppp.is_lan_address`)."""
 
 
 @pytest.mark.parametrize(
@@ -1087,6 +1089,7 @@ PUBLIC_SOURCE = ("100.64.0.60", 4000)
     [
         # A broadcast reaches only this host's networks: a LAN address answers it.
         (None, (), LAN_SOURCE, None, ConnectPath.LAN),
+        (None, (), CGNAT_SOURCE, None, ConnectPath.LAN),
         (None, (), LAN_SOURCE, (LAN_SOURCE[0], 4001), ConnectPath.LAN),  # another port
         (None, (), PUBLIC_SOURCE, None, None),
         (None, (), ("127.0.0.1", 4000), None, None),
@@ -1158,7 +1161,7 @@ async def test_a_connect_punches_a_bounded_number_of_addresses() -> None:
     transport = make_transport()
     punched = _discovering(transport, servers=frozenset({"192.0.2.1"}))
     cap = transport_module.MAX_PUNCH_TARGETS
-    targets = [("100.64.0.9", 4000 + n) for n in range(cap + 3)]
+    targets = [("192.88.99.9", 4000 + n) for n in range(cap + 3)]
     for target in [*targets, targets[0]]:
         transport.datagram_received(
             encode_packet(MsgType.PUNCH_TO, encode_sockaddr(*target)), ("192.0.2.1", 32100)

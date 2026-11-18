@@ -240,8 +240,9 @@ async def test_a_short_lived_session_connects_the_way_the_station_was_reached(
     ("peer", "searched", "learned"),
     [
         ("192.0.2.50", (), True),
-        ("100.64.0.50", (), False),
-        ("100.64.0.50", ("100.64.0.50",), True),
+        ("100.64.0.50", (), True),  # shared address space
+        ("192.88.99.50", (), False),
+        ("192.88.99.50", ("192.88.99.50",), True),
         ("127.0.0.1", (), False),
         ("not-an-address", (), False),
     ],

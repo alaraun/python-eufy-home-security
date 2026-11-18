@@ -182,8 +182,18 @@ by unicast at the LAN address it reports itself (parameter 1176 in the cloud's
 snapshot), beside the broadcast (`network.HostSource.DEVICE`). This is the library's
 choice: the app only broadcasts. It helps where a gateway rule admits the station's
 replies; behind a stateful gateway without one, only the rendezvous connect gets
-through. Only an IPv4 unicast LAN address is searched (`pppp.is_lan_address`: private,
-and not unspecified, loopback, link-local or reserved), as for the cloud's `local_ip`.
+through. Only a LAN address is searched, as for the cloud's `local_ip`.
+
+A LAN address (`pppp.is_lan_address`) is an IPv4 address in one of
+`pppp.LAN_NETWORKS`: the private ranges `10.0.0.0/8`, `172.16.0.0/12` and
+`192.168.0.0/16`, the shared address space `100.64.0.0/10` (some ISP and mobile
+routers number their LAN from it), and the benchmarking (`198.18.0.0/15`) and
+documentation ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`), which no
+router forwards to the internet. Nothing else is: not a public address, `0.0.0.0/8`,
+loopback, link-local, multicast, reserved or the limited broadcast, nor an IPv6 address
+(discovery is IPv4 only). A broadcast's reply counts only from a LAN address, and a
+link's address becomes the next search's host only when it is one (or is searched by
+unicast already).
 
 ## Waking a paired camera **[verified]**
 

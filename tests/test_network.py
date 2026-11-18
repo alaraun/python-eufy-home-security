@@ -62,7 +62,8 @@ def test_public_local_ip_is_not_used_for_lan_discovery() -> None:
         ("169.254.3.4", False),
         ("224.0.0.251", False),
         ("240.0.0.1", False),
-        ("100.64.0.9", False),
+        ("100.64.0.9", True),  # shared address space
+        ("192.88.99.9", False),  # public
         ("fd00::21", False),  # IPv6: discovery is IPv4 only
         ("fe80::1", False),
         ("::1", False),
@@ -149,14 +150,14 @@ def _device(local_ip: str | None, lan_ip: str | None) -> CloudDevice:
         ((None, "192.168.7.21", None), ("192.168.7.21", HostSource.DEVICE, ("192.168.7.21",))),
         (("", "192.168.7.21", None), ("192.168.7.21", HostSource.DEVICE, ("192.168.7.21",))),
         (
-            ("100.64.0.9", "192.168.7.21", None),
+            ("192.88.99.9", "192.168.7.21", None),
             ("192.168.7.21", HostSource.DEVICE, ("192.168.7.21",)),
         ),
         # A private cloud address or a configured one is searched instead, alone.
         (("192.168.1.20", "192.168.7.21", None), ("192.168.1.20", HostSource.CLOUD, ())),
         ((None, "192.168.7.21", "192.168.1.40"), ("192.168.1.40", HostSource.CONFIGURED, ())),
         # A reported address that is public or no address at all is not searched.
-        ((None, "100.64.0.9", None), (None, HostSource.BROADCAST, ())),
+        ((None, "192.88.99.9", None), (None, HostSource.BROADCAST, ())),
         ((None, "not an ip", None), (None, HostSource.BROADCAST, ())),
         ((None, None, None), (None, HostSource.BROADCAST, ())),
     ],

@@ -181,6 +181,48 @@ def test_decode_sockaddr_accepts_exactly_sixteen_bytes() -> None:
     assert pppp.decode_sockaddr(raw) == ("0.0.0.0", 32108)  # noqa: S104
 
 
+@pytest.mark.parametrize(
+    ("ip", "lan"),
+    [
+        # RFC 1918, edges included
+        ("10.0.0.1", True),
+        ("10.255.255.254", True),
+        ("172.16.0.1", True),
+        ("172.31.255.254", True),
+        ("172.32.0.1", False),
+        ("192.168.0.1", True),
+        # shared address space (RFC 6598), edges included
+        ("100.64.0.0", True),
+        ("100.127.255.255", True),
+        ("100.63.255.255", False),
+        ("100.128.0.0", False),
+        # benchmarking (RFC 2544) and documentation (RFC 5737) ranges
+        ("198.18.0.1", True),
+        ("198.19.255.254", True),
+        ("192.0.2.5", True),
+        ("198.51.100.5", True),
+        ("203.0.113.5", True),
+        # no LAN host
+        ("0.0.0.0", False),  # noqa: S104 - names no host
+        ("0.1.2.3", False),  # "this network"
+        ("127.0.0.1", False),
+        ("169.254.1.1", False),
+        ("192.0.0.8", False),  # IETF protocol assignments
+        ("192.0.0.9", False),
+        ("192.88.99.9", False),  # global
+        ("224.0.0.251", False),
+        ("240.0.0.1", False),
+        ("255.255.255.255", False),
+        ("fd00::1", False),  # IPv6: discovery is IPv4 only
+        ("::ffff:192.168.1.2", False),
+        ("not an address", False),
+        ("", False),
+    ],
+)
+def test_which_addresses_are_lan_addresses(ip: str, lan: bool) -> None:
+    assert pppp.is_lan_address(ip) is lan
+
+
 def test_decode_init_string_round_trips_through_the_app_transform() -> None:
     # Encode with the inverse of decode_init_string, then decode back.
     table = pppp._INIT_STRING_TABLE

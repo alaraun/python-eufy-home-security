@@ -99,17 +99,35 @@ def encode_sockaddr(ip: str, port: int) -> bytes:
     return struct.pack(">H", _AF_INET) + struct.pack("<H", port) + packed[::-1] + bytes(8)
 
 
+#: The IPv4 networks :func:`is_lan_address` accepts: the private ranges (RFC 1918), the
+#: shared address space (RFC 6598) some ISP and mobile routers number their LAN from,
+#: and the benchmarking (RFC 2544) and documentation (RFC 5737) ranges, which no router
+#: forwards to the internet.
+LAN_NETWORKS = tuple(
+    ipaddress.IPv4Network(net)
+    for net in (
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "100.64.0.0/10",
+        "198.18.0.0/15",
+        "192.0.2.0/24",
+        "198.51.100.0/24",
+        "203.0.113.0/24",
+    )
+)
+
+
 def is_lan_address(ip: str) -> bool:
-    """Whether ``ip`` is an IPv4 unicast LAN address: private (no multicast address
-    is), and not unspecified, loopback, link-local or reserved (the limited broadcast
-    included). Discovery is IPv4 only, so an IPv6 address is never one."""
+    """Whether ``ip`` is an IPv4 address in one of :data:`LAN_NETWORKS`. Every other
+    address is none: public ones, ``0.0.0.0/8``, loopback, link-local, multicast,
+    reserved and the limited broadcast. Discovery is IPv4 only, so an IPv6 address is
+    never one."""
     try:
         addr = ipaddress.IPv4Address(ip)
     except ValueError:
         return False
-    return addr.is_private and not (
-        addr.is_unspecified or addr.is_loopback or addr.is_link_local or addr.is_reserved
-    )
+    return any(addr in net for net in LAN_NETWORKS)
 
 
 def decode_sockaddr(data: bytes) -> tuple[str, int]:
