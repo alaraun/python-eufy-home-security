@@ -211,7 +211,8 @@ def invite_code_opens(code: str, sealed: str) -> bool:
     under ``PBKDF2-HMAC-SHA256(code, salt, 100000)``, opened to a non-empty text.
     Whitespace and missing padding in the base64 are tolerated, as the app's decoder does.
 
-    CPU-bound (tens of milliseconds): call it off the event loop.
+    CPU-bound (100 000 PBKDF2 rounds, up to a few tenths of a second on a small host):
+    call it off the event loop.
     """
     compact = "".join(sealed.split())
     try:

@@ -482,10 +482,17 @@ async def test_invites_name_a_region_when_two_list_the_same_id(
         await run(["invites", "accept", "D3"], tmp_path)
     assert await run(["invites", "accept", "d3@US"], tmp_path) == 0
     assert StubCloud.accepted == [(us, None)]
-    StubCloud.invites = [us, us]  # one region listing an id twice: refused, not guessed
-    with pytest.raises(UsageError, match="no single pending invitation D3@US"):
+    assert "Accepted invitation D3@us;" in capsys.readouterr().out
+    StubCloud.invites = [eu]  # a qualified id still names its row once it is unique
+    assert await run(["invites", "accept", "D3@eu"], tmp_path) == 0
+    assert StubCloud.accepted[1:] == [(eu, None)]
+    assert "Accepted invitation D3;" in capsys.readouterr().out
+    with pytest.raises(UsageError, match=r"no single pending invitation D3@us \(choices: D3\)"):
         await run(["invites", "accept", "D3@us"], tmp_path)
-    assert StubCloud.accepted == [(us, None)]
+    StubCloud.invites = [us, us]  # one region listing an id twice: refused, not guessed
+    with pytest.raises(UsageError, match="D3@us is listed more than once"):
+        await run(["invites", "accept", "D3@us"], tmp_path)
+    assert len(StubCloud.accepted) == 2
 
 
 async def test_invites_log_in_first(fake: FakeStation, tmp_path: Any) -> None:

@@ -147,7 +147,7 @@ def render_devices(devices: Sequence[CloudDevice], *, show_serials: bool) -> str
 def invite_refs(invites: Sequence[CloudInvite]) -> list[str]:
     """The id ``invites accept`` takes for each invitation: ``H`` (a home) or ``D`` (a
     device) and its id, since the two lists number their entries apart; ``@<region>`` is
-    added when another region lists the same one. ``-`` for one without an id."""
+    added when the same one is listed more than once. ``-`` for one without an id."""
     bases = [
         "-" if i.invite_id is None else f"{'H' if i.kind == 'house' else 'D'}{i.invite_id}"
         for i in invites

@@ -333,22 +333,32 @@ async def cmd_invites(ctx: Context) -> int:
             print(render.render_invites(invites, show_serials=ctx.show_serials))
             return 0
         wanted = ctx.args.invite.upper()
+        base, _, region = wanted.partition("@")
         refs = render.invite_refs(invites)
-        matches = [i for i, ref in zip(invites, refs, strict=True) if ref.upper() == wanted]
+        matches = [
+            (invite, ref)
+            for invite, ref in zip(invites, refs, strict=True)
+            if ref.upper().partition("@")[0] == base
+            and (not region or invite.region.upper() == region)
+        ]
         if len(matches) != 1:
-            similar = [r for r in refs if r.upper().partition("@")[0] == wanted.partition("@")[0]]
-            hint = f" (choices: {', '.join(similar)})" if similar else ""
+            choices = list(dict.fromkeys(r for r in refs if r.upper().partition("@")[0] == base))
+            if len(choices) == 1 and len(matches) > 1:
+                raise UsageError(
+                    f"invitation {choices[0]} is listed more than once; accept it in the eufy app"
+                )
+            hint = f" (choices: {', '.join(choices)})" if choices else ""
             raise UsageError(
-                f"no single pending invitation {wanted}{hint}; `{PROG} invites` lists them"
+                f"no single pending invitation {ctx.args.invite}{hint}; `{PROG} invites` lists them"
             )
-        (invite,) = matches
+        ((invite, ref),) = matches
         code = None
         if invite.needs_code:
             code = ctx.args.code or await ctx.ask("Code the inviter shared: ")
         elif ctx.args.code:
-            print(f"{PROG}: invitation {wanted} needs no code; --code ignored", file=sys.stderr)
+            print(f"{PROG}: invitation {ref} needs no code; --code ignored", file=sys.stderr)
         await eufy.async_accept_invite(invite, code=code)
-    print(f"Accepted invitation {wanted}; `{PROG} devices` lists the shared devices.")
+    print(f"Accepted invitation {ref}; `{PROG} devices` lists the shared devices.")
     return 0
 
 
