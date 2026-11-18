@@ -26,12 +26,16 @@ from eufy_home_security.p2p.pppp import (
     MsgType,
     decode_packet,
     encode_drw_ack,
+    encode_p2p_req,
     encode_p2p_req_dsk,
     encode_packet,
+    encode_sockaddr,
 )
 from eufy_home_security.p2p.transport import (
     ACKED_MEMORY,
+    P2P_REQ_PORTS,
     RENDEZVOUS_PORT,
+    ConnectPath,
     PPPPTransport,
     SilentLinkError,
     StationClosedLinkError,
@@ -756,3 +760,343 @@ async def test_a_dsk_that_is_not_ascii_fails_the_connect_typed() -> None:
         )
     assert transport._transport is not None
     assert transport._transport.is_closing()
+
+
+# ── rendezvous connect ──────────────────────────────────────────────────────
+
+CAMERA_WAN = "198.51.100.7"
+"""A PUNCH_TO address this host cannot reach (the route below drops it)."""
+SEARCHED = "192.0.2.10"
+"""The searched LAN address: the camera is not there, so only a punch reaches it."""
+
+
+class _PunchToServer(asyncio.DatagramProtocol):
+    """A rendezvous server: answers each P2P_REQ_DSK with one PUNCH_TO per entry."""
+
+    def __init__(self, entries: list[bytes]) -> None:
+        self.entries = entries
+        self.received: list[tuple[int, bytes]] = []
+        self._transport: asyncio.DatagramTransport | None = None
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.DatagramTransport, transport)
+
+    def datagram_received(self, data: bytes, addr: tuple[str | int, int]) -> None:
+        msg, payload = decode_packet(data)
+        self.received.append((msg, payload))
+        if msg == MsgType.P2P_REQ_DSK and self._transport is not None:
+            for entry in self.entries:
+                self._transport.sendto(encode_packet(MsgType.PUNCH_TO, entry), addr)
+
+
+class _RemoteCamera(asyncio.DatagramProtocol):
+    """A station on another network: it never answers a LAN_SEARCH, and answers a
+    client's PUNCH_PKT with its own PUNCH_PKT (``did``) and a P2P_RDY, sent from
+    ``reply_from`` (its own socket by default)."""
+
+    def __init__(self, did: Did) -> None:
+        self.did = did
+        self.punches: list[bytes] = []
+        self.reply_from: asyncio.DatagramTransport | None = None
+        self._transport: asyncio.DatagramTransport | None = None
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self._transport = cast(asyncio.DatagramTransport, transport)
+
+    def datagram_received(self, data: bytes, addr: tuple[str | int, int]) -> None:
+        msg, payload = decode_packet(data)
+        if msg != MsgType.PUNCH_PKT:
+            return
+        self.punches.append(payload)
+        out = self.reply_from or self._transport
+        if out is not None:
+            out.sendto(encode_packet(MsgType.PUNCH_PKT, self.did.to_struct()), addr)
+            out.sendto(encode_packet(MsgType.P2P_RDY, self.did.to_struct()), addr)
+
+
+class _Rendezvous:
+    """A punch-reachable camera, its rendezvous server and the route between them."""
+
+    def __init__(self) -> None:
+        self.did = Did.parse(SYNTHETIC.did)
+        self.camera = _RemoteCamera(self.did)
+        self.server = _PunchToServer([])
+        self.sent: list[tuple[int, tuple[str, int], bytes]] = []
+        self._endpoints: list[asyncio.DatagramTransport] = []
+        self.camera_port = 0
+        self.server_port = 0
+
+    async def start(self) -> None:
+        loop = asyncio.get_running_loop()
+        for proto in (self.camera, self.server):
+            endpoint, _ = await loop.create_datagram_endpoint(
+                lambda proto=proto: proto,  # type: ignore[misc]
+                local_addr=("127.0.0.1", 0),
+            )
+            self._endpoints.append(endpoint)
+        self.camera_port = self._endpoints[0].get_extra_info("sockname")[1]
+        self.server_port = self._endpoints[1].get_extra_info("sockname")[1]
+        self.server.entries = [
+            encode_sockaddr(CAMERA_WAN, self.camera_port),
+            encode_sockaddr("127.0.0.1", self.camera_port),
+            encode_sockaddr("0.0.0.0", self.camera_port),  # noqa: S104 - the empty entry
+        ]
+
+    async def second_socket(self) -> asyncio.DatagramTransport:
+        endpoint, _ = await asyncio.get_running_loop().create_datagram_endpoint(
+            asyncio.DatagramProtocol, local_addr=("127.0.0.1", 0)
+        )
+        self._endpoints.append(endpoint)
+        return endpoint
+
+    def route(self, transport: PPPPTransport) -> None:
+        """Record every send; the rendezvous port goes to the fake server, anything
+        that is not loopback is dropped (unreachable)."""
+        send = transport._sendto
+
+        def routed(packet: bytes, addr: tuple[str, int]) -> None:
+            msg, payload = decode_packet(packet)
+            self.sent.append((msg, addr, payload))
+            if addr[1] == RENDEZVOUS_PORT:
+                send(packet, ("127.0.0.1", self.server_port))
+            elif addr[0] == "127.0.0.1":
+                send(packet, addr)
+
+        transport._sendto = routed  # type: ignore[method-assign]
+
+    def punched(self) -> set[tuple[str, int]]:
+        return {addr for msg, addr, _ in self.sent if msg == MsgType.PUNCH_PKT}
+
+    def stop(self) -> None:
+        for endpoint in self._endpoints:
+            endpoint.close()
+
+
+@pytest.fixture
+async def rendezvous() -> AsyncIterator[_Rendezvous]:
+    fake = _Rendezvous()
+    await fake.start()
+    yield fake
+    fake.stop()
+
+
+async def _connect_via(
+    rendezvous: _Rendezvous,
+    *,
+    servers: tuple[str, ...] = ("127.0.0.1",),
+    timeout: float = 3.0,
+    host: str | None = SEARCHED,
+    port: int = 59999,
+) -> PPPPTransport:
+    transport = make_transport()
+    rendezvous.route(transport)
+    try:
+        await transport.connect(
+            host,
+            port=port,
+            expected_did=rendezvous.did,
+            timeout=timeout,
+            wake=Wake(servers=servers, dsk="x" * 8),
+        )
+    except BaseException:
+        transport.close()
+        raise
+    return transport
+
+
+async def test_a_rendezvous_connect_punches_every_named_address_but_the_empty_one(
+    rendezvous: _Rendezvous,
+) -> None:
+    transport = await _connect_via(rendezvous)
+    try:
+        assert transport.peer == ("127.0.0.1", rendezvous.camera_port)
+        assert transport.path is ConnectPath.RENDEZVOUS
+        assert rendezvous.punched() == {
+            (CAMERA_WAN, rendezvous.camera_port),
+            ("127.0.0.1", rendezvous.camera_port),
+        }
+        # The punch carries the station's DID, as its own PUNCH_PKT does.
+        assert rendezvous.camera.punches[0] == rendezvous.did.to_struct()
+    finally:
+        transport.close()
+
+
+async def test_the_first_punch_to_sends_a_p2p_req_to_each_server_once(
+    rendezvous: _Rendezvous, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(transport_module, "_local_ip_towards", lambda _host: "192.0.2.20")
+    transport = await _connect_via(rendezvous)
+    try:
+        local_port = transport.local_port or 0
+        requests = [(addr, body) for msg, addr, body in rendezvous.sent if msg == MsgType.P2P_REQ]
+        assert sorted(addr for addr, _ in requests) == [
+            ("127.0.0.1", port) for port in P2P_REQ_PORTS
+        ]
+        assert {body for _, body in requests} == {
+            encode_p2p_req(rendezvous.did.to_struct(), "192.0.2.20", local_port)
+        }
+    finally:
+        transport.close()
+
+
+async def test_a_punch_from_an_address_not_punched_is_ignored(
+    rendezvous: _Rendezvous,
+) -> None:
+    rendezvous.camera.reply_from = await rendezvous.second_socket()
+    with pytest.raises(StationUnreachableError):
+        await _connect_via(rendezvous, timeout=1.5)
+    assert ("127.0.0.1", rendezvous.camera_port) in rendezvous.punched()  # it was punched
+
+
+async def test_a_punch_with_another_stations_did_is_ignored(rendezvous: _Rendezvous) -> None:
+    rendezvous.camera.did = Did.parse("EUPRAMA-654321-ZYXWV")
+    with pytest.raises(StationUnreachableError):
+        await _connect_via(rendezvous, timeout=1.5)
+    assert rendezvous.camera.punches  # punched, answered, refused
+
+
+async def test_a_punch_to_from_another_host_than_the_servers_is_ignored(
+    rendezvous: _Rendezvous,
+) -> None:
+    # The route still delivers to the fake server, but its answers come from
+    # 127.0.0.1, which is not the server address the connect was given.
+    with pytest.raises(StationUnreachableError):
+        await _connect_via(rendezvous, servers=("127.0.0.2",), timeout=1.5)
+    assert any(msg == MsgType.P2P_REQ_DSK for msg, _ in rendezvous.server.received)
+    assert rendezvous.punched() == set()
+
+
+async def test_lan_discovery_still_wins_when_the_station_answers_it(
+    rendezvous: _Rendezvous, station: FakeStation
+) -> None:
+    rendezvous.server.entries = [encode_sockaddr(CAMERA_WAN, rendezvous.camera_port)]
+    transport = await _connect_via(rendezvous, host="127.0.0.1", port=station.discovery_port)
+    try:
+        assert transport.peer is not None
+        assert transport.peer[1] != rendezvous.camera_port
+        assert transport.path is ConnectPath.LAN
+    finally:
+        transport.close()
+
+
+async def test_without_a_wake_nothing_goes_to_the_servers(station: FakeStation) -> None:
+    transport = make_transport()
+    sent: list[tuple[str, int]] = []
+    send = transport._sendto
+
+    def record(packet: bytes, addr: tuple[str, int]) -> None:
+        sent.append(addr)
+        send(packet, addr)
+
+    transport._sendto = record  # type: ignore[method-assign]
+    try:
+        await transport.connect("127.0.0.1", port=station.discovery_port)
+        assert transport.path is ConnectPath.LAN
+    finally:
+        transport.close()
+    assert all(port not in (RENDEZVOUS_PORT, *P2P_REQ_PORTS) for _, port in sent)
+
+
+def _discovering(transport: PPPPTransport, *, servers: frozenset[str]) -> list[tuple[str, int]]:
+    """``transport`` in the discovery phase of a rendezvous connect, without a socket;
+    returns the list its punches are recorded into."""
+    transport._punch = asyncio.get_running_loop().create_future()
+    transport._servers = servers
+    transport._rendezvous_did = Did.parse(SYNTHETIC.did)
+    punched: list[tuple[str, int]] = []
+
+    def record(packet: bytes, addr: tuple[str, int]) -> None:
+        if decode_packet(packet)[0] == MsgType.PUNCH_PKT:
+            punched.append(addr)
+
+    transport._sendto = record  # type: ignore[method-assign]
+    return punched
+
+
+@pytest.mark.parametrize(
+    ("body", "punches"),
+    [
+        (encode_sockaddr("203.0.113.9", 4000), True),
+        (encode_sockaddr("203.0.113.9", 4000) + b"\x00\x00", True),  # trailing bytes
+        (encode_sockaddr("0.0.0.0", 4000), False),  # noqa: S104 - names no address
+        (encode_sockaddr("255.255.255.255", 4000), False),
+        (encode_sockaddr("203.0.113.9", 0), False),
+        (encode_sockaddr("203.0.113.9", 4000)[:15], False),  # truncated
+        (b"\x00\x0a" + encode_sockaddr("203.0.113.9", 4000)[2:], False),  # not IPv4
+    ],
+)
+async def test_which_punch_to_entries_are_punched(body: bytes, punches: bool) -> None:
+    transport = make_transport()
+    punched = _discovering(transport, servers=frozenset({"192.0.2.1"}))
+    transport.datagram_received(encode_packet(MsgType.PUNCH_TO, body), ("192.0.2.1", 32100))
+    assert bool(punched) is punches
+    if punches:
+        assert set(punched) == {("203.0.113.9", 4000)}
+        assert len(punched) == transport_module.PUNCH_BURST
+
+
+async def test_a_punch_to_after_the_peer_is_pinned_is_ignored() -> None:
+    transport = make_transport()
+    punched = _discovering(transport, servers=frozenset({"192.0.2.1"}))
+    transport._peer = PEER
+    transport.datagram_received(
+        encode_packet(MsgType.PUNCH_TO, encode_sockaddr("203.0.113.9", 4000)), ("192.0.2.1", 32100)
+    )
+    assert punched == []
+
+
+async def test_a_repeated_punch_to_punches_again() -> None:
+    transport = make_transport()
+    punched = _discovering(transport, servers=frozenset({"192.0.2.1"}))
+    entry = encode_packet(MsgType.PUNCH_TO, encode_sockaddr("203.0.113.9", 4000))
+    transport.datagram_received(entry, ("192.0.2.1", 32100))
+    transport.datagram_received(entry, ("192.0.2.1", 32100))
+    assert len(punched) == 2 * transport_module.PUNCH_BURST
+
+
+async def test_an_extra_search_host_is_searched_and_answers(station: FakeStation) -> None:
+    transport = make_transport()
+    searched: list[tuple[str, int]] = []
+    send = transport._sendto
+
+    def route(packet: bytes, addr: tuple[str, int]) -> None:
+        if decode_packet(packet)[0] == MsgType.LAN_SEARCH:
+            searched.append(addr)
+        if addr[0] == "127.0.0.1":
+            send(packet, addr)
+
+    transport._sendto = route  # type: ignore[method-assign]
+    try:
+        await transport.connect(
+            SEARCHED,
+            port=station.discovery_port,
+            expected_did=Did.parse(SYNTHETIC.did),
+            extra_hosts=("127.0.0.1",),
+        )
+        assert transport.peer is not None
+        assert transport.peer[0] == "127.0.0.1"
+        assert transport.path is ConnectPath.LAN
+    finally:
+        transport.close()
+    assert (SEARCHED, station.discovery_port) in searched
+    assert ("127.0.0.1", station.discovery_port) in searched
+
+
+async def test_without_the_extra_host_its_answer_is_ignored(station: FakeStation) -> None:
+    """The control for the extra host: the same station answering from a host that
+    was not searched is not adopted."""
+    transport = make_transport()
+    send = transport._sendto
+
+    def route(packet: bytes, addr: tuple[str, int]) -> None:
+        if addr[0] != "127.0.0.1":
+            send(packet, ("127.0.0.1", addr[1]))  # deliver the search, from another host
+
+    transport._sendto = route  # type: ignore[method-assign]
+    with pytest.raises(StationUnreachableError):
+        await transport.connect(
+            SEARCHED,
+            port=station.discovery_port,
+            expected_did=Did.parse(SYNTHETIC.did),
+            timeout=1.2,
+        )

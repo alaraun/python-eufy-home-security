@@ -40,6 +40,12 @@ class SessionStats:
     """Sessions established (handshake completed), the first included."""
     reconnects: int
     """Sessions established after the first."""
+    connect_path: str | None
+    """How the current or last link was set up: ``"lan"`` (LAN discovery) or
+    ``"rendezvous"`` (a punch toward an address the station's rendezvous servers named,
+    :class:`~..transport.ConnectPath`); None before the first link."""
+    connects_by_path: Mapping[str, int]
+    """Links set up, by :attr:`connect_path` value."""
     handshake_failures: int
     """``CONN_INIT`` exchanges that yielded no session key: unanswered, or a key that
     would not unwrap."""
@@ -223,6 +229,7 @@ class HealthCounters:
     __slots__ = (
         "account_mismatch_seen",
         "connects",
+        "connects_by_path",
         "dropped_undecodable",
         "events_by_type",
         "extra_live_opened",
@@ -243,6 +250,8 @@ class HealthCounters:
         self.state_frames: Counter[str] = Counter()
         """State frames taken, by encryption (``state_frames_by_encryption``)."""
         self.connects = 0
+        self.connects_by_path: Counter[str] = Counter()
+        """Links set up, by :class:`~..transport.ConnectPath` value."""
         self.handshake_failures = 0
         self.key_refreshes = 0
         self.last_event_at: float | None = None

@@ -11,7 +11,11 @@ the station needs a fixed IP (a DHCP reservation):
 
 Discovery is a broadcast unless the station's address is known (configured, or a
 private address from the cloud), and a broadcast only reaches the station's own
-network. The cloud's device list often carries no LAN address for a station, or a
+network. Without either, the LAN address the station reports itself (parameter 1176
+in the cloud's snapshot) is searched by unicast beside the broadcast: the library's
+choice, the eufy app only broadcasts. A station on another network is reached through
+its rendezvous servers instead (``docs/protocol/p2p-transport.md``), which needs no
+firewall rule on a stateful gateway. The cloud's device list often carries no LAN address for a station, or a
 public one, so the address worth advising on is where the station *answers* from:
 ``EufySecurity.async_probe_lan()`` runs one discovery and records it. Nothing in this
 module does I/O: :attr:`Station.lan_path` describes one station, :func:`with_discovery`
@@ -27,6 +31,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
+from .models import PARAM_LAN_IP
 from .p2p.pppp import DISCOVERY_PORT
 
 if TYPE_CHECKING:
@@ -45,6 +50,9 @@ class HostSource(StrEnum):
     """Set by the user (``station_hosts``)."""
     CLOUD = "cloud"
     """The private ``local_ip`` the cloud reports for the station."""
+    DEVICE = "device"
+    """No address configured or reported by the cloud: the LAN address the station
+    reports itself (parameter 1176), searched by unicast beside the broadcast."""
     BROADCAST = "broadcast"
     """No address: discovery broadcasts on this host's networks."""
 
@@ -134,7 +142,10 @@ def lan_path_for(
     ``learned_host`` is where an established session found the station.
     """
     cloud_ip = lan_address(device.local_ip)
-    if search_host is None:
+    reported = extra_search_hosts(device, search_host)
+    if reported:
+        search_host, source = reported[0], HostSource.DEVICE
+    elif search_host is None:
         source = HostSource.BROADCAST
     elif search_host == cloud_ip:
         source = HostSource.CLOUD
@@ -149,6 +160,18 @@ def lan_path_for(
         observed_ip=learned_host if learned_host != search_host else None,
         local_port=local_port,
     )
+
+
+def extra_search_hosts(device: CloudDevice, search_host: str | None) -> tuple[str, ...]:
+    """The addresses discovery searches by unicast beside ``search_host``: the LAN
+    address ``device`` reports itself (parameter 1176 in the cloud's snapshot, when
+    private) while no address is configured or reported by the cloud (``search_host``
+    None, a broadcast); else none. The library's choice: the eufy app only broadcasts."""
+    if search_host is not None:
+        return ()
+    value = next((p.value for p in device.cloud_params if p.param_id == PARAM_LAN_IP), None)
+    reported = lan_address(value)
+    return () if reported is None else (reported,)
 
 
 def lan_address(local_ip: str | None) -> str | None:

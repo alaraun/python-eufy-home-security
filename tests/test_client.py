@@ -74,8 +74,8 @@ from eufy_home_security.identity import StationClaims
 from eufy_home_security.images import JPEG_CONTENT_TYPE, PushImage
 from eufy_home_security.inclusion import Reach
 from eufy_home_security.install import InstallState
-from eufy_home_security.models import GuardMode
-from eufy_home_security.network import PathWarning
+from eufy_home_security.models import PARAM_LAN_IP, GuardMode
+from eufy_home_security.network import HostSource, PathWarning
 from eufy_home_security.p2p import discovery as discovery_module
 from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p.did import Did
@@ -2413,6 +2413,29 @@ async def test_a_latched_session_fails_an_on_demand_wake_at_once(
             await wake()
         assert cloud.calls == sent  # refused locally
         assert [type(p.error) for p in _problems(events)] == [SessionReplacedError]
+        await eufy.async_close()
+
+
+async def test_every_station_gets_the_rendezvous_and_its_reported_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A held station has the rendezvous connect as well (after a failed LAN attempt);
+    one without a configured or cloud address also searches the address it reports."""
+    monkeypatch.setattr(CloudDevice, "rendezvous_servers", ("192.0.2.1",))
+    garage = garage_device() | {
+        "params": [{"param_type": PARAM_LAN_IP, "param_value": "192.0.2.77"}]
+    }
+    cloud = FakeCloud(devices=[station_device(), camera_device(), garage])
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        stations = {s.serial: s for s in await eufy.async_discover()}
+        home, other = stations[SYNTHETIC.station_sn], stations[OTHER_STATION_SN]
+        assert not home.connects_on_demand
+        assert home.session._wake_provider is not None
+        assert other.session._wake_provider is not None
+        assert (home.session.extra_hosts, other.session.extra_hosts) == ((), ("192.0.2.77",))
+        assert other.lan_path.host_source is HostSource.DEVICE
+        assert home.lan_path.host_source is HostSource.CLOUD
         await eufy.async_close()
 
 

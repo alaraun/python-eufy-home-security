@@ -2,21 +2,28 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
+from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.models import PARAM_LAN_IP
 from eufy_home_security.network import (
     FIRST_SUGGESTED_LOCAL_PORT,
     HostSource,
     LanPath,
     PathWarning,
     check_local_ports,
+    extra_search_hosts,
     lan_address,
+    lan_path_for,
     suggest_local_ports,
     with_discovery,
 )
 from eufy_home_security.p2p.did import Did
 from eufy_home_security.p2p.discovery import DiscoveredStation
 from eufy_home_security.testing import SYNTHETIC
+from eufy_home_security.testing.cloud import station_device
 
 OTHER_DID = "EUPRAMA-654321-ABCDE"
 
@@ -101,3 +108,48 @@ def test_suggestions_are_stable_and_skip_taken_ports() -> None:
     assert first["T8030P0000000009"] == FIRST_SUGGESTED_LOCAL_PORT  # serial order
     with pytest.raises(ValueError, match="no free local port"):
         suggest_local_ports(["A", "B"], start=65535)
+
+
+def _device(local_ip: str | None, lan_ip: str | None) -> CloudDevice:
+    entry = station_device(params={PARAM_LAN_IP: lan_ip} if lan_ip is not None else None)
+    entry["local_ip"] = local_ip
+    return CloudDevice.from_api(entry)
+
+
+@pytest.mark.parametrize(
+    ("given", "want"),
+    [
+        # No address configured or reported by the cloud: the station's own one is
+        # searched beside the broadcast.
+        ((None, "192.168.7.21", None), ("192.168.7.21", HostSource.DEVICE, ("192.168.7.21",))),
+        (("", "192.168.7.21", None), ("192.168.7.21", HostSource.DEVICE, ("192.168.7.21",))),
+        (
+            ("100.64.0.9", "192.168.7.21", None),
+            ("192.168.7.21", HostSource.DEVICE, ("192.168.7.21",)),
+        ),
+        # A private cloud address or a configured one is searched instead, alone.
+        (("192.168.1.20", "192.168.7.21", None), ("192.168.1.20", HostSource.CLOUD, ())),
+        ((None, "192.168.7.21", "192.168.1.40"), ("192.168.1.40", HostSource.CONFIGURED, ())),
+        # A reported address that is public or no address at all is not searched.
+        ((None, "100.64.0.9", None), (None, HostSource.BROADCAST, ())),
+        ((None, "not an ip", None), (None, HostSource.BROADCAST, ())),
+        ((None, None, None), (None, HostSource.BROADCAST, ())),
+    ],
+)
+def test_the_station_reported_address_is_searched_when_nothing_else_names_one(
+    given: tuple[str | None, str | None, str | None],
+    want: tuple[str | None, HostSource, tuple[str, ...]],
+) -> None:
+    local_ip, lan_ip, configured = given
+    host, source, extra = want
+    device = _device(local_ip, lan_ip)
+    search_host = configured or lan_address(device.local_ip)
+    assert extra_search_hosts(device, search_host) == extra
+    path = lan_path_for(device, search_host=search_host, local_port=0)
+    assert (path.host, path.host_source) == (host, source)
+
+
+def test_a_path_through_the_reported_address_still_warns_a_change() -> None:
+    path = lan_path_for(_device(None, "192.168.7.21"), search_host=None, local_port=0)
+    assert PathWarning.BROADCAST_ONLY not in path.warnings
+    assert replace(path, observed_ip="192.168.7.99").warnings[-1] is PathWarning.ADDRESS_CHANGED

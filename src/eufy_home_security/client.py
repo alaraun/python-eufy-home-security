@@ -78,7 +78,14 @@ from .identity import StationClaims, is_device_serial
 from .images import PushImage, picture_content_type
 from .inclusion import Reach, StationChoice
 from .models import GuardMode
-from .network import LanPath, check_local_ports, lan_address, lan_path_for, with_discovery
+from .network import (
+    LanPath,
+    check_local_ports,
+    extra_search_hosts,
+    lan_address,
+    lan_path_for,
+    with_discovery,
+)
 from .p2p.crypto import CONN_INIT_NO_CIPHER
 from .p2p.did import Did
 from .p2p.media import StillFormat, classify_still, decode_still
@@ -289,6 +296,15 @@ class EufySecurity:
         station is built, and fetched again every ``cloud_state_refresh`` seconds (one
         device-list call for the account) while :meth:`async_start` runs; pushes update it
         in between.
+
+        Every station with rendezvous servers (the cloud's ``app_conn``) can also be
+        reached through them, as the eufy app connects: a station on another subnet
+        behind a stateful gateway, or off the LAN. A station reached on demand runs it
+        on every connect (it wakes the station); a held one once a LAN discovery attempt
+        has failed, or at once when its last link came through it. It costs one DSK per
+        station from the cloud, cached until it expires. A station with no configured
+        address and no private cloud ``local_ip`` is also searched at the LAN address it
+        reports (:attr:`~.network.HostSource.DEVICE`).
 
         ``_cloud_factory`` and ``_discovery_port`` are private seams for
         :mod:`eufy_home_security.testing` only: the factory is called like
@@ -638,10 +654,11 @@ class EufySecurity:
                 expect_channels=station_channels(device, sub_devices),
                 block_aliases=station_block_aliases(device),
                 on_demand=connects_on_demand(serial),
-                wake_provider=self._wake_provider(device) if connects_on_demand(serial) else None,
+                wake_provider=self._wake_provider(device),
                 key_refresh=_CachedKeyRefreshLatch(self.cache, serial),
                 cloud_problems_reported=True,
                 max_sessions=self._max_sessions,
+                extra_hosts=extra_search_hosts(device, self._search_host(device)),
             )
             station = Station(
                 device,
@@ -793,9 +810,11 @@ class EufySecurity:
         return self._listed.get(product_code, ())
 
     def _wake_provider(self, device: CloudDevice) -> WakeProvider:
-        """A :class:`~.p2p.session.WakeProvider` for a battery station: its rendezvous
-        servers (from the cloud entry) and a cached-or-fetched DSK. A cloud failure
-        becomes a ``CloudProblem`` and returns None, so a wake falls back to LAN discovery."""
+        """A :class:`~.p2p.session.WakeProvider` for a station's rendezvous connect (every
+        station; the session decides when it runs): its rendezvous servers (from the
+        cloud entry) and a cached-or-fetched DSK. None without servers. A cloud failure
+        becomes a ``CloudProblem`` and returns None, so the connect falls back to LAN
+        discovery; a replaced session is raised (an on-demand station fails at once)."""
         cloud, serial = self.cloud, device.device_sn
         servers = device.rendezvous_servers
 
