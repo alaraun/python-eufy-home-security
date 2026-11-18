@@ -182,6 +182,14 @@ LAN usually answers the search before any `PUNCH_TO` and counts as `"lan"` again
 next link. A link's address becomes the next search's host when it is a LAN address or
 one discovery already searches by unicast; a public one does not.
 
+**Setup probe** (`EufySecurity.async_station_choices()`, the library's): a mains
+station that did not answer the LAN probe and lists rendezvous servers gets the
+rendezvous half of a connect alone (`PPPPTransport.punch_probe`): HELLO, P2P_REQ_DSK each
+round and the punches above, no `LAN_SEARCH`. The station's first `PUNCH_PKT` with its
+DID ends it: the client sends that address a `CLOSE` and closes the socket, with no
+punch echo, no `P2P_RDY` wait and no `ALIVE`, so no session is set up. A station
+reached on demand is not probed this way, since the punch wakes it.
+
 A station with no configured address and no private cloud `local_ip` is also searched
 by unicast at the LAN address it reports itself (parameter 1176 in the cloud's
 snapshot), beside the broadcast (`network.HostSource.DEVICE`). This is the library's

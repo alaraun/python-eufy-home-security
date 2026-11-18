@@ -174,6 +174,7 @@ attempts. A test that meets such a wait on purpose shortens it.
 | re-send while the camera moves; default-preset write result | `station.PTZ_BUSY_DELAY`, `DEFAULT_PRESET_RESULT_WAIT` | 0.05 s, 0.1 s |
 | full-resolution live image, live open (1700) | `station.FULL_RESOLUTION_TIMEOUT`, `devices.recipes.LIVE_OPEN_TIMEOUT` | 1 s, 2 s |
 | LAN search (`async_probe_lan`, `async_station_choices`) | `p2p.pppp.LAN_DISCOVERY_TIMEOUT` | 0.5 s |
+| rendezvous probe of `async_station_choices`: per station, all | `client.RENDEZVOUS_PROBE_TIMEOUT`, `RENDEZVOUS_PROBE_BUDGET` | 0.5 s, 2 s |
 
 Not shortened, because a test observes their length: `PARAM_SETTLE` (sub-device blocks
 following a dump), `MEDIA_IDLE_TIMEOUT`, `MEDIA_DRAIN_MAX` (a stopped stream's leftover

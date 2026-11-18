@@ -456,16 +456,37 @@ Let the config flow say what it found, and let the user decide. The library
 classifies; the flow only presents the choice and stores the answer.
 
 `await eufy.async_station_choices()` lists every station on the account (each HomeBase,
-and each standalone device) as a `StationChoice`. It runs one LAN probe, builds
-nothing and opens no session:
+and each standalone device) as a `StationChoice`. It runs one LAN probe, then one
+rendezvous probe for the mains stations the LAN probe did not find; it builds nothing
+and opens no session:
 
 | field | meaning |
 |---|---|
-| `reach` | `Reach.LOCAL` if the station answered LAN discovery, else `Reach.REMOTE`. The probe is LAN discovery only: a station that is reached only through its rendezvous servers (another subnet, see the network section) is reported remote, yet gets a full session when included as `Reach.LOCAL` |
+| `reachable_via` | `ConnectPath.LAN` (`"lan"`) if the station answered LAN discovery, `ConnectPath.RENDEZVOUS` (`"rendezvous"`) if a punch through its rendezvous servers reached it (another subnet behind a stateful gateway, or another site; see the network section), None if neither did |
+| `reach` | `Reach.LOCAL` when `reachable_via` is set, else `Reach.REMOTE`. A station reached through its servers gets the same full session as one on the LAN |
+| `rendezvous` | the rendezvous probe's outcome: True (reached), False (no punch within the probe's time), None (not tried: it answered the LAN probe, it is reached on demand, it lists no servers, or its DSK could not be fetched) |
+| `connects_on_demand` | a battery station reached on demand; one that did not answer the LAN probe is **not** probed through its servers, since the punch would wake it |
 | `sub_devices` | the cameras and sensors paired to it; they are included with it |
 | `supported` | whether the device catalog knows the model |
 | `enabled_by_default` | local **and** supported |
-| `path` | its `LanPath`, for the network step below |
+| `path` | its `LanPath`, for the network step below (`answered` is the LAN probe's answer alone) |
+
+The rendezvous probe: for each station that did not answer the LAN probe, lists
+rendezvous servers in its cloud entry and is not reached on demand, the library fetches
+its DSK (cached, one `get_dsk_keys` per station; never a login), sends the servers its
+request and punches the addresses they name. The station's first `PUNCH_PKT` is the
+success; the library then sends it a `CLOSE`. No session is set up, no credentials are
+read. Up to 4 stations are probed at a time, each for 5 s, all within 20 s
+(`client.RENDEZVOUS_PROBE_CONCURRENCY`, `RENDEZVOUS_PROBE_TIMEOUT`,
+`RENDEZVOUS_PROBE_BUDGET`). A cloud failure arrives as a `CloudProblem`, and the station
+keeps its LAN result (`rendezvous` None). A station with a connected session is not
+probed: `rendezvous` is True when its link came through the servers.
+
+A battery station that did not answer the LAN probe stays `Reach.REMOTE` with
+`rendezvous` None: whether its servers would reach it cannot be known without waking
+it. Included as `Reach.LOCAL`, it is woken through its servers for each command (see
+*A battery station* under *Coordinator per station*), so offer that choice for it,
+unselected, with the battery cost named.
 
 What each reach gives:
 
@@ -482,12 +503,15 @@ the flow before the user enables one.
 
 **Config flow step "stations"** (after the login step):
 
-- Headline: "Found N stations on your local network, with M cameras and sensors.
+- Headline: "Found N stations Home Assistant can reach, with M cameras and sensors.
   They will be added with local control."
 - One multi-select: every local station, preselected when `enabled_by_default`, listed
-  with its sub-devices. Then every remote station, **not** preselected, labelled
-  "remote: events only, no arming, settings or live view". Show an unsupported station
-  as "not supported yet" and leave it unselected.
+  with its sub-devices; one whose `reachable_via` is `"rendezvous"` labelled "reachable
+  through eufy's servers (local control)". Then every remote station, **not**
+  preselected, labelled "remote: events only, no arming, settings or live view"; a
+  remote one with `connects_on_demand` also "battery camera: not checked through eufy's
+  servers, which would wake it". Show an unsupported station as "not supported yet"
+  and leave it unselected.
 - Store the answer as `entry.options["stations"] = {serial: "local" | "remote"}` and pass
   it back as `EufySecurity(stations={sn: Reach(value) for sn, value in …})`. A station
   missing from it is left out: the library builds nothing for it, does not claim it
@@ -496,7 +520,7 @@ the flow before the user enables one.
 
 **Options flow:** the same step, run again with a fresh `async_station_choices()`.
 Changing it reloads the entry. The probe is safe on a loaded entry: it never sends a
-`LAN_SEARCH` to a station that has a connected session, and reports that station as local
+`LAN_SEARCH` or a rendezvous request for a station that has a connected session, and reports that station as local
 from the session itself (`observed_ip` is the address it is connected to). While any
 station is connected the probe also sends no broadcast, so an unconnected station is
 found only at its known address (`station_hosts`, or the cloud's): one more reason for
@@ -565,6 +589,9 @@ The library describes each station's path; the integration only presents it:
 - **Probe duration:** `async_station_choices()` and `async_probe_lan()` listen for
   `LAN_DISCOVERY_TIMEOUT` (5 s) by default. A battery or solar standalone camera answers
   late (a T8170 after 2.1 s), so do not shorten it; show a progress step instead.
+  `async_station_choices()` adds its rendezvous probe after that when a mains station
+  did not answer (up to `RENDEZVOUS_PROBE_BUDGET`, 20 s; about the DSK fetch plus a
+  fraction of a second for a station that answers).
 - **Config flow:** after the stations step, show a "network" step for the local
   stations: each one's path (the `StationChoice.path` from that step, or
   `async_probe_lan()` once they are built), its warnings, and the two firewall options

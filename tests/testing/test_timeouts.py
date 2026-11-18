@@ -75,6 +75,12 @@ def test_the_camera_motion_and_live_image_waits_are_shortened(name: str) -> None
     assert value < getattr(importlib.import_module(f"eufy_home_security.{module}"), name)
 
 
+@pytest.mark.parametrize("name", ["RENDEZVOUS_PROBE_TIMEOUT", "RENDEZVOUS_PROBE_BUDGET"])
+def test_the_setup_rendezvous_probe_waits_are_shortened(name: str) -> None:
+    module, value = SHORT_TIMEOUTS[name]
+    assert value < getattr(importlib.import_module(f"eufy_home_security.{module}"), name)
+
+
 def test_short_timeouts_refuses_an_unknown_name() -> None:
     with pytest.raises(KeyError, match="PARAM_SETTLE"), short_timeouts(PARAM_SETTLE=0.1):
         pass

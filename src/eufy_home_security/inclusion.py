@@ -1,9 +1,10 @@
 """Which stations to include, and how: for a setup step that asks the user.
 
-A station that answers LAN discovery can be served **locally**: its P2P session
-gives full control (state, commands, settings, media) and its own event stream.
-A station that does not answer (another site, another network, offline) can still
-be included **remotely**: its devices and the cloud push events for them
+A station that answers LAN discovery, or a punch through its rendezvous servers, can
+be served **locally**: its P2P session gives full control (state, commands,
+settings, media) and its own event stream. A station that answers neither (another
+site, offline, a battery station off the LAN, which is not probed through the servers)
+can still be included **remotely**: its devices and the cloud push events for them
 (detections, guard-mode changes as they happen), but nothing that needs the P2P
 session: no commands, no settings, no state dumps, no media. The library has no
 cloud command path, so a remote station is monitor-only.
@@ -18,8 +19,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .cloud.models import CloudDevice
-from .devices.types import DeviceModel, model_for_serial
+from .devices.types import DeviceModel, connects_on_demand, model_for_serial
 from .network import LanPath
+from .p2p.transport import ConnectPath
 
 
 class Reach(StrEnum):
@@ -39,7 +41,11 @@ class StationChoice:
     sub_devices: tuple[CloudDevice, ...]
     """The cameras and sensors paired to it; they are included with it."""
     path: LanPath
-    """Its LAN path after a discovery probe (``path.answered`` decides the reach)."""
+    """Its LAN path after a discovery probe."""
+    rendezvous: bool | None = None
+    """Whether a punch through its rendezvous servers reached it (a probe, or the link
+    of its connected session); None when that was not tried: it answered the LAN probe,
+    it is reached on demand, it lists no servers, or its DSK could not be fetched."""
 
     @property
     def serial(self) -> str:
@@ -54,9 +60,24 @@ class StationChoice:
         return model_for_serial(self.serial)
 
     @property
+    def reachable_via(self) -> ConnectPath | None:
+        """How a session reaches it: through its rendezvous servers, over the LAN, or
+        None when neither answered."""
+        if self.rendezvous:
+            return ConnectPath.RENDEZVOUS
+        return ConnectPath.LAN if self.path.answered else None
+
+    @property
     def reach(self) -> Reach:
-        """Local when it answered the LAN probe, remote otherwise."""
-        return Reach.LOCAL if self.path.answered else Reach.REMOTE
+        """Local when a session reaches it (:attr:`reachable_via`), remote otherwise."""
+        return Reach.REMOTE if self.reachable_via is None else Reach.LOCAL
+
+    @property
+    def connects_on_demand(self) -> bool:
+        """Whether it is a battery station reached on demand
+        (:func:`~.devices.types.connects_on_demand`): one that did not answer the LAN
+        probe is not probed through its servers, which would wake it."""
+        return connects_on_demand(self.serial)
 
     @property
     def supported(self) -> bool:

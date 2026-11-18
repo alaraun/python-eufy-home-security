@@ -21,7 +21,7 @@ from dataclasses import dataclass, fields, replace
 from types import MappingProxyType, TracebackType
 from typing import TYPE_CHECKING, Any, Literal, Self, cast
 
-from ._logging import Identifier, LogThrottle, Secret, redact_serial
+from ._logging import Identifier, LogThrottle, Secret, redact_serial, register_secret_bytes
 from .cloud import arming
 from .cloud.api import CipherKeys, EufyCloudApi, HttpSession, PasswordSource
 from .cloud.const import CLOUD_STATE_REFRESH, FACES_BY_IDS_PATH, firmware_ota_type
@@ -98,7 +98,7 @@ from .p2p.session import (
     WakeProvider,
     _session_budget,
 )
-from .p2p.transport import Wake
+from .p2p.transport import ConnectPath, PPPPTransport, Wake
 from .station import RemoteStation, Station, station_block_aliases, station_channels
 from .storage import SessionCache, Store
 
@@ -109,6 +109,16 @@ if TYPE_CHECKING:
     from .push.fcm import PushListener
 
 _LOGGER = logging.getLogger(__name__)
+
+RENDEZVOUS_PROBE_TIMEOUT = 5.0
+"""Seconds a setup probe waits for one station's punch through its rendezvous servers
+(:meth:`EufySecurity.async_station_choices`)."""
+RENDEZVOUS_PROBE_CONCURRENCY = 4
+"""Stations probed through their rendezvous servers at a time."""
+RENDEZVOUS_PROBE_BUDGET = 20.0
+"""Seconds all of a setup's rendezvous probes may take, DSK fetches included; a probe
+still running then is cancelled and reports nothing."""
+
 _SKIP_THROTTLE = LogThrottle()  # one line per skipped device, not one per discovery
 _SCAN_KEY_REFUSED = (
     "the cloud refused this client's key identity after a new key exchange; "
@@ -809,12 +819,13 @@ class EufySecurity:
         """The settings listed from the cloud TD for ``product_code``; ``()`` for none."""
         return self._listed.get(product_code, ())
 
-    def _wake_provider(self, device: CloudDevice) -> WakeProvider:
+    def _wake_provider(self, device: CloudDevice, *, login: bool = True) -> WakeProvider:
         """A :class:`~.p2p.session.WakeProvider` for a station's rendezvous connect (every
         station; the session decides when it runs): its rendezvous servers (from the
         cloud entry) and a cached-or-fetched DSK. None without servers. A cloud failure
         becomes a ``CloudProblem`` and returns None, so the connect falls back to LAN
-        discovery; a replaced session is raised (an on-demand station fails at once)."""
+        discovery; a replaced session is raised (an on-demand station fails at once).
+        Without ``login`` the DSK fetch never logs in."""
         cloud, serial = self.cloud, device.device_sn
         servers = device.rendezvous_servers
 
@@ -825,7 +836,7 @@ class EufySecurity:
             if dsk := cloud.cached_dsk_key(serial):
                 return Wake(servers=servers, dsk=dsk)  # no cloud call: no success either
             try:
-                dsk = await cloud.async_get_dsk_key(serial)
+                dsk = await cloud.async_get_dsk_key(serial, login=login)
             except SessionReplacedError as err:
                 # No wake is possible until a human takes the session back: fail the
                 # connect now rather than after a LAN search a sleeping camera ignores.
@@ -985,13 +996,26 @@ class EufySecurity:
     async def async_station_choices(
         self, *, timeout: float | None = None, port: int = DISCOVERY_PORT
     ) -> list[StationChoice]:
-        """Every station on the account, with its reach after one LAN probe.
+        """Every station on the account, with its reach after one LAN probe and, for
+        the mains stations it did not find, one rendezvous probe.
 
         For a setup step that asks which stations to include (see :mod:`.inclusion`).
         Builds nothing and opens no session; the device list comes from the cache
-        when there is one. Safe on a running account: the probe is the one of
+        when there is one. Safe on a running account: the LAN probe is the one of
         :meth:`async_probe_lan`, so a station with a connected session is never
-        searched and is reported local, at the session's host.
+        searched and is reported local, at the session's host (``rendezvous`` True
+        when its link came through the servers).
+
+        A station that did not answer the LAN probe and lists rendezvous servers is
+        then punched through them (:meth:`~.p2p.transport.PPPPTransport.punch_probe`:
+        its first ``PUNCH_PKT`` is success, then a ``CLOSE``; no session), and
+        :attr:`~.inclusion.StationChoice.rendezvous` records the outcome. This needs
+        the station's DSK (one cached ``get_dsk_keys``, never a login); a cloud failure
+        is reported as a :class:`~.events.CloudProblem` and leaves that station's LAN
+        result. A station reached on demand is never probed this way: the punch would
+        wake a battery station. At most :data:`RENDEZVOUS_PROBE_CONCURRENCY` stations are
+        probed at a time, each for :data:`RENDEZVOUS_PROBE_TIMEOUT`, all within
+        :data:`RENDEZVOUS_PROBE_BUDGET`.
         """
         await self._ensure_cache_loaded()
         candidates, children, self.skipped_devices = _group(await self.cloud.async_get_devices())
@@ -1004,12 +1028,68 @@ class EufySecurity:
             for device in candidates
         ]
         probed = await self._probe(paths, candidates, timeout=timeout, port=port)
+        punched = await self._probe_rendezvous(
+            [device for device, path in zip(candidates, probed, strict=True) if not path.answered]
+        )
+        for serial, station in self.stations.items():
+            if station.session.connected and station.session.connect_path is ConnectPath.RENDEZVOUS:
+                punched[serial] = True
         return [
             StationChoice(
-                device=device, sub_devices=tuple(children.get(device.device_sn, ())), path=path
+                device=device,
+                sub_devices=tuple(children.get(device.device_sn, ())),
+                path=path,
+                rendezvous=punched.get(device.device_sn),
             )
             for device, path in zip(candidates, probed, strict=True)
         ]
+
+    async def _probe_rendezvous(self, devices: list[CloudDevice]) -> dict[str, bool | None]:
+        """Whether each of ``devices`` answers a punch through its rendezvous servers,
+        by serial; None for a station without servers or whose DSK cannot be fetched,
+        and a station reached on demand or still probed at the budget's end is left out
+        (see :meth:`async_station_choices`)."""
+        targets = [device for device in devices if not connects_on_demand(device.device_sn)]
+        if not targets:
+            return {}
+        limit = asyncio.Semaphore(RENDEZVOUS_PROBE_CONCURRENCY)
+
+        async def probe(device: CloudDevice) -> bool | None:
+            async with limit:
+                serial = redact_serial(device.device_sn)
+                try:
+                    wake = await self._wake_provider(device, login=False)()
+                except SessionReplacedError:
+                    wake = None  # reported as a CloudProblem by the provider
+                if wake is None:
+                    _LOGGER.debug("%s: no rendezvous probe (no servers or no DSK)", serial)
+                    return None
+                register_secret_bytes(wake.dsk)
+                transport = PPPPTransport(on_chunk=_ignore, on_lost=_ignore)
+                try:
+                    await transport.punch_probe(
+                        expected_did=Did.parse(device.p2p_did or ""),
+                        wake=wake,
+                        timeout=RENDEZVOUS_PROBE_TIMEOUT,
+                    )
+                except EufySecurityError as err:
+                    _LOGGER.debug("%s: rendezvous probe unanswered: %s", serial, err)
+                    return False
+                finally:
+                    transport.close(send_close=False)
+                _LOGGER.debug("%s: rendezvous probe answered", serial)
+                return True
+
+        tasks = {device.device_sn: asyncio.create_task(probe(device)) for device in targets}
+        _done, pending = await asyncio.wait(tasks.values(), timeout=RENDEZVOUS_PROBE_BUDGET)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        if pending:
+            _LOGGER.debug(
+                "%d rendezvous probe(s) cut off after %.0fs", len(pending), RENDEZVOUS_PROBE_BUDGET
+            )
+        return {serial: task.result() for serial, task in tasks.items() if task not in pending}
 
     async def async_probe_lan(
         self, *, timeout: float | None = None, port: int = DISCOVERY_PORT
@@ -1833,6 +1913,10 @@ def _group(
         else:
             skip(device, "orphan")
     return stations, children, tuple(skipped)
+
+
+def _ignore(_value: object) -> None:
+    """A transport callback for a punch probe, which carries no session."""
 
 
 def _did_parses(did: str | None) -> bool:

@@ -49,6 +49,8 @@ SHORT_TIMEOUTS: Final[Mapping[str, tuple[str, Any]]] = {
     "LIVE_OPEN_TIMEOUT": ("devices.recipes", 2.0),
     "CAPTURE_START_TIMEOUT": ("p2p.broadcast", 2.0),
     "LAN_DISCOVERY_TIMEOUT": ("p2p.pppp", 0.5),
+    "RENDEZVOUS_PROBE_TIMEOUT": ("client", 0.5),
+    "RENDEZVOUS_PROBE_BUDGET": ("client", 2.0),
 }
 """Each shortened wait: its name, the module that defines it, and the value used.
 
