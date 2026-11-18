@@ -167,17 +167,19 @@ rendezvous servers in the cloud's `app_conn`):
 | held (mains) | from the second attempt, after a LAN attempt (6 s) failed; from the first when its last link came through the servers | a station the LAN reaches costs no cloud call and no server traffic; the app runs both from the start, waiting one attempt is the library's choice |
 
 It needs the station's DSK from the cloud (cached until it expires, about 30-60 min;
-one `get_dsk_keys` per station per expiry while connecting). Without one (a cloud
-error) the attempt is LAN discovery only; a replaced cloud session fails an on-demand
-station's connect at once and leaves a held station on LAN discovery.
+one `get_dsk_keys` per station per expiry, shared by concurrent connects, its failure
+included). Without one (a cloud error) the attempt is LAN discovery only; a replaced
+cloud session fails an on-demand station's connect at once and leaves a held station
+on LAN discovery.
 `SessionStats.connect_path` (`"lan"` / `"rendezvous"`) and `connects_by_path` say which
-way the links came up: `"rendezvous"` when the `PUNCH_PKT` came from an address the client punched (even a
-host it also searched by unicast: behind a stateful gateway the punch is what admits
-the reply), `"lan"` otherwise. A held station whose last link counted as rendezvous
-runs the rendezvous connect from its first attempt, so it skips the LAN attempt that
-cannot answer; a station on the LAN usually answers the search before any `PUNCH_TO`
-and counts as `"lan"` again on its next link. A link's address becomes the next search's host when it is a
-LAN address or one discovery already searches by unicast; a public one does not.
+way the links came up: `"rendezvous"` when the `PUNCH_PKT` came from an address the
+client punched (even a host it also searched by unicast: behind a stateful gateway the
+punch is what admits the reply), `"lan"` otherwise. A held station whose last link
+counted as rendezvous runs the rendezvous connect from its first attempt, so it skips
+the 6 s LAN-only first attempt (the LAN search still runs alongside); a station on the
+LAN usually answers the search before any `PUNCH_TO` and counts as `"lan"` again on its
+next link. A link's address becomes the next search's host when it is a LAN address or
+one discovery already searches by unicast; a public one does not.
 
 A station with no configured address and no private cloud `local_ip` is also searched
 by unicast at the LAN address it reports itself (parameter 1176 in the cloud's
