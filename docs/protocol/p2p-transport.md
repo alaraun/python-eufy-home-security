@@ -71,11 +71,11 @@ Facts that shape a client **[verified]**:
 | fact | consequence |
 |---|---|
 | The station answers from a **random high port that changes every session**, not from 32108. | Pin the peer to the address the PUNCH_PKT came from. `:32108` firewall rules and conntrack do not match the reply, which is a new flow. |
-| Within one session, **every datagram from the station comes from that one port**: replies, pushes, parameter dumps and media alike. ACKs and keepalives sent only to that port keep every channel, media included, flowing. | Once the peer is pinned, the library accepts datagrams only from that exact (host, port) and drops the rest. A datagram from the station's IP on another port is not this session's traffic (another session on the base, or a forgery). It is dropped, counted, and logged at DEBUG (throttled). Before a peer is pinned, discovery filters on the expected DID and the source: a searched host (any host for a broadcast) or an address the client punched for a [rendezvous connect](#rendezvous-connect). |
+| Within one session, **every datagram from the station comes from that one port**: replies, pushes, parameter dumps and media alike. ACKs and keepalives sent only to that port keep every channel, media included, flowing. | Once the peer is pinned, the library accepts datagrams only from that exact (host, port) and drops the rest. A datagram from the station's IP on another port is not this session's traffic (another session on the base, or a forgery). It is dropped, counted, and logged at DEBUG (throttled). Before a peer is pinned, discovery filters on the expected DID and the source: a searched host (any LAN address for a broadcast, which reaches no other) or an address the client punched for a [rendezvous connect](#rendezvous-connect). |
 | **The first LAN_SEARCH after a session is closed is ignored.** This holds after the client's own CLOSE and after another client's session closes. | Discovery must re-send until a timeout (the library sends every 1 s for 6 s, 3 attempts). A single failed search is not "station gone". |
 | **A battery or solar standalone camera answers late, or not at all while asleep.** A T8170 answered one search after 2.1 s, and at another time no search for 15 s, broadcast or unicast, while its address still answered ARP. It wakes on its own about every 7 min. | Listen longer (`LAN_DISCOVERY_TIMEOUT`, 5 s) to catch a wake window, or **wake it deliberately** ([below](#waking-a-battery-station-verified)). |
 | **The eufy app holds no session to a battery device.** A list of serial prefixes (battery SoloCams such as the T8170, battery doorbells, trackers, locks) is excluded from the app's watchdog, which reconnects every other session every 60 s while the app is in the foreground; the app closes every session 120 s after it leaves the foreground **[declared: app]**. | The library copies it: `devices.ON_DEMAND_PREFIXES`; such a station connects per command and closes after `ON_DEMAND_IDLE_CLOSE` (120 s) idle, and its state comes from the cloud snapshot ([cloud.md](cloud.md)). |
-| A host firewall can only admit the station's replies by the **client's** port. | Bind a fixed local port **per station** when needed (two sessions cannot bind one port) and accept `udp dport <local port>` from the station's address, or accept all UDP from that address. Either rule needs the station on a fixed IP. With an open path, an ephemeral port is fine. A station with rendezvous servers needs neither behind a stateful gateway: the client's punch opens the path ([rendezvous connect](#rendezvous-connect)). |
+| A host firewall can only admit the station's replies by the **client's** port. | Bind a fixed local port **per station** when needed (two sessions cannot bind one port) and accept `udp dport <local port>` from the station's address, or accept all UDP from that address. Either rule needs the station on a fixed IP. With an open path, an ephemeral port is fine. A station with rendezvous servers needs neither when every filter on the path (host firewall and gateway) admits replies by connection tracking: the client's punch opens the path ([rendezvous connect](#rendezvous-connect)). A stateless filter still needs the station's UDP admitted. |
 | P2P_RDY is frequently absent on the LAN. | Wait briefly (the library waits 2 s), then proceed. |
 | The station accepts several concurrent sessions, but has a **session budget** [verified]: a HomeBase 3 holds 9 sessions across all clients, a T8170 4. Idle or streaming makes no difference to the count. | The library holds at most `max_sessions` to a station (default 6: its session, 1 trigger-frame session, 4 extra live sessions; configurable 2–9) and closes short-lived ones at once. A live open next to 0, 2 or 4 idle extra sessions reached its first keyframe in 2 to 4 s; one outlier run with two idle extras got no frame in 25 s and did not recur. |
 | **Too many sessions: the station closes one [verified].** With the eufy app, two long-lived foreign sessions and two library sessions connected, a library client opened six more, one at a time, each reading parameters fine. As the count passed about nine, the station sent CLOSE to an existing session twice (at the 5th and 6th extra): first the oldest, then one that was neither the oldest nor the newest. | A session can be dropped because *other* clients connected. Supervise and reconnect (the library's monitor reconnected in 8 s); never assume a slot is reserved. |
@@ -136,13 +136,16 @@ client        → station:R           PUNCH_PKT echo, then P2P_RDY / DRW / ALIVE
   (family `0x0002` big-endian, port little-endian, IPv4 reversed, 8 zero bytes). A
   server answers each P2P_REQ_DSK with several: the station's public address and port,
   its LAN address and port, and `0.0.0.0` with the port **[verified: T817L]**. The client
-  punches every address that names a host (`0.0.0.0` and `255.255.255.255` are skipped,
-  as the app skips them), again on every `PUNCH_TO`. A `PUNCH_TO` is taken only from
+  punches each address that names a remote unicast host: `0.0.0.0` and
+  `255.255.255.255` are skipped, as the app skips them; loopback, multicast, link-local
+  and other reserved addresses and the client's own socket are skipped too, at most 8
+  distinct addresses are punched per connect, and each at most once per discovery round
+  however many servers name it (the library's bounds). A `PUNCH_TO` is taken only from
   a server the client sent its request to, and only before the session is up.
 - The client takes the first `PUNCH_PKT` with the station's DID that comes from a
-  searched host or from an address it punched, and pins the session there. The session
-  above it (DRW, keepalive, XZYH, crypto) is the one of a LAN discovery
-  **[verified: T817L, live media included]**.
+  searched host (during a broadcast: a LAN address) or from an address it punched, and
+  pins the session there. The session above it (DRW, keepalive, XZYH, crypto) is the
+  one of a LAN discovery **[verified: T817L, live media included]**.
 - A station on another subnet of the same house: the client's punch to the station's LAN
   address passes the gateway as a new flow from the client's side, and the station's
   `PUNCH_PKT` from that address returns as its reply: no firewall rule needed. The
@@ -166,15 +169,19 @@ one `get_dsk_keys` per station per expiry while connecting). Without one (a clou
 error) the attempt is LAN discovery only; a replaced cloud session fails an on-demand
 station's connect at once and leaves a held station on LAN discovery.
 `SessionStats.connect_path` (`"lan"` / `"rendezvous"`) and `connects_by_path` say which
-way the links came up. A link that came up through the servers at a private address
-makes that address the next search's host, as a LAN link does; a public one does not.
+way the links came up: `"lan"` when the `PUNCH_PKT` came from a host searched by unicast
+(even one the client also punched, so a station on the LAN does not stay on the
+rendezvous path) or, during a broadcast, from a LAN address it did not punch;
+`"rendezvous"` otherwise. A link's address becomes the next search's host when it is a
+LAN address or one discovery already searches by unicast; a public one does not.
 
 A station with no configured address and no private cloud `local_ip` is also searched
 by unicast at the LAN address it reports itself (parameter 1176 in the cloud's
 snapshot), beside the broadcast (`network.HostSource.DEVICE`). This is the library's
 choice: the app only broadcasts. It helps where a gateway rule admits the station's
 replies; behind a stateful gateway without one, only the rendezvous connect gets
-through.
+through. Only an IPv4 unicast LAN address is searched (`pppp.is_lan_address`: private,
+and not unspecified, loopback, link-local or reserved), as for the cloud's `local_ip`.
 
 ## Waking a paired camera **[verified]**
 

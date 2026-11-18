@@ -15,8 +15,9 @@ network. Without either, the LAN address the station reports itself (parameter 1
 in the cloud's snapshot) is searched by unicast beside the broadcast: the library's
 choice, the eufy app only broadcasts. A station on another network is reached through
 its rendezvous servers instead (``docs/protocol/p2p-transport.md``), which needs no
-firewall rule on a stateful gateway. The cloud's device list often carries no LAN address for a station, or a
-public one, so the address worth advising on is where the station *answers* from:
+firewall rule where every filter on the way admits replies by connection tracking.
+The cloud's device list often carries no LAN address for a station, or a public one,
+so the address worth advising on is where the station *answers* from:
 ``EufySecurity.async_probe_lan()`` runs one discovery and records it. Nothing in this
 module does I/O: :attr:`Station.lan_path` describes one station, :func:`with_discovery`
 folds a probe's replies in, and a consumer (the CLI, a config flow) turns the result

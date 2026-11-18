@@ -534,25 +534,29 @@ What the library relies on:
 - **Both rules name the station's address**, so the station needs a fixed IP: a DHCP
   reservation on the router. The same applies to a standalone camera, which the
   library treats as its own station.
-- **A station on another subnet needs no rule behind a stateful gateway.** Every station
-  whose cloud entry lists rendezvous servers can also connect through them, as the eufy
-  app does ([rendezvous connect](../protocol/p2p-transport.md#rendezvous-connect)): the
-  servers name the station's addresses, the library punches them, and the station's
-  answer returns as a reply. What it needs is outbound UDP to the servers (port 32100,
-  also 32101-32102) and from Home Assistant to the station; a cloud DSK per station
-  (cached). A held station tries it after one failed LAN attempt, so its first connect
-  after a start takes about 6 s longer; reconnects go to the servers at once. The
-  integration does nothing for it; `stats().connect_path` says which path a station's
-  link took (`"lan"` / `"rendezvous"`), worth showing in diagnostics.
+- **A station on another subnet can need no rule.** Every station whose cloud entry
+  lists rendezvous servers can also connect through them, as the eufy app does
+  ([rendezvous connect](../protocol/p2p-transport.md#rendezvous-connect)): the servers
+  name the station's addresses, the library punches them, and the station's answer
+  returns as a reply. That holds only when every filter on the way (the host firewall
+  and the gateway) admits replies by connection tracking; a stateless filter still needs
+  the station's UDP admitted, as above. What it needs besides is outbound UDP to the
+  servers (port 32100, also 32101-32102) and from Home Assistant to the station, and a
+  cloud DSK per station (cached). A held station tries it after one failed LAN attempt,
+  so its first connect after a start takes about 6 s longer; a reconnect goes to the
+  servers at once only when the last link counted as `"rendezvous"`. The integration
+  does nothing for it; `stats().connect_path` says which path a station's link took
+  (`"lan"` / `"rendezvous"`), worth showing in diagnostics.
 - **Without a configured or cloud address**, discovery also searches the LAN address the
   station reports (parameter 1176) by unicast, beside the broadcast; its `LanPath` shows
-  `host_source` `device`.
+  `host_source` `device` and still warns `broadcast_only`: that address follows the
+  station's lease until it is fixed.
 
 The library describes each station's path; the integration only presents it:
 
 | library | use in Home Assistant |
 |---|---|
-| `await eufy.async_probe_lan()` | one `LanPath` per station, after one LAN discovery (broadcast plus each configured address): no session, no cloud |
+| `await eufy.async_probe_lan()` | one `LanPath` per station, after one LAN discovery (broadcast plus each known address: configured, the cloud's or the one the station reports): no session, no cloud |
 | `LanPath` | `station_ip`, `host`, `host_source` (`configured` / `cloud` / `device` / `broadcast`), `cloud_ip`, `observed_ip` (where it answered), `answered`, `local_port` as description placeholders |
 | `LanPath.warnings` (`PathWarning`) | one translation key each: `broadcast_only`, `ephemeral_port`, `no_lan_reply`, `address_changed` |
 | `suggest_local_ports(serials, taken=…)` | pre-fills a port per station; stable for the same stations |
@@ -3180,8 +3184,10 @@ async def async_get_config_entry_diagnostics(hass, entry):
   and `media_codec_changes` (see `docs/protocol/media.md`). For "events stopped", compare
   `seconds_since_last_event` with `seconds_since_last_probe` and look at
   `state_frames_by_encryption`, `dropped_undecodable` and `wrong_port_drops`; for a flapping
-  station, `reconnects`, `handshake_failures`, `key_refreshes` and `last_error` (a class
-  name, kept after recovery). Add `eufy.push_running` and the deduplicator's counters.
+  station, `reconnects`, `handshake_failures`, `key_refreshes`, `last_error` (a class
+  name, kept after recovery), `connect_path` and `connects_by_path` (whether its links
+  come up over LAN discovery or through its rendezvous servers). Add `eufy.push_running`
+  and the deduplicator's counters.
 
 Each station's `stats()` (`SessionStats`) also carries `conn_init_version` (8: ECIES,
 anything else: the legacy RSA handshake) and the `cipher_id` it named, once a CONN_INIT
