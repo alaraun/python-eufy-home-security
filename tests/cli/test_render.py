@@ -702,6 +702,23 @@ def test_render_network_advises_on_a_reported_address_and_the_servers() -> None:
     assert "no firewall rule is needed" in out
 
 
+def test_render_network_advises_where_a_station_was_found_over_what_it_reports() -> None:
+    path = LanPath(
+        serial="T8030P2000012345",
+        name="Base",
+        host="192.168.7.21",
+        host_source=HostSource.DEVICE,
+        cloud_ip=None,
+        observed_ip="192.168.7.30",
+        local_port=32109,
+    )
+    out = render_network([path], show_serials=False)
+    assert (
+        "Base: searched at the address it reports (192.168.7.21), which can change; "
+        "give the station a fixed IP and pass --host 192.168.7.30" in out
+    )
+
+
 def test_camera_busy_and_presets_changed_render_and_serialise() -> None:
     busy = CameraBusyChanged(
         station_sn=SYNTHETIC.station_sn, device_sn=SYNTHETIC.camera_sn, busy=True

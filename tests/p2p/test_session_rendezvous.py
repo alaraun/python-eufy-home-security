@@ -38,6 +38,8 @@ class Attempts:
         self.fail = fail
         self.reach: str | None = None
         """Where the fake station is when the session searches no host (a broadcast)."""
+        self.redirect: dict[str, str] = {}
+        """Searched host -> where the fake station answers from instead (a punched path)."""
         self.path = ConnectPath.LAN
         self.calls: list[dict[str, Any]] = []
         connect = PPPPTransport.connect
@@ -48,7 +50,9 @@ class Attempts:
                 raise StationUnreachableError("no LAN discovery reply")
             kwargs.pop("wake", None)
             kwargs.pop("extra_hosts", None)
-            did = await connect(transport, host or self.reach, **kwargs)
+            did = await connect(
+                transport, self.redirect.get(host or "", host) or self.reach, **kwargs
+            )
             transport._path = self.path
             return did
 
@@ -281,3 +285,21 @@ async def test_the_link_address_is_searched_next_only_when_it_may_be(
     finally:
         await session.async_close()
     assert session.host == learned
+
+
+async def test_a_link_from_the_configured_host_is_searched_again_after_the_host_moved(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host moved to another address since it was configured; a link that comes
+    from the configured (not LAN) address makes it the host again."""
+    attempts = Attempts(monkeypatch)
+    attempts.redirect = {"192.0.2.99": "127.0.0.1"}
+    session = _session(station, None)
+    session._search_host = "127.0.0.1"
+    session._host = "192.0.2.99"
+    try:
+        await session.async_connect()
+    finally:
+        await session.async_close()
+    assert attempts.calls[0]["host"] == "192.0.2.99"
+    assert session.host == "127.0.0.1"
