@@ -41,7 +41,7 @@ from ..events import (
     ZoomChanged,
 )
 from ..models import STATION_CHANNEL, GuardMode, ValueSource
-from ..network import LanPath, PathWarning, suggest_local_ports
+from ..network import HostSource, LanPath, PathWarning, suggest_local_ports
 
 if TYPE_CHECKING:
     from ..client import ModelStatus
@@ -193,6 +193,14 @@ def render_invites(invites: Sequence[CloudInvite], *, show_serials: bool) -> str
 # ── network ──────────────────────────────────────────────────────────────────
 
 
+_HOST_SOURCES = {
+    HostSource.CONFIGURED: "the configured address {host}",
+    HostSource.CLOUD: "the address the cloud reports, {host},",
+    HostSource.DEVICE: "the address the station reports, {host},",
+}
+"""How a searched address is named in advice, by :class:`HostSource`."""
+
+
 def render_network(paths: Sequence[LanPath], *, show_serials: bool) -> str:
     """Each station's LAN path, and what a firewall between here and it must allow."""
     if not paths:
@@ -220,6 +228,12 @@ def render_network(paths: Sequence[LanPath], *, show_serials: bool) -> str:
         ip = path.station_ip or "<station IP>"
         for warning in path.warnings:
             match warning:
+                case PathWarning.BROADCAST_ONLY if path.host_source is HostSource.DEVICE:
+                    fixed = path.observed_ip or path.host
+                    advice.append(
+                        f"{who}: searched at the address it reports ({path.host}), which can "
+                        f"change; give the station a fixed IP and pass --host {fixed}"
+                    )
                 case PathWarning.BROADCAST_ONLY if path.observed_ip:
                     advice.append(
                         f"{who}: found only by broadcast (at {path.observed_ip}), so this host "
@@ -241,13 +255,16 @@ def render_network(paths: Sequence[LanPath], *, show_serials: bool) -> str:
                 case PathWarning.NO_LAN_REPLY:
                     advice.append(
                         f"{who}: did not answer LAN discovery: it is offline, on another "
-                        "network, or a firewall drops its replies"
+                        "network, or a firewall drops its replies. It may still connect "
+                        "through its rendezvous servers: where every filter on the way "
+                        "admits replies by connection tracking, no firewall rule is needed"
                     )
                 case PathWarning.ADDRESS_CHANGED:
                     elsewhere = path.observed_ip or path.cloud_ip
+                    source = _HOST_SOURCES.get(path.host_source, "the searched address {host}")
                     advice.append(
-                        f"{who}: the configured address {path.host} is not where the station "
-                        f"is ({elsewhere}); its IP has changed, or the setting is stale"
+                        f"{who}: {source.format(host=path.host)} is not where the station "
+                        f"is ({elsewhere}); its IP has changed, or the source is stale"
                     )
         if path.local_port:
             advice.append(f"{who}: allow UDP from {ip} to this host's port {path.local_port}")

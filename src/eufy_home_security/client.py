@@ -1014,8 +1014,9 @@ class EufySecurity:
     ) -> list[LanPath]:
         """Each built station's :class:`LanPath`, with one LAN discovery folded in.
 
-        Searches the broadcast address and every configured station address at once
-        and records where each station answered from. It opens no session and needs
+        Searches the broadcast address and every known station address at once (the
+        :attr:`~.network.LanPath.host`: configured, the cloud's, or the one the station
+        reports) and records where each station answered from. It opens no session and needs
         no cloud, so it suits a setup step (a pinned local port is not reused here:
         discovery binds an ephemeral one).
 

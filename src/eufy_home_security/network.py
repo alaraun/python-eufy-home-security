@@ -60,15 +60,17 @@ class PathWarning(StrEnum):
     """Something about a station's network path the user should act on."""
 
     BROADCAST_ONLY = "broadcast_only"
-    """No address is configured or reported: discovery is a broadcast, so this host
-    must share the station's network, and a firewall rule cannot rely on the address
-    the station answers from until that address is fixed."""
+    """No fixed address: none is configured or reported by the cloud, so discovery is
+    a broadcast, beside a unicast to the address the station reports itself
+    (:attr:`HostSource.DEVICE`), which follows its lease. A firewall rule cannot rely
+    on the address the station answers from until that address is fixed."""
     EPHEMERAL_PORT = "ephemeral_port"
     """No local port is pinned: a firewall that filters inbound UDP must allow all
     UDP from the station, or a local port must be pinned for it."""
     ADDRESS_CHANGED = "address_changed"
-    """The configured address is not where the station answered from, or not the one
-    the cloud reports: its IP changed (give it a fixed lease) or the setting is stale."""
+    """The searched address (:attr:`LanPath.host_source` says where it came from) is
+    not where the station answered from, or a configured one is not the one the cloud
+    reports: its IP changed (give it a fixed lease) or the source is stale."""
     NO_LAN_REPLY = "no_lan_reply"
     """The station did not answer LAN discovery: it is offline, on another network,
     or a firewall drops its replies."""
@@ -100,7 +102,7 @@ class LanPath:
     @property
     def warnings(self) -> tuple[PathWarning, ...]:
         found: list[PathWarning] = []
-        if self.host is None:
+        if self.host is None or self.host_source is HostSource.DEVICE:
             found.append(PathWarning.BROADCAST_ONLY)
         if not self.local_port:
             found.append(PathWarning.EPHEMERAL_PORT)

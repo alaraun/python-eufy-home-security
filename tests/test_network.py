@@ -174,7 +174,10 @@ def test_the_station_reported_address_is_searched_when_nothing_else_names_one(
     assert (path.host, path.host_source) == (host, source)
 
 
-def test_a_path_through_the_reported_address_still_warns_a_change() -> None:
-    path = lan_path_for(_device(None, "192.168.7.21"), search_host=None, local_port=0)
-    assert PathWarning.BROADCAST_ONLY not in path.warnings
-    assert replace(path, observed_ip="192.168.7.99").warnings[-1] is PathWarning.ADDRESS_CHANGED
+def test_a_path_through_the_reported_address_warns_it_is_not_fixed() -> None:
+    """The address a station reports follows its lease: a firewall rule cannot rely on
+    it until it is fixed, as for a broadcast."""
+    path = lan_path_for(_device(None, "192.168.7.21"), search_host=None, local_port=32109)
+    assert path.warnings == (PathWarning.BROADCAST_ONLY,)
+    moved = replace(path, observed_ip="192.168.7.99")
+    assert moved.warnings == (PathWarning.BROADCAST_ONLY, PathWarning.ADDRESS_CHANGED)
