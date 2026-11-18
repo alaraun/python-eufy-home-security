@@ -202,6 +202,19 @@ cluster (its cipher, DSK and push calls), and ECC media on a station whose param
 asks for it (ECC is verified only as an offer a HomeBase 3 accepted). A standalone camera as its own station is reached only
 with the T8170 rows above (a T8400 on the account was unreachable).
 
+## T817L (eufyCam C31) standalone camera, firmware 2.1.0.5, on another subnet behind a stateful gateway
+
+The camera on its own subnet; the client on another, routed through a gateway that
+drops new flows from the camera's subnet to the client's (replies pass), behind double
+NAT. No firewall rule for the camera.
+
+| area | mark | evidence |
+|---|---|---|
+| Rendezvous connect, another subnet | ✓ | Library, read-only (`status`, `get`): LAN discovery (broadcast; the cloud lists no `local_ip`) got no reply in 6 s; the second attempt sent HELLO + P2P_REQ_DSK to the 3 servers of `app_conn` (DSK from `get_dsk_keys`, then from the cache). Each server answered with PUNCH_TO for the camera's public address, its LAN address and `0.0.0.0`, all with the camera's session port. The client punched the first two; the camera's PUNCH_PKT came from its LAN address 6 ms after the punch, then P2P_RDY, and the handshake and the read completed (9.1 s for `status` from the start, the 6 s LAN attempt included). The same call on the library without the rendezvous connect failed (no LAN discovery reply, 3 attempts). |
+| Media over a rendezvous link | ✓ | Library, `live` 5 s over the punched session: first keyframe 0.3 s after the open, 78 video frames (3 keyframes, H.264) and 82 audio frames, closed by the client. |
+| PUNCH_TO without the client's punch | ✗ | Probe client: answering the PUNCH_TO entries with nothing (LAN discovery only), 12 rounds brought no packet from the camera: its own punch toward the client is dropped by the gateway. A hairpin through the shared public address carried nothing either (two sockets of the client host, 8 datagrams each way). |
+| Unicast LAN_SEARCH from another subnet | – | With a temporary gateway rule admitting the camera's UDP, a unicast `LAN_SEARCH` to the camera's LAN address was answered from its session port; without the rule, the answer is dropped as a new flow. The address is the one the camera reports in parameter 1176, which the library searches when nothing else names one. |
+
 ## Reported by users
 
 Results a user reported from their own station, not reproduced here. They are listed
