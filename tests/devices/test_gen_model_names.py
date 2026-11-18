@@ -425,6 +425,19 @@ def test_check_compares_and_a_run_writes(
     assert gen.main([*argv, "--check"]) == 0
 
 
+def test_check_against_a_stale_file_fails_and_leaves_it(
+    gen: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = {"T9003": gen.Row("Three", (), "T9003")}
+    harness = SimpleNamespace(node=SimpleNamespace(node_refusal=lambda prog: None))
+    monkeypatch.setattr(gen, "_harness", lambda: harness)
+    monkeypatch.setattr(gen, "generate", lambda tm, cache: (rows, []))
+    out = tmp_path / "out.py"
+    stale = gen.render({"T9003": gen.Row("Old", (), "T9003")})
+    out.write_text(stale, encoding="utf-8")
+    assert gen.main(["--cache", str(tmp_path), "--out", str(out), "--check"]) == 1
+    assert out.read_text(encoding="utf-8") == stale
+
 
 @pytest.mark.needs_node
 @pytest.mark.skipif(not CACHE.is_dir(), reason="needs the private thing-model cache")
