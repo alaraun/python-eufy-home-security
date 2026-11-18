@@ -39,12 +39,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import ipaddress
 import logging
 import os
 import time
 from collections import deque
-from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -176,7 +175,7 @@ from ..mode_actions import CMD_SET_ALL_ACTION, ModeTable
 from ..notify import decode_camera_push, stamped_accounts
 from ..param_notify import ParamNotify, decode_param_notify
 from ..params import ParamDump
-from ..pppp import DISCOVERY_PORT, DrwChunk
+from ..pppp import DISCOVERY_PORT, DrwChunk, is_lan_address
 from ..storage_info import (
     CMD_HUB_STORAGE,
     CMD_SD_INFO,
@@ -368,16 +367,12 @@ class P2PCredentials:
     rsa_private_key: str | None = None
 
 
-def _learns_host(path: ConnectPath, peer: str) -> bool:
+def _learns_host(peer: str, searched: Collection[str]) -> bool:
     """Whether a link's peer address becomes the host the next discovery searches: a
-    LAN link's always, a rendezvous link's only when it is a private address (a public
-    one is the station's router, which no ``LAN_SEARCH`` should go to)."""
-    if path is ConnectPath.LAN:
-        return True
-    try:
-        return ipaddress.ip_address(peer).is_private
-    except ValueError:
-        return False
+    LAN address (:func:`~..pppp.is_lan_address`), or one in ``searched`` (the hosts
+    discovery already searches by unicast). A public peer is the station's router,
+    which no ``LAN_SEARCH`` should go to unless it was configured."""
+    return is_lan_address(peer) or peer in searched
 
 
 class WakeProvider(Protocol):
@@ -2753,7 +2748,8 @@ class StationSession:
         self._keys.static_key = ecb_key
         path = transport.path or ConnectPath.LAN
         self._connect_path = path
-        if transport.peer is not None and _learns_host(path, transport.peer[0]):
+        searched = [host for host in (self._search_host, *self._extra_hosts) if host]
+        if transport.peer is not None and _learns_host(transport.peer[0], searched):
             self._host = transport.peer[0]
         self._decoders.clear()
         self._results_due.clear()

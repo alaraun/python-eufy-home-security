@@ -63,6 +63,7 @@ from .pppp import (
     encode_p2p_req,
     encode_p2p_req_dsk,
     encode_packet,
+    is_lan_address,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -181,7 +182,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
         self._on_lost = on_lost
         self._transport: asyncio.DatagramTransport | None = None
         self._discover_host: str | None = None
-        self._extra_hosts: frozenset[str] = frozenset()
+        self._extra_hosts: tuple[str, ...] = ()
         self._expected_did: Did | None = None
         # Rendezvous: the servers' addresses, the station's DID, this host's endpoint
         # and the addresses punched so far.
@@ -269,14 +270,16 @@ class PPPPTransport(asyncio.DatagramProtocol):
         within ``timeout``.
 
         ``extra_hosts`` are searched too, by unicast, and their ``PUNCH_PKT`` is taken
-        like the searched host's.
+        like the searched host's. During a broadcast a ``PUNCH_PKT`` is taken only from
+        a LAN address (:func:`~.pppp.is_lan_address`): a broadcast reaches no other.
 
         ``wake`` runs a rendezvous connect beside the search: a ``P2P_REQ_DSK`` to the
         station's rendezvous servers each round. The server pokes the station over its
         standing cloud link (waking a battery station) and answers with ``PUNCH_TO``
-        addresses; the client punches every one that names a host, and a ``PUNCH_PKT``
-        with the station's DID from a punched address is taken as from the searched
-        host. ``expected_did`` is required with it. :attr:`path` says which way won.
+        addresses; the client punches each one that names a remote host, and a
+        ``PUNCH_PKT`` with the station's DID from a punched address is taken too.
+        ``expected_did`` is required with it. :attr:`path` says which way won: a reply
+        from a host searched by unicast counts as LAN even when it was also punched.
         """
         if wake is not None and expected_did is None:
             raise ProtocolError("a wake needs the station's DID to build its P2P_REQ_DSK")
@@ -309,7 +312,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
         )
 
         self._discover_host = host
-        self._extra_hosts = frozenset(extra_hosts)
+        self._extra_hosts = tuple(dict.fromkeys(extra_hosts))
         self._expected_did = expected_did
         self._punch = loop.create_future()
         search = encode_packet(MsgType.LAN_SEARCH)
@@ -518,8 +521,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
             return
         if msg != MsgType.PUNCH_PKT:
             return
-        punched = addr in self._punched
-        if not punched and not self._searched(addr[0]):
+        lan = self._answers_search(addr)
+        if not lan and addr not in self._punched:
             if self._throttle.should_log(("other-host", addr[0])):
                 _LOGGER.debug(
                     "ignoring a PUNCH_PKT from %s (searching %s)",
@@ -542,16 +545,20 @@ class PPPPTransport(asyncio.DatagramProtocol):
                 "ignoring discovery reply from another station (%s)", Identifier(str(did))
             )
             return
-        self._path = ConnectPath.RENDEZVOUS if punched else ConnectPath.LAN
+        self._path = ConnectPath.LAN if lan else ConnectPath.RENDEZVOUS
         self._punch.set_result((did, payload, addr))
 
-    def _searched(self, host: str) -> bool:
-        """Whether discovery searched ``host``: a broadcast searches every host."""
-        return (
-            not self._discover_host
-            or self._discover_host in (BROADCAST, host)
-            or host in self._extra_hosts
-        )
+    def _answers_search(self, addr: tuple[str, int]) -> bool:
+        """Whether a ``PUNCH_PKT`` from ``addr`` answers the LAN search: its host was
+        searched by unicast (punched or not), or, during a broadcast, it is a LAN
+        address the client did not punch. A broadcast reaches only this host's own
+        networks, so a public source is no reply to it."""
+        host = addr[0]
+        if host in self._extra_hosts:
+            return True
+        if self._discover_host and self._discover_host != BROADCAST:
+            return host == self._discover_host
+        return is_lan_address(host) and addr not in self._punched
 
     def _on_punch_to(self, payload: bytes, source: str) -> None:
         """Punch the address a rendezvous server's ``PUNCH_TO`` names, as the eufy app

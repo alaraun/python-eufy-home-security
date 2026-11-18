@@ -1035,6 +1035,56 @@ async def test_which_punch_to_entries_are_punched(body: bytes, punches: bool) ->
         assert len(punched) == transport_module.PUNCH_BURST
 
 
+LAN_SOURCE = ("192.0.2.60", 4000)
+PUBLIC_SOURCE = ("100.64.0.60", 4000)
+"""Not a LAN address (``is_private`` is False for it)."""
+
+
+@pytest.mark.parametrize(
+    ("searched", "extra", "source", "punched", "path"),
+    [
+        # A broadcast reaches only this host's networks: a LAN address answers it.
+        (None, (), LAN_SOURCE, None, ConnectPath.LAN),
+        (None, (), LAN_SOURCE, (LAN_SOURCE[0], 4001), ConnectPath.LAN),  # another port
+        (None, (), PUBLIC_SOURCE, None, None),
+        (None, (), ("127.0.0.1", 4000), None, None),
+        (None, (), LAN_SOURCE, LAN_SOURCE, ConnectPath.RENDEZVOUS),
+        (None, (), PUBLIC_SOURCE, PUBLIC_SOURCE, ConnectPath.RENDEZVOUS),
+        # A host searched by unicast answers the search, punched or not.
+        (LAN_SOURCE[0], (), LAN_SOURCE, None, ConnectPath.LAN),
+        (LAN_SOURCE[0], (), LAN_SOURCE, LAN_SOURCE, ConnectPath.LAN),
+        (PUBLIC_SOURCE[0], (), PUBLIC_SOURCE, None, ConnectPath.LAN),
+        (None, (LAN_SOURCE[0],), LAN_SOURCE, LAN_SOURCE, ConnectPath.LAN),
+        (SEARCHED, (LAN_SOURCE[0],), LAN_SOURCE, None, ConnectPath.LAN),
+        # Any other source counts only once punched, at that port.
+        (SEARCHED, (), LAN_SOURCE, None, None),
+        (SEARCHED, (), LAN_SOURCE, (LAN_SOURCE[0], 4001), None),
+        (SEARCHED, (), LAN_SOURCE, LAN_SOURCE, ConnectPath.RENDEZVOUS),
+        (SEARCHED, (), PUBLIC_SOURCE, PUBLIC_SOURCE, ConnectPath.RENDEZVOUS),
+    ],
+)
+async def test_which_station_punch_is_taken_and_how_it_is_classified(
+    searched: str | None,
+    extra: tuple[str, ...],
+    source: tuple[str, int],
+    punched: tuple[str, int] | None,
+    path: ConnectPath | None,
+) -> None:
+    transport = make_transport()
+    _discovering(transport, servers=frozenset({"192.0.2.1"}))
+    transport._discover_host = searched
+    transport._extra_hosts = extra
+    if punched is not None:
+        transport.datagram_received(
+            encode_packet(MsgType.PUNCH_TO, encode_sockaddr(*punched)), ("192.0.2.1", 32100)
+        )
+    did = Did.parse(SYNTHETIC.did)
+    transport.datagram_received(encode_packet(MsgType.PUNCH_PKT, did.to_struct()), source)
+    assert transport._punch is not None
+    assert transport._punch.done() is (path is not None)
+    assert transport.path is path
+
+
 async def test_a_punch_to_after_the_peer_is_pinned_is_ignored() -> None:
     transport = make_transport()
     punched = _discovering(transport, servers=frozenset({"192.0.2.1"}))

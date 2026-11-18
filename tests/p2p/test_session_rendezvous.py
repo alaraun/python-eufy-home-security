@@ -231,33 +231,46 @@ async def test_a_short_lived_session_connects_the_way_the_station_was_reached(
 
 
 @pytest.mark.parametrize(
-    ("path", "peer", "learned"),
+    ("peer", "searched", "learned"),
     [
-        (ConnectPath.LAN, "192.0.2.50", True),
-        (ConnectPath.LAN, "100.64.0.50", True),
-        (ConnectPath.RENDEZVOUS, "192.0.2.50", True),
-        (ConnectPath.RENDEZVOUS, "100.64.0.50", False),
-        (ConnectPath.RENDEZVOUS, "not-an-address", False),
+        ("192.0.2.50", (), True),
+        ("100.64.0.50", (), False),
+        ("100.64.0.50", ("100.64.0.50",), True),
+        ("127.0.0.1", (), False),
+        ("not-an-address", (), False),
     ],
 )
 def test_which_peer_address_is_kept_as_the_station_host(
-    path: ConnectPath, peer: str, learned: bool
+    peer: str, searched: tuple[str, ...], learned: bool
 ) -> None:
-    """A station reached through the servers at a public address is not searched there."""
-    assert session_module._learns_host(path, peer) is learned
+    """Only a LAN address, or one discovery already searches by unicast, is searched
+    next: a station punching from a public address is not looked for there."""
+    assert session_module._learns_host(peer, searched) is learned
 
 
-@pytest.mark.parametrize("learns", [True, False])
+@pytest.mark.parametrize(
+    ("searched", "extra", "learned"),
+    [
+        ("127.0.0.1", (), "127.0.0.1"),
+        (None, ("127.0.0.1",), "127.0.0.1"),
+        (None, (), None),
+    ],
+)
 async def test_the_link_address_is_searched_next_only_when_it_may_be(
-    station: FakeStation, monkeypatch: pytest.MonkeyPatch, learns: bool
+    station: FakeStation,
+    monkeypatch: pytest.MonkeyPatch,
+    searched: str | None,
+    extra: tuple[str, ...],
+    learned: str | None,
 ) -> None:
+    """The station answers from loopback, no LAN address: it is kept as the host only
+    when the session searches it by unicast (configured or an extra host)."""
     attempts = Attempts(monkeypatch)
     attempts.reach = "127.0.0.1"
-    monkeypatch.setattr(session_module, "_learns_host", lambda _path, _peer: learns)
-    session = _session(station, None)
-    session._host = session._search_host = None
+    session = _session(station, None, extra_hosts=extra)
+    session._host = session._search_host = searched
     try:
         await session.async_connect()
     finally:
         await session.async_close()
-    assert session.host == ("127.0.0.1" if learns else None)
+    assert session.host == learned
