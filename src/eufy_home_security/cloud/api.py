@@ -2044,8 +2044,9 @@ class EufyCloudApi:
         another client took over, or any other failure propagates at once.
 
         Without ``login`` nothing logs in: no usable session, or one the cloud answers
-        as expired, raises :class:`NoCachedSessionError` (never an
-        :class:`AuthenticationError`), the session left for the next ordinary call.
+        as expired, raises :class:`NoCachedSessionError` (not an
+        :class:`AuthenticationError`), the session left for the next ordinary call; a
+        credential rejection still propagates as above.
         """
         identity = await self._ensure_session(region, login=login)
         # The re-key runs inside the try: its exchange's answers take the same mapping.
@@ -2377,9 +2378,12 @@ class EufyCloudApi:
         as every signed call: :class:`CloudApiError` when the cloud refuses the accept;
         :class:`SessionReplacedError` when another client's login ended the session
         (latched and persisted, so the client then reports a replaced session);
-        :class:`RateLimitedError` during a hold-off; :class:`CommunicationError` on a
-        transport failure. Without ``login`` nothing logs in (see :meth:`_with_session`)
-        and a region without a usable session raises :class:`NoCachedSessionError`.
+        :class:`RateLimitedError` when the cloud throttles or a hold-off runs
+        (:class:`LoginLimitedError` is one); :class:`AuthenticationError` when the cloud
+        answers with a credential-rejection code; :class:`ProtocolError` on an answer it
+        cannot decode; :class:`CommunicationError` on a transport failure. Without
+        ``login`` nothing logs in (see :meth:`_with_session`) and a region without a usable
+        session raises :class:`NoCachedSessionError`.
         """
         if invite.kind == "device" and invite.category in const.INVITE_CATEGORIES_OTHER_SDK:
             raise UnsupportedError(f"a {invite.category} invitation is accepted in the eufy app")

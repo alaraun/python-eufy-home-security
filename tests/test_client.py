@@ -23,7 +23,7 @@ from eufy_home_security._logging import LogThrottle, redact_serial
 from eufy_home_security.client import EufySecurity
 from eufy_home_security.cloud import crypto
 from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession, _SessionExpiredError
-from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY
+from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY, CloudCode
 from eufy_home_security.cloud.models import CloudDevice, CloudInvite
 from eufy_home_security.cloud.status import LoginNeed
 from eufy_home_security.devices.model_settings import (
@@ -2739,15 +2739,17 @@ async def test_accepting_on_a_lapsed_session_does_not_log_in() -> None:
     assert cloud.invite_accepts == []
 
 
-async def test_a_replaced_session_on_an_accept_is_latched() -> None:
-    """The next setup sees the replaced session without another request."""
+@pytest.mark.parametrize("status", [401, 200], ids=["http-401", "body-code"])
+async def test_a_replaced_session_on_an_accept_is_latched(status: int) -> None:
+    """The next setup sees the replaced session without another request, for both
+    answers that report a takeover."""
     entry = {"id": 3, "device_sn": SYNTHETIC.camera_sn}
     cloud = FakeCloud(device_invites=[entry])
     store = warm_store(email=SYNTHETIC.email, cloud=cloud)
     eufy = build_eufy_security(email=SYNTHETIC.email, store=store, cloud=cloud)
     (pending,) = await eufy.async_pending_invites()
     cloud.calls.clear()
-    cloud.call_errors = [SessionReplacedError()]
+    cloud.call_errors = [FakeCloud.refusal(status, CloudCode.SESSION_REPLACED)]
     with pytest.raises(SessionReplacedError):
         await eufy.async_accept_invite(pending)
     assert cloud.invite_accepts == []

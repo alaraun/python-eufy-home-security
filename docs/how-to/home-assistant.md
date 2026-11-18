@@ -429,8 +429,10 @@ tell the user to accept that one in the eufy app.
 The call's other errors are those of every login-free cloud call: `NoCachedSessionError`
 (no usable session for that region), `SessionReplacedError` (another client's login ended
 the session; latched and persisted as on every call, so the next setup sees
-`login_need` `REPLACED`), `RateLimitedError`, `CommunicationError`, and `CloudApiError`
-when the cloud refuses the accept; see the error table.
+`login_need` `REPLACED`), `RateLimitedError` (a throttle or hold-off; `LoginLimitedError`
+is one), `AuthenticationError` (a credential-rejection answer), `ProtocolError` (an
+answer that does not decode), `CommunicationError`, and `CloudApiError` when the cloud
+refuses the accept; see the error table.
 The shared devices appear from the next `async_discover(refresh=True)`.
 
 ### Firmware updates
