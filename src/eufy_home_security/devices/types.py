@@ -49,9 +49,9 @@ class DeviceModel:
     ``model`` is the serial-number prefix (``"T8030"``). ``name`` is the prefix's base
     name (``"eufyCam C31"``) by the steps of :func:`product_name`, without a serial; the
     prefix itself where no step names it. A single unit can carry another name
-    (:func:`product_name`). ``cloud_device_type`` is
-    the ``device_type`` the cloud device list reports, recorded only where a source
-    states it. ``categories`` are the eufy app's product categories of the model,
+    (:func:`product_name`). ``cloud_device_type`` is the ``device_type`` the cloud
+    device list reports, recorded only where a source states it. ``categories`` are
+    the eufy app's product categories of the model,
     nearest first (``("VideoDoorbell", "Camera")``): the app shows a camera card and a
     live view for every model under :data:`CAMERA_CATEGORY`, a video doorbell and a video lock
     included. Empty where the app files the model under no category.
