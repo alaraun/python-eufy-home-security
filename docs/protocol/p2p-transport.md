@@ -155,8 +155,9 @@ client        → station:R           PUNCH_PKT echo, then P2P_RDY / DRW / ALIVE
   client's punch nothing arrives (the station's own punch toward the client is dropped
   as a new flow). The public-address entry needs hairpin NAT inside the house.
 - Off the LAN, the public-address entry is the path (UDP hole punching through both
-  NATs): **[declared: app], not verified off-LAN**. It fails behind symmetric NAT;
-  relay is not implemented.
+  NATs): the station answered from its public address 50 ms after the client's punch
+  **[verified: T8134, a battery camera at another site, waking it]**. It fails behind
+  symmetric NAT; relay is not implemented.
 
 When the library runs it (`StationSession`, `EufySecurity` wires every station with
 rendezvous servers in the cloud's `app_conn`):

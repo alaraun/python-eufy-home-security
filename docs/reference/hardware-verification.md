@@ -215,6 +215,15 @@ NAT. No firewall rule for the camera.
 | PUNCH_TO without the client's punch | ✗ | Probe client: answering the PUNCH_TO entries with nothing (LAN discovery only), 12 rounds brought no packet from the camera: its own punch toward the client is dropped by the gateway. A hairpin through the shared public address carried nothing either (two sockets of the client host, 8 datagrams each way). |
 | Unicast LAN_SEARCH from another subnet | – | With a temporary gateway rule admitting the camera's UDP, a unicast `LAN_SEARCH` to the camera's LAN address was answered from its session port; without the rule, the answer is dropped as a new flow. The address is the one the camera reports in parameter 1176, which the library searches when nothing else names one. |
 
+## T8134 (SoloCam C20) battery camera, firmware 3.3.6.0, at another site
+
+The camera behind its own site's NAT; the client at another site, behind double NAT.
+No port forwarding at either end.
+
+| area | mark | evidence |
+|---|---|---|
+| Rendezvous connect off the LAN (wake included) | ✓ | Library, read-only `status`: the first attempt broadcast LAN discovery and sent HELLO + P2P_REQ_DSK to the 3 servers of `app_conn`; a PUNCH_TO for the camera's public address arrived 2.0 s in, the client punched it, the camera's `PUNCH_PKT` came from that address 50 ms later (path `rendezvous`), and the session was up 2.4 s after the attempt started (6.5 s for the whole command, cloud restore included). Battery 93 % read back. |
+
 ## Reported by users
 
 Results a user reported from their own station, not reproduced here. They are listed
