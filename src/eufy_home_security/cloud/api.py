@@ -2371,17 +2371,18 @@ class EufyCloudApi:
         cloud answers success; the shared devices are listed from the next device-list
         refresh (``async_get_devices(refresh=True)``).
 
-        Raises :class:`InviteCodeError` (no code, or a wrong one) and
-        :class:`UnsupportedError` (an invitation of a category the app accepts elsewhere,
-        or one without the ids its accept needs) before anything is sent;
-        :class:`CloudApiError` when the cloud refuses. Without ``login`` nothing logs in
-        (see :meth:`_with_session`).
+        Raises, before anything is sent: :class:`InviteCodeError` (no code, or a wrong
+        one) and :class:`UnsupportedError` (an invitation of a category the app accepts
+        elsewhere, or one without the ids its accept needs). Then the call's own errors,
+        as every signed call: :class:`CloudApiError` when the cloud refuses the accept;
+        :class:`SessionReplacedError` when another client's login ended the session
+        (latched and persisted, so the client then reports a replaced session);
+        :class:`RateLimitedError` during a hold-off; :class:`CommunicationError` on a
+        transport failure. Without ``login`` nothing logs in (see :meth:`_with_session`)
+        and a region without a usable session raises :class:`NoCachedSessionError`.
         """
         if invite.kind == "device" and invite.category in const.INVITE_CATEGORIES_OTHER_SDK:
-            raise UnsupportedError(
-                f"a {invite.category} invitation is accepted in the eufy app",
-                device_sn=invite.device_sn,
-            )
+            raise UnsupportedError(f"a {invite.category} invitation is accepted in the eufy app")
         target = invite.house_id if invite.kind == "house" else invite.device_sn
         if invite.invite_id is None or not target:
             raise UnsupportedError(f"the {invite.kind} invitation carries no id to accept")

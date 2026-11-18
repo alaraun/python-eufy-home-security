@@ -526,8 +526,11 @@ class EufySecurity:
         its inviter shared when it :attr:`~CloudInvite.needs_code` (see
         :meth:`EufyCloudApi.async_accept_invite` for the errors).
 
-        Login-free: the invitation's region must hold a session. The shared devices
-        appear from the next device-list refresh: ``async_discover(refresh=True)``.
+        Login-free: the invitation's region must hold a session, else
+        :class:`NoCachedSessionError`. A :class:`SessionReplacedError` is latched as on every
+        call (:attr:`session_replaced`, :meth:`async_cloud_status` ``login_need``
+        ``REPLACED``). The shared devices appear from the next device-list refresh:
+        ``async_discover(refresh=True)``.
         """
         await self._ensure_cache_loaded()
         await self.cloud.async_accept_invite(invite, code=code, login=False)

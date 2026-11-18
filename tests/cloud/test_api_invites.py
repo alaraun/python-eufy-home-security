@@ -266,8 +266,9 @@ async def test_an_appliance_invitation_is_left_to_the_app(
     (device,) = await _listed(
         fake_mega, cache, houses=[], devices=[_device_entry(category=category)]
     )
-    with pytest.raises(UnsupportedError):
+    with pytest.raises(UnsupportedError) as caught:
         await _accept(fake_mega, cache, device)
+    assert caught.value.device_sn is None  # the message names no serial
     assert _accepts(fake_mega) == []
 
 

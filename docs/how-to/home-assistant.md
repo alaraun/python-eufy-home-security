@@ -426,6 +426,11 @@ it; a missing or wrong code raises `InviteCodeError` (`missing` tells which) bef
 anything is sent, so the repair step can ask again. An invitation of eufy's home
 appliance categories raises `UnsupportedError` (the app accepts those on another path):
 tell the user to accept that one in the eufy app.
+The call's other errors are those of every login-free cloud call: `NoCachedSessionError`
+(no usable session for that region), `SessionReplacedError` (another client's login ended
+the session; latched and persisted as on every call, so the next setup sees
+`login_need` `REPLACED`), `RateLimitedError`, `CommunicationError`, and `CloudApiError`
+when the cloud refuses the accept; see the error table.
 The shared devices appear from the next `async_discover(refresh=True)`.
 
 ### Firmware updates
