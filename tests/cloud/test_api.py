@@ -2292,6 +2292,104 @@ async def test_a_waiter_cancelled_with_the_fetching_caller_ends_cancelled(
     assert len(fetches.sent) == 1
 
 
+async def test_a_waiter_cancelled_after_the_fetch_was_dropped_ends_cancelled(
+    monkeypatch: pytest.MonkeyPatch, cache: SessionCache
+) -> None:
+    """Cancelled after the caller running the fetch has dropped it but before it
+    resumes, a waiting caller ends cancelled instead of starting a fetch of its own."""
+    fetches = DskFetches(monkeypatch)
+    fetches.release[SYNTHETIC.station_sn] = asyncio.Event()
+    async with aiohttp.ClientSession() as session:
+        api = _api(session, cache)
+        first = asyncio.create_task(api.async_get_dsk_key(SYNTHETIC.station_sn))
+        await fetches.started.wait()
+        waiter = asyncio.create_task(api.async_get_dsk_key(SYNTHETIC.station_sn))
+        await asyncio.sleep(0)
+        first.cancel()
+        await asyncio.sleep(0)
+        assert first.done()
+        assert not waiter.done()
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(waiter, 1)
+    assert len(fetches.sent) == 1
+
+
+async def test_a_shared_dsk_failure_after_a_waiter_left_reaches_no_loop_handler(
+    monkeypatch: pytest.MonkeyPatch, cache: SessionCache
+) -> None:
+    """A waiter cancelled before the shared fetch fails leaves nothing for the event
+    loop's exception handler (Home Assistant logs those as errors)."""
+    fetches = DskFetches(monkeypatch)
+    gate = fetches.release[SYNTHETIC.station_sn] = asyncio.Event()
+    fetches.error = CommunicationError("timed out")
+    loop = asyncio.get_running_loop()
+    reported: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: reported.append(context))
+    try:
+        async with aiohttp.ClientSession() as session:
+            api = _api(session, cache)
+            first = asyncio.create_task(api.async_get_dsk_key(SYNTHETIC.station_sn))
+            await fetches.started.wait()
+            waiter = asyncio.create_task(api.async_get_dsk_key(SYNTHETIC.station_sn))
+            await asyncio.sleep(0)
+            waiter.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await waiter
+            gate.set()
+            with pytest.raises(CommunicationError):
+                await first
+            for _ in range(3):
+                await asyncio.sleep(0)
+            gc.collect()
+    finally:
+        loop.set_exception_handler(None)
+    assert reported == []
+
+
+async def test_a_fetched_dsk_is_shared_even_when_its_caller_is_cancelled_saving_it(
+    monkeypatch: pytest.MonkeyPatch, cache: SessionCache
+) -> None:
+    """The key is handed to waiting callers once it is cached, before the save: a
+    caller cancelled during the save costs no second fetch."""
+    fetches = DskFetches(monkeypatch)
+    gate = fetches.release[SYNTHETIC.station_sn] = asyncio.Event()
+    saving = asyncio.Event()
+    hold = asyncio.Event()
+
+    async def slow_save() -> None:
+        saving.set()
+        await hold.wait()
+
+    monkeypatch.setattr(cache, "async_save", slow_save)
+    async with aiohttp.ClientSession() as session:
+        api = _api(session, cache)
+        first = asyncio.create_task(api.async_get_dsk_key(SYNTHETIC.station_sn))
+        await fetches.started.wait()
+        waiter = asyncio.create_task(api.async_get_dsk_key(SYNTHETIC.station_sn, refresh=True))
+        await asyncio.sleep(0)
+        gate.set()
+        await saving.wait()
+        first.cancel()
+        assert await asyncio.wait_for(waiter, 1) == "key1"
+        with pytest.raises(asyncio.CancelledError):
+            await first
+    assert len(fetches.sent) == 1
+
+
+async def test_a_fetched_dsk_is_saved_to_the_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    DskFetches(monkeypatch)
+    store = MemoryStore()
+    async with aiohttp.ClientSession() as session:
+        api = _api(session, SessionCache(store, SYNTHETIC.email))
+        await api.async_get_dsk_key(SYNTHETIC.station_sn)
+    reloaded = SessionCache(store, SYNTHETIC.email)
+    await reloaded.async_load()
+    saved = reloaded.dsk_key(SYNTHETIC.station_sn)
+    assert saved is not None
+    assert saved[0] == "key1"
+
+
 async def test_a_failed_dsk_fetch_nobody_shared_logs_nothing(
     monkeypatch: pytest.MonkeyPatch, cache: SessionCache, caplog: pytest.LogCaptureFixture
 ) -> None:

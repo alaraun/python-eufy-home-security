@@ -2543,20 +2543,21 @@ class EufyCloudApi:
         back another key.
 
         One fetch per station runs at a time, and a caller arriving during it shares its
-        key or its error. A caller fetches again after one it waited for only when the
-        caller running it was cancelled, or, with ``refresh``, when it brought back the
-        rejected key.
+        key (as soon as it is cached, before it is saved) or its error. A caller fetches
+        again after one it waited for only when the caller running it was cancelled
+        before the key was cached, or, with ``refresh``, when it brought back the
+        rejected key. A caller cancelled while it waits leaves the fetch running.
         """
         known = self._cache.dsk_key(station_sn)
         rejected = known[0] if refresh and known else None
         while True:
             if (pending := self._dsk_fetches.get(station_sn)) is not None:
-                try:
-                    key = await asyncio.shield(pending)
-                except asyncio.CancelledError:
-                    if pending.cancelled() and not _cancelling():
-                        continue  # the caller running it was cancelled: fetch again
-                    raise
+                # asyncio.wait neither cancels the shared future nor hands its error to
+                # the loop's exception handler when this caller is cancelled.
+                await asyncio.wait((pending,))
+                if pending.cancelled():
+                    continue  # the caller running it was cancelled: fetch again
+                key = pending.result()
                 if key != rejected:
                     return key
                 continue
@@ -2578,18 +2579,18 @@ class EufyCloudApi:
                 Secret(key),
             )
             self._cache.set_dsk_key(station_sn, key, expiration)
-            await self._cache.async_save()
         except Exception as err:
             future.set_exception(err)
             future.exception()  # marks it retrieved: a fetch nobody shared logs nothing
             raise
         else:
-            future.set_result(key)
-            return key
+            future.set_result(key)  # shared once cached, before the save can be cancelled
         finally:
             if not future.done():
                 future.cancel()  # cancelled: a caller waiting for it fetches again
             del self._dsk_fetches[station_sn]
+        await self._cache.async_save()
+        return key
 
     def cached_dsk_key(self, station_sn: str, *, margin: float = DSK_REFRESH_MARGIN) -> str | None:
         """The station's cached DSK while at least ``margin`` seconds of it remain,
@@ -3894,12 +3895,6 @@ def _message(parsed: Mapping[str, Any]) -> str:
 
 def _ms(started: float) -> float:
     return (time.monotonic() - started) * 1000
-
-
-def _cancelling() -> bool:
-    """Whether the running task has been asked to cancel."""
-    task = asyncio.current_task()
-    return task is not None and task.cancelling() > 0
 
 
 def _epoch(value: object) -> str:
