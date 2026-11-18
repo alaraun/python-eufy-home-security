@@ -6,7 +6,7 @@ import importlib.util
 import json
 import subprocess
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -214,18 +214,27 @@ def test_the_base_serial_avoids_every_rules_characters(gen: ModuleType) -> None:
     assert all(base[pos] == "Z" for pos in (5, 6, 7, 8, 12, 13, 14, 15))
 
 
-def _fake_tm(answers: Mapping[str, Callable[[str], str]], dates: Mapping[str, str]) -> Any:
-    """A harness whose handler of ``code`` answers ``answers[code](serial)`` (default: none)."""
+def _fake_tm(
+    answers: Mapping[str, Callable[[str], str]],
+    dates: Mapping[str, str],
+    or_cloud: Collection[str] = (),
+) -> Any:
+    """A harness whose handler of ``code`` answers ``answers[code](serial)`` (default: none);
+    a handler in ``or_cloud`` answers the probe device's ``device_model`` instead of none."""
 
     def nothing(serial: str) -> str:
         return ""
 
     def run_driver(handler: Path, requests: Sequence[Mapping[str, Any]]) -> list[Any]:
-        answer = answers.get(handler.parent.name, nothing)
-        return [
-            {"code": 0, "data": {"p2p": {"device_model": answer(r["device"]["device_sn"])}}}
-            for r in requests
-        ]
+        code = handler.parent.name
+        answer = answers.get(code, nothing)
+        replies = []
+        for r in requests:
+            value = answer(r["device"]["device_sn"])
+            if code in or_cloud:
+                value = value or r["device"].get("device_model")
+            replies.append({"code": 0, "data": {"p2p": {"device_model": value}}})
+        return replies
 
     return SimpleNamespace(
         run_driver=run_driver,
@@ -285,6 +294,34 @@ def test_a_handler_naming_a_unit_no_table_knows_is_reported(
 
     _rows, problems = gen.generate(_fake_tm({"T9003": handler}, {}), cache)
     assert problems == ["T9003: serial tail 'ZZZZZZZZQZZ': 'Thing 3 Q' != 'Thing 3'"]
+
+
+def test_a_handler_answering_the_cloud_records_code_on_a_miss_passes(
+    gen: ModuleType, tmp_path: Path
+) -> None:
+    """The ``table || device.device_model`` shape: the probe device carries the code."""
+    js = _bundle(_table_js())
+    cache = _cache(tmp_path, {"T9002": (js, True), "T9050": (js, True)})
+    row = gen.row_of(gen.name_table(js), "T9002", "T9002")
+    answers = {"T9002": row.name_for}
+    _rows, problems = gen.generate(_fake_tm(answers, {}, or_cloud={"T9002", "T9050"}), cache)
+    assert problems == []
+
+
+@pytest.mark.parametrize(
+    ("code", "answer", "first"),
+    [
+        ("T9002", "T9002", "T9002: serial tail 'ZZZZZZZZZZZ': 'T9002' != 'Thing 2'"),
+        ("T9050", "Other", "T9050: serial tail 'ZZZZZZZZZZZ': 'Other' != ''"),
+    ],
+)
+def test_a_handler_answering_otherwise_than_its_table_or_the_code_is_reported(
+    gen: ModuleType, tmp_path: Path, code: str, answer: str, first: str
+) -> None:
+    """The code is accepted only on a miss; any other text never."""
+    cache = _cache(tmp_path, {code: (_bundle(_table_js()), True)})
+    _rows, problems = gen.generate(_fake_tm({code: lambda serial: answer}, {}), cache)
+    assert problems[0] == first
 
 
 def test_only_a_product_declaring_the_property_is_checked(gen: ModuleType, tmp_path: Path) -> None:
@@ -386,6 +423,7 @@ def test_check_compares_and_a_run_writes(
     assert gen.main(argv) == 0
     assert out.read_text(encoding="utf-8") == gen.render(rows)
     assert gen.main([*argv, "--check"]) == 0
+
 
 
 @pytest.mark.needs_node

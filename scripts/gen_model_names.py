@@ -1,27 +1,38 @@
-"""Generate ``devices/_model_names_data.py``: the product names the eufy app shows.
+"""Generate ``devices/_model_names_data.py``: the product names, per product and unit.
 
 Every product handler of the eufy app carries one name table (a JS object literal):
 product prefix → display name, plus ``specialRules`` that name single units by characters
-of their serial. The handler answers the thing property ``device_model`` from it: the
-first rule for the serial's 5-character prefix whose characters all match, else the
-prefix's entry when it is not blank, else nothing. Six-character keys are never looked
-up. Tables differ between handler builds.
+of their serial. The table's lookup: the first rule for the serial's 5-character prefix
+whose characters all match, else the prefix's entry when it is not blank, else nothing.
+Six-character keys are never looked up. Tables differ between handler builds.
+
+A handler answers the thing property ``device_model`` in one of three shapes: the
+lookup's result (``""`` on a miss); the lookup's result, else the cloud record's
+``device_model`` field (the product code); or that field alone, without the table. A
+product whose thing description declares no ``device_model`` has no such answer, so the
+app shows no name from the table for it.
 
 Per product code (every cached product, and every prefix any table names) the module
-records the base name and the serial rules of one table:
+records the base name and the serial rules of one table, in three steps:
 
 1. the product's own handler table, when it names the product's prefix (base or rule):
-   what the app shows for a unit of that product;
-2. else the newest handler table (by the handler's publication date, then code) that
-   names the prefix: the app's name table, used where the product's own handler has none;
-3. else no row (the catalog keeps the name read from the app's model constant).
+   the name the eufy app shows for a unit of that product;
+2. else, as the library's choice, the newest handler table (by the handler's publication
+   date, then code) that names the prefix: the app shows no name from a table there;
+3. else no row: the library names the product from the app's model constant.
+
+Products that declare no ``device_model`` are named by the same steps. The library never
+uses the cloud record's product code as the name: where no table names a unit it keeps
+its own fallback (step 2, else 3).
 
 The tables are parsed as data (no vendor code runs for that). The parse is then checked
 against the handlers themselves (``scripts/thing_models.py`` harness, Node): for every
 product whose thing description declares ``device_model``, its handler answers a base
-serial and one serial per rule of its prefix, and each answer must equal what the
-parsed table gives. Runs on a maintainer host only; nothing at runtime executes vendor
-code. The table is a Python module, so reading it is an import.
+serial, the base serial with each single character changed and one serial per known rule
+of its prefix, the probe device carrying the product code as its ``device_model``; each
+answer must equal what the parsed table gives, or on a miss be ``""`` or that code. Runs
+on a maintainer host only; nothing at runtime executes vendor code. The table is a Python
+module, so reading it is an import.
 
     gen_model_names.py [--cache DIR] [--out FILE] [--check]
 """
@@ -350,8 +361,10 @@ def check_handler(
     known_rules: Iterable[Rule] = (),
 ) -> list[str]:
     """Where the handler of ``code`` answers ``device_model`` otherwise than its own
-    parsed table gives (one line per serial); empty when they agree. ``known_rules``
-    adds probe serials (rules other tables hold for the prefix)."""
+    parsed table gives (one line per serial); empty when they agree. The probe device
+    carries ``code`` as the cloud record's ``device_model``, which a handler may answer
+    where its table names nothing. ``known_rules`` adds probe serials (rules other tables
+    hold for the prefix)."""
     prefix = code[:PREFIX_LEN]
     row = row_of(table, prefix, code) if table is not None else None
     own_rules = row.rules if row is not None else ()
@@ -361,7 +374,7 @@ def check_handler(
             "kind": "get",
             "cmds": "",
             "props": [PROPERTY],
-            "device": {"device_sn": sn, "station_sn": sn, "params": []},
+            "device": {"device_sn": sn, "station_sn": sn, PROPERTY: code, "params": []},
         }
         for sn in serials
     ]
@@ -372,7 +385,7 @@ def check_handler(
         found = data.get("p2p") if isinstance(data, Mapping) else None
         answer = found.get(PROPERTY, "") if isinstance(found, Mapping) else None
         expected = row.name_for(serial) if row is not None else ""
-        if answer != expected:
+        if answer != expected and not (expected == "" and answer == code):
             problems.append(
                 f"{code}: serial tail {serial[PREFIX_LEN:]!r}: {answer!r} != {expected!r}"
             )
@@ -436,10 +449,12 @@ def render(rows: Mapping[str, Row]) -> str:
     """The module text: one line per product code, sorted."""
     lines = [
         '"""Generated by scripts/gen_model_names.py from the eufy app\'s product handlers; do',
-        "not edit. Per product code: the product name the app shows (None where its table",
-        "names only single units), the rules that name single units by their serial (each",
+        "not edit. Per product code: the base name of one handler table (None where it names",
+        "only single units), that table's rules that name single units by their serial (each",
         "``(position, text)`` pair must hold; the first rule that matches wins), and the",
-        'product code whose handler table gave them."""',
+        "product code whose handler table gave them: the product's own (the name the eufy app",
+        "shows) or, as the library's choice, the newest table naming the prefix (see the",
+        'generator)."""',
         "",
         "from typing import Final",
         "",

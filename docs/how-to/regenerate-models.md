@@ -92,11 +92,16 @@ uv run python scripts/gen_live_open.py           # rewrite the table
 uv run python scripts/gen_live_open.py --check   # compare, write nothing
 ```
 
-The product names (`devices/_model_names_data.py`: per product code the name the app
-shows and the serial rules that name single units, read by `DeviceModel.name` and
-`product_name`) come from the name table each product handler carries. The generator
-parses the tables, then checks the parse against every handler that declares
-`device_model` (Node), and writes nothing when one disagrees:
+The product names (`devices/_model_names_data.py`, read by `DeviceModel.name` and
+`product_name`) come from the name table each product handler carries: per product code
+a base name and the serial rules that name single units, in three steps. The product's
+own table where it names the prefix, as the eufy app shows it; else, as the library's
+choice, the newest table that names the prefix; else no row, and the library derives the
+name from the app's model constant. A product whose thing description declares no
+`device_model` is named the same way, though the app shows no such name for it. The
+generator parses the tables, then checks the parse against every handler that declares
+`device_model` (Node; a handler may answer the cloud record's product code where its
+table names nothing), and writes nothing when one disagrees:
 
 ```
 uv run python scripts/gen_model_names.py           # rewrite the table
