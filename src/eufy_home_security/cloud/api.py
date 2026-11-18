@@ -2538,8 +2538,9 @@ class EufyCloudApi:
         :class:`~..p2p.session.StationSession`): the app fetches one per client and it
         lasts about an hour. The cache is used while at least ``margin`` seconds remain;
         after that a fresh key is fetched with an empty ``invalid_dsk``. ``refresh``
-        rejects the key cached when the call starts: unless another caller has replaced
-        it meanwhile, it fetches with that key as ``invalid_dsk`` so the server rotates it.
+        rejects the key cached when the call starts and fetches with it as
+        ``invalid_dsk`` so the server rotates it, unless a fetch already in flight brings
+        back another key.
 
         One fetch per station runs at a time, and a caller arriving during it shares its
         key or its error. A caller fetches again after one it waited for only when the
@@ -2559,11 +2560,7 @@ class EufyCloudApi:
                 if key != rejected:
                     return key
                 continue
-            if refresh:
-                cached = self._cache.dsk_key(station_sn)
-                if cached and cached[0] != rejected:
-                    return cached[0]
-            elif fresh := self.cached_dsk_key(station_sn, margin=margin):
+            if not refresh and (fresh := self.cached_dsk_key(station_sn, margin=margin)):
                 return fresh
             return await self._fetch_dsk_shared(station_sn, invalid_dsk=rejected or "")
 

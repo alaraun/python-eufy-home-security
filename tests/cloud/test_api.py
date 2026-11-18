@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
 import logging
 import time
@@ -2268,6 +2269,40 @@ async def test_a_cancelled_waiter_leaves_the_dsk_fetch_running(
         gate.set()
         assert await first == "key1"
         assert len(fetches.sent) == 1
+
+
+async def test_a_waiter_cancelled_with_the_fetching_caller_ends_cancelled(
+    monkeypatch: pytest.MonkeyPatch, cache: SessionCache
+) -> None:
+    """Cancelled in the same tick as the caller running the fetch, a waiting caller
+    ends cancelled instead of starting a fetch of its own."""
+    fetches = DskFetches(monkeypatch)
+    fetches.release[SYNTHETIC.station_sn] = asyncio.Event()
+    async with aiohttp.ClientSession() as session:
+        api = _api(session, cache)
+        first = asyncio.create_task(api.async_get_dsk_key(SYNTHETIC.station_sn))
+        await fetches.started.wait()
+        waiter = asyncio.create_task(api.async_get_dsk_key(SYNTHETIC.station_sn))
+        await asyncio.sleep(0)
+        first.cancel()
+        waiter.cancel()
+        for task in (first, waiter):
+            with pytest.raises(asyncio.CancelledError):
+                await task
+    assert len(fetches.sent) == 1
+
+
+async def test_a_failed_dsk_fetch_nobody_shared_logs_nothing(
+    monkeypatch: pytest.MonkeyPatch, cache: SessionCache, caplog: pytest.LogCaptureFixture
+) -> None:
+    fetches = DskFetches(monkeypatch)
+    fetches.error = CommunicationError("timed out")
+    async with aiohttp.ClientSession() as session:
+        api = _api(session, cache)
+        with pytest.raises(CommunicationError):
+            await api.async_get_dsk_key(SYNTHETIC.station_sn)
+    gc.collect()
+    assert not [record for record in caplog.records if record.name == "asyncio"]
 
 
 async def test_a_stale_dsk_is_replaced_without_naming_it_invalid(
