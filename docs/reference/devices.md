@@ -230,7 +230,7 @@ Support legend (models, capabilities and guard modes):
 | T9149 | T9149 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
 | T9150 | T9150 | other |  | declared | eufy app 6.1.10 model list (app product category: Scale) |
 
-Model names are the product names the eufy app shows; a model its name tables do not name keeps a name read from its app constant. The app names some units by their serial instead (`product_name`): the first rule of the unit's product that matches wins (serial characters count from 0).
+Model names come in three steps: the product's own name table where it names the prefix, as the eufy app shows it; else, as the library's choice, the newest name table that names the prefix; else the name derived from the app's model constant. A product whose thing description declares no `device_model` is named the same way, though the app shows no such name for it. Some units are named by their serial (`product_name`): the first rule of the unit's product that matches wins (serial characters count from 0).
 
 | product | serial | name |
 |---|---|---|

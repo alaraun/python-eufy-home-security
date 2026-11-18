@@ -3054,7 +3054,7 @@ station's serials, so the ids below never collide between accounts:
 | device `identifiers` | `{(DOMAIN, serial)}`: the station's serial, or the camera's or sensor's own serial |
 | device parent | `via_device_id` = the station's device, from `device_registry.async_get_device_by_identifier((DOMAIN, station.serial), entry.entry_id)`; register the station first. `DeviceInfo["via_device"]` is deprecated since 2026.8 |
 | device `manufacturer` | `"eufy"` |
-| device `model` | `CloudDevice.model_name`: the product name the eufy app shows for the unit (`"eufyCam 3"`; by product code, and by serial where the app names single units, `product_name`); `None` for a model neither the app's names nor the catalog know |
+| device `model` | `CloudDevice.model_name`: the unit's product name (`"eufyCam 3"`; by product code, and by serial where a name table names single units, `product_name`), in three steps: the product's own name table where it names the prefix, as the eufy app shows it; else, as the library's choice, the newest name table that names it; else the name derived from the app's model constant. A product whose thing description declares no `device_model` is named the same way, though the app shows no such name for it. `None` for a model none of these name |
 | device `model_id` | `CloudDevice.model_id`: the serial's 5-character prefix (`"T8160"`), set for uncatalogued models too |
 | device `serial_number`, `sw_version` | `CloudDevice.device_sn`, `CloudDevice.main_sw_version` |
 | entity `unique_id` | `entity_unique_id(serial, key)`: `key` is the setting's `Setting.key` for settings, or a fixed lower-case name for the rest (`"guard_mode"`, `"battery"`, `"camera"`) |

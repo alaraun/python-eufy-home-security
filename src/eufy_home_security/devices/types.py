@@ -3,8 +3,8 @@
 The hand-written entries below carry what was observed or looked up per model; every
 other product the eufy app names comes from :mod:`.app_models` (generated from the app,
 graded *declared*). A model's kind is its product category in the eufy app (see
-docs/how-to/add-a-device.md § The model). Names are the product names the eufy app
-shows (:mod:`._model_names_data`, generated from the app's product handlers).
+docs/how-to/add-a-device.md § The model). Names come from the name tables of the app's
+product handlers (:mod:`._model_names_data`, see :func:`product_name` for the rule).
 """
 
 from __future__ import annotations
@@ -46,10 +46,10 @@ _CAMERA_KINDS: Final = frozenset({DeviceKind.CAMERA, DeviceKind.DOORBELL})
 class DeviceModel:
     """One hardware model.
 
-    ``model`` is the serial-number prefix (``"T8030"``). ``name`` is the product name
-    the eufy app shows for the prefix (``"eufyCam C31"``); where the app's name tables
-    hold none, a name read from the app's model constant for it, else the prefix. A
-    single unit can carry another name (:func:`product_name`). ``cloud_device_type`` is
+    ``model`` is the serial-number prefix (``"T8030"``). ``name`` is the prefix's base
+    name (``"eufyCam C31"``) by the steps of :func:`product_name`, without a serial; the
+    prefix itself where no step names it. A single unit can carry another name
+    (:func:`product_name`). ``cloud_device_type`` is
     the ``device_type`` the cloud device list reports, recorded only where a source
     states it. ``categories`` are the eufy app's product categories of the model,
     nearest first (``("VideoDoorbell", "Camera")``): the app shows a camera card and a
@@ -105,8 +105,8 @@ _APP_CONSTANTS: Final = {row[0]: row[1] for row in APP_MODELS}
 
 
 def _model_name(prefix: str) -> str:
-    """The app's product name for ``prefix`` (:data:`MODEL_NAMES`), else the name its
-    app constant reads as, else the prefix."""
+    """The base name :data:`MODEL_NAMES` holds for ``prefix``, else the name its app
+    constant reads as, else the prefix."""
     entry = MODEL_NAMES.get(prefix)
     if entry is not None and entry[0] is not None:
         return entry[0]
@@ -313,12 +313,21 @@ def model_for_serial(serial: str) -> DeviceModel | None:
 
 
 def product_name(serial: str, product_code: str | None = None) -> str | None:
-    """The product name the eufy app shows for the unit ``serial`` (``"eufyCam C36"``).
+    """The product name for the unit ``serial`` (``"eufyCam C36"``), in three steps:
 
-    The names of ``product_code`` (the unit's product, when it shares the serial's
-    prefix) or else of the serial's prefix (:data:`MODEL_NAMES`) give the name of the
-    first serial rule that matches, else their base name; without either, the
-    catalogued model's :attr:`~DeviceModel.name`. ``None`` when neither names the prefix.
+    1. the product's own handler name table, where it names the prefix: the name the
+       eufy app shows for the unit;
+    2. else, as the library's choice, the newest handler table that names the prefix;
+    3. else the catalogued model's :attr:`~DeviceModel.name`, derived from the app's
+       model constant.
+
+    Steps 1 and 2 are the row of ``product_code`` (the unit's product, when it shares
+    the serial's prefix) or else of the serial's prefix (:data:`MODEL_NAMES`): the first
+    of its serial rules that matches, else its base name. Where no table names a unit,
+    the app shows nothing or the product code; the library keeps its own name (steps 2
+    and 3). A product whose thing description declares no ``device_model`` is named by
+    the same steps, though the app shows no such name for it. ``None`` when no step
+    names the prefix.
     """
     prefix = serial_prefix(serial)
     if prefix is None:

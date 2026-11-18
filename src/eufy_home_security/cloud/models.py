@@ -281,10 +281,11 @@ class CloudDevice:
 
     @property
     def model_name(self) -> str | None:
-        """The product name the eufy app shows for this unit (``"eufyCam 3"``), by its
-        product code and serial (:func:`~..devices.types.product_name`); HA's
-        ``DeviceInfo`` ``model``. ``None`` for a model neither the app's names nor the
-        catalog know."""
+        """This unit's product name (``"eufyCam 3"``), by its product code and serial
+        (:func:`~..devices.types.product_name`): the product's own name table, as the eufy
+        app shows it; else, as the library's choice, the newest table naming it; else the
+        name derived from the app's model constant. HA's ``DeviceInfo`` ``model``.
+        ``None`` for a model none of these name."""
         code = product_code_of(self.raw.get("device_new_pn"), self.device_sn)
         return product_name(self.device_sn, code)
 
