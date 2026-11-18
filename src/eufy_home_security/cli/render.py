@@ -170,8 +170,8 @@ def render_invites(invites: Sequence[CloudInvite], *, show_serials: bool) -> str
         if invite.kind == "house":
             shares = f'home "{invite.house_name or "(unnamed)"}"'
         else:
-            model = model_for_serial(invite.device_sn or "")
-            name = model.name if model else invite.product_code or "device"
+            name = product_name(invite.device_sn or "", invite.product_code)
+            name = name or invite.product_code or "device"
             shares = f"{name} {fmt_serial(invite.device_sn, show_serials)}"
         inviter = invite.inviter or "?"
         if not show_serials and "@" in inviter:

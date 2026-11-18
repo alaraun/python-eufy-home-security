@@ -342,6 +342,14 @@ def test_invites_name_what_each_shares_and_whether_it_needs_a_code() -> None:
             encrypted_data="sealed",
         ),
         CloudInvite(kind="device", region="us", invite_id=4, product_code="T9999"),
+        CloudInvite(kind="device", region="eu", invite_id=5, device_sn="T817LZZZZZZZZZZZ"),
+        CloudInvite(
+            kind="device",
+            region="eu",
+            invite_id=6,
+            device_sn="T8124ZZZZZZZZZZZ",
+            product_code="T8124R",
+        ),
     ]
     rows = render.render_invites(invites, show_serials=False).splitlines()
     assert rows[0].split() == ["ID", "SHARES", "FROM", "CODE", "REGION"]
@@ -353,6 +361,8 @@ def test_invites_name_what_each_shares_and_whether_it_needs_a_code() -> None:
     assert "eufyCam 3" in rows[5]
     assert rows[5].split()[-4:] == ["T8160***7890", "?", "needed", "us"]
     assert rows[6].split() == ["D4", "T9999", "?", "?", "-", "us"]
+    assert rows[7].split()[:3] == ["D5", "eufyCam", "C31"]  # the unit's product name
+    assert rows[8].split()[:4] == ["D6", "SoloCam", "S40", "T8124***ZZZZ"]  # by product code
     shown = render.render_invites(invites, show_serials=True)
     assert "kim@example.invalid" in shown
     assert SYNTHETIC.camera_sn in shown
