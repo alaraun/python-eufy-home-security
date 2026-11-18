@@ -538,8 +538,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
             return
         if msg != MsgType.PUNCH_PKT:
             return
-        lan = self._answers_search(addr)
-        if not lan and addr not in self._punched:
+        if not self._answers_search(addr) and addr not in self._punched:
             if self._throttle.should_log(("other-host", addr[0])):
                 _LOGGER.debug(
                     "ignoring a PUNCH_PKT from %s (searching %s)",
@@ -567,15 +566,15 @@ class PPPPTransport(asyncio.DatagramProtocol):
 
     def _answers_search(self, addr: tuple[str, int]) -> bool:
         """Whether a ``PUNCH_PKT`` from ``addr`` answers the LAN search: its host was
-        searched by unicast (punched or not), or, during a broadcast, it is a LAN
-        address the client did not punch. A broadcast reaches only this host's own
-        networks, so a public source is no reply to it."""
+        searched by unicast, or, during a broadcast, it is a LAN address. A broadcast
+        reaches only this host's own networks, so a public source is no reply to it.
+        A punched address is taken apart from this (see ``_on_discovery_packet``)."""
         host = addr[0]
         if host in self._extra_hosts:
             return True
         if self._discover_host and self._discover_host != BROADCAST:
             return host == self._discover_host
-        return is_lan_address(host) and addr not in self._punched
+        return is_lan_address(host)
 
     def _on_punch_to(self, payload: bytes, source: str) -> None:
         """Punch the address a rendezvous server's ``PUNCH_TO`` names, as the eufy app
