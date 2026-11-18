@@ -458,8 +458,41 @@ async def test_invites_lists_then_accepts_one_asking_for_its_code(
     assert await run(["invites", "accept", "H7"], tmp_path, prompt=answer) == 0
     assert StubCloud.accepted[2:] == [(home, None)]
     assert len(asked) == 1  # a home invitation without a code asks for none
-    with pytest.raises(UsageError, match="no pending invitation D8"):
+    with pytest.raises(UsageError, match="no single pending invitation D8"):
         await run(["invites", "accept", "D8"], tmp_path)
+    assert await run(["invites", "accept", "H7", "--code", "1"], tmp_path) == 0
+    assert "needs no code; --code ignored" in capsys.readouterr().err
+    assert StubCloud.accepted[3:] == [(home, None)]
+
+
+async def test_invites_name_a_region_when_two_list_the_same_id(
+    fake: FakeStation, tmp_path: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    eu, us = (
+        CloudInvite(kind="device", region=r, invite_id=3, device_sn=SYNTHETIC.camera_sn)
+        for r in ("eu", "us")
+    )
+    StubCloud.invites = [eu, us]
+    assert await run(["--redact-serials", "invites"], tmp_path) == 0
+    out = capsys.readouterr().out
+    assert "D3@eu" in out
+    assert "D3@us" in out
+    assert SYNTHETIC.camera_sn not in out
+    with pytest.raises(UsageError, match=r"choices: D3@eu, D3@us"):
+        await run(["invites", "accept", "D3"], tmp_path)
+    assert await run(["invites", "accept", "d3@US"], tmp_path) == 0
+    assert StubCloud.accepted == [(us, None)]
+    StubCloud.invites = [us, us]  # one region listing an id twice: refused, not guessed
+    with pytest.raises(UsageError, match="no single pending invitation D3@US"):
+        await run(["invites", "accept", "D3@us"], tmp_path)
+    assert StubCloud.accepted == [(us, None)]
+
+
+async def test_invites_log_in_first(fake: FakeStation, tmp_path: Any) -> None:
+    """A host without a session gets one (and its challenge), not an empty list."""
+    StubCloud.challenge = LoginChallengeError("verify_code", login_id="L1")
+    with pytest.raises(LoginChallengeError):
+        await run(["invites"], tmp_path)
 
 
 async def test_select_refreshing_refetches_once_when_a_named_station_is_not_cached() -> None:

@@ -131,6 +131,7 @@ SENSITIVE_KEY_PARTS: Final = (
     "phone",
     "captcha",
     "verify_code",
+    "encrypted_data",
 )
 
 

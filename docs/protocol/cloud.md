@@ -309,14 +309,17 @@ cameras) **[verified, one account]**.
   shows its devices only once the invitation is accepted.
   `POST app-house-{region}-pr.eufy.com/app/house/get_house_invite_records`, body
   `{"transaction": …, "is_inviter": 1}`: `data.house_invite_records[]` with `id`,
-  `house_id`, `house_name`, `action_user_nick`, `role_type`, `email`, `user_id`.
+  `house_id`, `house_name`, `action_user_nick`, `role_type`, `email`, `user_id`, and
+  `encrypted_data` when the inviter set a code.
   `POST app-devicerelation-{region}-pr.eufy.com/app/devicerelation/get_invites`, body
   `{"transaction": …, "is_inviter": 1, "categories": [], "add_pns": []}`: `data.invites[]`
   with `id`, `device_sn`, `product_code`, `action_user_nick`, `action_user_email`,
-  `member_type`, `create_time`, `status`. `is_inviter` 1 asks the invitations sent to
+  `member_type`, `create_time`, `status`, `user_id` (the owner), `category`, `sub_sns`,
+  and `encrypted_data` when the inviter set a code. `is_inviter` 1 asks the invitations sent to
   the account (the app's start-up invitation dialog), 0 the ones it sent **[declared:
   app]**. Both answer code 0 with empty lists on an account whose shares were accepted
-  **[verified, one account]**; a pending entry has not been observed.
+  **[verified, one account]**; a pending device entry with `encrypted_data` was listed and
+  accepted on another account **[verified, once]**.
 - Accepting one, `EufyCloudApi.async_accept_invite(invite, code=…)`: a home **[declared:
   app]** with `POST app-house-{region}-pr.eufy.com/app/house/confirm_house_invited`, body
   `{"transaction": …, "categories": [], "add_pns": [], "house_id": …, "invite_id": <id>,

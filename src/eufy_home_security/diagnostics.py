@@ -122,7 +122,7 @@ class InviteReport:
     device_sn: str | None
     product_code: str | None
     created_at: int | None
-    needs_code: bool = False
+    needs_code: bool
 
     @classmethod
     def of(cls, invite: CloudInvite) -> InviteReport:

@@ -2366,7 +2366,8 @@ class EufyCloudApi:
         on the invitation's region.
 
         An invitation that :attr:`~CloudInvite.needs_code` takes the ``code`` its inviter
-        shared; it is checked here, as the app checks it, and is not sent. Returns once the
+        shared (surrounding whitespace ignored); it is checked here, as the app checks it,
+        and is not sent. Returns once the
         cloud answers success; the shared devices are listed from the next device-list
         refresh (``async_get_devices(refresh=True)``).
 
@@ -2384,6 +2385,7 @@ class EufyCloudApi:
         target = invite.house_id if invite.kind == "house" else invite.device_sn
         if invite.invite_id is None or not target:
             raise UnsupportedError(f"the {invite.kind} invitation carries no id to accept")
+        code = (code or "").strip()
         if invite.needs_code:
             if not code:
                 raise InviteCodeError(

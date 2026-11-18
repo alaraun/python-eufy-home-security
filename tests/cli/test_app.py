@@ -23,6 +23,7 @@ from eufy_home_security.exceptions import (
     DeviceTimeoutError,
     EufySecurityError,
     HandshakeError,
+    InviteCodeError,
     LoginChallengeError,
     LoginLimitedError,
     LoginVerificationError,
@@ -68,6 +69,7 @@ def restore_logging() -> Iterator[None]:
         (HandshakeError("bad key"), "re-paired"),
         (ProtocolError("garbled"), "-vv"),
         (UnsupportedError("no"), "not supported: no"),
+        (InviteCodeError("wrong code", missing=False), "ask the inviter for the invitation's code"),
         (EufySecurityError("plain"), "plain"),
     ],
 )

@@ -500,7 +500,8 @@ class CloudInvite:
     (:attr:`needs_code`); a device invitation without its own takes the one of another
     pending invitation from the same owner, as the eufy app does. The account sees the
     shared devices only after it accepts (:meth:`EufyCloudApi.async_accept_invite`); an
-    accepted invitation leaves both lists. Names and ids are private: log the repr, put
+    accepted invitation leaves both lists. ``(region, kind, invite_id)`` identifies an
+    invitation across listings. Names and ids are private: log the repr, put
     :meth:`as_redacted_dict` in diagnostics.
     """
 
@@ -516,7 +517,7 @@ class CloudInvite:
     owner_user_id: str | None = None
     category: str | None = None
     sub_sns: str = ""
-    encrypted_data: str = field(default="", repr=False)
+    encrypted_data: str = field(default="", repr=False, compare=False)
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     @property

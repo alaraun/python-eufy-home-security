@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 
 import pytest
 from cryptography.hazmat.primitives import hashes
@@ -110,6 +111,23 @@ def test_an_invitation_code_opens_the_app_format() -> None:
 )
 def test_an_invitation_code_does_not_open_anything_else(sealed: str) -> None:
     assert not crypto.invite_code_opens("482913", sealed)
+
+
+@pytest.mark.parametrize(
+    "reshape",
+    [
+        lambda b: "\n".join(b[i : i + 76] for i in range(0, len(b), 76)),
+        lambda b: b.rstrip("="),
+        lambda b: f" {b}\r\n",
+    ],
+    ids=["wrapped", "unpadded", "padded-with-whitespace"],
+)
+def test_an_invitation_code_tolerates_what_the_apps_decoder_does(
+    reshape: Callable[[str], str],
+) -> None:
+    sealed = _sealed("482913", b"share-share-share-share-share-share-share-share-share-share")
+    assert sealed.endswith("=")
+    assert crypto.invite_code_opens("482913", reshape(sealed))
 
 
 def test_a_sealed_invitation_opens_with_its_code_only() -> None:

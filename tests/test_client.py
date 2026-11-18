@@ -24,7 +24,7 @@ from eufy_home_security.client import EufySecurity
 from eufy_home_security.cloud import crypto
 from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession, _SessionExpiredError
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY
-from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.cloud.models import CloudDevice, CloudInvite
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
     bundled_td_version,
@@ -2701,6 +2701,26 @@ async def test_an_accepted_invitation_leaves_the_pending_list_without_a_login() 
     assert await eufy.async_pending_invites() == []
     assert "accept_device_invite" in cloud.calls
     assert "login" not in cloud.calls
+
+
+@pytest.mark.parametrize(
+    ("region", "call"), [("us", "accept_device_invite"), ("eu", "accept_device_invite@eu")]
+)
+async def test_an_invitation_is_accepted_on_its_own_region_from_the_cached_session(
+    region: str, call: str
+) -> None:
+    """No listing first: the cached session of the invitation's region, whichever region
+    lists the account's devices, carries the accept."""
+    entry = {"id": 3, "device_sn": SYNTHETIC.camera_sn}
+    cloud = FakeCloud(region="us", device_invites=[entry])
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=warm_store(email=SYNTHETIC.email, cloud=cloud), cloud=cloud
+    )
+    cloud.calls.clear()
+    invite = CloudInvite(kind="device", region=region, invite_id=3, device_sn=SYNTHETIC.camera_sn)
+    await eufy.async_accept_invite(invite)
+    assert cloud.calls == [call]
+    assert [i["invites"][0]["invite_id"] for i in cloud.invite_accepts] == [3]
 
 
 async def test_accepting_on_a_lapsed_session_does_not_log_in() -> None:

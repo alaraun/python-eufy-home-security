@@ -424,7 +424,8 @@ on the invitation's region (login-free). An invitation that `needs_code` takes t
 its inviter shared: the library checks it on this host, as the app does, and never sends
 it; a missing or wrong code raises `InviteCodeError` (`missing` tells which) before
 anything is sent, so the repair step can ask again. An invitation of eufy's home
-appliance categories raises `UnsupportedError` (the app accepts those on another path).
+appliance categories raises `UnsupportedError` (the app accepts those on another path):
+tell the user to accept that one in the eufy app.
 The shared devices appear from the next `async_discover(refresh=True)`.
 
 ### Firmware updates
@@ -2898,6 +2899,7 @@ The library raises typed errors; translate them at the coordinator / setup bound
 | `StationUnreachableError`, `DeviceTimeoutError` | `raise UpdateFailed` — the session's own supervisor is already reconnecting. A reply wait moves its deadline out by the time something else held the event loop (another integration's blocking setup at HA start; up to `p2p.session.LOOP_STALL_MAX`, 30 s), so a held loop alone does not raise `DeviceTimeoutError` |
 | `DeviceBusyError` (a `CommunicationError`, raised while an image capture holds the camera: by another capture, a default-preset write or a pan/tilt step) | not an outage: from a button or service action, `raise HomeAssistantError` ("capture in progress"); never `UpdateFailed` |
 | `CommandNotAppliedError` | surface to the user; usually a wrong owner id or an unpaired channel |
+| `InviteCodeError` (from `async_accept_invite`) | not a reauth: the invitation needs the code its inviter shared. Show the form again with an error: `missing` → "enter the code", otherwise "wrong code". Nothing was sent |
 | `AccountRejectedError` (a `CommandRejectedError`; `code` −104, `INVALID_ACCOUNT`) | the station refused the account the command was sent under, on any command path (arm, setting write, device alarm, preset edit, station action, storage or event read, media open). Retrying changes nothing: `raise HomeAssistantError` with the account hint ("the station does not accept this account: check in the eufy app that it is shared with this account, or remove and add it again"). Catch it before `CommandRejectedError` |
 | `LiveStreamLimitError` (a `CommunicationError`; `limit`) | the station's session budget (`station.max_sessions`) allows no further live stream; nothing was sent. From a live view answer 503 and log the limit; the station is fine |
 | `CameraWakeError` (a `CommandRejectedError` and a `CommunicationError`; `code` -204, -203 or -205) | the station could not wake the camera: not a station outage, no `UpdateFailed`. From a live view, answer 503 and let the session's wake backoff (`retry_after`) decide when the next attempt goes out; from a button or service action, `raise HomeAssistantError` ("the camera did not wake") |

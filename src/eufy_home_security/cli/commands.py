@@ -332,13 +332,21 @@ async def cmd_invites(ctx: Context) -> int:
         if ctx.args.action == "list":
             print(render.render_invites(invites, show_serials=ctx.show_serials))
             return 0
-        wanted = ctx.args.invite.strip().upper()
-        invite = next((i for i in invites if render.invite_ref(i) == wanted), None)
-        if invite is None:
-            raise UsageError(f"no pending invitation {wanted}; `{PROG} invites` lists them")
+        wanted = ctx.args.invite.upper()
+        refs = render.invite_refs(invites)
+        matches = [i for i, ref in zip(invites, refs, strict=True) if ref.upper() == wanted]
+        if len(matches) != 1:
+            similar = [r for r in refs if r.upper().partition("@")[0] == wanted.partition("@")[0]]
+            hint = f" (choices: {', '.join(similar)})" if similar else ""
+            raise UsageError(
+                f"no single pending invitation {wanted}{hint}; `{PROG} invites` lists them"
+            )
+        (invite,) = matches
         code = None
         if invite.needs_code:
             code = ctx.args.code or await ctx.ask("Code the inviter shared: ")
+        elif ctx.args.code:
+            print(f"{PROG}: invitation {wanted} needs no code; --code ignored", file=sys.stderr)
         await eufy.async_accept_invite(invite, code=code)
     print(f"Accepted invitation {wanted}; `{PROG} devices` lists the shared devices.")
     return 0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 import aiohttp
@@ -146,13 +147,18 @@ async def test_a_code_invitation_is_accepted_with_its_code_which_is_not_sent(
         devices=[],
     )
     assert home.needs_code
-    await _accept(fake_mega, cache, home, CODE)
+    assert "needs_code=True" in repr(home)
+    assert home.as_redacted_dict()["needs_code"] is True
+    assert sealed not in repr(home)
+    await _accept(fake_mega, cache, home, f" {CODE}\n")
     (body,) = _bodies(fake_mega, "accept_house_invite")
     assert CODE not in str(body)
     assert sealed not in str(body)
 
 
-@pytest.mark.parametrize(("code", "missing"), [(None, True), ("", True), ("482914", False)])
+@pytest.mark.parametrize(
+    ("code", "missing"), [(None, True), ("", True), (" \t ", True), ("482914", False)]
+)
 async def test_a_code_invitation_without_the_right_code_sends_nothing(
     fake_mega: FakeMega, cache: SessionCache, code: str | None, missing: bool
 ) -> None:
@@ -166,6 +172,48 @@ async def test_a_code_invitation_without_the_right_code_sends_nothing(
         await _accept(fake_mega, cache, device, code)
     assert caught.value.missing is missing
     assert _accepts(fake_mega) == []
+
+
+async def test_the_code_check_runs_off_the_event_loop(
+    fake_mega: FakeMega, cache: SessionCache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    on_loop: list[bool] = []
+
+    def opens(code: str, sealed: str) -> bool:
+        on_loop.append(threading.current_thread() is threading.main_thread())
+        return True
+
+    (device,) = await _listed(
+        fake_mega, cache, houses=[], devices=[_device_entry(encrypted_data="sealed")]
+    )
+    monkeypatch.setattr(crypto, "invite_code_opens", opens)
+    await _accept(fake_mega, cache, device, CODE)
+    assert on_loop == [False]
+
+
+async def test_invitation_id_0_is_accepted(fake_mega: FakeMega, cache: SessionCache) -> None:
+    (device,) = await _listed(fake_mega, cache, houses=[], devices=[_device_entry(0)])
+    await _accept(fake_mega, cache, device)
+    ((sent,),) = [b["invites"] for b in _bodies(fake_mega, "accept_device_invite")]
+    assert sent["invite_id"] == 0
+
+
+async def test_an_inherited_code_leaves_the_invitations_identity_alone(
+    fake_mega: FakeMega, cache: SessionCache
+) -> None:
+    """A listing before and after the owner's coded invitation was accepted names the
+    same invitation: the inherited code is not part of its equality."""
+    sealed = crypto.invite_seal(CODE, "share")
+    first, _coded = await _listed(
+        fake_mega,
+        cache,
+        houses=[],
+        devices=[_device_entry(1), _device_entry(2, encrypted_data=sealed)],
+    )
+    (alone,) = await _listed(fake_mega, cache, houses=[], devices=[_device_entry(1)])
+    assert first.needs_code
+    assert not alone.needs_code
+    assert first == alone
 
 
 async def test_an_owners_code_covers_each_of_that_owners_device_invitations(

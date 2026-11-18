@@ -318,6 +318,8 @@ def test_devices_listing() -> None:
 def test_invites_name_what_each_shares_and_whether_it_needs_a_code() -> None:
     invites = [
         CloudInvite(kind="house", region="eu", invite_id=7, house_name="Lake", inviter="Kim"),
+        CloudInvite(kind="house", region="us", invite_id=7, inviter="kim@example.invalid"),
+        CloudInvite(kind="house", region="us"),
         CloudInvite(
             kind="device",
             region="us",
@@ -329,11 +331,16 @@ def test_invites_name_what_each_shares_and_whether_it_needs_a_code() -> None:
     ]
     rows = render.render_invites(invites, show_serials=False).splitlines()
     assert rows[0].split() == ["ID", "SHARES", "FROM", "CODE", "REGION"]
-    assert rows[1].split() == ["H7", "home", '"Lake"', "Kim", "-", "eu"]
-    assert rows[2].startswith("D3 ")
-    assert "eufyCam 3" in rows[2]
-    assert rows[2].split()[-4:] == ["T8160***7890", "?", "needed", "us"]
-    assert rows[3].split() == ["D4", "T9999", "?", "?", "-", "us"]
+    assert rows[1].split() == ["H7@eu", "home", '"Lake"', "Kim", "-", "eu"]
+    assert rows[2].split() == ["H7@us", "home", '"(unnamed)"', "***alid", "-", "us"]
+    assert rows[3].split() == ["-", "home", '"(unnamed)"', "?", "-", "us"]
+    assert rows[4].startswith("D3 ")
+    assert "eufyCam 3" in rows[4]
+    assert rows[4].split()[-4:] == ["T8160***7890", "?", "needed", "us"]
+    assert rows[5].split() == ["D4", "T9999", "?", "?", "-", "us"]
+    shown = render.render_invites(invites, show_serials=True)
+    assert "kim@example.invalid" in shown
+    assert SYNTHETIC.camera_sn in shown
     assert "invites accept ID" in rows[-1]
     assert render.render_invites([], show_serials=True) == "No pending invitations."
 

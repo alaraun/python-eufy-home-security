@@ -77,6 +77,11 @@ def test_a_credential_keeps_no_tail_and_no_length(value: str) -> None:
         set_secret_logging(False)
 
 
+def test_an_invitations_sealed_code_is_masked() -> None:
+    sealed = "c2FsdHNhbHRzYWx0c2FsdG5vbmNlbm9uY2Vub25jZQ=="
+    assert sealed[:-4] not in str(Payload({"invites": [{"encrypted_data": sealed}]}))
+
+
 def test_a_credential_still_shows_whether_one_was_given() -> None:
     assert str(Credential(None)) == "None"
     assert str(Credential("")) == ""

@@ -209,11 +209,13 @@ def invite_code_opens(code: str, sealed: str) -> bool:
     """Whether ``code`` opens an invitation's ``encrypted_data``, as the eufy app checks
     the code an inviter shares: ``base64(salt16 ‖ nonce12 ‖ AES-256-GCM(text) ‖ tag16)``
     under ``PBKDF2-HMAC-SHA256(code, salt, 100000)``, opened to a non-empty text.
+    Whitespace and missing padding in the base64 are tolerated, as the app's decoder does.
 
-    CPU-bound (about 0.1 s): call it off the event loop.
+    CPU-bound (tens of milliseconds): call it off the event loop.
     """
+    compact = "".join(sealed.split())
     try:
-        blob = base64.b64decode(sealed, validate=True)
+        blob = base64.b64decode(compact + "=" * (-len(compact) % 4), validate=True)
     except (ValueError, binascii.Error):
         return False
     salt = blob[:_INVITE_SALT_LEN]
