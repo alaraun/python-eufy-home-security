@@ -148,6 +148,20 @@ def _local_ip_towards(host: str) -> str:
         return ANY_ADDRESS
 
 
+def _unanswered(
+    host: str | None, extra_hosts: Sequence[str], servers: Sequence[str], timeout: float
+) -> str:
+    """The message of a connect nobody answered, naming what it sent: the searched
+    hosts, and the rendezvous servers a ``P2P_REQ_DSK`` went to (when any did)."""
+    searched = " or ".join((host or "the broadcast address", *extra_hosts))
+    rendezvous = (
+        f" and no punch through {len(servers)} rendezvous server{'s' if len(servers) > 1 else ''}"
+        if servers
+        else ""
+    )
+    return f"no LAN discovery reply from {searched}{rendezvous} within {timeout:.0f}s"
+
+
 async def _resolve(host: str) -> str | None:
     """``host`` as an IPv4 address, resolving a name off the event loop; None when it
     does not resolve. Rendezvous servers arrive from the cloud's ``app_conn`` and may be
@@ -331,9 +345,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
                 if remaining <= 0:
                     _LOGGER.debug("no PUNCH_PKT after %d LAN_SEARCH(es)", searches)
                     raise StationUnreachableError(
-                        f"no LAN discovery reply from {host or 'the broadcast address'}"
-                        f"{' and no punch through the rendezvous servers' if wake else ''} "
-                        f"within {timeout:.0f}s"
+                        _unanswered(host, self._extra_hosts, servers, timeout)
                     )
                 searches += 1
                 self._search_round = searches

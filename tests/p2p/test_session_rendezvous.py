@@ -156,6 +156,12 @@ async def test_a_station_last_reached_through_the_servers_goes_there_at_once(
     assert stats.connects_by_path == {"rendezvous": 1, "lan": 2}
 
 
+def test_no_connect_path_before_the_first_link(station: FakeStation) -> None:
+    stats = _session(station, WakeSource()).stats()
+    assert stats.connect_path is None
+    assert stats.connects_by_path == {}
+
+
 async def test_a_held_station_without_cloud_session_keeps_searching_the_lan(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:

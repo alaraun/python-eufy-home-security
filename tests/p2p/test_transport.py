@@ -1212,3 +1212,63 @@ async def test_without_the_extra_host_its_answer_is_ignored(station: FakeStation
             expected_did=Did.parse(SYNTHETIC.did),
             timeout=1.2,
         )
+
+
+@pytest.mark.parametrize(
+    ("host", "extra", "servers", "message"),
+    [
+        (SEARCHED, (), None, f"no LAN discovery reply from {SEARCHED}"),
+        (
+            None,
+            ("192.0.2.33",),
+            None,
+            "no LAN discovery reply from the broadcast address or 192.0.2.33",
+        ),
+        (
+            SEARCHED,
+            (),
+            ("192.0.2.1", "192.0.2.2", "2001:db8::1"),
+            f"no LAN discovery reply from {SEARCHED} and no punch through 2 rendezvous servers",
+        ),
+        (
+            SEARCHED,
+            (),
+            ("192.0.2.1",),
+            f"no LAN discovery reply from {SEARCHED} and no punch through 1 rendezvous server",
+        ),
+        # No server address resolved: nothing went to the servers, so nothing is claimed.
+        (SEARCHED, (), ("2001:db8::1",), f"no LAN discovery reply from {SEARCHED}"),
+    ],
+)
+async def test_an_unanswered_connect_names_what_it_sent(
+    host: str | None, extra: tuple[str, ...], servers: tuple[str, ...] | None, message: str
+) -> None:
+    transport = make_transport()
+    transport._sendto = lambda packet, addr: None  # type: ignore[method-assign]
+    with pytest.raises(StationUnreachableError) as caught:
+        await transport.connect(
+            host,
+            expected_did=Did.parse(SYNTHETIC.did),
+            timeout=0.05,
+            wake=None if servers is None else Wake(servers=servers, dsk="x" * 8),
+            extra_hosts=extra,
+        )
+    assert str(caught.value) == f"{message} within 0s"
+
+
+async def test_only_the_first_punch_to_sends_the_p2p_reqs() -> None:
+    transport = make_transport()
+    _discovering(transport, servers=frozenset({"192.0.2.1"}))
+    requests: list[tuple[str, int]] = []
+
+    def record(packet: bytes, addr: tuple[str, int]) -> None:
+        if decode_packet(packet)[0] == MsgType.P2P_REQ:
+            requests.append(addr)
+
+    transport._sendto = record  # type: ignore[method-assign]
+    for port in (4000, 4001, 4002):
+        transport.datagram_received(
+            encode_packet(MsgType.PUNCH_TO, encode_sockaddr("203.0.113.9", port)),
+            ("192.0.2.1", 32100),
+        )
+        assert sorted(requests) == [("192.0.2.1", port) for port in P2P_REQ_PORTS]
