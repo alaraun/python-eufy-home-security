@@ -44,7 +44,7 @@ from ..network import LanPath, PathWarning, suggest_local_ports
 
 if TYPE_CHECKING:
     from ..client import ModelStatus
-    from ..cloud.models import CloudDevice
+    from ..cloud.models import CloudDevice, CloudInvite
     from ..devices.model_settings import Setting, Value
     from ..p2p.discovery import DiscoveredStation
     from ..p2p.storage_info import StorageInfo, StorageMedium
@@ -141,6 +141,38 @@ def render_devices(devices: Sequence[CloudDevice], *, show_serials: bool) -> str
         rows.extend(row(child, "└ ") for child in children.get(station.device_sn, []))
     rows.extend(row(device, "") for device in orphans)
     return "\n".join(_table(rows, indent=""))
+
+
+def invite_ref(invite: CloudInvite) -> str:
+    """The id ``invites accept`` takes: ``H`` (a home) or ``D`` (a device) and the
+    invitation's id, since the two lists number their entries apart."""
+    return f"{'H' if invite.kind == 'house' else 'D'}{invite.invite_id}"
+
+
+def render_invites(invites: Sequence[CloudInvite], *, show_serials: bool) -> str:
+    """The pending invitations, one row each."""
+    if not invites:
+        return "No pending invitations."
+    rows: list[tuple[str, ...]] = [("ID", "SHARES", "FROM", "CODE", "REGION")]
+    for invite in invites:
+        if invite.kind == "house":
+            shares = f'home "{invite.house_name or "(unnamed)"}"'
+        else:
+            model = model_for_serial(invite.device_sn or "")
+            name = model.name if model else invite.product_code or "device"
+            shares = f"{name} {fmt_serial(invite.device_sn, show_serials)}"
+        rows.append(
+            (
+                invite_ref(invite),
+                shares,
+                invite.inviter or "?",
+                "needed" if invite.needs_code else "-",
+                invite.region,
+            )
+        )
+    return "\n".join(
+        [*_table(rows, indent=""), "", "Accept one with: eufy-security invites accept ID"]
+    )
 
 
 # ── network ──────────────────────────────────────────────────────────────────

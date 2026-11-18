@@ -502,8 +502,9 @@ class EufySecurity:
 
         Login-free: a region without a session is not asked. A region whose request
         fails is skipped; the error is raised only when no region answered. The account
-        sees a shared home's devices only once the invitation is accepted in the eufy
-        app, so a consumer can tell the user so. Two cloud requests per region: call it
+        sees a shared home's devices only once the invitation is accepted (in the eufy
+        app or with :meth:`async_accept_invite`), so a consumer can tell the user so.
+        Two cloud requests per region: call it
         when the device list comes back empty or on a user's request, not on a timer.
         """
         await self._ensure_cache_loaded()
@@ -519,6 +520,17 @@ class EufySecurity:
         if errors and len(errors) == len(regions):
             raise errors[0]
         return invites
+
+    async def async_accept_invite(self, invite: CloudInvite, *, code: str | None = None) -> None:
+        """Accept a pending invitation from :meth:`async_pending_invites`, with the code
+        its inviter shared when it :attr:`~CloudInvite.needs_code` (see
+        :meth:`EufyCloudApi.async_accept_invite` for the errors).
+
+        Login-free: the invitation's region must hold a session. The shared devices
+        appear from the next device-list refresh: ``async_discover(refresh=True)``.
+        """
+        await self._ensure_cache_loaded()
+        await self.cloud.async_accept_invite(invite, code=code, login=False)
 
     async def async_reauthenticate(
         self,

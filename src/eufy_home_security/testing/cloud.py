@@ -328,7 +328,10 @@ class FakeCloud:
     are recorded as ``"houses"``, ``"house:<house_id>"``, ``"security_stations"`` and
     ``"security_devices"``. ``house_invites`` and ``device_invites`` are the raw pending
     invitation entries (``house_invite_records``, ``invites``) of the ``region`` cluster,
-    recorded as ``"house_invites"`` and ``"device_invites"``.
+    recorded as ``"house_invites"`` and ``"device_invites"``. An accept
+    (``confirm_house_invited``, ``confirm_invite``) is recorded as ``"accept_house_invite"``
+    or ``"accept_device_invite"``, its body in ``invite_accepts``, and removes the
+    entries whose ``id`` it names from those lists, as the cloud does.
 
     ``things`` holds the thing description per product code that ``get_things_list``
     returns (see :func:`thing_description`); a code not in it is omitted from the reply.
@@ -391,6 +394,8 @@ class FakeCloud:
     security_devices: list[dict[str, Any]] = field(default_factory=list)
     house_invites: list[dict[str, Any]] = field(default_factory=list)
     device_invites: list[dict[str, Any]] = field(default_factory=list)
+    invite_accepts: list[dict[str, Any]] = field(default_factory=list)
+    """The body of each invitation accept, in order."""
     cipher_ids_requested: list[int] = field(default_factory=list)
     login_error: EufySecurityError | None = None
     call_errors: list[EufySecurityError] = field(default_factory=list)
@@ -539,6 +544,20 @@ class FakeCloud:
                 else []
             )
             return {"house_invite_records" if house else "invites": list(listed)}
+        if path in {const.HOUSE_INVITE_ACCEPT_PATH, const.DEVICE_INVITE_ACCEPT_PATH}:
+            house = path == const.HOUSE_INVITE_ACCEPT_PATH
+            note("accept_house_invite" if house else "accept_device_invite")
+            self._raise_call_error()
+            self.invite_accepts.append(dict(payload))
+            if region == self.region:
+                accepted = (
+                    {payload.get("invite_id")}
+                    if house
+                    else {i.get("invite_id") for i in payload.get("invites", [])}
+                )
+                pending = self.house_invites if house else self.device_invites
+                pending[:] = [e for e in pending if e.get("id") not in accepted]
+            return None
         if path == const.HOUSES_PATH:
             note("houses")
             self._raise_call_error()

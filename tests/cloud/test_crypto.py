@@ -5,7 +5,10 @@ from __future__ import annotations
 import base64
 
 import pytest
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from eufy_home_security.cloud import const, crypto
 from eufy_home_security.exceptions import ProtocolError
@@ -79,3 +82,37 @@ def test_a_rewrapped_password_matches_the_first_wrap() -> None:
 def test_login_password_repr_hides_the_ciphertext() -> None:
     out = crypto.encrypt_login_password("hunter2hunter2")
     assert out.encrypted not in repr(out)
+
+
+def _sealed(code: str, text: bytes, *, rounds: int = 100_000) -> str:
+    """``salt16 ‖ nonce12 ‖ AES-256-GCM(text) ‖ tag16`` under PBKDF2-HMAC-SHA256, built
+    without the module under test."""
+    salt, nonce = bytes(range(16)), bytes(range(16, 28))
+    key = PBKDF2HMAC(hashes.SHA256(), 32, salt, rounds).derive(code.encode())
+    return base64.b64encode(salt + nonce + AESGCM(key).encrypt(nonce, text, None)).decode()
+
+
+def test_an_invitation_code_opens_the_app_format() -> None:
+    assert crypto.invite_code_opens("482913", _sealed("482913", b"share"))
+
+
+@pytest.mark.parametrize(
+    "sealed",
+    [
+        _sealed("482914", b"share"),
+        _sealed("482913", b"share", rounds=1000),
+        _sealed("482913", b""),
+        "not base64!",
+        base64.b64encode(bytes(28)).decode(),
+        "",
+    ],
+    ids=["other-code", "other-rounds", "empty-text", "not-base64", "no-ciphertext", "empty"],
+)
+def test_an_invitation_code_does_not_open_anything_else(sealed: str) -> None:
+    assert not crypto.invite_code_opens("482913", sealed)
+
+
+def test_a_sealed_invitation_opens_with_its_code_only() -> None:
+    sealed = crypto.invite_seal("482913", "share")
+    assert crypto.invite_code_opens("482913", sealed)
+    assert not crypto.invite_code_opens("482910", sealed)

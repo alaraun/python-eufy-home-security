@@ -173,6 +173,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also ask the cloud regions that listed no devices last time",
     )
+    invites = command("invites", "list the invitations sent to the account, or accept one")
+    invites.add_argument("action", nargs="?", choices=("list", "accept"), default="list")
+    invites.add_argument(
+        "invite", nargs="?", metavar="ID", help="for accept: the invitation's ID from the list"
+    )
+    invites.add_argument(
+        "--code",
+        help="for accept: the code the inviter shared, when the list says one is needed "
+        "(default: prompt)",
+    )
     command("network", "each station's LAN path and what a firewall must allow")
 
     status = command("status", "station snapshot: guard mode, firmware, sub-devices")
@@ -321,6 +331,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             parser.error("guard set needs a MODE")
         if args.action == "get" and args.mode:
             parser.error("guard get takes no MODE")
+    if args.command == "invites":
+        if args.action == "accept" and not args.invite:
+            parser.error("invites accept needs an ID")
+        if args.action == "list" and (args.invite or args.code):
+            parser.error("invites list takes no ID or --code")
     if args.command == "monitor" and args.no_push and args.no_p2p:
         parser.error("--no-push and --no-p2p together leave nothing to monitor")
     if not 0 <= args.local_port <= MAX_PORT:

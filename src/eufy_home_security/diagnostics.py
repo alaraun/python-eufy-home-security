@@ -114,14 +114,15 @@ class HouseReport:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class InviteReport:
     """One pending invitation (see :class:`~.cloud.models.CloudInvite`) without names or
-    ids: what it shares (``kind``, the device's redacted serial and product code) and
-    when it was sent (epoch seconds)."""
+    ids: what it shares (``kind``, the device's redacted serial and product code), when it
+    was sent (epoch seconds) and whether accepting it needs the inviter's code."""
 
     region: str
     kind: InviteKind
     device_sn: str | None
     product_code: str | None
     created_at: int | None
+    needs_code: bool = False
 
     @classmethod
     def of(cls, invite: CloudInvite) -> InviteReport:

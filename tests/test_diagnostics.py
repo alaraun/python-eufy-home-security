@@ -115,6 +115,7 @@ async def test_every_list_is_asked_and_merged_per_device() -> None:
             "device_sn": None,
             "product_code": None,
             "created_at": None,
+            "needs_code": False,
         }
     ]
     assert report["houses"] == [

@@ -109,6 +109,7 @@ async def test_pending_invitations_of_homes_and_devices(
         "device_sn": "T8160***7890",
         "product_code": "T8160",
         "created_at": 1700000000,
+        "needs_code": False,
     }
     for secret in ("house-9", "Cottage", "Kim", "kim@", SYNTHETIC.camera_sn):
         assert secret not in repr([home, device])

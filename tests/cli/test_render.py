@@ -9,7 +9,7 @@ import pytest
 
 from eufy_home_security.cli import render
 from eufy_home_security.cli.render import render_network
-from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.cloud.models import CloudDevice, CloudInvite
 from eufy_home_security.devices.device_alarm import DeviceAlarm
 from eufy_home_security.devices.recipes import PresetPosition
 from eufy_home_security.events import (
@@ -313,6 +313,29 @@ def test_devices_listing() -> None:
     assert SYNTHETIC.station_sn not in text
     assert text.splitlines()[0].split()[-1] == "REGION"
     assert text.splitlines()[1].split()[-1] == "us"
+
+
+def test_invites_name_what_each_shares_and_whether_it_needs_a_code() -> None:
+    invites = [
+        CloudInvite(kind="house", region="eu", invite_id=7, house_name="Lake", inviter="Kim"),
+        CloudInvite(
+            kind="device",
+            region="us",
+            invite_id=3,
+            device_sn=SYNTHETIC.camera_sn,
+            encrypted_data="sealed",
+        ),
+        CloudInvite(kind="device", region="us", invite_id=4, product_code="T9999"),
+    ]
+    rows = render.render_invites(invites, show_serials=False).splitlines()
+    assert rows[0].split() == ["ID", "SHARES", "FROM", "CODE", "REGION"]
+    assert rows[1].split() == ["H7", "home", '"Lake"', "Kim", "-", "eu"]
+    assert rows[2].startswith("D3 ")
+    assert "eufyCam 3" in rows[2]
+    assert rows[2].split()[-4:] == ["T8160***7890", "?", "needed", "us"]
+    assert rows[3].split() == ["D4", "T9999", "?", "?", "-", "us"]
+    assert "invites accept ID" in rows[-1]
+    assert render.render_invites([], show_serials=True) == "No pending invitations."
 
 
 def test_discovered() -> None:

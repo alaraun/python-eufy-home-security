@@ -407,17 +407,25 @@ diagnostics download only, never on a timer. `ciphers=False` leaves the cipher s
 #### Pending invitations
 
 An account that a home or device was shared with sees those devices only after it
-accepts the invitation in the eufy app. `await eufy.async_pending_invites()` returns the
+accepts the invitation. `await eufy.async_pending_invites()` returns the
 invitations it has not accepted (`CloudInvite`: `kind` `"house"` or `"device"`,
-`house_name` or `device_sn` / `product_code`, `inviter`, `region`), login-free and
+`house_name` or `device_sn` / `product_code`, `inviter`, `region`, `needs_code`), login-free and
 uncached, two requests per region with a session. A region whose request fails is
 skipped; the call raises only when no region answered, and a session the cloud no
 longer accepts raises `NoCachedSessionError` there (no login was tried: not a reauth).
 Ask it when the device list comes
 back empty (and on a user's rescan), and when it is not empty raise a repair: "accept
-the invitation from *inviter* to *home* in the eufy app, then rescan". `house_name` and
-`inviter` are for that message only: keep them out of logs and diagnostics
-(`as_redacted_dict()` has neither).
+the invitation from *inviter* to *home*", either in the eufy app or from the repair's
+own step. `house_name` and `inviter` are for that message only: keep them out of logs and
+diagnostics (`as_redacted_dict()` has neither).
+
+`await eufy.async_accept_invite(invite, code=...)` accepts one, as the eufy app does,
+on the invitation's region (login-free). An invitation that `needs_code` takes the code
+its inviter shared: the library checks it on this host, as the app does, and never sends
+it; a missing or wrong code raises `InviteCodeError` (`missing` tells which) before
+anything is sent, so the repair step can ask again. An invitation of eufy's home
+appliance categories raises `UnsupportedError` (the app accepts those on another path).
+The shared devices appear from the next `async_discover(refresh=True)`.
 
 ### Firmware updates
 

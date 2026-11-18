@@ -248,13 +248,21 @@ class FakeMega:
             ),
             repeat=True,
         )
+        relation = const.cluster_host("devicerelation", region)
+        for host, path, endpoint in (
+            (house, const.HOUSE_INVITE_ACCEPT_PATH, "accept_house_invite"),
+            (relation, const.DEVICE_INVITE_ACCEPT_PATH, "accept_device_invite"),
+        ):
+            mock.post(
+                _url(host, path),
+                callback=self._delayed(
+                    endpoint, functools.partial(self._invite_accept, endpoint=endpoint), region
+                ),
+                repeat=True,
+            )
         for host, path, endpoint in (
             (house, const.HOUSE_INVITES_PATH, "house_invites"),
-            (
-                const.cluster_host("devicerelation", region),
-                const.DEVICE_INVITES_PATH,
-                "device_invites",
-            ),
+            (relation, const.DEVICE_INVITES_PATH, "device_invites"),
         ):
             mock.post(
                 _url(host, path),
@@ -532,6 +540,12 @@ class FakeMega:
             return failure
         key = "house_invite_records" if endpoint == "house_invites" else "invites"
         return self._reply(self._shared_for(kwargs), 0, self.invite_data.get(endpoint, {key: []}))
+
+    def _invite_accept(self, url: str, *, endpoint: str, **kwargs: Any) -> CallbackResult:
+        self.calls.append((endpoint, self._decrypt_body(kwargs)))
+        if failure := self._failure_once(endpoint, kwargs):
+            return failure
+        return self._reply(self._shared_for(kwargs), 0, None)
 
     def _security_list(self, url: str, *, endpoint: str, **kwargs: Any) -> CallbackResult:
         self.headers.setdefault(endpoint, []).append(dict(kwargs["headers"]))

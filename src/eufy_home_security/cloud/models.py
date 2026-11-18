@@ -494,9 +494,14 @@ class CloudInvite:
     and ``house_name`` name it. A ``"device"`` invitation (``get_invites``) shares one
     device and its sub-devices: ``device_sn`` and ``product_code`` name it. ``inviter``
     is the inviting account's nickname or e-mail address; ``created_at`` epoch seconds.
-    The account sees the shared devices only after it accepts in the eufy app; an
-    accepted invitation leaves both lists. Names and ids are private: log the repr,
-    put :meth:`as_redacted_dict` in diagnostics.
+    A device invitation also names the owner's cloud user id (``owner_user_id``), its
+    ``category`` and the shared sub-devices (``sub_sns``), which its accept sends back.
+    ``encrypted_data`` is set when the inviter protected the invitation with a code
+    (:attr:`needs_code`); a device invitation without its own takes the one of another
+    pending invitation from the same owner, as the eufy app does. The account sees the
+    shared devices only after it accepts (:meth:`EufyCloudApi.async_accept_invite`); an
+    accepted invitation leaves both lists. Names and ids are private: log the repr, put
+    :meth:`as_redacted_dict` in diagnostics.
     """
 
     kind: InviteKind
@@ -508,14 +513,24 @@ class CloudInvite:
     product_code: str | None = None
     inviter: str = ""
     created_at: int | None = None
+    owner_user_id: str | None = None
+    category: str | None = None
+    sub_sns: str = ""
+    encrypted_data: str = field(default="", repr=False)
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False, compare=False)
+
+    @property
+    def needs_code(self) -> bool:
+        """Whether accepting needs the code the inviter shared."""
+        return bool(self.encrypted_data)
 
     def __repr__(self) -> str:
         """Identifiers redacted: an invitation repr lands in logs."""
         return (
             f"CloudInvite(kind={self.kind!r}, region={self.region!r}, "
             f"house_id={redact(self.house_id)!r}, device_sn={redact_serial(self.device_sn)!r}, "
-            f"product_code={self.product_code!r}, created_at={self.created_at})"
+            f"product_code={self.product_code!r}, created_at={self.created_at}, "
+            f"needs_code={self.needs_code})"
         )
 
     @classmethod
@@ -528,6 +543,7 @@ class CloudInvite:
             house_id=_str_or_none(data.get("house_id")),
             house_name=_str_or_none(data.get("house_name")) or "",
             inviter=_str_or_none(data.get("action_user_nick")) or "",
+            encrypted_data=_str_or_none(data.get("encrypted_data")) or "",
             raw=MappingProxyType(dict(data)),
         )
 
@@ -545,6 +561,10 @@ class CloudInvite:
             product_code=_str_or_none(data.get("product_code")),
             inviter=inviter or "",
             created_at=_int_or_none(data.get("create_time")),
+            owner_user_id=_str_or_none(data.get("user_id")),
+            category=_str_or_none(data.get("category")),
+            sub_sns=_str_or_none(data.get("sub_sns")) or "",
+            encrypted_data=_str_or_none(data.get("encrypted_data")) or "",
             raw=MappingProxyType(dict(data)),
         )
 
@@ -556,6 +576,7 @@ class CloudInvite:
             "device_sn": redact_serial(self.device_sn) if self.device_sn else None,
             "product_code": self.product_code,
             "created_at": self.created_at,
+            "needs_code": self.needs_code,
         }
 
 

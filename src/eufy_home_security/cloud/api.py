@@ -49,6 +49,7 @@ from ..exceptions import (
     CommunicationError,
     EmptyResponseError,
     EufySecurityError,
+    InviteCodeError,
     KeyExchangeRefusedError,
     LoginChallengeError,
     LoginLimitedError,
@@ -314,6 +315,21 @@ def _entries(data: object, path: str, key: str) -> list[Mapping[str, Any]]:
     if not isinstance(listed, list):
         raise ProtocolError(f"cloud response to {path} has no {key} list")
     return [entry for entry in listed if isinstance(entry, Mapping)]
+
+
+def _with_owner_codes(invites: list[CloudInvite]) -> list[CloudInvite]:
+    """Device invitations, each without a code of its own taking the first one of another
+    invitation from the same owner: the eufy app asks one code for an owner's invitations."""
+    codes: dict[str, str] = {}
+    for invite in invites:
+        if invite.encrypted_data and invite.owner_user_id:
+            codes.setdefault(invite.owner_user_id, invite.encrypted_data)
+    return [
+        replace(invite, encrypted_data=codes[invite.owner_user_id])
+        if not invite.encrypted_data and invite.owner_user_id in codes
+        else invite
+        for invite in invites
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -2303,7 +2319,8 @@ class EufyCloudApi:
         homes (``get_house_invite_records``), then single devices (``get_invites``).
 
         Not cached. An account sees a shared home's devices only after it accepts the
-        invitation in the eufy app, so a pending one explains an empty device list.
+        invitation (:meth:`async_accept_invite`), so a pending one explains an empty
+        device list.
         Without ``login`` nothing logs in (see :meth:`_with_session`).
         """
         houses = await self._authenticated_call(
@@ -2331,13 +2348,79 @@ class EufyCloudApi:
             CloudInvite.from_house_api(entry, region=region)
             for entry in _entries(houses, const.HOUSE_INVITES_PATH, "house_invite_records")
         ]
-        invites += [
-            CloudInvite.from_device_api(entry, region=region)
-            for entry in _entries(devices, const.DEVICE_INVITES_PATH, "invites")
-        ]
+        invites += _with_owner_codes(
+            [
+                CloudInvite.from_device_api(entry, region=region)
+                for entry in _entries(devices, const.DEVICE_INVITES_PATH, "invites")
+            ]
+        )
         for invite in invites:
             _LOGGER.debug("  %r", invite)
         return invites
+
+    async def async_accept_invite(
+        self, invite: CloudInvite, *, code: str | None = None, login: bool = True
+    ) -> None:
+        """Accept a pending invitation from :meth:`async_list_invites`, as the eufy app
+        does: a home's with ``confirm_house_invited``, a device's with ``confirm_invite``,
+        on the invitation's region.
+
+        An invitation that :attr:`~CloudInvite.needs_code` takes the ``code`` its inviter
+        shared; it is checked here, as the app checks it, and is not sent. Returns once the
+        cloud answers success; the shared devices are listed from the next device-list
+        refresh (``async_get_devices(refresh=True)``).
+
+        Raises :class:`InviteCodeError` (no code, or a wrong one) and
+        :class:`UnsupportedError` (an invitation of a category the app accepts elsewhere,
+        or one without the ids its accept needs) before anything is sent;
+        :class:`CloudApiError` when the cloud refuses. Without ``login`` nothing logs in
+        (see :meth:`_with_session`).
+        """
+        if invite.kind == "device" and invite.category in const.INVITE_CATEGORIES_OTHER_SDK:
+            raise UnsupportedError(
+                f"a {invite.category} invitation is accepted in the eufy app",
+                device_sn=invite.device_sn,
+            )
+        target = invite.house_id if invite.kind == "house" else invite.device_sn
+        if invite.invite_id is None or not target:
+            raise UnsupportedError(f"the {invite.kind} invitation carries no id to accept")
+        if invite.needs_code:
+            if not code:
+                raise InviteCodeError(
+                    "the invitation needs the code its inviter shared", missing=True
+                )
+            if not await asyncio.to_thread(crypto.invite_code_opens, code, invite.encrypted_data):
+                raise InviteCodeError("the invitation's code is wrong", missing=False)
+        if invite.kind == "house":
+            host = self._host("house", invite.region)
+            path = const.HOUSE_INVITE_ACCEPT_PATH
+            payload: dict[str, Any] = {
+                "transaction": crypto.new_key_ident(),
+                "categories": [],
+                "add_pns": [],
+                "house_id": target,
+                "invite_id": invite.invite_id,
+                "is_inviter": const.INVITES_RECEIVED,
+            }
+        else:
+            host = self._host("devicerelation", invite.region)
+            path = const.DEVICE_INVITE_ACCEPT_PATH
+            payload = {
+                "transaction": crypto.new_key_ident(),
+                "invites": [
+                    {
+                        "category": invite.category or const.INVITE_CATEGORY_DEFAULT,
+                        "device_sn": target,
+                        "invite_id": invite.invite_id,
+                        "owner_user_id": invite.owner_user_id or "",
+                        "sub_sns": invite.sub_sns,
+                    }
+                ],
+            }
+        await self._authenticated_call(
+            host, path, payload, region=invite.region, login=login, expect_data=False
+        )
+        _LOGGER.info("accepted %r", invite)
 
     async def async_list_security_devices(
         self, region: str, *, stations: bool, login: bool = True

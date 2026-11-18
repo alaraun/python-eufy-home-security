@@ -323,6 +323,27 @@ async def cmd_devices(ctx: Context) -> int:
     return 0
 
 
+async def cmd_invites(ctx: Context) -> int:
+    """List the pending invitations, or accept the one ``ID`` names (with ``--code`` or
+    a prompt for the code its inviter shared, when it needs one)."""
+    async with await open_account(ctx) as eufy:
+        await eufy.async_login()
+        invites = await eufy.async_pending_invites()
+        if ctx.args.action == "list":
+            print(render.render_invites(invites, show_serials=ctx.show_serials))
+            return 0
+        wanted = ctx.args.invite.strip().upper()
+        invite = next((i for i in invites if render.invite_ref(i) == wanted), None)
+        if invite is None:
+            raise UsageError(f"no pending invitation {wanted}; `{PROG} invites` lists them")
+        code = None
+        if invite.needs_code:
+            code = ctx.args.code or await ctx.ask("Code the inviter shared: ")
+        await eufy.async_accept_invite(invite, code=code)
+    print(f"Accepted invitation {wanted}; `{PROG} devices` lists the shared devices.")
+    return 0
+
+
 async def cmd_status(ctx: Context) -> int:
     serial = await _pinned_station_serial(ctx)
     async with await open_account(ctx, station_sn=serial) as eufy:
@@ -721,6 +742,7 @@ COMMANDS: dict[str, Callable[[Context], Coroutine[Any, Any, int]]] = {
     "discover": cmd_discover,
     "login": cmd_login,
     "devices": cmd_devices,
+    "invites": cmd_invites,
     "network": cmd_network,
     "status": cmd_status,
     "coverage": cmd_coverage,

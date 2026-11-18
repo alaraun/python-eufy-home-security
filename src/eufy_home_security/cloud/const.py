@@ -135,7 +135,17 @@ DEVICE_INVITES_PATH: Final = "/app/devicerelation/get_invites"
 """Invitations to share single devices (the device-relation service's host)."""
 INVITES_RECEIVED: Final = 1
 """``is_inviter`` of an invitation list request that asks the invitations sent to the
-account (the app's start-up invitation dialog); 0 asks the ones it sent."""
+account (the app's start-up invitation dialog); 0 asks the ones it sent. A home
+invitation's accept carries it too."""
+HOUSE_INVITE_ACCEPT_PATH: Final = "/app/house/confirm_house_invited"
+"""Accepts an invitation to share a home (the house service's host)."""
+DEVICE_INVITE_ACCEPT_PATH: Final = "/app/devicerelation/confirm_invite"
+"""Accepts invitations to share single devices (the device-relation service's host)."""
+INVITE_CATEGORY_DEFAULT: Final = "eufy_security"
+"""``category`` a device invitation's accept carries when its list entry names none."""
+INVITE_CATEGORIES_OTHER_SDK: Final = frozenset({"eufy_home", "eufy_home_tuya"})
+"""Device invitation categories (eufy home appliances) the eufy app accepts on another
+path than :data:`DEVICE_INVITE_ACCEPT_PATH`."""
 SECURITY_STATIONS_PATH: Final = "/v3/app/get_hub_list"
 """The security realm's station list (the eufy Security app's binder service)."""
 SECURITY_DEVICES_PATH: Final = "/v3/app/get_devs_list"

@@ -21,6 +21,7 @@ from ..exceptions import (
     DeviceTimeoutError,
     EufySecurityError,
     HandshakeError,
+    InviteCodeError,
     LoginChallengeError,
     LoginLimitedError,
     LoginVerificationError,
@@ -86,6 +87,8 @@ def describe_error(exc: EufySecurityError) -> str:
             )
         case AuthenticationError():
             return f"the eufy cloud rejected the login ({exc}); check the e-mail and password"
+        case InviteCodeError():
+            return f"{exc}: ask the inviter for the invitation's code"
         case CloudError():
             return f"eufy cloud error: {exc}"
         case CommandNotAppliedError():

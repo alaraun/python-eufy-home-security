@@ -20,9 +20,11 @@ import os
 import secrets
 from dataclasses import dataclass, field
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from ..exceptions import ProtocolError
@@ -191,3 +193,43 @@ def rewrap_login_password(password: str, client_public_key: str, secret: bytes) 
         client_public_key=client_public_key,
         secret=secret,
     )
+
+
+_INVITE_SALT_LEN = 16
+_INVITE_NONCE_LEN = 12
+_INVITE_TAG_LEN = 16
+_INVITE_KDF_ROUNDS = 100_000
+
+
+def _invite_key(code: str, salt: bytes) -> bytes:
+    return hashlib.pbkdf2_hmac("sha256", code.encode(), salt, _INVITE_KDF_ROUNDS, dklen=32)
+
+
+def invite_code_opens(code: str, sealed: str) -> bool:
+    """Whether ``code`` opens an invitation's ``encrypted_data``, as the eufy app checks
+    the code an inviter shares: ``base64(salt16 ‖ nonce12 ‖ AES-256-GCM(text) ‖ tag16)``
+    under ``PBKDF2-HMAC-SHA256(code, salt, 100000)``, opened to a non-empty text.
+
+    CPU-bound (about 0.1 s): call it off the event loop.
+    """
+    try:
+        blob = base64.b64decode(sealed, validate=True)
+    except (ValueError, binascii.Error):
+        return False
+    salt = blob[:_INVITE_SALT_LEN]
+    nonce = blob[_INVITE_SALT_LEN : _INVITE_SALT_LEN + _INVITE_NONCE_LEN]
+    body = blob[_INVITE_SALT_LEN + _INVITE_NONCE_LEN :]
+    try:
+        text = AESGCM(_invite_key(code, salt)).decrypt(nonce, body, None)
+    except (InvalidTag, ValueError):
+        return False
+    return bool(text)
+
+
+def invite_seal(code: str, text: str) -> str:
+    """``text`` sealed under ``code`` as an invitation's ``encrypted_data`` (the
+    inverse of :func:`invite_code_opens`)."""
+    salt = os.urandom(_INVITE_SALT_LEN)
+    nonce = os.urandom(_INVITE_NONCE_LEN)
+    body = AESGCM(_invite_key(code, salt)).encrypt(nonce, text.encode(), None)
+    return base64.b64encode(salt + nonce + body).decode()

@@ -22,7 +22,7 @@ from eufy_home_security.cli import commands
 from eufy_home_security.cli.commands import Context, date_window, select_station
 from eufy_home_security.cli.config import UsageError, parse_args
 from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi
-from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.cloud.models import CloudDevice, CloudInvite
 from eufy_home_security.exceptions import LoginChallengeError
 from eufy_home_security.models import GuardMode
 from eufy_home_security.network import LanPath
@@ -44,6 +44,8 @@ class StubCloud:
     emails: ClassVar[list[str]] = []
     device_refreshes: ClassVar[list[bool]] = []
     rescans: ClassVar[list[bool]] = []
+    invites: ClassVar[list[CloudInvite]] = []
+    accepted: ClassVar[list[tuple[CloudInvite, str | None]]] = []
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.user_name = "user"
@@ -82,6 +84,17 @@ class StubCloud:
     async def async_get_station_owner_id(self, station_sn: str, *, refresh: bool = False) -> str:
         return SYNTHETIC.account_id
 
+    def regions_with_session(self) -> list[str]:
+        return ["eu"]
+
+    async def async_list_invites(self, region: str, *, login: bool = True) -> list[CloudInvite]:
+        return list(StubCloud.invites)
+
+    async def async_accept_invite(
+        self, invite: CloudInvite, *, code: str | None = None, login: bool = True
+    ) -> None:
+        StubCloud.accepted.append((invite, code))
+
     async def async_get_cipher_keys(
         self, station_sn: str, cipher_id: int = 40, *, refresh: bool = False
     ) -> CipherKeys:
@@ -110,6 +123,8 @@ async def fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> AsyncIterator[
     await station.start()
     CURRENT["station"] = station
     StubCloud.challenge = None
+    StubCloud.invites = []
+    StubCloud.accepted = []
     StubCloud.device_refreshes = []
     StubCloud.rescans = []
     monkeypatch.setattr(client_module, "EufyCloudApi", StubCloud)
@@ -409,6 +424,42 @@ async def test_status_reads_the_cached_device_list_then_devices_refreshes_it(
     assert StubCloud.rescans[-1] is False
     assert await run(["devices", "--rescan-regions"], tmp_path) == 0
     assert StubCloud.rescans[-1] is True
+
+
+async def test_invites_lists_then_accepts_one_asking_for_its_code(
+    fake: FakeStation, tmp_path: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = CloudInvite(kind="house", region="eu", invite_id=7, house_id="h-9", house_name="Lake")
+    device = CloudInvite(
+        kind="device",
+        region="eu",
+        invite_id=7,
+        device_sn=SYNTHETIC.camera_sn,
+        inviter="Kim",
+        encrypted_data="sealed",
+    )
+    StubCloud.invites = [home, device]
+    assert await run(["invites"], tmp_path) == 0
+    out = capsys.readouterr().out
+    assert "H7" in out
+    assert "D7" in out
+    asked: list[str] = []
+
+    def answer(question: str) -> str:
+        asked.append(question)
+        return " 482913 "
+
+    assert await run(["invites", "accept", "d7"], tmp_path, prompt=answer) == 0
+    assert StubCloud.accepted == [(device, "482913")]
+    assert len(asked) == 1
+    assert await run(["invites", "accept", "D7", "--code", "111222"], tmp_path, prompt=answer) == 0
+    assert StubCloud.accepted[1:] == [(device, "111222")]
+    assert len(asked) == 1  # --code answers without a prompt
+    assert await run(["invites", "accept", "H7"], tmp_path, prompt=answer) == 0
+    assert StubCloud.accepted[2:] == [(home, None)]
+    assert len(asked) == 1  # a home invitation without a code asks for none
+    with pytest.raises(UsageError, match="no pending invitation D8"):
+        await run(["invites", "accept", "D8"], tmp_path)
 
 
 async def test_select_refreshing_refetches_once_when_a_named_station_is_not_cached() -> None:

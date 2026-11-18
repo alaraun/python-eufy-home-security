@@ -313,6 +313,18 @@ class LoginVerificationError(AuthenticationError):
         super().__init__(message)
 
 
+class InviteCodeError(EufySecurityError):
+    """An invitation needs the code its inviter shared, and none or a wrong one was given.
+
+    ``missing`` is True when no code was given. The code is checked on this host, as
+    the eufy app checks it; raised before anything is sent.
+    """
+
+    def __init__(self, message: str, *, missing: bool) -> None:
+        self.missing = missing
+        super().__init__(message)
+
+
 # ── transport ────────────────────────────────────────────────────────────────
 
 
