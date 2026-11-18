@@ -137,11 +137,13 @@ client        → station:R           PUNCH_PKT echo, then P2P_RDY / DRW / ALIVE
   server answers each P2P_REQ_DSK with several: the station's public address and port,
   its LAN address and port, and `0.0.0.0` with the port **[verified: T817L]**. The client
   punches each address that names a remote unicast host: `0.0.0.0` and
-  `255.255.255.255` are skipped, as the app skips them; loopback, multicast, link-local
-  and other reserved addresses and the client's own socket are skipped too, at most 8
-  distinct addresses are punched per connect, and each at most once per discovery round
-  however many servers name it (the library's bounds). A `PUNCH_TO` is taken only from
-  a server the client sent its request to, and only before the session is up.
+  `255.255.255.255` are skipped, as the app skips them; the rest of `0.0.0.0/8`,
+  loopback, multicast, link-local and other reserved addresses and the client's own
+  socket are skipped too (a subnet's broadcast address is not: the station's netmask is
+  unknown), at most 8 distinct addresses are punched per connect, and each at most once
+  per discovery round however many servers name it (the library's bounds). A `PUNCH_TO`
+  is taken only from a server the client sent its request to, and only before the
+  session is up.
 - The client takes the first `PUNCH_PKT` with the station's DID that comes from a
   searched host (during a broadcast: a LAN address) or from an address it punched, and
   pins the session there. The session above it (DRW, keepalive, XZYH, crypto) is the

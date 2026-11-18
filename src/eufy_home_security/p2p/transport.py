@@ -99,6 +99,8 @@ PUNCH_BURST = 4
 ANY_ADDRESS = "0.0.0.0"  # noqa: S104 - the P2P_REQ_DSK's address when this host's is not known
 #: Distinct ``PUNCH_TO`` addresses one connect punches; a server names about three.
 MAX_PUNCH_TARGETS = 8
+#: "This network" (RFC 791): an address in it names no remote host to punch.
+_THIS_NETWORK = ipaddress.IPv4Network("0.0.0.0/8")
 
 type ChunkHandler = Callable[[DrwChunk], None]
 type LostHandler = Callable[[Exception], None]
@@ -627,11 +629,12 @@ class PPPPTransport(asyncio.DatagramProtocol):
 
     def _punchable(self, target: tuple[str, int]) -> bool:
         """Whether a ``PUNCH_TO`` address names a remote unicast host: a port, and no
-        unspecified, loopback, multicast, link-local or reserved address (the limited
-        broadcast included), nor this host's own socket."""
+        ``0.0.0.0/8``, loopback, multicast, link-local or reserved address (the limited
+        broadcast included), nor this host's own socket. A subnet's broadcast address
+        passes: the station's netmask is unknown."""
         ip, port = target
         addr = ipaddress.IPv4Address(ip)
-        if not port or addr.is_unspecified or addr.is_loopback or addr.is_multicast:
+        if not port or addr in _THIS_NETWORK or addr.is_loopback or addr.is_multicast:
             return False
         if addr.is_link_local or addr.is_reserved:
             return False

@@ -1054,6 +1054,8 @@ def _discovering(transport: PPPPTransport, *, servers: frozenset[str]) -> list[t
         (encode_sockaddr("192.88.99.9", 4000), True),  # public
         (encode_sockaddr(OUR_ENDPOINT[0], 4000), True),  # this host, another port
         (encode_sockaddr("0.0.0.0", 4000), False),  # noqa: S104 - names no address
+        (encode_sockaddr("0.1.2.3", 4000), False),  # "this network"
+        (encode_sockaddr("192.0.2.255", 4000), True),  # a /24's broadcast: netmask unknown
         (encode_sockaddr("255.255.255.255", 4000), False),
         (encode_sockaddr("127.0.0.1", 4000), False),
         (encode_sockaddr("127.1.2.3", 4000), False),
