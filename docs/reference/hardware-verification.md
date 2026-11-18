@@ -224,7 +224,7 @@ No port forwarding at either end.
 | area | mark | evidence |
 |---|---|---|
 | Rendezvous connect off the LAN (wake included) | ✓ | Library, read-only `status`: the first attempt broadcast LAN discovery and sent HELLO + P2P_REQ_DSK to the 3 servers of `app_conn`; a PUNCH_TO for the camera's public address arrived 2.0 s in, the client punched it, the camera's `PUNCH_PKT` came from that address 50 ms later (path `rendezvous`), and the session was up 2.4 s after the attempt started (6.5 s for the whole command, cloud restore included). Battery 93 % read back. |
-| Setup probe leaves a battery station asleep | ✓ | Library, the same `async_station_choices()` call: the camera did not answer the LAN probe and, as a station reached on demand, got no DSK fetch and no rendezvous request, so nothing could wake it. Offered remote, `rendezvous` None. |
+| Setup probe sends a battery station nothing | ✓ | Library, the same `async_station_choices()` call: the camera did not answer the LAN probe and, as a station reached on demand, got no DSK fetch and no rendezvous request, so nothing could wake it. Offered remote, `rendezvous` None. |
 
 ## Reported by users
 

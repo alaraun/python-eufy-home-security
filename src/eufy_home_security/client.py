@@ -1004,7 +1004,9 @@ class EufySecurity:
         when there is one. Safe on a running account: the LAN probe is the one of
         :meth:`async_probe_lan`, so a station with a connected session is never
         searched and is reported local, at the session's host (``rendezvous`` True
-        when its link came through the servers).
+        when its link came through the servers). A built station whose session is down
+        is not punched either (its own reconnect may be punching it): ``rendezvous`` is
+        True when its last link came through the servers, else None.
 
         A station that did not answer the LAN probe and lists rendezvous servers is
         then punched through them (:meth:`~.p2p.transport.PPPPTransport.punch_probe`:
@@ -1029,10 +1031,14 @@ class EufySecurity:
         ]
         probed = await self._probe(paths, candidates, timeout=timeout, port=port)
         punched = await self._probe_rendezvous(
-            [device for device, path in zip(candidates, probed, strict=True) if not path.answered]
+            [
+                device
+                for device, path in zip(candidates, probed, strict=True)
+                if not path.answered and device.device_sn not in self.stations
+            ]
         )
         for serial, station in self.stations.items():
-            if station.session.connected and station.session.connect_path is ConnectPath.RENDEZVOUS:
+            if station.session.connect_path is ConnectPath.RENDEZVOUS:
                 punched[serial] = True
         return [
             StationChoice(
@@ -1081,10 +1087,14 @@ class EufySecurity:
                 return True
 
         tasks = {device.device_sn: asyncio.create_task(probe(device)) for device in targets}
-        _done, pending = await asyncio.wait(tasks.values(), timeout=RENDEZVOUS_PROBE_BUDGET)
-        for task in pending:
-            task.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
+        pending: set[asyncio.Task[bool | None]] = set(tasks.values())
+        try:
+            _done, pending = await asyncio.wait(tasks.values(), timeout=RENDEZVOUS_PROBE_BUDGET)
+        finally:
+            # On the budget's end and on the caller's cancel alike: no probe outlives it.
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
         if pending:
             _LOGGER.debug(
                 "%d rendezvous probe(s) cut off after %.0fs", len(pending), RENDEZVOUS_PROBE_BUDGET

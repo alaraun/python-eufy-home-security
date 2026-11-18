@@ -1453,21 +1453,55 @@ async def test_a_connected_station_is_not_probed_and_reports_its_links_path(
 
 
 @pytest.mark.usefixtures("servers")
-async def test_a_built_station_that_is_not_connected_reports_its_probe_not_its_last_link(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("last_link", "rendezvous"),
+    [(ConnectPath.RENDEZVOUS, True), (ConnectPath.LAN, None), (None, None)],
+)
+async def test_a_built_station_that_is_down_reports_its_last_link_unprobed(
+    monkeypatch: pytest.MonkeyPatch, last_link: ConnectPath | None, rendezvous: bool | None
 ) -> None:
+    """A built station's own session reconnects it, through the servers too: the setup
+    probe sends it no punch of its own and reports how its last link came up."""
     _lan_answers(monkeypatch)
     punches = Punches(monkeypatch)
     async with aiohttp.ClientSession() as http:
         eufy = account(http, two_stations(other_did=OTHER_DID))
         await eufy.async_discover()
         home = eufy.stations[SYNTHETIC.station_sn]
-        home.session._connect_path = ConnectPath.RENDEZVOUS  # its last link, now down
+        assert not home.session.connected
+        home.session._connect_path = last_link
         choices = {c.serial: c for c in await eufy.async_station_choices()}
         await eufy.async_close()
 
-    assert SYNTHETIC.did in punches.probed
-    assert choices[SYNTHETIC.station_sn].rendezvous is False
+    assert SYNTHETIC.did not in punches.probed
+    assert choices[SYNTHETIC.station_sn].rendezvous is rendezvous
+
+
+@pytest.mark.usefixtures("servers")
+async def test_cancelling_the_choices_call_cancels_the_probes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller cancelled during the rendezvous probe: no probe keeps running and no
+    queued probe starts afterwards."""
+    monkeypatch.setattr(client_module, "RENDEZVOUS_PROBE_CONCURRENCY", 2)
+    monkeypatch.setattr(client_module, "RENDEZVOUS_PROBE_BUDGET", 30.0)
+    _lan_answers(monkeypatch)
+    punches = Punches(monkeypatch)
+    punches.gate = asyncio.Event()
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, _mains_stations(4))
+        task = asyncio.create_task(eufy.async_station_choices(timeout=0.1))
+        await wait_for(lambda: punches.in_flight == 2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(0.05)
+        in_flight_after_cancel = punches.in_flight
+        punches.gate.set()
+        await asyncio.sleep(0.1)
+        probed_total = len(punches.probed)
+        await eufy.async_close()
+    assert (in_flight_after_cancel, probed_total) == (0, 2)
 
 
 def _mains_stations(count: int) -> FakeCloud:

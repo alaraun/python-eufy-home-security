@@ -464,7 +464,7 @@ and opens no session:
 |---|---|
 | `reachable_via` | `ConnectPath.LAN` (`"lan"`) if the station answered LAN discovery, `ConnectPath.RENDEZVOUS` (`"rendezvous"`) if a punch through its rendezvous servers reached it (another subnet behind a stateful gateway, or another site; see the network section), None if neither did |
 | `reach` | `Reach.LOCAL` when `reachable_via` is set, else `Reach.REMOTE`. A station reached through its servers gets the same full session as one on the LAN |
-| `rendezvous` | the rendezvous probe's outcome: True (reached), False (no punch within the probe's time), None (not tried: it answered the LAN probe, it is reached on demand, it lists no servers, or its DSK could not be fetched) |
+| `rendezvous` | the rendezvous probe's outcome: True (reached, or a built station whose last link came through the servers), False (no punch within the probe's time), None (not tried or not finished: it answered the LAN probe, it is reached on demand, it lists no servers, its DSK could not be fetched, it is built and its last link did not come through the servers, or its probe was still running when the probe budget ended) |
 | `connects_on_demand` | a battery station reached on demand; one that did not answer the LAN probe is **not** probed through its servers, since the punch would wake it |
 | `sub_devices` | the cameras and sensors paired to it; they are included with it |
 | `supported` | whether the device catalog knows the model |
@@ -478,9 +478,12 @@ request and punches the addresses they name. The station's first `PUNCH_PKT` is 
 success; the library then sends it a `CLOSE`. No session is set up, no credentials are
 read. Up to 4 stations are probed at a time, each for 5 s, all within 20 s
 (`client.RENDEZVOUS_PROBE_CONCURRENCY`, `RENDEZVOUS_PROBE_TIMEOUT`,
-`RENDEZVOUS_PROBE_BUDGET`). A cloud failure arrives as a `CloudProblem`, and the station
-keeps its LAN result (`rendezvous` None). A station with a connected session is not
-probed: `rendezvous` is True when its link came through the servers.
+`RENDEZVOUS_PROBE_BUDGET`); cancelling the call cancels its probes. A cloud failure
+arrives as a `CloudProblem`, and the station keeps its LAN result (`rendezvous` None).
+One with `NoCachedSessionError` is no reauth: the probe never logs in, and the next
+ordinary call does. A built station is not probed, connected or not (its own session
+reconnects it, through the servers too): `rendezvous` is True when its last link came
+through the servers.
 
 A battery station that did not answer the LAN probe stays `Reach.REMOTE` with
 `rendezvous` None: whether its servers would reach it cannot be known without waking

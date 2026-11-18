@@ -43,9 +43,11 @@ class StationChoice:
     path: LanPath
     """Its LAN path after a discovery probe."""
     rendezvous: bool | None = None
-    """Whether a punch through its rendezvous servers reached it (a probe, or the link
-    of its connected session); None when that was not tried: it answered the LAN probe,
-    it is reached on demand, it lists no servers, or its DSK could not be fetched."""
+    """Whether a punch through its rendezvous servers reached it (a probe, or the last
+    link of its built session); None when that was not tried or not finished: it
+    answered the LAN probe, it is reached on demand, it lists no servers, its DSK could
+    not be fetched, it is built and its last link did not come through the servers, or
+    its probe was still running when the probe budget ended."""
 
     @property
     def serial(self) -> str:
