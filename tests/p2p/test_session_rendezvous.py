@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -303,3 +304,34 @@ async def test_a_link_from_the_configured_host_is_searched_again_after_the_host_
         await session.async_close()
     assert attempts.calls[0]["host"] == "192.0.2.99"
     assert session.host == "127.0.0.1"
+
+
+async def test_the_link_log_names_the_peer_and_the_path(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A link whose peer is not kept as the search host still logs where it came from."""
+    attempts = Attempts(monkeypatch)
+    attempts.reach = "127.0.0.1"
+    attempts.path = ConnectPath.RENDEZVOUS
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", station.ecc_private_key_hex)
+
+    session = StationSession(
+        SYNTHETIC.station_sn,
+        credentials,
+        host=None,
+        port=station.discovery_port,
+        did=SYNTHETIC.did,
+        wake_provider=WakeSource(),
+    )
+    caplog.set_level(logging.INFO, logger="eufy_home_security.p2p.session")
+    try:
+        await session.async_connect()
+    finally:
+        await session.async_close()
+    assert session.host is None
+    assert any(
+        "P2P session established via 127.0.0.1 (rendezvous)" in record.getMessage()
+        for record in caplog.records
+    )

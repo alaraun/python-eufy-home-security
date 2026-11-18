@@ -2824,7 +2824,13 @@ class StationSession:
             Secret(session_key),
             " (the static key)" if self.static_key_session else "",
         )
-        _LOGGER.info("%s: P2P session established via %s", self._log_name, Address(self._host))
+        peer = self._transport.peer
+        _LOGGER.info(
+            "%s: P2P session established via %s (%s)",
+            self._log_name,
+            Address(peer[0] if peer is not None else self._host),
+            path,
+        )
         return creds
 
     async def _unwrap_conn_init(
