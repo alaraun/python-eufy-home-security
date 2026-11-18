@@ -25,6 +25,7 @@ from eufy_home_security.p2p.pppp import (
     DrwChunk,
     MsgType,
     decode_packet,
+    decode_sockaddr,
     encode_drw_ack,
     encode_p2p_req,
     encode_p2p_req_dsk,
@@ -768,6 +769,8 @@ CAMERA_WAN = "198.51.100.7"
 """A PUNCH_TO address this host cannot reach (the route below drops it)."""
 SEARCHED = "192.0.2.10"
 """The searched LAN address: the camera is not there, so only a punch reaches it."""
+CAMERA_LAN = "192.0.2.77"
+"""The camera's LAN address; the route carries it to and from its loopback socket."""
 
 
 class _PunchToServer(asyncio.DatagramProtocol):
@@ -838,7 +841,7 @@ class _Rendezvous:
         self.server_port = self._endpoints[1].get_extra_info("sockname")[1]
         self.server.entries = [
             encode_sockaddr(CAMERA_WAN, self.camera_port),
-            encode_sockaddr("127.0.0.1", self.camera_port),
+            encode_sockaddr(CAMERA_LAN, self.camera_port),
             encode_sockaddr("0.0.0.0", self.camera_port),  # noqa: S104 - the empty entry
         ]
 
@@ -850,19 +853,31 @@ class _Rendezvous:
         return endpoint
 
     def route(self, transport: PPPPTransport) -> None:
-        """Record every send; the rendezvous port goes to the fake server, anything
-        that is not loopback is dropped (unreachable)."""
-        send = transport._sendto
+        """Record every send; the rendezvous port goes to the fake server,
+        :data:`CAMERA_LAN` to and from the camera's socket, and anything else that is
+        not loopback is dropped (unreachable)."""
+        send, receive = transport._sendto, transport.datagram_received
+        start_alive = transport._start_alive_thread
 
         def routed(packet: bytes, addr: tuple[str, int]) -> None:
             msg, payload = decode_packet(packet)
             self.sent.append((msg, addr, payload))
             if addr[1] == RENDEZVOUS_PORT:
                 send(packet, ("127.0.0.1", self.server_port))
-            elif addr[0] == "127.0.0.1":
-                send(packet, addr)
+            elif addr[0] in ("127.0.0.1", CAMERA_LAN):
+                send(packet, ("127.0.0.1", addr[1]))
+
+        def received(data: bytes, addr: tuple[str | Any, int]) -> None:
+            if addr == ("127.0.0.1", self.camera_port):
+                addr = (CAMERA_LAN, self.camera_port)
+            receive(data, addr)
+
+        def alive_to(peer: tuple[str, int]) -> None:
+            start_alive(("127.0.0.1", peer[1]) if peer[0] == CAMERA_LAN else peer)
 
         transport._sendto = routed  # type: ignore[method-assign]
+        transport.datagram_received = received  # type: ignore[method-assign]
+        transport._start_alive_thread = alive_to  # type: ignore[method-assign]
 
     def punched(self) -> set[tuple[str, int]]:
         return {addr for msg, addr, _ in self.sent if msg == MsgType.PUNCH_PKT}
@@ -909,11 +924,11 @@ async def test_a_rendezvous_connect_punches_every_named_address_but_the_empty_on
 ) -> None:
     transport = await _connect_via(rendezvous)
     try:
-        assert transport.peer == ("127.0.0.1", rendezvous.camera_port)
+        assert transport.peer == (CAMERA_LAN, rendezvous.camera_port)
         assert transport.path is ConnectPath.RENDEZVOUS
         assert rendezvous.punched() == {
             (CAMERA_WAN, rendezvous.camera_port),
-            ("127.0.0.1", rendezvous.camera_port),
+            (CAMERA_LAN, rendezvous.camera_port),
         }
         # The punch carries the station's DID, as its own PUNCH_PKT does.
         assert rendezvous.camera.punches[0] == rendezvous.did.to_struct()
@@ -945,7 +960,7 @@ async def test_a_punch_from_an_address_not_punched_is_ignored(
     rendezvous.camera.reply_from = await rendezvous.second_socket()
     with pytest.raises(StationUnreachableError):
         await _connect_via(rendezvous, timeout=1.5)
-    assert ("127.0.0.1", rendezvous.camera_port) in rendezvous.punched()  # it was punched
+    assert (CAMERA_LAN, rendezvous.camera_port) in rendezvous.punched()  # it was punched
 
 
 async def test_a_punch_with_another_stations_did_is_ignored(rendezvous: _Rendezvous) -> None:
@@ -953,6 +968,14 @@ async def test_a_punch_with_another_stations_did_is_ignored(rendezvous: _Rendezv
     with pytest.raises(StationUnreachableError):
         await _connect_via(rendezvous, timeout=1.5)
     assert rendezvous.camera.punches  # punched, answered, refused
+
+
+async def test_every_discovery_round_punches_again(rendezvous: _Rendezvous) -> None:
+    """The station is punched in each round the servers name it (two rounds in 1.5 s)."""
+    rendezvous.camera.did = Did.parse("EUPRAMA-654321-ZYXWV")  # never taken: rounds go on
+    with pytest.raises(StationUnreachableError):
+        await _connect_via(rendezvous, timeout=1.5)
+    assert len(rendezvous.camera.punches) >= 2 * transport_module.PUNCH_BURST
 
 
 async def test_a_punch_to_from_another_host_than_the_servers_is_ignored(
@@ -997,10 +1020,20 @@ async def test_without_a_wake_nothing_goes_to_the_servers(station: FakeStation) 
     assert all(port not in (RENDEZVOUS_PORT, *P2P_REQ_PORTS) for _, port in sent)
 
 
+OUR_ENDPOINT = ("192.0.2.20", 40001)
+"""This host's address towards the servers and its bound port, in :func:`_discovering`."""
+
+
 def _discovering(transport: PPPPTransport, *, servers: frozenset[str]) -> list[tuple[str, int]]:
-    """``transport`` in the discovery phase of a rendezvous connect, without a socket;
-    returns the list its punches are recorded into."""
+    """``transport`` in the discovery phase of a rendezvous connect, bound to
+    :data:`OUR_ENDPOINT` without a socket; returns the list its punches are recorded
+    into."""
     transport._punch = asyncio.get_running_loop().create_future()
+    transport._transport = cast(
+        asyncio.DatagramTransport,
+        SimpleNamespace(get_extra_info=lambda _name: ("0.0.0.0", OUR_ENDPOINT[1])),  # noqa: S104
+    )
+    transport._our_ip = OUR_ENDPOINT[0]
     transport._servers = servers
     transport._rendezvous_did = Did.parse(SYNTHETIC.did)
     punched: list[tuple[str, int]] = []
@@ -1018,8 +1051,17 @@ def _discovering(transport: PPPPTransport, *, servers: frozenset[str]) -> list[t
     [
         (encode_sockaddr("203.0.113.9", 4000), True),
         (encode_sockaddr("203.0.113.9", 4000) + b"\x00\x00", True),  # trailing bytes
+        (encode_sockaddr("100.64.0.9", 4000), True),  # public
+        (encode_sockaddr(OUR_ENDPOINT[0], 4000), True),  # this host, another port
         (encode_sockaddr("0.0.0.0", 4000), False),  # noqa: S104 - names no address
         (encode_sockaddr("255.255.255.255", 4000), False),
+        (encode_sockaddr("127.0.0.1", 4000), False),
+        (encode_sockaddr("127.1.2.3", 4000), False),
+        (encode_sockaddr("224.0.0.1", 4000), False),
+        (encode_sockaddr("239.255.255.250", 4000), False),
+        (encode_sockaddr("169.254.1.1", 4000), False),
+        (encode_sockaddr("240.0.0.1", 4000), False),
+        (encode_sockaddr(*OUR_ENDPOINT), False),  # this host's own socket
         (encode_sockaddr("203.0.113.9", 0), False),
         (encode_sockaddr("203.0.113.9", 4000)[:15], False),  # truncated
         (b"\x00\x0a" + encode_sockaddr("203.0.113.9", 4000)[2:], False),  # not IPv4
@@ -1031,7 +1073,7 @@ async def test_which_punch_to_entries_are_punched(body: bytes, punches: bool) ->
     transport.datagram_received(encode_packet(MsgType.PUNCH_TO, body), ("192.0.2.1", 32100))
     assert bool(punched) is punches
     if punches:
-        assert set(punched) == {("203.0.113.9", 4000)}
+        assert set(punched) == {decode_sockaddr(body)}
         assert len(punched) == transport_module.PUNCH_BURST
 
 
@@ -1095,13 +1137,33 @@ async def test_a_punch_to_after_the_peer_is_pinned_is_ignored() -> None:
     assert punched == []
 
 
-async def test_a_repeated_punch_to_punches_again() -> None:
+async def test_a_punch_to_bursts_once_per_discovery_round() -> None:
+    """Each server names the same addresses every round: one burst per address and
+    round, however many servers name it."""
     transport = make_transport()
-    punched = _discovering(transport, servers=frozenset({"192.0.2.1"}))
+    punched = _discovering(transport, servers=frozenset({"192.0.2.1", "192.0.2.2"}))
     entry = encode_packet(MsgType.PUNCH_TO, encode_sockaddr("203.0.113.9", 4000))
     transport.datagram_received(entry, ("192.0.2.1", 32100))
-    transport.datagram_received(entry, ("192.0.2.1", 32100))
+    transport.datagram_received(entry, ("192.0.2.2", 32100))
+    assert len(punched) == transport_module.PUNCH_BURST
+    transport._search_round += 1
+    transport.datagram_received(entry, ("192.0.2.2", 32100))
     assert len(punched) == 2 * transport_module.PUNCH_BURST
+
+
+async def test_a_connect_punches_a_bounded_number_of_addresses() -> None:
+    transport = make_transport()
+    punched = _discovering(transport, servers=frozenset({"192.0.2.1"}))
+    cap = transport_module.MAX_PUNCH_TARGETS
+    targets = [("100.64.0.9", 4000 + n) for n in range(cap + 3)]
+    for target in [*targets, targets[0]]:
+        transport.datagram_received(
+            encode_packet(MsgType.PUNCH_TO, encode_sockaddr(*target)), ("192.0.2.1", 32100)
+        )
+        transport._search_round += 1
+    assert set(punched) == set(targets[:cap])
+    # An address punched before the cap was reached is punched again.
+    assert punched.count(targets[0]) == 2 * transport_module.PUNCH_BURST
 
 
 async def test_an_extra_search_host_is_searched_and_answers(station: FakeStation) -> None:

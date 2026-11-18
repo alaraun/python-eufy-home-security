@@ -97,8 +97,8 @@ P2P_REQ_PORTS = (32101, 32102)
 #: ``PUNCH_PKT`` datagrams sent per ``PUNCH_TO`` address, as the eufy app bursts them.
 PUNCH_BURST = 4
 ANY_ADDRESS = "0.0.0.0"  # noqa: S104 - the P2P_REQ_DSK's address when this host's is not known
-#: ``PUNCH_TO`` addresses that name no host; the client punches neither.
-_NO_HOST = frozenset({ANY_ADDRESS, BROADCAST})
+#: Distinct ``PUNCH_TO`` addresses one connect punches; a server names about three.
+MAX_PUNCH_TARGETS = 8
 
 type ChunkHandler = Callable[[DrwChunk], None]
 type LostHandler = Callable[[Exception], None]
@@ -184,12 +184,13 @@ class PPPPTransport(asyncio.DatagramProtocol):
         self._discover_host: str | None = None
         self._extra_hosts: tuple[str, ...] = ()
         self._expected_did: Did | None = None
-        # Rendezvous: the servers' addresses, the station's DID, this host's endpoint
-        # and the addresses punched so far.
+        # Rendezvous: the servers' addresses, the station's DID, this host's endpoint,
+        # the discovery round, and each address punched with the round of its last burst.
         self._servers: frozenset[str] = frozenset()
         self._rendezvous_did: Did | None = None
         self._our_ip = ANY_ADDRESS
-        self._punched: set[tuple[str, int]] = set()
+        self._search_round = 0
+        self._punched: dict[tuple[str, int], int] = {}
         self._path: ConnectPath | None = None
         self._punch: asyncio.Future[tuple[Did, bytes, tuple[str, int]]] | None = None
         self._ready = asyncio.Event()
@@ -335,6 +336,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
                         f"within {timeout:.0f}s"
                     )
                 searches += 1
+                self._search_round = searches
                 _LOGGER.debug("LAN_SEARCH #%d to %s:%d", searches, Address(target[0]), target[1])
                 self._sendto(search, target)
                 for extra in self._extra_hosts:
@@ -562,9 +564,13 @@ class PPPPTransport(asyncio.DatagramProtocol):
 
     def _on_punch_to(self, payload: bytes, source: str) -> None:
         """Punch the address a rendezvous server's ``PUNCH_TO`` names, as the eufy app
-        does: :data:`PUNCH_BURST` ``PUNCH_PKT`` with the station's DID, again for every
-        ``PUNCH_TO``; an address naming no host is skipped. The first one punched also
-        sends each server a ``P2P_REQ`` on :data:`P2P_REQ_PORTS`."""
+        does: :data:`PUNCH_BURST` ``PUNCH_PKT`` with the station's DID. The first one
+        punched also sends each server a ``P2P_REQ`` on :data:`P2P_REQ_PORTS`.
+
+        Bounds (the library's): an address that is no remote unicast host is skipped
+        (:meth:`_punchable`), at most :data:`MAX_PUNCH_TARGETS` addresses are punched
+        per connect, and each at most once per discovery round, however many servers
+        name it."""
         did = self._rendezvous_did
         if did is None or source not in self._servers:
             if self._throttle.should_log(("punch-to-source", source)):
@@ -578,12 +584,23 @@ class PPPPTransport(asyncio.DatagramProtocol):
             if self._throttle.should_log(("bad-punch-to", source)):
                 _LOGGER.debug("ignoring a PUNCH_TO from %s: %s", Address(source), err)
             return
-        if target[0] in _NO_HOST or not target[1]:
+        if not self._punchable(target):
             return
         first = not self._punched
         if target not in self._punched:
+            if len(self._punched) >= MAX_PUNCH_TARGETS:
+                if self._throttle.should_log("punch-cap"):
+                    _LOGGER.debug(
+                        "PUNCH_TO %s:%d not punched: %d addresses already are",
+                        Address(target[0]),
+                        target[1],
+                        MAX_PUNCH_TARGETS,
+                    )
+                return
             _LOGGER.debug("PUNCH_TO %s:%d; punching it", Address(target[0]), target[1])
-            self._punched.add(target)
+        elif self._punched[target] == self._search_round:
+            return
+        self._punched[target] = self._search_round
         punch = encode_packet(MsgType.PUNCH_PKT, did.to_struct())
         for _ in range(PUNCH_BURST):
             self._sendto(punch, target)
@@ -594,6 +611,18 @@ class PPPPTransport(asyncio.DatagramProtocol):
             for server in sorted(self._servers):
                 for port in P2P_REQ_PORTS:
                     self._sendto(request, (server, port))
+
+    def _punchable(self, target: tuple[str, int]) -> bool:
+        """Whether a ``PUNCH_TO`` address names a remote unicast host: a port, and no
+        unspecified, loopback, multicast, link-local or reserved address (the limited
+        broadcast included), nor this host's own socket."""
+        ip, port = target
+        addr = ipaddress.IPv4Address(ip)
+        if not port or addr.is_unspecified or addr.is_loopback or addr.is_multicast:
+            return False
+        if addr.is_link_local or addr.is_reserved:
+            return False
+        return target != (self._our_ip, self.local_port)
 
     def _on_drw(self, payload: bytes) -> None:
         try:
