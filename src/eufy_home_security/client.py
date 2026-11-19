@@ -311,9 +311,13 @@ class EufySecurity:
         Every station with rendezvous servers (the cloud's ``app_conn``) can also be
         reached through them, as the eufy app connects: a station on another subnet
         behind a stateful gateway, or off the LAN. A station reached on demand runs it
-        on every connect (it wakes the station); a held one once a LAN discovery attempt
-        has failed, or at once when its last link came through it. It costs one DSK per
-        station from the cloud, cached until it expires. A station with no configured
+        on every connect (it wakes the station); a held one beside LAN discovery from
+        the first attempt when its DSK is cached (no cloud call) or its last link came
+        through the servers, else once a LAN discovery attempt has failed. How each
+        station's last link came up is kept in the cache (``stations.<serial>.link_path``),
+        so it holds across restarts. A link counts as rendezvous only when the station
+        answered from outside this host's own networks. It costs one DSK per station from
+        the cloud, cached until it expires. A station with no configured
         address and no private cloud ``local_ip`` is also searched at the LAN address it
         reports (:attr:`~.network.HostSource.DEVICE`).
 
@@ -1030,7 +1034,9 @@ class EufySecurity:
         searched and is reported local, at the session's host (``rendezvous`` True
         when its link came through the servers). A built station whose session is down
         is not punched either (its own reconnect may be punching it): ``rendezvous`` is
-        True when its last link came through the servers, else None.
+        True when its last link came through the servers, else None. A built station's
+        last link is the one of this run, or before its first one the path stored from
+        an earlier run.
 
         A station that did not answer the LAN probe and lists rendezvous servers is
         then punched through them (:meth:`~.p2p.transport.PPPPTransport.punch_probe`:

@@ -172,6 +172,7 @@ from ..messages import (
     tone_file_payload,
 )
 from ..mode_actions import CMD_SET_ALL_ACTION, ModeTable
+from ..netif import async_local_networks
 from ..notify import decode_camera_push, stamped_accounts
 from ..param_notify import ParamNotify, decode_param_notify
 from ..params import ParamDump
@@ -2694,7 +2695,10 @@ class StationSession:
         if wake is not None:
             register_secret_bytes(wake.dsk)
         elif cached_only:
-            _LOGGER.debug("%s: no cached rendezvous material; LAN discovery first", self._log_name)
+            _LOGGER.debug(
+                "%s: LAN discovery only on this attempt (no rendezvous servers, or no DSK held)",
+                self._log_name,
+            )
         return wake
 
     async def _establish(self, creds: P2PCredentials | None) -> P2PCredentials:
@@ -2720,6 +2724,8 @@ class StationSession:
                 self._local_port or "ephemeral",
             )
             wake = await self._wake(cached_only=not self._rendezvous_on(attempt))
+            # A punch answer is classified by this host's networks (see PPPPTransport.connect).
+            networks = None if wake is None else await async_local_networks()
             transport = PPPPTransport(on_chunk=self._on_chunk, on_lost=self._on_lost)
             try:
                 did = await transport.connect(
@@ -2730,6 +2736,7 @@ class StationSession:
                     timeout=DISCOVERY_TIMEOUT,
                     wake=wake,
                     extra_hosts=self._extra_hosts,
+                    local_networks=networks,
                 )
             except StationUnreachableError as err:
                 last_error = err

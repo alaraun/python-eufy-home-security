@@ -4,8 +4,9 @@ Security events arrive two ways — pushed by the station over local P2P, and
 relayed by the eufy cloud over FCM — and both decode into the same
 :class:`SecurityEvent`, tagged with its :class:`EventSource`. The two channels
 overlap but are not interchangeable: P2P is about a second faster for camera
-detections and works without internet; only the cloud reaches a station off the LAN
-and carries arming pushes (see ``docs/protocol/events.md``). The station's own
+detections and works without internet; off the LAN a P2P session through the
+station's rendezvous servers delivers P2P events too, and only the cloud carries
+arming pushes (see ``docs/protocol/events.md``). The station's own
 guard-mode reports over P2P become :class:`GuardModeChanged`, not a
 :class:`SecurityEvent`. :class:`~.client.EufySecurity` de-duplicates across both
 channels (:class:`EventDeduplicator`): each real occurrence is emitted once, plus

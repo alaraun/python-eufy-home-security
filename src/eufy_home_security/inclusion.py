@@ -44,7 +44,8 @@ class StationChoice:
     """Its LAN path after a discovery probe."""
     rendezvous: bool | None = None
     """Whether a punch through its rendezvous servers reached it (a probe, or the last
-    link of its built session); None when that was not tried or not finished: it
+    link of its built session: from this run, or stored from an earlier one before the
+    first); None when that was not tried or not finished: it
     answered the LAN probe, it is reached on demand, it lists no servers, its DSK could
     not be fetched, it is built and its last link did not come through the servers, or
     its probe was still running when the probe budget ended."""

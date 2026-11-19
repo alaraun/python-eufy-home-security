@@ -410,6 +410,10 @@ class FakeStation:
     schedule_mode: int = 1
     """The mode a schedule slot puts in force while Schedule (2) is selected."""
     ignore_searches: int = 0
+    answers_punch: bool = False
+    """Answer a client's first ``PUNCH_PKT`` on the session port with the station's own
+    ``PUNCH_PKT``, as a station answers a rendezvous punch; the session port is
+    :attr:`session_port`."""
     reply_to_settings: bool = False
     tone_frames: bool = False
     """Answer SET_TONE_FILE (1201) with an alarm-tone frame on the station's channel, as a
@@ -767,6 +771,12 @@ class FakeStation:
         )
         self.discovery_port = self._discovery.get_extra_info("sockname")[1]
 
+    @property
+    def session_port(self) -> int:
+        """The loopback UDP port sessions run on (and punches arrive at); 0 before
+        :meth:`start`."""
+        return 0 if self._session is None else int(self._session.get_extra_info("sockname")[1])
+
     def stop(self) -> None:
         self._stop_media()
         for t in (self._discovery, self._session):
@@ -819,6 +829,8 @@ class FakeStation:
             # A client punching back opens a session; the others stay open up to
             # max_sessions, as on the real station.
             peer = self._peers[addr] = _Peer(addr)
+            if self.answers_punch and self._session is not None:
+                self._session.sendto(encode_packet(MsgType.PUNCH_PKT, self.did.to_struct()), addr)
             if self.max_sessions is not None and len(self._peers) > self.max_sessions:
                 self.station_closes += 1
                 victim = next(iter(self._peers.values()))

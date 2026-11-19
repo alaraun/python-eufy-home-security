@@ -89,7 +89,9 @@ async def test_warm_start_needs_no_cloud() -> None:
   `guard_mode`, `schedule_mode` (the slot mode a selected Schedule puts in force),
   `images` (stills by path; a path not in it gets no reply, so the fetch times out, and
   `image_requests` lists every path asked), `answer_params`, `answer_conn_init`, `params_cipher`, `recording_frames`,
-  `unhandled_commands` (answered with receipt −108), `playback_end_delay`.
+  `unhandled_commands` (answered with receipt −108), `playback_end_delay`,
+  `ignore_searches` (LAN searches left unanswered) and `answers_punch` (a client's punch
+  on `session_port` is answered with the station's `PUNCH_PKT`, as a rendezvous punch is).
   A standalone fake (a T8170 serial, `cipher_id=98`, `receipt_len=STANDALONE_RECEIPT_LEN`)
   answers the 1700 recipes: `preset_points` (the 6034 answer), `preset_gotos`,
   `doorbell_payloads`, `bare_stops` and `pings` record what arrived, and

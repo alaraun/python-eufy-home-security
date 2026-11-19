@@ -41,8 +41,9 @@ class SessionStats:
     reconnects: int
     """Sessions established after the first."""
     connect_path: str | None
-    """How the current or last link was set up: ``"lan"`` (LAN discovery) or
-    ``"rendezvous"`` (a punch toward an address the station's rendezvous servers named,
+    """How the current or last link was set up: ``"lan"`` (LAN discovery, or a punch
+    answered from an address in this host's own networks) or ``"rendezvous"`` (a punch
+    toward an address the station's rendezvous servers named, outside those networks;
     :class:`~..transport.ConnectPath`). Before the session's first link, the path it was
     built with (:class:`~...client.EufySecurity` passes the one its cache kept from an
     earlier run); None when unknown."""

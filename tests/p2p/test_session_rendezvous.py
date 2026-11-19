@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import AsyncIterator
+from ipaddress import IPv4Network
 from typing import Any
 
 import pytest
@@ -14,6 +16,7 @@ from eufy_home_security.exceptions import (
     SessionReplacedError,
     StationUnreachableError,
 )
+from eufy_home_security.p2p import netif
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
 from eufy_home_security.p2p.transport import ConnectPath, PPPPTransport, Wake
 from eufy_home_security.testing import SYNTHETIC
@@ -213,6 +216,48 @@ async def test_a_session_given_the_rendezvous_path_fetches_its_dsk_on_the_first_
     assert wake.asks == [False]
     assert wake.fetches == 1
     assert session.connect_path is ConnectPath.LAN  # the LAN answered: lan from now on
+
+
+async def test_a_rendezvous_attempt_classifies_by_this_hosts_networks(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An attempt with the rendezvous gives the transport this host's networks, read
+    off the event loop; a LAN-only attempt reads none."""
+    attempts = Attempts(monkeypatch, fail=1)
+    networks = (IPv4Network("192.0.2.0/24"),)
+    reads: list[threading.Thread] = []
+
+    def reader() -> tuple[IPv4Network, ...]:
+        reads.append(threading.current_thread())
+        return networks
+
+    monkeypatch.setattr(netif, "local_networks", reader)
+    session = _session(station, WakeSource())
+    try:
+        await session.async_connect()
+    finally:
+        await session.async_close()
+    assert attempts.wakes == [False, True]
+    assert [call["local_networks"] for call in attempts.calls] == [None, networks]
+    assert len(reads) == 1
+    assert reads[0] is not threading.current_thread()
+
+
+async def test_a_held_station_without_rendezvous_material_logs_a_lan_only_attempt(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    Attempts(monkeypatch)
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.p2p.session")
+    session = _session(station, WakeSource())
+    try:
+        await session.async_connect()
+    finally:
+        await session.async_close()
+    assert any(
+        "LAN discovery only on this attempt (no rendezvous servers, or no DSK held)"
+        in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_no_connect_path_before_the_first_link(station: FakeStation) -> None:

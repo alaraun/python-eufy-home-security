@@ -177,13 +177,24 @@ included). Without one (a cloud error) the attempt is LAN discovery only; a repl
 cloud session fails an on-demand station's connect at once and leaves a held station
 on LAN discovery.
 `SessionStats.connect_path` (`"lan"` / `"rendezvous"`) and `connects_by_path` say which
-way the links came up: `"rendezvous"` when the `PUNCH_PKT` came from an address the
-client punched (even a host it also searched by unicast: behind a stateful gateway the
-punch is what admits the reply), `"lan"` otherwise. A held station whose last link
-counted as rendezvous, or whose DSK is cached, runs the rendezvous connect from its
-first attempt, so it skips the 6 s LAN-only first attempt; a station on the LAN usually
-answers the search before any `PUNCH_TO` and counts as `"lan"` again on its next link.
-`EufySecurity` keeps each station's last path in its session cache
+way the links came up, decided by where the station's `PUNCH_PKT` came from (the
+library's rule):
+
+| source of the `PUNCH_PKT` | path |
+|---|---|
+| an address in one of this host's directly connected IPv4 networks (each interface's address and netmask: the networks a broadcast `LAN_SEARCH` reaches), punched or not | `"lan"` |
+| outside them, an address the client punched (even a host it also searched by unicast: behind a stateful gateway the punch is what admits the reply) | `"rendezvous"` |
+| outside them, not punched (a host searched by unicast) | `"lan"` |
+| this host's networks cannot be read (not Linux, or an interface error): an address the client punched | `"rendezvous"` |
+
+So a station on this host's LAN that answers the punch toward its LAN address before
+the search (it ignores the first `LAN_SEARCH` after a session was closed) is still a
+LAN link, and a station on another subnet of the house is a rendezvous one. The
+networks are read off the event loop once per attempt that runs the rendezvous connect.
+A held station whose last link counted as rendezvous, or whose DSK is cached, runs the
+rendezvous connect from its first attempt, so it skips the 6 s LAN-only first attempt;
+a station that has moved onto this host's network counts as `"lan"` again on its next
+link. `EufySecurity` keeps each station's last path in its session cache
 (`stations.<serial>.link_path`, saved when it changes) and builds the station's session
 with it, so the first connect after a restart (a CLI run, a Home Assistant restart)
 already knows it; a station the device list no longer names loses it. A link's address

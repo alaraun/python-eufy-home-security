@@ -9,6 +9,7 @@ import time
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
+from ipaddress import IPv4Network
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 from typing import Any, ClassVar, cast
@@ -78,13 +79,14 @@ from eufy_home_security.install import InstallState
 from eufy_home_security.models import PARAM_LAN_IP, GuardMode
 from eufy_home_security.network import HostSource, PathWarning
 from eufy_home_security.p2p import discovery as discovery_module
+from eufy_home_security.p2p import netif
 from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p.did import Did
 from eufy_home_security.p2p.discovery import DiscoveredStation
 from eufy_home_security.p2p.media import Still, StillFormat
 from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN
-from eufy_home_security.p2p.pppp import BROADCAST
-from eufy_home_security.p2p.transport import ConnectPath, PPPPTransport, Wake
+from eufy_home_security.p2p.pppp import BROADCAST, encode_sockaddr
+from eufy_home_security.p2p.transport import RENDEZVOUS_PORT, ConnectPath, PPPPTransport, Wake
 from eufy_home_security.p2p.xzyh import FrameType
 from eufy_home_security.push import fcm as fcm_module
 from eufy_home_security.station import Station
@@ -105,6 +107,7 @@ from eufy_home_security.testing.cloud import (
     station_device,
     thing_description,
 )
+from tests.p2p.test_transport import _PunchToServer
 
 OTHER_STATION_SN = "T8030P2000054321"
 OTHER_DID = "EUPRAMA-654321-ABCDE"
@@ -2932,6 +2935,97 @@ async def test_a_station_the_list_no_longer_names_loses_its_link_path() -> None:
         assert store.data is not None
         assert "link_path" not in store.data["stations"][OTHER_STATION_SN]  # saved at once
         await eufy.async_close()
+
+
+STATION_LAN = "192.0.2.77"
+"""The punch-tested station's LAN address; routed to its loopback session socket."""
+SERVER = ("192.0.2.1", RENDEZVOUS_PORT)
+"""The station's rendezvous server; routed to a loopback :class:`_PunchToServer`."""
+
+
+def _route_punches(monkeypatch: pytest.MonkeyPatch, fake: FakeStation, server_port: int) -> None:
+    """Every transport the client opens reaches :data:`SERVER` at ``server_port`` and
+    :data:`STATION_LAN` at the fake's session socket, both on loopback, and drops the
+    rest of what goes to the server's host."""
+    connect = PPPPTransport.connect
+
+    async def routed(transport: PPPPTransport, host: str | None, **kwargs: Any) -> Did:
+        send, receive = transport._sendto, transport.datagram_received
+        start_alive = transport._start_alive_thread
+        station = ("127.0.0.1", fake.session_port)
+        server = ("127.0.0.1", server_port)
+
+        def sendto(packet: bytes, addr: tuple[str, int]) -> None:
+            if addr == SERVER:
+                send(packet, server)
+            elif addr[0] == STATION_LAN:
+                send(packet, station)
+            elif addr[0] != SERVER[0]:
+                send(packet, addr)
+
+        def received(data: bytes, addr: tuple[str | Any, int]) -> None:
+            if addr == station:
+                addr = (STATION_LAN, addr[1])
+            elif addr == server:
+                addr = SERVER
+            receive(data, addr)
+
+        transport._sendto = sendto  # type: ignore[method-assign]
+        transport.datagram_received = received  # type: ignore[method-assign]
+        transport._start_alive_thread = lambda peer: start_alive(  # type: ignore[method-assign]
+            station if peer[0] == STATION_LAN else peer
+        )
+        return await connect(transport, host, **kwargs)
+
+    monkeypatch.setattr(PPPPTransport, "connect", routed)
+
+
+@pytest.mark.parametrize(
+    ("stored", "networks", "path"),
+    [
+        (None, (IPv4Network("192.0.2.0/24"),), ConnectPath.LAN),
+        ("rendezvous", (IPv4Network("192.0.2.0/24"),), ConnectPath.LAN),
+        (None, (IPv4Network("198.51.100.0/24"),), ConnectPath.RENDEZVOUS),
+    ],
+)
+async def test_a_station_answering_the_punch_first_is_stored_by_this_hosts_networks(
+    monkeypatch: pytest.MonkeyPatch,
+    stored: str | None,
+    networks: tuple[IPv4Network, ...],
+    path: ConnectPath,
+) -> None:
+    """A station that ignores the LAN search (as once after a close) and answers the
+    punch toward its LAN address, with its DSK cached: in one of this host's networks
+    the link is stored as ``"lan"`` (a stored ``"rendezvous"`` too), on another subnet
+    as ``"rendezvous"``. No ``get_dsk_keys`` is sent."""
+    fake = FakeStation(ignore_searches=1000, answers_punch=True)
+    await fake.start()
+    server = _PunchToServer([encode_sockaddr(STATION_LAN, fake.session_port)])
+    endpoint, _ = await asyncio.get_running_loop().create_datagram_endpoint(
+        lambda: server, local_addr=("127.0.0.1", 0)
+    )
+    _route_punches(monkeypatch, fake, endpoint.get_extra_info("sockname")[1])
+    monkeypatch.setattr(CloudDevice, "rendezvous_servers", (SERVER[0],))
+    monkeypatch.setattr(netif, "local_networks", lambda: networks)
+    cloud = FakeCloud.for_stations(fake)
+    store = _link_path_store(cloud, {} if stored is None else {fake.serial: stored})
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=store, cloud=cloud, stations={fake.serial: fake}
+    )
+    try:
+        await eufy.async_discover()
+        eufy.cache.set_dsk_key(fake.serial, "cached-dsk", time.time() + 3600)
+        assert await eufy.async_start(push=False) == {}
+        await wait_for(lambda: eufy.cache.link_path(fake.serial) is path)
+        assert eufy.stations[fake.serial].session.stats().connects_by_path == {str(path): 1}
+    finally:
+        await eufy.async_close()
+        fake.stop()
+        endpoint.close()
+    assert fake.searches > 0  # searched, and ignored
+    assert not [call for call in cloud.calls if call.startswith("dsk:")]
+    assert store.data is not None
+    assert store.data["stations"][fake.serial]["link_path"] == str(path)
 
 
 # ── models without a bundled file ───────────────────────────────────────────

@@ -464,7 +464,7 @@ and opens no session:
 |---|---|
 | `reachable_via` | `ConnectPath.LAN` (`"lan"`) if the station answered LAN discovery, `ConnectPath.RENDEZVOUS` (`"rendezvous"`) if a punch through its rendezvous servers reached it (another subnet behind a stateful gateway, or another site; see the network section), None if neither did |
 | `reach` | `Reach.LOCAL` when `reachable_via` is set, else `Reach.REMOTE`. A station reached through its servers gets the same full session as one on the LAN |
-| `rendezvous` | the rendezvous probe's outcome: True (reached, or a built station whose last link came through the servers), False (no punch within the probe's time), None (not tried or not finished: it answered the LAN probe, it is reached on demand, it lists no servers, its DSK could not be fetched, it is built and its last link did not come through the servers, or its probe was still running when the probe budget ended) |
+| `rendezvous` | the rendezvous probe's outcome: True (reached, or a built station whose last link came through the servers: its last link of this run, or before the first the path stored from an earlier run), False (no punch within the probe's time), None (not tried or not finished: it answered the LAN probe, it is reached on demand, it lists no servers, its DSK could not be fetched, it is built and its last link did not come through the servers, or its probe was still running when the probe budget ended) |
 | `connects_on_demand` | a battery station reached on demand; one that did not answer the LAN probe is **not** probed through its servers, since the punch would wake it |
 | `sub_devices` | the cameras and sensors paired to it; they are included with it |
 | `supported` | whether the device catalog knows the model |
@@ -483,7 +483,7 @@ arrives as a `CloudProblem`, and the station keeps its LAN result (`rendezvous` 
 One with `NoCachedSessionError` is no reauth: the probe never logs in, and the next
 ordinary call does. A built station is not probed, connected or not (its own session
 reconnects it, through the servers too): `rendezvous` is True when its last link came
-through the servers.
+through the servers, from this run or, before its first link, stored from an earlier one.
 
 A battery station that did not answer the LAN probe stays `Reach.REMOTE` with
 `rendezvous` None: whether its servers would reach it cannot be known without waking
@@ -573,7 +573,10 @@ What the library relies on:
   the first attempt when its last link counted as `"rendezvous"` (kept in the session
   cache across restarts) or a fresh DSK is cached; otherwise after one failed LAN
   attempt, so a station that never reached the servers needs no cloud call, and only
-  its very first connect takes about 6 s longer. The integration does nothing for it;
+  its very first connect takes about 6 s longer. A link counts as `"rendezvous"` only
+  when the station answers from outside the host's own networks (its interfaces'
+  subnets); a station on the host's LAN is `"lan"` however its answer arrived. The
+  integration does nothing for it;
   `stats().connect_path` says which path a station's link took (`"lan"` /
   `"rendezvous"`; before the first link of a run, the one kept from the last run),
   worth showing in diagnostics.

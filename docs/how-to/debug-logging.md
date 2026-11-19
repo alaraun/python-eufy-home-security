@@ -188,11 +188,13 @@ logger:
 - `P2P session established via <address> (lan)` / `(rendezvous)` (INFO) says where the
   station answered and which way the link came up. `rendezvous via 3 of 3 server(s)`,
   `PUNCH_TO <address>; punching it` and `PUNCH_PKT from <address> (…, rendezvous)` trace
-  a connect through the servers; a public address is starred.
+  a connect through the servers; a public address is starred. A punch answered from an
+  address in the host's own networks logs `lan`: that station is on the host's LAN.
 - `no LAN discovery reply from <hosts> and no punch through N rendezvous servers within
   Ns` names what an unanswered connect sent; without the `and no punch …` part, no
   rendezvous request went out on that attempt (a held station's LAN-only first attempt,
-  no session key, or no server name resolved: check DNS and outbound UDP 32100). The
+  logged as `LAN discovery only on this attempt (no rendezvous servers, or no DSK held)`;
+  no session key; or no server name resolved: check DNS and outbound UDP 32100). The
   setup probe's own failure reads `no punch through N rendezvous servers within Ns`.
 - `acknowledged … but never acted on it` means the station dropped a command —
   almost always an `account_id` that is not the station owner's.

@@ -9,6 +9,7 @@ import threading
 import time
 import warnings
 from collections.abc import AsyncIterator, Iterator
+from ipaddress import IPv4Network
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -1196,6 +1197,82 @@ async def test_which_station_punch_is_taken_and_how_it_is_classified(
     assert transport._punch is not None
     assert transport._punch.done() is (path is not None)
     assert transport.path is path
+
+
+OUR_LAN = IPv4Network("192.0.2.0/24")
+"""This host's connected network, holding :data:`LAN_SOURCE`."""
+OTHER_LAN = IPv4Network("198.51.100.0/24")
+"""Another network of this host, not holding :data:`LAN_SOURCE`."""
+
+
+@pytest.mark.parametrize(
+    ("networks", "searched", "source", "punched", "path"),
+    [
+        # A punched address in one of this host's networks is on the LAN.
+        ((OUR_LAN,), None, LAN_SOURCE, LAN_SOURCE, ConnectPath.LAN),
+        ((OTHER_LAN, OUR_LAN), LAN_SOURCE[0], LAN_SOURCE, LAN_SOURCE, ConnectPath.LAN),
+        # Outside them, a punched address is the rendezvous path (another subnet, off-site).
+        ((OTHER_LAN,), None, LAN_SOURCE, LAN_SOURCE, ConnectPath.RENDEZVOUS),
+        ((OUR_LAN,), None, PUBLIC_SOURCE, PUBLIC_SOURCE, ConnectPath.RENDEZVOUS),
+        ((), None, LAN_SOURCE, LAN_SOURCE, ConnectPath.RENDEZVOUS),
+        # Not punched: the search's answer, inside the networks or not.
+        ((OTHER_LAN,), LAN_SOURCE[0], LAN_SOURCE, None, ConnectPath.LAN),
+        ((OUR_LAN,), None, LAN_SOURCE, None, ConnectPath.LAN),
+        # Unknown networks: punched counts as rendezvous.
+        (None, None, LAN_SOURCE, LAN_SOURCE, ConnectPath.RENDEZVOUS),
+        (None, None, LAN_SOURCE, None, ConnectPath.LAN),
+    ],
+)
+async def test_a_punched_station_on_this_hosts_network_counts_as_lan(
+    networks: tuple[IPv4Network, ...] | None,
+    searched: str | None,
+    source: tuple[str, int],
+    punched: tuple[str, int] | None,
+    path: ConnectPath,
+) -> None:
+    transport = make_transport()
+    _discovering(transport, servers=frozenset({"192.0.2.1"}))
+    transport._discover_host = searched
+    transport._local_networks = networks
+    if punched is not None:
+        transport.datagram_received(
+            encode_packet(MsgType.PUNCH_TO, encode_sockaddr(*punched)), ("192.0.2.1", 32100)
+        )
+    did = Did.parse(SYNTHETIC.did)
+    transport.datagram_received(encode_packet(MsgType.PUNCH_PKT, did.to_struct()), source)
+    assert transport.path is path
+
+
+@pytest.mark.parametrize(
+    ("networks", "path"),
+    [
+        ((OUR_LAN,), ConnectPath.LAN),  # holds CAMERA_LAN
+        ((OTHER_LAN,), ConnectPath.RENDEZVOUS),
+    ],
+)
+async def test_a_station_answering_the_punch_to_its_lan_address_first_is_on_the_lan(
+    rendezvous: _Rendezvous,
+    networks: tuple[IPv4Network, ...],
+    path: ConnectPath,
+) -> None:
+    """A station that ignores the search (it does so once after a close) but answers
+    the punch toward its LAN address: on this host's network that link is a LAN one;
+    on another subnet it is the rendezvous path."""
+    transport = make_transport()
+    rendezvous.route(transport)
+    try:
+        await transport.connect(
+            SEARCHED,
+            port=59999,
+            expected_did=rendezvous.did,
+            timeout=3.0,
+            wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
+            local_networks=networks,
+        )
+        assert transport.peer == (CAMERA_LAN, rendezvous.camera_port)
+        assert transport.path is path
+    finally:
+        transport.close()
 
 
 async def test_a_punch_to_after_the_peer_is_pinned_is_ignored() -> None:

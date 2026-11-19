@@ -19,7 +19,9 @@ Wire facts that shape it:
   station's rendezvous servers answer a ``P2P_REQ_DSK`` with ``PUNCH_TO`` addresses,
   the client punches each, and the station's ``PUNCH_PKT`` from one of them is the
   session, as the eufy app connects. It reaches a station a ``LAN_SEARCH`` does not
-  (another subnet behind a stateful gateway, a battery station asleep).
+  (another subnet behind a stateful gateway, a battery station asleep). A punch answered
+  from an address in this host's own networks still counts as a LAN link
+  (:class:`ConnectPath`).
 * A firewall can only admit the station's replies by the *local* port; pin it with
   ``local_port`` when that is needed (0 = ephemeral).
 * The station answers ``ALIVE`` whether or not the encrypted session above still
@@ -118,9 +120,11 @@ class ConnectPath(StrEnum):
     """How a link was set up."""
 
     LAN = "lan"
-    """The station answered a ``LAN_SEARCH`` (or punched this host on its own)."""
+    """The station answered a ``LAN_SEARCH`` (or punched this host on its own), or
+    answered a punch from an address in one of this host's directly connected networks."""
     RENDEZVOUS = "rendezvous"
-    """The station answered a punch toward an address its rendezvous servers named."""
+    """The station answered a punch toward an address its rendezvous servers named,
+    outside this host's networks (or while those are unknown)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +219,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
         self._our_ip = ANY_ADDRESS
         self._search_round = 0
         self._punched: dict[tuple[str, int], int] = {}
+        self._local_networks: Sequence[ipaddress.IPv4Network] | None = None
         self._path: ConnectPath | None = None
         self._punch: asyncio.Future[tuple[Did, bytes, tuple[str, int]]] | None = None
         self._ready = asyncio.Event()
@@ -285,6 +290,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
         expected_did: Did | None = None,
         wake: Wake | None = None,
         extra_hosts: Sequence[str] = (),
+        local_networks: Sequence[ipaddress.IPv4Network] | None = None,
     ) -> Did:
         """Discover and punch the station; returns its DID.
 
@@ -304,9 +310,13 @@ class PPPPTransport(asyncio.DatagramProtocol):
         addresses; the client punches each one that names a remote host, and a
         ``PUNCH_PKT`` with the station's DID from a punched address is taken too.
         ``expected_did`` is required with it. :attr:`path` says which way won: a reply
-        from an address the client punched counts as rendezvous, even one it also searched:
-        the punch is what a stateful gateway admits the reply by.
+        from an address in one of ``local_networks`` (this host's directly connected
+        networks, :func:`~.netif.local_networks`) is on the LAN, punched or not; one from
+        outside them that the client punched counts as rendezvous, even an address it
+        also searched: the punch is what a stateful gateway admits the reply by. With
+        ``local_networks`` None (unknown), any punched address counts as rendezvous.
         """
+        self._local_networks = local_networks
         did, body, addr = await self._await_punch(
             host,
             port=port,
@@ -629,8 +639,15 @@ class PPPPTransport(asyncio.DatagramProtocol):
                 "ignoring discovery reply from another station (%s)", Identifier(str(did))
             )
             return
-        self._path = ConnectPath.RENDEZVOUS if addr in self._punched else ConnectPath.LAN
+        rendezvous = addr in self._punched and not self._on_local_network(addr[0])
+        self._path = ConnectPath.RENDEZVOUS if rendezvous else ConnectPath.LAN
         self._punch.set_result((did, payload, addr))
+
+    def _on_local_network(self, host: str) -> bool:
+        """Whether ``host`` lies in one of this host's directly connected networks, the
+        ones a broadcast ``LAN_SEARCH`` reaches; False while they are unknown."""
+        address = ipaddress.IPv4Address(host)
+        return any(address in network for network in self._local_networks or ())
 
     def _answers_search(self, addr: tuple[str, int]) -> bool:
         """Whether a ``PUNCH_PKT`` from ``addr`` answers the LAN search: its host was
