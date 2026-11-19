@@ -72,8 +72,10 @@ page names the ones written and read back.
 - Python 3.13 or newer.
 - A eufy Security account that can see the station: the owner's, or a member it is
   shared with (commands are sent on the owner's behalf).
-- For local access, a host on the **same L2 network** as the station: discovery is a
-  broadcast, and a routed host cannot reach it. Login and push work from anywhere.
+- For local access, the fastest path is a host on the **same L2 network** as the
+  station (discovery is a broadcast). A station on another subnet or at another site
+  connects through eufy's rendezvous servers instead (outbound UDP 32100 and a cloud
+  session for its key). Login and push work from anywhere.
 - If inbound UDP is filtered: a fixed IP and a pinned local port per station.
   `eufy-security network` prints what each station needs.
 

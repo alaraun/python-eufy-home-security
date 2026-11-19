@@ -12,7 +12,7 @@ A station reports what happens at the house on two independent channels:
 | guard-mode changes | changes over P2P, from the app and from a schedule announced by `0x047F` **[verified, fw 3.8.7.4]**; keypad changes **[open]** (poll the parameter dump); no arming push (msg_type 9) over P2P | **pushed**, decoded within about 1 s **[verified]** |
 | parameter changes (battery, settings) | pushed as dumps, plus polling | no |
 | stills | 640×360 thumbnail, crop, 4K from the recording ([media.md](media.md)) | encrypted `pic_url` thumbnail **[app]** |
-| off-LAN | no | yes |
+| off-LAN | through a session over the rendezvous servers ([p2p-transport.md](p2p-transport.md)) | yes |
 
 Code: `src/eufy_home_security/p2p/notify.py` (P2P push decode), `p2p/alarm.py`
 (alarm frames), `p2p/params.py` (dumps), `p2p/session/` (probe and supervision),

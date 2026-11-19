@@ -4,7 +4,9 @@ The cloud provides four things, all needed before any local traffic: a login
 session, the device list, the station owner's user id, and the station's cipher 40
 private key. After those are cached, a client can run a HomeBase on the LAN with no
 cloud calls at all. Only cloud push ([events.md](events.md)) stays on the cloud; a
-standalone battery camera also needs a [DSK](#device-session-key-dsk) for each wake.
+standalone battery camera also needs a [DSK](#device-session-key-dsk) for each wake,
+and a station LAN discovery does not reach needs one to connect through its rendezvous
+servers.
 
 Code: `src/eufy_home_security/cloud/crypto.py` (pure primitives),
 `cloud/api.py` (calls), `cloud/const.py` (constants and codes).
@@ -275,7 +277,7 @@ The device entries:
 | `member.admin_user_id` | **the station owner's user id = the P2P `account_id`** |
 | `member.member_type` | 0 guest, 1 admin, 2 owner (super-admin). Only the app's UI enforces it; the station does not **[app]**. |
 | `main_sw_version`, `sec_sw_version` | firmware. The command set is firmware-dependent. |
-| `app_conn` | the PPPP **rendezvous servers** (obfuscated), which wake a battery station ([p2p-transport.md](p2p-transport.md#waking-a-battery-station-verified)). Decoded by `pppp.decode_init_string` **[verified]**. `p2p_conn` is the same list plus relay host names. |
+| `app_conn` | the PPPP **rendezvous servers** (obfuscated), which wake a battery station and connect a station LAN discovery does not reach ([p2p-transport.md](p2p-transport.md#waking-a-battery-station-verified)). Decoded by `pppp.decode_init_string` **[verified]**. `p2p_conn` is the same list plus relay host names. |
 | `p2p_license`, `signaling_servers`, `mqtt_info` | off-LAN relay / WebRTC / MQTT material, not used by LAN operation **[open]**. MQTT (`aiot-mqtt-eu.anker.com`) grants no topic for a camera, so it is not a camera channel **[verified]** |
 | `parent_sn` = own `device_sn` | a standalone device (a T8170), its own station; a HomeBase 3 leaves `parent_sn` empty **[verified]** |
 | `params` | the cloud's snapshot of every parameter: `[{param_type, param_value, update_time}]`, `update_time` in epoch seconds. The device (or its hub) uploads a value when it changes, so a battery camera's state is here without waking it **[verified]**: at one fetch a T8170's battery was 3 min old, its Wi-Fi signal 17 min and its guard mode 18 min. The library keeps it in the cache for stations (the second source of their settings, see [source-of-truth.md](../reference/source-of-truth.md#where-a-station-settings-value-comes-from)) and devices reached on demand. |
@@ -552,7 +554,8 @@ Whether a guest (`member_type` 0) is served is untested **[open]**.
 
 `data.device_dsks[0]` = `{device_sn, dsk_key (20 chars), expiration (epoch s, ~1 h),
 enabled, about_to_be_replaced, category}`. The DSK wakes a battery station over its
-rendezvous servers ([p2p-transport.md](p2p-transport.md#waking-a-battery-station-verified)).
+rendezvous servers and connects a station LAN discovery does not reach
+([p2p-transport.md](p2p-transport.md#waking-a-battery-station-verified)).
 Each client gets its own key; pass a stale one as `invalid_dsk` to force a rotation. The
 library caches it per station until ~5 min before it expires **[verified]**, then fetches
 a new one with an empty `invalid_dsk`; it names a key invalid only when a caller rejects

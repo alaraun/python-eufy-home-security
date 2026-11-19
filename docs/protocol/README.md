@@ -22,8 +22,9 @@ A client starts in the **cloud**. It logs in to eufy_mega with e-mail and passwo
 reads the device list (which gives the station serial, P2P DID, LAN address and the
 **owner's user id**), and fetches the station's **cipher 40** private key from the
 separate security realm. That happens once and is cached. Everything after it is
-local. The client finds the station on the LAN with a PPPP `LAN_SEARCH`, punches a
-UDP session, and keeps it up with `ALIVE`. Application data travels as **DRW**
+local. The client finds the station on the LAN with a PPPP `LAN_SEARCH` (or, when
+the LAN does not reach it, through its rendezvous servers, which name the addresses to
+punch), punches a UDP session, and keeps it up with `ALIVE`. Application data travels as **DRW**
 chunks on numbered channels. Reassembled in order, each channel is a byte stream of
 **XZYH** frames. The first frame exchange (**CONN_INIT**) is wrapped under a static
 key derived from the serial and DID. It carries an ECIES blob that unwraps, with the
@@ -63,7 +64,7 @@ exception, because it can only be woken through eufy's servers.
 | device list (serial, DID, `local_ip`, channels) | building a `Station` per HomeBase | until a device is added or removed | the cached list; `LAN_SEARCH` returns the DID and address as well |
 | owner `admin_user_id` | every P2P command (any other id is acknowledged and dropped) | until the sharing changes | cached; a station push also carries it (`rec_content[].account`) |
 | `ecc_private_key` of the cipher the station names (40 on a HomeBase 3, 98 on a T8170) | unwrapping the CONN_INIT session key: **the hard dependency** | until the station is re-bound **[open]** | **none.** The station encrypts the session key to the account's P-256 key from pairing; the private half exists only in eufy's cloud. Cached for good; a rotation costs one fetch |
-| DSK and the rendezvous servers (`app_conn`) | waking a sleeping battery station ([p2p-transport.md](p2p-transport.md#waking-a-battery-station-verified)) | ~1 h, per client | none (see below) |
+| DSK and the rendezvous servers (`app_conn`) | waking a sleeping battery station, and connecting any station LAN discovery does not reach ([p2p-transport.md](p2p-transport.md#waking-a-battery-station-verified)) | ~1 h, per client | a station on the LAN: none. A battery station or one only the servers reach: none (see below) |
 | cloud `params` snapshot | the state of a sleeping camera without waking it; a station's settings its dump lacks | refreshed hourly while a battery station is on the account, else with the device list | wake the camera, which needs the cloud anyway; a hub's cloud-only settings show the app's defaults |
 | cloud push (FCM) | a guard-mode change as it happens | install-scoped | on fw 3.8.7.4 the station announces app, schedule and P2P changes itself (`0x047F`, [events.md](events.md#guard-mode-announcements)); keypad changes are untested. On fw 3.8.6.0 app changes reach only the push |
 
@@ -76,7 +77,9 @@ device.
 **Standalone battery camera (T8170).** Asleep, it answers no `LAN_SEARCH`; its only
 standing link is to eufy's PPPP rendezvous servers, and the wake needs a fresh DSK from
 the cloud plus UDP to those servers. The data path then punches back over the LAN
-without a relay, so operation is local but each wake-hour costs a cloud call. MQTT is
+without a relay, so operation is local but each wake-hour costs a cloud call. A station
+on another subnet or at another site connects the same way (mains powered or not); a
+relay, for two NATs a punch cannot cross, is not implemented. MQTT is
 not a channel: the broker grants no camera topic **[verified]**.
 
 **The station's own cloud traffic** (parameter uploads, pushes, relay registration,

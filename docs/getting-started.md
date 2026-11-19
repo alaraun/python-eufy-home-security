@@ -5,9 +5,11 @@
 - Python 3.13+
 - A eufy Security account that can see the station (the owner's, or a shared
   member's — commands are sent on the owner's behalf automatically).
-- For local P2P: a host on the **same L2 network** as the HomeBase. LAN discovery is
-  a broadcast; a routed host cannot reach the station. Cloud login and push work
-  from anywhere.
+- For local P2P: a host on the **same L2 network** as the station is the fastest
+  path (LAN discovery is a broadcast). A station the broadcast does not reach (another
+  subnet, another site) connects through eufy's rendezvous servers: outbound UDP 32100
+  and a cloud session for its key ([p2p-transport.md](protocol/p2p-transport.md)).
+  Cloud login and push work from anywhere.
 - If the host or the network filters inbound UDP: a fixed IP for each station (a DHCP
   reservation), and either all UDP from the station allowed, or one pinned local port
   per station (`local_ports=`) allowed. `eufy-security network` prints what each of
@@ -115,8 +117,9 @@ Two channels feed the same stream, tagged by `event.source`:
   a second before the cloud, without internet. Guard-mode reports arrive as
   `GuardModeChanged`, parameter changes as `ParamChanged`.
 - **Cloud** (`EventSource.CLOUD`) — FCM push. It carries guard-mode changes made
-  elsewhere (app, keypad, schedule) also while no local session is up, and it is the
-  only channel that works off the LAN.
+  elsewhere (app, keypad, schedule) also while no local session is up, and it needs no
+  local session at all. A P2P session through the rendezvous servers (a station off the
+  LAN) delivers the P2P events as on the LAN.
 
 Run both. Sessions reconnect on their own; `ConnectionChanged` reports it.
 

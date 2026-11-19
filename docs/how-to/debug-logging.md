@@ -12,7 +12,7 @@ Loggers follow the module path, so one subsystem can be turned up on its own:
 | `eufy_home_security.client` | the P2P credentials handed to each station |
 | `eufy_home_security.identity` | which account serves a station shared between accounts |
 | `eufy_home_security.p2p.discovery` | LAN probe searches and who answered |
-| `eufy_home_security.p2p.transport` | bind, LAN_SEARCH / PUNCH_PKT / P2P_RDY, every DRW chunk and ack, retransmits, keepalive (sampled), CLOSE, link down |
+| `eufy_home_security.p2p.transport` | bind, LAN_SEARCH / PUNCH_PKT / P2P_RDY, the rendezvous request and each PUNCH_TO punched, every DRW chunk and ack, retransmits, keepalive (sampled), CLOSE, link down |
 | `eufy_home_security.p2p.xzyh` | duplicate and out-of-order chunks (sampled) |
 | `eufy_home_security.p2p.broadcast` | a shared live stream's subscribers falling behind, resolution changes, resize grace |
 | `eufy_home_security.p2p.session` (and its submodules) | handshake steps and keys, every request (label, resends, reply time), command-lock waits, parameter changes, guard mode, camera pushes and their record binding, still fetches, trigger frames, media streams (see [Tracing a detection](#tracing-a-detection)) |
@@ -185,6 +185,15 @@ logger:
 
 - `no LAN discovery reply` once after a reconnect is normal: the station ignores
   the first search after a session closes, and discovery retries.
+- `P2P session established via <address> (lan)` / `(rendezvous)` (INFO) says where the
+  station answered and which way the link came up. `rendezvous via 3 of 3 server(s)`,
+  `PUNCH_TO <address>; punching it` and `PUNCH_PKT from <address> (…, rendezvous)` trace
+  a connect through the servers; a public address is starred.
+- `no LAN discovery reply from <hosts> and no punch through N rendezvous servers within
+  Ns` names what an unanswered connect sent; without the `and no punch …` part, no
+  rendezvous request went out on that attempt (a held station's LAN-only first attempt,
+  no session key, or no server name resolved: check DNS and outbound UDP 32100). The
+  setup probe's own failure reads `no punch through N rendezvous servers within Ns`.
 - `acknowledged … but never acted on it` means the station dropped a command —
   almost always an `account_id` that is not the station owner's.
 - `replied under GCM, not ECB` means a firmware moved a setting to the
