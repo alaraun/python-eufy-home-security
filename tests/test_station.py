@@ -5432,6 +5432,33 @@ async def test_a_model_that_prefers_the_status_parameter_groups_the_devices_valu
     assert (info.emmc.work_status, info.emmc.status_group, info.emmc.state) == (0, group, state)
 
 
+@pytest.mark.parametrize(
+    ("dumped", "listed", "group"),
+    [("4", "", 2), ("4", "0", 2), ("", "4", 0)],
+    ids=["dump-set-cloud-empty", "dump-set-cloud-other", "dump-empty-cloud-set"],
+)
+async def test_the_devices_own_status_parameter_wins_over_the_clouds_copy(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch, dumped: str, listed: str, group: int
+) -> None:
+    """The station's dump of 1135 is the value grouped, an empty one included (the answer's
+    status 0 then decides)."""
+    monkeypatch.setattr(
+        station_mod, "sd_status_groups", lambda code: SdStatusGroups({0: 0, 4: 2}, 1, 1135)
+    )
+    fake.sd_info = (0, 8000, 2000)
+    fake.params[255][1135] = dumped
+    raw = {"params": [{"param_type": 1135, "param_value": listed}]}
+    station = await _standalone(fake, "T8115P2000054321", raw=raw)
+    try:
+        assert station.state is not None
+        assert station.state.setting_params.get(1135) == dumped
+        info = await station.async_get_storage()
+    finally:
+        await station.async_close()
+    assert info.emmc is not None
+    assert (info.emmc.work_status, info.emmc.status_group) == (0, group)
+
+
 async def test_async_get_storage_on_homebase_retains_1307_path(
     station: Station, fake: FakeStation
 ) -> None:
