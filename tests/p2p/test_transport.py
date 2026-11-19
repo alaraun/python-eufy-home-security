@@ -1442,6 +1442,32 @@ async def test_without_an_on_link_grace_the_lan_address_is_punched_at_once(
     assert on_link - search < 1.0
 
 
+@pytest.mark.parametrize("extra", [True, False], ids=["extra-host", "search-host"])
+async def test_a_station_searched_off_link_and_reached_by_the_punch_is_not_flagged(
+    rendezvous: _Rendezvous, extra: bool
+) -> None:
+    """A station on another subnet whose LAN address discovery searches by unicast
+    (configured, or the address it reports) and that answers the punch toward it: a
+    rendezvous link, punched at once and never recorded as LAN reply blocked."""
+    transport = make_transport()
+    rendezvous.route(transport)
+    try:
+        await transport.connect(
+            SEARCHED if extra else CAMERA_LAN,
+            port=59999,
+            expected_did=rendezvous.did,
+            timeout=3.0,
+            wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
+            extra_hosts=(CAMERA_LAN,) if extra else (),
+            local_networks=(IPv4Network("203.0.113.0/24"),),
+            on_link_grace=True,
+        )
+        assert transport.path is ConnectPath.RENDEZVOUS
+        assert transport.lan_reply_blocked is False
+    finally:
+        transport.close()
+
+
 async def test_a_punch_to_after_the_peer_is_pinned_is_ignored() -> None:
     transport = make_transport()
     punched = _discovering(transport, servers=frozenset({"192.0.2.1"}))
