@@ -4,6 +4,26 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.14](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.13...v0.4.14) (2026-11-19)
+
+
+### Features
+
+* **cloud:** accept pending home and device invitations ([#195](https://github.com/alaraun/python-eufy-home-security/issues/195)) ([e92cc1a](https://github.com/alaraun/python-eufy-home-security/commit/e92cc1a55362a7395d258405fc3a2699305b0eda))
+* **p2p:** connect to stations beyond the LAN through their rendezvous servers ([#200](https://github.com/alaraun/python-eufy-home-security/issues/200)) ([2b75a38](https://github.com/alaraun/python-eufy-home-security/commit/2b75a38eef7a747dcae09b60441ef8bcff5f2e95))
+
+
+### Bug Fixes
+
+* **devices:** name models and units from eufy's product name tables ([#198](https://github.com/alaraun/python-eufy-home-security/issues/198)) ([dada403](https://github.com/alaraun/python-eufy-home-security/commit/dada403102d7254f09a836f2d2e8aa3f9f121f7a))
+* **p2p:** an SDINFO_EX answer without a usable medium is a result, grouped per model ([#201](https://github.com/alaraun/python-eufy-home-security/issues/201)) ([87a1aea](https://github.com/alaraun/python-eufy-home-security/commit/87a1aeaa2aa0283add27e1a1fe501eff8fbf339f))
+* **p2p:** name PPPP types 0x26, 0x43 and 0xF9 as the P2P stack does ([#199](https://github.com/alaraun/python-eufy-home-security/issues/199)) ([28cb3bf](https://github.com/alaraun/python-eufy-home-security/commit/28cb3bf2f31a8d6589e2e7cb383c60b5b9f51f6f))
+
+
+### Documentation
+
+* **cloud:** name every error of async_accept_invite ([#197](https://github.com/alaraun/python-eufy-home-security/issues/197)) ([a0a73fd](https://github.com/alaraun/python-eufy-home-security/commit/a0a73fd89645ea7bd9c33aff6a885cbc2048dda4))
+
 ## [0.4.13](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.12...v0.4.13) (2026-11-12)
 
 
