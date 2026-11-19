@@ -2,7 +2,8 @@
 
 The per-model settings (`src/eufy_home_security/devices/data/models/<PN>.json` and
 `INDEX.json`) are generated offline from the eufy app's thing models and ship with each
-release. Nothing at runtime fetches or runs vendor code: a newer handler reaches users
+release. Besides the settings, a model's file carries its battery reads (`battery`) and
+how its handler groups an `SDINFO_EX` storage status (`sd_status_groups`). Nothing at runtime fetches or runs vendor code: a newer handler reaches users
 only through a regenerated file in a library release. The format is in
 [reference/models-schema.md](../reference/models-schema.md).
 

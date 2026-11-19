@@ -1250,9 +1250,13 @@ A closed session (`async_close`) never reconnects on its own — build a new
     - A `1144` record also says whether the medium can be used: `storage.emmc.usable`
       (True / False) and `storage.emmc.state` (`MediumState`: `normal`, `no_card`,
       `corrupted`, `other`), with the raw code in `work_status` and its group in
-      `status_group`. They are set on every `1144` record: a standalone camera's, and
-      that of the HomeBases asked `1144` (a HomeBase 2 below firmware 3.3.7.7, the
-      T8001, T8002, T8020 and T8023). They are None on a `1307` record (the HomeBase 3
+      `status_group`, grouped as the device's model groups it (its settings file's
+      table; the same code can mean another group on another model, e.g. 30 is normal
+      on most models and `other` on a T8115), so read `state` and `usable` rather than
+      mapping codes in the integration. They are set on every `1144` record: a
+      standalone camera's, and that of the HomeBases asked `1144` (a HomeBase 2 below
+      firmware 3.3.7.7, the T8001, T8002, T8020 and T8023). They are None on a `1307`
+      record (the HomeBase 3
       family) and a `55000` record (a HomeBase 2 from 3.3.7.7), which carry no such
       status. Any 12-byte answer is the result and ends the query at once, `[0, 0, 0]`
       included, so there is no retry to build: a camera with no card, or one it cannot

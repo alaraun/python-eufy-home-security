@@ -618,14 +618,25 @@ The app reads the status through a grouping table in each product's handler
 **[declared: app]**: each code falls into a display group, a code the table does not
 list into group 1. The groups whose meaning the app names are 0 (in use, no prompt), 2
 (its "no SD card" prompt) and 4 (its "SD card corrupted" prompt); the others are not
-normal, their meaning is not named here. The library groups every product's status by
-one table, the union of the handlers' tables (`sd_status_group`):
+normal, their meaning is not named here. The tables differ between products, so the
+library groups each device's status by its own model's table, generated from the
+model's handler into its settings file (`sd_status_groups`,
+[models-schema.md](../reference/models-schema.md);
+`devices.model_settings.sd_status_groups`). Of the bundled models, 105 carry one:
+
+| models | which | group of 29, 30, 31, 33 |
+|---|---|---|
+| 75 | the T817L, T8170, T8160 among them | 18, 0, 2, 1 (33 unlisted) |
+| 29 | T8028, T8030, T8040, T8112, T8144, T814X, T8160C, T8161, T8162, T8172, T8180, T8214, T8215, T8217, T8223, T8224, T8400, T8401, T8404, T8410, T8410C, T8411, T84A1, T8600, T86P2, T8E00, T8L60, T8P00, T8P10 | 18, 0, 2, 22 |
+| 1 | T8115 | 1, 1, 1, 1 (all four unlisted) |
+
+Every table groups the other codes alike:
 
 | group | status codes |
 |---|---|
-| 0 | 0, 25, 30 |
+| 0 | 0, 25, and 30 where listed |
 | 1 | 27, 28, and every code not listed |
-| 2 | 4, 31 |
+| 2 | 4, and 31 where listed |
 | 4 | 22 |
 | 6 | 11 |
 | 7 | 5, 6 |
@@ -635,23 +646,26 @@ one table, the union of the handlers' tables (`sd_status_group`):
 | 11 | 15 |
 | 12 | 13, 18, 21 |
 | 13 | 8 |
-| 18 | 29 |
-| 22 | 33 |
+| 18 | 29 where listed |
+| 22 | 33 where listed |
 
-Where a product's handler differs from it:
-
-- **Code 33** is group 22 only in the handlers of the T8028, T8030, T8040, T8112,
-  T8144, T814X, T8160C, T8161, T8162, T8172, T8180, T8214, T8215, T8217, T8223, T8224,
-  T8400, T8401, T8404, T8410, T8410C, T8411, T84A1, T8600, T86P2, T8E00, T8L60, T8P00
-  and T8P10. The others (the T817L among them) leave it out, so the app shows it in
-  group 1. `state` and `usable` are the same either way: groups 22 and 1 are both
-  `other`, only `status_group` differs.
-- **The T8115's handler** also leaves out 29, 30 and 31, which fall to group 1 there.
-  For 30 the library reads `normal` (and `usable` True with a size) where the app shows
-  group 1; 31 reads `no_card` where the app shows group 1; 29 is `other` either way.
-- **The T814X, T8W11C and T8600** group the device's status parameter `1135`
-  (`APP_CMD_GET_TFCARD_STATUS`) in place of the reply's status when the parameter is
-  set; the library groups the reply's status.
+- **The T8600 and the T8W11C** group the device's status parameter `1135`
+  (`APP_CMD_GET_TFCARD_STATUS`) in place of the answer's status whenever the device
+  lists it with a value (an empty value keeps the answer's status; a value that is no
+  decimal code falls to group 1). The library does the same with the device's
+  parameters as last reported (the station's over the cloud's copy), and groups the
+  answer's status while the device reports none.
+- **On 16 models the handler's parse of this answer reads no status** (T7100, T8028,
+  T8111, T8112, T8113, T8114, T8140, T8142, T8144, T8160, T8160C, T8161, T8162, T8E00,
+  T8P00, T8P10): it reads a field the answer does not carry (the T8028's handler has
+  no parse of it at all), so the app shows group 1 for every answer there. The library groups their status by the table the same
+  handler applies to the device's status parameter (`1135`), the library's choice: a
+  group that ignores the status would report every card as not usable.
+- **A model without a table** (no settings file, or a handler that reads no status
+  anywhere, such as the smart locks) is grouped by the library's own table
+  (`sd_status_group`, `SD_STATUS_GROUPS`): the union of the products' tables, 0 for
+  0, 25 and 30, 2 for 4 and 31, 22 for 33, the rest as above. That table is the
+  library's choice.
 
 The app formats the sizes as **MB** (base 1000, `< 1000` → "MB", else ÷1000 → "GB") and
 takes used as `total − free` (this query carries no system-reserve figure). So for the
@@ -674,7 +688,7 @@ with a shorter body is not an answer. Unanswered, the query is resent every 2 s
 (`SD_INFO_RESEND`) and raises `DeviceTimeoutError("no SDINFO_EX answer within 15s")`
 after `SD_INFO_TIMEOUT`. It returns a `StorageInfo` with only `emmc` set: an `EmmcInfo`
 (`size_mib` = total, `used_mib` = `total − free`, `work_status` = the raw status code,
-`status_group` = that code's group, see `sd_status_group`), whose `used_percent` is the
+`status_group` = its group in the model's table, above), whose `used_percent` is the
 figure the eMMC diagnostic shows. `state` names the group (`MediumState`: `normal`,
 `no_card`, `corrupted`, or `other`), and `usable` is True only for group 0 with a size.
 A total of 0 or less leaves the sizes and `used_percent` None and `usable` False; a
