@@ -29,6 +29,7 @@ from typing import Any, Final, cast
 
 from ..exceptions import ModelDataError, UnsupportedError
 from ..models import PARAM_BATTERY
+from ..p2p._json import json_int
 from ..p2p.mode_actions import ACTION_FLAGS
 from .conditions import Groups, groups_of
 from .labels import setting_name
@@ -55,6 +56,7 @@ __all__ = [
     "IDENTIFIER",
     "PARENTLESS_ONLY",
     "BatteryRead",
+    "SdStatusGroups",
     "Setting",
     "SettingControl",
     "SettingKind",
@@ -71,6 +73,7 @@ __all__ = [
     "canonical_code",
     "mode_table_settings",
     "product_code_of",
+    "sd_status_groups",
     "settings_of",
     "sort_settings",
 ]
@@ -1118,10 +1121,46 @@ def battery_level(product_code: str | None, params: Mapping[int, str | None]) ->
 
 
 @dataclass(frozen=True, slots=True)
+class SdStatusGroups:
+    """How a model's handler groups an ``SDINFO_EX`` (``1144``) status **[declared]**
+    (the settings file's ``sd_status_groups``, see docs/reference/models-schema.md): its
+    parse of the answer, or, where that parse reads no status, the grouping its status
+    property applies (the library's choice over a group that ignores the status)."""
+
+    codes: Mapping[int, int]
+    """The group of each status whose group is not :attr:`default`."""
+    default: int
+    """The group of every other status."""
+    param: int | None = None
+    """The device parameter the handler groups in place of the answer's status when the
+    device lists it with a value; None when it groups the answer's status alone."""
+
+    def group(self, status: int, params: Mapping[int, str | None] | None = None) -> int:
+        """The group of the answer's ``status``, or, where :attr:`param` is set and the
+        device's ``params`` hold it with a non-empty value, of that value's status (a
+        value that is no decimal status: :attr:`default`)."""
+        raw = None if self.param is None or params is None else params.get(self.param)
+        if raw:
+            parsed = json_int(raw.strip())
+            return self.default if parsed is None else self.codes.get(parsed, self.default)
+        return self.codes.get(status, self.default)
+
+
+def sd_status_groups(product_code: str | None) -> SdStatusGroups | None:
+    """How a device of ``product_code`` groups an ``SDINFO_EX`` status, as its handler
+    does; None without a code, a file or a grouping in it (the caller's fallback applies).
+    Reads like :func:`settings_of` (same memo) and raises like it."""
+    if product_code is None or not _PRODUCT_CODE.fullmatch(product_code):
+        return None
+    return _load(product_code.upper()).sd_status
+
+
+@dataclass(frozen=True, slots=True)
 class _Model:
     entries: Mapping[str, Mapping[str, Any]]
     td_version: int | None
     battery: tuple[BatteryRead, ...] = ()
+    sd_status: SdStatusGroups | None = None
 
 
 _NO_MODEL: Final = _Model(MappingProxyType({}), None)
@@ -1144,9 +1183,35 @@ def _load(code: str) -> _Model:
         for context in (None, *_context_names(entries)):
             _parse(code, entries, context)
         battery = _battery_of(data.get("battery", []))
+        sd_status = (
+            None if "sd_status_groups" not in data else _sd_status_of(data["sd_status_groups"])
+        )
     except (KeyError, TypeError, ValueError) as err:
         raise ModelDataError(f"{name}: {err}") from err
-    return _Model(MappingProxyType(entries), _source_version(data), battery)
+    return _Model(MappingProxyType(entries), _source_version(data), battery, sd_status)
+
+
+_STATUS_TEXT: Final = re.compile(r"-?(?:0|[1-9][0-9]*)")
+
+
+def _sd_status_of(raw: object) -> SdStatusGroups:
+    """The checked ``sd_status_groups`` object of a settings file."""
+    if not isinstance(raw, dict):
+        raise TypeError("sd_status_groups is not an object")
+    if not {"codes", "default"} <= set(raw) <= {"codes", "default", "param"}:
+        raise TypeError("sd_status_groups is not {codes, default, param}")
+    default, codes, param = raw["default"], raw["codes"], raw.get("param")
+    if type(default) is not int:
+        raise ValueError(f"sd_status_groups default group {default!r} is no group")
+    if not isinstance(codes, dict) or not all(
+        isinstance(k, str) and _STATUS_TEXT.fullmatch(k) and type(v) is int
+        for k, v in codes.items()
+    ):
+        raise TypeError("sd_status_groups codes are not status -> group")
+    if param is not None and (type(param) is not int or not 0 < param < 2**16):
+        raise ValueError(f"sd_status_groups param {param!r} is no parameter id")
+    by_code = MappingProxyType({int(k): v for k, v in codes.items()})
+    return SdStatusGroups(by_code, default, param)
 
 
 def _battery_of(items: object) -> tuple[BatteryRead, ...]:

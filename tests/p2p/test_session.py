@@ -4641,6 +4641,24 @@ async def test_async_get_sd_info_returns_and_keeps_storage(station: FakeStation)
         await session.async_close()
 
 
+async def test_async_get_sd_info_groups_the_status_with_the_grouping_passed(
+    station: FakeStation,
+) -> None:
+    """The kept and announced record carry the caller's grouping, not the library's."""
+    session = make_session(station, Provider(station))
+    station.sd_info = (0, 8000, 2000)
+    changes: list[StorageChanged] = []
+    session.subscribe(lambda e: changes.append(e) if isinstance(e, StorageChanged) else None)
+    try:
+        info = await session.async_get_sd_info(group=lambda status: status + 7)
+        assert info.emmc is not None
+        assert (info.emmc.work_status, info.emmc.status_group) == (0, 7)
+        assert session.storage == info
+        assert changes == [StorageChanged(station_sn=SYNTHETIC.station_sn, storage=info)]
+    finally:
+        await session.async_close()
+
+
 async def test_async_get_sd_info_emits_storage_changed(station: FakeStation) -> None:
     session = make_session(station, Provider(station))
     station.sd_info = (0, 8000, 2000)

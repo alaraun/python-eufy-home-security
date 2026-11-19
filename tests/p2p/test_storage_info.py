@@ -511,6 +511,17 @@ def test_a_non_normal_status_with_a_size_keeps_the_sizes_and_is_not_usable() -> 
     assert (info.state, info.usable) == (MediumState.CORRUPTED, False)
 
 
+@pytest.mark.parametrize("total", [8000, 0])
+def test_the_answer_is_grouped_by_the_grouping_passed(total: int) -> None:
+    """A product's own grouping (here: 30 is not normal) replaces the library's table."""
+    payload = struct.pack("<3i", 30, total, 2000 if total else 0)
+    assert sd_status_group(30) == 0
+    info = parse_sd_card_info(payload, group={30: 1}.__getitem__)
+    assert info is not None
+    assert (info.work_status, info.status_group) == (30, 1)
+    assert (info.state, info.usable) == (MediumState.OTHER, False)
+
+
 @pytest.mark.parametrize(
     ("status", "group"),
     [

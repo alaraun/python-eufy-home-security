@@ -38,6 +38,7 @@ from eufy_home_security.devices.live_view import (
 )
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
+    SdStatusGroups,
     bundled_codes,
     mode_table_settings,
     settings_of,
@@ -2942,8 +2943,11 @@ def test_station_devices_hub_vs_standalone(
     assert on_demand_station.devices == (on_demand_station.device,)
 
 
-async def _standalone(fake: FakeStation, serial: str) -> Station:
-    """A standalone camera ``serial`` that is its own station, on ``fake``."""
+async def _standalone(
+    fake: FakeStation, serial: str, *, raw: dict[str, Any] | None = None
+) -> Station:
+    """A standalone camera ``serial`` that is its own station, on ``fake`` (``raw``: its
+    cloud entry's raw fields)."""
     fake.serial = serial
     fake.static_key = static_key(serial, fake.did)
 
@@ -2957,6 +2961,7 @@ async def _standalone(fake: FakeStation, serial: str) -> Station:
         name="PTZ",
         p2p_did=SYNTHETIC.did,
         station_sn=serial,
+        raw=raw or {},
     )
     station = Station(device, session)
     await station.async_update()
@@ -5358,6 +5363,73 @@ async def test_a_standalone_camera_without_a_usable_card_answers_storage_at_once
     assert info.emmc.size_mib is None
     assert fake.sd_info_queries == 1
     assert standalone_station.storage == info
+
+
+@pytest.mark.parametrize(
+    ("serial", "group", "state"),
+    [
+        ("T8170P2000054321", 0, MediumState.NORMAL),  # its handler groups 30 as normal
+        ("T8115P2000054321", 1, MediumState.OTHER),  # its handler leaves 30 out
+    ],
+)
+async def test_a_standalone_camera_groups_the_status_as_its_model_does(
+    fake: FakeStation, serial: str, group: int, state: MediumState
+) -> None:
+    fake.sd_info = (30, 8000, 2000)
+    station = await _standalone(fake, serial)
+    try:
+        info = await station.async_get_storage()
+    finally:
+        await station.async_close()
+    assert info.emmc is not None
+    assert (info.emmc.work_status, info.emmc.status_group, info.emmc.state) == (30, group, state)
+    assert info.emmc.usable is (state is MediumState.NORMAL)
+
+
+async def test_a_model_without_a_grouping_groups_with_the_library_table(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(station_mod, "sd_status_groups", lambda code: None)
+    fake.sd_info = (30, 8000, 2000)
+    station = await _standalone(fake, "T8115P2000054321")
+    try:
+        info = await station.async_get_storage()
+    finally:
+        await station.async_close()
+    assert info.emmc is not None
+    assert (info.emmc.status_group, info.emmc.state, info.emmc.usable) == (
+        0,
+        MediumState.NORMAL,
+        True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "group", "state"),
+    [("4", 2, MediumState.NO_CARD), ("", 0, MediumState.NORMAL)],
+    ids=["set", "empty"],
+)
+async def test_a_model_that_prefers_the_status_parameter_groups_the_devices_value(
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch, value: str, group: int, state: MediumState
+) -> None:
+    """The device's own status parameter (cloud list) wins over the answer's status 0."""
+    asked: list[str | None] = []
+
+    def groups(code: str | None) -> SdStatusGroups:
+        asked.append(code)
+        return SdStatusGroups({0: 0, 4: 2}, 1, 1135)
+
+    monkeypatch.setattr(station_mod, "sd_status_groups", groups)
+    fake.sd_info = (0, 8000, 2000)
+    raw = {"params": [{"param_type": 1135, "param_value": value}]}
+    station = await _standalone(fake, "T8115P2000054321", raw=raw)
+    try:
+        info = await station.async_get_storage()
+    finally:
+        await station.async_close()
+    assert asked == ["T8115"]
+    assert info.emmc is not None
+    assert (info.emmc.work_status, info.emmc.status_group, info.emmc.state) == (0, group, state)
 
 
 async def test_async_get_storage_on_homebase_retains_1307_path(

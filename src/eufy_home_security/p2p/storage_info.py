@@ -15,7 +15,7 @@ The eufy app asks each station model its own storage query (:func:`storage_query
 - ``1144`` (:attr:`StorageQuery.SD_INFO`, ``SDINFO_EX``): a bare command frame, answered
   by a frame of the same type with three ``int32`` (:func:`parse_sd_card_info`): the
   device's local medium (a camera's SD card or built-in eMMC) and its status, grouped
-  by :func:`sd_status_group` (:class:`MediumState`).
+  as the device model's handler groups it (:class:`MediumState`).
 
 The record comes off the network: every field is validated on its own, and a missing
 or malformed one becomes ``None`` rather than an error. See
@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import math
 import struct
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
@@ -194,16 +194,12 @@ SD_STATUS_GROUPS: Final[Mapping[int, frozenset[int]]] = MappingProxyType(
         22: frozenset({33}),
     }
 )
-"""The display group of each ``SDINFO_EX`` status code, by group: the library's union of
-the tables in the products' handlers **[declared: app]**, the same table for every
-product. The handlers differ: most leave out ``33`` (it falls to
-:data:`SD_STATUS_DEFAULT_GROUP` there), which changes no :attr:`StorageMedium.state` or
-:attr:`StorageMedium.usable` (groups 22 and 1 are both :attr:`MediumState.OTHER`); one
-product's handler also leaves out 29, 30 and 31, so the app shows 30 there as not
-normal where this table reads it as normal. A few products' handlers group the device's
-status parameter (``1135``) in place of the reply's status when the parameter is set;
-the library groups the reply's status. docs/protocol/commands.md lists the products.
-The app also names groups 3, 5 and 14, which no code reaches."""
+"""The display group of each ``SDINFO_EX`` status code, by group: the union of the
+products' tables **[declared: app]**. A model whose file carries a grouping groups by its
+handler's own table (:func:`~..devices.model_settings.sd_status_groups`); this table is
+the library's choice for any other device (a model without a file, or whose handler reads
+no status). See docs/protocol/commands.md. The app also names groups 3, 5 and 14, which
+no code reaches."""
 SD_STATUS_DEFAULT_GROUP: Final = 1
 """The group of a status code :data:`SD_STATUS_GROUPS` does not list."""
 
@@ -213,8 +209,8 @@ _GROUP_OF_STATUS: Final[Mapping[int, int]] = MappingProxyType(
 
 
 def sd_status_group(status: int) -> int:
-    """The display group of the ``SDINFO_EX`` status ``status`` in the union table
-    :data:`SD_STATUS_GROUPS` (a product's own handler can group a code differently)."""
+    """The display group of the ``SDINFO_EX`` status ``status`` in the library's table
+    :data:`SD_STATUS_GROUPS`, for a device whose model has no grouping of its own."""
     return _GROUP_OF_STATUS.get(status, SD_STATUS_DEFAULT_GROUP)
 
 
@@ -225,7 +221,8 @@ class MediumState(StrEnum):
     """Group 0: in use, with no prompt in the app **[declared: app]** (status 0 on a
     working eMMC **[verified]**)."""
     NO_CARD = "no_card"
-    """Group 2: the app's "no SD card" prompt (status 4 or 31) **[declared: app]**."""
+    """Group 2: the app's "no SD card" prompt (status 4, and 31 on most models)
+    **[declared: app]**."""
     CORRUPTED = "corrupted"
     """Group 4: the app's "SD card corrupted" prompt (status 22) **[declared: app]**."""
     OTHER = "other"
@@ -296,9 +293,9 @@ class StorageMedium:
     station_used_percent: int | None = None
     """The station's own use percentage (``data_used_percent``), when it reports one."""
     status_group: int | None = None
-    """The display group of an ``SDINFO_EX`` status: :func:`sd_status_group` of
-    :attr:`work_status`, the library's union of the app's per-product tables; None for a
-    record that carries no such status (``1307``, ``55000``)."""
+    """The display group of an ``SDINFO_EX`` status, as the device model's handler groups
+    :attr:`work_status` (:func:`parse_sd_card_info`); None for a record that carries no
+    such status (``1307``, ``55000``)."""
     label: str | None = field(default=None, repr=False)
     """``hdd_label``: the file-system label, new on every format."""
     serial: str | None = field(default=None, repr=False)
@@ -523,7 +520,9 @@ def parse_storage_info(body: Mapping[str, Any]) -> StorageInfo:
 SD_INFO_LEN: Final = 12
 
 
-def parse_sd_card_info(payload: bytes) -> EmmcInfo | None:
+def parse_sd_card_info(
+    payload: bytes, *, group: Callable[[int], int] = sd_status_group
+) -> EmmcInfo | None:
     """A device's local medium (SD card or built-in eMMC) from a ``SDINFO_EX`` (1144) frame.
 
     The device answers frame type 1144 with a 12-byte body (GCM-tagged but clear, like
@@ -531,8 +530,9 @@ def parse_sd_card_info(payload: bytes) -> EmmcInfo | None:
     free size, in the device's own **MB** (base 1000, as the app formats them).
     ``used`` is ``total - free`` (the response carries no system reserve), and
     :attr:`~StorageMedium.used_percent` derives from it: the figure the eMMC diagnostic
-    shows. The status is ``work_status``, its group ``status_group``
-    (:func:`sd_status_group`); :attr:`~StorageMedium.usable` is False for a status other
+    shows. The status is ``work_status``, its group ``status_group``: ``group`` of the
+    status, the device model's grouping where the caller has one, else
+    :func:`sd_status_group`. :attr:`~StorageMedium.usable` is False for a status other
     than normal or a total that is not positive, whose sizes are then None. None only
     for a body too short to be an answer.
 
@@ -543,9 +543,9 @@ def parse_sd_card_info(payload: bytes) -> EmmcInfo | None:
     if len(payload) < SD_INFO_LEN:
         return None
     status, total, free = struct.unpack_from("<3i", payload)
-    group = sd_status_group(status)
+    status_group = group(status)
     if total <= 0:
-        return EmmcInfo(work_status=status, status_group=group)
+        return EmmcInfo(work_status=status, status_group=status_group)
     free = max(min(free, total), 0)
     used = total - free
     return EmmcInfo(
@@ -553,7 +553,7 @@ def parse_sd_card_info(payload: bytes) -> EmmcInfo | None:
         used_mib=used,
         filesystem_used_mib=used,
         work_status=status,
-        status_group=group,
+        status_group=status_group,
     )
 
 

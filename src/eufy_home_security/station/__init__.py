@@ -64,6 +64,7 @@ from ..devices.model_settings import (
     battery_level,
     mode_table_settings,
     product_code_of,
+    sd_status_groups,
     settings_of,
     sort_settings,
 )
@@ -184,7 +185,13 @@ from ..p2p.session.media_stream import MediaStream
 from ..p2p.session.param_state import ParamOrigin
 from ..p2p.session.stats import SessionStats
 from ..p2p.station_config_codecs import Schedule
-from ..p2p.storage_info import CMD_STORAGE, StorageInfo, StorageQuery, storage_query
+from ..p2p.storage_info import (
+    CMD_STORAGE,
+    StorageInfo,
+    StorageQuery,
+    sd_status_group,
+    storage_query,
+)
 from ..recordings import RecordingsPage
 from ..station_config import ModeInfo, StationConfig, build_station_config, stored_device_params
 from .alarms import AlarmWaits, StationAlarms
@@ -3463,7 +3470,9 @@ class Station:
         from firmware 3.3.7.7, and ``SDINFO_EX`` (``1144``) on a standalone camera, an
         older HomeBase 2 and the small HomeBases, which sets
         :attr:`~..p2p.storage_info.StorageInfo.emmc` alone (the device's SD card or eMMC;
-        a medium that is not usable is a result with ``usable`` False, not an error). A
+        a medium that is not usable is a result with ``usable`` False, not an error; the
+        status grouped as the model's handler groups it,
+        :func:`~..devices.model_settings.sd_status_groups`, else by the library's table). A
         model the app asks nothing raises :class:`CommandUnsupportedError` without
         sending. Wakes a battery camera. The result is also kept as :attr:`storage`.
         """
@@ -3471,7 +3480,9 @@ class Station:
             self.serial, self.device.main_sw_version, standalone=self.session.standalone
         )
         if query is StorageQuery.SD_INFO:
-            return await self.session.async_get_sd_info(timeout=timeout)
+            return await self.session.async_get_sd_info(
+                timeout=timeout, group=self._sd_status_group()
+            )
         if query is StorageQuery.HUB_STORAGE:
             return await self.session.async_get_hub_storage(timeout=timeout)
         if query is StorageQuery.NONE:
@@ -3479,6 +3490,17 @@ class Station:
                 CMD_STORAGE, RECEIPT_NOT_HANDLED, "the eufy app asks this station no storage query"
             )
         return await self.session.async_get_storage(timeout=timeout)
+
+    def _sd_status_group(self) -> Callable[[int], int]:
+        """How the station's model groups an ``SDINFO_EX`` status
+        (:func:`~..devices.model_settings.sd_status_groups`, with the device's parameters
+        as last reported for a model that groups its status parameter); for a model
+        without one, the library's table (:func:`~..p2p.storage_info.sd_status_group`),
+        the library's choice."""
+        groups = sd_status_groups(self._product_code(self.serial))
+        if groups is None:
+            return sd_status_group
+        return lambda status: groups.group(status, self._reported_params(self.device))
 
     # ── station actions: restart, sound and stop the alarm ───────────────────
 

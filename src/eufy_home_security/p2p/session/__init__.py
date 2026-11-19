@@ -188,6 +188,7 @@ from ..storage_info import (
     parse_sd_card_info,
     parse_storage_info,
     result_code,
+    sd_status_group,
     storage_query_payload,
     storage_record,
 )
@@ -1952,7 +1953,9 @@ class StationSession:
             )
         return cast(StorageInfo, info)
 
-    async def async_get_sd_info(self, *, timeout: float | None = None) -> StorageInfo:
+    async def async_get_sd_info(
+        self, *, timeout: float | None = None, group: Callable[[int], int] = sd_status_group
+    ) -> StorageInfo:
         """The device's local medium (SD card or built-in eMMC), via ``SDINFO_EX`` (``1144``).
 
         The query a standalone device answers where it does not answer the HomeBase
@@ -1961,7 +1964,9 @@ class StationSession:
         status, total, free — see :func:`~..storage_info.parse_sd_card_info`). Every
         such answer is the result, a medium that is not usable (no card, total 0)
         included: a :class:`StorageInfo` with only ``emmc`` set, kept as :attr:`storage`
-        and announced with :class:`~...events.StorageChanged` when it changed.
+        and announced with :class:`~...events.StorageChanged` when it changed. ``group``
+        groups the status (the device model's grouping, which the caller knows; default
+        :func:`~..storage_info.sd_status_group`, the library's table).
 
         A T8170 just woken ignores the query for a few seconds (as it does the
         event-count query), so it is resent every :data:`SD_INFO_RESEND` seconds until
@@ -1975,7 +1980,7 @@ class StationSession:
             # but clear, like a receipt (never a JSON reply), so bind by type alone.
             if inbound.type != CMD_SD_INFO or inbound.channel != 0:
                 return None
-            emmc = parse_sd_card_info(inbound.frame.payload)
+            emmc = parse_sd_card_info(inbound.frame.payload, group=group)
             if emmc is None:
                 return None  # a body too short to be the answer; keep waiting
             info = StorageInfo(emmc=emmc)
