@@ -64,7 +64,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
 
-from eufy_home_security.devices.model_settings import BATTERY_PROPERTY
+from eufy_home_security.devices.model_settings import BATTERY_PROPERTY, SdStatusGroups
 from eufy_home_security.devices.param_info import STATE_PARAM_INFO
 from eufy_home_security.devices.settings import DUAL_VIEW, VIEW_MODE_PARAM
 from eufy_home_security.devices.types import DeviceKind, model_for_serial
@@ -103,6 +103,7 @@ SD_STATUS_SAMPLES = range(-1, 256)  # statuses swept besides the handler's numbe
 SD_STATUS_RANGE = range(-(2**31), 2**31)  # an SDINFO_EX status is an int32
 SD_STATUS_UNLISTED = 2**31 - 1  # a status no grouping lists: its group is the default
 SD_PROBE_TOTAL, SD_PROBE_FREE = 1000, 500  # the sizes the swept answers carry
+SD_PARAM_TEXTS = (" 4 ", "+4", "4.0", "0x4", "abc", "  ")  # status parameter values no code names
 
 
 def _load(name: str) -> ModuleType:
@@ -884,8 +885,9 @@ def sd_status_param(
     when the device lists it with a value (an empty value keeps the answer's status);
     None when none does. Found by halving :func:`handler_param_ids`, held at a status
     whose group is not the default while the answer carries :data:`SD_STATUS_UNLISTED`.
-    Raises GeneratorError when several parameters do, or when the one found is read
-    otherwise than that, at any swept status.
+    Raises GeneratorError when several parameters do, or when the parse groups the one
+    found otherwise than :meth:`SdStatusGroups.group` does: at each swept status, empty
+    at each swept answer status, and at each of :data:`SD_PARAM_TEXTS`.
     """
     probe = next(c for c, g in by_code.items() if g != default)
     found: list[int] = []
@@ -909,7 +911,9 @@ def sd_status_param(
         raise GeneratorError(f"{product_code}: the SDINFO_EX parse reads parameters {found}")
     (param,) = found
     asks = [([(param, str(c))], probe) for c in by_code] + [([(param, "")], c) for c in by_code]
-    want = [*by_code.values(), *by_code.values()]
+    asks += [([(param, text)], probe) for text in SD_PARAM_TEXTS]
+    library = SdStatusGroups(by_code, default, param)
+    want = [library.group(status, dict(params)) for params, status in asks]
     got = _sd_parse_with(product_code, handler, context, asks)
     if bad := next((a for a, g, w in zip(asks, got, want, strict=True) if g != w), None):
         raise GeneratorError(

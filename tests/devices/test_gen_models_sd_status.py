@@ -126,6 +126,21 @@ def test_a_preference_other_than_the_set_parameter_fails(tmp_path: Path, parse: 
         _groups(tmp_path, parse)
 
 
+@pytest.mark.parametrize(
+    "parse",
+    [
+        "return group(o ? Number(o) : r);",  # "+4", "4.0", "0x4" read as 4, "  " as 0
+        "return group(o ? parseInt(o, 10) : r);",  # "+4", "4.0" read as 4
+    ],
+)
+def test_a_status_parameter_read_otherwise_than_a_decimal_code_fails(
+    tmp_path: Path, parse: str
+) -> None:
+    """Every code and an empty value read alike; only a value no code names tells."""
+    with pytest.raises(gen_models.GeneratorError, match="otherwise than"):
+        _groups(tmp_path, parse)
+
+
 def test_a_parse_that_reads_no_status_takes_the_status_property(tmp_path: Path) -> None:
     found, counts = _groups(tmp_path, IGNORES)
     assert (found, counts) == ({"codes": CODES, "default": 1}, {"sd status:param": 1})
