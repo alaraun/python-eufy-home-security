@@ -10,11 +10,15 @@ from pathlib import Path
 import pytest
 
 from eufy_home_security.devices import model_settings
-from eufy_home_security.devices.model_settings import SdStatusGroups, sd_status_groups
+from eufy_home_security.devices.model_settings import (
+    SdStatusGroups,
+    SdStatusSource,
+    sd_status_groups,
+)
 from eufy_home_security.exceptions import ModelDataError
 
 GOOD_ENTRY = {"access": "ro", "kind": "bool", "read": None, "section": "other", "role": "status"}
-GROUPS = {"codes": {"0": 0, "4": 2, "-5": 3}, "default": 1}
+GROUPS = {"codes": {"0": 0, "4": 2, "-5": 3}, "default": 1, "from": "answer"}
 
 
 def _clear() -> None:
@@ -44,6 +48,12 @@ def _write(root: Path, groups: object) -> None:
 def test_the_file_names_each_status_group_and_the_default(data_root: Path) -> None:
     _write(data_root, {**GROUPS, "param": 1135})
     assert sd_status_groups("t0001") == SdStatusGroups({0: 0, 4: 2, -5: 3}, 1, 1135)
+
+
+def test_the_file_names_what_the_table_is_read_from(data_root: Path) -> None:
+    _write(data_root, {**GROUPS, "from": "status_property"})
+    groups = sd_status_groups("T0001")
+    assert groups == SdStatusGroups({0: 0, 4: 2, -5: 3}, 1, None, SdStatusSource.STATUS_PROPERTY)
 
 
 @pytest.mark.parametrize(("status", "group"), [(0, 0), (4, 2), (-5, 3), (30, 1), (5, 1)])
@@ -103,8 +113,12 @@ def test_a_file_without_a_grouping_has_none(data_root: Path) -> None:
     ("groups", "match"),
     [
         ([], "not an object"),
-        ({"codes": {}}, r"\{codes, default, param\}"),
-        ({**GROUPS, "map": {}}, r"\{codes, default, param\}"),
+        ({"codes": {}, "default": 1}, r"\{codes, default, from, param\}"),
+        ({**GROUPS, "map": {}}, r"\{codes, default, from, param\}"),
+        ({**GROUPS, "from": "param"}, "not a valid SdStatusSource"),
+        ({**GROUPS, "from": None}, "not a valid SdStatusSource"),
+        ({**GROUPS, "from": []}, ""),
+        ({**GROUPS, "from": "status_property", "param": 1135}, "not read from the answer"),
         ({**GROUPS, "default": "1"}, "default group"),
         ({**GROUPS, "default": True}, "default group"),
         ({**GROUPS, "codes": []}, "status -> group"),
@@ -130,8 +144,11 @@ def test_a_malformed_grouping_names_the_file(data_root: Path, groups: object, ma
         ("T8170", 33, None, 1),  # and leaves out 33
         ("T8162", 33, None, 22),  # the table that groups 33
         ("T8160", 4, None, 2),  # read from its status property: its parse reads no status
+        ("T8160", 30, None, 0),
         ("T8115", 30, None, 1),  # its table leaves out 29, 30 and 31
+        ("T8115", 29, None, 1),
         ("T8115", 31, None, 1),
+        ("T8115", 33, None, 1),
         ("T8600", 0, {1135: "4"}, 2),  # it groups a set status parameter
         ("T8600", 0, {1135: ""}, 0),
     ],
@@ -142,6 +159,22 @@ def test_bundled_models_group_as_their_file_says(
     groups = sd_status_groups(code)
     assert groups is not None
     assert groups.group(status, params) == group
+
+
+@pytest.mark.parametrize(
+    ("code", "source", "param"),
+    [
+        ("T8170", SdStatusSource.ANSWER, None),
+        ("T8160", SdStatusSource.STATUS_PROPERTY, None),
+        ("T8600", SdStatusSource.ANSWER, 1135),
+    ],
+)
+def test_bundled_models_name_what_their_table_is_read_from(
+    code: str, source: SdStatusSource, param: int | None
+) -> None:
+    groups = sd_status_groups(code)
+    assert groups is not None
+    assert (groups.source, groups.param) == (source, param)
 
 
 def test_a_bundled_model_whose_handler_reads_no_status_has_no_grouping() -> None:

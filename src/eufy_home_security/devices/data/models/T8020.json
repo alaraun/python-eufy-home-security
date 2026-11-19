@@ -33,7 +33,8 @@
    "8": 13,
    "9": 10
   },
-  "default": 1
+  "default": 1,
+  "from": "answer"
  },
  "settings": {
   "alarm_volume_value": {

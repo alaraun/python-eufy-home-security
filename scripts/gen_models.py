@@ -64,7 +64,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
 
-from eufy_home_security.devices.model_settings import BATTERY_PROPERTY, SdStatusGroups
+from eufy_home_security.devices.model_settings import (
+    BATTERY_PROPERTY,
+    SdStatusGroups,
+    SdStatusSource,
+)
 from eufy_home_security.devices.param_info import STATE_PARAM_INFO
 from eufy_home_security.devices.settings import DUAL_VIEW, VIEW_MODE_PARAM
 from eufy_home_security.devices.types import DeviceKind, model_for_serial
@@ -103,6 +107,10 @@ SD_STATUS_SAMPLES = range(-1, 256)  # statuses swept besides the handler's numbe
 SD_STATUS_RANGE = range(-(2**31), 2**31)  # an SDINFO_EX status is an int32
 SD_STATUS_UNLISTED = 2**31 - 1  # a status no grouping lists: its group is the default
 SD_PROBE_TOTAL, SD_PROBE_FREE = 1000, 500  # the sizes the swept answers carry
+SD_SOURCE_COUNTS = {  # the run summary's name of each source
+    SdStatusSource.ANSWER: "answer",
+    SdStatusSource.STATUS_PROPERTY: "status property (library's choice)",
+}
 SD_PARAM_TEXTS = (" 4 ", "+4", "4.0", "0x4", "abc", "  ")  # status parameter values no code names
 
 
@@ -788,9 +796,9 @@ def sd_status_groups(
     counts: dict[str, int],
 ) -> dict[str, Any] | None:
     """How the handler groups an ``SDINFO_EX`` status (the settings file's
-    ``sd_status_groups``): ``{"default": <group>, "codes": {"<status>": <group>}}`` for
-    each status of :func:`sd_status_codes` whose group is not the default, plus
-    ``"param"`` when the handler groups that device parameter in place of the answer's
+    ``sd_status_groups``): ``{"default": <group>, "codes": {"<status>": <group>},
+    "from": <SdStatusSource>}`` with each status of :func:`sd_status_codes` whose group is
+    not the default and what the table is read from, plus ``"param"`` when the handler groups that device parameter in place of the answer's
     status whenever the device lists it with a value (:func:`sd_status_param`).
 
     The groups come from the handler's parse of the answer (:data:`SD_STATUS_ACTION`);
@@ -808,7 +816,7 @@ def sd_status_groups(
         device = ctx.device(product_code)
         replies = run_driver(product_code, handler, [_sd_answer(device, s) for s in asked])
         tables.append(_sd_table([_sd_parsed(r) for r in replies]))
-    table, source = _agreed(product_code, "grouping", tables), "answer"
+    table, source = _agreed(product_code, "grouping", tables), SdStatusSource.ANSWER
     if table is None and (where := _status_param(product_code, handler, contexts[BASE], located)):
         tables = []
         for ctx in contexts.values():
@@ -816,17 +824,19 @@ def sd_status_groups(
             replies = run_driver(product_code, handler, requests)
             groups = [_sd_group(_property_values(r).get(SD_STATUS_PROPERTY)) for r in replies]
             tables.append(_sd_table(groups))
-        table, source = _agreed(product_code, "status property's grouping", tables), "param"
+        table = _agreed(product_code, "status property's grouping", tables)
+        source = SdStatusSource.STATUS_PROPERTY
     if table is None:
         return None
-    _count(counts, f"sd status:{source}")
+    _count(counts, f"sd status:{SD_SOURCE_COUNTS[source]}")
     default, groups = table
     by_code = dict(zip(codes, groups, strict=True))
     out: dict[str, Any] = {
         "codes": {str(c): g for c, g in by_code.items() if g != default},
         "default": default,
+        "from": source.value,
     }
-    if source == "answer":
+    if source is SdStatusSource.ANSWER:
         param = sd_status_param(product_code, handler, contexts, by_code, default)
         if param is not None:
             out["param"] = param

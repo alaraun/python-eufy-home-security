@@ -344,8 +344,11 @@ def test_model_file_matches_the_schema(code: str) -> None:
 
 def _check_sd_status_groups(groups: Any) -> None:
     """A default group and the int32 statuses whose group differs from it (at least one),
-    plus the parameter the handler groups in place of the answer's status, if any."""
-    assert set(groups) - {"param"} == {"default", "codes"}
+    what the table is read from, and the parameter the handler groups in place of the
+    answer's status, if any (only on a table read from the answer)."""
+    assert set(groups) - {"param"} == {"default", "codes", "from"}
+    assert groups["from"] in {"answer", "status_property"}
+    assert "param" not in groups or groups["from"] == "answer"
     assert type(groups["default"]) is int
     assert groups["codes"]
     for code, group in groups["codes"].items():

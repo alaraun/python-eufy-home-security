@@ -57,6 +57,7 @@ __all__ = [
     "PARENTLESS_ONLY",
     "BatteryRead",
     "SdStatusGroups",
+    "SdStatusSource",
     "Setting",
     "SettingControl",
     "SettingKind",
@@ -1120,12 +1121,23 @@ def battery_level(product_code: str | None, params: Mapping[int, str | None]) ->
     return None
 
 
+class SdStatusSource(StrEnum):
+    """What a model's ``SDINFO_EX`` grouping is read from (``sd_status_groups.from``)."""
+
+    ANSWER = "answer"
+    """The handler's parse of the answer **[declared]**."""
+    STATUS_PROPERTY = "status_property"
+    """The grouping the handler applies to the device's status parameter, for a model
+    whose parse of the answer reads no status: the library's choice over a group that
+    ignores the status."""
+
+
 @dataclass(frozen=True, slots=True)
 class SdStatusGroups:
     """How a model's handler groups an ``SDINFO_EX`` (``1144``) status **[declared]**
     (the settings file's ``sd_status_groups``, see docs/reference/models-schema.md): its
     parse of the answer, or, where that parse reads no status, the grouping its status
-    property applies (the library's choice over a group that ignores the status)."""
+    property applies (:attr:`source`)."""
 
     codes: Mapping[int, int]
     """The group of each status whose group is not :attr:`default`."""
@@ -1134,6 +1146,8 @@ class SdStatusGroups:
     param: int | None = None
     """The device parameter the handler groups in place of the answer's status when the
     device lists it with a value; None when it groups the answer's status alone."""
+    source: SdStatusSource = SdStatusSource.ANSWER
+    """What the table is read from."""
 
     def group(self, status: int, params: Mapping[int, str | None] | None = None) -> int:
         """The group of the answer's ``status``, or, where :attr:`param` is set and the
@@ -1198,9 +1212,10 @@ def _sd_status_of(raw: object) -> SdStatusGroups:
     """The checked ``sd_status_groups`` object of a settings file."""
     if not isinstance(raw, dict):
         raise TypeError("sd_status_groups is not an object")
-    if not {"codes", "default"} <= set(raw) <= {"codes", "default", "param"}:
-        raise TypeError("sd_status_groups is not {codes, default, param}")
+    if not {"codes", "default", "from"} <= set(raw) <= {"codes", "default", "from", "param"}:
+        raise TypeError("sd_status_groups is not {codes, default, from, param}")
     default, codes, param = raw["default"], raw["codes"], raw.get("param")
+    source = SdStatusSource(raw["from"])
     if type(default) is not int:
         raise ValueError(f"sd_status_groups default group {default!r} is no group")
     if not isinstance(codes, dict) or not all(
@@ -1210,8 +1225,10 @@ def _sd_status_of(raw: object) -> SdStatusGroups:
         raise TypeError("sd_status_groups codes are not status -> group")
     if param is not None and (type(param) is not int or not 0 < param < 2**16):
         raise ValueError(f"sd_status_groups param {param!r} is no parameter id")
+    if param is not None and source is not SdStatusSource.ANSWER:
+        raise ValueError(f"sd_status_groups param {param} on a table not read from the answer")
     by_code = MappingProxyType({int(k): v for k, v in codes.items()})
-    return SdStatusGroups(by_code, default, param)
+    return SdStatusGroups(by_code, default, param, source)
 
 
 def _battery_of(items: object) -> tuple[BatteryRead, ...]:

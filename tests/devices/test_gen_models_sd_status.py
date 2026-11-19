@@ -76,6 +76,9 @@ CODES = {"-5": 3, "0": 0, "25": 0, "29": 18, "31": 2, "33": 22, "4": 2, "4000": 
 READS = "return group(r);"
 PREFERS = "return group(o || r);"
 IGNORES = "return group(r.status);"  # the answer's status is a number: no group read
+FROM_ANSWER = {"from": "answer"}
+FROM_PROPERTY = {"codes": CODES, "default": 1, "from": "status_property"}
+PROPERTY_COUNTS = {"sd status:status property (library's choice)": 1}
 
 
 def _handler(
@@ -111,17 +114,20 @@ def _groups(
 
 def test_the_parse_of_the_answer_gives_each_code_its_group(tmp_path: Path) -> None:
     """Codes beyond the sample range are found through the handler's number literals."""
-    assert _groups(tmp_path) == ({"codes": CODES, "default": 1}, {"sd status:answer": 1})
+    assert _groups(tmp_path) == (
+        {**FROM_ANSWER, "codes": CODES, "default": 1},
+        {"sd status:answer": 1},
+    )
 
 
 def test_the_default_group_is_the_one_of_an_unlisted_code(tmp_path: Path) -> None:
     found, _ = _groups(tmp_path, "const g = group(r); return g === 1 ? 7 : g;")
-    assert found == {"codes": CODES, "default": 7}
+    assert found == {**FROM_ANSWER, "codes": CODES, "default": 7}
 
 
 def test_a_parse_that_prefers_the_status_parameter_names_it(tmp_path: Path) -> None:
     found, _ = _groups(tmp_path, PREFERS)
-    assert found == {"codes": CODES, "default": 1, "param": STATUS_PARAM}
+    assert found == {**FROM_ANSWER, "codes": CODES, "default": 1, "param": STATUS_PARAM}
 
 
 @pytest.mark.parametrize(
@@ -153,7 +159,7 @@ def test_a_status_parameter_read_otherwise_than_a_decimal_code_fails(
 
 def test_a_parse_that_reads_no_status_takes_the_status_property(tmp_path: Path) -> None:
     found, counts = _groups(tmp_path, IGNORES)
-    assert (found, counts) == ({"codes": CODES, "default": 1}, {"sd status:param": 1})
+    assert (found, counts) == (FROM_PROPERTY, PROPERTY_COUNTS)
 
 
 def test_a_parse_that_reads_only_the_status_parameter_names_no_parameter(
@@ -161,7 +167,7 @@ def test_a_parse_that_reads_only_the_status_parameter_names_no_parameter(
 ) -> None:
     """Without the answer's status the table comes from the status property, alone."""
     found, counts = _groups(tmp_path, "return group(o);")
-    assert (found, counts) == ({"codes": CODES, "default": 1}, {"sd status:param": 1})
+    assert (found, counts) == (FROM_PROPERTY, PROPERTY_COUNTS)
 
 
 def test_a_parse_that_prefers_two_parameters_fails(tmp_path: Path) -> None:
@@ -175,12 +181,12 @@ def test_a_parse_that_prefers_two_parameters_fails(tmp_path: Path) -> None:
 
 def test_no_parse_at_all_takes_the_status_property(tmp_path: Path) -> None:
     found, counts = _groups(tmp_path, "return undefined;")
-    assert (found, counts) == ({"codes": CODES, "default": 1}, {"sd status:param": 1})
+    assert (found, counts) == (FROM_PROPERTY, PROPERTY_COUNTS)
 
 
 def test_a_status_property_the_description_lacks_is_looked_for(tmp_path: Path) -> None:
     found, counts = _groups(tmp_path, IGNORES, located=False)
-    assert (found, counts) == ({"codes": CODES, "default": 1}, {"sd status:param": 1})
+    assert (found, counts) == (FROM_PROPERTY, PROPERTY_COUNTS)
 
 
 @pytest.mark.parametrize("parse", [IGNORES, "return undefined;"])
@@ -230,8 +236,8 @@ def _td(tmp_path: Path, props: list[str], parse: str, *, prop: bool = True) -> P
 @pytest.mark.parametrize(
     ("props", "parse", "prop", "groups"),
     [
-        (["label"], READS, True, {"codes": CODES, "default": 1}),
-        (["get_storage_status"], IGNORES, True, {"codes": CODES, "default": 1}),
+        (["label"], READS, True, {**FROM_ANSWER, "codes": CODES, "default": 1}),
+        (["get_storage_status"], IGNORES, True, FROM_PROPERTY),
         (["label"], IGNORES, False, None),  # nothing to read the table from
     ],
 )
