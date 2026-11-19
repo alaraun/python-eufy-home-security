@@ -554,6 +554,7 @@ field one record gains later is not lost.
 | `wear_percent` | `eol_percent` if present | `eol_percent` (life used, 0-100) |
 | `temperature_c` | `cur_temperate` (°C) | `cur_temperate` if present |
 | `health` / `healthy`, `work_status` | `health` (the app flags 1, 2, 3 as a fault; `healthy` is False for those), `work_status` (0 idle) | same |
+| `status_group`, `state`, `usable` | None: this record carries no such status (nor does `55000`) | same; set only on a `1144` record ([below](#a-devices-sd-card-or-emmc-1144-get_sd_info_ext-verified)) |
 | `parted_status`, `ready`, `formatting` | `parted_status` (1 ready, 2 formatting) | same, if present |
 | `model`, `disk_type`, `path` | `device_module`, `hdd_type`, `disk_path` | same, if present |
 | `serial`, `label` | `serial_number`, `hdd_label` — left out of `repr`; redact them in logs | same, if present |
@@ -603,7 +604,7 @@ whose 12-byte body is three little-endian `int32`:
 | offset | `int32` | meaning |
 |---|---|---|
 | 0 | status | the medium's status code, grouped by the app (below) |
-| 4 | total | total size; 0 when there is no usable medium |
+| 4 | total | total size; 0 when the device reports no size (no card) |
 | 8 | free | free size |
 
 The app reads the status through one grouping for every model **[declared: app]**:
@@ -644,15 +645,19 @@ T8023 (see the table above); its layout there is not verified.
 
 **Library API.** On a standalone camera and those stations `station.async_get_storage()` sends this query
 instead (`session.async_get_sd_info()`): a bare `1144` frame, its answer bound by frame
-type on channel 0 and parsed from the 12-byte body. Every 12-byte answer is the result
-(a frame with a shorter body is not an answer); unanswered, the query is resent every
-2 s (`SD_INFO_RESEND`) and raises `DeviceTimeoutError("no SDINFO_EX answer within 15s")`
+type on channel 0 and parsed from the 12-byte body. Any 12-byte answer is final,
+whatever its content (`[0, 0, 0]` included: `state` `normal`, `usable` False); a frame
+with a shorter body is not an answer. Unanswered, the query is resent every 2 s
+(`SD_INFO_RESEND`) and raises `DeviceTimeoutError("no SDINFO_EX answer within 15s")`
 after `SD_INFO_TIMEOUT`. It returns a `StorageInfo` with only `emmc` set: an `EmmcInfo`
-(`size_mib` = total, `used_mib` = `total − free`, `work_status` = status,
-`status_group` = its app group), whose `used_percent` is the figure the eMMC diagnostic
-shows. `state` names the group (`MediumState`: `normal`, `no_card`, `corrupted`, or
-`other`), and `usable` is True only for group 0 with a size. A total of 0 or less leaves
-the sizes and `used_percent` None, `usable` False. It
+(`size_mib` = total, `used_mib` = `total − free`, `work_status` = the raw status code,
+`status_group` = that code's group, see `sd_status_group`), whose `used_percent` is the
+figure the eMMC diagnostic shows. `state` names the group (`MediumState`: `normal`,
+`no_card`, `corrupted`, or `other`), and `usable` is True only for group 0 with a size.
+A total of 0 or less leaves the sizes and `used_percent` None and `usable` False; a
+status that is not normal with a size keeps its figures (`[22, 8000, 3000]`: 62.5 %
+used, `usable` False). `status_group`, `state` and `usable` are None on the `1307` and
+`55000` records. It
 is kept as `station.storage` and emits `StorageChanged` like the HomeBase record. The
 passive `emmc_used_percent` state field is HomeBase param 1190 (`GET_HB_EMMC_PERSENT`)
 only; a standalone camera has no such param, so read its eMMC use from `storage.emmc`.

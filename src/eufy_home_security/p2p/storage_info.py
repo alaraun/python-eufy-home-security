@@ -278,7 +278,10 @@ class StorageMedium:
     health: int | None = None
     """``health``: the app flags 1, 2 and 3 as a fault and names no other code."""
     work_status: int | None = None
-    """``work_status``: 0 idle; other codes unknown."""
+    """The medium's status code: ``work_status`` on a ``1307`` record (0 idle, other codes
+    unknown), ``emmc_status`` / ``usb_status`` on a ``55000`` record, and on an
+    ``SDINFO_EX`` (``1144``) record the raw status code that :attr:`status_group`
+    groups."""
     parted_status: int | None = None
     """``parted_status``: 1 ready, 2 formatting."""
     wear_percent: int | None = None
