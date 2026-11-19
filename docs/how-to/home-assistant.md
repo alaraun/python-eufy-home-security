@@ -588,7 +588,8 @@ What the library relies on:
 - **A station on Home Assistant's own network whose LAN reply a host firewall drops**
   (ufw, firewalld or nftables admitting only `ct state established`: the station answers
   a search from a random port, a new flow) still connects: after the on-link grace
-  (1.5 s) the library punches its LAN address, and its answer to the punch is a reply.
+  (2.5 s) the library punches its LAN address, and its answer to the punch is a reply,
+  so each of its connects comes up about 2.5 s later than a plain LAN link would.
   The link counts as `"lan"`, but every connect then needs internet access, eufy's
   servers and a DSK, so the station does not come back in an internet outage. The
   library records it per station: `station.lan_path.warnings` holds
@@ -596,7 +597,10 @@ What the library relies on:
   needed; `stats().lan_reply_blocked` too), with `LanPath.station_ip` for the rule and
   `LanPath.local_port` (0 = none pinned) for wording the fix: allow all UDP from the
   station, or pin a local port and allow UDP from the station to it. A later link that
-  comes up from a LAN reply (the rule added) clears it. The record is kept in the
+  comes up from a LAN reply (the rule added) clears it. A station without a firewall
+  that ignores the first three searches (the third goes out at 2 s) and answers a later
+  one is punched and flagged the same way, until its next link from a LAN reply: word
+  the repair as likely, not certain. The record is kept in the
   session cache with the link path, so after a restart the warning shows before the
   station's first link and that link runs the rendezvous from its first attempt. Pass the host's networks as
   `EufySecurity(local_networks=…)`, built from Home Assistant's network adapters

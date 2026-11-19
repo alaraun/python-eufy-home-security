@@ -192,7 +192,7 @@ logger:
   address in the host's own networks logs `lan`: that station is on the host's LAN
   (the setup probe's `punch probe: PUNCH_PKT from …` reads no host networks and labels
   any punched address `rendezvous`).
-- `PUNCH_TO <address> is on this host's network; punching it after 1.5s unless the LAN
+- `PUNCH_TO <address> is on this host's network; punching it after 2.5s unless the LAN
   search is answered first`: the on-link grace of a held station. A link that follows
   from that punch is a LAN one whose LAN reply was blocked (`stats().lan_reply_blocked`):
   a firewall on this host drops the station's replies to the search.

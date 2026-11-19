@@ -20,6 +20,7 @@ from eufy_home_security.exceptions import (
     ProtocolError,
     StationUnreachableError,
 )
+from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p import transport as transport_module
 from eufy_home_security.p2p.did import Did
 from eufy_home_security.p2p.pppp import (
@@ -1341,15 +1342,25 @@ async def test_an_on_link_station_whose_lan_reply_is_blocked_is_punched_after_th
     assert 0.5 - 0.01 <= on_link - search < 0.8
 
 
+def test_the_on_link_grace_spans_two_search_rounds_inside_one_attempt() -> None:
+    """The grace outlasts the third LAN_SEARCH (sent two rounds after the first) and
+    ends inside one connect attempt."""
+    assert (
+        transport_module.DISCOVERY_RETRY_INTERVAL * 2
+        < transport_module.ON_LINK_PUNCH_GRACE
+        < session_module.DISCOVERY_TIMEOUT
+    )
+
+
+@pytest.mark.parametrize("answers", [2, 3])
 async def test_an_on_link_station_answering_the_search_within_the_grace_is_never_punched(
-    rendezvous: _Rendezvous, monkeypatch: pytest.MonkeyPatch
+    rendezvous: _Rendezvous, answers: int
 ) -> None:
-    """The station ignores the first LAN_SEARCH (as after a close) and answers the next
-    one, while its servers name its LAN address from the first round: the LAN reply
-    wins, that address is never punched, and nothing is flagged."""
-    monkeypatch.setattr(transport_module, "DISCOVERY_RETRY_INTERVAL", 0.2)
-    monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.6)
-    rendezvous.camera.answer_search = 2
+    """At the real timing, a station that ignores the first LAN_SEARCH (as after a
+    close) or the first two and answers the next, while its servers name its LAN
+    address from the first round: the LAN reply wins, that address is never punched,
+    and nothing is flagged."""
+    rendezvous.camera.answer_search = answers
     transport = make_transport()
     rendezvous.route(transport)
     sent = _discovery_sends(transport)
@@ -1358,7 +1369,7 @@ async def test_an_on_link_station_answering_the_search_within_the_grace_is_never
             CAMERA_LAN,
             port=rendezvous.camera_port,
             expected_did=rendezvous.did,
-            timeout=3.0,
+            timeout=session_module.DISCOVERY_TIMEOUT,
             wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
             local_networks=(OUR_LAN,),
             on_link_grace=True,
@@ -1367,7 +1378,7 @@ async def test_an_on_link_station_answering_the_search_within_the_grace_is_never
         assert transport.lan_reply_blocked is False
     finally:
         transport.close()
-    assert rendezvous.camera.searches == 2
+    assert rendezvous.camera.searches == answers
     assert _first(sent, MsgType.PUNCH_PKT, CAMERA_WAN) is not None  # PUNCH_TOs were taken
     assert _first(sent, MsgType.PUNCH_PKT, CAMERA_LAN) is None
 

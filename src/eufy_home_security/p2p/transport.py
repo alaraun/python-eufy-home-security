@@ -103,11 +103,12 @@ PUNCH_BURST = 4
 ANY_ADDRESS = "0.0.0.0"  # noqa: S104 - the P2P_REQ_DSK's address when this host's is not known
 #: Distinct ``PUNCH_TO`` addresses one connect punches; a server names about three.
 MAX_PUNCH_TARGETS = 8
-ON_LINK_PUNCH_GRACE = 1.5
+ON_LINK_PUNCH_GRACE = 2.5
 """Seconds from a connect's first ``LAN_SEARCH`` before a ``PUNCH_TO`` address in this
-host's directly connected networks is punched (``on_link_grace``): two search rounds,
-so a station on this host's network that ignores the first search after a close still
-answers the LAN search first. Addresses outside them are punched at once."""
+host's directly connected networks is punched (``on_link_grace``): past the third
+search round, so a station on this host's network that ignores the first searches
+after a close still answers the LAN search first. Addresses outside them are punched
+at once."""
 #: "This network" (RFC 791): an address in it names no remote host to punch.
 _THIS_NETWORK = ipaddress.IPv4Network("0.0.0.0/8")
 

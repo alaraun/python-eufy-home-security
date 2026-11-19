@@ -3048,6 +3048,7 @@ async def test_a_station_answering_the_punch_first_is_stored_by_this_hosts_netwo
     punch toward its LAN address, with its DSK cached: in one of this host's networks
     the link is stored as ``"lan"`` (a stored ``"rendezvous"`` too), on another subnet
     as ``"rendezvous"``. No ``get_dsk_keys`` is sent."""
+    monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.3)
     fake = FakeStation(ignore_searches=1000, answers_punch=True)
     await fake.start()
     server = _PunchToServer([encode_sockaddr(STATION_LAN, fake.session_port)])

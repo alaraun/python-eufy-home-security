@@ -183,6 +183,7 @@ following a dump), `MEDIA_IDLE_TIMEOUT`, `MEDIA_DRAIN_MAX` (a stopped stream's l
 frames), `SETTLE_STATION` and `SETTLE_STANDALONE` (how long a picture size must hold;
 a full-resolution image is bounded by `FULL_RESOLUTION_TIMEOUT`), the probe schedule,
 and the reprobe and idle-close delays. Set them per test. So is
-`p2p.transport.ON_LINK_PUNCH_GRACE` (1.5 s): a test of a station whose LAN replies are
+`p2p.transport.ON_LINK_PUNCH_GRACE` (2.5 s): a test of a station whose LAN replies are
 dropped (`FakeStation(ignore_searches=…, answers_punch=True)` behind a routed punch)
-links only after it.
+links only after it, so set it below the short `DISCOVERY_TIMEOUT` (also 2.5 s) or the
+attempt ends first.

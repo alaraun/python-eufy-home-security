@@ -213,15 +213,17 @@ searches by unicast; a public one does not.
 
 **On-link grace** (the library's): in an attempt that runs the rendezvous connect for a
 held station, a `PUNCH_TO` address inside this host's directly connected networks is
-punched only `transport.ON_LINK_PUNCH_GRACE` (1.5 s, two search rounds) after the
-attempt's first `LAN_SEARCH`; addresses outside them (another subnet, the public
-address) are punched at once. A station on this host's network that answers the search
-(the second one, after ignoring the first after a close) therefore links over the LAN
-without being punched. One whose LAN reply never arrives (a host firewall that admits
-replies by connection tracking drops it: the station answers from a random port, a new
-flow) is punched after the grace; its `PUNCH_PKT` returns as the reply to the punch,
-and the link comes up 1.5 s later than without the grace. A station reached on demand
-gets no grace (its wake is the punch), nor does an attempt whose networks are unknown.
+punched only `transport.ON_LINK_PUNCH_GRACE` (2.5 s: past the third search round, inside
+the 6 s attempt) after the attempt's first `LAN_SEARCH`; addresses outside them (another
+subnet, the public address) are punched at once. A station on this host's network that
+answers the second or third search (after ignoring the first ones after a close)
+therefore links over the LAN without being punched. One whose LAN reply never arrives
+(a host firewall that admits replies by connection tracking drops it: the station
+answers from a random port, a new flow) is punched after the grace; its `PUNCH_PKT`
+returns as the reply to the punch, and the link comes up about 2.5 s later than
+without the grace (still well inside the 6 s LAN-only attempt it replaces). A station
+reached on demand gets no grace (its wake is the punch), nor does an attempt whose
+networks are unknown.
 
 That link counts as `"lan"` (media and commands run over the LAN), but the session
 records it as **LAN reply blocked** (`SessionStats.lan_reply_blocked`,
@@ -230,6 +232,9 @@ records it as **LAN reply blocked** (`SessionStats.lan_reply_blocked`,
 servers and a DSK, so it fails in an internet outage where a plain LAN link would not.
 While it is set, a reconnect runs the rendezvous connect from its first attempt. Each
 link sets it again: a later link from a LAN reply (a firewall rule added) clears it.
+A healthy station that ignores the first three searches and answers a later one is
+punched too and is recorded the same way until its next link that comes from a LAN
+reply: the record can be a false positive for a station that answers that late.
 `EufySecurity` keeps it beside the link path (`stations.<serial>.lan_reply_blocked`), so
 after a restart the warning stands before the first link and that link skips the
 LAN-only attempt.
