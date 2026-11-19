@@ -901,31 +901,60 @@ def sd_status_param(
 ) -> int | None:
     """The device parameter the handler's parse groups in place of the answer's status
     when the device lists it with a value (an empty value keeps the answer's status);
-    None when none does. Found and checked in every context (:func:`_sd_status_param_in`);
-    raises GeneratorError when the contexts disagree."""
-    found = [
-        _sd_status_param_in(product_code, handler, ctx, by_code, default)
-        for ctx in contexts.values()
-    ]
-    return _agreed(product_code, "status parameter", found)
+    None when none does.
+
+    Found in the base context by halving :func:`handler_param_ids`, held at a status
+    whose group is not the default while the answer carries :data:`SD_STATUS_UNLISTED`.
+    Checked in every context, one driver job each: the parse groups it as
+    :meth:`SdStatusGroups.group` does at each swept status, empty at each swept answer
+    status and at each of :data:`SD_PARAM_TEXTS`; outside the base context the other
+    ids, held together, leave the default group. Raises GeneratorError when several
+    parameters change the group, or a check fails.
+    """
+    probe = next(c for c, g in by_code.items() if g != default)
+    ids = handler_param_ids(handler)
+    param = _sd_find_param(product_code, handler, contexts[BASE], ids, probe=probe, default=default)
+    checks: list[tuple[Sequence[tuple[int, str]], int]] = []
+    if param is not None:
+        checks += [([(param, str(c))], probe) for c in by_code]
+        checks += [([(param, "")], c) for c in by_code]
+        checks += [([(param, text)], probe) for text in SD_PARAM_TEXTS]
+    library = SdStatusGroups(by_code, default, param)
+    held = [(p, str(probe)) for p in ids if p != param]
+    others = [(held, SD_STATUS_UNLISTED)] if held else []
+    for name, ctx in contexts.items():
+        asks = checks if name == BASE else [*others, *checks]
+        want = [library.group(status, dict(params)) for params, status in asks]
+        got = _sd_parse_with(product_code, handler, ctx, asks)
+        bad = next((a for a, g, w in zip(asks, got, want, strict=True) if g != w), None)
+        if bad is None:
+            continue
+        if name != BASE:
+            raise GeneratorError(
+                f"{product_code}: the SDINFO_EX status parameter differs between contexts "
+                f"({name}: asked {bad})"
+            )
+        raise GeneratorError(
+            f"{product_code}: the SDINFO_EX parse reads the status parameter {param} "
+            f"otherwise than as a status in place of the answer's (asked {bad})"
+        )
+    return param
 
 
-def _sd_status_param_in(
+def _sd_find_param(
     product_code: str,
     handler: Path,
     context: codec.Context,
-    by_code: Mapping[int, int],
+    ids: Sequence[int],
+    *,
+    probe: int,
     default: int,
 ) -> int | None:
-    """:func:`sd_status_param` in ``context``. Found by halving :func:`handler_param_ids`, held at a status
-    whose group is not the default while the answer carries :data:`SD_STATUS_UNLISTED`.
-    Raises GeneratorError when several parameters do, or when the parse groups the one
-    found otherwise than :meth:`SdStatusGroups.group` does: at each swept status, empty
-    at each swept answer status, and at each of :data:`SD_PARAM_TEXTS`.
-    """
-    probe = next(c for c, g in by_code.items() if g != default)
+    """The one of ``ids`` that, listed at ``probe``, changes the parse's group of an
+    answer carrying :data:`SD_STATUS_UNLISTED` in ``context``, found by halving; None
+    when none does. Raises GeneratorError when several do."""
     found: list[int] = []
-    pending = [ids] if (ids := handler_param_ids(handler)) else []
+    pending = [list(ids)] if ids else []
     while pending:
         asks = [([(p, str(probe)) for p in group], SD_STATUS_UNLISTED) for group in pending]
         split: list[list[int]] = []
@@ -939,22 +968,9 @@ def _sd_status_param_in(
             else:
                 split += [group[: len(group) // 2], group[len(group) // 2 :]]
         pending = split
-    if not found:
-        return None
     if len(found) > 1:
         raise GeneratorError(f"{product_code}: the SDINFO_EX parse reads parameters {found}")
-    (param,) = found
-    asks = [([(param, str(c))], probe) for c in by_code] + [([(param, "")], c) for c in by_code]
-    asks += [([(param, text)], probe) for text in SD_PARAM_TEXTS]
-    library = SdStatusGroups(by_code, default, param)
-    want = [library.group(status, dict(params)) for params, status in asks]
-    got = _sd_parse_with(product_code, handler, context, asks)
-    if bad := next((a for a, g, w in zip(asks, got, want, strict=True) if g != w), None):
-        raise GeneratorError(
-            f"{product_code}: the SDINFO_EX parse reads the status parameter {param} "
-            f"otherwise than as a status in place of the answer's (asked {bad})"
-        )
-    return param
+    return found[0] if found else None
 
 
 def _json_structure(raw: Any) -> bool:

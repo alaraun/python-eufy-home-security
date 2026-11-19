@@ -206,10 +206,17 @@ STANDALONE = "m.device.device_sn === m.device.parent_sn"  # true in the standalo
     [
         (f"return {STANDALONE} ? group(r) : 1 + group(r);", True, "grouping"),
         (f"return group({STANDALONE} && o ? o : r);", True, "status parameter"),
+        (f"return group(o ? ({STANDALONE} ? Number(o) : o) : r);", True, "status parameter"),
+        (
+            "const p = (m.device.params || []).find((x) => x.param_type === 6001)?.param_value;"
+            f" return group(o || ({STANDALONE} && p) || r);",
+            True,
+            "status parameter",
+        ),
         (IGNORES, STANDALONE, "status property's grouping"),
         (IGNORES, f"!({STANDALONE}) || p.param_value !== '4'", "status property's grouping"),
     ],
-    ids=["answer", "parameter", "property", "property-code"],
+    ids=["answer", "parameter", "parameter-text", "parameter-other", "property", "property-code"],
 )
 def test_a_grouping_that_differs_between_contexts_fails(
     tmp_path: Path, parse: str, prop: str | bool, what: str
