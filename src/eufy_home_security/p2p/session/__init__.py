@@ -497,6 +497,7 @@ class StationSession:
         max_sessions: int = DEFAULT_STATION_SESSIONS,
         extra_hosts: Sequence[str] = (),
         connect_path: ConnectPath | None = None,
+        lan_reply_blocked: bool = False,
     ) -> None:
         # max_sessions: see the max_sessions property.
         # expect_channels: the paired sub-devices' channels, used by every parameter
@@ -507,6 +508,7 @@ class StationSession:
         # nothing, nothing reconnects, and a link idle for idle_close seconds is closed.
         # wake_provider: the rendezvous connect's material (see _rendezvous_on).
         # connect_path: how the last link came up, also one of an earlier run.
+        # lan_reply_blocked: whether that link needed the punch (see lan_reply_blocked).
         # extra_hosts: searched by unicast beside the host (or broadcast).
         # key_refresh: where the stale-key latch lives (in memory when None).
         # cloud_problems_reported: the owner delivers cloud errors as CloudProblem, so
@@ -525,6 +527,7 @@ class StationSession:
         self._search_host = host
         self._extra_hosts = tuple(extra_hosts)
         self._connect_path = connect_path
+        self._lan_reply_blocked = lan_reply_blocked
         self._expected_did = Did.parse(did) if isinstance(did, str) else did
         # The static key slices the id's text as the cloud lists it (see static_key).
         self._did_text = did if isinstance(did, str) else None
@@ -739,6 +742,16 @@ class StationSession:
         return self._connect_path
 
     @property
+    def lan_reply_blocked(self) -> bool:
+        """Whether the current or last link came from a punch toward the station's
+        address in this host's directly connected networks after its LAN search went
+        unanswered for the on-link grace (:attr:`~..transport.PPPPTransport.lan_reply_blocked`):
+        the station is on this host's network, but a firewall drops its LAN replies, so
+        each connect needs its rendezvous servers. Each link sets it; before the first,
+        the ``lan_reply_blocked`` the session was built with."""
+        return self._lan_reply_blocked
+
+    @property
     def local_port(self) -> int:
         """The pinned local UDP port; 0 binds an ephemeral one per session."""
         return self._local_port
@@ -917,6 +930,7 @@ class StationSession:
             reconnects=max(self._health.connects - 1, 0),
             connect_path=None if self._connect_path is None else str(self._connect_path),
             connects_by_path=dict(self._health.connects_by_path),
+            lan_reply_blocked=self._lan_reply_blocked,
             handshake_failures=self._health.handshake_failures,
             key_refreshes=self._health.key_refreshes,
             last_error=self._last_error_name,
@@ -2420,6 +2434,7 @@ class StationSession:
             cloud_problems_reported=self._cloud_problems_reported,
             extra_hosts=self._extra_hosts,
             connect_path=self._connect_path,
+            lan_reply_blocked=self._lan_reply_blocked,
         )
 
     def _media_waits(self) -> MediaWaits:
@@ -2657,13 +2672,19 @@ class StationSession:
 
         An on-demand station runs it on every attempt: it is what wakes the station.
         A held station runs it once LAN discovery has failed an attempt, or from the
-        first attempt when its last link came through it. Otherwise the attempt runs it
+        first attempt when its last link came through it or needed a punch because its
+        LAN reply was blocked. Otherwise the attempt runs it
         only with a DSK the provider already holds (``cached_only``), so a station the
         LAN reaches costs no cloud call. The eufy app runs both from the start; the
         library does so whenever that needs no cloud call. The LAN search runs on every
         attempt.
         """
-        return self.on_demand or attempt > 1 or self._connect_path is ConnectPath.RENDEZVOUS
+        return (
+            self.on_demand
+            or attempt > 1
+            or self._connect_path is ConnectPath.RENDEZVOUS
+            or self._lan_reply_blocked
+        )
 
     async def _wake(self, *, cached_only: bool) -> Wake | None:
         """The rendezvous material for this connection attempt, or None when it cannot
@@ -2737,6 +2758,7 @@ class StationSession:
                     wake=wake,
                     extra_hosts=self._extra_hosts,
                     local_networks=networks,
+                    on_link_grace=not self.on_demand,
                 )
             except StationUnreachableError as err:
                 last_error = err
@@ -2765,6 +2787,7 @@ class StationSession:
         self._keys.static_key = ecb_key
         path = transport.path or ConnectPath.LAN
         self._connect_path = path
+        self._lan_reply_blocked = transport.lan_reply_blocked
         searched = [host for host in (self._search_host, *self._extra_hosts) if host]
         if transport.peer is not None and _learns_host(transport.peer[0], searched):
             self._host = transport.peer[0]

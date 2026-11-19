@@ -3227,7 +3227,9 @@ async def async_get_config_entry_diagnostics(hass, entry):
   `state_frames_by_encryption`, `dropped_undecodable` and `wrong_port_drops`; for a flapping
   station, `reconnects`, `handshake_failures`, `key_refreshes`, `last_error` (a class
   name, kept after recovery), `connect_path` and `connects_by_path` (whether its links
-  come up over LAN discovery or through its rendezvous servers). Add `eufy.push_running`
+  come up over LAN discovery or through its rendezvous servers), and `lan_reply_blocked`
+  (a station on the host's network whose LAN replies a firewall drops, linked through a
+  punch). Add `eufy.push_running`
   and the deduplicator's counters.
 
 Each station's `stats()` (`SessionStats`) also carries `conn_init_version` (8: ECIES,

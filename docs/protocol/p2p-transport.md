@@ -209,6 +209,27 @@ longer names loses it, while a list the cloud did not answer whole keeps every p
 becomes the next search's host when it is a LAN address or one discovery already
 searches by unicast; a public one does not.
 
+**On-link grace** (the library's): in an attempt that runs the rendezvous connect for a
+held station, a `PUNCH_TO` address inside this host's directly connected networks is
+punched only `transport.ON_LINK_PUNCH_GRACE` (1.5 s, two search rounds) after the
+attempt's first `LAN_SEARCH`; addresses outside them (another subnet, the public
+address) are punched at once. A station on this host's network that answers the search
+(the second one, after ignoring the first after a close) therefore links over the LAN
+without being punched. One whose LAN reply never arrives (a host firewall that admits
+replies by connection tracking drops it: the station answers from a random port, a new
+flow) is punched after the grace; its `PUNCH_PKT` returns as the reply to the punch,
+and the link comes up 1.5 s later than without the grace. A station reached on demand
+gets no grace (its wake is the punch), nor does an attempt whose networks are unknown.
+
+That link counts as `"lan"` (media and commands run over the LAN), but the session
+records it as **LAN reply blocked** (`SessionStats.lan_reply_blocked`,
+`StationSession.lan_reply_blocked`): every connect of that station needs its rendezvous
+servers and a DSK, so it fails in an internet outage where a plain LAN link would not.
+While it is set, a reconnect runs the rendezvous connect from its first attempt. Each
+link sets it again: a later link from a LAN reply (a firewall rule added) clears it.
+Without known host networks (not Linux, or an interface error) there is no grace and no
+such record.
+
 **Setup probe** (`EufySecurity.async_station_choices()`, the library's): a mains
 station that did not answer the LAN probe and lists rendezvous servers gets the
 rendezvous half of a connect alone (`PPPPTransport.punch_probe`): HELLO, P2P_REQ_DSK each

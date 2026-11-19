@@ -49,6 +49,11 @@ class SessionStats:
     earlier run); None when unknown."""
     connects_by_path: Mapping[str, int]
     """Links set up, by :attr:`connect_path` value."""
+    lan_reply_blocked: bool
+    """Whether the current or last link needed a punch toward the station's address in
+    this host's directly connected networks because its LAN search went unanswered for
+    the on-link grace: on this host's network, but a firewall drops the station's LAN
+    replies (``connect_path`` is then ``"lan"``; see ``StationSession.lan_reply_blocked``)."""
     handshake_failures: int
     """``CONN_INIT`` exchanges that yielded no session key: unanswered, or a key that
     would not unwrap."""

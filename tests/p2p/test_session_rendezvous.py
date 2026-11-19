@@ -45,6 +45,8 @@ class Attempts:
         self.redirect: dict[str, str] = {}
         """Searched host -> where the fake station answers from instead (a punched path)."""
         self.path = ConnectPath.LAN
+        self.blocked = False
+        """Reported as the link's ``lan_reply_blocked``."""
         self.calls: list[dict[str, Any]] = []
         connect = PPPPTransport.connect
 
@@ -58,6 +60,7 @@ class Attempts:
                 transport, self.redirect.get(host or "", host) or self.reach, **kwargs
             )
             transport._path = self.path
+            transport._lan_reply_blocked = self.blocked
             return did
 
         monkeypatch.setattr(PPPPTransport, "connect", recording)
@@ -243,6 +246,48 @@ async def test_a_rendezvous_attempt_classifies_by_this_hosts_networks(
     assert reads[0] is not threading.current_thread()
 
 
+@pytest.mark.parametrize(("on_demand", "grace"), [(False, True), (True, False)])
+async def test_only_a_held_station_holds_its_on_link_punch_for_the_grace(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch, on_demand: bool, grace: bool
+) -> None:
+    """A held station's LAN search gets the on-link grace; a station reached on demand
+    is punched at once, as its wake needs."""
+    attempts = Attempts(monkeypatch)
+    session = _session(station, WakeSource(cached=True), on_demand=on_demand)
+    try:
+        await session.async_connect()
+    finally:
+        await session.async_close()
+    assert [call["on_link_grace"] for call in attempts.calls] == [grace]
+
+
+async def test_a_blocked_lan_reply_is_reported_until_a_link_comes_up_without_it(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each link sets ``lan_reply_blocked`` (stats too); while it is set, a reconnect
+    runs the rendezvous from its first attempt, its DSK fetched when none is cached."""
+    attempts = Attempts(monkeypatch)
+    attempts.blocked = True
+    wake = WakeSource()
+    session = _session(station, wake)
+    assert session.lan_reply_blocked is False
+    try:
+        await session.async_connect()
+        seen = [session.lan_reply_blocked, session.stats().lan_reply_blocked]
+        session._teardown("test")
+        attempts.blocked = False
+        await session.async_connect()
+        seen += [session.lan_reply_blocked, session.stats().lan_reply_blocked]
+        session._teardown("test")
+        await session.async_connect()
+    finally:
+        await session.async_close()
+    assert seen == [True, True, False, False]
+    # LAN first; at once through the servers while blocked; LAN first again.
+    assert attempts.wakes == [False, True, False]
+    assert wake.asks == [True, False, True]
+
+
 async def test_a_held_station_without_rendezvous_material_logs_a_lan_only_attempt(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -331,6 +376,25 @@ async def test_a_short_lived_session_connects_the_way_the_station_was_reached(
         extra = session._short_lived_session()
         assert extra.connect_path is ConnectPath.RENDEZVOUS
         assert extra.extra_hosts == ("192.0.2.33",)
+        try:
+            await extra.async_connect()
+        finally:
+            await extra.async_close()
+    finally:
+        await session.async_close()
+    assert attempts.wakes == [False, True]
+
+
+async def test_a_short_lived_session_of_a_blocked_station_runs_the_rendezvous_at_once(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    attempts = Attempts(monkeypatch)
+    attempts.blocked = True
+    session = _session(station, WakeSource())
+    try:
+        await session.async_connect()
+        extra = session._short_lived_session()
+        assert extra.lan_reply_blocked is True
         try:
             await extra.async_connect()
         finally:

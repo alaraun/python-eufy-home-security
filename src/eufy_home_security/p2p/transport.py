@@ -21,7 +21,9 @@ Wire facts that shape it:
   session, as the eufy app connects. It reaches a station a ``LAN_SEARCH`` does not
   (another subnet behind a stateful gateway, a battery station asleep). A punch answered
   from an address in this host's own networks still counts as a LAN link
-  (:class:`ConnectPath`).
+  (:class:`ConnectPath`); such an address is punched only after an on-link grace
+  (:data:`ON_LINK_PUNCH_GRACE`), so the LAN search answers a station on this host's
+  network first.
 * A firewall can only admit the station's replies by the *local* port; pin it with
   ``local_port`` when that is needed (0 = ephemeral).
 * The station answers ``ALIVE`` whether or not the encrypted session above still
@@ -101,6 +103,11 @@ PUNCH_BURST = 4
 ANY_ADDRESS = "0.0.0.0"  # noqa: S104 - the P2P_REQ_DSK's address when this host's is not known
 #: Distinct ``PUNCH_TO`` addresses one connect punches; a server names about three.
 MAX_PUNCH_TARGETS = 8
+ON_LINK_PUNCH_GRACE = 1.5
+"""Seconds from a connect's first ``LAN_SEARCH`` before a ``PUNCH_TO`` address in this
+host's directly connected networks is punched (``on_link_grace``): two search rounds,
+so a station on this host's network that ignores the first search after a close still
+answers the LAN search first. Addresses outside them are punched at once."""
 #: "This network" (RFC 791): an address in it names no remote host to punch.
 _THIS_NETWORK = ipaddress.IPv4Network("0.0.0.0/8")
 
@@ -221,6 +228,12 @@ class PPPPTransport(asyncio.DatagramProtocol):
         self._punched: dict[tuple[str, int], int] = {}
         self._local_networks: Sequence[ipaddress.IPv4Network] | None = None
         self._path: ConnectPath | None = None
+        # The on-link grace: whether it runs, its timer, and the on-link PUNCH_TO
+        # addresses held back until it ends.
+        self._on_link_grace = False
+        self._grace_timer: asyncio.TimerHandle | None = None
+        self._held_back: dict[tuple[str, int], None] = {}
+        self._lan_reply_blocked = False
         self._punch: asyncio.Future[tuple[Did, bytes, tuple[str, int]]] | None = None
         self._ready = asyncio.Event()
         self._peer: tuple[str, int] | None = None
@@ -259,6 +272,14 @@ class PPPPTransport(asyncio.DatagramProtocol):
         return self._path
 
     @property
+    def lan_reply_blocked(self) -> bool:
+        """Whether the link came from a punch toward an address in this host's directly
+        connected networks after the on-link grace ended without a LAN reply: the
+        station is on this host's network, but its replies to a ``LAN_SEARCH`` do not
+        arrive (a firewall here drops them). False without the grace."""
+        return self._lan_reply_blocked
+
+    @property
     def wrong_port_drops(self) -> int:
         """Datagrams dropped for coming from the peer's host but not its pinned port."""
         return self._wrong_port_drops
@@ -291,6 +312,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
         wake: Wake | None = None,
         extra_hosts: Sequence[str] = (),
         local_networks: Sequence[ipaddress.IPv4Network] | None = None,
+        on_link_grace: bool = False,
     ) -> Did:
         """Discover and punch the station; returns its DID.
 
@@ -315,8 +337,15 @@ class PPPPTransport(asyncio.DatagramProtocol):
         outside them that the client punched counts as rendezvous, even an address it
         also searched: the punch is what a stateful gateway admits the reply by. With
         ``local_networks`` None (unknown), any punched address counts as rendezvous.
+
+        ``on_link_grace`` (with ``wake`` and known ``local_networks``) holds back a
+        ``PUNCH_TO`` address in ``local_networks`` until :data:`ON_LINK_PUNCH_GRACE`
+        after the first ``LAN_SEARCH``, so a station on this host's network answers the
+        search first; addresses outside them are punched at once. A link that then comes
+        from that punch sets :attr:`lan_reply_blocked`.
         """
         self._local_networks = local_networks
+        self._on_link_grace = on_link_grace
         did, body, addr = await self._await_punch(
             host,
             port=port,
@@ -453,6 +482,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
             )
             deadline = loop.time() + timeout
             rounds = 0
+            if self._on_link_grace:  # from the first LAN_SEARCH, sent next
+                self._grace_timer = loop.call_later(ON_LINK_PUNCH_GRACE, self._end_grace)
             while not self._punch.done():
                 remaining = deadline - loop.time()
                 if remaining <= 0:
@@ -477,6 +508,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
         except BaseException:
             self.close(send_close=False)
             raise
+        finally:
+            self._cancel_grace()
 
     async def _prepare_wake(self, wake: Wake, did: Did) -> tuple[bytes, tuple[str, ...]]:
         """Send HELLO to each rendezvous server; return the P2P_REQ_DSK to poke them with and the
@@ -639,8 +672,12 @@ class PPPPTransport(asyncio.DatagramProtocol):
                 "ignoring discovery reply from another station (%s)", Identifier(str(did))
             )
             return
-        rendezvous = addr in self._punched and not self._on_local_network(addr[0])
-        self._path = ConnectPath.RENDEZVOUS if rendezvous else ConnectPath.LAN
+        punched = addr in self._punched
+        on_link = self._on_local_network(addr[0])
+        self._path = ConnectPath.RENDEZVOUS if punched and not on_link else ConnectPath.LAN
+        # On-link addresses are punched only after the grace: a reply to that punch
+        # means the LAN search went unanswered while the station was reachable.
+        self._lan_reply_blocked = punched and on_link and self._on_link_grace
         self._punch.set_result((did, payload, addr))
 
     def _on_local_network(self, host: str) -> bool:
@@ -669,7 +706,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
         Bounds (the library's): an address that is no remote unicast host is skipped
         (:meth:`_punchable`), at most :data:`MAX_PUNCH_TARGETS` addresses are punched
         per connect, and each at most once per discovery round, however many servers
-        name it."""
+        name it. During the on-link grace an address in this host's networks is held
+        back until :meth:`_end_grace` (see :meth:`connect`)."""
         did = self._rendezvous_did
         if did is None or source not in self._servers:
             if self._throttle.should_log(("punch-to-source", source)):
@@ -685,6 +723,21 @@ class PPPPTransport(asyncio.DatagramProtocol):
             return
         if not self._punchable(target):
             return
+        if self._grace_timer is not None and self._on_local_network(target[0]):
+            if target not in self._held_back:
+                _LOGGER.debug(
+                    "PUNCH_TO %s:%d is on this host's network; punching it after %.1fs "
+                    "unless the LAN search is answered first",
+                    Address(target[0]),
+                    target[1],
+                    ON_LINK_PUNCH_GRACE,
+                )
+                self._held_back[target] = None
+            return
+        self._punch_target(target, did)
+
+    def _punch_target(self, target: tuple[str, int], did: Did) -> None:
+        """Send ``target`` a :data:`PUNCH_BURST` (see :meth:`_on_punch_to` for the bounds)."""
         first = not self._punched
         if target not in self._punched:
             if len(self._punched) >= MAX_PUNCH_TARGETS:
@@ -723,6 +776,23 @@ class PPPPTransport(asyncio.DatagramProtocol):
         if addr.is_link_local or addr.is_reserved:
             return False
         return target != (self._our_ip, self.local_port)
+
+    def _end_grace(self) -> None:
+        """End the on-link grace: punch each address it held back, unless a reply was
+        already taken."""
+        self._grace_timer = None
+        held, self._held_back = self._held_back, {}
+        did = self._rendezvous_did
+        if did is None or self._punch is None or self._punch.done():
+            return
+        for target in held:
+            self._punch_target(target, did)
+
+    def _cancel_grace(self) -> None:
+        if self._grace_timer is not None:
+            self._grace_timer.cancel()
+            self._grace_timer = None
+        self._held_back.clear()
 
     def _on_drw(self, payload: bytes) -> None:
         try:

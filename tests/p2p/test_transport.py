@@ -802,6 +802,9 @@ class _RemoteCamera(asyncio.DatagramProtocol):
         self.did = did
         self.punches: list[bytes] = []
         self.reply_from: asyncio.DatagramTransport | None = None
+        self.answer_search: int | None = None
+        """Answer the n-th LAN_SEARCH (from 1) and every later one; None: never."""
+        self.searches = 0
         self._transport: asyncio.DatagramTransport | None = None
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
@@ -809,6 +812,12 @@ class _RemoteCamera(asyncio.DatagramProtocol):
 
     def datagram_received(self, data: bytes, addr: tuple[str | int, int]) -> None:
         msg, payload = decode_packet(data)
+        if msg == MsgType.LAN_SEARCH:
+            self.searches += 1
+            if self.answer_search is not None and self.searches >= self.answer_search:
+                assert self._transport is not None
+                self._transport.sendto(encode_packet(MsgType.PUNCH_PKT, self.did.to_struct()), addr)
+            return
         if msg != MsgType.PUNCH_PKT:
             return
         self.punches.append(payload)
@@ -1273,6 +1282,137 @@ async def test_a_station_answering_the_punch_to_its_lan_address_first_is_on_the_
         assert transport.path is path
     finally:
         transport.close()
+
+
+def _discovery_sends(transport: PPPPTransport) -> list[tuple[float, int, tuple[str, int]]]:
+    """Record (monotonic time, type, address) of each LAN_SEARCH and PUNCH_PKT
+    ``transport`` sends before its peer is pinned (the punch echo is left out)."""
+    sent: list[tuple[float, int, tuple[str, int]]] = []
+    inner = transport._sendto
+
+    def timed(packet: bytes, addr: tuple[str, int]) -> None:
+        msg = decode_packet(packet)[0]
+        if transport.peer is None and msg in (MsgType.LAN_SEARCH, MsgType.PUNCH_PKT):
+            sent.append((time.monotonic(), msg, addr))
+        inner(packet, addr)
+
+    transport._sendto = timed  # type: ignore[method-assign]
+    return sent
+
+
+def _first(sent: list[tuple[float, int, tuple[str, int]]], msg: int, host: str) -> float | None:
+    return next((at for at, kind, addr in sent if kind == msg and addr[0] == host), None)
+
+
+async def test_an_on_link_station_whose_lan_reply_is_blocked_is_punched_after_the_grace(
+    rendezvous: _Rendezvous, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The station's LAN address lies in this host's networks, but its LAN replies never
+    arrive: that address is punched only once :data:`ON_LINK_PUNCH_GRACE` has passed
+    since the first LAN_SEARCH, its public one at once; the link is a LAN one whose
+    reply needed the punch."""
+    monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.5)
+    transport = make_transport()
+    rendezvous.route(transport)
+    sent = _discovery_sends(transport)
+    try:
+        await transport.connect(
+            SEARCHED,
+            port=59999,
+            expected_did=rendezvous.did,
+            timeout=3.0,
+            wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
+            local_networks=(OUR_LAN,),
+            on_link_grace=True,
+        )
+        assert transport.peer == (CAMERA_LAN, rendezvous.camera_port)
+        assert transport.path is ConnectPath.LAN
+        assert transport.lan_reply_blocked is True
+    finally:
+        transport.close()
+    search = _first(sent, MsgType.LAN_SEARCH, SEARCHED)
+    public = _first(sent, MsgType.PUNCH_PKT, CAMERA_WAN)
+    on_link = _first(sent, MsgType.PUNCH_PKT, CAMERA_LAN)
+    assert search is not None
+    assert public is not None
+    assert on_link is not None
+    assert public - search < 0.15  # off-link: at once
+    # When the grace ends, not at the next round's PUNCH_TO (1 s after the first).
+    assert 0.5 - 0.01 <= on_link - search < 0.8
+
+
+async def test_an_on_link_station_answering_the_search_within_the_grace_is_never_punched(
+    rendezvous: _Rendezvous, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The station ignores the first LAN_SEARCH (as after a close) and answers the next
+    one, while its servers name its LAN address from the first round: the LAN reply
+    wins, that address is never punched, and nothing is flagged."""
+    monkeypatch.setattr(transport_module, "DISCOVERY_RETRY_INTERVAL", 0.2)
+    monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.6)
+    rendezvous.camera.answer_search = 2
+    transport = make_transport()
+    rendezvous.route(transport)
+    sent = _discovery_sends(transport)
+    try:
+        await transport.connect(
+            CAMERA_LAN,
+            port=rendezvous.camera_port,
+            expected_did=rendezvous.did,
+            timeout=3.0,
+            wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
+            local_networks=(OUR_LAN,),
+            on_link_grace=True,
+        )
+        assert transport.path is ConnectPath.LAN
+        assert transport.lan_reply_blocked is False
+    finally:
+        transport.close()
+    assert rendezvous.camera.searches == 2
+    assert _first(sent, MsgType.PUNCH_PKT, CAMERA_WAN) is not None  # PUNCH_TOs were taken
+    assert _first(sent, MsgType.PUNCH_PKT, CAMERA_LAN) is None
+
+
+@pytest.mark.parametrize(
+    ("networks", "grace", "path"),
+    [
+        # The LAN address is outside this host's networks (another subnet): no grace.
+        ((IPv4Network("203.0.113.0/24"),), True, ConnectPath.RENDEZVOUS),
+        # Networks unknown: no grace, and a punched address is rendezvous.
+        (None, True, ConnectPath.RENDEZVOUS),
+        # No grace asked (a station reached on demand): punched at once, a LAN link.
+        ((OUR_LAN,), False, ConnectPath.LAN),
+    ],
+)
+async def test_without_an_on_link_grace_the_lan_address_is_punched_at_once(
+    rendezvous: _Rendezvous,
+    monkeypatch: pytest.MonkeyPatch,
+    networks: tuple[IPv4Network, ...] | None,
+    grace: bool,
+    path: ConnectPath,
+) -> None:
+    monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 2.0)
+    transport = make_transport()
+    rendezvous.route(transport)
+    sent = _discovery_sends(transport)
+    try:
+        await transport.connect(
+            SEARCHED,
+            port=59999,
+            expected_did=rendezvous.did,
+            timeout=3.0,
+            wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
+            local_networks=networks,
+            on_link_grace=grace,
+        )
+        assert transport.path is path
+        assert transport.lan_reply_blocked is False
+    finally:
+        transport.close()
+    search = _first(sent, MsgType.LAN_SEARCH, SEARCHED)
+    on_link = _first(sent, MsgType.PUNCH_PKT, CAMERA_LAN)
+    assert search is not None
+    assert on_link is not None
+    assert on_link - search < 1.0
 
 
 async def test_a_punch_to_after_the_peer_is_pinned_is_ignored() -> None:
