@@ -3130,10 +3130,52 @@ async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
         assert path.station_ip == STATION_LAN
         assert path.local_port == 0
         assert bool(reads) is not override
+        await wait_for(lambda: eufy.cache.lan_reply_blocked(fake.serial))
+        assert eufy.cache.link_path(fake.serial) is ConnectPath.LAN
     finally:
         await eufy.async_close()
         fake.stop()
         endpoint.close()
+
+
+async def test_a_station_stored_with_a_blocked_lan_reply_warns_and_goes_to_the_servers_at_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The kept record of an earlier run: the station's ``lan_path`` warns before its
+    first link, and its first attempt runs the rendezvous with a DSK fetched from the
+    cloud (no LAN-only first attempt); its LAN link then clears the record."""
+    fake = FakeStation()
+    await fake.start()
+    calls: list[bool] = []
+    connect = PPPPTransport.connect
+
+    async def recording(transport: PPPPTransport, host: str | None, **kwargs: Any) -> Did:
+        calls.append(kwargs.get("wake") is not None)
+        kwargs.pop("wake", None)
+        return await connect(transport, host, **kwargs)
+
+    monkeypatch.setattr(PPPPTransport, "connect", recording)
+    monkeypatch.setattr(CloudDevice, "rendezvous_servers", (SERVER[0],))
+    cloud = FakeCloud.for_stations(fake)
+    store = _link_path_store(cloud, {fake.serial: "lan"})
+    assert store.data is not None
+    store.data["stations"][fake.serial]["lan_reply_blocked"] = True
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=store, cloud=cloud, stations={fake.serial: fake}
+    )
+    try:
+        await eufy.async_discover()
+        station = eufy.stations[fake.serial]
+        assert PathWarning.LAN_REPLY_BLOCKED in station.lan_path.warnings
+        assert await eufy.async_start(push=False) == {}
+        await wait_for(lambda: not eufy.cache.lan_reply_blocked(fake.serial))
+        assert PathWarning.LAN_REPLY_BLOCKED not in station.lan_path.warnings
+    finally:
+        await eufy.async_close()
+        fake.stop()
+    assert calls == [True]
+    assert [call for call in cloud.calls if call.startswith("dsk:")]
+    assert "lan_reply_blocked" not in store.data["stations"][fake.serial]
 
 
 # ── models without a bundled file ───────────────────────────────────────────

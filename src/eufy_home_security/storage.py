@@ -97,6 +97,8 @@ _MIGRATED_VERSIONS: Final = (1,)
 _REPLACED = "replaced"
 # Per-station key of the last link path, and the values it is read as.
 _LINK_PATH = "link_path"
+# Per-station flag beside it: that link needed a punch because the LAN reply was blocked.
+_LAN_REPLY_BLOCKED = "lan_reply_blocked"
 _CONNECT_PATHS: Final = tuple(str(path) for path in ConnectPath)
 
 _LOGGER = logging.getLogger(__name__)
@@ -215,6 +217,7 @@ class SessionCache:
                                    "key_refresh": <epoch s>,
                                    "dsk": {"key": "…", "expiration": <epoch s>},
                                    "link_path": "lan" | "rendezvous",
+                                   "lan_reply_blocked": true,
                                    "presets": {"<camera serial>": [{...}, …]}}},
          "refresh_attempts": {"owner": <epoch s>},
          "throttle": {"requests": <epoch s>, "login": {"<region>": <epoch s>},
@@ -512,18 +515,38 @@ class SessionCache:
         value = entry.get(_LINK_PATH) if isinstance(entry, dict) else None
         return ConnectPath(value) if value in _CONNECT_PATHS else None
 
-    def set_link_path(self, serial: str, path: ConnectPath) -> bool:
-        """Store how the last link to ``serial`` came up; whether the stored path changed."""
-        if self.link_path(serial) is path:
+    def lan_reply_blocked(self, serial: str) -> bool:
+        """Whether the last link to ``serial`` needed a punch because the station's LAN
+        reply was blocked, as stored by :meth:`set_link_path`; only a stored ``true``
+        counts."""
+        stations = self._doc.get("stations")
+        entry = stations.get(serial) if isinstance(stations, dict) else None
+        return isinstance(entry, dict) and entry.get(_LAN_REPLY_BLOCKED) is True
+
+    def set_link_path(
+        self, serial: str, path: ConnectPath, *, lan_reply_blocked: bool = False
+    ) -> bool:
+        """Store how the last link to ``serial`` came up and whether its LAN reply was
+        blocked; whether either changed."""
+        if self.link_path(serial) is path and self.lan_reply_blocked(serial) is lan_reply_blocked:
             return False
-        self.station(serial)[_LINK_PATH] = str(path)
+        entry = self.station(serial)
+        entry[_LINK_PATH] = str(path)
+        if lan_reply_blocked:
+            entry[_LAN_REPLY_BLOCKED] = True
+        else:
+            entry.pop(_LAN_REPLY_BLOCKED, None)
         return True
 
     def drop_link_path(self, serial: str) -> bool:
-        """Forget ``serial``'s last link path; whether one was stored."""
+        """Forget ``serial``'s last link path (and its blocked-reply flag); whether a
+        path was stored."""
         stations = self._doc.get("stations")
         entry = stations.get(serial) if isinstance(stations, dict) else None
-        return isinstance(entry, dict) and entry.pop(_LINK_PATH, None) is not None
+        if not isinstance(entry, dict):
+            return False
+        entry.pop(_LAN_REPLY_BLOCKED, None)
+        return entry.pop(_LINK_PATH, None) is not None
 
     # ── device list ──────────────────────────────────────────────────────────
 

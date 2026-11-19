@@ -166,6 +166,7 @@ rendezvous servers in the cloud's `app_conn`):
 |---|---|---|
 | reached on demand (a battery station) | every discovery attempt, from the first | it is what wakes the station |
 | held (mains), last link through the servers | every attempt, from the first (the DSK fetched when none is cached) | the station is not on the LAN path |
+| held (mains), last link needed a punch for a blocked LAN reply | every attempt, from the first (the DSK fetched when none is cached) | its LAN replies do not arrive ([on-link grace](#rendezvous-connect)) |
 | held (mains), a fresh DSK cached | every attempt, from the first | no cloud call needed: both run from the start, as the app runs them |
 | held (mains), no DSK cached | from the second attempt, after a LAN attempt (6 s) failed | a station the LAN reaches costs no cloud call; waiting one attempt is the library's choice |
 
@@ -229,6 +230,9 @@ records it as **LAN reply blocked** (`SessionStats.lan_reply_blocked`,
 servers and a DSK, so it fails in an internet outage where a plain LAN link would not.
 While it is set, a reconnect runs the rendezvous connect from its first attempt. Each
 link sets it again: a later link from a LAN reply (a firewall rule added) clears it.
+`EufySecurity` keeps it beside the link path (`stations.<serial>.lan_reply_blocked`), so
+after a restart the warning stands before the first link and that link skips the
+LAN-only attempt.
 Without known host networks (not Linux, or an interface error, and none given as
 `EufySecurity(local_networks=…)`) there is no grace and no such record.
 

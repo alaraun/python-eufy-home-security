@@ -324,8 +324,10 @@ class EufySecurity:
         the first attempt when its DSK is cached (no cloud call) or its last link came
         through the servers, else once a LAN discovery attempt has failed. How each
         station's last link came up is kept in the cache (``stations.<serial>.link_path``),
-        so it holds across restarts. A link counts as rendezvous only when the station
-        answered from outside this host's own networks. It costs one DSK per station from
+        so it holds across restarts, with whether that link needed a punch because the
+        station's LAN reply was blocked (``stations.<serial>.lan_reply_blocked``, see
+        :attr:`~.network.PathWarning.LAN_REPLY_BLOCKED`). A link counts as rendezvous
+        only when the station answered from outside this host's own networks. It costs one DSK per station from
         the cloud, cached until it expires. A station with no configured
         address and no private cloud ``local_ip`` is also searched at the LAN address it
         reports (:attr:`~.network.HostSource.DEVICE`).
@@ -685,6 +687,7 @@ class EufySecurity:
                 max_sessions=self._max_sessions,
                 extra_hosts=extra_search_hosts(device, self._search_host(device)),
                 connect_path=self.cache.link_path(serial),
+                lan_reply_blocked=self.cache.lan_reply_blocked(serial),
                 local_networks=self._local_networks,
             )
             station = Station(
@@ -718,11 +721,16 @@ class EufySecurity:
             await self.cache.async_save()
 
     def _note_link_path(self, serial: str) -> None:
-        """Keep how a built station's link came up, for its session after a restart
-        (saved only when it changed)."""
+        """Keep how a built station's link came up and whether its LAN reply was blocked,
+        for its session after a restart (saved only when either changed)."""
         station = self.stations.get(serial)
-        path = None if station is None else station.session.connect_path
-        if path is not None and self.cache.set_link_path(serial, path):
+        if station is None:
+            return
+        session = station.session
+        path = session.connect_path
+        if path is not None and self.cache.set_link_path(
+            serial, path, lan_reply_blocked=session.lan_reply_blocked
+        ):
             self.cache.schedule_save()
 
     def _login_country_code(self) -> str | None:

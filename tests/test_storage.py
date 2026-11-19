@@ -136,6 +136,36 @@ async def test_a_station_link_path_persists_and_reports_a_change() -> None:
     assert reloaded.link_path(serial) is None
 
 
+async def test_a_blocked_lan_reply_is_kept_with_the_link_path() -> None:
+    store = MemoryStore()
+    cache = SessionCache(store, SYNTHETIC.email)
+    await cache.async_load()
+    serial = SYNTHETIC.station_sn
+    assert cache.lan_reply_blocked(serial) is False
+    assert cache.set_link_path(serial, ConnectPath.LAN, lan_reply_blocked=True)
+    assert not cache.set_link_path(serial, ConnectPath.LAN, lan_reply_blocked=True)
+    await cache.async_save()
+
+    reloaded = SessionCache(store, SYNTHETIC.email)
+    await reloaded.async_load()
+    assert reloaded.lan_reply_blocked(serial) is True
+    assert reloaded.set_link_path(serial, ConnectPath.LAN)  # the flag alone changed
+    assert reloaded.lan_reply_blocked(serial) is False
+    assert reloaded.set_link_path(serial, ConnectPath.LAN, lan_reply_blocked=True)
+    assert reloaded.drop_link_path(serial)
+    assert reloaded.lan_reply_blocked(serial) is False
+    assert not reloaded.drop_link_path(serial)
+
+
+@pytest.mark.parametrize("stored", [None, 1, "true", [True]])
+async def test_a_blocked_lan_reply_reads_only_true_as_set(stored: object) -> None:
+    store = MemoryStore()
+    cache = SessionCache(store, SYNTHETIC.email)
+    await cache.async_load()
+    cache.station(SYNTHETIC.station_sn)["lan_reply_blocked"] = stored
+    assert cache.lan_reply_blocked(SYNTHETIC.station_sn) is False
+
+
 @pytest.mark.parametrize("stored", [None, "relay", 1, "", ["lan"]])
 async def test_a_missing_or_unknown_link_path_reads_as_none(stored: object) -> None:
     """A cache written before the link path was kept, or by a later build that knows
