@@ -54,6 +54,7 @@ from ..devices.live_view import (
 from ..devices.model_settings import (
     BATTERY_PROPERTY,
     PARENTLESS_ONLY,
+    SdStatusGroups,
     Setting,
     SettingKind,
     Value,
@@ -117,6 +118,7 @@ from ..exceptions import (
     CommandUnsupportedError,
     DeviceTimeoutError,
     EufySecurityError,
+    ModelDataError,
     RecordNotFoundError,
     StillNotWrittenError,
     UnsupportedError,
@@ -1052,6 +1054,8 @@ class Station:
         self._configuration = StationConfiguration(self)
         self._settings_memo: dict[tuple[str, str], tuple[Setting, ...]] = {}
         """:meth:`settings_for` per ``(serial, product code)``."""
+        self._sd_groups_memo: dict[str | None, SdStatusGroups | None] = {}
+        """The model's ``SDINFO_EX`` grouping per product code (None: the library's table)."""
         self._cloud: dict[int, _CloudValue] = {}
         """The cloud list's copy of the station's own parameters (a station reached on
         demand files them in its session instead)."""
@@ -3472,16 +3476,16 @@ class Station:
         :attr:`~..p2p.storage_info.StorageInfo.emmc` alone (the device's SD card or eMMC;
         a medium that is not usable is a result with ``usable`` False, not an error; the
         status grouped as the model's handler groups it,
-        :func:`~..devices.model_settings.sd_status_groups`, else by the library's table). A
-        model the app asks nothing raises :class:`CommandUnsupportedError` without
-        sending. Wakes a battery camera. The result is also kept as :attr:`storage`.
+        :func:`~..devices.model_settings.sd_status_groups`, else, a malformed file too, by
+        the library's table). A model the app asks nothing raises
+        :class:`CommandUnsupportedError` without sending. Wakes a battery camera. The result is also kept as :attr:`storage`.
         """
         query = storage_query(
             self.serial, self.device.main_sw_version, standalone=self.session.standalone
         )
         if query is StorageQuery.SD_INFO:
             return await self.session.async_get_sd_info(
-                timeout=timeout, group=self._sd_status_group()
+                timeout=timeout, group=await self._sd_status_group()
             )
         if query is StorageQuery.HUB_STORAGE:
             return await self.session.async_get_hub_storage(timeout=timeout)
@@ -3491,13 +3495,29 @@ class Station:
             )
         return await self.session.async_get_storage(timeout=timeout)
 
-    def _sd_status_group(self) -> Callable[[int], int]:
+    async def _sd_status_group(self) -> Callable[[int], int]:
         """How the station's model groups an ``SDINFO_EX`` status
         (:func:`~..devices.model_settings.sd_status_groups`, with the device's parameters
         as last reported for a model that groups its status parameter); for a model
-        without one, the library's table (:func:`~..p2p.storage_info.sd_status_group`),
-        the library's choice."""
-        groups = sd_status_groups(self._product_code(self.serial))
+        without one, or whose file is malformed (logged once), the library's table
+        (:func:`~..p2p.storage_info.sd_status_group`), the library's choice. Read off the
+        event loop once per product code."""
+        code = self._product_code(self.serial)
+        if code not in self._sd_groups_memo:
+            try:
+                found = await asyncio.to_thread(sd_status_groups, code)
+            except ModelDataError as err:
+                found = None
+                if self._throttle.should_log(("sd status groups", code)):
+                    _LOGGER.warning(
+                        "%s: the SDINFO_EX grouping of model %s is unreadable (%s); "
+                        "grouping by the library's table",
+                        self._log_name,
+                        code,
+                        err,
+                    )
+            self._sd_groups_memo[code] = found
+        groups = self._sd_groups_memo[code]
         if groups is None:
             return sd_status_group
         return lambda status: groups.group(status, self._reported_params(self.device))

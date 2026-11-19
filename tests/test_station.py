@@ -8,8 +8,9 @@ import json
 import logging
 import math
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -21,6 +22,7 @@ import eufy_home_security.station.ptz as station_ptz
 from eufy_home_security import MediumState
 from eufy_home_security._logging import redact_serial
 from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.devices import model_settings
 from eufy_home_security.devices._ptz_data import PTZ
 from eufy_home_security.devices.capabilities import (
     PTZ_ACTION_NEEDS,
@@ -5430,6 +5432,79 @@ async def test_a_model_that_prefers_the_status_parameter_groups_the_devices_valu
     assert asked == ["T8115"]
     assert info.emmc is not None
     assert (info.emmc.work_status, info.emmc.status_group, info.emmc.state) == (0, group, state)
+
+
+@pytest.fixture
+def malformed_t8115(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
+    """``.malform()`` points the models directory at a copy of the bundled files whose T8115
+    file has a malformed ``sd_status_groups``; ``.asked`` lists the codes the station's
+    grouping lookup was called with."""
+    root = model_settings._root()
+    doc = json.loads(root.joinpath("T8115.json").read_text(encoding="utf-8"))
+    doc["sd_status_groups"] = []
+    (tmp_path / "T8115.json").write_text(json.dumps(doc), encoding="utf-8")
+    index = json.loads(root.joinpath("INDEX.json").read_text(encoding="utf-8"))
+    index["codes"] = ["T8115"]
+    (tmp_path / "INDEX.json").write_text(json.dumps(index), encoding="utf-8")
+    asked: list[str | None] = []
+    caches = (model_settings._load, model_settings._resolved, model_settings.bundled_codes)
+
+    def lookup(code: str | None) -> SdStatusGroups | None:
+        asked.append(code)
+        return model_settings.sd_status_groups(code)
+
+    def malform() -> None:
+        monkeypatch.setattr(model_settings, "_root", lambda: tmp_path)
+        for cache in caches:
+            cache.cache_clear()
+
+    monkeypatch.setattr(station_mod, "sd_status_groups", lookup)
+    yield SimpleNamespace(asked=asked, malform=malform)
+    monkeypatch.undo()
+    for cache in caches:
+        cache.cache_clear()
+
+
+async def test_a_malformed_grouping_file_still_gives_the_storage_record(
+    fake: FakeStation, malformed_t8115: SimpleNamespace, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The library's table groups the status (30: normal), the file is read once and the
+    failure logged once."""
+    fake.sd_info = (30, 8000, 2000)
+    station = await _standalone(fake, "T8115P2000054321")
+    malformed_t8115.malform()
+    try:
+        with caplog.at_level(logging.WARNING, logger=station_mod.__name__):
+            first = await station.async_get_storage()
+            second = await station.async_get_storage()
+    finally:
+        await station.async_close()
+    for info in (first, second):
+        assert info.emmc is not None
+        assert (info.emmc.status_group, info.emmc.state, info.emmc.usable) == (
+            0,
+            MediumState.NORMAL,
+            True,
+        )
+    assert malformed_t8115.asked == ["T8115"]
+    warned = [r for r in caplog.records if "SDINFO_EX grouping" in r.getMessage()]
+    assert len(warned) == 1
+    assert "T8115.json" in warned[0].getMessage()
+
+
+async def test_concurrent_reads_of_a_malformed_grouping_log_it_once(
+    fake: FakeStation, malformed_t8115: SimpleNamespace, caplog: pytest.LogCaptureFixture
+) -> None:
+    station = await _standalone(fake, "T8115P2000054321")
+    malformed_t8115.malform()
+    try:
+        with caplog.at_level(logging.WARNING, logger=station_mod.__name__):
+            groups = await asyncio.gather(station._sd_status_group(), station._sd_status_group())
+    finally:
+        await station.async_close()
+    assert malformed_t8115.asked == ["T8115", "T8115"]  # both began before either finished
+    assert [g(30) for g in groups] == [0, 0]
+    assert len([r for r in caplog.records if "SDINFO_EX grouping" in r.getMessage()]) == 1
 
 
 @pytest.mark.parametrize(
