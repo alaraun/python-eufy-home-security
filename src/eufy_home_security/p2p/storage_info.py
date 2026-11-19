@@ -33,6 +33,7 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from ..exceptions import ProtocolError
+from ..models import STORAGE_STATUS_NORMAL
 from ._json import json_int, loads_json
 
 #: The storage command (``NOTIFY_STORAGE``); its verb sits in ``payload.cmd``.
@@ -178,7 +179,7 @@ def _object(obj: Mapping[str, Any], key: str) -> Mapping[str, Any] | None:
 
 SD_STATUS_GROUPS: Final[Mapping[int, frozenset[int]]] = MappingProxyType(
     {
-        0: frozenset({0, 25, 30}),
+        0: STORAGE_STATUS_NORMAL,
         1: frozenset({27, 28}),
         2: frozenset({4, 31}),
         4: frozenset({22}),

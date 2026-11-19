@@ -203,7 +203,8 @@ PARAM_SD_INFO = 1102
 PARAM_STORAGE_STATUS = 1135
 """``GET_TFCARD_STATUS``: the storage status code (0 = normal)."""
 STORAGE_STATUS_NORMAL: Final = frozenset({0, 25, 30})
-"""Storage status codes the handlers show as normal (their UI status 0)."""
+"""Storage status codes the handlers show as normal (their UI status 0); also group 0 of
+the library's ``SDINFO_EX`` table (``p2p.storage_info.SD_STATUS_GROUPS``)."""
 SUBSYSTEM_FIRMWARE_PARAMS: Final = tuple(range(5006, 5013))
 """Version strings of the station's subsystems; no vendor code names the subsystems."""
 
