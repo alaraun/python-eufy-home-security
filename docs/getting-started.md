@@ -13,7 +13,9 @@
 - If the host or the network filters inbound UDP: a fixed IP for each station (a DHCP
   reservation), and either all UDP from the station allowed, or one pinned local port
   per station (`local_ports=`) allowed. `eufy-security network` prints what each of
-  your stations needs.
+  your stations needs. A station on the host's own network whose replies a host
+  firewall drops still connects, through its rendezvous servers, and its
+  `Station.lan_path` warns `lan_reply_blocked` until the rule is in place.
 - **Current station/camera firmware.** Current firmware uses the ECIES session
   handshake (CONN_INIT version 8). A device on older firmware that negotiates the legacy
   RSA handshake (CONN_INIT version 1) is supported as *declared*, not verified on
