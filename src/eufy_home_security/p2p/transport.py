@@ -644,8 +644,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
         self._punch.set_result((did, payload, addr))
 
     def _on_local_network(self, host: str) -> bool:
-        """Whether ``host`` lies in one of this host's directly connected networks, the
-        ones a broadcast ``LAN_SEARCH`` reaches; False while they are unknown."""
+        """Whether ``host`` lies in one of this host's directly connected networks
+        (:func:`~.netif.local_networks`); False while they are unknown."""
         address = ipaddress.IPv4Address(host)
         return any(address in network for network in self._local_networks or ())
 

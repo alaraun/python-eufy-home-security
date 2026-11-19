@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import fcntl
+import os
 import socket
 import sys
 import threading
@@ -31,8 +32,9 @@ def _fake_ioctl(table: dict[str, tuple[str, str] | int]) -> object:
     is the errno the interface raises."""
 
     def ioctl(_fd: int, request: int, arg: bytes) -> bytes:
+        assert len(arg) == 40  # a whole ifreq
         name = arg[:16].rstrip(b"\0")
-        entry = table[name.decode()]
+        entry = table[os.fsdecode(name)]
         if isinstance(entry, int):
             raise OSError(entry, "fake")
         address, mask = entry
@@ -71,6 +73,38 @@ def test_an_interface_without_ipv4_or_gone_is_skipped(
 def test_no_ipv4_interface_but_loopback_is_no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch(monkeypatch, {"lo": _ADDR["lo"], "wg0": errno.EADDRNOTAVAIL})
     assert netif.local_networks() == ()
+
+
+def test_an_interface_name_that_is_not_utf8_is_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A name the kernel lists with bytes that are not UTF-8 (surrogate-escaped by
+    ``if_nameindex``) goes to the ioctl as those bytes."""
+    _patch(monkeypatch, {"\udcff": _ADDR["eth0"]})
+    assert netif.local_networks() == (IPv4Network("192.0.2.0/24"),)
+
+
+def test_an_interface_the_ioctl_refuses_as_a_value_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch(monkeypatch, {"bad0": _ADDR["br0"], "eth0": _ADDR["eth0"]})
+    ioctl = fcntl.ioctl
+
+    def refusing(fd: int, request: int, arg: bytes) -> bytes:
+        if arg.startswith(b"bad0\0"):
+            raise ValueError("fake")
+        return ioctl(fd, request, arg)
+
+    monkeypatch.setattr(fcntl, "ioctl", refusing)
+    assert netif.local_networks() == (IPv4Network("192.0.2.0/24"),)
+
+
+def test_a_long_interface_name_is_cut_to_the_kernels_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``ifreq`` holds 15 name bytes and a NUL: a longer listed name is sent cut."""
+    long_name = "veth0123456789abcdef"
+    _patch(monkeypatch, {long_name[:15]: _ADDR["eth0"]})
+    monkeypatch.setattr(socket, "if_nameindex", lambda: [(1, long_name)])
+    assert netif.local_networks() == (IPv4Network("192.0.2.0/24"),)
 
 
 def test_any_other_interface_error_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:

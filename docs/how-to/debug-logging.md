@@ -189,7 +189,9 @@ logger:
   station answered and which way the link came up. `rendezvous via 3 of 3 server(s)`,
   `PUNCH_TO <address>; punching it` and `PUNCH_PKT from <address> (…, rendezvous)` trace
   a connect through the servers; a public address is starred. A punch answered from an
-  address in the host's own networks logs `lan`: that station is on the host's LAN.
+  address in the host's own networks logs `lan`: that station is on the host's LAN
+  (the setup probe's `punch probe: PUNCH_PKT from …` reads no host networks and labels
+  any punched address `rendezvous`).
 - `no LAN discovery reply from <hosts> and no punch through N rendezvous servers within
   Ns` names what an unanswered connect sent; without the `and no punch …` part, no
   rendezvous request went out on that attempt (a held station's LAN-only first attempt,

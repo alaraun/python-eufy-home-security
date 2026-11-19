@@ -182,10 +182,17 @@ library's rule):
 
 | source of the `PUNCH_PKT` | path |
 |---|---|
-| an address in one of this host's directly connected IPv4 networks (each interface's address and netmask: the networks a broadcast `LAN_SEARCH` reaches), punched or not | `"lan"` |
+| an address in one of this host's directly connected IPv4 networks (each interface's primary address and netmask), punched or not | `"lan"` |
 | outside them, an address the client punched (even a host it also searched by unicast: behind a stateful gateway the punch is what admits the reply) | `"rendezvous"` |
 | outside them, not punched (a host searched by unicast) | `"lan"` |
 | this host's networks cannot be read (not Linux, or an interface error): an address the client punched | `"rendezvous"` |
+
+The networks are read on Linux with the `SIOCGIFADDR` / `SIOCGIFNETMASK` ioctls (stdlib
+only): one primary IPv4 address per interface, so a station on a subnet this host holds
+only as a secondary address (an alias) is classified by the rule for addresses outside
+the networks (a punched one is `"rendezvous"`, never wrongly `"lan"`). Every interface
+counts, up or down, tunnels included: a station reached through a VPN whose far end
+masquerades into a WireGuard or tun subnet of this host counts as `"lan"`.
 
 So a station on this host's LAN that answers the punch toward its LAN address before
 the search (it ignores the first `LAN_SEARCH` after a session was closed) is still a
@@ -209,7 +216,9 @@ round and the punches above, no `LAN_SEARCH`. The station's first `PUNCH_PKT` wi
 DID ends it: the client sends that address a `CLOSE` and closes the socket, with no
 punch echo, no `P2P_RDY` wait and no `ALIVE`, so no session is set up **[verified:
 T817L, the camera's punch 21 ms after the probe began]**. A station reached on demand is
-not probed this way, since the punch wakes it.
+not probed this way, since the punch wakes it. The probe reads none of this host's
+networks: it answers whether a punch reaches the station, not which path a session
+would be labelled with.
 
 A station with no configured address and no private cloud `local_ip` is also searched
 by unicast at the LAN address it reports itself (parameter 1176 in the cloud's

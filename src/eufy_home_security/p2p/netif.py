@@ -1,12 +1,15 @@
 """This host's directly connected IPv4 networks, for classifying how a station answered.
 
-A broadcast ``LAN_SEARCH`` reaches exactly these networks, so a station whose
-``PUNCH_PKT`` comes from an address in one of them is on this host's LAN, however the
-punch arrived (see ``docs/protocol/p2p-transport.md`` § Rendezvous connect).
+A station whose ``PUNCH_PKT`` comes from an address in one of these networks is on a
+network this host is attached to, however the punch arrived (see
+``docs/protocol/p2p-transport.md`` § Rendezvous connect).
 
-Linux only: each interface's IPv4 address and netmask are read with the
-``SIOCGIFADDR`` / ``SIOCGIFNETMASK`` ioctls. Elsewhere, or when the interfaces cannot
-be read, the networks are unknown (None). The read is blocking system calls: call
+Linux only: each interface's primary IPv4 address and netmask are read with the
+``SIOCGIFADDR`` / ``SIOCGIFNETMASK`` ioctls. Secondary addresses (aliases) are not
+read, so a station on such a subnet is classified as one outside these networks.
+An interface counts whether it is up or down, and a tunnel interface (WireGuard,
+tun) counts like any other. Elsewhere, or when the interfaces cannot be read, the
+networks are unknown (None). The read is blocking system calls: call
 :func:`async_local_networks` from the event loop.
 """
 
@@ -14,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import errno
+import os
 import socket
 import sys
 from ipaddress import IPv4Interface, IPv4Network
@@ -33,9 +37,11 @@ _SKIPPED_ERRNOS: Final = frozenset({errno.EADDRNOTAVAIL, errno.ENODEV})
 
 
 def local_networks() -> tuple[IPv4Network, ...] | None:
-    """The IPv4 networks of this host's interfaces (address and netmask), loopback left
-    out, each once in interface order; None when they cannot be read (not Linux, or an
-    interface error other than :data:`_SKIPPED_ERRNOS`)."""
+    """The IPv4 networks of this host's interfaces (primary address and netmask),
+    loopback left out, each once in interface order; None when they cannot be read
+    (not Linux, or an interface error other than :data:`_SKIPPED_ERRNOS`). An
+    interface whose request the ioctl refuses as a value is skipped like one
+    without IPv4."""
     if sys.platform != "linux":
         return None
     found: dict[IPv4Network, None] = {}
@@ -45,6 +51,8 @@ def local_networks() -> tuple[IPv4Network, ...] | None:
                 try:
                     address = _ioctl_ipv4(sock, SIOCGIFADDR, name)
                     netmask = _ioctl_ipv4(sock, SIOCGIFNETMASK, name)
+                except ValueError:
+                    continue
                 except OSError as err:
                     if err.errno in _SKIPPED_ERRNOS:
                         continue
@@ -63,7 +71,8 @@ async def async_local_networks() -> tuple[IPv4Network, ...] | None:
 
 
 def _ioctl_ipv4(sock: socket.socket, request: int, name: str) -> str:
-    """The IPv4 address an ``ifreq`` ioctl returns for interface ``name``."""
-    request_buffer = name.encode()[: _IFNAMSIZ - 1].ljust(_IFREQ_SIZE, b"\0")
+    """The IPv4 address an ``ifreq`` ioctl returns for interface ``name``, sent as the
+    bytes the kernel listed (``os.fsencode``) and cut to its 15-byte limit."""
+    request_buffer = os.fsencode(name)[: _IFNAMSIZ - 1].ljust(_IFREQ_SIZE, b"\0")
     reply = fcntl.ioctl(sock.fileno(), request, request_buffer)
     return socket.inet_ntoa(reply[20:24])

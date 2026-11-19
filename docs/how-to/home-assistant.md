@@ -484,6 +484,11 @@ One with `NoCachedSessionError` is no reauth: the probe never logs in, and the n
 ordinary call does. A built station is not probed, connected or not (its own session
 reconnects it, through the servers too): `rendezvous` is True when its last link came
 through the servers, from this run or, before its first link, stored from an earlier one.
+The probe does not read this host's networks: a station on Home Assistant's own network
+that does not answer the LAN probe (a host firewall drops its reply) but answers the
+punch shows `reachable_via` `"rendezvous"` here, which is what its connects need, while
+its session, once built, reports `connect_path` `"lan"` (the punch came from an address
+in the host's networks).
 
 A battery station that did not answer the LAN probe stays `Reach.REMOTE` with
 `rendezvous` None: whether its servers would reach it cannot be known without waking
