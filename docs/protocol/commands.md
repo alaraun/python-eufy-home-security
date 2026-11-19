@@ -626,7 +626,7 @@ model's handler into its settings file (`sd_status_groups`,
 
 - **A table read from the answer** (`from` `answer`): the handler's parse of the answer
   groups its status. The tables differ in a few codes: the T8170 groups 30 as 0 and
-  leaves 33 out (group 1), the T8162 groups 33 as 22, the T8115 leaves 29, 30, 31 and 33
+  leaves 33 out (group 1), the T8030 groups 33 as 22, the T8115 leaves 29, 30, 31 and 33
   out.
 - **The status parameter in place of the answer's status** (`param`, e.g. on the
   T8600): whenever the device lists `1135` (`APP_CMD_GET_TFCARD_STATUS`) with a value,

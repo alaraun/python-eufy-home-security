@@ -3478,7 +3478,8 @@ class Station:
         status grouped as the model's handler groups it,
         :func:`~..devices.model_settings.sd_status_groups`, else, a malformed file too, by
         the library's table). A model the app asks nothing raises
-        :class:`CommandUnsupportedError` without sending. Wakes a battery camera. The result is also kept as :attr:`storage`.
+        :class:`CommandUnsupportedError` without sending. Wakes a battery camera. The
+        result is also kept as :attr:`storage`.
         """
         query = storage_query(
             self.serial, self.device.main_sw_version, standalone=self.session.standalone
@@ -3501,7 +3502,7 @@ class Station:
         as last reported for a model that groups its status parameter); for a model
         without one, or whose file is malformed (logged once), the library's table
         (:func:`~..p2p.storage_info.sd_status_group`), the library's choice. Read off the
-        event loop once per product code."""
+        event loop and memoised per product code."""
         code = self._product_code(self.serial)
         if code not in self._sd_groups_memo:
             try:

@@ -798,8 +798,9 @@ def sd_status_groups(
     """How the handler groups an ``SDINFO_EX`` status (the settings file's
     ``sd_status_groups``): ``{"default": <group>, "codes": {"<status>": <group>},
     "from": <SdStatusSource>}`` with each status of :func:`sd_status_codes` whose group is
-    not the default and what the table is read from, plus ``"param"`` when the handler groups that device parameter in place of the answer's
-    status whenever the device lists it with a value (:func:`sd_status_param`).
+    not the default and what the table is read from, plus ``"param"`` when the handler
+    groups that device parameter in place of the answer's status whenever the device
+    lists it with a value (:func:`sd_status_param`).
 
     The groups come from the handler's parse of the answer (:data:`SD_STATUS_ACTION`);
     where that parse reads no status (one group for every status, or no parse), from the
