@@ -223,7 +223,9 @@ therefore links over the LAN without being punched. One whose LAN reply never ar
 (a host firewall that admits replies by connection tracking drops it: the station
 answers from a random port, a new flow) is punched after the grace; its `PUNCH_PKT`
 returns as the reply to the punch, and the link comes up about 2.5 s later than
-without the grace (still well inside the 6 s LAN-only attempt it replaces). A station
+without the grace (still well inside the 6 s LAN-only attempt it replaces) **[not
+verified on hardware: a station behind a host firewall that admits replies by
+connection tracking, linking after the grace with the record below set]**. A station
 reached on demand gets no grace (its wake is the punch), nor does an attempt whose
 networks are unknown.
 

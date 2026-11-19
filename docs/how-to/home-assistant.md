@@ -589,7 +589,8 @@ What the library relies on:
   (ufw, firewalld or nftables admitting only `ct state established`: the station answers
   a search from a random port, a new flow) still connects: after the on-link grace
   (2.5 s) the library punches its LAN address, and its answer to the punch is a reply,
-  so each of its connects comes up about 2.5 s later than a plain LAN link would.
+  so each of its connects comes up about 2.5 s later than a plain LAN link would
+  (tested against fakes, not verified on hardware yet).
   The link counts as `"lan"`, but every connect then needs internet access, eufy's
   servers and a DSK, so the station does not come back in an internet outage. The
   library records it per station: `station.lan_path.warnings` holds
