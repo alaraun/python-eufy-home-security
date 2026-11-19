@@ -147,6 +147,7 @@ def test_a_preference_other_than_the_set_parameter_fails(tmp_path: Path, parse: 
     [
         "return group(o ? Number(o) : r);",  # "+4", "4.0", "0x4" read as 4, "  " as 0
         "return group(o ? parseInt(o, 10) : r);",  # "+4", "4.0" read as 4
+        "return group(o ? (o.trim() === o ? o : 'x') : r);",  # " 4 " not stripped
     ],
 )
 def test_a_status_parameter_read_otherwise_than_a_decimal_code_fails(
