@@ -624,7 +624,7 @@ The library describes each station's path; the integration only presents it:
 | `await eufy.async_probe_lan()` | one `LanPath` per station, after one LAN discovery (broadcast plus each known address: configured, the cloud's or the one the station reports): no session, no cloud |
 | `LanPath` | `station_ip`, `host`, `host_source` (`configured` / `cloud` / `device` / `broadcast`), `cloud_ip`, `observed_ip` (where it answered), `answered`, `local_port` as description placeholders |
 | `LanPath.warnings` (`PathWarning`) | one translation key each: `broadcast_only`, `ephemeral_port`, `no_lan_reply`, `address_changed`, `lan_reply_blocked` |
-| `station.lan_path` | a built station's `LanPath` from its session, at each access: `lan_reply_blocked` appears once a link needed the punch and goes with the next LAN link |
+| `station.lan_path` | a built station's `LanPath` from its session, at each access: `lan_reply_blocked` appears once a link needed the punch and goes with the next LAN link; a path whose `answered` is True (a probe got the station's reply) never carries it; `async_probe_lan()` reports a connected station whose link needed the punch with `answered` None, so the warning stays |
 | `suggest_local_ports(serials, taken=…)` | pre-fills a port per station; stable for the same stations |
 | `EufySecurity(local_ports={serial: port}, station_hosts={serial: ip})` | what the options flow stores and setup passes back |
 
@@ -650,7 +650,8 @@ The library describes each station's path; the integration only presents it:
   carrying the placeholders of a fresh `async_probe_lan()`. `address_changed` deserves an
   issue of its own: the station's address has probably changed. `lan_reply_blocked` on a
   built station's `lan_path` suits a warning issue that names the station and its
-  `station_ip` and offers the two firewall rules; re-decide it when a link comes up
+  `station_ip` and offers the two firewall rules (the same fix `ephemeral_port` or a
+  pinned port's rule would state: say it once); re-decide it when a link comes up
   (`ConnectionChanged(connected=True)`) and withdraw it once the warning is gone.
 
 The CLI does the same: `eufy-security login` prints the advice once the session is

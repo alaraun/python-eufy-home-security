@@ -226,7 +226,16 @@ def render_network(paths: Sequence[LanPath], *, show_serials: bool) -> str:
         who = path.name or fmt_serial(path.serial, show_serials)
         station = path.name or path.serial
         ip = path.station_ip or "<station IP>"
-        for warning in path.warnings:
+        warnings = path.warnings
+        # A blocked LAN reply states the firewall fix itself, so no other line repeats it.
+        blocked = PathWarning.LAN_REPLY_BLOCKED in warnings
+        pin = (
+            ""
+            if path.local_port
+            else f"allow all UDP from {ip}, or pin a port (--station {station!r} "
+            f"--local-port {suggested[path.serial]}) and allow UDP from {ip} to it"
+        )
+        for warning in warnings:
             match warning:
                 case PathWarning.BROADCAST_ONLY if path.host_source is HostSource.DEVICE:
                     fixed = path.observed_ip or path.host
@@ -246,12 +255,8 @@ def render_network(paths: Sequence[LanPath], *, show_serials: bool) -> str:
                         "host must be on the station's network; give the station a fixed IP "
                         "and pass --host"
                     )
-                case PathWarning.EPHEMERAL_PORT:
-                    advice.append(
-                        f"{who}: if this host or the network filters inbound UDP, allow all UDP "
-                        f"from {ip}, or pin a port (--station {station!r} --local-port "
-                        f"{suggested[path.serial]}) and allow UDP from {ip} to it"
-                    )
+                case PathWarning.EPHEMERAL_PORT if not blocked:
+                    advice.append(f"{who}: if this host or the network filters inbound UDP, {pin}")
                 case PathWarning.NO_LAN_REPLY:
                     advice.append(
                         f"{who}: did not answer LAN discovery: it is offline, on another "
@@ -263,8 +268,7 @@ def render_network(paths: Sequence[LanPath], *, show_serials: bool) -> str:
                     fix = (
                         f"allow UDP from {ip} to this host's port {path.local_port}"
                         if path.local_port
-                        else f"allow all UDP from {ip}, or pin a local port and allow UDP "
-                        "from it to that port"
+                        else pin
                     )
                     advice.append(
                         f"{who}: on this host's network, but its LAN replies do not arrive "
@@ -278,7 +282,7 @@ def render_network(paths: Sequence[LanPath], *, show_serials: bool) -> str:
                         f"{who}: {source.format(host=path.host)} is not where the station "
                         f"is ({elsewhere}); its IP has changed, or the source is stale"
                     )
-        if path.local_port:
+        if path.local_port and not blocked:
             advice.append(f"{who}: allow UDP from {ip} to this host's port {path.local_port}")
     lines = _table(rows, indent="")
     lines += ["", "Network:"]

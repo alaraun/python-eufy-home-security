@@ -3138,6 +3138,10 @@ async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
         assert bool(reads) is not override
         await wait_for(lambda: eufy.cache.lan_reply_blocked(fake.serial))
         assert eufy.cache.link_path(fake.serial) is ConnectPath.LAN
+        # A probe while the link is up reports it from the session, warning kept.
+        (probed,) = await eufy.async_probe_lan()
+        assert probed.answered is None
+        assert PathWarning.LAN_REPLY_BLOCKED in probed.warnings
     finally:
         await eufy.async_close()
         fake.stop()

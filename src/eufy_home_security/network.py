@@ -83,7 +83,9 @@ class PathWarning(StrEnum):
     replies to LAN discovery did not arrive (a firewall on this host drops them). The
     link runs over the LAN, but every connect needs internet access, the servers and a
     DSK. The fix names :attr:`LanPath.station_ip`: allow all UDP from it, or pin a local
-    port (:attr:`LanPath.local_port`) and allow UDP from it to that port."""
+    port (:attr:`LanPath.local_port`) and allow UDP from it to that port. Not given when
+    a discovery probe got the station's answer (:attr:`LanPath.answered` True): its LAN
+    replies arrive."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -121,7 +123,8 @@ class LanPath:
             found.append(PathWarning.EPHEMERAL_PORT)
         if self.answered is False:
             found.append(PathWarning.NO_LAN_REPLY)
-        if self.lan_reply_blocked:
+        if self.lan_reply_blocked and self.answered is not True:
+            # A probe the station answered proves its LAN replies arrive.
             found.append(PathWarning.LAN_REPLY_BLOCKED)
         if self.host is not None and (
             (self.observed_ip is not None and self.observed_ip != self.host)

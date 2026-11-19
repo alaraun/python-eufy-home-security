@@ -94,6 +94,8 @@ def test_path_warnings() -> None:
     assert answered_elsewhere.warnings == (PathWarning.ADDRESS_CHANGED,)
     assert _path(answered=False).warnings == (PathWarning.NO_LAN_REPLY,)
     assert _path(lan_reply_blocked=True).warnings == (PathWarning.LAN_REPLY_BLOCKED,)
+    # A probe the station answered proves its LAN replies arrive.
+    assert _path(lan_reply_blocked=True, answered=True).warnings == ()
 
 
 def test_a_path_carries_whether_the_stations_lan_reply_is_blocked() -> None:

@@ -1167,7 +1167,8 @@ class EufySecurity:
 
         Guarantee: a station with a connected session is never sent a LAN_SEARCH. It is
         reported from its session instead (answered, ``observed_ip`` = the session's
-        host), so the probe may run while the sessions are live. While any station of
+        host; ``answered`` None when that link needed a punch because its LAN reply was
+        blocked), so the probe may run while the sessions are live. While any station of
         the account is connected no broadcast is sent either: only the known addresses
         of the stations that are not connected are searched, so a station without a
         known address is found only while nothing is connected.
@@ -1220,7 +1221,12 @@ class EufySecurity:
         results = await asyncio.gather(*(search(target) for target in sorted(targets)))
         replies = [reply for found in results for reply in found]
         return [
-            replace(path, answered=True, observed_ip=live[path.serial].host)
+            # A link whose LAN reply was blocked proves no reply: report it unprobed.
+            replace(
+                path,
+                answered=None if path.lan_reply_blocked else True,
+                observed_ip=live[path.serial].host,
+            )
             if path.serial in live
             else with_discovery(path, device.p2p_did, replies)
             for path, device in zip(paths, devices, strict=True)

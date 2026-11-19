@@ -705,11 +705,17 @@ def test_render_network_advises_on_a_reported_address_and_the_servers() -> None:
 @pytest.mark.parametrize(
     ("local_port", "fix"),
     [
-        (0, "allow all UDP from 192.168.7.21, or pin a local port"),
+        (
+            0,
+            "allow all UDP from 192.168.7.21, or pin a port (--station 'Base' --local-port "
+            "32109) and allow UDP from 192.168.7.21 to it",
+        ),
         (32109, "allow UDP from 192.168.7.21 to this host's port 32109"),
     ],
 )
 def test_render_network_advises_on_a_blocked_lan_reply(local_port: int, fix: str) -> None:
+    """The firewall fix is stated once, in the blocked-reply line: no separate
+    ephemeral-port or pinned-port line repeats it."""
     path = LanPath(
         serial="T8030P2000012345",
         name="Base",
@@ -726,6 +732,12 @@ def test_render_network_advises_on_a_blocked_lan_reply(local_port: int, fix: str
         "drops them), so every connect goes through eufy's servers and needs internet "
         f"access; {fix}" in out
     )
+    assert out.count("192.168.7.21 to") == 1
+    assert "filters inbound UDP" not in out
+    # A probe it answered: its replies arrive, so only the usual port advice is left.
+    answered = render_network([dataclasses.replace(path, answered=True)], show_serials=False)
+    assert "LAN replies do not arrive" not in answered
+    assert answered.count("192.168.7.21 to") == 1
 
 
 def test_render_network_advises_where_a_station_was_found_over_what_it_reports() -> None:
