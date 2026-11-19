@@ -190,7 +190,8 @@ library's rule):
 | this host's networks are unknown (not Linux, or an interface error, and none given): an address the client punched | `"rendezvous"` |
 
 The networks are `EufySecurity(local_networks=…)` when given (a consumer such as Home
-Assistant fills them from its own network adapters), else read on Linux with the
+Assistant fills them from its own network adapters; an empty list: none, so no station
+is on-link), else read on Linux with the
 `SIOCGIFADDR` / `SIOCGIFNETMASK` ioctls (stdlib only): one primary IPv4 address per interface, so a station on a subnet this host holds
 only as a secondary address (an alias) is classified by the rule for addresses outside
 the networks (a punched one is `"rendezvous"`, never wrongly `"lan"`). Every interface

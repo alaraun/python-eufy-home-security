@@ -1403,8 +1403,9 @@ async def test_an_on_link_station_answering_the_search_within_the_grace_is_never
     [
         # The LAN address is outside this host's networks (another subnet): no grace.
         ((IPv4Network("203.0.113.0/24"),), True, ConnectPath.RENDEZVOUS),
-        # Networks unknown: no grace, and a punched address is rendezvous.
+        # Networks unknown, or none: no grace, and a punched address is rendezvous.
         (None, True, ConnectPath.RENDEZVOUS),
+        ((), True, ConnectPath.RENDEZVOUS),
         # No grace asked (a station reached on demand): punched at once, a LAN link.
         ((OUR_LAN,), False, ConnectPath.LAN),
     ],

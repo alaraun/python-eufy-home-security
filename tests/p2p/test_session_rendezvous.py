@@ -246,13 +246,13 @@ async def test_a_rendezvous_attempt_classifies_by_this_hosts_networks(
     assert reads[0] is not threading.current_thread()
 
 
+@pytest.mark.parametrize("given", [(IPv4Network("198.51.100.0/24"),), ()])
 async def test_given_host_networks_are_used_instead_of_the_interfaces(
-    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch, given: tuple[IPv4Network, ...]
 ) -> None:
     """``local_networks`` given to the session replace the interface reader, for its
-    own attempts and for its short-lived sessions."""
+    own attempts and for its short-lived sessions; none given (empty) too."""
     attempts = Attempts(monkeypatch)
-    given = (IPv4Network("198.51.100.0/24"),)
 
     def unread() -> tuple[IPv4Network, ...]:
         raise AssertionError("the interfaces were read")

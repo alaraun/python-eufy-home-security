@@ -611,7 +611,10 @@ What the library relies on:
   (`network.async_get_adapters(hass)`: each `ipv4` entry's `address` and
   `network_prefix` as `IPv4Network(f"{address}/{network_prefix}", strict=False)`):
   they are used instead of the library's own interface reader (Linux only). Without
-  either there is no grace and no warning, and a punched link counts as `"rendezvous"`.
+  either there is no grace and no warning, and a punched link counts as `"rendezvous"`;
+  an empty list says the host has no network to treat as on-link, with the same outcome
+  (the interfaces are not read). An entry that is no `IPv4Network` raises `ValueError`
+  at construction.
 - **Without a configured or cloud address**, discovery also searches the LAN address the
   station reports (parameter 1176) by unicast, beside the broadcast; its `LanPath` shows
   `host_source` `device` and still warns `broadcast_only`: that address follows the

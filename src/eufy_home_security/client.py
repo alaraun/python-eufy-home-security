@@ -16,7 +16,7 @@ import asyncio
 import contextlib
 import logging
 import math
-from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from ipaddress import IPv4Network
 from types import MappingProxyType, TracebackType
@@ -176,6 +176,16 @@ class ModelStatus:
         )
 
 
+def _ipv4_networks(networks: Iterable[object]) -> tuple[IPv4Network, ...]:
+    """``networks`` as a tuple; ValueError when an entry is no :class:`IPv4Network`."""
+    found: list[IPv4Network] = []
+    for network in networks:
+        if not isinstance(network, IPv4Network):
+            raise ValueError(f"local_networks takes IPv4Network entries, not {network!r}")
+        found.append(network)
+    return tuple(found)
+
+
 def _account_codes(devices: Sequence[CloudDevice]) -> tuple[str, ...]:
     """The product codes of ``devices`` (canonical), deduplicated and sorted."""
     codes = {product_code_of(d.raw.get("device_new_pn"), d.device_sn) for d in devices}
@@ -278,7 +288,10 @@ class EufySecurity:
         of reading the interfaces (:mod:`.p2p.netif`, Linux only). They decide which
         punch-answered links count as ``"lan"``, the on-link punch grace, and
         :attr:`~.network.PathWarning.LAN_REPLY_BLOCKED`; with neither (not Linux, no
-        ``local_networks``) there is no grace and no such warning.
+        ``local_networks``) there is no grace and no such warning. An empty list means
+        this host has no network to treat as on-link: no grace, no warning, and a
+        punched link counts as ``"rendezvous"`` (the interfaces are not read). An entry
+        that is no :class:`~ipaddress.IPv4Network` raises ValueError.
 
         Pass one ``claims`` to every account of a process so that a station shared
         between accounts is served by exactly one of them. Likewise pass one
@@ -361,7 +374,7 @@ class EufySecurity:
         check_local_ports(local_ports or {})
         self._max_sessions = _session_budget(max_sessions)
         self._local_ports = dict(local_ports or {})
-        self._local_networks = None if local_networks is None else tuple(local_networks)
+        self._local_networks = None if local_networks is None else _ipv4_networks(local_networks)
         self._bus = EventBus()
         # One ring for the account, both channels; it outlives every session reconnect.
         self.deduplicator: EventDeduplicator | None = EventDeduplicator() if deduplicate else None

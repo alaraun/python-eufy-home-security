@@ -9,7 +9,7 @@ import time
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
-from ipaddress import IPv4Network
+from ipaddress import IPv4Address, IPv4Network, IPv6Network
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 from typing import Any, ClassVar, cast
@@ -3082,6 +3082,23 @@ async def test_a_station_answering_the_punch_first_is_stored_by_this_hosts_netwo
     assert store.data["stations"][fake.serial]["link_path"] == str(path)
 
 
+async def _punch_only_station(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[FakeStation, asyncio.DatagramTransport]:
+    """A started station at :data:`STATION_LAN` that ignores every LAN search but
+    answers a punch, and its rendezvous server naming that address (the endpoint to
+    close)."""
+    fake = FakeStation(ignore_searches=1000, answers_punch=True)
+    await fake.start()
+    server = _PunchToServer([encode_sockaddr(STATION_LAN, fake.session_port)])
+    endpoint, _ = await asyncio.get_running_loop().create_datagram_endpoint(
+        lambda: server, local_addr=("127.0.0.1", 0)
+    )
+    _route_punches(monkeypatch, fake, endpoint.get_extra_info("sockname")[1])
+    monkeypatch.setattr(CloudDevice, "rendezvous_servers", (SERVER[0],))
+    return fake, endpoint
+
+
 @pytest.mark.parametrize("override", [False, True])
 async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
     monkeypatch: pytest.MonkeyPatch, override: bool
@@ -3093,14 +3110,7 @@ async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
     come from the interfaces, or from ``local_networks`` when given (the interfaces then
     unread)."""
     monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.3)
-    fake = FakeStation(ignore_searches=1000, answers_punch=True)
-    await fake.start()
-    server = _PunchToServer([encode_sockaddr(STATION_LAN, fake.session_port)])
-    endpoint, _ = await asyncio.get_running_loop().create_datagram_endpoint(
-        lambda: server, local_addr=("127.0.0.1", 0)
-    )
-    _route_punches(monkeypatch, fake, endpoint.get_extra_info("sockname")[1])
-    monkeypatch.setattr(CloudDevice, "rendezvous_servers", (SERVER[0],))
+    fake, endpoint = await _punch_only_station(monkeypatch)
     ours = (IPv4Network("192.0.2.0/24"),)
     reads: list[None] = []
 
@@ -3147,6 +3157,66 @@ async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
         fake.stop()
         endpoint.close()
     assert fake.searches > 0  # searched at its address, and ignored
+
+
+async def test_no_local_networks_means_no_station_is_on_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``local_networks=[]``: this host has no network to treat as on-link. The station
+    above is punched at once (no grace) and links as ``"rendezvous"``, never flagged;
+    the interfaces are not read."""
+    monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 2.0)
+    fake, endpoint = await _punch_only_station(monkeypatch)
+
+    def unread() -> tuple[IPv4Network, ...]:
+        raise AssertionError("the interfaces were read")
+
+    monkeypatch.setattr(netif, "local_networks", unread)
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email,
+        store=MemoryStore(),
+        cloud=FakeCloud.for_stations(fake),
+        stations={fake.serial: fake},
+        station_hosts={fake.serial: STATION_LAN},
+        local_networks=[],
+    )
+    try:
+        await eufy.async_discover()
+        station = eufy.stations[fake.serial]
+        eufy.cache.set_dsk_key(fake.serial, "cached-dsk", time.time() + 3600)
+        started = time.monotonic()
+        assert await eufy.async_start(push=False) == {}
+        await wait_for(lambda: station.session.stats().connects == 1)
+        assert time.monotonic() - started < 1.0
+        stats = station.session.stats()
+        assert stats.connect_path == "rendezvous"
+        assert stats.lan_reply_blocked is False
+        assert PathWarning.LAN_REPLY_BLOCKED not in station.lan_path.warnings
+    finally:
+        await eufy.async_close()
+        fake.stop()
+        endpoint.close()
+
+
+@pytest.mark.parametrize(
+    "networks",
+    [
+        ["192.0.2.0/24"],
+        [IPv6Network("2001:db8::/32")],
+        [IPv4Address("192.0.2.1")],
+        IPv4Network("192.0.2.0/30"),  # a network, not a sequence of them
+    ],
+)
+def test_local_networks_take_only_ipv4_networks(networks: Any) -> None:
+    with pytest.raises(ValueError, match="local_networks"):
+        EufySecurity(
+            no_session(),
+            SYNTHETIC.email,
+            None,
+            store=MemoryStore(),
+            local_networks=networks,
+            _cloud_factory=cloud_factory(StubCloud),
+        )
 
 
 async def test_a_station_stored_with_a_blocked_lan_reply_warns_and_goes_to_the_servers_at_once(
