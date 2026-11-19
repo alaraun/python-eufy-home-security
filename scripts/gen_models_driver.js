@@ -5,8 +5,10 @@
 // job:    {"handler": "<path to <PN>Handle.mix.js>",
 //          "requests": [{"kind": "set", "identifier", "payload", "device"}
 //                     | {"kind": "action", "identifier", "payload", "device"}
-//                     | {"kind": "get", "cmds", "device", "props"?}]}
-// "set" sends the action "setProperty"; "action" sends the identifier itself as the action.
+//                     | {"kind": "get", "cmds", "device", "props"?}
+//                     | {"kind": "parse", "action", "input", "device"}]}
+// "set" sends the action "setProperty"; "action" sends the identifier itself as the action;
+// "parse" sends a parse action with a device answer's fields as its input, unwrapped.
 // reply:  a JSON array with one reply per request; a throwing request yields {"error": "..."}.
 //
 // Without arguments: one job on stdin, its reply on stdout.
@@ -84,6 +86,10 @@ function call(handler, request) {
       device: request.device,
     };
     return handler.deviceStatus(JSON.stringify(msg) + "EOF;", 1);
+  }
+  if (request.kind === "parse") {
+    const msg = { action: request.action, input: request.input, device: request.device };
+    return handler.controlDevice(JSON.stringify(msg) + "EOF;", 0);
   }
   if (request.kind === "action") {
     const input = { [request.identifier]: JSON.stringify({ "payload-value": request.payload }) };

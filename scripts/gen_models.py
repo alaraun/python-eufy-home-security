@@ -8,8 +8,9 @@ to getProperty for the read codec (a setting without a write: the parameter getP
 fills it from, ``locate_params``), join the app's labels and settings layout
 (``scripts/gen_models_join.py``) with the app's setting titles, units and variant pairs,
 give each setting its role and where the app shows it (``--shown``,
-``scripts/gen_models_roles.py``), and write ``<out>/<PN>.json``, then ``<out>/INDEX.json``,
-the sorted list of every ``<PN>.json`` in ``<out>``.
+``scripts/gen_models_roles.py``), add the battery reads and the handler's grouping of an
+``SDINFO_EX`` status (``sd_status_groups``), and write ``<out>/<PN>.json``, then
+``<out>/INDEX.json``, the sorted list of every ``<PN>.json`` in ``<out>``.
 
 Every model is checked before it is written: each codec must render back every swept
 recipe, and every row of the frozen v1 reference (``tests/fixtures/models_v1_reference.json``)
@@ -61,7 +62,7 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 from eufy_home_security.devices.model_settings import BATTERY_PROPERTY
 from eufy_home_security.devices.param_info import STATE_PARAM_INFO
@@ -96,6 +97,12 @@ BOOL_EXTRA_PROBE = "2"  # a parameter value no bool form names
 BATTERY_PROBE = "57"  # the value a candidate battery parameter is listed at
 BATTERY_SAMPLES = range(256)  # the raw levels a battery parameter is read at
 BATTERY_LEVEL_TEXT = re.compile(r"-?[0-9]+")
+SD_STATUS_ACTION = "get_storage_info_parse_payload"  # the parse of an SDINFO_EX answer
+SD_STATUS_PROPERTY = "get_storage_status"  # filled from the device's status parameter
+SD_STATUS_SAMPLES = range(-1, 256)  # statuses swept besides the handler's number literals
+SD_STATUS_RANGE = range(-(2**31), 2**31)  # an SDINFO_EX status is an int32
+SD_STATUS_UNLISTED = 2**31 - 1  # a status no grouping lists: its group is the default
+SD_PROBE_TOTAL, SD_PROBE_FREE = 1000, 500  # the sizes the swept answers carry
 
 
 def _load(name: str) -> ModuleType:
@@ -302,19 +309,22 @@ def _held_block(
     return {i: _answer(reply, i) for i in idents}
 
 
+def handler_numbers(handler: Path) -> set[int]:
+    """Every number literal of the handler's source (decimal, with exponent, or hex)."""
+    found: set[int] = set()
+    for literal in JS_NUMBER.findall(handler.read_text(encoding="utf-8", errors="replace")):
+        if literal[:2].lower() == "0x":
+            found.add(int(literal, 16))
+        else:
+            mantissa, _, exponent = literal.lower().partition("e")
+            found.add(int(mantissa) * 10 ** int(exponent or 0))
+    return found
+
+
 def handler_param_ids(handler: Path) -> list[int]:
     """The ids of :data:`PROBE_PARAMS` the handler's source writes as a number literal,
     ascending: the only parameter ids its property table and parsers compare against."""
-    ids: set[int] = set()
-    for literal in JS_NUMBER.findall(handler.read_text(encoding="utf-8", errors="replace")):
-        if literal[:2].lower() == "0x":
-            value = int(literal, 16)
-        else:
-            mantissa, _, exponent = literal.lower().partition("e")
-            value = int(mantissa) * 10 ** int(exponent or 0)
-        if value in PROBE_PARAMS:
-            ids.add(value)
-    return sorted(ids)
+    return sorted(n for n in handler_numbers(handler) if n in PROBE_PARAMS)
 
 
 def _locate_in_block(
@@ -724,6 +734,189 @@ def battery_block(
         return {}
     reads = battery_reads(product_code, handler, context, counts)
     return {"battery": reads} if reads else {}
+
+
+def _sd_answer(device: Mapping[str, Any], status: int) -> dict[str, Any]:
+    """The handler's parse of an ``SDINFO_EX`` answer carrying ``status``, on ``device``."""
+    fields = {"ivalue1": SD_PROBE_TOTAL, "ivalue2": SD_PROBE_FREE, "ivalue3": status}
+    return {"kind": "parse", "action": SD_STATUS_ACTION, "input": fields, "device": device}
+
+
+def _sd_group(status: Any) -> int | None:
+    """The group of a status object ``{"status": <group>, ...}`` (or its JSON text)."""
+    if isinstance(status, str):
+        try:
+            status = json.loads(status)
+        except ValueError:
+            return None
+    group = status.get("status") if isinstance(status, dict) else None
+    return group if type(group) is int else None
+
+
+def _sd_parsed(reply: Any) -> int | None:
+    """The status group of a parse reply (``mapOf.status``); None for any other shape."""
+    map_of = (p2p(reply) or {}).get("mapOf")
+    return _sd_group(map_of.get("status")) if isinstance(map_of, dict) else None
+
+
+def sd_status_codes(handler: Path) -> list[int]:
+    """The statuses the grouping is swept at, ascending: :data:`SD_STATUS_SAMPLES` and
+    every int32 number literal of the handler's source, with its negative."""
+    found = set(SD_STATUS_SAMPLES)
+    for n in handler_numbers(handler):
+        found.update(v for v in (n, -n) if v in SD_STATUS_RANGE)
+    found.discard(SD_STATUS_UNLISTED)
+    return sorted(found)
+
+
+def _sd_table(groups: Sequence[int | None]) -> tuple[int, list[int]] | None:
+    """The default group and the group of each status of the sweep, from the groups of
+    :data:`SD_STATUS_UNLISTED` (first) and of each status; None when one is no group or
+    every status has the same group (the handler reads no status)."""
+    default, *rest = groups
+    if default is None or any(g is None for g in rest) or all(g == default for g in rest):
+        return None
+    return default, cast(list[int], rest)
+
+
+def sd_status_groups(
+    product_code: str,
+    handler: Path,
+    contexts: Mapping[str, codec.Context],
+    located: Mapping[str, Located],
+    counts: dict[str, int],
+) -> dict[str, Any] | None:
+    """How the handler groups an ``SDINFO_EX`` status (the settings file's
+    ``sd_status_groups``): ``{"default": <group>, "codes": {"<status>": <group>}}`` for
+    each status of :func:`sd_status_codes` whose group is not the default, plus
+    ``"param"`` when the handler groups that device parameter in place of the answer's
+    status whenever the device lists it with a value (:func:`sd_status_param`).
+
+    The groups come from the handler's parse of the answer (:data:`SD_STATUS_ACTION`) in
+    every context, which must agree; where that parse reads no status (one group for
+    every status, or no parse), from the property the handler fills from the device's
+    status parameter (:data:`SD_STATUS_PROPERTY`, at the parameter :func:`_status_param`
+    names, in the base context). None when neither reads the status. Raises GeneratorError when the
+    contexts disagree.
+    """
+    codes = sd_status_codes(handler)
+    asked = [SD_STATUS_UNLISTED, *codes]
+    tables = []
+    for ctx in contexts.values():
+        device = ctx.device(product_code)
+        replies = run_driver(product_code, handler, [_sd_answer(device, s) for s in asked])
+        tables.append(_sd_table([_sd_parsed(r) for r in replies]))
+    if any(t != tables[0] for t in tables):
+        raise GeneratorError(f"{product_code}: the SDINFO_EX grouping differs between contexts")
+    table, source = tables[0], "answer"
+    base = contexts[BASE]
+    if table is None and (where := _status_param(product_code, handler, base, located)):
+        requests = [where.request(product_code, base, SD_STATUS_PROPERTY, str(s)) for s in asked]
+        replies = run_driver(product_code, handler, requests)
+        table = _sd_table([_sd_group(_property_values(r).get(SD_STATUS_PROPERTY)) for r in replies])
+        source = "param"
+    if table is None:
+        return None
+    _count(counts, f"sd status:{source}")
+    default, groups = table
+    by_code = dict(zip(codes, groups, strict=True))
+    out: dict[str, Any] = {
+        "codes": {str(c): g for c, g in by_code.items() if g != default},
+        "default": default,
+    }
+    if source == "answer":
+        param = sd_status_param(product_code, handler, base, by_code, default)
+        if param is not None:
+            out["param"] = param
+    return out
+
+
+def sd_status_block(
+    product_code: str,
+    handler: Path,
+    contexts: Mapping[str, codec.Context],
+    located: Mapping[str, Located],
+    counts: dict[str, int],
+) -> dict[str, Any]:
+    """The settings file's ``sd_status_groups`` (:func:`sd_status_groups`); empty when
+    the handler reads no ``SDINFO_EX`` status."""
+    groups = sd_status_groups(product_code, handler, contexts, located, counts)
+    return {} if groups is None else {"sd_status_groups": groups}
+
+
+def _status_param(
+    product_code: str, handler: Path, context: codec.Context, located: Mapping[str, Located]
+) -> Located | None:
+    """Where getProperty reads :data:`SD_STATUS_PROPERTY` from: its located parameter,
+    else the one :func:`locate_params` finds for it (the thing description need not
+    declare it); None when no parameter fills it."""
+    if (where := located.get(SD_STATUS_PROPERTY)) is not None:
+        return where
+    return locate_params(product_code, handler, context, [SD_STATUS_PROPERTY], {}).get(
+        SD_STATUS_PROPERTY
+    )
+
+
+def _sd_parse_with(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    asks: Sequence[tuple[Sequence[tuple[int, str]], int]],
+) -> list[int | None]:
+    """The parse's group for each ``(device params, answer status)`` of ``asks``, in one
+    driver job."""
+    requests = []
+    for params, status in asks:
+        device = context.device(product_code)
+        device["params"] = [{"param_type": p, "param_value": v} for p, v in params]
+        requests.append(_sd_answer(device, status))
+    return [_sd_parsed(r) for r in run_driver(product_code, handler, requests)] if asks else []
+
+
+def sd_status_param(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    by_code: Mapping[int, int],
+    default: int,
+) -> int | None:
+    """The device parameter the handler's parse groups in place of the answer's status
+    when the device lists it with a value (an empty value keeps the answer's status);
+    None when none does. Found by halving :func:`handler_param_ids`, held at a status
+    whose group is not the default while the answer carries :data:`SD_STATUS_UNLISTED`.
+    Raises GeneratorError when several parameters do, or when the one found is read
+    otherwise than that, at any swept status.
+    """
+    probe = next(c for c, g in by_code.items() if g != default)
+    found: list[int] = []
+    pending = [ids] if (ids := handler_param_ids(handler)) else []
+    while pending:
+        asks = [([(p, str(probe)) for p in group], SD_STATUS_UNLISTED) for group in pending]
+        split: list[list[int]] = []
+        for group, got in zip(
+            pending, _sd_parse_with(product_code, handler, context, asks), strict=True
+        ):
+            if got == default:
+                continue
+            if len(group) == 1:
+                found.extend(group)
+            else:
+                split += [group[: len(group) // 2], group[len(group) // 2 :]]
+        pending = split
+    if not found:
+        return None
+    if len(found) > 1:
+        raise GeneratorError(f"{product_code}: the SDINFO_EX parse reads parameters {found}")
+    (param,) = found
+    asks = [([(param, str(c))], probe) for c in by_code] + [([(param, "")], c) for c in by_code]
+    want = [*by_code.values(), *by_code.values()]
+    got = _sd_parse_with(product_code, handler, context, asks)
+    if bad := next((a for a, g, w in zip(asks, got, want, strict=True) if g != w), None):
+        raise GeneratorError(
+            f"{product_code}: the SDINFO_EX parse reads the status parameter {param} "
+            f"otherwise than as a status in place of the answer's (asked {bad})"
+        )
+    return param
 
 
 def _json_structure(raw: Any) -> bool:
@@ -1712,6 +1905,7 @@ def generate(
         "source": joiner.source_block(td, app_version),
         "settings": merged,
         **battery_block(product_code, handler, props, contexts[BASE], counts),
+        **sd_status_block(product_code, handler, contexts, located, counts),
     }
     return doc, counts
 
