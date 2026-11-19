@@ -3462,7 +3462,9 @@ class Station:
         firmware): the ``1307`` record on the HomeBase 3 family, ``55000`` on a HomeBase 2
         from firmware 3.3.7.7, and ``SDINFO_EX`` (``1144``) on a standalone camera, an
         older HomeBase 2 and the small HomeBases, which sets
-        :attr:`~..p2p.storage_info.StorageInfo.emmc` alone. A model the app asks nothing
+        :attr:`~..p2p.storage_info.StorageInfo.emmc` alone (the device's SD card or eMMC;
+        a medium that is not usable is a result with ``usable`` False, not an error). A
+        model the app asks nothing
         raises :class:`CommandUnsupportedError` without sending. Wakes a battery camera.
         The result is also kept as :attr:`storage`.
         """

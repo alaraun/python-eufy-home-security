@@ -13,9 +13,12 @@ from eufy_home_security.p2p.storage_info import (
     CMD_HUB_STORAGE,
     CMD_SD_INFO,
     CMD_STORAGE,
+    SD_STATUS_DEFAULT_GROUP,
+    SD_STATUS_GROUPS,
     STORAGE_QUERY_INFO,
     DiskInfo,
     EmmcInfo,
+    MediumState,
     StorageInfo,
     StorageMedium,
     StorageQuery,
@@ -25,6 +28,7 @@ from eufy_home_security.p2p.storage_info import (
     parse_sd_card_info,
     parse_storage_info,
     result_code,
+    sd_status_group,
     storage_query,
     storage_query_payload,
     storage_record,
@@ -466,11 +470,97 @@ def test_parse_sd_card_info_clamps_free_to_total() -> None:
     assert info.used_percent == 0.0
 
 
-def test_parse_sd_card_info_none_for_short_or_no_emmc() -> None:
+def test_parse_sd_card_info_none_only_for_a_short_body() -> None:
     assert parse_sd_card_info(b"") is None
     assert parse_sd_card_info(struct.pack("<2i", 0, 7140)) is None  # under 12 bytes
-    assert parse_sd_card_info(struct.pack("<3i", 0, 0, 0)) is None  # total 0: no eMMC
-    assert parse_sd_card_info(struct.pack("<3i", 0, -1, 3000)) is None  # negative total
+    assert parse_sd_card_info(struct.pack("<3i", 0, 7140, 7108) + b"\x00") is not None
+
+
+def test_a_normal_answer_with_a_size_is_a_usable_medium() -> None:
+    info = parse_sd_card_info(struct.pack("<3i", 0, 7140, 7108))
+    assert info is not None
+    assert (info.status_group, info.state, info.usable) == (0, MediumState.NORMAL, True)
+
+
+@pytest.mark.parametrize(
+    ("status", "total", "free", "group", "state"),
+    [
+        (4, 0, 0, 2, MediumState.NO_CARD),  # the answer of a camera with no usable card
+        (0, 0, 0, 0, MediumState.NORMAL),  # a normal status without a size
+        (0, -1, 3000, 0, MediumState.NORMAL),  # a negative total
+        (31, 0, 0, 2, MediumState.NO_CARD),
+    ],
+    ids=["no-card", "normal-zero-total", "negative-total", "no-card-31"],
+)
+def test_an_answer_without_a_size_is_a_medium_that_is_not_usable(
+    status: int, total: int, free: int, group: int, state: MediumState
+) -> None:
+    info = parse_sd_card_info(struct.pack("<3i", status, total, free))
+    assert isinstance(info, EmmcInfo)
+    assert (info.size_mib, info.used_mib, info.filesystem_used_mib) == (None, None, None)
+    assert (info.free_mib, info.used_percent, info.size_gib) == (None, None, None)
+    assert info.work_status == status
+    assert (info.status_group, info.state, info.usable) == (group, state, False)
+
+
+def test_a_non_normal_status_with_a_size_keeps_the_sizes_and_is_not_usable() -> None:
+    info = parse_sd_card_info(struct.pack("<3i", 22, 8000, 3000))
+    assert info is not None
+    assert (info.size_mib, info.used_mib, info.used_percent) == (8000, 5000, 62.5)
+    assert (info.work_status, info.status_group) == (22, 4)
+    assert (info.state, info.usable) == (MediumState.CORRUPTED, False)
+
+
+@pytest.mark.parametrize(
+    ("status", "group"),
+    [
+        *((s, 0) for s in (0, 25, 30)),
+        *((s, 1) for s in (27, 28)),
+        *((s, 2) for s in (4, 31)),
+        (22, 4),
+        (11, 6),
+        *((s, 7) for s in (5, 6)),
+        *((s, 8) for s in (2, 3)),
+        *((s, 9) for s in (7, 14, 16, 17, 23)),
+        *((s, 10) for s in (1, 9, 10, 12, 19, 20, 26)),
+        (15, 11),
+        *((s, 12) for s in (13, 18, 21)),
+        (8, 13),
+        (29, 18),
+        (33, 22),
+        # codes the app groups nowhere fall to its default group 1
+        *((s, 1) for s in (-1, 24, 32, 34, 1 << 30)),
+    ],
+)
+def test_sd_status_group_is_the_apps_grouping(status: int, group: int) -> None:
+    assert sd_status_group(status) == group
+
+
+def test_sd_status_groups_list_each_code_once() -> None:
+    codes = [code for group in SD_STATUS_GROUPS.values() for code in group]
+    assert len(codes) == len(set(codes))
+    assert SD_STATUS_DEFAULT_GROUP not in (0, 2, 4)
+
+
+@pytest.mark.parametrize(
+    ("group", "state"),
+    [
+        (0, MediumState.NORMAL),
+        (2, MediumState.NO_CARD),
+        (4, MediumState.CORRUPTED),
+        *((g, MediumState.OTHER) for g in (1, 3, 6, 8, 9, 10, 13, 18, 22)),
+    ],
+)
+def test_medium_state_names_the_groups_the_app_names(group: int, state: MediumState) -> None:
+    medium = EmmcInfo(size_mib=1000, used_mib=0, status_group=group)
+    assert medium.state is state
+    assert medium.usable is (state is MediumState.NORMAL)
+
+
+def test_a_record_without_an_sd_status_has_no_state() -> None:
+    emmc = parse_storage_info(synthetic_storage_body()).emmc
+    assert emmc is not None
+    assert (emmc.status_group, emmc.state, emmc.usable) == (None, None, None)
 
 
 def test_cmd_sd_info_is_1144() -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import struct
 from datetime import UTC, datetime
 from typing import Any, get_args
 
@@ -41,7 +42,11 @@ from eufy_home_security.models import FrameCipher, GuardMode, ValueSource
 from eufy_home_security.network import HostSource, LanPath
 from eufy_home_security.p2p.did import Did
 from eufy_home_security.p2p.discovery import DiscoveredStation
-from eufy_home_security.p2p.storage_info import parse_storage_info
+from eufy_home_security.p2p.storage_info import (
+    StorageInfo,
+    parse_sd_card_info,
+    parse_storage_info,
+)
 from eufy_home_security.station import StationState, SubDeviceState
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import synthetic_storage_body
@@ -109,6 +114,25 @@ def test_storage_events_render_and_serialise() -> None:
     assert "Disk:          none reported" in render.render_storage(bare.storage, name="Home Base")
     data = json.loads(json.dumps(render.event_json(changed)))
     assert data["storage"]["disk"]["parted_status"] == 2
+
+
+def test_a_local_medium_that_is_not_usable_renders_its_state() -> None:
+    storage = StorageInfo(emmc=parse_sd_card_info(struct.pack("<3i", 4, 0, 0)))
+    text = render.render_storage(storage, name="Camera")
+    assert "  SD/eMMC:       ? used of ?" in text
+    assert "not usable: no_card (status 4, group 2)" in text
+    data = json.loads(json.dumps(render.storage_json(storage, show_serials=False)))
+    emmc = data["emmc"]
+    assert (emmc["usable"], emmc["state"], emmc["status_group"]) == (False, "no_card", 2)
+    assert (emmc["work_status"], emmc["size_mib"], emmc["used_percent"]) == (4, None, None)
+
+
+def test_a_usable_local_medium_renders_no_state_line() -> None:
+    storage = StorageInfo(emmc=parse_sd_card_info(struct.pack("<3i", 0, 8000, 2000)))
+    text = render.render_storage(storage, name="Camera")
+    assert "  SD/eMMC:       5.86 GB used of 7.81 GB (75.0 %)" in text
+    assert "usable" not in text
+    assert render.storage_json(storage, show_serials=False)["emmc"]["usable"] is True
 
 
 def test_stations_changed_lines() -> None:

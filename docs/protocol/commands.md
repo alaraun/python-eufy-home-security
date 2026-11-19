@@ -468,7 +468,7 @@ Each station handler of the app builds its own `get_storage_info` request
 |---|---|
 | T8030 (HomeBase 3), T8025, T9000, T8N00 | `1307` / `11001` (this section) |
 | T8010 (HomeBase 2), listed `main_sw_version` ≥ 3.3.7.7 | `55000` ([below](#homebase-2-storage-55000-declared-app)) |
-| T8010 on older firmware, T8001, T8002, T8020, T8023 | `1144` ([below](#a-standalone-cameras-emmc-1144-get_sd_info_ext-verified)) |
+| T8010 on older firmware, T8001, T8002, T8020, T8023 | `1144` ([below](#a-devices-sd-card-or-emmc-1144-get_sd_info_ext-verified)) |
 | T8024 | none |
 | a standalone device not listed | `1144`; any other station not listed: `1307` |
 
@@ -591,9 +591,9 @@ The answer is a `0x0547` (the app parses it as `HbCard`):
 The sizes keep the station's MB in the `*_mib` fields, as the `1144` figures do. Not
 verified on hardware: the reply's exact layout comes from the app's parser.
 
-### A standalone camera's eMMC (1144 `GET_SD_INFO_EXT`) **[verified]**
+### A device's SD card or eMMC (1144 `GET_SD_INFO_EXT`) **[verified]**
 
-A standalone camera (a T8170) does not answer the HomeBase storage record (1307 /
+A standalone camera (a T8170, a T817L) does not answer the HomeBase storage record (1307 /
 11001). Its handler's `get_storage_info` recipe resolves, for a non-station device, to
 a bare **`GET_SD_INFO_EXT`** command (app enum `SDINFO_EX`) — an XZYH frame of type **1144 (`0x0478`)** with an empty
 body (`msgType 10`, no JSON). The camera answers with a frame
@@ -602,9 +602,32 @@ whose 12-byte body is three little-endian `int32`:
 
 | offset | `int32` | meaning |
 |---|---|---|
-| 0 | status | 0 normal; the app shows 2 as no card, 3 as low memory, 4 as corrupted **[app]** |
-| 4 | total | total size |
+| 0 | status | the medium's status code, grouped by the app (below) |
+| 4 | total | total size; 0 when there is no usable medium |
 | 8 | free | free size |
+
+The app reads the status through one grouping for every model **[declared: app]**:
+each code falls into a display group, a code it does not list into group 1. The groups
+whose meaning the app names are 0 (in use, no prompt), 2 (its "no SD card" prompt) and
+4 (its "SD card corrupted" prompt); the others are not normal, their meaning is not
+named here.
+
+| group | status codes |
+|---|---|
+| 0 | 0, 25, 30 |
+| 1 | 27, 28, and every code not listed |
+| 2 | 4, 31 |
+| 4 | 22 |
+| 6 | 11 |
+| 7 | 5, 6 |
+| 8 | 2, 3 |
+| 9 | 7, 14, 16, 17, 23 |
+| 10 | 1, 9, 10, 12, 19, 20, 26 |
+| 11 | 15 |
+| 12 | 13, 18, 21 |
+| 13 | 8 |
+| 18 | 29 |
+| 22 | 33 (some models' handlers leave 33 out, so the app shows it in group 1 there) |
 
 The app formats the sizes as **MB** (base 1000, `< 1000` → "MB", else ÷1000 → "GB") and
 takes used as `total − free` (this query carries no system-reserve figure). So for the
@@ -612,16 +635,24 @@ eMMC, used% = `(total − free) / total`. **Verified** on a T8170: the
 reply body was `00000000 e41b0000 c41b0000` = `[0, 7140, 7108]` (a ~7.14 GB eMMC, 32 MB
 = 0.4 % used); sent as a plain `1307` `DeviceMsgBean` instead the camera answered receipt
 code −1. The field order is by observation (free never exceeds total, so with status 0
-`[status, total, free]` is the only consistent reading of `[0, 7140, 7108]`).
+`[status, total, free]` is the only consistent reading of `[0, 7140, 7108]`). A T817L
+(microSD, no eMMC) answered every query within ~10 ms with `[4, 0, 0]`: status 4, group 2,
+no size **[verified: the answer; the card's state not checked]**.
 
 The app sends the same query to an older HomeBase 2 and to the T8001, T8002, T8020 and
 T8023 (see the table above); its layout there is not verified.
 
 **Library API.** On a standalone camera and those stations `station.async_get_storage()` sends this query
 instead (`session.async_get_sd_info()`): a bare `1144` frame, its answer bound by frame
-type on channel 0 and parsed from the 12-byte body. It returns a `StorageInfo` with only
-`emmc` set: an `EmmcInfo` (`size_mib` = total, `used_mib` = `total − free`,
-`work_status` = status), whose `used_percent` is the figure the eMMC diagnostic shows. It
+type on channel 0 and parsed from the 12-byte body. Every 12-byte answer is the result
+(a frame with a shorter body is not an answer); unanswered, the query is resent every
+2 s (`SD_INFO_RESEND`) and raises `DeviceTimeoutError("no SDINFO_EX answer within 15s")`
+after `SD_INFO_TIMEOUT`. It returns a `StorageInfo` with only `emmc` set: an `EmmcInfo`
+(`size_mib` = total, `used_mib` = `total − free`, `work_status` = status,
+`status_group` = its app group), whose `used_percent` is the figure the eMMC diagnostic
+shows. `state` names the group (`MediumState`: `normal`, `no_card`, `corrupted`, or
+`other`), and `usable` is True only for group 0 with a size. A total of 0 or less leaves
+the sizes and `used_percent` None, `usable` False. It
 is kept as `station.storage` and emits `StorageChanged` like the HomeBase record. The
 passive `emmc_used_percent` state field is HomeBase param 1190 (`GET_HB_EMMC_PERSENT`)
 only; a standalone camera has no such param, so read its eMMC use from `storage.emmc`.

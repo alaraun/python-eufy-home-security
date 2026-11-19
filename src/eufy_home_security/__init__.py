@@ -174,7 +174,7 @@ if TYPE_CHECKING:
     )
     from .p2p.session.stats import SessionStats
     from .p2p.station_config_codecs import Schedule, ScheduleSlot, Weekday
-    from .p2p.storage_info import DiskInfo, EmmcInfo, StorageInfo, StorageMedium
+    from .p2p.storage_info import DiskInfo, EmmcInfo, MediumState, StorageInfo, StorageMedium
     from .recordings import RecordingsPage
     from .station import RemoteStation, SettingsCoverage, Station, StationState, SubDeviceState
     from .station_config import (
@@ -389,7 +389,10 @@ _EXPORTS: dict[str, str] = {
         "p2p.session",
     ),
     "SessionStats": "p2p.session.stats",
-    **dict.fromkeys(("DiskInfo", "EmmcInfo", "StorageInfo", "StorageMedium"), "p2p.storage_info"),
+    **dict.fromkeys(
+        ("DiskInfo", "EmmcInfo", "MediumState", "StorageInfo", "StorageMedium"),
+        "p2p.storage_info",
+    ),
     **dict.fromkeys(
         ("RemoteStation", "SettingsCoverage", "Station", "StationState", "SubDeviceState"),
         "station",
@@ -533,6 +536,7 @@ __all__ = [
     "LoginVerificationError",
     "MediaClip",
     "MediaKeyType",
+    "MediumState",
     "MemoryStore",
     "ModeDeviceAction",
     "ModeInUseError",

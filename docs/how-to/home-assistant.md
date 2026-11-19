@@ -1241,11 +1241,23 @@ A closed session (`async_close`) never reconnects on its own — build a new
       `emmc_used_percent`. Keep `serial` and `label` out of state and attributes: they
       identify the drive, and the label changes on every format.
     - an external disk (`storage.external`) only when it is not None.
-    - On a **standalone camera** (a T8170), `async_get_storage()` reads the camera's
-      built-in eMMC through its own query and returns a `StorageInfo` with only
-      `storage.emmc` set (no `disk`); it **wakes a battery camera**, so read it when the
-      camera is awake anyway (at setup, or fold it into a preset/live capture) rather
-      than on a timer. `storage.emmc.used_percent` is the "eMMC used" figure.
+    - On a **standalone camera** (a T8170, a T817L), `async_get_storage()` reads the
+      camera's own medium (its built-in eMMC or its SD card) through its own query and
+      returns a `StorageInfo` with only `storage.emmc` set (no `disk`); it **wakes a
+      battery camera**, so read it when the camera is awake anyway (at setup, or fold it
+      into a preset/live capture) rather than on a timer. `storage.emmc.used_percent` is
+      the "used" figure.
+    - That record also says whether the medium can be used: `storage.emmc.usable`
+      (True / False; None on a HomeBase record, which carries no such status) and
+      `storage.emmc.state` (`MediumState`: `normal`, `no_card`, `corrupted`, `other`),
+      with the raw code in `work_status` and the eufy app's group in `status_group`. A
+      camera with no card, or one it cannot use, answers at once: `usable` is False and
+      the sizes and `used_percent` are None. This is a result, not an error: show it as
+      the medium's state (an enum sensor "SD card" with `no_card` / `corrupted` /
+      `other` / `normal`, or a binary sensor "SD card usable"), leave the size sensors
+      unknown, and do not turn on the storage `problem` sensor or log an error for it.
+      Only `DeviceTimeoutError` ("no SDINFO_EX answer within 15s") means the camera did
+      not answer.
     - The library sends each model the query the eufy app sends it: a HomeBase 2 gets
       its eMMC and disk totals (sizes in MB, no recordings or wear figures), a HomeBase
       mini (T8023) and the older small HomeBases their eMMC only, like a standalone

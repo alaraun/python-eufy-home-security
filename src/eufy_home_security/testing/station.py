@@ -466,9 +466,11 @@ class FakeStation:
     hub_storage: dict[str, Any] | None = None
     """The ``55000`` reply (without ``cmd``, see :func:`synthetic_hub_storage`) a
     HomeBase 2 storage query is answered with; None: no answer."""
-    sd_info: tuple[int, int, int] | None = None
-    """``(status, total, free)`` a standalone ``SDINFO_EX`` (``1144``) is answered with as
-    three ``int32``; None: no answer (the frame is ignored)."""
+    sd_info: tuple[int, ...] | None = None
+    """``(status, total, free)`` a ``SDINFO_EX`` (``1144``) is answered with, each an
+    ``int32`` (fewer values: a short body); None: no answer (the frame is ignored)."""
+    sd_info_queries: int = 0
+    """``SDINFO_EX`` frames received."""
     storage_reply_code: int = 0
     """``mIntRet`` of the storage reply (non-zero: the body is left out)."""
     storage_reply_cipher: int = FrameCipher.ECB
@@ -951,10 +953,11 @@ class FakeStation:
             self.send_receipt(FrameType.STOP_REALTIME_MEDIA, RECEIPT_TAKEN)
             self._stop_live()
         elif ftype == CMD_SD_INFO:
-            # A standalone eMMC query: answer with a frame of the same type on
+            # The local-medium query: answer with a frame of the same type on
             # channel 0, three int32 (status, total, free), GCM-tagged but clear.
+            self.sd_info_queries += 1
             if self.sd_info is not None:
-                body = struct.pack("<3i", *self.sd_info)
+                body = struct.pack(f"<{len(self.sd_info)}i", *self.sd_info)
                 subheader = bytes([FrameCipher.GCM, 0, 0, 0, 1, 0])
                 self.send_frame(
                     CMD_SD_INFO, body, cipher=FrameCipher.GCM, channel=0, subheader=subheader

@@ -4468,7 +4468,7 @@ async def test_async_event_summary_resends_and_timeouts(
 
         station.event_count_queries = 0
         station.event_count_ignored = 100
-        with pytest.raises(DeviceTimeoutError):
+        with pytest.raises(DeviceTimeoutError, match=r"^no event count answer within 0\.5s$"):
             await session.async_event_summary(SYNTHETIC.camera_sn, timeout=0.5)
     finally:
         await session.async_close()
@@ -4657,8 +4657,58 @@ async def test_async_get_sd_info_raises_timeout_on_no_answer(station: FakeStatio
     session = make_session(station, Provider(station))
     station.sd_info = None
     try:
+        with pytest.raises(DeviceTimeoutError, match=r"^no SDINFO_EX answer within 0\.3s$"):
+            await session.async_get_sd_info(timeout=0.3)
+    finally:
+        await session.async_close()
+
+
+async def test_a_resent_sd_info_query_names_the_whole_wait(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(session_module, "SD_INFO_RESEND", 0.2)
+    station.sd_info = None
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        with pytest.raises(DeviceTimeoutError, match=r"^no SDINFO_EX answer within 0\.5s$"):
+            await session.async_get_sd_info(timeout=0.5)
+        assert station.sd_info_queries >= 2
+    finally:
+        await session.async_close()
+
+
+@pytest.mark.parametrize(
+    "answer", [(4, 0, 0), (0, 0, 0), (22, 8000, 3000)], ids=["no-card", "zero", "corrupted"]
+)
+async def test_an_sd_info_answer_that_is_not_usable_ends_the_query_at_once(
+    station: FakeStation, answer: tuple[int, int, int]
+) -> None:
+    """Any 12-byte answer is the result: no resend, no wait for the timeout."""
+    station.sd_info = answer
+    session = make_session(station, Provider(station))
+    try:
+        await session.async_connect()
+        started = time.monotonic()
+        info = await session.async_get_sd_info(timeout=10.0)
+        elapsed = time.monotonic() - started
+        assert elapsed < session_module.SD_INFO_RESEND / 2
+        assert station.sd_info_queries == 1
+        assert info.emmc is not None
+        assert info.emmc.work_status == answer[0]
+        assert info.emmc.usable is False
+        assert session.storage == info
+    finally:
+        await session.async_close()
+
+
+async def test_a_short_sd_info_frame_is_not_an_answer(station: FakeStation) -> None:
+    station.sd_info = (0, 7140)
+    session = make_session(station, Provider(station))
+    try:
         with pytest.raises(DeviceTimeoutError):
             await session.async_get_sd_info(timeout=0.3)
+        assert session.storage is None
     finally:
         await session.async_close()
 

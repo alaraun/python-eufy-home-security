@@ -521,6 +521,10 @@ def _medium_lines(title: str, medium: StorageMedium) -> list[str]:
         bits.append("FORMATTING")
     elif medium.ready is False:
         bits.append(f"not ready (parted_status {medium.parted_status})")
+    if (state := medium.state) is not None and not medium.usable:
+        bits.append(
+            f"not usable: {state.value} (status {medium.work_status}, group {medium.status_group})"
+        )
     if shown := [bit for bit in bits if bit]:
         lines.append(f"  {'':<14} {'  '.join(shown)}")
     return lines
@@ -536,7 +540,9 @@ def render_storage(storage: StorageInfo, *, name: str) -> str:
     if storage.external is not None:
         lines += _medium_lines("External disk", storage.external)
     if storage.emmc is not None:
-        lines += _medium_lines("eMMC", storage.emmc)
+        # An SDINFO_EX record (it carries a status group) is an SD card or an eMMC.
+        title = "eMMC" if storage.emmc.status_group is None else "SD/eMMC"
+        lines += _medium_lines(title, storage.emmc)
     if storage.storage_events is not None and storage.storage_days is not None:
         lines.append(
             f"  {'Kept:':<14} {storage.storage_events} event(s) over {storage.storage_days} day(s)"
@@ -555,7 +561,7 @@ _MEDIUM_DERIVED = (
     "recordings_used_gib",
     "recordings_capacity_gib",
 )
-_MEDIUM_FLAGS = ("healthy", "formatting", "ready")
+_MEDIUM_FLAGS = ("healthy", "formatting", "ready", "state", "usable")
 
 
 def _medium_json(medium: StorageMedium | None, *, show_serials: bool) -> dict[str, Any] | None:

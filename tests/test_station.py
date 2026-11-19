@@ -18,6 +18,7 @@ import pytest
 import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.station as station_mod
 import eufy_home_security.station.ptz as station_ptz
+from eufy_home_security import MediumState
 from eufy_home_security._logging import redact_serial
 from eufy_home_security.cloud.models import CloudDevice
 from eufy_home_security.devices._ptz_data import PTZ
@@ -5343,6 +5344,19 @@ async def test_async_get_storage_routes_to_sd_info_on_standalone_station(
     assert info.emmc.used_percent == 75.0
     assert info.emmc.size_mib == 8000
     assert info.disk is None
+    assert standalone_station.storage == info
+
+
+async def test_a_standalone_camera_without_a_usable_card_answers_storage_at_once(
+    standalone_station: Station, fake: FakeStation
+) -> None:
+    fake.sd_info = (4, 0, 0)
+    async with asyncio.timeout(1.0):  # under one SD_INFO_RESEND: answered, not resent
+        info = await standalone_station.async_get_storage()
+    assert info.emmc is not None
+    assert (info.emmc.usable, info.emmc.state) == (False, MediumState.NO_CARD)
+    assert info.emmc.size_mib is None
+    assert fake.sd_info_queries == 1
     assert standalone_station.storage == info
 
 
