@@ -793,12 +793,13 @@ def sd_status_groups(
     ``"param"`` when the handler groups that device parameter in place of the answer's
     status whenever the device lists it with a value (:func:`sd_status_param`).
 
-    The groups come from the handler's parse of the answer (:data:`SD_STATUS_ACTION`) in
-    every context, which must agree; where that parse reads no status (one group for
-    every status, or no parse), from the property the handler fills from the device's
-    status parameter (:data:`SD_STATUS_PROPERTY`, at the parameter :func:`_status_param`
-    names, in the base context). None when neither reads the status. Raises GeneratorError when the
-    contexts disagree.
+    The groups come from the handler's parse of the answer (:data:`SD_STATUS_ACTION`);
+    where that parse reads no status (one group for every status, or no parse), from the
+    property the handler fills from the device's status parameter
+    (:data:`SD_STATUS_PROPERTY`, at the parameter :func:`_status_param` names in the base
+    context). Each sweep, and :func:`sd_status_param`, runs in every context, one driver
+    job per context, and the contexts must agree. None when neither reads the status.
+    Raises GeneratorError when the contexts disagree.
     """
     codes = sd_status_codes(handler)
     asked = [SD_STATUS_UNLISTED, *codes]
@@ -807,15 +808,15 @@ def sd_status_groups(
         device = ctx.device(product_code)
         replies = run_driver(product_code, handler, [_sd_answer(device, s) for s in asked])
         tables.append(_sd_table([_sd_parsed(r) for r in replies]))
-    if any(t != tables[0] for t in tables):
-        raise GeneratorError(f"{product_code}: the SDINFO_EX grouping differs between contexts")
-    table, source = tables[0], "answer"
-    base = contexts[BASE]
-    if table is None and (where := _status_param(product_code, handler, base, located)):
-        requests = [where.request(product_code, base, SD_STATUS_PROPERTY, str(s)) for s in asked]
-        replies = run_driver(product_code, handler, requests)
-        table = _sd_table([_sd_group(_property_values(r).get(SD_STATUS_PROPERTY)) for r in replies])
-        source = "param"
+    table, source = _agreed(product_code, "grouping", tables), "answer"
+    if table is None and (where := _status_param(product_code, handler, contexts[BASE], located)):
+        tables = []
+        for ctx in contexts.values():
+            requests = [where.request(product_code, ctx, SD_STATUS_PROPERTY, str(s)) for s in asked]
+            replies = run_driver(product_code, handler, requests)
+            groups = [_sd_group(_property_values(r).get(SD_STATUS_PROPERTY)) for r in replies]
+            tables.append(_sd_table(groups))
+        table, source = _agreed(product_code, "status property's grouping", tables), "param"
     if table is None:
         return None
     _count(counts, f"sd status:{source}")
@@ -826,10 +827,17 @@ def sd_status_groups(
         "default": default,
     }
     if source == "answer":
-        param = sd_status_param(product_code, handler, base, by_code, default)
+        param = sd_status_param(product_code, handler, contexts, by_code, default)
         if param is not None:
             out["param"] = param
     return out
+
+
+def _agreed[T](product_code: str, what: str, per_context: Sequence[T]) -> T:
+    """The one value every context gave; raises GeneratorError when they differ."""
+    if any(v != per_context[0] for v in per_context):
+        raise GeneratorError(f"{product_code}: the SDINFO_EX {what} differs between contexts")
+    return per_context[0]
 
 
 def sd_status_block(
@@ -877,13 +885,29 @@ def _sd_parse_with(
 def sd_status_param(
     product_code: str,
     handler: Path,
-    context: codec.Context,
+    contexts: Mapping[str, codec.Context],
     by_code: Mapping[int, int],
     default: int,
 ) -> int | None:
     """The device parameter the handler's parse groups in place of the answer's status
     when the device lists it with a value (an empty value keeps the answer's status);
-    None when none does. Found by halving :func:`handler_param_ids`, held at a status
+    None when none does. Found and checked in every context (:func:`_sd_status_param_in`);
+    raises GeneratorError when the contexts disagree."""
+    found = [
+        _sd_status_param_in(product_code, handler, ctx, by_code, default)
+        for ctx in contexts.values()
+    ]
+    return _agreed(product_code, "status parameter", found)
+
+
+def _sd_status_param_in(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    by_code: Mapping[int, int],
+    default: int,
+) -> int | None:
+    """:func:`sd_status_param` in ``context``. Found by halving :func:`handler_param_ids`, held at a status
     whose group is not the default while the answer carries :data:`SD_STATUS_UNLISTED`.
     Raises GeneratorError when several parameters do, or when the parse groups the one
     found otherwise than :meth:`SdStatusGroups.group` does: at each swept status, empty

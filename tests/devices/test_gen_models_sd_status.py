@@ -78,15 +78,25 @@ PREFERS = "return group(o || r);"
 IGNORES = "return group(r.status);"  # the answer's status is a number: no group read
 
 
-def _handler(tmp_path: Path, parse: str = READS, *, table: str = TABLE, prop: bool = True) -> Path:
+def _handler(
+    tmp_path: Path, parse: str = READS, *, table: str = TABLE, prop: bool | str = True
+) -> Path:
+    """A synthetic handler; ``prop``: whether it fills the status property, or the JS
+    condition (on ``m``, the message) under which it does."""
     path = tmp_path / f"{PN}Handle.mix.js"
-    text = HANDLER % {"table": table, "parse": parse, "property": "true" if prop else "false"}
+    cond = prop if isinstance(prop, str) else "true" if prop else "false"
+    text = HANDLER % {"table": table, "parse": parse, "property": cond}
     path.write_text(text, "utf-8")
     return path
 
 
 def _groups(
-    tmp_path: Path, parse: str = READS, *, prop: bool = True, located: bool = True, **kwargs: Any
+    tmp_path: Path,
+    parse: str = READS,
+    *,
+    prop: bool | str = True,
+    located: bool = True,
+    **kwargs: Any,
 ) -> tuple[dict[str, Any] | None, dict[str, int]]:
     """``sd_status_groups`` of a synthetic handler; ``located``: the status property is
     among the located thing-description properties (else the generator looks for it)."""
@@ -182,10 +192,24 @@ def test_a_status_property_that_reads_no_status_gives_no_grouping(tmp_path: Path
     assert _groups(tmp_path, IGNORES, table="{}") == (None, {})
 
 
-def test_a_grouping_that_differs_between_contexts_fails(tmp_path: Path) -> None:
-    parse = "return m.device.device_sn === m.device.parent_sn ? group(r) : 1 + group(r);"
-    with pytest.raises(gen_models.GeneratorError, match="differs between contexts"):
-        _groups(tmp_path, parse)
+STANDALONE = "m.device.device_sn === m.device.parent_sn"  # true in the standalone context
+
+
+@pytest.mark.parametrize(
+    ("parse", "prop", "what"),
+    [
+        (f"return {STANDALONE} ? group(r) : 1 + group(r);", True, "grouping"),
+        (f"return group({STANDALONE} && o ? o : r);", True, "status parameter"),
+        (IGNORES, STANDALONE, "status property's grouping"),
+        (IGNORES, f"!({STANDALONE}) || p.param_value !== '4'", "status property's grouping"),
+    ],
+    ids=["answer", "parameter", "property", "property-code"],
+)
+def test_a_grouping_that_differs_between_contexts_fails(
+    tmp_path: Path, parse: str, prop: str | bool, what: str
+) -> None:
+    with pytest.raises(gen_models.GeneratorError, match=rf"SDINFO_EX {what} differs between"):
+        _groups(tmp_path, parse, prop=prop)
 
 
 def _td(tmp_path: Path, props: list[str], parse: str, *, prop: bool = True) -> Path:
