@@ -304,7 +304,8 @@ def test_model_file_matches_the_schema(code: str) -> None:
     assert path.is_file()
     text = path.read_text(encoding="utf-8")
     doc = json.loads(text, object_pairs_hook=dict)
-    assert set(doc) - {"battery"} == {"schema_version", "product_code", "source", "settings"}
+    optional = {"battery", "sd_status_groups"}
+    assert set(doc) - optional == {"schema_version", "product_code", "source", "settings"}
     assert doc["schema_version"] == 3
     assert doc["product_code"] == code
     source = doc["source"]
@@ -335,8 +336,26 @@ def test_model_file_matches_the_schema(code: str) -> None:
             _check_setting(ident, setting, resolved)
     if "battery" in doc:
         _check_battery(doc["battery"], settings)
+    if "sd_status_groups" in doc:
+        _check_sd_status_groups(doc["sd_status_groups"])
     assert text == codec.dump(doc)
     assert [s for s in _strings(doc) if SERIAL.search(s)] == []
+
+
+def _check_sd_status_groups(groups: Any) -> None:
+    """A default group and the int32 statuses whose group differs from it (at least one),
+    plus the parameter the handler groups in place of the answer's status, if any."""
+    assert set(groups) - {"param"} == {"default", "codes"}
+    assert type(groups["default"]) is int
+    assert groups["codes"]
+    for code, group in groups["codes"].items():
+        assert str(int(code)) == code
+        assert -(2**31) <= int(code) < 2**31
+        assert type(group) is int
+        assert group != groups["default"]
+    if "param" in groups:
+        assert type(groups["param"]) is int
+        assert 1000 <= groups["param"] < 65536
 
 
 def _check_battery(battery: Any, settings: dict[str, Any]) -> None:
