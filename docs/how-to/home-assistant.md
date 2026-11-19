@@ -1247,17 +1247,28 @@ A closed session (`async_close`) never reconnects on its own — build a new
       battery camera**, so read it when the camera is awake anyway (at setup, or fold it
       into a preset/live capture) rather than on a timer. `storage.emmc.used_percent` is
       the "used" figure.
-    - That record also says whether the medium can be used: `storage.emmc.usable`
-      (True / False; None on a HomeBase record, which carries no such status) and
-      `storage.emmc.state` (`MediumState`: `normal`, `no_card`, `corrupted`, `other`),
-      with the raw code in `work_status` and the eufy app's group in `status_group`. A
-      camera with no card, or one it cannot use, answers at once: `usable` is False and
-      the sizes and `used_percent` are None. This is a result, not an error: show it as
-      the medium's state (an enum sensor "SD card" with `no_card` / `corrupted` /
-      `other` / `normal`, or a binary sensor "SD card usable"), leave the size sensors
-      unknown, and do not turn on the storage `problem` sensor or log an error for it.
-      Only `DeviceTimeoutError` ("no SDINFO_EX answer within 15s") means the camera did
-      not answer.
+    - A `1144` record also says whether the medium can be used: `storage.emmc.usable`
+      (True / False) and `storage.emmc.state` (`MediumState`: `normal`, `no_card`,
+      `corrupted`, `other`), with the raw code in `work_status` and its group in
+      `status_group`. They are set on every `1144` record: a standalone camera's, and
+      that of the HomeBases asked `1144` (a HomeBase 2 below firmware 3.3.7.7, the
+      T8001, T8002, T8020 and T8023). They are None on a `1307` record (the HomeBase 3
+      family) and a `55000` record (a HomeBase 2 from 3.3.7.7), which carry no such
+      status. Any 12-byte answer is the result and ends the query at once, `[0, 0, 0]`
+      included, so there is no retry to build: a camera with no card, or one it cannot
+      use, answers within milliseconds with `usable` False. The sizes and `used_percent`
+      are None only for a total of 0 or less; a status that is not normal keeps its
+      figures when the answer has a size (`[22, 8000, 3000]`: 62.5 % used, `state`
+      `corrupted`, `usable` False). `[0, 0, 0]` reads `state` `normal` with `usable`
+      False (no size), so key the sensor on `usable` together with `state`, never on
+      `state` alone. This is a result, not an error: show it as the medium's state (a
+      binary sensor "Local storage usable" from `usable`, and an enum sensor "Local
+      storage" from `state`, `normal` only while `usable` is True), leave a size sensor
+      unknown while its figure is None, and do not turn on the storage `problem` sensor
+      or log an error for it. Name these sensors neutrally: the medium is an SD card on
+      some models and a built-in eMMC on others (a T8170, a T8023). Only
+      `DeviceTimeoutError` ("no SDINFO_EX answer within 15s") means the device did not
+      answer.
     - The library sends each model the query the eufy app sends it: a HomeBase 2 gets
       its eMMC and disk totals (sizes in MB, no recordings or wear figures), a HomeBase
       mini (T8023) and the older small HomeBases their eMMC only, like a standalone
