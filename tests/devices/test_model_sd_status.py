@@ -57,29 +57,29 @@ def test_a_status_the_file_does_not_list_has_the_default_group(
 
 
 @pytest.mark.parametrize(
-    ("params", "group"),
+    ("status", "params", "group"),
     [
-        ({1135: "4"}, 2),  # the parameter's status wins over the answer's 0
-        ({1135: "0"}, 0),  # "0" is set
-        ({1135: " 4 "}, 2),
-        ({1135: "-5"}, 3),
-        ({1135: "abc"}, 1),  # set, but no status: the default group
-        ({1135: "4.0"}, 1),
-        ({1135: "+4"}, 1),
-        ({1135: ""}, 0),  # empty: the answer's status
-        ({1135: None}, 0),
-        ({1136: "4"}, 0),
-        ({}, 0),
-        (None, 0),
+        (0, {1135: "4"}, 2),  # the parameter's status wins over the answer's
+        (4, {1135: "0"}, 0),  # "0" is set
+        (0, {1135: " 4 "}, 2),
+        (0, {1135: "-5"}, 3),
+        (0, {1135: "abc"}, 1),  # set, but no status: the default group
+        (0, {1135: "4.0"}, 1),
+        (0, {1135: "+4"}, 1),
+        (4, {1135: ""}, 2),  # empty: the answer's status
+        (4, {1135: None}, 2),
+        (4, {1136: "0"}, 2),
+        (4, {}, 2),
+        (4, None, 2),
     ],
 )
 def test_a_set_status_parameter_is_grouped_in_place_of_the_answer(
-    data_root: Path, params: dict[int, str | None] | None, group: int
+    data_root: Path, status: int, params: dict[int, str | None] | None, group: int
 ) -> None:
     _write(data_root, {**GROUPS, "param": 1135})
     groups = sd_status_groups("T0001")
     assert groups is not None
-    assert groups.group(0, params) == group
+    assert groups.group(status, params) == group
 
 
 def test_without_a_parameter_the_device_params_do_not_matter(data_root: Path) -> None:
