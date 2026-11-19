@@ -603,15 +603,16 @@ whose 12-byte body is three little-endian `int32`:
 
 | offset | `int32` | meaning |
 |---|---|---|
-| 0 | status | the medium's status code, grouped by the app (below) |
+| 0 | status | the medium's status code, grouped as below |
 | 4 | total | total size; 0 when the device reports no size (no card) |
 | 8 | free | free size |
 
-The app reads the status through one grouping for every model **[declared: app]**:
-each code falls into a display group, a code it does not list into group 1. The groups
-whose meaning the app names are 0 (in use, no prompt), 2 (its "no SD card" prompt) and
-4 (its "SD card corrupted" prompt); the others are not normal, their meaning is not
-named here.
+The app reads the status through a grouping table in each product's handler
+**[declared: app]**: each code falls into a display group, a code the table does not
+list into group 1. The groups whose meaning the app names are 0 (in use, no prompt), 2
+(its "no SD card" prompt) and 4 (its "SD card corrupted" prompt); the others are not
+normal, their meaning is not named here. The library groups every product's status by
+one table, the union of the handlers' tables (`sd_status_group`):
 
 | group | status codes |
 |---|---|
@@ -628,7 +629,22 @@ named here.
 | 12 | 13, 18, 21 |
 | 13 | 8 |
 | 18 | 29 |
-| 22 | 33 (some models' handlers leave 33 out, so the app shows it in group 1 there) |
+| 22 | 33 |
+
+Where a product's handler differs from it:
+
+- **Code 33** is group 22 only in the handlers of the T8028, T8030, T8040, T8112,
+  T8144, T814X, T8160C, T8161, T8162, T8172, T8180, T8214, T8215, T8217, T8223, T8224,
+  T8400, T8401, T8404, T8410, T8410C, T8411, T84A1, T8600, T86P2, T8E00, T8L60, T8P00
+  and T8P10. The others (the T817L among them) leave it out, so the app shows it in
+  group 1. `state` and `usable` are the same either way: groups 22 and 1 are both
+  `other`, only `status_group` differs.
+- **The T8115's handler** also leaves out 29, 30 and 31, which fall to group 1 there.
+  For 30 the library reads `normal` (and `usable` True with a size) where the app shows
+  group 1; 31 reads `no_card` where the app shows group 1; 29 is `other` either way.
+- **The T814X, T8W11C and T8600** group the device's status parameter `1135`
+  (`APP_CMD_GET_TFCARD_STATUS`) in place of the reply's status when the parameter is
+  set; the library groups the reply's status.
 
 The app formats the sizes as **MB** (base 1000, `< 1000` → "MB", else ÷1000 → "GB") and
 takes used as `total − free` (this query carries no system-reserve figure). So for the
