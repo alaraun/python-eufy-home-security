@@ -1305,33 +1305,48 @@ def _first(sent: list[tuple[float, int, tuple[str, int]]], msg: int, host: str) 
     return next((at for at, kind, addr in sent if kind == msg and addr[0] == host), None)
 
 
+@pytest.mark.parametrize(
+    ("host", "extra", "blocked"),
+    [
+        (CAMERA_LAN, (), True),  # searched by unicast
+        (None, (), True),  # a broadcast covers this host's networks
+        (SEARCHED, (CAMERA_LAN,), True),  # an extra search host
+        # A stale searched address: the search never reached the station.
+        (SEARCHED, (), False),
+    ],
+)
 async def test_an_on_link_station_whose_lan_reply_is_blocked_is_punched_after_the_grace(
-    rendezvous: _Rendezvous, monkeypatch: pytest.MonkeyPatch
+    rendezvous: _Rendezvous,
+    monkeypatch: pytest.MonkeyPatch,
+    host: str | None,
+    extra: tuple[str, ...],
+    blocked: bool,
 ) -> None:
     """The station's LAN address lies in this host's networks, but its LAN replies never
     arrive: that address is punched only once :data:`ON_LINK_PUNCH_GRACE` has passed
-    since the first LAN_SEARCH, its public one at once; the link is a LAN one whose
-    reply needed the punch."""
+    since the first LAN_SEARCH, its public one at once; the link is a LAN one, recorded
+    as LAN reply blocked only when discovery searched the station's address."""
     monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.5)
     transport = make_transport()
     rendezvous.route(transport)
     sent = _discovery_sends(transport)
     try:
         await transport.connect(
-            SEARCHED,
-            port=59999,
+            host,
+            port=rendezvous.camera_port,
             expected_did=rendezvous.did,
             timeout=3.0,
             wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
+            extra_hosts=extra,
             local_networks=(OUR_LAN,),
             on_link_grace=True,
         )
         assert transport.peer == (CAMERA_LAN, rendezvous.camera_port)
         assert transport.path is ConnectPath.LAN
-        assert transport.lan_reply_blocked is True
+        assert transport.lan_reply_blocked is blocked
     finally:
         transport.close()
-    search = _first(sent, MsgType.LAN_SEARCH, SEARCHED)
+    search = next((at for at, kind, _ in sent if kind == MsgType.LAN_SEARCH), None)
     public = _first(sent, MsgType.PUNCH_PKT, CAMERA_WAN)
     on_link = _first(sent, MsgType.PUNCH_PKT, CAMERA_LAN)
     assert search is not None

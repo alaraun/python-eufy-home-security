@@ -597,7 +597,11 @@ What the library relies on:
   needed; `stats().lan_reply_blocked` too), with `LanPath.station_ip` for the rule and
   `LanPath.local_port` (0 = none pinned) for wording the fix: allow all UDP from the
   station, or pin a local port and allow UDP from the station to it. A later link that
-  comes up from a LAN reply (the rule added) clears it. A station without a firewall
+  comes up from a LAN reply (the rule added) clears it. Only a link whose search went to
+  the station's address counts (a broadcast, or the searched address): a station that
+  moved away from a stale configured address is not flagged, but on a host with
+  several networks a broadcast leaves by one interface, so a station on another
+  interface's network that links through the punch is. A station without a firewall
   that ignores the first three searches (the third goes out at 2 s) and answers a later
   one is punched and flagged the same way, until its next link from a LAN reply: word
   the repair as likely, not certain. The record is kept in the

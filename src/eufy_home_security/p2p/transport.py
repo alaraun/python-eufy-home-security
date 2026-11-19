@@ -275,9 +275,11 @@ class PPPPTransport(asyncio.DatagramProtocol):
     @property
     def lan_reply_blocked(self) -> bool:
         """Whether the link came from a punch toward an address in this host's directly
-        connected networks after the on-link grace ended without a LAN reply: the
-        station is on this host's network, but its replies to a ``LAN_SEARCH`` do not
-        arrive (a firewall here drops them). False without the grace."""
+        connected networks after the on-link grace ended without a LAN reply, the LAN
+        search having gone to that address (a broadcast, or a searched host equal to
+        it): the station is on this host's network, but its replies to a
+        ``LAN_SEARCH`` do not arrive (a firewall here drops them). False without the
+        grace."""
         return self._lan_reply_blocked
 
     @property
@@ -343,7 +345,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
         ``PUNCH_TO`` address in ``local_networks`` until :data:`ON_LINK_PUNCH_GRACE`
         after the first ``LAN_SEARCH``, so a station on this host's network answers the
         search first; addresses outside them are punched at once. A link that then comes
-        from that punch sets :attr:`lan_reply_blocked`.
+        from that punch sets :attr:`lan_reply_blocked` when the search went to that
+        address.
         """
         self._local_networks = local_networks
         self._on_link_grace = on_link_grace
@@ -677,8 +680,11 @@ class PPPPTransport(asyncio.DatagramProtocol):
         on_link = self._on_local_network(addr[0])
         self._path = ConnectPath.RENDEZVOUS if punched and not on_link else ConnectPath.LAN
         # On-link addresses are punched only after the grace: a reply to that punch
-        # means the LAN search went unanswered while the station was reachable.
-        self._lan_reply_blocked = punched and on_link and self._on_link_grace
+        # means the LAN search went unanswered while the station was reachable, when
+        # the search went to the station's address (not to a stale one).
+        self._lan_reply_blocked = (
+            punched and on_link and self._on_link_grace and self._answers_search(addr)
+        )
         self._punch.set_result((did, payload, addr))
 
     def _on_local_network(self, host: str) -> bool:

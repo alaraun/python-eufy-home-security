@@ -2995,8 +2995,9 @@ SERVER = ("192.0.2.1", RENDEZVOUS_PORT)
 
 def _route_punches(monkeypatch: pytest.MonkeyPatch, fake: FakeStation, server_port: int) -> None:
     """Every transport the client opens reaches :data:`SERVER` at ``server_port`` and
-    :data:`STATION_LAN` at the fake's session socket, both on loopback, and drops the
-    rest of what goes to the server's host."""
+    :data:`STATION_LAN` at the fake's session socket (its discovery socket at the
+    discovery port), all on loopback, and drops the rest of what goes to the server's
+    host."""
     connect = PPPPTransport.connect
 
     async def routed(transport: PPPPTransport, host: str | None, **kwargs: Any) -> Did:
@@ -3008,6 +3009,8 @@ def _route_punches(monkeypatch: pytest.MonkeyPatch, fake: FakeStation, server_po
         def sendto(packet: bytes, addr: tuple[str, int]) -> None:
             if addr == SERVER:
                 send(packet, server)
+            elif addr == (STATION_LAN, fake.discovery_port):
+                send(packet, ("127.0.0.1", fake.discovery_port))
             elif addr[0] == STATION_LAN:
                 send(packet, station)
             elif addr[0] != SERVER[0]:
@@ -3086,8 +3089,9 @@ async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
     """A station on this host's network that never answers the LAN search but answers
     the punch toward its LAN address: linked after the on-link grace, as a LAN link,
     and its ``lan_path`` warns ``lan_reply_blocked`` at the address it answered from,
-    with no local port pinned. The host's networks come from the interfaces, or from
-    ``local_networks`` when given (the interfaces then unread)."""
+    with no local port pinned (discovery searches that address). The host's networks
+    come from the interfaces, or from ``local_networks`` when given (the interfaces then
+    unread)."""
     monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.3)
     fake = FakeStation(ignore_searches=1000, answers_punch=True)
     await fake.start()
@@ -3111,6 +3115,7 @@ async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
         store=MemoryStore(),
         cloud=cloud,
         stations={fake.serial: fake},
+        station_hosts={fake.serial: STATION_LAN},
         local_networks=list(ours) if override else None,
     )
     try:
@@ -3137,6 +3142,7 @@ async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
         await eufy.async_close()
         fake.stop()
         endpoint.close()
+    assert fake.searches > 0  # searched at its address, and ignored
 
 
 async def test_a_station_stored_with_a_blocked_lan_reply_warns_and_goes_to_the_servers_at_once(

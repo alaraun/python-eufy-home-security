@@ -228,7 +228,13 @@ networks are unknown.
 That link counts as `"lan"` (media and commands run over the LAN), but the session
 records it as **LAN reply blocked** (`SessionStats.lan_reply_blocked`,
 `StationSession.lan_reply_blocked`, and `network.PathWarning.LAN_REPLY_BLOCKED` on
-`Station.lan_path`): every connect of that station needs its rendezvous
+`Station.lan_path`) when the search went to the station's address: a broadcast (which
+covers it), or a unicast search host or extra search host equal to it. A punch answered
+from another address (the searched one is stale: the station moved) is no blocked
+reply and is not recorded. A limited broadcast leaves by one interface only, so on a
+host with several networks a station on another interface's network that the
+broadcast never reached, and that links through the punch, is still recorded. Every
+connect of such a station needs its rendezvous
 servers and a DSK, so it fails in an internet outage where a plain LAN link would not.
 While it is set, a reconnect runs the rendezvous connect from its first attempt. Each
 link sets it again: a later link from a LAN reply (a firewall rule added) clears it.
