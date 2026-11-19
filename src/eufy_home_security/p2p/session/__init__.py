@@ -298,9 +298,11 @@ STORAGE_TIMEOUT = 30.0
 A station that refuses the query ends the wait sooner with its receipt (a HomeBase 2
 sent -1 after 18 s)."""
 SD_INFO_RESEND = 2.0
-"""How often the eMMC query (1144) is resent: a just-woken T8170 ignores it briefly."""
+"""How often the local-medium query (1144) is resent: a just-woken T8170 ignores it
+briefly."""
 SD_INFO_TIMEOUT = 15.0
-"""How long the eMMC query keeps retrying a just-woken camera before giving up."""
+"""How long the local-medium query (1144) keeps retrying a just-woken camera before
+giving up."""
 MEDIA_PING_INTERVAL = 3.0
 """How often a standalone device's open live stream gets the app's 1139 PING. A T8170
 ends a stream about 10 s after it opens unless pinged; with a ping every 3 s (the app's
