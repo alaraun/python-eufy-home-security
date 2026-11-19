@@ -54,6 +54,7 @@ class StubCloud:
         self.logins: list[dict[str, Any]] = []
         self.scanned_codes: list[list[str]] = []
         self.session_replaced = StubCloud.replaced
+        self.device_list_source = "fetched"
         StubCloud.emails.append(args[2])
 
     async def async_login(self, **kwargs: Any) -> None:

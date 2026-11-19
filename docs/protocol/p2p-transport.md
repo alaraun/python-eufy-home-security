@@ -197,7 +197,8 @@ a station that has moved onto this host's network counts as `"lan"` again on its
 link. `EufySecurity` keeps each station's last path in its session cache
 (`stations.<serial>.link_path`, saved when it changes) and builds the station's session
 with it, so the first connect after a restart (a CLI run, a Home Assistant restart)
-already knows it; a station the device list no longer names loses it. A link's address
+already knows it; a station that a whole device list (fetched, or the cached one) no
+longer names loses it, while a list the cloud did not answer whole keeps every path. A link's address
 becomes the next search's host when it is a LAN address or one discovery already
 searches by unicast; a public one does not.
 

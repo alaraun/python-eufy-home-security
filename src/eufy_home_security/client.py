@@ -693,7 +693,11 @@ class EufySecurity:
         return list(self.stations.values())
 
     async def _forget_link_paths(self, listed: Collection[str]) -> None:
-        """Drop the kept link path of every station the device list no longer names."""
+        """Drop the kept link path of every station a whole device list (fetched now,
+        or the cache of one) no longer names; a list the cloud did not answer whole
+        (``"fallback"``, ``"unsent"``) drops none."""
+        if self.device_list_source not in ("fetched", "cache"):
+            return
         dropped = [
             serial
             for serial in self.cache.station_serials()

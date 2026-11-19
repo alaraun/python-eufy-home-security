@@ -27,7 +27,7 @@ from eufy_home_security.cloud import crypto
 from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession, _SessionExpiredError
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY, CloudCode
 from eufy_home_security.cloud.models import CloudDevice, CloudInvite
-from eufy_home_security.cloud.status import LoginNeed
+from eufy_home_security.cloud.status import DeviceListSource, LoginNeed
 from eufy_home_security.devices.model_settings import (
     PARENTLESS_ONLY,
     bundled_td_version,
@@ -174,6 +174,7 @@ class StubCloud:
         self.user_name = "user"
         self.logins: list[dict[str, Any]] = []
         self.scanned_codes: list[list[str]] = []
+        self.device_list_source: DeviceListSource | None = "fetched"
 
     async def async_login(self, **kwargs: Any) -> None:
         self.logins.append(kwargs)
@@ -2922,18 +2923,66 @@ async def test_the_link_path_is_saved_only_when_it_changes(
         await eufy.async_close()
 
 
-async def test_a_station_the_list_no_longer_names_loses_its_link_path() -> None:
+@pytest.mark.parametrize("refresh", [False, True])
+async def test_a_station_the_list_no_longer_names_loses_its_link_path(refresh: bool) -> None:
+    """A whole list, the cached one or one fetched now, drops the path of a station it
+    does not name."""
     cloud = FakeCloud(devices=[station_device(), camera_device()])
     store = _link_path_store(
         cloud, {SYNTHETIC.station_sn: "rendezvous", OTHER_STATION_SN: "rendezvous"}
     )
     async with aiohttp.ClientSession() as http:
         eufy = account(http, cloud, store=store)
-        await eufy.async_discover()
+        await eufy.async_discover(refresh=refresh)
+        assert eufy.device_list_source == ("fetched" if refresh else "cache")
         assert eufy.cache.link_path(SYNTHETIC.station_sn) is ConnectPath.RENDEZVOUS
         assert eufy.cache.link_path(OTHER_STATION_SN) is None
         assert store.data is not None
         assert "link_path" not in store.data["stations"][OTHER_STATION_SN]  # saved at once
+        await eufy.async_close()
+
+
+async def test_a_listed_station_this_client_does_not_build_keeps_its_link_path() -> None:
+    """A station the list still names keeps its path whether or not it is built here
+    (included remote, or served by another account)."""
+    cloud = two_stations()
+    store = _link_path_store(
+        cloud, {SYNTHETIC.station_sn: "rendezvous", OTHER_STATION_SN: "rendezvous"}
+    )
+    async with aiohttp.ClientSession() as http:
+        eufy = account(
+            http,
+            cloud,
+            store=store,
+            stations={SYNTHETIC.station_sn: Reach.LOCAL, OTHER_STATION_SN: Reach.REMOTE},
+        )
+        await eufy.async_discover()
+        assert set(eufy.stations) == {SYNTHETIC.station_sn}
+        assert eufy.cache.link_path(OTHER_STATION_SN) is ConnectPath.RENDEZVOUS
+        await eufy.async_close()
+
+
+@pytest.mark.parametrize("source", ["fallback", "unsent"])
+async def test_a_list_that_is_not_whole_drops_no_link_path(
+    monkeypatch: pytest.MonkeyPatch, source: str
+) -> None:
+    """A list the cloud did not answer whole (a failed refresh's fallback, or nothing
+    sent while every scope is suspended) names no station's absence: every kept path
+    stays."""
+    cloud = FakeCloud(devices=[station_device(), camera_device()])
+    store = _link_path_store(cloud, {OTHER_STATION_SN: "rendezvous"})
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud, store=store)
+        listed = eufy.cloud.async_get_devices
+
+        async def partial(**kwargs: Any) -> list[CloudDevice]:
+            devices = await listed(**kwargs)
+            eufy.cloud.device_list_source = source  # type: ignore[assignment]
+            return devices
+
+        monkeypatch.setattr(eufy.cloud, "async_get_devices", partial)
+        await eufy.async_discover()
+        assert eufy.cache.link_path(OTHER_STATION_SN) is ConnectPath.RENDEZVOUS
         await eufy.async_close()
 
 
