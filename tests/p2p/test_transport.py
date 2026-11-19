@@ -1604,7 +1604,9 @@ async def test_the_grace_holds_back_no_more_addresses_than_may_still_be_punched(
     off_link = [("198.51.100.9", 4000 + n) for n in range(3)]
     on_link = [(CAMERA_LAN, 5000 + n) for n in range(cap + 2)]
     try:
-        for target in [*off_link, *on_link, on_link[0]]:
+        # on_link[0] is named again under the cap (other servers, later rounds) and
+        # once more past it.
+        for target in [*off_link, on_link[0], on_link[0], *on_link, on_link[0]]:
             name(target)
     finally:
         transport._grace_timer.cancel()
