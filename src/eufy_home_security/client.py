@@ -18,6 +18,7 @@ import logging
 import math
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
+from ipaddress import IPv4Network
 from types import MappingProxyType, TracebackType
 from typing import TYPE_CHECKING, Any, Literal, Self, cast
 
@@ -236,6 +237,7 @@ class EufySecurity:
         deduplicate: bool = True,
         cloud_state_refresh: float = CLOUD_STATE_REFRESH,
         max_sessions: int = DEFAULT_STATION_SESSIONS,
+        local_networks: Sequence[IPv4Network] | None = None,
         _cloud_factory: Callable[..., EufyCloudApi] | None = None,
         _discovery_port: int | None = None,
     ) -> None:
@@ -270,6 +272,13 @@ class EufySecurity:
         ``local_ports`` pins one local UDP port per station serial, so a firewall can
         admit each station's replies (see :mod:`.network`); stations not in it bind an
         ephemeral port. Two stations cannot share a pinned port (ValueError).
+
+        ``local_networks`` are this host's directly connected IPv4 networks (Home
+        Assistant's network adapters: each IPv4 address with its prefix), used instead
+        of reading the interfaces (:mod:`.p2p.netif`, Linux only). They decide which
+        punch-answered links count as ``"lan"``, the on-link punch grace, and
+        :attr:`~.network.PathWarning.LAN_REPLY_BLOCKED`; with neither (not Linux, no
+        ``local_networks``) there is no grace and no such warning.
 
         Pass one ``claims`` to every account of a process so that a station shared
         between accounts is served by exactly one of them. Likewise pass one
@@ -350,6 +359,7 @@ class EufySecurity:
         check_local_ports(local_ports or {})
         self._max_sessions = _session_budget(max_sessions)
         self._local_ports = dict(local_ports or {})
+        self._local_networks = None if local_networks is None else tuple(local_networks)
         self._bus = EventBus()
         # One ring for the account, both channels; it outlives every session reconnect.
         self.deduplicator: EventDeduplicator | None = EventDeduplicator() if deduplicate else None
@@ -675,6 +685,7 @@ class EufySecurity:
                 max_sessions=self._max_sessions,
                 extra_hosts=extra_search_hosts(device, self._search_host(device)),
                 connect_path=self.cache.link_path(serial),
+                local_networks=self._local_networks,
             )
             station = Station(
                 device,

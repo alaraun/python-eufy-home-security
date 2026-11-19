@@ -596,8 +596,12 @@ What the library relies on:
   needed; `stats().lan_reply_blocked` too), with `LanPath.station_ip` for the rule and
   `LanPath.local_port` (0 = none pinned) for wording the fix: allow all UDP from the
   station, or pin a local port and allow UDP from the station to it. A later link that
-  comes up from a LAN reply (the rule added) clears it. Without known host networks
-  (not Linux, or the interfaces cannot be read) there is no grace and no warning.
+  comes up from a LAN reply (the rule added) clears it. Pass the host's networks as
+  `EufySecurity(local_networks=…)`, built from Home Assistant's network adapters
+  (`network.async_get_adapters(hass)`: each `ipv4` entry's `address` and
+  `network_prefix` as `IPv4Network(f"{address}/{network_prefix}", strict=False)`):
+  they are used instead of the library's own interface reader (Linux only). Without
+  either there is no grace and no warning, and a punched link counts as `"rendezvous"`.
 - **Without a configured or cloud address**, discovery also searches the LAN address the
   station reports (parameter 1176) by unicast, beside the broadcast; its `LanPath` shows
   `host_source` `device` and still warns `broadcast_only`: that address follows the

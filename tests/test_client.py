@@ -3078,13 +3078,15 @@ async def test_a_station_answering_the_punch_first_is_stored_by_this_hosts_netwo
     assert store.data["stations"][fake.serial]["link_path"] == str(path)
 
 
+@pytest.mark.parametrize("override", [False, True])
 async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, override: bool
 ) -> None:
     """A station on this host's network that never answers the LAN search but answers
     the punch toward its LAN address: linked after the on-link grace, as a LAN link,
     and its ``lan_path`` warns ``lan_reply_blocked`` at the address it answered from,
-    with no local port pinned."""
+    with no local port pinned. The host's networks come from the interfaces, or from
+    ``local_networks`` when given (the interfaces then unread)."""
     monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.3)
     fake = FakeStation(ignore_searches=1000, answers_punch=True)
     await fake.start()
@@ -3094,10 +3096,21 @@ async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
     )
     _route_punches(monkeypatch, fake, endpoint.get_extra_info("sockname")[1])
     monkeypatch.setattr(CloudDevice, "rendezvous_servers", (SERVER[0],))
-    monkeypatch.setattr(netif, "local_networks", lambda: (IPv4Network("192.0.2.0/24"),))
+    ours = (IPv4Network("192.0.2.0/24"),)
+    reads: list[None] = []
+
+    def reader() -> tuple[IPv4Network, ...]:
+        reads.append(None)
+        return ours
+
+    monkeypatch.setattr(netif, "local_networks", reader)
     cloud = FakeCloud.for_stations(fake)
     eufy = build_eufy_security(
-        email=SYNTHETIC.email, store=MemoryStore(), cloud=cloud, stations={fake.serial: fake}
+        email=SYNTHETIC.email,
+        store=MemoryStore(),
+        cloud=cloud,
+        stations={fake.serial: fake},
+        local_networks=list(ours) if override else None,
     )
     try:
         await eufy.async_discover()
@@ -3116,6 +3129,7 @@ async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
         assert PathWarning.EPHEMERAL_PORT in path.warnings
         assert path.station_ip == STATION_LAN
         assert path.local_port == 0
+        assert bool(reads) is not override
     finally:
         await eufy.async_close()
         fake.stop()

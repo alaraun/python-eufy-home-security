@@ -47,6 +47,7 @@ from collections.abc import AsyncIterator, Callable, Collection, Iterable, Mappi
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from enum import StrEnum
+from ipaddress import IPv4Network
 from types import MappingProxyType
 from typing import Any, Protocol, cast
 
@@ -498,6 +499,7 @@ class StationSession:
         extra_hosts: Sequence[str] = (),
         connect_path: ConnectPath | None = None,
         lan_reply_blocked: bool = False,
+        local_networks: Sequence[IPv4Network] | None = None,
     ) -> None:
         # max_sessions: see the max_sessions property.
         # expect_channels: the paired sub-devices' channels, used by every parameter
@@ -509,6 +511,8 @@ class StationSession:
         # wake_provider: the rendezvous connect's material (see _rendezvous_on).
         # connect_path: how the last link came up, also one of an earlier run.
         # lan_reply_blocked: whether that link needed the punch (see lan_reply_blocked).
+        # local_networks: this host's directly connected networks, used instead of
+        # reading the interfaces (netif) when given.
         # extra_hosts: searched by unicast beside the host (or broadcast).
         # key_refresh: where the stale-key latch lives (in memory when None).
         # cloud_problems_reported: the owner delivers cloud errors as CloudProblem, so
@@ -528,6 +532,7 @@ class StationSession:
         self._extra_hosts = tuple(extra_hosts)
         self._connect_path = connect_path
         self._lan_reply_blocked = lan_reply_blocked
+        self._local_networks = None if local_networks is None else tuple(local_networks)
         self._expected_did = Did.parse(did) if isinstance(did, str) else did
         # The static key slices the id's text as the cloud lists it (see static_key).
         self._did_text = did if isinstance(did, str) else None
@@ -2435,6 +2440,7 @@ class StationSession:
             extra_hosts=self._extra_hosts,
             connect_path=self._connect_path,
             lan_reply_blocked=self._lan_reply_blocked,
+            local_networks=self._local_networks,
         )
 
     def _media_waits(self) -> MediaWaits:
@@ -2722,6 +2728,13 @@ class StationSession:
             )
         return wake
 
+    async def _host_networks(self) -> Sequence[IPv4Network] | None:
+        """This host's directly connected networks: the ones the session was given,
+        else read from the interfaces (off the event loop); None when unknown."""
+        if self._local_networks is not None:
+            return self._local_networks
+        return await async_local_networks()
+
     async def _establish(self, creds: P2PCredentials | None) -> P2PCredentials:
         """Connect and unwrap the session key; returns the credentials that unwrapped it.
 
@@ -2746,7 +2759,7 @@ class StationSession:
             )
             wake = await self._wake(cached_only=not self._rendezvous_on(attempt))
             # A punch answer is classified by this host's networks (see PPPPTransport.connect).
-            networks = None if wake is None else await async_local_networks()
+            networks = None if wake is None else await self._host_networks()
             transport = PPPPTransport(on_chunk=self._on_chunk, on_lost=self._on_lost)
             try:
                 did = await transport.connect(

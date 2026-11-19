@@ -185,10 +185,11 @@ library's rule):
 | an address in one of this host's directly connected IPv4 networks (each interface's primary address and netmask), punched or not | `"lan"` |
 | outside them, an address the client punched (even a host it also searched by unicast: behind a stateful gateway the punch is what admits the reply) | `"rendezvous"` |
 | outside them, not punched (a host searched by unicast) | `"lan"` |
-| this host's networks cannot be read (not Linux, or an interface error): an address the client punched | `"rendezvous"` |
+| this host's networks are unknown (not Linux, or an interface error, and none given): an address the client punched | `"rendezvous"` |
 
-The networks are read on Linux with the `SIOCGIFADDR` / `SIOCGIFNETMASK` ioctls (stdlib
-only): one primary IPv4 address per interface, so a station on a subnet this host holds
+The networks are `EufySecurity(local_networks=…)` when given (a consumer such as Home
+Assistant fills them from its own network adapters), else read on Linux with the
+`SIOCGIFADDR` / `SIOCGIFNETMASK` ioctls (stdlib only): one primary IPv4 address per interface, so a station on a subnet this host holds
 only as a secondary address (an alias) is classified by the rule for addresses outside
 the networks (a punched one is `"rendezvous"`, never wrongly `"lan"`). Every interface
 counts, up or down, tunnels included: a station reached through a VPN whose far end
@@ -228,8 +229,8 @@ records it as **LAN reply blocked** (`SessionStats.lan_reply_blocked`,
 servers and a DSK, so it fails in an internet outage where a plain LAN link would not.
 While it is set, a reconnect runs the rendezvous connect from its first attempt. Each
 link sets it again: a later link from a LAN reply (a firewall rule added) clears it.
-Without known host networks (not Linux, or an interface error) there is no grace and no
-such record.
+Without known host networks (not Linux, or an interface error, and none given as
+`EufySecurity(local_networks=…)`) there is no grace and no such record.
 
 **Setup probe** (`EufySecurity.async_station_choices()`, the library's): a mains
 station that did not answer the LAN probe and lists rendezvous servers gets the

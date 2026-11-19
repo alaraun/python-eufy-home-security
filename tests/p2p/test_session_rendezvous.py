@@ -246,6 +246,31 @@ async def test_a_rendezvous_attempt_classifies_by_this_hosts_networks(
     assert reads[0] is not threading.current_thread()
 
 
+async def test_given_host_networks_are_used_instead_of_the_interfaces(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``local_networks`` given to the session replace the interface reader, for its
+    own attempts and for its short-lived sessions."""
+    attempts = Attempts(monkeypatch)
+    given = (IPv4Network("198.51.100.0/24"),)
+
+    def unread() -> tuple[IPv4Network, ...]:
+        raise AssertionError("the interfaces were read")
+
+    monkeypatch.setattr(netif, "local_networks", unread)
+    session = _session(station, WakeSource(cached=True), local_networks=given)
+    try:
+        await session.async_connect()
+        extra = session._short_lived_session()
+        try:
+            await extra.async_connect()
+        finally:
+            await extra.async_close()
+    finally:
+        await session.async_close()
+    assert [call["local_networks"] for call in attempts.calls] == [given, given]
+
+
 @pytest.mark.parametrize(("on_demand", "grace"), [(False, True), (True, False)])
 async def test_only_a_held_station_holds_its_on_link_punch_for_the_grace(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch, on_demand: bool, grace: bool
