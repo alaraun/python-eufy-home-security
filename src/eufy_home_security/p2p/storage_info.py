@@ -592,7 +592,8 @@ def parse_hub_storage(obj: Mapping[str, Any]) -> StorageInfo | None:
     top level carries ``emmc_status``, ``usb_status`` (the disk's) and ``hdd_exist``.
     Like the app, a medium whose status is 1 or 26 counts as empty, and a disk counts
     only with ``hdd_total`` > 0 and ``hdd_exist`` 1 (or absent). Each status becomes
-    the medium's ``work_status``.
+    the medium's ``work_status``, ungrouped (``status_group`` None): the app reads these
+    codes only as empty or not, never through the ``SDINFO_EX`` grouping.
     """
     if json_int(obj.get("cmd")) != CMD_HUB_STORAGE:
         return None

@@ -563,5 +563,18 @@ def test_a_record_without_an_sd_status_has_no_state() -> None:
     assert (emmc.status_group, emmc.state, emmc.usable) == (None, None, None)
 
 
+def test_hub_storage_statuses_are_not_grouped() -> None:
+    """``emmc_status`` / ``usb_status`` stay raw: 1 and 26 mean empty there, not the
+    ``SDINFO_EX`` group 10."""
+    info = parse_hub_storage(
+        {"cmd": 55000, **synthetic_hub_storage(), "emmc_status": 1, "usb_status": 26}
+    )
+    assert info is not None
+    for medium, status in ((info.emmc, 1), (info.disk, 26)):
+        assert medium is not None
+        assert medium.work_status == status
+        assert (medium.status_group, medium.state, medium.usable) == (None, None, None)
+
+
 def test_cmd_sd_info_is_1144() -> None:
     assert CMD_SD_INFO == 1144

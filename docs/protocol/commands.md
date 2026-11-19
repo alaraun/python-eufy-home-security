@@ -585,6 +585,13 @@ The answer is a `0x0547` (the app parses it as `HbCard`):
 (the app shows them as MB, or ÷1000 as GB). The app shows a medium whose status is 1 or
 26 as empty (free = total) and a disk only when `hdd_exist` is 1.
 
+These statuses are not grouped like the `1144` status: the app reads `emmc_status` and
+`usb_status` only as empty (1 or 26) or not, and its storage summary for this record
+says "no storage" when both totals are 0 and "normal" otherwise, without reading either
+status. The codes are not the `1144` codes (there 1 and 26 fall into group 10), so the
+library gives this record no `status_group`, `state` or `usable` (None); `work_status`
+keeps the raw code.
+
 **Library API.** `station.async_get_storage()` sends it on such a station
 (`session.async_get_hub_storage()`), and returns a `StorageInfo` with `emmc` and, when
 `hdd_total` > 0 and `hdd_exist` is 1 (or absent), `disk`: `size_mib` = total, `used_mib`
