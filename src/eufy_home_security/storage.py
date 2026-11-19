@@ -40,6 +40,7 @@ from .cloud.const import (
 )
 from .cloud.models import REGION_KEY, CloudDevice, device_cache_entry
 from .devices.types import connects_on_demand
+from .p2p.transport import ConnectPath
 
 CACHE_VERSION = 2
 #: The public name of :data:`CACHE_VERSION`. A change without a migration from the
@@ -94,6 +95,9 @@ INSTALL_IDS_KEY: Final = "install_ids"
 _MIGRATED_VERSIONS: Final = (1,)
 # Top-level section of the session-replaced latch.
 _REPLACED = "replaced"
+# Per-station key of the last link path, and the values it is read as.
+_LINK_PATH = "link_path"
+_CONNECT_PATHS: Final = tuple(str(path) for path in ConnectPath)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -210,6 +214,7 @@ class SessionCache:
                                    "refresh_attempts": {"cipher": <epoch s>},
                                    "key_refresh": <epoch s>,
                                    "dsk": {"key": "…", "expiration": <epoch s>},
+                                   "link_path": "lan" | "rendezvous",
                                    "presets": {"<camera serial>": [{...}, …]}}},
          "refresh_attempts": {"owner": <epoch s>},
          "throttle": {"requests": <epoch s>, "login": {"<region>": <epoch s>},
@@ -498,6 +503,27 @@ class SessionCache:
 
     def set_station_cipher_id(self, serial: str, cipher_id: int) -> None:
         self.station(serial)["cipher_id"] = cipher_id
+
+    def link_path(self, serial: str) -> ConnectPath | None:
+        """How the last link to ``serial`` came up, as stored by :meth:`set_link_path`;
+        None when none is stored or the stored value is not a known path."""
+        stations = self._doc.get("stations")
+        entry = stations.get(serial) if isinstance(stations, dict) else None
+        value = entry.get(_LINK_PATH) if isinstance(entry, dict) else None
+        return ConnectPath(value) if value in _CONNECT_PATHS else None
+
+    def set_link_path(self, serial: str, path: ConnectPath) -> bool:
+        """Store how the last link to ``serial`` came up; whether the stored path changed."""
+        if self.link_path(serial) is path:
+            return False
+        self.station(serial)[_LINK_PATH] = str(path)
+        return True
+
+    def drop_link_path(self, serial: str) -> bool:
+        """Forget ``serial``'s last link path; whether one was stored."""
+        stations = self._doc.get("stations")
+        entry = stations.get(serial) if isinstance(stations, dict) else None
+        return isinstance(entry, dict) and entry.pop(_LINK_PATH, None) is not None
 
     # ── device list ──────────────────────────────────────────────────────────
 

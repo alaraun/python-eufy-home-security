@@ -43,7 +43,9 @@ class SessionStats:
     connect_path: str | None
     """How the current or last link was set up: ``"lan"`` (LAN discovery) or
     ``"rendezvous"`` (a punch toward an address the station's rendezvous servers named,
-    :class:`~..transport.ConnectPath`); None before the first link."""
+    :class:`~..transport.ConnectPath`). Before the session's first link, the path it was
+    built with (:class:`~...client.EufySecurity` passes the one its cache kept from an
+    earlier run); None when unknown."""
     connects_by_path: Mapping[str, int]
     """Links set up, by :attr:`connect_path` value."""
     handshake_failures: int

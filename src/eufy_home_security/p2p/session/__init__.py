@@ -378,9 +378,14 @@ def _learns_host(peer: str, searched: Collection[str]) -> bool:
 class WakeProvider(Protocol):
     """Supplies the :class:`~..transport.Wake` for a rendezvous connect (its rendezvous
     servers and a device session key), or None when it cannot be built (no DSK yet, a
-    cloud outage). Called before each connection attempt of an on-demand session."""
+    cloud outage). Called before each connection attempt.
 
-    async def __call__(self) -> Wake | None: ...
+    With ``cached_only`` it answers without a cloud call: the wake when a fresh DSK is
+    already held, else None (never a fetch). A held station's session asks so when the
+    rendezvous is optional (:meth:`StationSession._rendezvous_on`).
+    """
+
+    async def __call__(self, *, cached_only: bool = False) -> Wake | None: ...
 
 
 class CredentialProvider(Protocol):
@@ -499,9 +504,8 @@ class StationSession:
         # block under 255 and its channel: params.standalone_aliases).
         # on_demand: never hold the session (a battery station): async_start connects
         # nothing, nothing reconnects, and a link idle for idle_close seconds is closed.
-        # wake_provider: the rendezvous connect's material. An on-demand station runs it
-        # from the first discovery attempt (it wakes the station); a held one from the
-        # second, or from the first when its last link came through it (connect_path).
+        # wake_provider: the rendezvous connect's material (see _rendezvous_on).
+        # connect_path: how the last link came up, also one of an earlier run.
         # extra_hosts: searched by unicast beside the host (or broadcast).
         # key_refresh: where the stale-key latch lives (in memory when None).
         # cloud_problems_reported: the owner delivers cloud errors as CloudProblem, so
@@ -729,7 +733,8 @@ class StationSession:
 
     @property
     def connect_path(self) -> ConnectPath | None:
-        """How the current or last link was set up; None before the first."""
+        """How the current or last link was set up (before this session's first link:
+        the ``connect_path`` it was built with); None when unknown."""
         return self._connect_path
 
     @property
@@ -2646,19 +2651,22 @@ class StationSession:
     # ── connection internals ─────────────────────────────────────────────────
 
     def _rendezvous_on(self, attempt: int) -> bool:
-        """Whether discovery attempt ``attempt`` (from 1) runs the rendezvous connect.
+        """Whether discovery attempt ``attempt`` (from 1) runs the rendezvous connect even
+        when its DSK must be fetched from the cloud.
 
         An on-demand station runs it on every attempt: it is what wakes the station.
         A held station runs it once LAN discovery has failed an attempt, or from the
-        first attempt when its last link came through it, so a station the LAN reaches
-        costs no cloud call and no server traffic. The eufy app runs both from the
-        start; waiting one attempt is the library's choice.
+        first attempt when its last link came through it. Otherwise the attempt runs it
+        only with a DSK the provider already holds (``cached_only``), so a station the
+        LAN reaches costs no cloud call. The eufy app runs both from the start; the
+        library does so whenever that needs no cloud call. The LAN search runs on every
+        attempt.
         """
         return self.on_demand or attempt > 1 or self._connect_path is ConnectPath.RENDEZVOUS
 
-    async def _wake(self) -> Wake | None:
+    async def _wake(self, *, cached_only: bool) -> Wake | None:
         """The rendezvous material for this connection attempt, or None when it cannot
-        be built.
+        be built (with ``cached_only``: when it would need a cloud call).
 
         A failure to fetch the DSK (a cloud outage) is not fatal: discovery falls back
         to a plain ``LAN_SEARCH``, which still finds the station if it happens to be awake.
@@ -2669,7 +2677,7 @@ class StationSession:
         if self._wake_provider is None:
             return None
         try:
-            wake = await self._wake_provider()
+            wake = await self._wake_provider(cached_only=cached_only)
         except SessionReplacedError:
             if self.on_demand:
                 raise
@@ -2685,6 +2693,8 @@ class StationSession:
             return None
         if wake is not None:
             register_secret_bytes(wake.dsk)
+        elif cached_only:
+            _LOGGER.debug("%s: no cached rendezvous material; LAN discovery first", self._log_name)
         return wake
 
     async def _establish(self, creds: P2PCredentials | None) -> P2PCredentials:
@@ -2709,7 +2719,7 @@ class StationSession:
                 Address(self._host or "broadcast"),
                 self._local_port or "ephemeral",
             )
-            wake = await self._wake() if self._rendezvous_on(attempt) else None
+            wake = await self._wake(cached_only=not self._rendezvous_on(attempt))
             transport = PPPPTransport(on_chunk=self._on_chunk, on_lost=self._on_lost)
             try:
                 did = await transport.connect(

@@ -2793,7 +2793,7 @@ async def test_concurrent_connects_fetch_one_dsk_per_station(
 async def test_every_station_gets_the_rendezvous_and_its_reported_address(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A held station has the rendezvous connect as well (after a failed LAN attempt);
+    """A held station has the rendezvous connect as well (see ``_rendezvous_on``);
     one without a configured or cloud address also searches the address it reports."""
     monkeypatch.setattr(CloudDevice, "rendezvous_servers", ("192.0.2.1",))
     garage = garage_device() | {
@@ -2810,6 +2810,127 @@ async def test_every_station_gets_the_rendezvous_and_its_reported_address(
         assert (home.session.extra_hosts, other.session.extra_hosts) == ((), ("192.0.2.77",))
         assert other.lan_path.host_source is HostSource.DEVICE
         assert home.lan_path.host_source is HostSource.CLOUD
+        await eufy.async_close()
+
+
+async def test_a_cached_only_wake_never_calls_the_cloud(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``cached_only``: the wake from a fresh cached DSK, else None, with no fetch and
+    no cloud problem either way."""
+    monkeypatch.setattr(CloudDevice, "rendezvous_servers", ("192.0.2.1",))
+    async with aiohttp.ClientSession() as http:
+        cloud = FakeCloud()
+        eufy = account(http, cloud)
+        events: list[Event] = []
+        eufy.subscribe(events.append)
+        wake = eufy._wake_provider(CloudDevice.from_api(station_device()))
+        serial = SYNTHETIC.station_sn
+        sent = list(cloud.calls)
+        assert await wake(cached_only=True) is None
+        eufy.cache.set_dsk_key(serial, "cached-dsk", time.time() + 3600)
+        assert await wake(cached_only=True) == Wake(servers=("192.0.2.1",), dsk="cached-dsk")
+        eufy.cache.set_dsk_key(serial, "stale-dsk", time.time() + 1)  # inside the margin
+        assert await wake(cached_only=True) is None
+        assert cloud.calls == sent
+        assert _problems(events) == []
+        await eufy.async_close()
+
+
+async def test_a_cached_only_wake_without_servers_is_none() -> None:
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, FakeCloud())
+        eufy.cache.set_dsk_key(SYNTHETIC.station_sn, "cached-dsk", time.time() + 3600)
+        wake = eufy._wake_provider(CloudDevice.from_api(station_device()))
+        assert await wake(cached_only=True) is None
+        await eufy.async_close()
+
+
+def _link_path_store(cloud: FakeCloud, paths: Mapping[str, object]) -> MemoryStore:
+    """A warm store whose station entries hold ``paths`` as their last link path."""
+    store = warm_store(email=SYNTHETIC.email, cloud=cloud)
+    assert store.data is not None
+    for serial, path in paths.items():
+        store.data.setdefault("stations", {}).setdefault(serial, {})["link_path"] = path
+    return store
+
+
+async def test_a_station_session_starts_from_the_cached_link_path() -> None:
+    """The path a station's last link took, kept in the cache, is the session's initial
+    one: a station last reached through its servers goes there on the first attempt
+    after a restart."""
+    cloud = two_stations()
+    store = _link_path_store(cloud, {SYNTHETIC.station_sn: "rendezvous"})
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud, store=store)
+        stations = {s.serial: s for s in await eufy.async_discover()}
+        assert stations[SYNTHETIC.station_sn].session.connect_path is ConnectPath.RENDEZVOUS
+        assert stations[SYNTHETIC.station_sn].session._rendezvous_on(1)
+        assert stations[OTHER_STATION_SN].session.connect_path is None  # none stored
+        await eufy.async_close()
+
+
+async def test_a_link_records_its_path_in_the_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A station kept as last reached through its servers that the LAN answers is
+    stored as ``"lan"`` once its link is up, and survives the close."""
+    fake = FakeStation()
+    await fake.start()
+    cloud = FakeCloud.for_stations(fake)
+    store = _link_path_store(cloud, {fake.serial: "rendezvous"})
+    try:
+        eufy = build_eufy_security(
+            email=SYNTHETIC.email, store=store, cloud=cloud, stations={fake.serial: fake}
+        )
+        await eufy.async_discover()
+        assert await eufy.async_start(push=False) == {}
+        await wait_for(lambda: eufy.cache.link_path(fake.serial) is ConnectPath.LAN)
+        await eufy.async_close()
+    finally:
+        fake.stop()
+    assert store.data is not None
+    assert store.data["stations"][fake.serial]["link_path"] == "lan"
+
+
+async def test_the_link_path_is_saved_only_when_it_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saves: list[float] = []
+    monkeypatch.setattr(
+        storage_module.SessionCache, "schedule_save", lambda self, delay=0.0: saves.append(delay)
+    )
+    cloud = two_stations()
+    store = _link_path_store(cloud, {SYNTHETIC.station_sn: "lan"})
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud, store=store)
+        stations = {s.serial: s for s in await eufy.async_discover()}
+        session = stations[SYNTHETIC.station_sn].session
+        up = ConnectionChanged(station_sn=SYNTHETIC.station_sn, connected=True)
+        eufy._on_station_event(up)  # still lan
+        assert saves == []
+        session._connect_path = ConnectPath.RENDEZVOUS
+        eufy._on_station_event(up)
+        eufy._on_station_event(up)
+        assert len(saves) == 1
+        assert eufy.cache.link_path(SYNTHETIC.station_sn) is ConnectPath.RENDEZVOUS
+        session._connect_path = ConnectPath.LAN
+        eufy._on_station_event(ConnectionChanged(station_sn=SYNTHETIC.station_sn, connected=False))
+        eufy._on_station_event(  # a link of a station this client did not build
+            ConnectionChanged(station_sn="T8030P2000099999", connected=True)
+        )
+        assert len(saves) == 1
+        await eufy.async_close()
+
+
+async def test_a_station_the_list_no_longer_names_loses_its_link_path() -> None:
+    cloud = FakeCloud(devices=[station_device(), camera_device()])
+    store = _link_path_store(
+        cloud, {SYNTHETIC.station_sn: "rendezvous", OTHER_STATION_SN: "rendezvous"}
+    )
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud, store=store)
+        await eufy.async_discover()
+        assert eufy.cache.link_path(SYNTHETIC.station_sn) is ConnectPath.RENDEZVOUS
+        assert eufy.cache.link_path(OTHER_STATION_SN) is None
+        assert store.data is not None
+        assert "link_path" not in store.data["stations"][OTHER_STATION_SN]  # saved at once
         await eufy.async_close()
 
 

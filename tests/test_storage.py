@@ -15,6 +15,7 @@ from eufy_home_security import storage
 from eufy_home_security.cloud.api import EufyCloudApi
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY
 from eufy_home_security.exceptions import LoginLimitedError
+from eufy_home_security.p2p.transport import ConnectPath
 from eufy_home_security.storage import (
     CACHE_VERSION,
     JsonFileStore,
@@ -112,6 +113,49 @@ async def test_a_station_entry_with_a_key_the_cache_does_not_read_still_loads() 
     summary = reloaded.redacted_summary()["stations"]["T8030***2345"]
     assert summary["cipher_cached"] is True
     assert "session_key_state" not in summary
+
+
+async def test_a_station_link_path_persists_and_reports_a_change() -> None:
+    store = MemoryStore()
+    cache = SessionCache(store, SYNTHETIC.email)
+    await cache.async_load()
+    serial = SYNTHETIC.station_sn
+    assert cache.link_path(serial) is None
+    assert serial not in cache.station_serials()  # a read creates no entry
+    assert cache.set_link_path(serial, ConnectPath.RENDEZVOUS)
+    assert not cache.set_link_path(serial, ConnectPath.RENDEZVOUS)  # unchanged
+    await cache.async_save()
+
+    reloaded = SessionCache(store, SYNTHETIC.email)
+    await reloaded.async_load()
+    assert reloaded.link_path(serial) is ConnectPath.RENDEZVOUS
+    assert reloaded.set_link_path(serial, ConnectPath.LAN)
+    assert reloaded.link_path(serial) is ConnectPath.LAN
+    assert reloaded.drop_link_path(serial)
+    assert not reloaded.drop_link_path(serial)
+    assert reloaded.link_path(serial) is None
+
+
+@pytest.mark.parametrize("stored", [None, "relay", 1, "", ["lan"]])
+async def test_a_missing_or_unknown_link_path_reads_as_none(stored: object) -> None:
+    """A cache written before the link path was kept, or by a later build that knows
+    other paths, loads as it is; only a known path is read."""
+    serial = SYNTHETIC.station_sn
+    entry: dict[str, object] = {"cipher_id": 40}
+    if stored is not None:
+        entry["link_path"] = stored
+    store = MemoryStore(
+        {
+            "version": CACHE_VERSION,
+            "account": SYNTHETIC.email,
+            "stations": {serial: entry},
+        }
+    )
+    cache = SessionCache(store, SYNTHETIC.email)
+    await cache.async_load()
+    assert cache.link_path(serial) is None
+    assert cache.station_named_cipher_id(serial) == 40  # the rest of the entry is kept
+    assert cache.set_link_path(serial, ConnectPath.LAN)  # an unknown value is replaced
 
 
 async def test_key_refresh_slow_retry_window() -> None:

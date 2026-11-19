@@ -16,7 +16,7 @@ import asyncio
 import contextlib
 import logging
 import math
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from types import MappingProxyType, TracebackType
 from typing import TYPE_CHECKING, Any, Literal, Self, cast
@@ -43,6 +43,7 @@ from .events import (
     AlarmChanged,
     AlarmTracker,
     CloudProblem,
+    ConnectionChanged,
     CredentialsRefreshed,
     Event,
     EventBus,
@@ -669,6 +670,7 @@ class EufySecurity:
                 cloud_problems_reported=True,
                 max_sessions=self._max_sessions,
                 extra_hosts=extra_search_hosts(device, self._search_host(device)),
+                connect_path=self.cache.link_path(serial),
             )
             station = Station(
                 device,
@@ -682,8 +684,27 @@ class EufySecurity:
             station.apply_cloud_device(device)  # the cached snapshot, until a fresh one
             self.stations[serial] = station
             self._unsubs.append(station.subscribe(self._on_station_event))
+        await self._forget_link_paths({d.device_sn for d in candidates})
         self._report_stations_changed(first, built, candidates)
         return list(self.stations.values())
+
+    async def _forget_link_paths(self, listed: Collection[str]) -> None:
+        """Drop the kept link path of every station the device list no longer names."""
+        dropped = [
+            serial
+            for serial in self.cache.station_serials()
+            if serial not in listed and self.cache.drop_link_path(serial)
+        ]
+        if dropped:
+            await self.cache.async_save()
+
+    def _note_link_path(self, serial: str) -> None:
+        """Keep how a built station's link came up, for its session after a restart
+        (saved only when it changed)."""
+        station = self.stations.get(serial)
+        path = None if station is None else station.session.connect_path
+        if path is not None and self.cache.set_link_path(serial, path):
+            self.cache.schedule_save()
 
     def _login_country_code(self) -> str | None:
         """The code of the country the account logs in with; None while unknown."""
@@ -822,19 +843,22 @@ class EufySecurity:
     def _wake_provider(self, device: CloudDevice, *, login: bool = True) -> WakeProvider:
         """A :class:`~.p2p.session.WakeProvider` for a station's rendezvous connect (every
         station; the session decides when it runs): its rendezvous servers (from the
-        cloud entry) and a cached-or-fetched DSK. None without servers. A cloud failure
+        cloud entry) and a cached-or-fetched DSK. None without servers, and with
+        ``cached_only`` None without a fresh cached DSK (no cloud call). A cloud failure
         becomes a ``CloudProblem`` and returns None, so the connect falls back to LAN
         discovery; a replaced session is raised (an on-demand station fails at once).
         Without ``login`` the DSK fetch never logs in."""
         cloud, serial = self.cloud, device.device_sn
         servers = device.rendezvous_servers
 
-        async def provide() -> Wake | None:
+        async def provide(*, cached_only: bool = False) -> Wake | None:
             if not servers:
                 return None
             await self._ensure_cache_loaded()
             if dsk := cloud.cached_dsk_key(serial):
                 return Wake(servers=servers, dsk=dsk)  # no cloud call: no success either
+            if cached_only:
+                return None
             try:
                 dsk = await cloud.async_get_dsk_key(serial, login=login)
             except SessionReplacedError as err:
@@ -1399,6 +1423,8 @@ class EufySecurity:
             self.cache.schedule_save()
 
     def _on_station_event(self, event: Event) -> None:
+        if isinstance(event, ConnectionChanged) and event.connected:
+            self._note_link_path(event.station_sn)
         if isinstance(event, SecurityEvent):
             self._deliver(event)
             return

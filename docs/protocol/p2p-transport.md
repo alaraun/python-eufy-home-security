@@ -165,7 +165,11 @@ rendezvous servers in the cloud's `app_conn`):
 | station | rendezvous runs | why |
 |---|---|---|
 | reached on demand (a battery station) | every discovery attempt, from the first | it is what wakes the station |
-| held (mains) | from the second attempt, after a LAN attempt (6 s) failed; from the first when its last link came through the servers | a station the LAN reaches costs no cloud call and no server traffic; the app runs both from the start, waiting one attempt is the library's choice |
+| held (mains), last link through the servers | every attempt, from the first (the DSK fetched when none is cached) | the station is not on the LAN path |
+| held (mains), a fresh DSK cached | every attempt, from the first | no cloud call needed: both run from the start, as the app runs them |
+| held (mains), no DSK cached | from the second attempt, after a LAN attempt (6 s) failed | a station the LAN reaches costs no cloud call; waiting one attempt is the library's choice |
+
+LAN discovery runs on every attempt, beside the rendezvous connect when that runs.
 
 It needs the station's DSK from the cloud (cached until it expires, about 30-60 min;
 one `get_dsk_keys` per station per expiry, shared by concurrent connects, its failure
@@ -176,11 +180,15 @@ on LAN discovery.
 way the links came up: `"rendezvous"` when the `PUNCH_PKT` came from an address the
 client punched (even a host it also searched by unicast: behind a stateful gateway the
 punch is what admits the reply), `"lan"` otherwise. A held station whose last link
-counted as rendezvous runs the rendezvous connect from its first attempt, so it skips
-the 6 s LAN-only first attempt (the LAN search still runs alongside); a station on the
-LAN usually answers the search before any `PUNCH_TO` and counts as `"lan"` again on its
-next link. A link's address becomes the next search's host when it is a LAN address or
-one discovery already searches by unicast; a public one does not.
+counted as rendezvous, or whose DSK is cached, runs the rendezvous connect from its
+first attempt, so it skips the 6 s LAN-only first attempt; a station on the LAN usually
+answers the search before any `PUNCH_TO` and counts as `"lan"` again on its next link.
+`EufySecurity` keeps each station's last path in its session cache
+(`stations.<serial>.link_path`, saved when it changes) and builds the station's session
+with it, so the first connect after a restart (a CLI run, a Home Assistant restart)
+already knows it; a station the device list no longer names loses it. A link's address
+becomes the next search's host when it is a LAN address or one discovery already
+searches by unicast; a public one does not.
 
 **Setup probe** (`EufySecurity.async_station_choices()`, the library's): a mains
 station that did not answer the LAN probe and lists rendezvous servers gets the

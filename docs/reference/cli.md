@@ -9,7 +9,7 @@ public calls — and doubles as the tool for verifying devices.
 |---|---|
 | account | `--email`, else `$EUFY_EMAIL`, else the account the session cache belongs to — so after one login neither is needed. |
 | password | `$EUFY_PASSWORD`, else the password cached by the last successful login, else a prompt — shown only if a login actually happens. A cached password the cloud rejects is forgotten, so the next run asks. **Never a flag** (it would land in shell history and process lists). |
-| session cache | `--store PATH`, default `$XDG_CONFIG_HOME/eufy-security/cache.json` (`~/.config/…`), mode 0600. Holds the cloud session, the account password, the install's `openudid`, the device list, and per station the owner's account id and cipher key — so only the first run logs in. |
+| session cache | `--store PATH`, default `$XDG_CONFIG_HOME/eufy-security/cache.json` (`~/.config/…`), mode 0600. Holds the cloud session, the account password, the install's `openudid`, the device list, and per station the owner's account id, cipher key and the path its last link took — so only the first run logs in, and a station last reached through its rendezvous servers is connected through them from the first attempt. |
 
 Do not pass the password through `export $(...)` word-splitting: quotes added by
 `shlex.quote` are kept literally, and every failed login counts toward the cloud's

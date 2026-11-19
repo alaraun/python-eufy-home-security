@@ -66,12 +66,23 @@ class Attempts:
 
 
 class WakeSource:
-    def __init__(self, error: Exception | None = None) -> None:
-        self.calls = 0
-        self.error = error
+    """A wake provider holding a DSK when ``cached``; any other ask fetches one (a
+    cloud call), failing with ``error`` when set."""
 
-    async def __call__(self) -> Wake | None:
-        self.calls += 1
+    def __init__(self, error: Exception | None = None, *, cached: bool = False) -> None:
+        self.asks: list[bool] = []
+        """``cached_only`` of each call, in order."""
+        self.fetches = 0
+        self.error = error
+        self.cached = cached
+
+    async def __call__(self, *, cached_only: bool = False) -> Wake | None:
+        self.asks.append(cached_only)
+        if self.cached:
+            return WAKE
+        if cached_only:
+            return None
+        self.fetches += 1
         if self.error is not None:
             raise self.error
         return WAKE
@@ -95,7 +106,7 @@ def _session(
     )
 
 
-async def test_a_held_station_the_lan_reaches_never_asks_for_a_rendezvous(
+async def test_a_held_station_without_a_cached_dsk_searches_the_lan_first(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     attempts = Attempts(monkeypatch)
@@ -106,7 +117,26 @@ async def test_a_held_station_the_lan_reaches_never_asks_for_a_rendezvous(
     finally:
         await session.async_close()
     assert attempts.wakes == [False]
-    assert wake.calls == 0  # no cloud call for a station the LAN reaches
+    assert wake.asks == [True]  # a cached DSK only
+    assert wake.fetches == 0  # no cloud call for a station the LAN reaches
+
+
+async def test_a_held_station_with_a_cached_dsk_runs_the_rendezvous_from_the_first_attempt(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both searches from the start, as the eufy app runs them, when that needs no cloud
+    call; the LAN answering first makes the link a LAN one."""
+    attempts = Attempts(monkeypatch)
+    wake = WakeSource(cached=True)
+    session = _session(station, wake)
+    try:
+        await session.async_connect()
+    finally:
+        await session.async_close()
+    assert attempts.wakes == [True]
+    assert wake.asks == [True]
+    assert wake.fetches == 0
+    assert session.connect_path is ConnectPath.LAN
 
 
 async def test_a_held_station_adds_the_rendezvous_after_a_lan_attempt_fails(
@@ -120,19 +150,22 @@ async def test_a_held_station_adds_the_rendezvous_after_a_lan_attempt_fails(
     finally:
         await session.async_close()
     assert attempts.wakes == [False, True, True]
-    assert wake.calls == 2
+    assert wake.asks == [True, False, False]
+    assert wake.fetches == 2
 
 
 async def test_an_on_demand_station_runs_the_rendezvous_from_the_first_attempt(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     attempts = Attempts(monkeypatch)
-    session = _session(station, WakeSource(), on_demand=True)
+    wake = WakeSource()
+    session = _session(station, wake, on_demand=True)
     try:
         await session.async_connect()
     finally:
         await session.async_close()
     assert attempts.wakes == [True]
+    assert wake.asks == [False]  # fetched when not cached: it is what wakes the station
 
 
 async def test_a_station_last_reached_through_the_servers_goes_there_at_once(
@@ -140,7 +173,8 @@ async def test_a_station_last_reached_through_the_servers_goes_there_at_once(
 ) -> None:
     attempts = Attempts(monkeypatch, fail=1)
     attempts.path = ConnectPath.RENDEZVOUS
-    session = _session(station, WakeSource())
+    wake = WakeSource()
+    session = _session(station, wake)
     try:
         paths = []
         await session.async_connect()
@@ -156,9 +190,29 @@ async def test_a_station_last_reached_through_the_servers_goes_there_at_once(
     assert paths == [ConnectPath.RENDEZVOUS, ConnectPath.LAN]
     # LAN first; then straight to the servers after the rendezvous link; LAN first again.
     assert attempts.wakes == [False, True, True, False]
+    assert wake.asks == [True, False, False, True]  # fetched when it was the last path
     stats = session.stats()
     assert stats.connect_path == "lan"
     assert stats.connects_by_path == {"rendezvous": 1, "lan": 2}
+
+
+async def test_a_session_given_the_rendezvous_path_fetches_its_dsk_on_the_first_attempt(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The last link path an owner kept from an earlier run (``connect_path``) is read
+    as the session's own: the servers at once, the DSK fetched when none is cached."""
+    attempts = Attempts(monkeypatch)
+    wake = WakeSource()
+    session = _session(station, wake, connect_path=ConnectPath.RENDEZVOUS)
+    assert session.stats().connect_path == "rendezvous"
+    try:
+        await session.async_connect()
+    finally:
+        await session.async_close()
+    assert attempts.wakes == [True]
+    assert wake.asks == [False]
+    assert wake.fetches == 1
+    assert session.connect_path is ConnectPath.LAN  # the LAN answered: lan from now on
 
 
 def test_no_connect_path_before_the_first_link(station: FakeStation) -> None:
@@ -179,7 +233,7 @@ async def test_a_held_station_without_cloud_session_keeps_searching_the_lan(
     finally:
         await session.async_close()
     assert attempts.wakes == [False, False]
-    assert wake.calls == 1
+    assert wake.fetches == 1
 
 
 async def test_an_on_demand_station_without_cloud_session_fails_at_once(

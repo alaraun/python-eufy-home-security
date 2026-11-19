@@ -170,7 +170,7 @@ provides where it lives.
 | `cloud.pending_logins` | per login scope, the pending login a verification-code answer is sent inside: key ident, shared key, pending auth token and user id, the password wrap's client public key and ECDH secret, the `ab`, expiry (15 min) | when a login raises a verification-code challenge with a pending token; cleared by that scope's next successful login or a refused answer |
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
-| `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`) and its RSA private key when served (`rsa_ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), the key-refresh latch, a standalone camera's device session key (`dsk`, with its expiry) and each camera's preset slots (`presets`) | keys on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass. `dsk` when a wake needs it and less than 5 min of it remain; `presets` on each preset read that differs |
+| `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`) and its RSA private key when served (`rsa_ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), the key-refresh latch, a standalone camera's device session key (`dsk`, with its expiry), how its last link came up (`link_path`: `lan` / `rendezvous`) and each camera's preset slots (`presets`) | keys on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass. `dsk` when a wake needs it and less than 5 min of it remain; `link_path` when a link comes up on another path than the stored one, dropped when the device list no longer names the station (a cache without it loads as before); `presets` on each preset read that differs |
 | `devices` | the `get_devs_list` entries, each reduced to the fields `CloudDevice` reads (serials, type, name, channel, DID, IP, firmware versions, `app_conn`, the product code `device_new_pn`, the member's `admin_user_id` and `member_type`, and `cloud_region`, the region that listed it); the cloud's `params` snapshot for a station and a device reached on demand, and a station's `time_zone`. The member's e-mail and phone, MAC addresses and the rest never reach the store | only on `async_discover(refresh=True)`; an entry stored with more fields is reduced on load |
 | `push` | FCM credentials, the registered token, recent push ids and guard-mode times | on push start; delivery state written at most 30 s after it changes, and on close |
 | `refresh_attempts` | when the owner id (account-wide) and each station's cipher key were last force-fetched | with those fetches |
@@ -569,11 +569,14 @@ What the library relies on:
   and the gateway) admits replies by connection tracking; a stateless filter still needs
   the station's UDP admitted, as above. What it needs besides is outbound UDP to the
   servers (port 32100, also 32101-32102) and from Home Assistant to the station, and a
-  cloud DSK per station (cached). A held station tries it after one failed LAN attempt,
-  so its first connect after a start takes about 6 s longer; a reconnect goes to the
-  servers at once only when the last link counted as `"rendezvous"`. The integration
-  does nothing for it; `stats().connect_path` says which path a station's link took
-  (`"lan"` / `"rendezvous"`), worth showing in diagnostics.
+  cloud DSK per station (cached). A held station runs it beside the LAN search from
+  the first attempt when its last link counted as `"rendezvous"` (kept in the session
+  cache across restarts) or a fresh DSK is cached; otherwise after one failed LAN
+  attempt, so a station that never reached the servers needs no cloud call, and only
+  its very first connect takes about 6 s longer. The integration does nothing for it;
+  `stats().connect_path` says which path a station's link took (`"lan"` /
+  `"rendezvous"`; before the first link of a run, the one kept from the last run),
+  worth showing in diagnostics.
 - **Without a configured or cloud address**, discovery also searches the LAN address the
   station reports (parameter 1176) by unicast, beside the broadcast; its `LanPath` shows
   `host_source` `device` and still warns `broadcast_only`: that address follows the
