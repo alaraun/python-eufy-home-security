@@ -157,6 +157,23 @@ async def test_a_blocked_lan_reply_is_kept_with_the_link_path() -> None:
     assert not reloaded.drop_link_path(serial)
 
 
+@pytest.mark.parametrize("path", [None, "relay"])
+async def test_a_lone_blocked_lan_reply_reads_as_unset_and_is_dropped(path: str | None) -> None:
+    """A stored ``true`` without a known link path beside it (a hand-edited or later
+    cache) counts for nothing, and dropping the link path removes it as a change."""
+    cache = SessionCache(MemoryStore(), SYNTHETIC.email)
+    await cache.async_load()
+    serial = SYNTHETIC.station_sn
+    entry = cache.station(serial)
+    entry["lan_reply_blocked"] = True
+    if path is not None:
+        entry["link_path"] = path
+    assert cache.lan_reply_blocked(serial) is False
+    assert cache.drop_link_path(serial)
+    assert "lan_reply_blocked" not in entry
+    assert not cache.drop_link_path(serial)
+
+
 @pytest.mark.parametrize("stored", [None, 1, "true", [True]])
 async def test_a_blocked_lan_reply_reads_only_true_as_set(stored: object) -> None:
     store = MemoryStore()

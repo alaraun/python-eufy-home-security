@@ -518,10 +518,10 @@ class SessionCache:
     def lan_reply_blocked(self, serial: str) -> bool:
         """Whether the last link to ``serial`` needed a punch because the station's LAN
         reply was blocked, as stored by :meth:`set_link_path`; only a stored ``true``
-        counts."""
-        stations = self._doc.get("stations")
-        entry = stations.get(serial) if isinstance(stations, dict) else None
-        return isinstance(entry, dict) and entry.get(_LAN_REPLY_BLOCKED) is True
+        beside a known :meth:`link_path` counts."""
+        if self.link_path(serial) is None:
+            return False
+        return self._doc["stations"][serial].get(_LAN_REPLY_BLOCKED) is True
 
     def set_link_path(
         self, serial: str, path: ConnectPath, *, lan_reply_blocked: bool = False
@@ -539,14 +539,15 @@ class SessionCache:
         return True
 
     def drop_link_path(self, serial: str) -> bool:
-        """Forget ``serial``'s last link path (and its blocked-reply flag); whether a
-        path was stored."""
+        """Forget ``serial``'s last link path and its blocked-reply flag; whether either
+        was stored."""
         stations = self._doc.get("stations")
         entry = stations.get(serial) if isinstance(stations, dict) else None
         if not isinstance(entry, dict):
             return False
-        entry.pop(_LAN_REPLY_BLOCKED, None)
-        return entry.pop(_LINK_PATH, None) is not None
+        flag = entry.pop(_LAN_REPLY_BLOCKED, None)
+        path = entry.pop(_LINK_PATH, None)
+        return flag is not None or path is not None
 
     # ── device list ──────────────────────────────────────────────────────────
 
