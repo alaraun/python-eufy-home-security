@@ -140,7 +140,8 @@ client        → station:R           PUNCH_PKT echo, then P2P_RDY / DRW / ALIVE
   `255.255.255.255` are skipped, as the app skips them; the rest of `0.0.0.0/8`,
   loopback, multicast, link-local and other reserved addresses and the client's own
   socket are skipped too (a subnet's broadcast address is not: the station's netmask is
-  unknown), at most 8 distinct addresses are punched per connect, and each at most once
+  unknown), at most 8 distinct addresses are punched (or held back for the on-link
+  grace below) per connect, and each at most once
   per discovery round however many servers name it (the library's bounds). A `PUNCH_TO`
   is taken only from a server the client sent its request to, and only before the
   session is up.

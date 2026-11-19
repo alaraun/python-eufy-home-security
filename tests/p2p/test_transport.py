@@ -1480,6 +1480,114 @@ async def test_a_connect_punches_a_bounded_number_of_addresses() -> None:
     assert punched.count(targets[0]) == 2 * transport_module.PUNCH_BURST
 
 
+async def test_on_link_punch_tos_after_the_grace_are_punched_each_round(
+    rendezvous: _Rendezvous, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once the grace has ended, the station's LAN address is punched in every later
+    round its servers name it, like any other address."""
+    monkeypatch.setattr(transport_module, "DISCOVERY_RETRY_INTERVAL", 0.2)
+    monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.3)
+    rendezvous.camera.did = Did.parse("EUPRAMA-654321-ZYXWV")  # never taken: rounds go on
+    transport = make_transport()
+    rendezvous.route(transport)
+    with pytest.raises(StationUnreachableError):
+        await transport.connect(
+            CAMERA_LAN,
+            port=rendezvous.camera_port,
+            expected_did=rendezvous.did,
+            timeout=1.0,
+            wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
+            local_networks=(OUR_LAN,),
+            on_link_grace=True,
+        )
+    lan = [
+        addr
+        for msg, addr, _ in rendezvous.sent
+        if msg == MsgType.PUNCH_PKT and addr[0] == CAMERA_LAN
+    ]
+    assert len(lan) >= 3 * transport_module.PUNCH_BURST  # the grace's end, then each round
+
+
+async def test_a_grace_ending_after_the_punch_was_taken_punches_nothing() -> None:
+    """The grace's timer can fire after a reply was taken but before the connect
+    resumed: the held addresses are then left alone."""
+    transport = make_transport()
+    punched = _discovering(transport, servers=frozenset({"192.0.2.1"}))
+    transport._local_networks = (OUR_LAN,)
+    assert transport._punch is not None
+    transport._punch.set_result((Did.parse(SYNTHETIC.did), b"", (CAMERA_LAN, 4000)))
+    transport._held_back = {(CAMERA_LAN, 4000): None}
+    transport._end_grace()
+    assert punched == []
+
+
+@pytest.mark.parametrize("end", ["close", "cancel", "timeout"])
+async def test_a_connect_ended_inside_the_grace_leaves_no_timer(
+    rendezvous: _Rendezvous, monkeypatch: pytest.MonkeyPatch, end: str
+) -> None:
+    """A connect closed, cancelled or timed out while an on-link address is held back
+    cancels the grace's timer, and that address is never punched."""
+    monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.4)
+    transport = make_transport()
+    rendezvous.route(transport)
+    task = asyncio.create_task(
+        transport.connect(
+            SEARCHED,
+            port=59999,
+            expected_did=rendezvous.did,
+            timeout=0.2 if end == "timeout" else 3.0,
+            wake=Wake(servers=("127.0.0.1",), dsk="x" * 8),
+            local_networks=(OUR_LAN,),
+            on_link_grace=True,
+        )
+    )
+    await asyncio.sleep(0.1)
+    timer = transport._grace_timer
+    assert timer is not None
+    assert transport._held_back  # the LAN address waits for the grace
+    if end == "close":
+        transport.close()
+    elif end == "cancel":
+        task.cancel()
+    with pytest.raises((asyncio.CancelledError, StationUnreachableError)):
+        await task
+    assert timer.cancelled()
+    await asyncio.sleep(0.4)
+    assert (CAMERA_LAN, rendezvous.camera_port) not in rendezvous.punched()
+
+
+async def test_the_grace_holds_back_no_more_addresses_than_may_still_be_punched(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """During the grace, held-back addresses count against :data:`MAX_PUNCH_TARGETS`
+    with those already punched; an address named again is held (and logged) once."""
+    caplog.set_level(logging.DEBUG, logger=transport_module.__name__)
+    transport = make_transport()
+    punched = _discovering(transport, servers=frozenset({"192.0.2.1"}))
+    transport._local_networks = (OUR_LAN,)
+    loop = asyncio.get_running_loop()
+    transport._grace_timer = loop.call_later(60, lambda: None)
+    cap = transport_module.MAX_PUNCH_TARGETS
+
+    def name(target: tuple[str, int]) -> None:
+        transport.datagram_received(
+            encode_packet(MsgType.PUNCH_TO, encode_sockaddr(*target)), ("192.0.2.1", 32100)
+        )
+
+    off_link = [("198.51.100.9", 4000 + n) for n in range(3)]
+    on_link = [(CAMERA_LAN, 5000 + n) for n in range(cap + 2)]
+    try:
+        for target in [*off_link, *on_link, on_link[0]]:
+            name(target)
+    finally:
+        transport._grace_timer.cancel()
+    assert list(transport._held_back) == on_link[: cap - len(off_link)]
+    held = [r for r in caplog.records if "is on this host's network" in r.getMessage()]
+    assert len(held) == cap - len(off_link)
+    transport._end_grace()
+    assert set(punched) == {*off_link, *on_link[: cap - len(off_link)]}
+
+
 async def test_an_extra_search_host_is_searched_and_answers(station: FakeStation) -> None:
     transport = make_transport()
     searched: list[tuple[str, int]] = []

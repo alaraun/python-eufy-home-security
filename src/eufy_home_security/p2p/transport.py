@@ -714,7 +714,8 @@ class PPPPTransport(asyncio.DatagramProtocol):
         (:meth:`_punchable`), at most :data:`MAX_PUNCH_TARGETS` addresses are punched
         per connect, and each at most once per discovery round, however many servers
         name it. During the on-link grace an address in this host's networks is held
-        back until :meth:`_end_grace` (see :meth:`connect`)."""
+        back until :meth:`_end_grace` (see :meth:`connect`); held addresses count
+        against :data:`MAX_PUNCH_TARGETS` (:meth:`_hold_back`)."""
         did = self._rendezvous_did
         if did is None or source not in self._servers:
             if self._throttle.should_log(("punch-to-source", source)):
@@ -731,15 +732,7 @@ class PPPPTransport(asyncio.DatagramProtocol):
         if not self._punchable(target):
             return
         if self._grace_timer is not None and self._on_local_network(target[0]):
-            if target not in self._held_back:
-                _LOGGER.debug(
-                    "PUNCH_TO %s:%d is on this host's network; punching it after %.1fs "
-                    "unless the LAN search is answered first",
-                    Address(target[0]),
-                    target[1],
-                    ON_LINK_PUNCH_GRACE,
-                )
-                self._held_back[target] = None
+            self._hold_back(target)
             return
         self._punch_target(target, did)
 
@@ -784,6 +777,29 @@ class PPPPTransport(asyncio.DatagramProtocol):
             return False
         return target != (self._our_ip, self.local_port)
 
+    def _hold_back(self, target: tuple[str, int]) -> None:
+        """Keep an on-link ``target`` for :meth:`_end_grace`, within the addresses
+        :data:`MAX_PUNCH_TARGETS` leaves after those already punched."""
+        if target in self._held_back:
+            return
+        if len(self._held_back) + len(self._punched) >= MAX_PUNCH_TARGETS:
+            if self._throttle.should_log("punch-cap"):
+                _LOGGER.debug(
+                    "PUNCH_TO %s:%d not held: %d addresses already are punched or held",
+                    Address(target[0]),
+                    target[1],
+                    MAX_PUNCH_TARGETS,
+                )
+            return
+        _LOGGER.debug(
+            "PUNCH_TO %s:%d is on this host's network; punching it after %.1fs "
+            "unless the LAN search is answered first",
+            Address(target[0]),
+            target[1],
+            ON_LINK_PUNCH_GRACE,
+        )
+        self._held_back[target] = None
+
     def _end_grace(self) -> None:
         """End the on-link grace: punch each address it held back, unless a reply was
         already taken."""
@@ -799,7 +815,6 @@ class PPPPTransport(asyncio.DatagramProtocol):
         if self._grace_timer is not None:
             self._grace_timer.cancel()
             self._grace_timer = None
-        self._held_back.clear()
 
     def _on_drw(self, payload: bytes) -> None:
         try:
