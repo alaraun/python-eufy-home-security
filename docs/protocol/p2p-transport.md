@@ -223,7 +223,8 @@ gets no grace (its wake is the punch), nor does an attempt whose networks are un
 
 That link counts as `"lan"` (media and commands run over the LAN), but the session
 records it as **LAN reply blocked** (`SessionStats.lan_reply_blocked`,
-`StationSession.lan_reply_blocked`): every connect of that station needs its rendezvous
+`StationSession.lan_reply_blocked`, and `network.PathWarning.LAN_REPLY_BLOCKED` on
+`Station.lan_path`): every connect of that station needs its rendezvous
 servers and a DSK, so it fails in an internet outage where a plain LAN link would not.
 While it is set, a reconnect runs the rendezvous connect from its first attempt. Each
 link sets it again: a later link from a LAN reply (a firewall rule added) clears it.

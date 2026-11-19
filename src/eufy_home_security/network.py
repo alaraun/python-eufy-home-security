@@ -16,6 +16,8 @@ in the cloud's snapshot) is searched by unicast beside the broadcast: the librar
 choice, the eufy app only broadcasts. A station on another network is reached through
 its rendezvous servers instead (``docs/protocol/p2p-transport.md``), which needs no
 firewall rule where every filter on the way admits replies by connection tracking.
+A station on this host's own network that links only through such a punch has its
+LAN replies dropped here (:attr:`PathWarning.LAN_REPLY_BLOCKED`).
 The cloud's device list often carries no LAN address for a station, or a public one,
 so the address worth advising on is where the station *answers* from:
 ``EufySecurity.async_probe_lan()`` runs one discovery and records it. Nothing in this
@@ -75,6 +77,13 @@ class PathWarning(StrEnum):
     NO_LAN_REPLY = "no_lan_reply"
     """The station did not answer LAN discovery: it is offline, on another network,
     or a firewall drops its replies."""
+    LAN_REPLY_BLOCKED = "lan_reply_blocked"
+    """The station is on one of this host's directly connected networks, but its
+    session's last link needed a punch through its rendezvous servers because its
+    replies to LAN discovery did not arrive (a firewall on this host drops them). The
+    link runs over the LAN, but every connect needs internet access, the servers and a
+    DSK. The fix names :attr:`LanPath.station_ip`: allow all UDP from it, or pin a local
+    port (:attr:`LanPath.local_port`) and allow UDP from it to that port."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -94,6 +103,9 @@ class LanPath:
     """The pinned local UDP port; 0 is an ephemeral port chosen per session."""
     answered: bool | None = None
     """Whether the station answered a discovery probe; None when none was run."""
+    lan_reply_blocked: bool = False
+    """Whether the session's last link needed a punch because the station's LAN reply
+    was blocked (:attr:`PathWarning.LAN_REPLY_BLOCKED`)."""
 
     @property
     def station_ip(self) -> str | None:
@@ -109,6 +121,8 @@ class LanPath:
             found.append(PathWarning.EPHEMERAL_PORT)
         if self.answered is False:
             found.append(PathWarning.NO_LAN_REPLY)
+        if self.lan_reply_blocked:
+            found.append(PathWarning.LAN_REPLY_BLOCKED)
         if self.host is not None and (
             (self.observed_ip is not None and self.observed_ip != self.host)
             or (
@@ -138,10 +152,12 @@ def lan_path_for(
     search_host: str | None,
     local_port: int,
     learned_host: str | None = None,
+    lan_reply_blocked: bool = False,
 ) -> LanPath:
     """The :class:`LanPath` of ``device`` when discovery searches ``search_host``.
 
-    ``learned_host`` is where an established session found the station.
+    ``learned_host`` is where an established session found the station, and
+    ``lan_reply_blocked`` whether its link needed a punch for a blocked LAN reply.
     """
     cloud_ip = lan_address(device.local_ip)
     reported = extra_search_hosts(device, search_host)
@@ -161,6 +177,7 @@ def lan_path_for(
         cloud_ip=cloud_ip,
         observed_ip=learned_host if learned_host != search_host else None,
         local_port=local_port,
+        lan_reply_blocked=lan_reply_blocked,
     )
 
 

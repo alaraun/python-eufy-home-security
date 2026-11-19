@@ -702,6 +702,32 @@ def test_render_network_advises_on_a_reported_address_and_the_servers() -> None:
     assert "no firewall rule is needed" in out
 
 
+@pytest.mark.parametrize(
+    ("local_port", "fix"),
+    [
+        (0, "allow all UDP from 192.168.7.21, or pin a local port"),
+        (32109, "allow UDP from 192.168.7.21 to this host's port 32109"),
+    ],
+)
+def test_render_network_advises_on_a_blocked_lan_reply(local_port: int, fix: str) -> None:
+    path = LanPath(
+        serial="T8030P2000012345",
+        name="Base",
+        host="192.168.7.21",
+        host_source=HostSource.CLOUD,
+        cloud_ip="192.168.7.21",
+        observed_ip=None,
+        local_port=local_port,
+        lan_reply_blocked=True,
+    )
+    out = render_network([path], show_serials=False)
+    assert (
+        "Base: on this host's network, but its LAN replies do not arrive (a firewall here "
+        "drops them), so every connect goes through eufy's servers and needs internet "
+        f"access; {fix}" in out
+    )
+
+
 def test_render_network_advises_where_a_station_was_found_over_what_it_reports() -> None:
     path = LanPath(
         serial="T8030P2000012345",

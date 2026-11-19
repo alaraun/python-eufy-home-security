@@ -81,6 +81,7 @@ from eufy_home_security.network import HostSource, PathWarning
 from eufy_home_security.p2p import discovery as discovery_module
 from eufy_home_security.p2p import netif
 from eufy_home_security.p2p import session as session_module
+from eufy_home_security.p2p import transport as transport_module
 from eufy_home_security.p2p.did import Did
 from eufy_home_security.p2p.discovery import DiscoveredStation
 from eufy_home_security.p2p.media import Still, StillFormat
@@ -3075,6 +3076,50 @@ async def test_a_station_answering_the_punch_first_is_stored_by_this_hosts_netwo
     assert not [call for call in cloud.calls if call.startswith("dsk:")]
     assert store.data is not None
     assert store.data["stations"][fake.serial]["link_path"] == str(path)
+
+
+async def test_a_station_whose_lan_reply_is_blocked_shows_it_on_its_lan_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A station on this host's network that never answers the LAN search but answers
+    the punch toward its LAN address: linked after the on-link grace, as a LAN link,
+    and its ``lan_path`` warns ``lan_reply_blocked`` at the address it answered from,
+    with no local port pinned."""
+    monkeypatch.setattr(transport_module, "ON_LINK_PUNCH_GRACE", 0.3)
+    fake = FakeStation(ignore_searches=1000, answers_punch=True)
+    await fake.start()
+    server = _PunchToServer([encode_sockaddr(STATION_LAN, fake.session_port)])
+    endpoint, _ = await asyncio.get_running_loop().create_datagram_endpoint(
+        lambda: server, local_addr=("127.0.0.1", 0)
+    )
+    _route_punches(monkeypatch, fake, endpoint.get_extra_info("sockname")[1])
+    monkeypatch.setattr(CloudDevice, "rendezvous_servers", (SERVER[0],))
+    monkeypatch.setattr(netif, "local_networks", lambda: (IPv4Network("192.0.2.0/24"),))
+    cloud = FakeCloud.for_stations(fake)
+    eufy = build_eufy_security(
+        email=SYNTHETIC.email, store=MemoryStore(), cloud=cloud, stations={fake.serial: fake}
+    )
+    try:
+        await eufy.async_discover()
+        station = eufy.stations[fake.serial]
+        assert PathWarning.LAN_REPLY_BLOCKED not in station.lan_path.warnings
+        eufy.cache.set_dsk_key(fake.serial, "cached-dsk", time.time() + 3600)
+        started = time.monotonic()
+        assert await eufy.async_start(push=False) == {}
+        await wait_for(lambda: station.session.stats().connects == 1)
+        assert time.monotonic() - started >= 0.3
+        stats = station.session.stats()
+        assert stats.connect_path == "lan"
+        assert stats.lan_reply_blocked is True
+        path = station.lan_path
+        assert PathWarning.LAN_REPLY_BLOCKED in path.warnings
+        assert PathWarning.EPHEMERAL_PORT in path.warnings
+        assert path.station_ip == STATION_LAN
+        assert path.local_port == 0
+    finally:
+        await eufy.async_close()
+        fake.stop()
+        endpoint.close()
 
 
 # ── models without a bundled file ───────────────────────────────────────────

@@ -488,7 +488,7 @@ The probe does not read this host's networks: a station on Home Assistant's own 
 that does not answer the LAN probe (a host firewall drops its reply) but answers the
 punch shows `reachable_via` `"rendezvous"` here, which is what its connects need, while
 its session, once built, reports `connect_path` `"lan"` (the punch came from an address
-in the host's networks).
+in the host's networks) and its `lan_path` warns `lan_reply_blocked`.
 
 A battery station that did not answer the LAN probe stays `Reach.REMOTE` with
 `rendezvous` None: whether its servers would reach it cannot be known without waking
@@ -585,6 +585,19 @@ What the library relies on:
   `stats().connect_path` says which path a station's link took (`"lan"` /
   `"rendezvous"`; before the first link of a run, the one kept from the last run),
   worth showing in diagnostics.
+- **A station on Home Assistant's own network whose LAN reply a host firewall drops**
+  (ufw, firewalld or nftables admitting only `ct state established`: the station answers
+  a search from a random port, a new flow) still connects: after the on-link grace
+  (1.5 s) the library punches its LAN address, and its answer to the punch is a reply.
+  The link counts as `"lan"`, but every connect then needs internet access, eufy's
+  servers and a DSK, so the station does not come back in an internet outage. The
+  library records it per station: `station.lan_path.warnings` holds
+  `PathWarning.LAN_REPLY_BLOCKED` (read from the session at each access, no probe
+  needed; `stats().lan_reply_blocked` too), with `LanPath.station_ip` for the rule and
+  `LanPath.local_port` (0 = none pinned) for wording the fix: allow all UDP from the
+  station, or pin a local port and allow UDP from the station to it. A later link that
+  comes up from a LAN reply (the rule added) clears it. Without known host networks
+  (not Linux, or the interfaces cannot be read) there is no grace and no warning.
 - **Without a configured or cloud address**, discovery also searches the LAN address the
   station reports (parameter 1176) by unicast, beside the broadcast; its `LanPath` shows
   `host_source` `device` and still warns `broadcast_only`: that address follows the
@@ -596,7 +609,8 @@ The library describes each station's path; the integration only presents it:
 |---|---|
 | `await eufy.async_probe_lan()` | one `LanPath` per station, after one LAN discovery (broadcast plus each known address: configured, the cloud's or the one the station reports): no session, no cloud |
 | `LanPath` | `station_ip`, `host`, `host_source` (`configured` / `cloud` / `device` / `broadcast`), `cloud_ip`, `observed_ip` (where it answered), `answered`, `local_port` as description placeholders |
-| `LanPath.warnings` (`PathWarning`) | one translation key each: `broadcast_only`, `ephemeral_port`, `no_lan_reply`, `address_changed` |
+| `LanPath.warnings` (`PathWarning`) | one translation key each: `broadcast_only`, `ephemeral_port`, `no_lan_reply`, `address_changed`, `lan_reply_blocked` |
+| `station.lan_path` | a built station's `LanPath` from its session, at each access: `lan_reply_blocked` appears once a link needed the punch and goes with the next LAN link |
 | `suggest_local_ports(serials, taken=…)` | pre-fills a port per station; stable for the same stations |
 | `EufySecurity(local_ports={serial: port}, station_hosts={serial: ip})` | what the options flow stores and setup passes back |
 
@@ -620,7 +634,10 @@ The library describes each station's path; the integration only presents it:
 - **Repairs:** when a station stays unreachable (its entry in the `async_start()` result,
   or a `ConnectionChanged(False)` whose cause is `unreachable` and that lasts), raise a repair issue
   carrying the placeholders of a fresh `async_probe_lan()`. `address_changed` deserves an
-  issue of its own: the station's address has probably changed.
+  issue of its own: the station's address has probably changed. `lan_reply_blocked` on a
+  built station's `lan_path` suits a warning issue that names the station and its
+  `station_ip` and offers the two firewall rules; re-decide it when a link comes up
+  (`ConnectionChanged(connected=True)`) and withdraw it once the warning is gone.
 
 The CLI does the same: `eufy-security login` prints the advice once the session is
 cached, and `eufy-security network` prints it on demand.

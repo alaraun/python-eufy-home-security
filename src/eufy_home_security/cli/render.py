@@ -259,6 +259,18 @@ def render_network(paths: Sequence[LanPath], *, show_serials: bool) -> str:
                         "through its rendezvous servers: where every filter on the way "
                         "admits replies by connection tracking, no firewall rule is needed"
                     )
+                case PathWarning.LAN_REPLY_BLOCKED:
+                    fix = (
+                        f"allow UDP from {ip} to this host's port {path.local_port}"
+                        if path.local_port
+                        else f"allow all UDP from {ip}, or pin a local port and allow UDP "
+                        "from it to that port"
+                    )
+                    advice.append(
+                        f"{who}: on this host's network, but its LAN replies do not arrive "
+                        "(a firewall here drops them), so every connect goes through eufy's "
+                        f"servers and needs internet access; {fix}"
+                    )
                 case PathWarning.ADDRESS_CHANGED:
                     elsewhere = path.observed_ip or path.cloud_ip
                     source = _HOST_SOURCES.get(path.host_source, "the searched address {host}")

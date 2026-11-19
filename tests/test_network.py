@@ -93,6 +93,14 @@ def test_path_warnings() -> None:
     answered_elsewhere = _path(observed_ip="192.168.1.50", answered=True)
     assert answered_elsewhere.warnings == (PathWarning.ADDRESS_CHANGED,)
     assert _path(answered=False).warnings == (PathWarning.NO_LAN_REPLY,)
+    assert _path(lan_reply_blocked=True).warnings == (PathWarning.LAN_REPLY_BLOCKED,)
+
+
+def test_a_path_carries_whether_the_stations_lan_reply_is_blocked() -> None:
+    device = _device(SYNTHETIC.station_ip, None)
+    assert lan_path_for(device, search_host=None, local_port=0).lan_reply_blocked is False
+    blocked = lan_path_for(device, search_host=None, local_port=0, lan_reply_blocked=True)
+    assert PathWarning.LAN_REPLY_BLOCKED in blocked.warnings
 
 
 def _reply(ip: str, did: str = SYNTHETIC.did) -> DiscoveredStation:

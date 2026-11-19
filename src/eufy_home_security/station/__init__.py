@@ -1082,13 +1082,19 @@ class Station:
 
     @property
     def lan_path(self) -> LanPath:
-        """How this host reaches the station, for firewall and fixed-address advice."""
+        """How this host reaches the station, for firewall and fixed-address advice.
+
+        Read from the session at each call, so it follows the links: a link that needed
+        a punch because the station's LAN reply was blocked adds
+        :attr:`~.network.PathWarning.LAN_REPLY_BLOCKED`, a later LAN link removes it.
+        """
         session = self.session
         return lan_path_for(
             self.device,
             search_host=session.search_host,
             local_port=session.local_port,
             learned_host=session.host,
+            lan_reply_blocked=session.lan_reply_blocked,
         )
 
     @property
