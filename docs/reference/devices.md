@@ -10933,7 +10933,7 @@ rw 20 / ro 64
 
 ### Settings of T84A1 Wall Light Cam S100
 
-rw 14 / ro 72
+rw 15 / ro 71
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10997,7 +10997,7 @@ rw 14 / ro 72
 | `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
 | `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
 | `mac_address` | string | - | - | no | - | - |
-| `microphone_on_off` | string | - | - | no | - | - |
+| `microphone_on_off` | bool | - | - | yes | switch | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
 | `motion_dection_human_motion_notification_switch` | bool | - | - | no | - | - |
 | `motion_dection_other_motion_notification_switch` | bool | - | - | no | - | - |

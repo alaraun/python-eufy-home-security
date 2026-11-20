@@ -1015,14 +1015,26 @@
    "shown": "page"
   },
   "microphone_on_off": {
-   "access": "ro",
-   "default": "true",
-   "kind": "string",
-   "note": "handler ignores the value",
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "note": "round trip does not return the written value",
    "read": null,
    "role": "setting",
    "section": "audio",
-   "shown": "page"
+   "shown": "page",
+   "write": {
+    "cmd": 1240,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1240,
+     "paramValue": "$v:str"
+    }
+   }
   },
   "montion_detection_ui_show_type": {
    "access": "ro",
