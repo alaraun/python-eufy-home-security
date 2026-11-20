@@ -131,6 +131,37 @@ def test_one_job_builds_in_process_and_reports_each_failure(
 
 
 @pytest.mark.timeout(60)
+def test_a_built_model_keeps_only_its_run_s_answers_and_a_failed_one_its_earlier_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    handler = tmp_path / "Handle.mix.js"
+    handler.write_text("// handler", encoding="utf-8")
+    store = tmp_path / "answers"
+    monkeypatch.setattr(gen_models.ANSWERS, "root", None)  # restored after the run sets it
+    monkeypatch.setattr(gen_models.ANSWERS, "_runtime", lambda: "v0")
+    monkeypatch.setattr(gen_models.DRIVERS, "run", lambda job: [{} for _ in job["requests"]])
+    for pn in PNS:  # an earlier run's job, which this run does not ask
+        gen_models.ANSWERS.root = store
+        gen_models.ANSWERS.open(pn)
+        gen_models.run_driver(pn, handler, [{"earlier": pn}])
+        assert gen_models.ANSWERS.close(ok=True) is None
+
+    def asking_generate(pn: str, *args: Any, **kwargs: Any) -> Any:
+        gen_models.run_driver(pn, handler, [{"now": pn}])
+        return _fake_generate(pn, *args, **kwargs)
+
+    monkeypatch.setattr(gen_models, "generate", asking_generate)
+    args = _args(tmp_path, 1)
+    args.answers = store
+    gen_models.DRIVERS.close()  # as an earlier run leaves it
+    assert gen_models._generate_all(args, tmp_path, tmp_path / "out", quiet=True) == 1
+    assert "answers: 0 jobs replayed, 5 asked of Node" in capsys.readouterr().err
+    kept = {pn: len(gen_models.answers.read_records(store / f"{pn}.answers")[0]) for pn in PNS}
+    # T9ZZ2 fails with a GeneratorError, T9ZZ4 with another exception
+    assert kept == {"T9ZZ1": 1, "T9ZZ2": 2, "T9ZZ3": 1, "T9ZZ4": 2, "T9ZZ5": 1}
+
+
+@pytest.mark.timeout(60)
 def test_several_jobs_build_in_worker_processes_and_report_each_failure(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-c", SEVERAL_JOBS, __file__, str(tmp_path)],

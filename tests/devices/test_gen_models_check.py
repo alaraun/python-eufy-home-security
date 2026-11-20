@@ -53,6 +53,7 @@ def test_check_regenerates_committed_files_byte_identically() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "check: 0 files differ" in result.stdout
+    assert "answers:" not in result.stderr  # --no-answers: every job asked of Node, no store
 
 
 def _generate(
