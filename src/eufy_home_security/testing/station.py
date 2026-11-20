@@ -610,8 +610,21 @@ class FakeStation:
     command gets receipt -108 after :attr:`rejection_delay` and nothing else, as a
     HomeBase 3 answers a header-0 picture zoom (6203) for its T8170."""
     playback_end_delay: float | None = 0.05
-    """Seconds after a recording's last frame before its end-of-playback frame (the real
-    station: about 0.5 s); None sends none."""
+    """Seconds after a playback's (1025) last frame before its end-of-playback frame (the
+    real station: about 0.5 s); None sends none."""
+    download_end_delay: float | None = 0.05
+    """Seconds after a download's (1024) last frame before its end-of-download frame
+    (0x0518 ``DOWNLOAD_FINISH``, empty); None sends none. A download gets no
+    end-of-playback frame."""
+    download_finish_early: int = 0
+    """Send a download's end-of-download frame this many frames before its last one, the
+    rest following it (frames still in flight when the end frame arrives)."""
+    recording_pause: tuple[int, float] | None = None
+    """``(frames, seconds)``: a recording pauses this long after that many frames, then
+    sends the rest (a station stalling mid-download)."""
+    recording_stops_after: int | None = None
+    """A recording stops after this many frames and sends no end frame (a station giving
+    up mid-transfer)."""
     playback_end_cipher: int = FrameCipher.GCM
     """The end-of-playback frame's form: GCM-tagged with the clear 5-byte body, or
     :attr:`FrameCipher.ECB` for one block under the static key (encryption type 1), as a
@@ -1188,7 +1201,9 @@ class FakeStation:
             if cmd == 1003:
                 self.live_opens.append(camera)
                 self.live_open_payloads.append(dict(obj["payload"]))
-            self._start_media(obj["payload"]["key"], live=cmd == 1003, camera=camera)
+            self._start_media(
+                obj["payload"]["key"], live=cmd == 1003, camera=camera, download=cmd == 1024
+            )
         elif cmd == 1004:
             self._stop_live()
         elif cmd == 1306:
@@ -1412,7 +1427,12 @@ class FakeStation:
                 return
             self.native_recording_requests.append((ftype, subheader[2], path))
             numbers = self.ecc_private_key.public_key().public_numbers()
-            self._start_media(f"{numbers.x:064x}{numbers.y:064x}", live=False, camera=subheader[2])
+            self._start_media(
+                f"{numbers.x:064x}{numbers.y:064x}",
+                live=False,
+                camera=subheader[2],
+                download=ftype == CMD_DOWNLOAD_VIDEO,
+            )
             return
         channel = subheader[2]
         offset = 4 if ftype in ECB_CHANNEL_VALUE_CMDS else 0  # [channel][value][account]
@@ -1455,7 +1475,9 @@ class FakeStation:
         """Whether any stream (live or recording) is still sending frames, to any session."""
         return any(peer.streaming for peer in self._peers.values())
 
-    def _start_media(self, key_hex: str, *, live: bool, camera: int) -> None:
+    def _start_media(
+        self, key_hex: str, *, live: bool, camera: int, download: bool = False
+    ) -> None:
         peer = _CURRENT_PEER.get()
         if peer is None:
             return
@@ -1478,7 +1500,14 @@ class FakeStation:
             self.max_live_cameras = max(self.max_live_cameras, len(self.live_cameras))
         else:
             task = loop.create_task(
-                self._stream(public, self.recording_frames, MEDIA_RECORDING_PFRAME, camera, ecc=ecc)
+                self._stream(
+                    public,
+                    self.recording_frames,
+                    MEDIA_RECORDING_PFRAME,
+                    camera,
+                    ecc=ecc,
+                    download=download,
+                )
             )
             peer.recordings.add(task)
             task.add_done_callback(peer.recordings.discard)
@@ -1499,6 +1528,7 @@ class FakeStation:
         camera: int,
         *,
         ecc: EccMediaKey | None = None,
+        download: bool = False,
     ) -> None:
         # ``public`` None: an ECC stream, every record sealed with ``ecc``.
         keyframes = (
@@ -1514,7 +1544,14 @@ class FakeStation:
         self._last_ping = max(self._last_ping, loop.time())
         sizes = self.live_keyframe_sizes if count is None else []
         size = (MEDIA_WIDTH, MEDIA_HEIGHT)
+        finish_at = None if count is None else max(0, count - self.download_finish_early)
         while count is None or sent < count:
+            if download and sent == finish_at and self.download_end_delay is not None:
+                self.send_download_finish()  # ahead of frames still to come
+            if count is not None and sent == self.recording_stops_after:
+                return  # as a station giving up: no more frames, no end frame
+            if count is not None and self.recording_pause and sent == self.recording_pause[0]:
+                await asyncio.sleep(self.recording_pause[1])
             if (
                 count is None
                 and self.live_ends_unpinged_after is not None
@@ -1549,9 +1586,17 @@ class FakeStation:
             sent += 1
             self.media_frames_sent = sent
             await asyncio.sleep(MEDIA_INTERVAL)
-        if self.playback_end_delay is not None:
+        if download:
+            if self.download_end_delay is not None and finish_at == count:
+                await asyncio.sleep(self.download_end_delay)
+                self.send_download_finish()
+        elif self.playback_end_delay is not None:
             await asyncio.sleep(self.playback_end_delay)
             self.send_playback_end()
+
+    def send_download_finish(self) -> None:
+        """The end-of-download frame: ``DOWNLOAD_FINISH`` (0x0518), empty, on DRW channel 2."""
+        self.send_frame(FrameType.DOWNLOAD_FINISH, b"", cipher=0, channel=2)
 
     def send_playback_end(self, value: int = PLAYBACK_ENDED, *, cipher: int | None = None) -> None:
         """Send :meth:`playback_end_frame` on DRW channel 2, as the live station."""

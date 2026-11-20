@@ -312,6 +312,7 @@ class SessionBudget:
             self._session._health.recording_downloads += 1
         started = time.monotonic()
         ahead = 0
+        end_frame: bool | None = None
         try:
             await extra.async_connect()
             stream = await extra.async_open_recording(
@@ -326,6 +327,8 @@ class SessionBudget:
                             ahead = paced.peak_frames
                 else:
                     muxer, _ = await mux_frames(aiter(stream), write)
+            if download:
+                end_frame = stream.end_frame
         finally:
             extra._budget.end_extra_live()
             _LOGGER.debug(
@@ -338,7 +341,7 @@ class SessionBudget:
             )
         if not muxer.started:
             raise DeviceTimeoutError("the recording ended before a keyframe arrived")
-        return muxer.clip()
+        return muxer.clip(end_frame=end_frame)
 
 
 class BudgetOwner(Protocol):

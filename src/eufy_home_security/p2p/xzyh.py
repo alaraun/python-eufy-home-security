@@ -72,6 +72,9 @@ class FrameType(IntEnum):
     """1202 ``SET_DEVS_TONE_FILE``: a camera's siren."""
     VIDEO_FRAME = 0x0514
     AUDIO_FRAME = 0x0515
+    DOWNLOAD_FINISH = 0x0518
+    """1304 ``DOWNLOAD_FINISH``, empty: the station has sent the whole recording a
+    download (1024) asked for."""
     DB_SYNC = 0x051A
     MEDIA_DOWNLOAD = 0x051C
     CMD_TRANSFER = 0x0546

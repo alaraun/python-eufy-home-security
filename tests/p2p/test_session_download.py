@@ -11,13 +11,15 @@ import pytest
 
 from eufy_home_security.exceptions import LiveStreamLimitError, UnsupportedError
 from eufy_home_security.p2p import session as session_module
-from eufy_home_security.p2p.clip import CLIP_CONTENT_TYPE
+from eufy_home_security.p2p.clip import CLIP_CONTENT_TYPE, IncompleteReason, MediaClip
+from eufy_home_security.p2p.messages import CMD_DOWNLOAD_VIDEO, CMD_RECORD_VIEW
 from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
 from eufy_home_security.testing import SYNTHETIC
 from eufy_home_security.testing.station import FakeStation
 
 CLIP = "/zx/hdd_data0/Camera00/202610/20261001072414/20261001072414.zxvideo"
+NATIVE_CLIP = "/media/mmcblk0p1/Camera05/20310203112233.dat"
 VIDEO_PID = 0x0100
 AUDIO_PID = 0x0101
 
@@ -25,6 +27,15 @@ AUDIO_PID = 0x0101
 @pytest.fixture
 async def station() -> AsyncIterator[FakeStation]:
     fake = FakeStation()
+    await fake.start()
+    yield fake
+    fake.stop()
+
+
+@pytest.fixture
+async def native() -> AsyncIterator[FakeStation]:
+    """A station whose history is local events (10017): its downloads are 1024."""
+    fake = FakeStation(serial=SYNTHETIC.homebase2_station_sn)
     await fake.start()
     yield fake
     fake.stop()
@@ -73,7 +84,7 @@ async def test_a_recording_downloads_whole_on_an_extra_session_closed_after(
         assert clip.video_frames == 9
         assert clip.keyframes >= 2
         assert clip.content_type == CLIP_CONTENT_TYPE
-        assert clip.complete  # no record frame count to hold it against
+        assert (clip.complete, clip.end_frame) == (True, None), "a 1025 playback here"
         await _until(lambda: station.sessions == 1)
         stats = session.stats()
         assert (stats.recording_downloads, stats.recording_plays) == (1, 0)
@@ -87,25 +98,156 @@ async def test_a_recording_downloads_whole_on_an_extra_session_closed_after(
 
 
 async def test_a_download_with_no_end_frame_keeps_its_last_frame(
-    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+    native: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A download that ends at the idle timeout (no end-of-playback frame, as a HomeBase 3
-    sends none for 1024) still writes every frame, so the clip is complete."""
-    monkeypatch.setattr(session_module, "MEDIA_IDLE_TIMEOUT", 0.3)
-    station.recording_frames = 10
-    station.playback_end_delay = None
-    session = _session(station)
+    """A download that ends at its idle wait with no end-of-download frame still writes
+    every frame; it is complete only when the record's frame count shows it whole."""
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 0.3, raising=False)
+    native.recording_frames = 10
+    native.download_end_delay = None
+    session = _session(native, serial=SYNTHETIC.homebase2_station_sn)
 
     async def write(chunk: bytes) -> None:
         pass
 
     try:
         await session.async_connect()
-        clip = await session.async_download_recording(CLIP, 0, write)
+        clip = await session.async_download_recording(NATIVE_CLIP, 5, write)
     finally:
         await session.async_close()
+    assert (clip.video_frames, clip.end_frame) == (10, False)
+    assert clip.incomplete_reason is IncompleteReason.NO_END_FRAME
+    assert not clip.complete, "no end frame and no frame count: not known to be whole"
     judged = dataclasses.replace(clip, expected_frames=10)  # the history row's frame_num
-    assert (judged.video_frames, judged.complete) == (10, True)
+    assert (judged.complete, judged.incomplete_reason) == (True, None)
+
+
+async def _download(station: FakeStation) -> tuple[MediaClip, float]:
+    session = _session(station, serial=station.serial)
+
+    async def write(_chunk: bytes) -> None:
+        return None
+
+    try:
+        await session.async_connect()
+        started = time.monotonic()
+        clip = await asyncio.wait_for(session.async_download_recording(NATIVE_CLIP, 5, write), 10)
+        return clip, time.monotonic() - started
+    finally:
+        await session.async_close()
+
+
+async def test_a_download_ends_on_the_end_of_download_frame(
+    native: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The station's 0x0518 ends a download without waiting out the idle wait."""
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 8.0, raising=False)
+    monkeypatch.setattr(session_module, "MEDIA_IDLE_TIMEOUT", 8.0)
+    native.recording_frames = 10
+    clip, took = await _download(native)
+    assert (clip.video_frames, clip.end_frame, clip.complete) == (10, True, True)
+    assert took < 4.0, "ended by the station's frame, not the idle wait"
+
+
+async def test_frames_still_in_flight_after_the_end_frame_are_kept(
+    native: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Frames arriving just after the end-of-download frame still go into the clip."""
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 8.0, raising=False)
+    native.recording_frames = 10
+    native.download_finish_early = 4
+    clip, _ = await _download(native)
+    assert (clip.video_frames, clip.end_frame, clip.complete) == (10, True, True)
+
+
+async def test_a_download_whose_station_pauses_past_the_live_idle_wait_gets_every_frame(
+    native: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A download waits out a station's pause longer than the live idle wait."""
+    monkeypatch.setattr(session_module, "MEDIA_IDLE_TIMEOUT", 0.3)
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 3.0, raising=False)
+    native.recording_frames = 10
+    native.recording_pause = (4, 0.8)
+    clip, _ = await _download(native)
+    assert (clip.video_frames, clip.end_frame, clip.complete) == (10, True, True)
+
+
+async def test_a_download_the_station_stops_early_is_incomplete(
+    native: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A station that stops mid-download and sends no end frame gives an incomplete clip."""
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 0.3, raising=False)
+    native.recording_frames = 10
+    native.recording_stops_after = 4
+    clip, _ = await _download(native)
+    assert (clip.video_frames, clip.end_frame, clip.complete) == (4, False, False)
+    assert clip.incomplete_reason is IncompleteReason.NO_END_FRAME
+    judged = dataclasses.replace(clip, expected_frames=10)
+    assert judged.incomplete_reason is IncompleteReason.MISSING_FRAMES
+
+
+@pytest.mark.parametrize("download", [True, False])
+async def test_a_recording_open_waits_its_own_idle_default(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch, download: bool
+) -> None:
+    """A download (1024) idles out on the download wait, a playback (1025) on the live one."""
+    short, long = 0.2, 6.0
+    monkeypatch.setattr(
+        session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", short if download else long, raising=False
+    )
+    monkeypatch.setattr(session_module, "MEDIA_IDLE_TIMEOUT", long if download else short)
+    station.recording_frames = 6
+    station.download_end_delay = station.playback_end_delay = None
+    session = _session(station)
+    try:
+        await session.async_connect()
+        stream = await session.async_open_recording(CLIP, 0, download=download)
+        async with asyncio.timeout(3):
+            frames = [frame async for frame in stream]
+        assert frames
+        assert (stream.ended, stream.end_frame) == (True, False)
+    finally:
+        await session.async_close()
+
+
+def test_the_download_idle_wait_is_the_apps_and_live_keeps_its_own() -> None:
+    """A download gets the app's 15 s without data; live and playback keep 3 s; the settle
+    after an end frame is shorter than either."""
+    assert session_module.MEDIA_IDLE_TIMEOUT == 3.0
+    assert session_module.MEDIA_DOWNLOAD_IDLE_TIMEOUT == 15.0
+    assert session_module.MEDIA_DRAIN_GAP < session_module.MEDIA_IDLE_TIMEOUT
+
+
+class _Stream:
+    """The members the end-of-download handler reads, recording its call."""
+
+    def __init__(self, command: int, *, started: bool) -> None:
+        self.command = command
+        self._started = started
+        self.finished: list[float] = []
+
+    def _download_finished(self, settle: float) -> None:
+        self.finished.append(settle)
+
+
+@pytest.mark.parametrize(
+    ("command", "started", "taken"),
+    [
+        (CMD_DOWNLOAD_VIDEO, True, True),
+        (CMD_DOWNLOAD_VIDEO, False, False),
+        (CMD_RECORD_VIEW, True, False),
+    ],
+)
+def test_only_a_started_download_takes_the_end_of_download_frame(
+    station: FakeStation, command: int, started: bool, taken: bool
+) -> None:
+    """The frame carries no stream id: a download that has not started (an earlier
+    download's end) and a playback leave it."""
+    session = _session(station)
+    stream = _Stream(command, started=started)
+    session._on_download_finish(stream)  # type: ignore[arg-type]
+    session._on_download_finish(None)
+    assert stream.finished == ([session_module.MEDIA_DRAIN_GAP] if taken else [])
 
 
 async def test_native_local_events_download_uses_1024_and_decodes_mpegts() -> None:
@@ -170,7 +312,7 @@ async def test_a_play_writes_each_frame_on_an_extra_session_closed_after(
         assert data[0] == 0x47
         assert all(len(chunk) % TS_PACKET_LEN == 0 for chunk in chunks)
         assert {0x0000, VIDEO_PID, AUDIO_PID} <= _pids(data), "PAT, video and audio"
-        assert clip.video_frames == 50
+        assert (clip.video_frames, clip.end_frame) == (50, None), "no download end frame"
         assert len(chunks) >= clip.video_frames, "every frame written as it is muxed"
         assert len(data) == clip.bytes_written
         await _until(lambda: station.sessions == 1)

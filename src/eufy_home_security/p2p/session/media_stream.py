@@ -85,7 +85,7 @@ class MediaStream:
     miss its rest and is dropped with the video up to the next keyframe; a held keyframe
     is kept. A frame no video record follows is delivered when the stream ends, by the
     station's end-of-playback frame or at ``idle_timeout``, after which :attr:`ended` is
-    True. When a slow reader lets
+    True (:attr:`end_frame` tells which). When a slow reader lets
     :data:`MEDIA_QUEUE_FRAMES` pile up, video is dropped until the next keyframe
     (counted in :attr:`dropped`); after a keyframe that does not decode, a frame with no
     NAL unit or a part whose frame already went out, video is skipped to the next keyframe
@@ -96,9 +96,10 @@ class MediaStream:
     another stream's; only when none decodes by ``first_frame_timeout`` is it a WARNING.
 
     Iteration ends when the stream is closed, when the station sends a recording's
-    end-of-playback frame (``0x0402`` = 2, after the frames already queued), or when
-    it stays quiet for ``idle_timeout`` after a frame (the fallback; the held frame and
-    the frames already queued are delivered first). It raises when the session is lost,
+    end-of-playback frame (``0x0402`` = 2, after the frames already queued), when a
+    download's end-of-download frame (``0x0518``) came and no media followed for the
+    session's drain gap, or when it stays quiet for ``idle_timeout`` after a frame (the
+    fallback; the held frame and the frames already queued are delivered first). It raises when the session is lost,
     when the station rejects the open, or when no keyframe decodes within
     ``first_frame_timeout``. Closing sends the stop command, which only a live stream has.
     """
@@ -134,6 +135,7 @@ class MediaStream:
         self._error: Exception | None = None
         self._closed = False
         self._ended = False
+        self._end_frame = False
         self._opened_at = time.monotonic()
         self._last_rx: float | None = None
         """When the last media record arrived, decodable or not (liveness)."""
@@ -187,6 +189,13 @@ class MediaStream:
         when it ended; a live stream has only its held last frame and the audio behind it
         then. False for a stream the client closed or that failed."""
         return self._ended
+
+    @property
+    def end_frame(self) -> bool:
+        """Whether the station's end frame ended the stream: end of playback (0x0402) or
+        end of download (0x0518); False when it went quiet for ``idle_timeout``, failed or
+        was closed."""
+        return self._end_frame
 
     def __aiter__(self) -> MediaStream:
         return self
@@ -573,7 +582,24 @@ class MediaStream:
             self.channel,
             time.monotonic() - self._opened_at,
         )
+        self._end_frame = True
         self._finish()
+
+    def _download_finished(self, settle: float) -> None:
+        """The station has sent the whole download: end once no media has arrived for
+        ``settle`` seconds, so frames still in flight are taken first."""
+        if self._closed:
+            return
+        _LOGGER.debug(
+            "media (cmd %d ch%d) end-of-download frame after %.1fs; ending after %.1fs quiet",
+            self.command,
+            self.channel,
+            time.monotonic() - self._opened_at,
+            settle,
+        )
+        self._end_frame = True
+        self._idle_timeout = min(self._idle_timeout, settle)
+        self._wake.set()
 
     def _finish(self) -> None:
         """End the stream after the held frame and what is queued are delivered."""

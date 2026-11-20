@@ -19,12 +19,13 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Final
 
 from .encoder import StreamEncoder
 from .media import MediaFrame, MediaKind, VideoCodec
 
-__all__ = ["CLIP_CHUNK_BYTES", "CLIP_CONTENT_TYPE", "ClipWriter", "MediaClip"]
+__all__ = ["CLIP_CHUNK_BYTES", "CLIP_CONTENT_TYPE", "ClipWriter", "IncompleteReason", "MediaClip"]
 
 #: The MIME type of a clip's bytes.
 CLIP_CONTENT_TYPE: Final = "video/mp2t"
@@ -33,6 +34,18 @@ CLIP_CHUNK_BYTES: Final = 512 * 1024
 
 type ClipWriter = Callable[[bytes], Awaitable[object]]
 """Receives a clip's muxed bytes in order; awaited before the next chunk is muxed."""
+
+
+class IncompleteReason(StrEnum):
+    """Why a clip is not whole (:attr:`MediaClip.incomplete_reason`)."""
+
+    ENDED_EARLY = "ended_early"
+    """Cut at a video-codec change, or a live capture whose stream ended first."""
+    MISSING_FRAMES = "missing_frames"
+    """Fewer video frames than the history record counts."""
+    NO_END_FRAME = "no_end_frame"
+    """A download that went quiet for its idle wait without the station's
+    end-of-download frame, with no frame count to show it whole."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -67,18 +80,33 @@ class MediaClip:
     ended_early: bool = False
     """A live capture whose stream ended before the asked duration, or a clip (capture or
     download) cut at a video-codec change."""
+    end_frame: bool | None = None
+    """A download (1024): whether the station's end-of-download frame ended it (False: it
+    went quiet for its idle wait). None for a clip with no such frame (a playback, a live
+    capture)."""
     stopped: bool = False
     """A live capture ended by its ``stop`` event before the asked duration; it counts
     as complete."""
     content_type: str = CLIP_CONTENT_TYPE
 
     @property
-    def complete(self) -> bool:
-        """Whether the clip holds everything it should: all of a recording's frames
-        (when the record counts them), or a live capture's whole duration."""
+    def incomplete_reason(self) -> IncompleteReason | None:
+        """Why the clip is not whole, None when it is (:attr:`complete`)."""
         if self.ended_early:
-            return False
-        return self.expected_frames is None or self.video_frames >= self.expected_frames
+            return IncompleteReason.ENDED_EARLY
+        if self.expected_frames is not None:
+            if self.video_frames < self.expected_frames:
+                return IncompleteReason.MISSING_FRAMES
+        elif self.end_frame is False:
+            return IncompleteReason.NO_END_FRAME
+        return None
+
+    @property
+    def complete(self) -> bool:
+        """Whether the clip holds everything it should: a live capture's whole duration;
+        a recording's every frame its record counts, or, with no count, a download the
+        station's end-of-download frame ended."""
+        return self.incomplete_reason is None
 
 
 class _ClipMuxer:
@@ -147,6 +175,7 @@ class _ClipMuxer:
         started_at: datetime | None = None,
         ended_early: bool = False,
         stopped: bool = False,
+        end_frame: bool | None = None,
     ) -> MediaClip:
         return MediaClip(
             video_frames=self.video_frames,
@@ -161,6 +190,7 @@ class _ClipMuxer:
             started_at=started_at,
             ended_early=ended_early or self.codec_changed,
             stopped=stopped,
+            end_frame=end_frame,
         )
 
 

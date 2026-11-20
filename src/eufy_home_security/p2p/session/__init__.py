@@ -282,9 +282,14 @@ MIN_STATION_SESSIONS = 2
 """The smallest budget: the station session and the trigger-frame session (1 live stream)."""
 MEDIA_RECORDING_FIRST_FRAME_TIMEOUT = 10.0
 MEDIA_IDLE_TIMEOUT = 3.0
-"""A stream that sent frames and then stays quiet this long has ended. A 1025 playback
-normally ends earlier, on the station's end-of-playback frame; this is the fallback
-(a download, a lost end frame)."""
+"""A live stream or a 1025 playback that sent frames and then stays quiet this long has
+ended. A playback normally ends earlier, on the station's end-of-playback frame; this is
+the fallback (a lost end frame)."""
+MEDIA_DOWNLOAD_IDLE_TIMEOUT = 15.0
+"""A 1024 download that sent frames and then stays quiet this long has ended without its
+end-of-download frame: the eufy app fails a download after 15 s without progress. A
+station can pause a download for more than :data:`MEDIA_IDLE_TIMEOUT` and then send the
+rest; the download normally ends on its end-of-download frame instead."""
 MEDIA_DRAIN_GAP = 0.5
 """Opening a stream waits until no media frame has arrived for this long. A recording
 closed early on this session keeps streaming to its end (no command stops a playback,
@@ -2616,8 +2621,11 @@ class StationSession:
         Sends the app's playback command (1025), or the download command (1024)
         when ``download`` is set. Its first keyframe is the moment that triggered
         the event, and the camera is not woken. The stream ends by itself after the
-        last frame. ``wait`` is as for :meth:`async_open_live`. Timeouts default to
-        :data:`MEDIA_RECORDING_FIRST_FRAME_TIMEOUT` and :data:`MEDIA_IDLE_TIMEOUT`.
+        last frame: a playback on the station's end-of-playback frame, a download on its
+        end-of-download frame once no media has arrived for :data:`MEDIA_DRAIN_GAP`.
+        ``wait`` is as for :meth:`async_open_live`. Timeouts default to
+        :data:`MEDIA_RECORDING_FIRST_FRAME_TIMEOUT` and :data:`MEDIA_IDLE_TIMEOUT` (a
+        download: :data:`MEDIA_DOWNLOAD_IDLE_TIMEOUT`).
 
         Closing the stream early sends nothing: no command stops a playback (1051 is
         rejected with -108 after 11 to 12 s and stalls the session's command queue until
@@ -2631,7 +2639,9 @@ class StationSession:
             channel,
             download=download,
             first_frame_timeout=_or(first_frame_timeout, MEDIA_RECORDING_FIRST_FRAME_TIMEOUT),
-            idle_timeout=_or(idle_timeout, MEDIA_IDLE_TIMEOUT),
+            idle_timeout=_or(
+                idle_timeout, MEDIA_DOWNLOAD_IDLE_TIMEOUT if download else MEDIA_IDLE_TIMEOUT
+            ),
             wait=wait,
         )
 
@@ -2676,6 +2686,16 @@ class StationSession:
         ):
             return
         stream._end()
+
+    def _on_download_finish(self, stream: MediaStream | None) -> None:
+        """End ``stream``, a download (1024), on the station's end-of-download frame
+        (0x0518), once no media has arrived for :data:`MEDIA_DRAIN_GAP`: frames still in
+        flight go into it first. Only a download that has started takes it; the frame
+        carries no stream id.
+        """
+        if stream is None or stream.command != CMD_DOWNLOAD_VIDEO or not stream._started:
+            return
+        stream._download_finished(MEDIA_DRAIN_GAP)
 
     # ── connection internals ─────────────────────────────────────────────────
 
@@ -3274,6 +3294,9 @@ class StationSession:
             frame_encryption(inbound.frame.subheader),
             len(inbound.frame.payload),
         )
+        if inbound.type == FrameType.DOWNLOAD_FINISH:
+            self._on_download_finish(stream)
+            return
         receipt = inbound.receipt()
         if receipt is not None:
             self._note_receipt(inbound, receipt)
