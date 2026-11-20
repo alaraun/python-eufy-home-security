@@ -123,9 +123,16 @@ image = await station.async_preset_image(device_sn, preset=1)  # pan/tilt: turn,
   iteration stops. Only a recording
   that has delivered its first keyframe takes it, because the frame carries no stream
   id and an earlier playback's end can arrive just after the next open. Without one
-  (a download, a lost frame) the stream ends after 3 s without a frame
+  (a lost frame) the stream ends after 3 s without a frame
   (`idle_timeout`); its last frame, still held ([frames in parts](#frames-in-parts-app)),
-  is delivered then. A HomeBase 3 sends no end frame after a 1024 download.
+  is delivered then. A HomeBase 3 sends no end-of-playback frame after a 1024 download.
+- A download (1024) ends on the station's **end-of-download frame** (`0x0518`, below)
+  once no media has arrived for 0.5 s (`MEDIA_DRAIN_GAP`), so frames still in flight
+  are delivered first; only a download that has delivered its first keyframe takes it.
+  Without one it ends after 15 s without a frame (`MEDIA_DOWNLOAD_IDLE_TIMEOUT`, the
+  eufy app's limit for a download without progress): a station can pause a download for
+  more than 3 s and then send the rest. `MediaStream.end_frame` tells an end frame
+  (either kind) from the idle wait.
 - No frame within `first_frame_timeout` (20 s live, 10 s recording) raises
   `CommandNotAppliedError` when the station acknowledged the open, the owner-id
   case, and `DeviceTimeoutError` when it did not. Frames that arrive without a
@@ -684,7 +691,7 @@ another part follows is kept; one at the end of the last part is removed. As in 
 audio that arrives meanwhile is queued behind the held frame, and records dropped before
 decoding (another camera's on a HomeBase, another stream's keyframe, video skipped while
 waiting for a keyframe) leave it held. A frame no video record follows is delivered when
-the stream ends, by the station's end-of-playback frame or at the idle timeout, and
+the stream ends, by the station's end frame or at the idle timeout, and
 `MediaStream.ended` is True from then on. At the idle timeout the queue is empty, so only
 the held frame and the audio behind it are read after that; at the end frame, the frames
 queued before it too. A reader that times its frames (a pan/tilt preset image waiting
@@ -873,8 +880,19 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
   (undecodable)` for a frame it cannot read).
 - **Download frames.** A 1024 download on a short-lived session was followed by
   `0x0517` (1303 `CONVERT_MP4_OK`, a 16-byte ECB block whose first u32 varies and
-  whose third is constant) and `0x0518` (1304 `DOWNLOAD_FINISH`, app enum `DOENLOAD_FINISH`, empty) **[observed,
-  not decoded]**.
+  whose third is constant) and `0x0518` (1304 `DOWNLOAD_FINISH`, app enum
+  `DOENLOAD_FINISH`, empty) **[observed]**. The eufy app takes `0x0518` as "the
+  station has sent the whole recording" and keeps the file once its own queue is empty;
+  a download that goes 15 s without progress and without it is a failure there, and the
+  file is deleted **[declared: app]**. The library ends a download on it (above);
+  `0x0517` is not read.
+- **A download's completeness.** `Station.async_download_recording` returns a
+  `MediaClip` whose `end_frame` says whether `0x0518` ended a 1024 download (None for a
+  playback). `complete` is false, with `incomplete_reason`, when the clip was cut
+  (`ended_early`), holds fewer video frames than the history record's `frame_num`
+  (`missing_frames`), or is a download that went quiet without `0x0518` and has no
+  `frame_num` to check (`no_end_frame`). A download that went quiet without it but holds
+  every frame the record counts is complete.
 - The **first keyframe is the trigger moment** at full resolution: it arrived 0.4 s
   after the request and decoded to a 3840×2160 JPEG of about 1.7 MB.
 - It does not wake the camera: the recording is on the station's storage.
@@ -929,6 +947,7 @@ timeout with `CommandNotAppliedError`.
 | recording download (1024), 4K trigger frame | **[verified]** |
 | recording playback (1025), identical output to 1024 | **[verified]** |
 | whole-recording receive through the library, ends on the end-of-playback frame, else on silence | **[verified]** |
+| download (1024) ends on the end-of-download frame (`0x0518`), else after 15 s of silence | **[declared: app]**; `0x0518` after a 1024 download **[observed]** (HomeBase 3, JSON command) |
 | stream stop (1004) | **[verified]** (sent; the stream ends) |
 | download cancel (1051), playback stop (1055), play control stop (1026) | **[verified]** not to stop a 1025 playback; 1051 is rejected (−108) |
 | stopping a playback by closing its session | **[verified]** (station silent within about 5 ms) |

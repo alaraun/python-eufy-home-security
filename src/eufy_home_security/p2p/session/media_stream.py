@@ -99,9 +99,10 @@ class MediaStream:
     end-of-playback frame (``0x0402`` = 2, after the frames already queued), when a
     download's end-of-download frame (``0x0518``) came and no media followed for the
     session's drain gap, or when it stays quiet for ``idle_timeout`` after a frame (the
-    fallback; the held frame and the frames already queued are delivered first). It raises when the session is lost,
-    when the station rejects the open, or when no keyframe decodes within
-    ``first_frame_timeout``. Closing sends the stop command, which only a live stream has.
+    fallback; the held frame and the frames already queued are delivered first). It
+    raises when the session is lost, when the station rejects the open, or when no
+    keyframe decodes within ``first_frame_timeout``. Closing sends the stop command,
+    which only a live stream has.
     """
 
     def __init__(
@@ -588,8 +589,6 @@ class MediaStream:
     def _download_finished(self, settle: float) -> None:
         """The station has sent the whole download: end once no media has arrived for
         ``settle`` seconds, so frames still in flight are taken first."""
-        if self._closed:
-            return
         _LOGGER.debug(
             "media (cmd %d ch%d) end-of-download frame after %.1fs; ending after %.1fs quiet",
             self.command,

@@ -2106,7 +2106,18 @@ video and AAC untouched, starting at a keyframe) written through the integration
 `started_at` (aware), `device_sn`, `record_id` (downloads), `expected_frames` (the
 record's `frame_num`), `ended_early` (a capture whose stream ended first, or a clip cut
 at a video-codec change), `stopped` (a capture ended by its `stop` event; complete),
-`complete`, `content_type`.
+`end_frame` (a 1024 download: whether the station's end-of-download frame ended it; None
+otherwise), `complete`, `incomplete_reason` (`IncompleteReason`, None when complete),
+`content_type`.
+
+`complete` is false, with `incomplete_reason`, for a clip cut early (`ended_early`), one
+with fewer video frames than its record's `frame_num` (`missing_frames`), and a download
+that went quiet without the end-of-download frame and has no `frame_num` to check
+(`no_end_frame`). A 1024 download (a station whose history is local events, such as a
+HomeBase 2) ends on that frame, or after 15 s without data, so a station that pauses
+mid-download does not cut the clip short; a HomeBase 3's recordings are played (1025)
+and end on the end-of-playback frame. Store only `complete` clips and download the
+others again later; `ended_early` comes back the same on every try.
 
 #### The station's recordings
 

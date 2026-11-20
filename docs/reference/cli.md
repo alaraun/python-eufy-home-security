@@ -50,7 +50,7 @@ lock-out. A tiny wrapper that sets `os.environ` and `execv`s the CLI is safer.
 | `persons [--kind people\|faces\|bodies] [--count N] [--json]` | the AI face/person library: recognised people, or their face / body-reID pictures with fetchable paths; `--count` defaults to 200; `--json` prints the raw rows | cloud + LAN |
 | `image PATH --out FILE` | a still from the station's disk by its path (from an event or a person picture) | cloud + LAN |
 | `live --device SN\|--channel N [--seconds S] [--preset N] --out PREFIX` | record a camera's live video and audio to `PREFIX.hevc` + `PREFIX.aac` for `--seconds` (default 10) from the first frame (wakes a battery camera); `--preset` first turns a pan/tilt camera to that stored slot (with `--device`) | cloud + LAN |
-| `recording PATH --device SN\|--channel N [--download] --out PREFIX` | save a stored recording (a history row's `storage_path`) to `PREFIX.hevc` + `PREFIX.aac`, by playback (1025) or with `--download` the download command (1024) | cloud + LAN |
+| `recording PATH --device SN\|--channel N [--download] --out PREFIX` | save a stored recording (a history row's `storage_path`) to `PREFIX.hevc` + `PREFIX.aac`, by playback (1025) or with `--download` the download command (1024), which ends on the station's end-of-download frame or 15 s after the last frame | cloud + LAN |
 | `snapshot --device SN\|--channel N [--recording PATH] --out FILE` | one full-resolution HEVC keyframe: the camera's next one, or the recording's first (its trigger moment) | cloud + LAN |
 | `monitor [--no-push] [--no-p2p] [--json]` | print events as they arrive until Ctrl+C: `--no-push` skips cloud push, `--no-p2p` the local sessions (not both), `--json` prints one object per line | cloud + LAN |
 

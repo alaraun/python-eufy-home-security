@@ -2542,6 +2542,10 @@ class StationSession:
         :class:`LiveStreamLimitError`, or with ``wait`` (the default) waits up to
         ``first_frame_timeout`` for a stream to end.
 
+        A 1024 download ends on the station's end-of-download frame or after
+        :data:`MEDIA_DOWNLOAD_IDLE_TIMEOUT` without data; the clip's ``end_frame`` says
+        which (:attr:`~..clip.MediaClip.incomplete_reason`).
+
         ``write`` receives the muxed bytes in order (see :mod:`~..clip`). Raises what
         :meth:`async_open_recording` raises, and :class:`DeviceTimeoutError` when the
         recording ends before a keyframe; bytes already written stay written. A

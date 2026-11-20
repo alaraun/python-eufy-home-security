@@ -89,7 +89,8 @@ async def test_warm_start_needs_no_cloud() -> None:
   `guard_mode`, `schedule_mode` (the slot mode a selected Schedule puts in force),
   `images` (stills by path; a path not in it gets no reply, so the fetch times out, and
   `image_requests` lists every path asked), `answer_params`, `answer_conn_init`, `params_cipher`, `recording_frames`,
-  `unhandled_commands` (answered with receipt −108), `playback_end_delay`,
+  `unhandled_commands` (answered with receipt −108), `playback_end_delay`, `download_end_delay`,
+  `download_finish_early`, `recording_pause`, `recording_stops_after`,
   `playback_end_cipher` (`FrameCipher.ECB`: the end frame under the static key, as a
   HomeBase 3 sends it),
   `ignore_searches` (LAN searches left unanswered) and `answers_punch` (a client's punch
@@ -181,7 +182,7 @@ attempts. A test that meets such a wait on purpose shortens it.
 | rendezvous probe of `async_station_choices`: per station, all | `client.RENDEZVOUS_PROBE_TIMEOUT`, `RENDEZVOUS_PROBE_BUDGET` | 0.5 s, 2 s |
 
 Not shortened, because a test observes their length: `PARAM_SETTLE` (sub-device blocks
-following a dump), `MEDIA_IDLE_TIMEOUT`, `MEDIA_DRAIN_MAX` (a stopped stream's leftover
+following a dump), `MEDIA_IDLE_TIMEOUT`, `MEDIA_DOWNLOAD_IDLE_TIMEOUT`, `MEDIA_DRAIN_MAX` (a stopped stream's leftover
 frames), `SETTLE_STATION` and `SETTLE_STANDALONE` (how long a picture size must hold;
 a full-resolution image is bounded by `FULL_RESOLUTION_TIMEOUT`), the probe schedule,
 and the reprobe and idle-close delays. Set them per test. So is

@@ -2592,6 +2592,7 @@ async def test_recording_plays_to_its_end(
         assert (time.monotonic() - started < 1.0) is end_frame
         assert len(_video(frames)) == station.recording_frames
         assert stream.closed
+        assert (stream.ended, stream.end_frame) == (True, end_frame)
         opened = next(o for o in station.received if o["cmd"] == command)
         assert opened["payload"]["filepath"] == "/zx/clip.zxvideo"
         assert opened["mChannel"] == 1

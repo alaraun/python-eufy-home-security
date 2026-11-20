@@ -55,9 +55,9 @@ SHORT_TIMEOUTS: Final[Mapping[str, tuple[str, Any]]] = {
 """Each shortened wait: its name, the module that defines it, and the value used.
 
 Left out on purpose: waits whose length is part of what a fake reproduces or a test
-observes (``PARAM_SETTLE``, ``MEDIA_IDLE_TIMEOUT``, ``MEDIA_DRAIN_MAX``, the picture-size
-hold ``SETTLE_STATION``/``SETTLE_STANDALONE``, the probe schedule, the reprobe and
-idle-close delays); set those per test where needed.
+observes (``PARAM_SETTLE``, ``MEDIA_IDLE_TIMEOUT``, ``MEDIA_DOWNLOAD_IDLE_TIMEOUT``,
+``MEDIA_DRAIN_MAX``, the picture-size hold ``SETTLE_STATION``/``SETTLE_STANDALONE``, the
+probe schedule, the reprobe and idle-close delays); set those per test where needed.
 """
 
 
