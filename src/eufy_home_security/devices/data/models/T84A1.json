@@ -1530,11 +1530,23 @@
    }
   },
   "spotlight_switch": {
-   "access": "ro",
+   "access": "rw",
    "contexts": [
     {
      "entry": {
-      "note": "no handler write path"
+      "access": "ro",
+      "control": null,
+      "note": "no handler write path",
+      "read": {
+       "map": {
+        "": false,
+        "0": false,
+        "1": true
+       },
+       "no_default": true,
+       "param": 1400
+      },
+      "write": null
      },
      "names": [
       "HB1",
@@ -1550,14 +1562,55 @@
       "T7000",
       "T9000"
      ]
+    },
+    {
+     "entry": {
+      "write": {
+       "subCmd": 1400,
+       "params": {
+        "value": "$v:int",
+        "open": "$v:int",
+        "type": 2
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1400,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB3"
+     ]
     }
    ],
-   "kind": "string",
-   "note": "handler ignores the value",
-   "read": null,
+   "control": "switch",
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1400
+   },
    "role": "setting",
    "section": "picture",
-   "shown": "card"
+   "shown": "card",
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1400,
+    "params": {
+     "value": "$v:int",
+     "open": "$v:int",
+     "type": 2
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1400,
+     "paramValue": "$v:str"
+    }
+   }
   },
   "support_video_codec": {
    "access": "ro",

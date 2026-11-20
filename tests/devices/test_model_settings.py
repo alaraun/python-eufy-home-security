@@ -50,6 +50,30 @@ def _setting(product_code: str, key: str) -> Setting:
     return settings_of(product_code)[key]
 
 
+@pytest.mark.parametrize(("enabled", "raw"), [(True, "1"), (False, "0")])
+def test_t84a1_standalone_spotlight_switch_writes_its_handlers_1700_recipe(
+    enabled: bool, raw: str
+) -> None:
+    """The T84A1 manual light on its own: 1700/1400 with the state as an int, read from 1400."""
+    setting = settings_of("T84A1", standalone=True)["spotlight_switch"]
+    assert (setting.kind, setting.control) == (SettingKind.BOOL, SettingControl.SWITCH)
+    assert setting.writable
+    assert setting.read_param == 1400
+    assert setting.decode(raw) is enabled
+    wire = setting.encode(enabled, ALONE)
+    assert (wire.path, wire.cmd) == (WritePath.RECIPE_1700, 1400)
+    assert wire.params == {"value": int(enabled), "open": int(enabled), "type": 2}
+    assert wire.updates == ((1400, raw),)
+
+
+@pytest.mark.parametrize("connect", [ConnectType.HB2, ConnectType.HB3, ConnectType.HB4])
+def test_t84a1_spotlight_switch_behind_a_homebase_is_read_only(connect: ConnectType) -> None:
+    """No write behind a HomeBase: the handler names no command (HB3) or none at all."""
+    setting = settings_of("T84A1", connect)["spotlight_switch"]
+    assert not setting.writable
+    assert setting.read_param == 1400
+
+
 def test_power_manager_mode_round_trip() -> None:
     """T8160 power_manager_mode 3 is ECB 1246 value 2; parameter "2" reads back as 3."""
     setting = _setting("T8160", "power_manager_mode")

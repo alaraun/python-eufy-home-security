@@ -10933,7 +10933,7 @@ rw 20 / ro 64
 
 ### Settings of T84A1 Wall Light Cam S100
 
-rw 13 / ro 73
+rw 14 / ro 72
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -11016,7 +11016,7 @@ rw 13 / ro 73
 | `spotlight_schedule_config` | string | - | - | no | - | - |
 | `spotlight_schedule_switch` | bool | - | - | yes | switch | - |
 | `spotlight_status` | bool | - | - | yes | switch | - |
-| `spotlight_switch` | string | - | - | no | - | - |
+| `spotlight_switch` | bool | - | - | yes | switch | - |
 | `support_video_codec` | other | - | - | no | - | - |
 | `time_format_set` | enum | 0, 1 | - | no | - | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
