@@ -961,35 +961,56 @@ def record_view_payload(path: str, key_hex: str) -> dict[str, Any]:
     return _video_by_path_payload(path, key_hex)
 
 
-#: The ``RECORD_PLAY_CTRL`` (0x0402) value that ends a playback: the app's
-#: ``ControlEvent`` STOP. The station sends it about 0.5 s after the last frame.
+#: The ``RECORD_PLAY_CTRL`` (0x0402) value that ends a playback: the station has sent
+#: every frame. It comes about 0.5 s after the last frame.
 PLAYBACK_ENDED = 2
+#: What each ``RECORD_PLAY_CTRL`` value means to the eufy app; only
+#: :data:`PLAYBACK_ENDED` changes anything for a receiver.
+PLAY_CTRL_VALUES: Final[Mapping[int, str]] = {1: "paused", PLAYBACK_ENDED: "ended", 3: "dropped"}
 #: A clear control body is this short; anything longer is GCM ``tag ‖ nonce ‖ ct``.
 _PLAY_CTRL_CLEAR_MAX = 8
 
 
-def decode_record_play_ctrl(frame: Frame, session_key: bytes | None) -> int | None:
+def decode_record_play_ctrl(
+    frame: Frame,
+    *,
+    static_key: bytes | None = None,
+    session_key: bytes | None = None,
+    clear: bool = False,
+) -> int | None:
     """The control value of a station ``RECORD_PLAY_CTRL`` (0x0402) frame, or None.
 
-    Seen under the GCM tag with the 5-byte body ``02 00 00 00 00`` at the end of a
-    1025 playback (:data:`PLAYBACK_ENDED`). The value is the body's first ``u32le``.
-    A body longer than :data:`_PLAY_CTRL_CLEAR_MAX` is decrypted under the session key
-    first. None for another frame type or cipher, a body too short to carry a value,
-    or ciphertext that does not authenticate.
+    The value is the body's first byte, as the eufy app reads it (:data:`PLAY_CTRL_VALUES`;
+    :data:`PLAYBACK_ENDED` at the end of a 1025 playback). The body is read under the key
+    the frame names, as any station state:
+
+    * GCM tag: a body of at most :data:`_PLAY_CTRL_CLEAR_MAX` bytes as is (the
+      ``02 00 00 00 00`` end frame), a longer one decrypted under ``session_key``;
+    * ECB tag: AES-128-ECB under ``static_key``, the key its encryption type names
+      (:meth:`~.session.keys.SessionKeys.ecb_key`); a short tail stays as is;
+    * ``clear``: an RSA session's unencrypted body (ECB tag, encryption type 0).
+
+    None for another frame type or cipher, an empty body, a key not supplied, or GCM
+    ciphertext that does not authenticate.
     """
-    if frame.type != FrameType.RECORD_PLAY_CTRL or frame.cipher != FrameCipher.GCM:
+    if frame.type != FrameType.RECORD_PLAY_CTRL:
         return None
     body = frame.payload
-    if len(body) > _PLAY_CTRL_CLEAR_MAX:
-        if session_key is None:
-            return None
-        try:
-            body = gcm_decrypt_broadcast(session_key, body)
-        except ProtocolError:
-            return None
-    if len(body) < 4:
+    if clear:
+        return body[0] if body else None
+    if frame.cipher == FrameCipher.GCM:
+        if len(body) > _PLAY_CTRL_CLEAR_MAX:
+            if session_key is None:
+                return None
+            try:
+                body = gcm_decrypt_broadcast(session_key, body)
+            except ProtocolError:
+                return None
+    elif frame.cipher == FrameCipher.ECB and static_key is not None:
+        body = ecb_decrypt(static_key, body)
+    else:
         return None
-    return int(struct.unpack_from("<I", body)[0])
+    return body[0] if body else None
 
 
 class StillFormat(StrEnum):

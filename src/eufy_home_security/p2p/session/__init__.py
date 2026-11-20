@@ -128,6 +128,7 @@ from ..crypto import (
 from ..did import Did, static_key
 from ..media import (
     DECODABLE_STILLS,
+    PLAY_CTRL_VALUES,
     PLAYBACK_ENDED,
     MediaKeyType,
     Still,
@@ -2649,16 +2650,24 @@ class StationSession:
     def _on_play_ctrl(self, stream: MediaStream | None, frame: Frame) -> None:
         """End ``stream`` on the station's end-of-playback frame (0x0402 = 2).
 
-        Only a recording that has started takes it. The frame carries no stream id, and
-        an earlier playback's end can arrive just after the next open (it follows the
-        last frame by about 0.5 s, the drain gap), before that stream's first keyframe.
+        The frame is read under the key its tag and encryption type name, as station
+        state (:func:`~..media.decode_record_play_ctrl`). Only a recording that has started
+        takes it. The frame carries no stream id, and an earlier playback's end can arrive
+        just after the next open (it follows the last frame by about 0.5 s, the drain gap),
+        before that stream's first keyframe.
         """
-        value = (
-            self._rsa_play_ctrl(frame)
-            if self.rsa_session
-            else decode_record_play_ctrl(frame, self._keys.session_key)
+        if self._keys.plain_rsa_frame(frame):
+            value = decode_record_play_ctrl(frame, clear=True)
+        else:
+            value = decode_record_play_ctrl(
+                frame, static_key=self._keys.ecb_key(frame), session_key=self._keys.session_key
+            )
+        _LOGGER.debug(
+            "%s: playback control %s (%s)",
+            self._log_name,
+            value,
+            "undecodable" if value is None else PLAY_CTRL_VALUES.get(value, "unknown"),
         )
-        _LOGGER.debug("%s: playback control %s", self._log_name, value)
         if (
             value != PLAYBACK_ENDED
             or stream is None
@@ -3916,12 +3925,6 @@ class StationSession:
         if not due:
             return None
         return due.pop(0)[1]
-
-    def _rsa_play_ctrl(self, frame: Frame) -> int | None:
-        """An RSA session's end-of-playback value: the first ``u32le`` of its body under
-        any encryption type (:meth:`~.keys.SessionKeys.rsa_plaintext`)."""
-        body = self._keys.rsa_plaintext(frame)
-        return int.from_bytes(body[:4], "little") if body is not None and len(body) >= 4 else None
 
     def _decode_receipt(self, channel: int, frame: Frame) -> tuple[int, int | None] | None:
         """The code of a command receipt on the request channel (0) and, on an RSA

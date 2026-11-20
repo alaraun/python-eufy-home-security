@@ -90,6 +90,8 @@ async def test_warm_start_needs_no_cloud() -> None:
   `images` (stills by path; a path not in it gets no reply, so the fetch times out, and
   `image_requests` lists every path asked), `answer_params`, `answer_conn_init`, `params_cipher`, `recording_frames`,
   `unhandled_commands` (answered with receipt −108), `playback_end_delay`,
+  `playback_end_cipher` (`FrameCipher.ECB`: the end frame under the static key, as a
+  HomeBase 3 sends it),
   `ignore_searches` (LAN searches left unanswered) and `answers_punch` (a client's punch
   on `session_port` is answered with the station's `PUNCH_PKT`, as a rendezvous punch is).
   A standalone fake (a T8170 serial, `cipher_id=98`, `receipt_len=STANDALONE_RECEIPT_LEN`)

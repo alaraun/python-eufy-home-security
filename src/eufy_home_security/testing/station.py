@@ -102,7 +102,7 @@ from ..p2p.station_config_codecs import (
     ScheduleSlot,
 )
 from ..p2p.storage_info import CMD_SD_INFO
-from ..p2p.xzyh import FrameCipher, FrameType, StreamDecoder, encode_frame
+from ..p2p.xzyh import Frame, FrameCipher, FrameType, StreamDecoder, encode_frame
 from .station_config import mode_list_params, schedule_params
 from .synthetic import SYNTHETIC
 
@@ -612,6 +612,10 @@ class FakeStation:
     playback_end_delay: float | None = 0.05
     """Seconds after a recording's last frame before its end-of-playback frame (the real
     station: about 0.5 s); None sends none."""
+    playback_end_cipher: int = FrameCipher.GCM
+    """The end-of-playback frame's form: GCM-tagged with the clear 5-byte body, or
+    :attr:`FrameCipher.ECB` for one block under the static key (encryption type 1), as a
+    HomeBase 3 sends it (see :meth:`send_playback_end`)."""
     preset_points: list[dict[str, Any]] = field(
         default_factory=lambda: [
             {"index": i, "enable": int(i < 3), "zoom": 1, "isdefault": int(i == 0)}
@@ -1549,13 +1553,32 @@ class FakeStation:
             await asyncio.sleep(self.playback_end_delay)
             self.send_playback_end()
 
-    def send_playback_end(self) -> None:
-        """The end-of-playback frame: ``RECORD_PLAY_CTRL`` (0x0402), GCM-tagged, body ``= 2``."""
-        body = struct.pack("<IB", PLAYBACK_ENDED, 0)
-        subheader = bytes([FrameCipher.GCM, 0, 0xFF, FrameCipher.GCM, 0, 0])
+    def send_playback_end(self, value: int = PLAYBACK_ENDED, *, cipher: int | None = None) -> None:
+        """Send :meth:`playback_end_frame` on DRW channel 2, as the live station."""
+        frame = self.playback_end_frame(value, cipher=cipher)
         self.send_frame(
-            FrameType.RECORD_PLAY_CTRL, body, cipher=FrameCipher.GCM, channel=2, subheader=subheader
+            frame.type,
+            frame.payload,
+            cipher=frame.subheader[0],
+            channel=2,
+            subheader=frame.subheader,
         )
+
+    def playback_end_frame(
+        self, value: int = PLAYBACK_ENDED, *, cipher: int | None = None
+    ) -> Frame:
+        """The end-of-playback frame: ``RECORD_PLAY_CTRL`` (0x0402) carrying ``value``, in
+        the form ``cipher`` names (default :attr:`playback_end_cipher`): GCM-tagged with the
+        clear body ``value 00 00 00 00``, or that body zero-padded to one AES block under the
+        static key (cipher tag 01, encryption type 1)."""
+        body = struct.pack("<IB", value, 0)
+        cipher = self.playback_end_cipher if cipher is None else cipher
+        if cipher == FrameCipher.ECB:
+            body = ecb_encrypt(self.static_key, body.ljust(16, b"\0"))
+            subheader = bytes([cipher, 0, 0xFF, FRAME_STATIC_ECB, 0, 0])
+        else:
+            subheader = bytes([cipher, 0, 0xFF, cipher, 0, 0])
+        return Frame(type=FrameType.RECORD_PLAY_CTRL, subheader=subheader, payload=body)
 
     def send_video(
         self,

@@ -12,7 +12,6 @@ from ..crypto import (
     FRAME_STATIC_ECB,
     GCM_SEQ_START,
     STATIC_KEY_FALLBACK_MODELS,
-    ecb_decrypt,
     frame_encryption,
 )
 from ..xzyh import Frame, FrameCipher
@@ -92,24 +91,6 @@ class SessionKeys:
         if self.aes_key is not None and frame_encryption(frame.subheader) == FRAME_SESSION_ECB:
             return self.aes_key
         return self.static_key
-
-    def rsa_plaintext(self, frame: Frame) -> bytes | None:
-        """An RSA session frame's body under the key its encryption type (subheader
-        byte 3) names, as the eufy app takes it: clear as is, type 1 the static key,
-        type 2 the session key; a partial last block stays as is. None on a GCM session
-        or for another encryption type."""
-        if self.aes_key is None:
-            return None
-        encryption = frame_encryption(frame.subheader)
-        if encryption == FRAME_PLAIN:
-            return frame.payload
-        if encryption == FRAME_STATIC_ECB:
-            key = self.static_key
-        elif encryption == FRAME_SESSION_ECB:
-            key = self.aes_key
-        else:
-            return None
-        return None if key is None else ecb_decrypt(key, frame.payload)
 
     def session_ecb_frame(self, frame: Frame) -> bool:
         """Whether ``frame`` is ECB under an RSA session's key and so authenticated by the

@@ -412,7 +412,7 @@ What the library does with them:
 | `0x0408` (1032) | Wi-Fi RSSI (`[-61, 0]`) of a camera while it streams |
 | `0x0547` cmd 6246 | live viewers of a camera: `{"num": 1}` when a stream opens, 0 when it closes — every session sees another client's live view |
 | `0x0547` cmd 1307 / 1082 | storage records and 1082 answers, including those requested by another client ([commands.md](commands.md#storage-1307-verified)). The library keeps each GCM 11001 record and emits `StorageChanged` when it differs from the last |
-| `0x0402` (1026) | `02` when a recording playback ends ([media.md](media.md)) |
+| `0x0402` (1026) | first byte `02` when a recording playback ends, GCM-tagged or under the static key ([media.md](media.md#recording-playback-1025-and-download-1024-verified)) |
 
 ## Guard mode announcements
 

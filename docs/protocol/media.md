@@ -118,8 +118,9 @@ image = await station.async_preset_image(device_sn, preset=1)  # pan/tilt: turn,
   does not decode, a frame with no NAL unit or a part whose frame already went out skips
   video to the next keyframe, counted in `stream.skipped`
   (`media_frames_skipped_for_keyframe`).
-- A recording ends on the station's **end-of-playback frame** (`0x0402` = 2, below):
-  the frames already queued are delivered, then iteration stops. Only a recording
+- A recording ends on the station's **end-of-playback frame** (`0x0402` = 2, GCM-tagged
+  or under the static key, below): the frames already queued are delivered, then
+  iteration stops. Only a recording
   that has delivered its first keyframe takes it, because the frame carries no stream
   id and an earlier playback's end can arrive just after the next open. Without one
   (a download, a lost frame) the stream ends after 3 s without a frame
@@ -845,12 +846,30 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
   of 3840×2160 at about 16 fps, 6.0 MB, plus 20.2 s of AAC) took about 7 s, and a 36 s
   one (1068 frames, 10.6 MB) 6.1 s, with no frame lost and no decode error.
 - **End of playback [verified].** About 0.5 s after the last frame of a 1025
-  playback the station sends `0x0402` (1026 `RECORD_PLAY_CTRL`) under GCM with the 5-byte
-  body `02 00 00 00 00` on channel 2 (0.51 s after the last frame): playback ended. It is the end signal a client can use instead of
-  waiting for silence. The value is the body's first `u32le`, 2 being the app's
-  `ControlEvent` STOP. Whether the 5 bytes are the body as sent or a GCM plaintext
-  is not settled, so `decode_record_play_ctrl` (`p2p/media.py`) takes a body of at
-  most 8 bytes as is and decrypts a longer one under the session key.
+  playback the station sends `0x0402` (1026 `RECORD_PLAY_CTRL`) on DRW channel 2: playback
+  ended. It is the end signal a client can use instead of waiting for silence. The value
+  is the body's **first byte** [declared, eufy app]; the four bytes after it are ignored.
+  The station sends it in either form, read like any station state
+  ([session-crypto.md](session-crypto.md#station-state-under-any-encryption-declared-app)):
+  - GCM-tagged, the 5-byte body `02 00 00 00 00` in clear (0.51 s after the last frame)
+    **[verified]** (HomeBase 3 fw 3.8.7.4). Whether the 5 bytes are the body as sent or a
+    GCM plaintext is not settled, so a GCM body of at most 8 bytes is taken as is and a
+    longer one decrypted under the session key.
+  - ECB-tagged, one 16-byte block under the static key (encryption type 1)
+    **[observed on a HomeBase 3]** (fw 3.8.8.0); decrypted under the key its encryption
+    type names, as an alarm frame.
+  - On an RSA session: clear (encryption type 0) as is, type 2 under the session key,
+    any other type under the static key.
+
+  | value | meaning [declared, eufy app] | effect on the stream |
+  |---|---|---|
+  | 1 | paused | none |
+  | 2 | ended: every frame was sent | ends it after the queued frames |
+  | 3 | dropped | none |
+
+  `decode_record_play_ctrl` (`p2p/media.py`) decodes it; the session logs
+  `playback control 2 (ended)` at DEBUG (`(unknown)` for another value, `None
+  (undecodable)` for a frame it cannot read).
 - **Download frames.** A 1024 download on a short-lived session was followed by
   `0x0517` (1303 `CONVERT_MP4_OK`, a 16-byte ECB block whose first u32 varies and
   whose third is constant) and `0x0518` (1304 `DOWNLOAD_FINISH`, app enum `DOENLOAD_FINISH`, empty) **[observed,
@@ -912,7 +931,7 @@ timeout with `CommandNotAppliedError`.
 | stream stop (1004) | **[verified]** (sent; the stream ends) |
 | download cancel (1051), playback stop (1055), play control stop (1026) | **[verified]** not to stop a 1025 playback; 1051 is rejected (−108) |
 | stopping a playback by closing its session | **[verified]** (station silent within about 5 ms) |
-| end-of-playback frame (`0x0402` = 2) | **[verified]** |
+| end-of-playback frame (`0x0402` = 2) | **[verified]** GCM-tagged (HomeBase 3 fw 3.8.7.4); **[observed]** under the static key (HomeBase 3 fw 3.8.8.0) |
 | V1 encrypted stills (key from `gen_pic_code_v1`) | **[verified]** (T8170) |
 | V2/V8 encrypted stills | **[app]**, not decoded |
 | ECC media key: AES-256-GCM keyframes and audio | **[verified]** as an ECC offer to a HomeBase 3 (T8160); not seen on a station whose param 1103 asks for it |

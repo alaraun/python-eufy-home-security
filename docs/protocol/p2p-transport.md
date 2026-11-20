@@ -472,7 +472,7 @@ changes the reply **[verified]**.
 | `0x044F` | 1103 | PARAM_NOTIFY | both | client: GCM parameter query. Station: parameter dump / change push (JSON). |
 | `0x0473` | 1139 | DEV_STATUS / PING | both | the app's empty keepalive: about every 20 s to a HomeBase 3, which answers with 8 zero bytes under GCM ([commands.md](commands.md)); every 3 s to a T8170, which needs it while streaming ([media.md](media.md#standalone-device-open-17001000-stop-bare-1004-ping-1139-verified)) |
 | `0x047F` | 1151 | ALARM_MODE_NOTIFY | station | the guard mode in force after any change, under either cipher: GCM (byte 0 `0x08`) body = u64le mode; ECB (byte 0 `0x01`) body = a 16-byte block whose first u32le is the mode ([commands.md](commands.md#arming-1224-verified)) |
-| `0x0402` | 1026 | RECORD_PLAY_CTRL | station | body `02 00 00 00 00`: a recording playback ended ([media.md](media.md)) |
+| `0x0402` | 1026 | RECORD_PLAY_CTRL | station | first body byte 2: a recording playback ended; GCM-tagged `02 00 00 00 00` in clear, or one block under the static key ([media.md](media.md#recording-playback-1025-and-download-1024-verified)) |
 | `0x0408` | 1032 | WIFI_STRENGTH (app enum WIFI_CONFIG) | station | camera RSSI while streaming |
 | `0x04B1`, `0x04B2` | 1201, 1202 | SET_TONE_FILE, SET_DEVS_TONE_FILE | station | alarm tone / camera siren, `[event_type, seconds]`, GCM ([events.md](events.md#alarm-over-p2p)). Client `0x04B2` = stop the alarm |
 | `0x04D3` | 1235 | SET_HUB_SPK_VOLUME | client | `u32 value ‖ account id` ([commands.md](commands.md)) |

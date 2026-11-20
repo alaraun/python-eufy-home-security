@@ -314,8 +314,8 @@ reads it as the eufy app does:
 The same rule reads an ECB scalar result. A HomeBase 3 answers with the code and 128 zero
 bytes, a T8170 with 32 zero bytes; a standalone T8414-class camera sends 132 bytes whose
 last 128 are not zero (reporter log). The end-of-playback frame (`0x0402`) is no result:
-it is decoded under the key its encryption type names (0 clear, 1 the static key, 2 the
-session key). A GCM session takes only GCM-tagged clear receipts
+it is decoded like station state, under the key its encryption type names (0 clear, 2 the
+session key, any other the static key). A GCM session takes only GCM-tagged clear receipts
 ([commands.md](commands.md#command-receipt-verified)).
 
 A result in clear proves nothing about its origin: a forged one can fail a command with

@@ -2562,15 +2562,26 @@ async def test_live_stream_starts_at_a_keyframe_and_stops_on_close(
         await session.async_close()
 
 
-# A playback ends on the station's end frame; without one, on the idle fallback.
+# A playback ends on the station's end frame, GCM-tagged or under the static key;
+# without one, on the idle fallback.
 @pytest.mark.parametrize(
-    ("download", "command", "end_frame"), [(False, 1025, True), (True, 1024, False)]
+    ("download", "command", "end_cipher"),
+    [(False, 1025, FrameCipher.GCM), (False, 1025, FrameCipher.ECB), (True, 1024, None)],
+    ids=["playback-gcm-end", "playback-static-key-end", "download-no-end"],
 )
 async def test_recording_plays_to_its_end(
-    station: FakeStation, download: bool, command: int, end_frame: bool
+    station: FakeStation,
+    download: bool,
+    command: int,
+    end_cipher: int | None,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    if not end_frame:
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.p2p.session")
+    end_frame = end_cipher is not None
+    if end_cipher is None:
         station.playback_end_delay = None
+    else:
+        station.playback_end_cipher = end_cipher
     session = make_session(station, Provider(station))
     try:
         stream = await session.async_open_recording(
@@ -2588,6 +2599,9 @@ async def test_recording_plays_to_its_end(
         assert [o["cmd"] for o in station.received] == [command]  # no stop: none works
     finally:
         await session.async_close()
+    ends = [m for m in caplog.messages if "rx frame 0x0402" in m]
+    assert len(ends) == (0 if end_cipher is None else 1)
+    assert all(f"rx frame 0x0402 ch2 v{end_cipher} " in m for m in ends)  # the form sent
 
 
 @pytest.mark.parametrize("kind", ["live", "recording", "download"])
@@ -2639,9 +2653,12 @@ async def test_a_recording_without_an_end_frame_ends_after_the_default_idle_wait
         await session.async_close()
 
 
-async def test_an_rsa_recording_ends_on_its_clear_end_of_playback_frame(
-    station: FakeStation,
+@pytest.mark.parametrize("cipher", [FrameCipher.GCM, FrameCipher.ECB], ids=["clear", "static-key"])
+async def test_an_rsa_recording_ends_on_its_end_of_playback_frame(
+    station: FakeStation, cipher: int
 ) -> None:
+    """The fake sends its GCM-form end frame to an RSA session in clear."""
+    station.playback_end_cipher = cipher
     session = make_rsa_session(station)
     try:
         stream = await session.async_open_recording("/zx/clip.zxvideo", 1, idle_timeout=1.0)
@@ -2694,6 +2711,96 @@ async def test_a_playback_end_before_the_first_keyframe_belongs_to_an_earlier_st
     frames = [frame.data async for frame in stream]
     assert (stream.closed, session._media_slot.stream) == (True, None)
     assert frames == [MEDIA_KEYFRAME]  # queued frames first
+
+
+def _started_recording(
+    session: StationSession, command: int = 1025
+) -> tuple[MediaStream, Callable[[Frame], None]]:
+    """A stream of ``command`` on ``session`` that has taken its first keyframe, and a
+    function that dispatches a frame to the session as received on DRW channel 2."""
+    _, rsa_key = generate_media_rsa_key()
+    stream = MediaStream(
+        session,
+        command=command,
+        channel=0,
+        decoder=MediaDecoder(rsa_key),
+        stop_body=None,
+        first_frame_timeout=1.0,
+        idle_timeout=1.0,
+    )
+    session._media_slot.set_stream(stream)
+    key = media_keyframe(rsa_key.public_key(), os.urandom(16))
+    session._dispatch(
+        Inbound(1, Frame(FrameType.VIDEO_FRAME, b"", video_record(key, keyframe=True)), session)
+    )
+
+    def dispatch(frame: Frame) -> None:
+        session._dispatch(Inbound(2, frame, session))
+
+    return stream, dispatch
+
+
+def _sealed_end_frame(station: FakeStation, value: int) -> Frame:
+    """A GCM-tagged end frame whose body is sealed under the session key."""
+    gcm = station.playback_end_frame(value, cipher=FrameCipher.GCM)
+    return replace(gcm, payload=station._seal(gcm.payload))
+
+
+@pytest.mark.parametrize("form", ["gcm", "gcm-sealed", "static-key"])
+async def test_only_the_end_value_ends_a_playback(
+    station: FakeStation, form: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Pause (1), drop (3) and unknown values are logged by name and leave the stream open."""
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.p2p.session")
+    session = make_session(station, Provider(station))
+    session._keys.static_key = station.static_key
+    session._keys.session_key = station.session_key
+
+    def end(value: int) -> Frame:
+        if form == "gcm-sealed":
+            return _sealed_end_frame(station, value)
+        cipher = FrameCipher.ECB if form == "static-key" else FrameCipher.GCM
+        return station.playback_end_frame(value, cipher=cipher)
+
+    stream, dispatch = _started_recording(session)
+    for value in (1, 3, 7):
+        dispatch(end(value))
+    assert not stream.closed
+    dispatch(end(0x0102))  # the first byte is the value
+    frames = [frame.data async for frame in stream]
+    assert (stream.closed, frames) == (True, [MEDIA_KEYFRAME])
+    controls = [r.getMessage().split(": ", 1)[1] for r in caplog.records if "control" in r.msg]
+    assert controls == [
+        "playback control 1 (paused)",
+        "playback control 3 (dropped)",
+        "playback control 7 (unknown)",
+        "playback control 2 (ended)",
+    ]
+
+
+async def test_an_end_frame_under_another_key_is_not_an_end(
+    station: FakeStation, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="eufy_home_security.p2p.session")
+    session = make_session(station, Provider(station))
+    session._keys.static_key = bytes(16)
+    stream, dispatch = _started_recording(session)
+    dispatch(station.playback_end_frame(cipher=FrameCipher.ECB))
+    assert not stream.closed
+    session._keys.static_key = None
+    dispatch(station.playback_end_frame(cipher=FrameCipher.ECB))
+    assert not stream.closed
+    assert "playback control None (undecodable)" in caplog.messages[-1]
+
+
+@pytest.mark.parametrize("cipher", [FrameCipher.GCM, FrameCipher.ECB], ids=["gcm", "static-key"])
+async def test_an_end_frame_does_not_end_a_live_stream(station: FakeStation, cipher: int) -> None:
+    session = make_session(station, Provider(station))
+    session._keys.static_key = station.static_key
+    stream, dispatch = _started_recording(session, command=1003)
+    dispatch(station.playback_end_frame(cipher=cipher))
+    assert not stream.closed
+    stream._end()
 
 
 async def test_rejected_media_open_raises_the_code(station: FakeStation) -> None:
@@ -5565,7 +5672,9 @@ async def test_an_rsa_session_reads_playback_end_under_any_encryption(
         frame = _rsa_frame(
             station, encryption, struct.pack("<I", 2) + bytes(12), ftype=FrameType.RECORD_PLAY_CTRL
         )
-        assert session._rsa_play_ctrl(frame) == 2
+        stream, dispatch = _started_recording(session)
+        dispatch(frame)
+        assert stream.closed
     finally:
         await session.async_close()
 

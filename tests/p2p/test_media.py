@@ -566,23 +566,80 @@ def _gcm(plain: bytes, key: bytes = _KEY) -> bytes:
     return sealed[-16:] + nonce + sealed[:-16]
 
 
+_ECB_KEY = bytes(range(16, 32))
+
+
 @pytest.mark.parametrize(
     ("ftype", "cipher", "payload", "value"),
     [
         (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, bytes.fromhex("0200000000"), 2),
         (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, _gcm(bytes.fromhex("0200000000")), 2),
         (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, _gcm(b"\x02\x00\x00\x00", bytes(32)), None),
-        (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, b"\x02\x00", None),
-        (FrameType.RECORD_PLAY_CTRL, FrameCipher.ECB, bytes.fromhex("0200000000"), None),
+        (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, b"\x02", 2),
+        (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, b"\x02\x01\x00\x00\x00", 2),
+        (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, b"\x03\x00\x00\x00\x00", 3),
+        (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, b"", None),
+        (
+            FrameType.RECORD_PLAY_CTRL,
+            FrameCipher.ECB,
+            crypto.ecb_encrypt(_ECB_KEY, bytes.fromhex("0200000000").ljust(16, b"\0")),
+            2,
+        ),
+        (FrameType.RECORD_PLAY_CTRL, FrameCipher.ECB, b"\x02\x00\x00\x00\x00", 2),
+        (
+            FrameType.RECORD_PLAY_CTRL,
+            FrameCipher.ECB,
+            crypto.ecb_encrypt(_ECB_KEY, bytes(16)) + b"\x02",
+            0,
+        ),
+        (FrameType.RECORD_PLAY_CTRL, 0x05, bytes.fromhex("0200000000"), None),
         (FrameType.NOTIFY_PAYLOAD, FrameCipher.GCM, bytes.fromhex("0200000000"), None),
+    ],
+    ids=[
+        "gcm-clear",
+        "gcm-sealed",
+        "gcm-wrong-key",
+        "gcm-one-byte",
+        "first-byte-not-u32",
+        "gcm-dropped",
+        "gcm-empty",
+        "static-key-block",
+        "ecb-short-tail-as-is",
+        "ecb-whole-blocks-decrypted",
+        "unknown-cipher",
+        "other-type",
     ],
 )
 def test_decode_record_play_ctrl(
     ftype: int, cipher: int, payload: bytes, value: int | None
 ) -> None:
+    """The value is the first byte of the body under the key the frame names."""
     frame = Frame(type=ftype, subheader=bytes([cipher, 0, 0, 0, 0, 0]), payload=payload)
-    assert media.decode_record_play_ctrl(frame, _KEY) == value
-    assert value == media.PLAYBACK_ENDED or value is None
+    assert media.decode_record_play_ctrl(frame, static_key=_ECB_KEY, session_key=_KEY) == value
+
+
+def test_decode_record_play_ctrl_needs_the_key_its_cipher_names() -> None:
+    gcm = Frame(FrameType.RECORD_PLAY_CTRL, bytes([FrameCipher.GCM, 0, 0, 0, 0, 0]), _gcm(b"\x02"))
+    ecb = Frame(
+        FrameType.RECORD_PLAY_CTRL,
+        bytes([FrameCipher.ECB, 0, 0, 1, 0, 0]),
+        crypto.ecb_encrypt(_ECB_KEY, b"\x02".ljust(16, b"\0")),
+    )
+    assert media.decode_record_play_ctrl(gcm, static_key=_ECB_KEY) is None
+    assert media.decode_record_play_ctrl(ecb, session_key=_KEY) is None
+    assert media.decode_record_play_ctrl(ecb, static_key=_ECB_KEY) == media.PLAYBACK_ENDED
+
+
+def test_decode_record_play_ctrl_reads_a_clear_body_as_is() -> None:
+    """An RSA session's clear frame (ECB tag, encryption type 0): no key is applied."""
+    clear = Frame(
+        FrameType.RECORD_PLAY_CTRL,
+        bytes([FrameCipher.ECB, 0, 0, 0, 0, 0]),
+        b"\x02".ljust(16, b"\0"),
+    )
+    assert media.decode_record_play_ctrl(clear, static_key=_ECB_KEY, clear=True) == 2
+    empty = Frame(FrameType.RECORD_PLAY_CTRL, clear.subheader, b"")
+    assert media.decode_record_play_ctrl(empty, clear=True) is None
 
 
 @pytest.mark.parametrize(
