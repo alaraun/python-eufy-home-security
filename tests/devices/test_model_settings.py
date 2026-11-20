@@ -27,6 +27,7 @@ from eufy_home_security.devices.model_settings import (
     declares_battery,
     mode_table_settings,
     product_code_of,
+    reached_on_demand,
     settings_of,
 )
 from eufy_home_security.devices.param_info import STATE_PARAM_INFO
@@ -197,6 +198,33 @@ def test_declares_battery_reads_a_camera_or_doorbells_settings(
 ) -> None:
     settings = settings_of(code, standalone=True).values()
     assert declares_battery(serial, settings) is expected
+
+
+@pytest.mark.parametrize(
+    ("serial", "code", "expected"),
+    [
+        ("T8170P0000000001", None, True),  # on the app's list: no model needed
+        ("T81A0P0000000001", "T81A0", True),  # off the list, settings declare a battery
+        ("T81A0P0000000001", None, False),  # no model: unknown
+        ("T84A1P0000000001", "T84A1", False),  # settings without one
+        ("T8030P0000000001", "T8030", False),  # a station's battery is not this rule's
+    ],
+)
+def test_reached_on_demand_takes_the_app_list_or_a_declared_battery(
+    serial: str, code: str | None, expected: bool
+) -> None:
+    assert reached_on_demand(serial, code) is expected
+
+
+def test_a_malformed_settings_file_is_not_reached_on_demand(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def malformed(*_args: object, **_kwargs: object) -> dict[str, Setting]:
+        raise ModelDataError("malformed")
+
+    monkeypatch.setattr(model_settings, "settings_of", malformed)
+    assert reached_on_demand("T81A0P0000000001", "T81A0") is False
+    assert reached_on_demand("T8170P0000000001", "T8170") is True  # the list needs no file
 
 
 # ── decode ──────────────────────────────────────────────────────────────────

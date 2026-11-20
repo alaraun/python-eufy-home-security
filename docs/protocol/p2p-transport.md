@@ -74,7 +74,7 @@ Facts that shape a client **[verified]**:
 | Within one session, **every datagram from the station comes from that one port**: replies, pushes, parameter dumps and media alike. ACKs and keepalives sent only to that port keep every channel, media included, flowing. | Once the peer is pinned, the library accepts datagrams only from that exact (host, port) and drops the rest. A datagram from the station's IP on another port is not this session's traffic (another session on the base, or a forgery). It is dropped, counted, and logged at DEBUG (throttled). Before a peer is pinned, discovery filters on the expected DID and the source: a searched host (any LAN address for a broadcast, which reaches no other) or an address the client punched for a [rendezvous connect](#rendezvous-connect). |
 | **The first LAN_SEARCH after a session is closed is ignored.** This holds after the client's own CLOSE and after another client's session closes. | Discovery must re-send until a timeout (the library sends every 1 s for 6 s, 3 attempts). A single failed search is not "station gone". |
 | **A battery or solar standalone camera answers late, or not at all while asleep.** A T8170 answered one search after 2.1 s, and at another time no search for 15 s, broadcast or unicast, while its address still answered ARP. It wakes on its own about every 7 min. | Listen longer (`LAN_DISCOVERY_TIMEOUT`, 5 s) to catch a wake window, or **wake it deliberately** ([below](#waking-a-battery-station-verified)). |
-| **The eufy app does not reconnect a battery device.** It connects every station when it comes to the foreground; its watchdog then reconnects a dropped session every 60 s while the app is in the foreground, except for a list of serial prefixes (battery SoloCams such as the T8170, battery doorbells, trackers, locks); the app closes every session 120 s after it leaves the foreground **[declared: app]**. The list leaves out newer battery models, such as the T81A0 wall light and the T86C1. | The library holds no session to a station on that list (`devices.ON_DEMAND_PREFIXES`), nor to a camera or doorbell whose bundled settings declare a battery (`devices.model_settings.declares_battery`; the library's rule, since the app holds no session in the background at all). The rule goes by model, not by how a unit is powered: a battery doorbell on wires is reached on demand too. Such a station connects per command and closes after `ON_DEMAND_IDLE_CLOSE` (120 s) idle, and its state comes from the cloud snapshot ([cloud.md](cloud.md)). `Station.connects_on_demand` is the decision taken. |
+| **The eufy app does not reconnect a battery device.** It connects every station when it comes to the foreground; its watchdog then reconnects a dropped session every 60 s while the app is in the foreground, except for a list of serial prefixes (battery SoloCams such as the T8170, battery doorbells, trackers, locks); the app closes every session 120 s after it leaves the foreground **[declared: app]**. The list leaves out newer battery models, such as the T81A0 wall light and the T86C1. | The library holds no session to a station on that list (`devices.ON_DEMAND_PREFIXES`), nor to a camera or doorbell whose bundled settings declare a battery (the library's rule, since the app holds no session in the background at all); `devices.model_settings.reached_on_demand` takes both parts. The rule goes by model, not by how a unit is powered: a battery doorbell on wires is reached on demand too. Such a station connects per command and closes after `ON_DEMAND_IDLE_CLOSE` (120 s) idle, and its state comes from the cloud snapshot ([cloud.md](cloud.md)). `Station.connects_on_demand` is the decision taken. |
 | A host firewall can only admit the station's replies by the **client's** port. | Bind a fixed local port **per station** when needed (two sessions cannot bind one port) and accept `udp dport <local port>` from the station's address, or accept all UDP from that address. Either rule needs the station on a fixed IP. With an open path, an ephemeral port is fine. A station with rendezvous servers needs neither when every filter on the path (host firewall and gateway) admits replies by connection tracking: the client's punch opens the path ([rendezvous connect](#rendezvous-connect)). A stateless filter still needs the station's UDP admitted. |
 | P2P_RDY is frequently absent on the LAN. | Wait briefly (the library waits 2 s), then proceed. |
 | The station accepts several concurrent sessions, but has a **session budget** [verified]: a HomeBase 3 holds 9 sessions across all clients, a T8170 4. Idle or streaming makes no difference to the count. | The library holds at most `max_sessions` to a station (default 6: its session, 1 trigger-frame session, 4 extra live sessions; configurable 2–9) and closes short-lived ones at once. A live open next to 0, 2 or 4 idle extra sessions reached its first keyframe in 2 to 4 s; one outlier run with two idle extras got no frame in 25 s and did not recur. |
@@ -89,7 +89,8 @@ known addresses of the stations that are not connected.
 ## Waking a battery station **[verified]**
 
 A battery station (verified on a T8170 standalone camera; the library wakes every
-station reached on demand this way, `Station.connects_on_demand`) keeps only a standing
+station reached on demand this way: one on the app's list or a camera or doorbell whose
+bundled settings declare a battery, `Station.connects_on_demand`) keeps only a standing
 link to eufy's cloud while it sleeps
 and does not answer a `LAN_SEARCH`. To reach it, poke it through its rendezvous servers,
 exactly as the app does:
@@ -166,7 +167,7 @@ rendezvous servers in the cloud's `app_conn`):
 
 | station | rendezvous runs | why |
 |---|---|---|
-| reached on demand (a battery station) | every discovery attempt, from the first | it is what wakes the station |
+| reached on demand (a battery station: the app's list or a declared battery) | every discovery attempt, from the first | it is what wakes the station |
 | held (mains), last link through the servers | every attempt, from the first (the DSK fetched when none is cached) | the station is not on the LAN path |
 | held (mains), last link needed a punch for a blocked LAN reply | every attempt, from the first (the DSK fetched when none is cached) | its LAN replies do not arrive ([on-link grace](#rendezvous-connect)) |
 | held (mains), a fresh DSK cached | every attempt, from the first | no cloud call needed: both run from the start, as the app runs them |
@@ -258,8 +259,8 @@ rendezvous half of a connect alone (`PPPPTransport.punch_probe`): HELLO, P2P_REQ
 round and the punches above, no `LAN_SEARCH`. The station's first `PUNCH_PKT` with its
 DID ends it: the client sends that address a `CLOSE` and closes the socket, with no
 punch echo, no `P2P_RDY` wait and no `ALIVE`, so no session is set up **[verified:
-T817L, the camera's punch 21 ms after the probe began]**. A station reached on demand is
-not probed this way, since the punch wakes it. The probe reads none of this host's
+T817L, the camera's punch 21 ms after the probe began]**. A station reached on demand (the
+rule a built station follows) is not probed this way, since the punch wakes it. The probe reads none of this host's
 networks: it answers whether a punch reaches the station, not which path a session
 would be labelled with.
 

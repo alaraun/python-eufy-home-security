@@ -28,7 +28,13 @@ def _choice(serial: str, *, answered: bool, rendezvous: bool | None = None) -> S
         local_port=0,
         answered=answered,
     )
-    return StationChoice(device=device, sub_devices=(camera,), path=path, rendezvous=rendezvous)
+    return StationChoice(
+        device=device,
+        sub_devices=(camera,),
+        path=path,
+        rendezvous=rendezvous,
+        connects_on_demand=False,
+    )
 
 
 @pytest.mark.parametrize(

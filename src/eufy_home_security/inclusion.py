@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .cloud.models import CloudDevice
-from .devices.types import DeviceModel, connects_on_demand, model_for_serial
+from .devices.types import DeviceModel, model_for_serial
 from .network import LanPath
 from .p2p.transport import ConnectPath
 
@@ -49,6 +49,11 @@ class StationChoice:
     answered the LAN probe, it is reached on demand, it lists no servers, its DSK could
     not be fetched, it is built and its last link did not come through the servers, or
     its probe was still running when the probe budget ended."""
+    connects_on_demand: bool
+    """Whether it is a battery station reached on demand
+    (:func:`~.devices.model_settings.reached_on_demand`, the rule a built station
+    follows): one that did not answer the LAN probe is not probed through its servers,
+    which would wake it."""
 
     @property
     def serial(self) -> str:
@@ -74,13 +79,6 @@ class StationChoice:
     def reach(self) -> Reach:
         """Local when a session reaches it (:attr:`reachable_via`), remote otherwise."""
         return Reach.REMOTE if self.reachable_via is None else Reach.LOCAL
-
-    @property
-    def connects_on_demand(self) -> bool:
-        """Whether it is a battery station reached on demand
-        (:func:`~.devices.types.connects_on_demand`): one that did not answer the LAN
-        probe is not probed through its servers, which would wake it."""
-        return connects_on_demand(self.serial)
 
     @property
     def supported(self) -> bool:

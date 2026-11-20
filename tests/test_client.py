@@ -65,7 +65,6 @@ from eufy_home_security.exceptions import (
     InviteCodeError,
     KeyExchangeRefusedError,
     KeyRejectedError,
-    ModelDataError,
     NoCachedSessionError,
     ProtocolError,
     RateLimitedError,
@@ -1350,6 +1349,38 @@ async def test_a_mains_station_only_its_servers_reach_is_offered_as_local(
     assert [wake.servers for wake in punches.wakes] == [SERVERS]
     assert _dsk_calls(cloud) == [f"dsk:{redact_serial(OTHER_STATION_SN)}"]
     assert b"dsk-of-the-garage-probe" in logging_module._SECRET_BYTES  # starred in hexdumps
+
+
+DECLARED_BATTERY_SN = "T81A0P2000012345"
+"""A standalone camera off the app's on-demand list whose settings declare a battery."""
+WIRED_SN = "T84A1P2000012345"
+"""A standalone wired camera: its settings declare no battery."""
+
+
+@pytest.mark.usefixtures("servers")
+async def test_a_station_whose_settings_declare_a_battery_is_not_probed_through_its_servers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The setup probe and the choice follow the stations' on-demand rule: a camera off
+    the app's list whose settings declare a battery is not woken; a wired one is probed."""
+    _lan_answers(monkeypatch)
+    punches = Punches(monkeypatch)
+    cloud = FakeCloud(
+        devices=[
+            station_device(DECLARED_BATTERY_SN, did=BATTERY_DID, name="Wall light"),
+            station_device(WIRED_SN, did=OTHER_DID, name="Wired"),
+        ]
+    )
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        choices = {c.serial: c for c in await eufy.async_station_choices()}
+        await eufy.async_close()
+
+    battery, wired = choices[DECLARED_BATTERY_SN], choices[WIRED_SN]
+    assert (battery.connects_on_demand, battery.rendezvous) == (True, None)
+    assert (wired.connects_on_demand, wired.rendezvous) == (False, False)
+    assert punches.probed == [OTHER_DID]
+    assert _dsk_calls(cloud) == [f"dsk:{redact_serial(WIRED_SN)}"]
 
 
 @pytest.mark.usefixtures("servers")
@@ -3331,21 +3362,6 @@ async def test_an_unbundled_model_is_listed_read_only_after_one_request() -> Non
         await eufy.async_close()
     assert cloud.calls.count("things") == 1
     assert "login" not in cloud.calls
-
-
-async def test_a_malformed_settings_file_keeps_a_held_session(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def malformed(*_args: object, **_kwargs: object) -> Mapping[str, object]:
-        raise ModelDataError("malformed")
-
-    monkeypatch.setattr(client_module, "settings_of", malformed)
-    cloud = FakeCloud(devices=[standalone_device("T81A0P0000000000")])
-    async with aiohttp.ClientSession() as http:
-        eufy = account(http, cloud)
-        (station,) = await eufy.async_discover()
-        assert station.connects_on_demand is False
-        await eufy.async_close()
 
 
 @pytest.mark.parametrize("listed_battery", [True, False])

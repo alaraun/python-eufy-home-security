@@ -33,12 +33,11 @@ from .devices.model_settings import (
     bundled_codes,
     bundled_td_version,
     canonical_code,
-    declares_battery,
     product_code_of,
+    reached_on_demand,
     settings_of,
 )
 from .devices.td import parse_thing_description, td_version
-from .devices.types import connects_on_demand
 from .devices.webrtc import app_webrtc_only, route_device
 from .diagnostics import AccountReport, async_account_report
 from .events import (
@@ -198,19 +197,27 @@ def _load_settings(devices: Sequence[CloudDevice]) -> frozenset[str]:
     thread only), so :meth:`Station.settings_for` reads no disk on the loop. A malformed
     file is left for :meth:`Station.settings_for` to raise.
 
-    Returns the serials whose bundled settings, as their own station, declare a battery
-    (:func:`~.devices.model_settings.declares_battery`); only a station reads it.
+    Returns :func:`_on_demand_serials` of ``devices``.
     """
-    battery: set[str] = set()
     for device in devices:
         code = product_code_of(device.raw.get("device_new_pn"), device.device_sn)
-        if code is None:
-            continue
-        with contextlib.suppress(ModelDataError):
-            settings_of(code)
-            if declares_battery(device.device_sn, settings_of(code, standalone=True).values()):
-                battery.add(device.device_sn)
-    return frozenset(battery)
+        if code is not None:
+            with contextlib.suppress(ModelDataError):
+                settings_of(code)
+    return _on_demand_serials(devices)
+
+
+def _on_demand_serials(devices: Iterable[CloudDevice]) -> frozenset[str]:
+    """The serials of ``devices`` reached only on demand as their own station
+    (:func:`~.devices.model_settings.reached_on_demand`). Blocking: package data, a worker
+    thread only."""
+    return frozenset(
+        device.device_sn
+        for device in devices
+        if reached_on_demand(
+            device.device_sn, product_code_of(device.raw.get("device_new_pn"), device.device_sn)
+        )
+    )
 
 
 def _bundled_version(code: str) -> int | None:
@@ -333,13 +340,11 @@ class EufySecurity:
         cloud's alarm pushes become one :class:`~.events.AlarmChanged` per start and
         per end, and a change of guard mode to a disarmed mode ends an alarm.
 
-        A station reached on demand (a battery device: on the eufy app's list,
-        :func:`~.devices.types.connects_on_demand`, or a camera or doorbell whose bundled
-        settings declare a battery, :func:`~.devices.model_settings.declares_battery`)
-        holds no session. The battery part is the library's rule (the app holds no
-        session in the background at all, and its list leaves out newer battery models);
-        it goes by model, not by how a unit is powered, and is taken when the station is
-        built. A model without a bundled settings file keeps a held session. Its state comes from
+        A station reached on demand (a battery device: on the eufy app's list, or a
+        camera or doorbell whose bundled settings declare a battery,
+        :func:`~.devices.model_settings.reached_on_demand`) holds no session; the
+        decision is taken when the station is built, and the setup probe of
+        :meth:`async_station_choices` takes the same one. Its state comes from
         the cloud device list's parameter snapshot: kept in the cache, applied when the
         station is built, and fetched again every ``cloud_state_refresh`` seconds (one
         device-list call for the account) while :meth:`async_start` runs; pushes update it
@@ -684,7 +689,7 @@ class EufySecurity:
             served = self._claims.claim(self.cache.account, included)
         self.stations_served_elsewhere = tuple(d for d in included if d.device_sn not in served)
         self._not_served = frozenset(d.device_sn for d in candidates if d.device_sn not in served)
-        battery_stations = await asyncio.to_thread(_load_settings, devices)
+        on_demand_stations = await asyncio.to_thread(_load_settings, devices)
         await self._async_scan_models(devices, refresh=refresh or rescan_regions)
         for device in candidates:
             serial = device.device_sn
@@ -699,8 +704,7 @@ class EufySecurity:
             if self._reach(serial) is Reach.REMOTE:
                 self.remote_stations[serial] = RemoteStation(device=device, sub_devices=sub_devices)
                 continue
-            # The app's list, or the library's rule for a battery camera or doorbell.
-            on_demand = connects_on_demand(serial) or serial in battery_stations
+            on_demand = serial in on_demand_stations
             session = StationSession(
                 serial,
                 self._credential_provider(serial),
@@ -1112,12 +1116,15 @@ class EufySecurity:
             )
             for device in candidates
         ]
+        on_demand = await asyncio.to_thread(_on_demand_serials, candidates)
         probed = await self._probe(paths, candidates, timeout=timeout, port=port)
         punched = await self._probe_rendezvous(
             [
                 device
                 for device, path in zip(candidates, probed, strict=True)
-                if not path.answered and device.device_sn not in self.stations
+                if not path.answered
+                and device.device_sn not in self.stations
+                and device.device_sn not in on_demand
             ]
         )
         for serial, station in self.stations.items():
@@ -1129,6 +1136,7 @@ class EufySecurity:
                 sub_devices=tuple(children.get(device.device_sn, ())),
                 path=path,
                 rendezvous=punched.get(device.device_sn),
+                connects_on_demand=device.device_sn in on_demand,
             )
             for device, path in zip(candidates, probed, strict=True)
         ]
@@ -1136,10 +1144,9 @@ class EufySecurity:
     async def _probe_rendezvous(self, devices: list[CloudDevice]) -> dict[str, bool | None]:
         """Whether each of ``devices`` answers a punch through its rendezvous servers,
         by serial; None for a station without servers or whose DSK cannot be fetched,
-        and a station reached on demand or still probed at the budget's end is left out
-        (see :meth:`async_station_choices`)."""
-        targets = [device for device in devices if not connects_on_demand(device.device_sn)]
-        if not targets:
+        and a station still probed at the budget's end is left out (see
+        :meth:`async_station_choices`, which passes no station reached on demand)."""
+        if not devices:
             return {}
         limit = asyncio.Semaphore(RENDEZVOUS_PROBE_CONCURRENCY)
 
@@ -1169,7 +1176,7 @@ class EufySecurity:
                 _LOGGER.debug("%s: rendezvous probe answered", serial)
                 return True
 
-        tasks = {device.device_sn: asyncio.create_task(probe(device)) for device in targets}
+        tasks = {device.device_sn: asyncio.create_task(probe(device)) for device in devices}
         pending: set[asyncio.Task[bool | None]] = set(tasks.values())
         try:
             _done, pending = await asyncio.wait(tasks.values(), timeout=RENDEZVOUS_PROBE_BUDGET)

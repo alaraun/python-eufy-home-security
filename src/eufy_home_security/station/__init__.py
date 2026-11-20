@@ -1614,10 +1614,9 @@ class Station:
 
     @property
     def connects_on_demand(self) -> bool:
-        """Whether this station is reached only on demand (a battery device: on the eufy
-        app's list, :func:`~..devices.types.connects_on_demand`, or a camera or doorbell
-        whose bundled settings declare a battery, decided by the client when it builds
-        the station): no held session, its state comes from the cloud snapshot and
+        """Whether this station is reached only on demand (a battery device,
+        :func:`~..devices.model_settings.reached_on_demand`, decided by the client when it
+        builds the station): no held session, its state comes from the cloud snapshot and
         pushes, and every command connects, then the link closes after
         :data:`~..p2p.session.ON_DEMAND_IDLE_CLOSE` seconds idle."""
         return self.session.on_demand

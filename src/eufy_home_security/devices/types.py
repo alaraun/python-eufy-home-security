@@ -255,8 +255,8 @@ MODELS: Final[Mapping[str, DeviceModel]] = MappingProxyType(_models)
 #: battery doorbells, trackers, locks): it connects them when it comes to the
 #: foreground, but reconnects only the other stations when their session drops. A
 #: prefix, not a catalog model: most of them are not catalogued. The list leaves out
-#: newer battery models; the client adds those by their settings (see
-#: ``EufySecurity``'s on-demand rule).
+#: newer battery models; the client adds those by their settings
+#: (:func:`~.model_settings.reached_on_demand`).
 ON_DEMAND_PREFIXES: Final = frozenset(
     {
         "T7400", "T7401", "T8110", "T8115", "T8122", "T8123", "T8124", "T8130", "T8131",
@@ -351,8 +351,7 @@ def product_name(serial: str, product_code: str | None = None) -> str | None:
 
 def connects_on_demand(serial: str) -> bool:
     """Whether a station is on the eufy app's on-demand list (:data:`ON_DEMAND_PREFIXES`):
-    a battery device a held session would keep awake. The client also reaches a camera
-    or doorbell on demand when its bundled settings declare a battery
-    (:func:`~.model_settings.declares_battery`); :attr:`Station.connects_on_demand
+    a battery device a held session would keep awake. The client's rule is wider
+    (:func:`~.model_settings.reached_on_demand`); :attr:`Station.connects_on_demand
     <eufy_home_security.station.Station.connects_on_demand>` is the decision taken."""
     return serial_prefix(serial) in ON_DEMAND_PREFIXES

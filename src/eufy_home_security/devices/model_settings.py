@@ -49,7 +49,7 @@ from .settings import (
     SettingUnit,
 )
 from .timezones import TIMEZONE_DOMAIN, decode_zone, encode_zone, zone_ids
-from .types import DeviceKind, model_for_serial, serial_product_code
+from .types import DeviceKind, connects_on_demand, model_for_serial, serial_product_code
 
 __all__ = [
     "DEFAULT_BATTERY_READS",
@@ -75,6 +75,7 @@ __all__ = [
     "declares_battery",
     "mode_table_settings",
     "product_code_of",
+    "reached_on_demand",
     "sd_status_groups",
     "settings_of",
     "sort_settings",
@@ -1027,6 +1028,29 @@ def declares_battery(serial: str, settings: Iterable[Setting]) -> bool | None:
         return None
     keys = {setting.key for setting in settings}
     return (BATTERY_PROPERTY in keys) if keys else None
+
+
+def reached_on_demand(serial: str, product_code: str | None) -> bool:
+    """Whether the client reaches the station ``serial`` (model ``product_code``) only on
+    demand, never over a held session: it is on the eufy app's on-demand list
+    (:func:`~.types.connects_on_demand`), or it is a camera or doorbell whose bundled
+    settings, as its own station, declare a battery (:func:`declares_battery`).
+
+    The battery part is the library's rule: the app holds no session while it is in the
+    background, and its list leaves out newer battery models. It goes by model, not by
+    how a unit is powered. A model without a bundled file, or with a malformed one,
+    keeps a held session. Reads package data on the first call per model: call it off
+    the event loop.
+    """
+    if connects_on_demand(serial):
+        return True
+    if product_code is None:
+        return False
+    try:
+        settings = settings_of(product_code, standalone=True).values()
+    except ModelDataError:
+        return False
+    return declares_battery(serial, settings) is True
 
 
 @functools.cache

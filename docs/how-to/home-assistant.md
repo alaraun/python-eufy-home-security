@@ -465,7 +465,7 @@ and opens no session:
 | `reachable_via` | `ConnectPath.LAN` (`"lan"`) if the station answered LAN discovery, `ConnectPath.RENDEZVOUS` (`"rendezvous"`) if a punch through its rendezvous servers reached it (another subnet behind a stateful gateway, or another site; see the network section), None if neither did |
 | `reach` | `Reach.LOCAL` when `reachable_via` is set, else `Reach.REMOTE`. A station reached through its servers gets the same full session as one on the LAN |
 | `rendezvous` | the rendezvous probe's outcome: True (reached, or a built station whose last link came through the servers: its last link of this run, or before the first the path stored from an earlier run), False (no punch within the probe's time), None (not tried or not finished: it answered the LAN probe, it is reached on demand, it lists no servers, its DSK could not be fetched, it is built and its last link did not come through the servers, or its probe was still running when the probe budget ended) |
-| `connects_on_demand` | a battery station reached on demand; one that did not answer the LAN probe is **not** probed through its servers, since the punch would wake it |
+| `connects_on_demand` | a battery station reached on demand, by the rule a built station follows (the eufy app's list, or a camera or doorbell whose bundled settings declare a battery); one that did not answer the LAN probe is **not** probed through its servers, since the punch would wake it |
 | `sub_devices` | the cameras and sensors paired to it; they are included with it |
 | `supported` | whether the device catalog knows the model |
 | `enabled_by_default` | local **and** supported |
