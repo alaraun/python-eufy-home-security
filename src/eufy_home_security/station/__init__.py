@@ -1642,11 +1642,11 @@ class Station:
         (:attr:`StationState.setting_params`); the entry replaces the previous copy. A
         station reached on demand merges the snapshot into its session instead (see
         :meth:`~..p2p.session.StationSession.ingest_cloud_params`), where it is its state.
-        A state the entry changed (by news, or by the record's firmware or name) emits
-        :class:`~..events.StationStateChanged` once the station has a state. Only this
-        station's own entry counts (a hub's paired devices report through the hub,
-        :meth:`update_sub_devices` takes their records); an entry of another serial
-        changes nothing.
+        A state the entry changed (by news, or by the record's firmware, second firmware or
+        name) emits :class:`~..events.StationStateChanged` once the station has a state.
+        Only this station's own entry counts (a hub's paired devices report through the hub,
+        :meth:`update_sub_devices` takes their records); an entry of another serial changes
+        nothing.
         """
         if device.device_sn != self.serial:
             return 0
