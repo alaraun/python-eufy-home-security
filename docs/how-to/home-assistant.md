@@ -1700,7 +1700,9 @@ the lamp is off: the app writes brightness on its own, writes no brightness of 1
 and turns the lamp off instead, so do the same for such a percent (`value_for` gives no
 range value below 2). Read `is_on` from the `on_off` setting and the brightness through
 `brightness.percent(value)`. The settings in `keys` stay in `settings_for` as well: hide
-their own switch and number or select where the light covers them; the colour temperature
+their own switch and number or select where the light covers them (a read-only brightness, as on a
+T8L60 or a standalone T81A0, and both keys of a lamp with no light entity, as a T84A1 behind
+a station, stay their own entities); the colour temperature
 and `config` settings stay entities of their own. Writes go through `async_set_setting` as
 for any setting.
 

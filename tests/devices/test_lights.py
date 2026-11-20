@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 from pathlib import Path
 
 import pytest
@@ -241,7 +242,9 @@ def _verified_rows() -> set[tuple[str, str, str]]:
         if "| ✓ |" not in row:
             continue
         contexts = {ctx for word, ctx in _ROW_CONTEXTS.items() if word in row}
-        codes = {code for code in bundled_codes() if code in row and lights_of(code)}
+        codes = {
+            code for code in bundled_codes() if re.search(rf"\b{code}\b", row) and lights_of(code)
+        }
         keys = {key for key in lamp_keys if f"`{key}`" in row}
         found |= {(c, ctx, k) for c in codes for ctx in contexts for k in keys}
     return found
