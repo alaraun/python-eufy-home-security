@@ -136,8 +136,10 @@ def _seed_answers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path
     handler = tmp_path / "Handle.mix.js"
     handler.write_text("// handler", encoding="utf-8")
     store = tmp_path / "answers"
-    monkeypatch.setattr(gen_models.ANSWERS, "root", store)  # restored after the test
-    monkeypatch.setattr(gen_models.ANSWERS, "_runtime", lambda: "v0")
+    fresh = gen_models.answers.AnswerStore(
+        store, driver=gen_models.node.DRIVER, runtime=lambda: "v0"
+    )
+    monkeypatch.setattr(gen_models, "ANSWERS", fresh)
     monkeypatch.setattr(gen_models.DRIVERS, "run", lambda job: [{} for _ in job["requests"]])
     for pn in PNS:
         gen_models.ANSWERS.open(pn)
@@ -201,6 +203,34 @@ def test_a_run_stopped_by_node_keeps_the_stopping_model_s_earlier_answers(
 
 
 @pytest.mark.timeout(60)
+def test_a_run_whose_node_runtime_cannot_be_asked_says_so_once_and_stores_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    handler, store = _seed_answers(tmp_path, monkeypatch)
+    before = {p.name: p.read_bytes() for p in store.iterdir()}
+
+    def no_runtime() -> str:
+        raise gen_models.answers.subprocess.CalledProcessError(1, ["node"])
+
+    fresh = gen_models.answers.AnswerStore(store, driver=gen_models.node.DRIVER, runtime=no_runtime)
+    monkeypatch.setattr(gen_models, "ANSWERS", fresh)
+
+    def generate(pn: str, *_: Any, **__: Any) -> Any:
+        gen_models.run_driver(pn, handler, [{"now": pn}])
+        return {"product_code": pn}, {}
+
+    monkeypatch.setattr(gen_models, "generate", generate)
+    args = _args(tmp_path, 1)
+    args.answers = store
+    gen_models.DRIVERS.close()  # as an earlier run leaves it
+    assert gen_models._generate_all(args, tmp_path, tmp_path / "out", quiet=True) == 0
+    err = capsys.readouterr().err
+    assert err.count("answers: cannot ask the Node runtime (") == 1
+    assert f"answers: 0 jobs replayed, 0 asked of Node, 5 asked without the store ({store})" in err
+    assert {p.name: p.read_bytes() for p in store.iterdir()} == before
+
+
+@pytest.mark.timeout(60)
 def test_several_jobs_build_in_worker_processes_and_report_each_failure(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-c", SEVERAL_JOBS, __file__, str(tmp_path)],
@@ -220,6 +250,7 @@ def test_several_jobs_build_in_worker_processes_and_report_each_failure(tmp_path
 # Answers --version as Node of the given version; any other run fails at once.
 FAKE_NODE = """#!/bin/sh
 if [ "$1" = "--version" ]; then echo @VERSION@; exit 0; fi
+if [ "$1" = "-p" ]; then echo '[{}, "UTC", "en-US"]'; exit 0; fi
 echo "fake node: broken" >&2
 exit 1
 """

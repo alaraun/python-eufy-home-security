@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
+import os
+import shutil
 import sys
 import zlib
 from pathlib import Path
@@ -351,16 +354,41 @@ def test_a_job_without_a_key_goes_to_the_driver_unstored(setup: Setup, cause: An
     for _ in range(2):
         replies, stats = setup.product(setup.job(1))
         assert replies == [[{"echo": 1, "n": len(setup.ask.jobs)}]]
-        assert (stats.asked, stats.replayed) == (0, 0)
+        assert (stats.asked, stats.replayed, stats.unkeyed) == (0, 0, 1)
     assert len(setup.ask.jobs) == 2
     assert not setup.file.exists()
 
 
+def test_the_runtime_is_asked_once_per_store_and_a_failure_once_too(
+    setup: Setup, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[int] = []
+
+    def runtime() -> str:
+        calls.append(1)
+        if failing:
+            raise answers.subprocess.CalledProcessError(1, ["node"])
+        return "v24"
+
+    for failing in (False, True):
+        calls.clear()
+        store = answers.AnswerStore(setup.root, driver=setup.driver, runtime=runtime)
+        for pn in ("T9ZZ1", "T9ZZ2"):
+            store.open(pn)
+            for n in range(3):
+                store.run(setup.job(n), setup.ask)
+            store.close(ok=True)
+        assert len(calls) == 1
+        assert (store.stats.asked, store.stats.unkeyed) == ((0, 3) if failing else (3, 0))
+    err = capsys.readouterr().err
+    assert err.count("answers: cannot ask the Node runtime (") == 1
+
+
 def _fake_node(path: Path, versions: str) -> str:
-    """A ``node`` that prints ``versions`` for ``-p JSON.stringify(process.versions)``."""
+    """A ``node`` that prints ``versions`` for ``-p <the runtime probe>``."""
     path.write_text(
         f"""#!/bin/sh
-[ "$1 $2" = "-p JSON.stringify(process.versions)" ] && echo '{versions}'
+[ "$1" = "-p" ] && [ "$2" = '{answers.RUNTIME_PROBE}' ] && echo '{versions}'
 """,
         encoding="utf-8",
     )
@@ -392,6 +420,40 @@ def test_the_runtime_text_follows_the_environment_a_reply_can_depend_on(
     node = _fake_node(tmp_path / "node", '{"node":"24.0.0","icu":"77.1","tz":"2026a"}')
     base = answers.runtime_version(node, BASE_ENV)
     assert (answers.runtime_version(node, env) != base) is changes
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="a shell-script node")
+def test_the_runtime_text_reads_this_process_s_environment_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    node = _fake_node(tmp_path / "node", '{"node":"24.0.0"}')
+    monkeypatch.setenv("TZ", "UTC")
+    utc = answers.runtime_version(node)
+    monkeypatch.setenv("TZ", "Pacific/Kiritimati")
+    assert answers.runtime_version(node) != utc
+    assert answers.runtime_version(node, {**os.environ, "TZ": "UTC"}) == utc
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="a shell-script node")
+def test_the_runtime_text_does_not_depend_on_the_environment_s_order(tmp_path: Path) -> None:
+    node = _fake_node(tmp_path / "node", '{"node":"24.0.0"}')
+    backwards = dict(reversed({**BASE_ENV, "LANG": "et_EE.UTF-8"}.items()))
+    assert answers.runtime_version(node, backwards) == answers.runtime_version(
+        node, {**BASE_ENV, "LANG": "et_EE.UTF-8"}
+    )
+
+
+@pytest.mark.needs_node
+def test_the_runtime_probe_names_the_build_and_the_zone_and_locale_node_resolves() -> None:
+    """The zone and locale as Node resolves them, so a host zone (/etc/localtime) counts."""
+    env = {"PATH": os.environ["PATH"], "TZ": "Pacific/Kiritimati", "LC_ALL": "de_DE.UTF-8"}
+    probe, settings = json.loads(answers.runtime_version(shutil.which("node") or "node", env))
+    versions, zone, locale = json.loads(probe)
+    assert {"node", "v8", "icu", "tz"} <= versions.keys()
+    assert zone == "Pacific/Kiritimati"
+    assert isinstance(locale, str)
+    assert locale
+    assert settings == [["LC_ALL", "de_DE.UTF-8"], ["TZ", "Pacific/Kiritimati"]]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="a shell-script node")

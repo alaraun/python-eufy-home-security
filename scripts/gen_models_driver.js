@@ -54,7 +54,7 @@ const FIXED_CLOCK = new vm.Script(
 
 // The last handler compiled: a worker serves one product's jobs in a row. The file's
 // identity and times are part of the match, so a handler rewritten in place is compiled
-// again.
+// again (best effort: two same-size writes within one clock tick look alike).
 let compiled = { stamp: null, script: null };
 
 function handlerScript(path) {

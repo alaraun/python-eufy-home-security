@@ -146,7 +146,7 @@ DRIVERS = node.DriverPool()  # one Node worker per generating thread
 ANSWERS = answers.AnswerStore(
     None,
     driver=node.DRIVER,
-    runtime=functools.cache(lambda: answers.runtime_version(node.node_path())),
+    runtime=lambda: answers.runtime_version(node.node_path()),
 )
 RECIPE_FIELDS = ("cmd", "subCmd", "params")
 type LeafPath = tuple[str | int, ...]
@@ -2472,6 +2472,7 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     if args.answers is not None:
         print(
             f"answers: {replies.replayed} jobs replayed, {replies.asked} asked of Node"
+            + (f", {replies.unkeyed} asked without the store" if replies.unkeyed else "")
             + (f", {replies.damaged} damaged in the store" if replies.damaged else "")
             + f" ({args.answers})",
             file=sys.stderr,

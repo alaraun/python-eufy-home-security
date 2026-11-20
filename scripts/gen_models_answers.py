@@ -27,6 +27,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import zlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -47,14 +48,22 @@ def file_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+# Node's build (Node, V8, ICU, time zone data) and the time zone and locale it resolves,
+# wherever they come from (TZ, LANG, /etc/localtime).
+RUNTIME_PROBE = (
+    "const o = Intl.DateTimeFormat().resolvedOptions();"
+    " JSON.stringify([process.versions, o.timeZone, o.locale])"
+)
+
+
 def runtime_version(node: str, env: Mapping[str, str] | None = None) -> str:
-    """The runtime part of every key: the ``process.versions`` of the Node binary ``node``
-    (Node, V8, ICU, time zone data) and the variables of ``env`` (default: this process's
-    environment, which the driver's workers inherit) that can change a handler's reply:
-    time zone, locale and Node options."""
+    """The runtime part of every key: what the Node binary ``node`` reports for
+    ``RUNTIME_PROBE`` under ``env`` (default: this process's environment, which the
+    driver's workers inherit), and the variables of ``env`` that can change a handler's
+    reply: time zone, locale and Node options."""
     env = os.environ if env is None else env
-    versions = subprocess.run(
-        [node, "-p", "JSON.stringify(process.versions)"],
+    probe = subprocess.run(
+        [node, "-p", RUNTIME_PROBE],
         capture_output=True,
         text=True,
         timeout=30,
@@ -62,21 +71,25 @@ def runtime_version(node: str, env: Mapping[str, str] | None = None) -> str:
         env=dict(env),
     ).stdout.strip()
     settings = sorted((k, v) for k, v in env.items() if k in RUNTIME_ENV or k.startswith("LC_"))
-    return json.dumps([versions, settings])
+    return json.dumps([probe, settings])
 
 
 @dataclass
 class Stats:
-    """Jobs per outcome: replayed from the store, asked of Node; and damaged spots found
-    in the store (a damaged record, or a file cut short or of another format)."""
+    """Jobs per outcome: replayed from the store, asked of Node and stored, asked of Node
+    without a key (not stored: the runtime, driver or handler could not be read); and
+    damaged spots found in the store (a damaged record, or a file cut short or of another
+    format)."""
 
     replayed: int = 0
     asked: int = 0
+    unkeyed: int = 0
     damaged: int = 0
 
     def add(self, other: Stats) -> None:
         self.replayed += other.replayed
         self.asked += other.asked
+        self.unkeyed += other.unkeyed
         self.damaged += other.damaged
 
 
@@ -92,15 +105,19 @@ class _Product:
 class AnswerStore:
     """Replays driver replies stored under ``root`` (None: every job goes to Node).
 
-    ``runtime`` gives the runtime text (:func:`runtime_version`) and ``driver`` is the
-    driver source; both are part of every key. Between ``open(name)`` and ``close(ok=...)``
-    the jobs of one product go through ``run``; outside them ``run`` asks Node directly.
+    ``runtime`` gives the runtime text (:func:`runtime_version`), asked once per store
+    (a failure too: it is printed once to stderr, and no job is stored from then on), and
+    ``driver`` is the driver source; both are part of every key. Between ``open(name)``
+    and ``close(ok=...)`` the jobs of one product go through ``run``; outside them ``run``
+    asks Node directly.
     """
 
     def __init__(self, root: Path | None, *, driver: Path, runtime: Callable[[], str]) -> None:
         self.root = root
         self._driver = driver
         self._runtime = runtime
+        self._runtime_text: str | None = None
+        self._runtime_failed = False
         self._prefix: dict[str, bytes] = {}  # handler path -> key prefix, per product
         self._product: _Product | None = None
         self.stats = Stats()
@@ -120,12 +137,14 @@ class AnswerStore:
 
     def close(self, *, ok: bool) -> str | None:
         """End the product: write its file when it changed. ``ok``: the product was
-        generated, so records its run did not ask are dropped; otherwise they are kept.
-        Returns a notice when the file could not be written (the run goes on)."""
+        generated, so records its run did not ask are dropped; otherwise, or when a job
+        went to Node without a key (what it would have replayed is unknown), they are
+        kept. Returns a notice when the file could not be written (the run goes on)."""
         product, self._product = self._product, None
         if product is None:
             return None
-        keep = dict(product.used) if ok else {**product.stored, **product.used}
+        prune = ok and not self.stats.unkeyed
+        keep = dict(product.used) if prune else {**product.stored, **product.used}
         if not product.changed and keep.keys() == product.stored.keys():
             return None
         try:
@@ -140,8 +159,12 @@ class AnswerStore:
         product = self._product
         requests = job["requests"]
         key = None if product is None else self._key(Path(job["handler"]), requests)
-        if product is None or key is None:
+        if product is None:
             return ask(job)
+        if key is None:
+            replies = ask(job)
+            self.stats.unkeyed += 1
+            return replies
         found = product.used.get(key) or product.stored.get(key)
         if found is not None:
             replies = _replies(*found, len(requests))
@@ -163,14 +186,30 @@ class AnswerStore:
         handler cannot be read (the job then goes to Node, which reports it)."""
         prefix = self._prefix.get(str(handler))
         if prefix is None:
+            runtime = self._runtime_part()
             try:
-                parts = (self._runtime(), file_digest(self._driver), file_digest(handler))
-            except (OSError, subprocess.SubprocessError):
+                parts = (runtime, file_digest(self._driver), file_digest(handler))
+            except OSError:
+                return None
+            if runtime is None:
                 return None
             prefix = "\0".join((HEADER.decode().strip(), *parts, "")).encode()
             self._prefix[str(handler)] = prefix
         # the requests as DriverPool.run sends them (json.dumps of the job)
         return hashlib.sha256(prefix + json.dumps(requests).encode()).hexdigest()
+
+    def _runtime_part(self) -> str | None:
+        """The runtime text, asked on the first call only; None when that failed."""
+        if self._runtime_text is None and not self._runtime_failed:
+            try:
+                self._runtime_text = self._runtime()
+            except (OSError, subprocess.SubprocessError) as err:
+                self._runtime_failed = True
+                print(
+                    f"answers: cannot ask the Node runtime ({err}); no job is stored",
+                    file=sys.stderr,
+                )
+        return self._runtime_text
 
 
 def _replies(digest: str, blob: bytes, count: int) -> list[Any] | None:
