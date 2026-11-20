@@ -31,7 +31,9 @@ All inputs are private and stay out of the repository:
 Node is needed for generating and for `--check`, and nowhere else: the handler runs in
 a `vm` sandbox (`scripts/gen_models_driver.js`), a fresh one per batch of requests. The
 generators need the Node major that `scripts/package.json` pins (`engines.node`) and
-refuse any other major with an error that names the version in use.
+refuse any other major with an error that names the version in use. `gen_models.py`
+keeps the handler's replies in an [answer store](#the-answer-store) and asks Node only
+for batches it has not seen.
 
 ## Fetch
 
@@ -180,6 +182,43 @@ uv run python scripts/check_generated.py gen_ptz gen_live_open
 
 The model list (`gen_app_models.py`) takes the app's input files as arguments and is
 checked on its own.
+
+## The answer store
+
+Nearly all of a run's time is the handler answering the generator's requests. A driver
+job's reply depends only on the Node version, the driver, the handler file and the job's
+requests (each job runs in a fresh sandbox with a seeded `Math.random` and a fixed clock),
+so `gen_models.py` keeps every reply in a store keyed by the SHA-256 of exactly those:
+`node --version`, the bytes of `scripts/gen_models_driver.js` and of `<PN>Handle.mix.js`,
+and the requests as the driver receives them. A run replays every job it finds and asks
+Node for the rest:
+
+- a change to the Python side that leaves the requests as they were (how replies are
+  read, joined or written) replays every job: a fix round costs the Python work only;
+- a change that alters some requests (a new probe, another sweep value) asks Node for
+  the jobs it alters, for every model;
+- a new handler, a driver change or another Node version asks Node again for the models
+  they touch.
+
+The store is private, since the replies come from vendor code: `--answers DIR`, default
+`.work/cache/gen_models_answers`, one file per model (`<PN>.answers`; worktrees that link
+`.work` share it). Each record carries a SHA-256 of its reply: a record that does not
+decompress, fails that check or does not fit its job is asked again, as are the records
+after a damaged or truncated spot. After a model is generated, its file holds the jobs that
+run asked, so replies no request names any more are dropped; a model that fails keeps its
+earlier records too. A file is written to a temporary name and renamed into place, and a
+store that cannot be written is reported and the run goes on without it.
+
+Every run that uses the store prints `answers: <n> jobs replayed, <m> asked of Node` to
+stderr. To ask Node for everything, clear the store or bypass it:
+
+```
+rm -r .work/cache/gen_models_answers                 # all models
+rm .work/cache/gen_models_answers/T8170.answers      # one model
+uv run python scripts/gen_models.py --check --no-answers  # read and write no store
+```
+
+The other generators run few handler jobs and keep no store.
 
 ## The model list
 

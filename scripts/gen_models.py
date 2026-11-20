@@ -30,9 +30,15 @@ goes on, exit 1 at the end. Node failing a job (no worker survives it, or none r
 time) stops the run at once: exit 2 and the cause. Runs on a maintainer host only (needs Node of the pinned major and the private
 cache); nothing at runtime executes vendor code. See docs/reference/models-schema.md.
 
+Driver replies are kept in a private answer store (``--answers DIR``, default
+``.work/cache/gen_models_answers``; ``scripts/gen_models_answers.py``): a job asked
+before with the same Node version, driver, handler and requests is replayed without
+Node. ``--no-answers`` asks Node for every job.
+
     gen_models.py [PN ...] [--check] [--cache DIR] [--out DIR] [--jobs N]
                   [--labels FILE] [--trees FILE] [--titles FILE] [--shown FILE]
                   [--app-version V] [--released FILE] [--update-released REF]
+                  [--answers DIR | --no-answers]
 """
 
 from __future__ import annotations
@@ -42,6 +48,7 @@ import atexit
 import base64
 import contextlib
 import copy
+import functools
 import importlib.util
 import io
 import json
@@ -83,6 +90,7 @@ DEFAULT_LABELS = ROOT / ".work" / "tools" / "data" / "app_choice_labels.json"
 DEFAULT_TREES = ROOT / ".work" / "tools" / "data" / "settings_trees.json"
 DEFAULT_TITLES = ROOT / ".work" / "tools" / "data" / "app_setting_titles.json"
 DEFAULT_SHOWN = ROOT / ".work" / "tools" / "data" / "app_shown.json"
+DEFAULT_ANSWERS = ROOT / ".work" / "cache" / "gen_models_answers"  # the driver answer store
 REFERENCE = ROOT / "tests" / "fixtures" / "models_v1_reference.json"
 DEFAULT_APP_VERSION = "6.1.10"  # the app build the label and tree data come from
 SCHEMA_VERSION = 3
@@ -131,8 +139,15 @@ controls = _load("gen_models_controls")
 sections = _load("gen_models_sections")
 variants = _load("gen_models_variants")
 roles = _load("gen_models_roles")
+answers = _load("gen_models_answers")
 GeneratorError = codec.GeneratorError
 DRIVERS = node.DriverPool()  # one Node worker per generating thread
+# Replays stored driver replies; the command line sets its root (--answers).
+ANSWERS = answers.AnswerStore(
+    None,
+    driver=node.DRIVER,
+    runtime=functools.cache(lambda: answers.runtime_version(node.node_path())),
+)
 RECIPE_FIELDS = ("cmd", "subCmd", "params")
 type LeafPath = tuple[str | int, ...]
 
@@ -238,13 +253,13 @@ def run_driver(
     requests: list[dict[str, Any]],
     wire: codec.WireValues | None = None,
 ) -> list[Any]:
-    """One driver job on this thread's worker (``DRIVERS``): a reply per request, in
-    order. A value of ``wire`` is sent as the value the app writes for it, and read back
-    as that value. NodeError when Node fails the job, GeneratorError for any other
-    failure."""
+    """One driver job on this thread's worker (``DRIVERS``), or its stored replies
+    (``ANSWERS``): a reply per request, in order. A value of ``wire`` is sent as the value
+    the app writes for it, and read back as that value. NodeError when Node fails the
+    job, GeneratorError for any other failure."""
     sent = [codec.to_wire(r, wire) for r in requests] if wire else requests
     try:
-        replies = DRIVERS.run({"handler": str(handler), "requests": sent})
+        replies = ANSWERS.run({"handler": str(handler), "requests": sent}, DRIVERS.run)
     except node.NodeError as err:
         raise node.NodeError(f"{product_code}: {err}") from None
     except node.DriverError as err:
@@ -320,14 +335,19 @@ def _held_block(
 
 def handler_numbers(handler: Path) -> set[int]:
     """Every number literal of the handler's source (decimal, with exponent, or hex)."""
+    return set(_source_numbers(handler.read_text(encoding="utf-8", errors="replace")))
+
+
+@functools.lru_cache(maxsize=2)  # a model asks for its handler's numbers several times
+def _source_numbers(source: str) -> frozenset[int]:
     found: set[int] = set()
-    for literal in JS_NUMBER.findall(handler.read_text(encoding="utf-8", errors="replace")):
+    for literal in JS_NUMBER.findall(source):
         if literal[:2].lower() == "0x":
             found.add(int(literal, 16))
         else:
             mantissa, _, exponent = literal.lower().partition("e")
             found.add(int(mantissa) * 10 ** int(exponent or 0))
-    return found
+    return frozenset(found)
 
 
 def handler_param_ids(handler: Path) -> list[int]:
@@ -1573,7 +1593,7 @@ def build_context(  # noqa: C901
         retry = read_samples(
             product_code,
             handler,
-            {i: raw[i] for i in failed},
+            {i: rows for i, rows in raw.items() if i in failed},  # same jobs every run
             context,
             counts,
             background=background,
@@ -2175,6 +2195,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--shown", type=Path, default=DEFAULT_SHOWN)
     parser.add_argument("--app-version", default=DEFAULT_APP_VERSION)
     parser.add_argument(
+        "--answers",
+        type=Path,
+        default=DEFAULT_ANSWERS,
+        help="driver answer store: replies of jobs asked before are replayed without Node",
+    )
+    parser.add_argument(
+        "--no-answers",
+        dest="answers",
+        action="store_const",
+        const=None,
+        help="ask Node for every job; read and write no answer store",
+    )
+    parser.add_argument(
         "--released",
         type=Path,
         default=DEFAULT_RELEASED,
@@ -2286,18 +2319,21 @@ class _Task:
     shown: Mapping[str, str] | None = None
 
 
-type _Result = tuple[str, str | None, dict[str, int], str]
+type _Result = tuple[str, str | None, dict[str, int], str, answers.Stats]
 
 
 def _build(task: _Task) -> _Result:
-    """``(product code, file text or None, counters, report)`` of one model; the report
-    holds what the model printed to stderr (driver notices) and, for a model that fails,
-    the failure. A failure is reported, not raised, so the run goes on to the end; the
-    report is returned, not printed, so the run prints the reports in model order.
-    NodeError (the run stops) is raised, the model's notices in its ``notices``."""
+    """``(product code, file text or None, counters, report, answer stats)`` of one
+    model; the report holds what the model printed to stderr (driver notices) and, for a
+    model that fails, the failure. A failure is reported, not raised, so the run goes on
+    to the end; the report is returned, not printed, so the run prints the reports in
+    model order. NodeError (the run stops) is raised, the model's notices in its
+    ``notices``."""
     pn = task.product_code
     stop: node.NodeError | None = None
+    failure = ""
     with contextlib.redirect_stderr(io.StringIO()) as notes:
+        ANSWERS.open(pn)
         try:
             doc, counts = generate(
                 pn,
@@ -2313,14 +2349,18 @@ def _build(task: _Task) -> _Result:
         except node.NodeError as err:
             stop = err
         except GeneratorError as err:
-            return pn, None, {}, f"{notes.getvalue()}{err}\n"
+            failure = f"{err}\n"
         except Exception as err:  # a shape the generator does not handle
             failure = f"{pn}: {type(err).__name__}: {err}\n{traceback.format_exc()}"
-            return pn, None, {}, notes.getvalue() + failure
+        notice = ANSWERS.close(ok=not (stop or failure))
+        if notice:
+            print(notice, file=sys.stderr)
     if stop is not None:
         stop.notices = notes.getvalue()  # the earlier deaths' causes, printed with it
         raise stop
-    return pn, codec.dump(doc), counts, notes.getvalue()
+    if failure:
+        return pn, None, {}, notes.getvalue() + failure, ANSWERS.stats
+    return pn, codec.dump(doc), counts, notes.getvalue(), ANSWERS.stats
 
 
 def _open_drivers() -> None:
@@ -2397,6 +2437,7 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     reference = load_reference()
     pns = args.product_codes or sorted(d.name for d in cache.iterdir() if d.is_dir())
     out.mkdir(parents=True, exist_ok=True)
+    ANSWERS.root = args.answers  # before the fork: the generating processes inherit it
     tasks = [
         _Task(
             pn,
@@ -2413,8 +2454,10 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     ]
     total: dict[str, int] = {}
     failed: list[str] = []
-    for pn, text, counts, report in _run_tasks(tasks, max(1, min(args.jobs, len(tasks)))):
+    replies = answers.Stats()
+    for pn, text, counts, report, stats in _run_tasks(tasks, max(1, min(args.jobs, len(tasks)))):
         print(report, end="", file=sys.stderr)
+        replies.add(stats)
         if text is None:
             failed.append(pn)
             continue
@@ -2426,6 +2469,13 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     write_index(out)
     if not quiet:
         print(f"total {len(pns)} models", _summary(total))
+    if args.answers is not None:
+        print(
+            f"answers: {replies.replayed} jobs replayed, {replies.asked} asked of Node"
+            + (f", {replies.damaged} damaged records" if replies.damaged else "")
+            + f" ({args.answers})",
+            file=sys.stderr,
+        )
     if failed:
         print(f"check failed, not written: {' '.join(failed)}", file=sys.stderr)
         return 1

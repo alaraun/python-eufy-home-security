@@ -92,6 +92,7 @@ def _args(tmp_path: Path, jobs: int) -> argparse.Namespace:
         titles=data / "titles.json",
         shown=data / "shown.json",
         released=data / "released.json",
+        answers=None,
     )
 
 
@@ -172,6 +173,7 @@ def _cli(tmp_path: Path, node_version: str, jobs: int) -> subprocess.CompletedPr
         for name in ("labels", "trees", "titles", "shown", "released")
     ]
     paths = [f"--cache={cache}", f"--out={tmp_path / 'out'}", f"--jobs={jobs}"]
+    paths.append(f"--answers={tmp_path / 'answers'}")
     return subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "gen_models.py"), *PNS[:3], *inputs, *paths],
         env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},

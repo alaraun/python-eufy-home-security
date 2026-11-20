@@ -326,7 +326,9 @@ is written, every codec must render back each swept recipe, and every row of
 A model that fails is not written, and the run exits 1; Node failing a job stops the run
 with exit 2. `--check` exits 1 on any byte difference and 2 when Node, the cache, the
 labels, the layout, the title or the shown-property data are missing.
-Run it on the full corpus after changing the generator.
+Run it on the full corpus after changing the generator. The handler's replies are kept in
+a private answer store, so a run whose driver jobs were asked before replays them
+without running the handler ([regenerate-models.md § The answer store](../how-to/regenerate-models.md#the-answer-store)).
 
 Tests that need only committed files check the schema of all 159 files and the v1
 reference. The `--check` test runs on three models and skips without Node of the pinned
