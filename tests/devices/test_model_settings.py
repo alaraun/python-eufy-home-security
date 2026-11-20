@@ -868,6 +868,18 @@ def test_unit_meaning_covers_every_time_unit() -> None:
     assert unit_meaning(None) is None
 
 
+def test_binary_meanings_are_the_sensor_card_statuses() -> None:
+    """Every status meaning a bool carries, and none of the value meanings."""
+    assert {
+        SettingMeaning.OPENING,
+        SettingMeaning.TAMPER,
+        SettingMeaning.LOW_BATTERY,
+        SettingMeaning.MOISTURE,
+        SettingMeaning.COLD,
+        SettingMeaning.SIREN_RINGING,
+    } == model_settings.BINARY_MEANINGS
+
+
 @pytest.mark.parametrize("value", ["yes", 1, None])
 def test_structured_must_be_a_bool(data_root: Path, value: object) -> None:
     _write_model(data_root, {"mode": {**GOOD_ENTRY, "structured": value}})

@@ -1383,8 +1383,8 @@ For the integration this means:
 `Intervals between triggers`, `Working mode` on a T8160), else a title made from the key;
 both in sentence case, as HA names entities.
 `setting.unit` is the unit the eufy app's screen shows for the value (seconds for
-`video_clip_length` and `trigger_interval_time` on the custom-recording page, none for the
-power-manager counters), else the TD's; use it as the entity's unit of measurement.
+`video_clip_length` and `trigger_interval_time` on every model, none for the power-manager
+counters), else the TD's; use it as the entity's unit of measurement.
 `setting.meaning` (`SettingMeaning` or None) says what the value stands for; map device
 classes from it with one table, never from keys (see
 [Device classes from `meaning`](#device-classes-from-meaning)). `setting.variant_of` is the key of the setting the app
@@ -1445,10 +1445,10 @@ without a device class.
 
 | `meaning` | kind | HA platform | device class | unit |
 |---|---|---|---|---|
-| `DURATION` | `RANGE` | `number` / `sensor` | `duration` | `setting.unit` (`s`, `ms`, `d`) |
+| `DURATION` | `RANGE` or `OTHER` | `number` / `sensor` (`OTHER`: `sensor`) | `duration` | `setting.unit` (`s`, `ms`) |
 | `PERCENT` | `RANGE` | `number` / `sensor` | none | `%` |
-| `TEMPERATURE` | `RANGE` | `number` / `sensor` | `temperature` | from the model's `device_indoor_temperature_unit` setting (`setting.unit` is None) |
-| `TIMESTAMP` | `STRING` | `sensor` | `timestamp` | value: integer milliseconds since the epoch (UTC); 0 or empty: unknown |
+| `TEMPERATURE` | `RANGE` | `number` / `sensor` | none | none: the scale (Celsius or Fahrenheit) is not known (`setting.unit` is None), so no temperature device class and no unit |
+| `TIMESTAMP` | `STRING` | `sensor` | `timestamp` | value: integer milliseconds since the epoch (UTC); 0 or empty: none recorded (state unknown) |
 | `TIME_OF_DAY` | `STRING` | `sensor` (a `time` entity once writable) | none | value `HH:MM` |
 | `OPENING` | `BOOL` | `binary_sensor` | `door` (or `opening`) | — |
 | `TAMPER` | `BOOL` | `binary_sensor` | `tamper` | — |

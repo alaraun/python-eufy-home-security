@@ -49,14 +49,16 @@ _LOGGER = logging.getLogger(__name__)
 LISTED_NOTE: Final = "not in bundled data"
 
 #: TD unit -> setting unit; None drops the unit (a count, no unit, or a unit with no
-#: SettingUnit: a temperature bound in the device's display scale, a sound level).
+#: SettingUnit: a temperature in a scale the data does not give, a sound level). ``day`` /
+#: ``天`` is dropped too: no app screen shows a value carrying it in days (the screens that
+#: show one show seconds or a bare count).
 UNITS: Final[Mapping[str, SettingUnit | None]] = MappingProxyType(
     {
         "s": SettingUnit.SECONDS,
         "秒": SettingUnit.SECONDS,
         "毫秒": SettingUnit.MILLISECONDS,
-        "day": SettingUnit.DAYS,
-        "天": SettingUnit.DAYS,
+        "day": None,
+        "天": None,
         "无": None,
         "个": None,
         "degree": None,

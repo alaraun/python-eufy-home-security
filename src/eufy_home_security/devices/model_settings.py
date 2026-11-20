@@ -202,15 +202,15 @@ class SettingMeaning(StrEnum):
     """
 
     DURATION = "duration"
-    """A length of time in :attr:`Setting.unit` (seconds, milliseconds or days)."""
+    """A length of time in :attr:`Setting.unit`."""
     PERCENT = "percent"
     """A percentage (``unit`` ``%``)."""
     TEMPERATURE = "temperature"
-    """A temperature in the device's display scale; the model's
-    ``device_indoor_temperature_unit`` setting says which scale (``unit`` stays None)."""
+    """A temperature in a scale (Celsius or Fahrenheit) the model's data does not give:
+    ``unit`` stays None."""
     TIMESTAMP = "timestamp"
     """A point in time as integer milliseconds since the Unix epoch (UTC), as the device
-    reports it (a ``STRING`` setting holds the digits); 0 or empty means never."""
+    reports it (a ``STRING`` setting holds the digits); 0 or empty: none recorded."""
     TIME_OF_DAY = "time_of_day"
     """A local time of day as ``HH:MM`` text."""
     OPENING = "opening"

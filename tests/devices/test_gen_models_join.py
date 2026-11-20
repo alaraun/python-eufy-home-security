@@ -307,6 +307,14 @@ def test_app_meanings_apply_to_the_identifier_and_its_variants_on_every_model() 
         assert counts["meaning:binary on a non-bool"] == 1
 
 
+def test_an_app_meaning_wins_over_the_td_unit_meaning() -> None:
+    settings = _settings()
+    settings["clip"]["meaning"] = "temperature"
+    meanings = {"clip": {"meaning": "timestamp"}}
+    join.join(PN, settings, _td(MODE), None, None, titles=_titles(meanings=meanings))
+    assert settings["clip"]["meaning"] == "timestamp"
+
+
 @pytest.mark.parametrize("rule", [{"meaning": "door"}, {}, {"meaning": None}])
 def test_a_meaning_rule_naming_no_meaning_is_refused(rule: dict[str, Any]) -> None:
     with pytest.raises(join.GeneratorError, match="flag is not a meaning"):
@@ -551,8 +559,8 @@ def test_generated_t8160_custom_recording_settings_apply_when_mode_is_3() -> Non
         ("s", 2, 60, "s"),
         ("秒", None, None, "s"),
         ("毫秒", None, None, "ms"),
-        ("day", 10, 120, "d"),
-        ("天", 10, 120, "d"),
+        ("day", 10, 120, None),
+        ("天", 10, 120, None),
         ("音量", 1, 100, "%"),
         ("音量", 0, 100, "%"),
         ("无", 0, 1, None),

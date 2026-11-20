@@ -69,7 +69,7 @@ def test_an_unmapped_unit_is_dropped_not_raised(raw: str) -> None:
     ("raw", "meaning"),
     [
         ("秒", SettingMeaning.DURATION),
-        ("day", SettingMeaning.DURATION),
+        ("day", None),
         ("degree", SettingMeaning.TEMPERATURE),
         ("decibel", None),
         ("个", None),
@@ -91,7 +91,8 @@ def test_a_unit_with_no_setting_unit_is_dropped(raw: str) -> None:
 
 def test_normalise_unit_raises_value_error_when_unmapped() -> None:
     assert normalise_unit("个", 0, 3) is None
-    assert normalise_unit("day", None, None) is SettingUnit.DAYS
+    assert normalise_unit("day", None, None) is None
+    assert normalise_unit("天", 10, 120) is None
     with pytest.raises(ValueError, match="lux"):
         normalise_unit("lux", 0, 100)
 
