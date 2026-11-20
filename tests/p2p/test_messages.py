@@ -227,6 +227,17 @@ def test_a_number_field_holding_a_list_is_refused() -> None:
         messages.ecb_field_value(1400, {"open": [1], "value": 1})
 
 
+@pytest.mark.parametrize("raw", [float("inf"), float("-inf"), float("nan")])
+def test_a_number_field_holding_a_non_finite_float_is_refused(raw: float) -> None:
+    with pytest.raises(ValueError, match="1401 needs an integer 'brightness'"):
+        messages.ecb_field_value(1401, {"brightness": raw})
+
+
+@pytest.mark.parametrize("raw", [float("inf"), float("-inf"), float("nan")])
+def test_a_flag_field_holding_a_non_finite_float_is_off(raw: float) -> None:
+    assert messages.ecb_field_value(1403, {"switch": raw}) == 0
+
+
 @pytest.mark.parametrize(
     ("cmd", "body", "value"),
     [

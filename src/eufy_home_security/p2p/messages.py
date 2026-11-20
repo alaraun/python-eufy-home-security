@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import struct
 from collections.abc import Mapping, Sequence
 from datetime import date
@@ -599,21 +600,24 @@ ECB_VALUE_FIELDS: dict[int, EcbValueField] = {
 
 def ecb_field_value(cmd: int, body: Mapping[str, object]) -> object:
     """The value ``cmd``'s field holds in a handler body, or None when ``cmd`` has no
-    field in :data:`ECB_VALUE_FIELDS` or the body lacks it. A flag field gives 1 or 0; a
-    number field its integer part (a float truncated, as the eufy app reads it), a str or
-    bool as is. Raises ValueError for a number field holding any other type."""
+    field in :data:`ECB_VALUE_FIELDS` or the body lacks it. A flag field gives 1 or 0 (a
+    non-finite float 0); a number field its integer part (a float truncated, as the eufy app
+    reads it), a str or bool as is. Raises ValueError for a number field holding a
+    non-finite float or any other type."""
     spec = ECB_VALUE_FIELDS.get(cmd)
     raw = None if spec is None else body.get(spec.name)
     if spec is None or raw is None:
         return None
     if not spec.flag:
-        if isinstance(raw, float):
+        if isinstance(raw, float) and math.isfinite(raw):
             return int(raw)
         if not isinstance(raw, str | int):
             raise ValueError(f"ECB command {cmd} needs an integer {spec.name!r}, got {raw!r}")
         return raw
     if isinstance(raw, str):
         return int(raw in ("1", "true", "TRUE"))
+    if isinstance(raw, float) and not math.isfinite(raw):
+        return 0
     if isinstance(raw, int | float):  # a bool too
         return int(int(raw) == 1)
     return 0

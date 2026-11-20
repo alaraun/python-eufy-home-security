@@ -273,18 +273,17 @@ of the codec's own command (not observed on hardware). An ECB scalar's value is 
 codec body's field for that command, as the eufy app reads it **[declared]** (eufy app):
 `open` for 1400, `brightness` for 1401, `switch` for 1403. A switch field such as
 1403's sends 1 for `true`, `1`, `"1"`, `"true"` or `"TRUE"`, else 0; a number field sends
-its integer (a float's integer part), and a list or object there is refused before
-sending. The body's other fields are not sent: the manual light's
-`{value, open, type: 2}` goes out as ECB 1400 with `open` (wire verified on a HomeBase 3
-with an eufyCam 3, see the table above). A body without the command's field (or a
-command with none) must hold one value, perhaps under several names, and that value is
+its integer (a finite float's integer part), and an infinite or NaN float, a list or an
+object there is refused before sending. The body's other fields are not sent: the manual
+light's `{value, open, type: 2}` goes out as ECB 1400 with `open` (wire verified on a
+HomeBase 3 with an eufyCam 3, see the table above). A body without the command's field (or
+a command with none) must hold one value, perhaps under several names, and that value is
 sent; otherwise the codec goes out as a DeviceMsgBean of its own command. Sending the
-user's value there is the library's choice: the eufy app sends 0 for a body that lacks
-the field. A codec that goes to the cloud, stays in the app or uses another transport is
-not sent: such a setting is not writable and says why. A rejection raises the typed
-error; nothing is read back. After a send, the parameter values the codec's `update`
-names are merged into
-the cached dump, as the app does, until the next real dump replaces them. The
+user's value there is the library's choice: the eufy app sends 0 for a body that lacks the
+field. A codec that goes to the cloud, stays in the app or uses another transport is not
+sent: such a setting is not writable and says why. A rejection raises the typed error;
+nothing is read back. After a send, the parameter values the codec's `update` names are
+merged into the cached dump, as the app does, until the next real dump replaces them. The
 mode-table settings are the exception: they go through the 1255 table write
 ([below](#mode-actions-delays-and-schedule-app-writes-verified)).
 
