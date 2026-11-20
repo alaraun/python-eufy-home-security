@@ -4,6 +4,20 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.15](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.14...v0.4.15) (2026-11-20)
+
+
+### Features
+
+* **client:** reach battery cameras and doorbells on demand, by the app's list or the battery device flag their bundled settings declare ([2effeec](https://github.com/alaraun/python-eufy-home-security/commit/2effeec362a70f2e6bef10f08566f9a8d4dd27e1))
+
+
+### Bug Fixes
+
+* **devices:** reach the T81A0 (Solar Wall Light Cam S120) on demand by @TheRudin in [#190](https://github.com/alaraun/python-eufy-home-security/issues/190) ([2effeec](https://github.com/alaraun/python-eufy-home-security/commit/2effeec362a70f2e6bef10f08566f9a8d4dd27e1))
+* the Wall Light Cam S100 (T84A1) manual light is writable when standalone by [@fuatakgun](https://github.com/fuatakgun) in [#194](https://github.com/alaraun/python-eufy-home-security/issues/194) ([46bd078](https://github.com/alaraun/python-eufy-home-security/commit/46bd0787e4a359a14080c60244f74eb2e1da7756))
+* the Wall Light Cam S100 (T84A1) microphone switch is writable ([46bd078](https://github.com/alaraun/python-eufy-home-security/commit/46bd0787e4a359a14080c60244f74eb2e1da7756))
+
 ## [0.4.14](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.13...v0.4.14) (2026-11-19)
 
 
