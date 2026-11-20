@@ -243,7 +243,7 @@ def _driver_generate(
 def _alive(pid: int) -> bool:
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):  # gone before the open, or before the read
         return False
     return stat.rsplit(")", 1)[1].split()[0] != "Z"
 

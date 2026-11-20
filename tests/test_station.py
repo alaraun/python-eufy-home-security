@@ -816,7 +816,7 @@ def _unconnected_station(*, host: str | None, local_ip: str | None, local_port: 
     [
         ("192.168.1.20", "192.168.1.20", HostSource.CLOUD),
         ("192.168.1.21", "192.168.1.20", HostSource.CONFIGURED),
-        (None, "88.196.8.222", HostSource.BROADCAST),  # a WAN local_ip is no LAN address
+        (None, "192.88.99.9", HostSource.BROADCAST),  # a WAN local_ip is no LAN address
     ],
 )
 def test_lan_path_says_where_the_address_came_from(

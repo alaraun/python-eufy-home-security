@@ -46,7 +46,7 @@ def test_public_local_ip_is_not_used_for_lan_discovery() -> None:
     assert lan_address(SYNTHETIC.station_ip) == SYNTHETIC.station_ip  # 192.0.2.x counts as private
     assert lan_address("192.168.1.20") == "192.168.1.20"
     assert lan_address("10.0.0.5") == "10.0.0.5"
-    assert lan_address("88.196.8.222") is None
+    assert lan_address("192.88.99.9") is None
     assert lan_address("not an ip") is None
     assert lan_address(None) is None
 
