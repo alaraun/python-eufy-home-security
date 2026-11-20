@@ -28,7 +28,7 @@ def _load(name: str) -> ModuleType:
     return module
 
 
-_load("gen_models_codec")
+codec = _load("gen_models_codec")
 join = _load("gen_models_join")
 gen_models = _load("gen_models")
 
@@ -207,6 +207,52 @@ def test_a_bool_switch_writes_the_json_bool_for_each_state() -> None:
 def test_switch_texts_must_be_strings(on: Any, off: Any) -> None:
     with pytest.raises(join.GeneratorError, match="two distinct"):
         join.switches(PN, {"switches": {"spotlight_switch": {"on": on, "off": off}}})
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        ["spotlight_switch"],
+        {"spotlight_switch": "-"},
+        {"spotlight_switch": {}},
+        {"spotlight_switch": {"source": 1}},
+    ],
+    ids=["list", "text-entry", "no-source", "non-text-source"],
+)
+def test_a_bool_switch_entry_needs_a_source(rules: Any) -> None:
+    with pytest.raises(join.GeneratorError, match="bool switch"):
+        join.switches(PN, {"bool_switches": rules})
+
+
+@pytest.mark.parametrize(
+    ("default", "values", "expected"),
+    [
+        ("true", {True: True, False: False}, "true"),
+        ("false", {True: True, False: False}, "false"),
+        ("0", {True: "1", False: "0"}, "false"),
+        ("1", {True: "0", False: "1"}, "false"),
+    ],
+)
+def test_a_switchs_td_default_becomes_its_state(
+    default: str, values: dict[bool, Any], expected: str
+) -> None:
+    prop = {"identifier": "x", "data_type": {"type": "string", "specs": {"defaultValue": default}}}
+    assert codec.as_switch(prop, values)["data_type"] == {
+        "type": "bool",
+        "specs": {"defaultValue": expected},
+    }
+
+
+@pytest.mark.parametrize(
+    ("default", "values"),
+    [(None, {True: True, False: False}), ("on", {True: True, False: False})],
+)
+def test_a_switch_default_matching_no_state_is_dropped(
+    default: Any, values: dict[bool, Any]
+) -> None:
+    specs = {} if default is None else {"defaultValue": default}
+    prop = {"identifier": "x", "data_type": {"type": "string", "specs": specs}}
+    assert codec.as_switch(prop, values)["data_type"] == {"type": "bool", "specs": {}}
 
 
 def test_a_switch_listed_with_texts_and_as_a_bool_raises() -> None:

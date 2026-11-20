@@ -292,8 +292,9 @@ def switches(pn: str, titles: Mapping[str, Any] | None) -> dict[str, dict[bool, 
 
     From the title file's ``switches`` (texts ``on``/``off``, a per-model pair under
     ``models``) and ``bool_switches`` (the identifiers whose switch writes the JSON bool
-    itself); raises GeneratorError when the two texts are equal or not strings, or when
-    both lists name one identifier.
+    itself, ``{identifier: {"source": text}}``); raises GeneratorError when the two texts
+    are equal or not strings, when a bool switch entry has no source text, or when both
+    lists name one identifier.
     """
     out: dict[str, dict[bool, str | bool]] = {}
     for ident, rule in ((titles or {}).get("switches") or {}).items():
@@ -302,7 +303,12 @@ def switches(pn: str, titles: Mapping[str, Any] | None) -> dict[str, dict[bool, 
         if not isinstance(on, str) or not isinstance(off, str) or on == off:
             raise GeneratorError(f"{pn}: switch {ident} needs two distinct on/off texts")
         out[ident] = {True: on, False: off}
-    for ident in (titles or {}).get("bool_switches") or {}:
+    bool_rules = (titles or {}).get("bool_switches") or {}
+    if not isinstance(bool_rules, Mapping):
+        raise GeneratorError(f"{pn}: bool switches need a mapping of identifier to source")
+    for ident, rule in bool_rules.items():
+        if not isinstance(rule, Mapping) or not isinstance(rule.get("source"), str):
+            raise GeneratorError(f"{pn}: bool switch {ident} needs a source text")
         if ident in out:
             raise GeneratorError(f"{pn}: switch {ident} is listed with texts and as a bool")
         out[ident] = {True: True, False: False}
