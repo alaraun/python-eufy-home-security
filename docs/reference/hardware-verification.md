@@ -235,3 +235,4 @@ for scope; none makes a capability *verified*.
 | area | verified | notes |
 |---|---|---|
 | Mode-action Notification bit, reported on a second HomeBase 3 | – | Reported by a user: a HomeBase 3 (T8030, firmware not reported) with an indoor camera (T8417) and a battery camera (T8162). No detection reached the library until Notification was turned on for the cameras in the guard mode in force (eufy app, Security mode); then they arrived, with cloud push off too, which points at the P2P push (2037) being held back as well. |
+| Manual light (`spotlight_switch`, 1400) on a standalone Wall Light Cam S100 | – | Reported by a contributor: a Wall Light Cam S100 (T84A1) fw 1.1.0.7, standalone, switched its manual light with `1700` subCmd 1400 and the body `{"value": 0 or 1}`. The library writes the model's handler recipe, the same command with `open` (the same value) and `type` 2 added; that body was not reported. Behind a HomeBase the setting stays read-only. |
