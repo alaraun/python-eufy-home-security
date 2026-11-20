@@ -848,7 +848,7 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
 - **End of playback [verified].** About 0.5 s after the last frame of a 1025
   playback the station sends `0x0402` (1026 `RECORD_PLAY_CTRL`) on DRW channel 2: playback
   ended. It is the end signal a client can use instead of waiting for silence. The value
-  is the body's **first byte** [declared, eufy app]; the four bytes after it are ignored.
+  is the body's **first byte** [declared, eufy app]; the bytes after it are ignored.
   The station sends it in either form, read like any station state
   ([session-crypto.md](session-crypto.md#station-state-under-any-encryption-declared-app)):
   - GCM-tagged, the 5-byte body `02 00 00 00 00` in clear (0.51 s after the last frame)
@@ -856,7 +856,8 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
     GCM plaintext is not settled, so a GCM body of at most 8 bytes is taken as is and a
     longer one decrypted under the session key.
   - ECB-tagged, one 16-byte block under the static key (encryption type 1)
-    **[observed on a HomeBase 3]** (fw 3.8.8.0); decrypted under the key its encryption
+    **[verified]** (HomeBase 3 fw 3.8.8.0): its first byte read 2 and the playback ended
+    right after it with every frame delivered; decrypted under the key its encryption
     type names, as an alarm frame.
   - On an RSA session: clear (encryption type 0) as is, type 2 under the session key,
     any other type under the static key.
@@ -931,7 +932,7 @@ timeout with `CommandNotAppliedError`.
 | stream stop (1004) | **[verified]** (sent; the stream ends) |
 | download cancel (1051), playback stop (1055), play control stop (1026) | **[verified]** not to stop a 1025 playback; 1051 is rejected (−108) |
 | stopping a playback by closing its session | **[verified]** (station silent within about 5 ms) |
-| end-of-playback frame (`0x0402` = 2) | **[verified]** GCM-tagged (HomeBase 3 fw 3.8.7.4); **[observed]** under the static key (HomeBase 3 fw 3.8.8.0) |
+| end-of-playback frame (`0x0402` = 2) | **[verified]** GCM-tagged (HomeBase 3 fw 3.8.7.4); **[verified]** under the static key (HomeBase 3 fw 3.8.8.0) |
 | V1 encrypted stills (key from `gen_pic_code_v1`) | **[verified]** (T8170) |
 | V2/V8 encrypted stills | **[app]**, not decoded |
 | ECC media key: AES-256-GCM keyframes and audio | **[verified]** as an ECC offer to a HomeBase 3 (T8160); not seen on a station whose param 1103 asks for it |

@@ -579,6 +579,7 @@ _ECB_KEY = bytes(range(16, 32))
         (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, b"\x02\x01\x00\x00\x00", 2),
         (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, b"\x03\x00\x00\x00\x00", 3),
         (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, b"", None),
+        (FrameType.RECORD_PLAY_CTRL, FrameCipher.GCM, b"\x02" + bytes(15), None),
         (
             FrameType.RECORD_PLAY_CTRL,
             FrameCipher.ECB,
@@ -603,6 +604,7 @@ _ECB_KEY = bytes(range(16, 32))
         "first-byte-not-u32",
         "gcm-dropped",
         "gcm-empty",
+        "gcm-longer-than-clear-is-decrypted",
         "static-key-block",
         "ecb-short-tail-as-is",
         "ecb-whole-blocks-decrypted",

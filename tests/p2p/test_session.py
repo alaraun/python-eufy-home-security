@@ -2778,7 +2778,7 @@ async def test_only_the_end_value_ends_a_playback(
     ]
 
 
-async def test_an_end_frame_under_another_key_is_not_an_end(
+async def test_an_end_frame_under_another_key_does_not_end_this_playback(
     station: FakeStation, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.DEBUG, logger="eufy_home_security.p2p.session")
