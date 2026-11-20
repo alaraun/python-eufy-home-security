@@ -214,6 +214,7 @@ def test_declares_battery_reads_a_camera_or_doorbells_settings(
         ("T8030P0000000001", "T8030", False),  # a station without it
         ("T9000P0000000001", "T9000", False),  # a station with it: not this rule's
         ("T8530P0000000001", "T8530", False),  # a lock with it: not this rule's
+        ("T8530P0000000001", "T81A0", False),  # the serial's kind decides, not the file's
     ],
 )
 def test_reached_on_demand_takes_the_app_list_or_the_battery_device_flag(
