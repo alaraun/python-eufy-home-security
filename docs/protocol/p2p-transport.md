@@ -485,6 +485,6 @@ changes the reply **[verified]**.
 | `0x051C` | 1308 | MEDIA_DOWNLOAD / IMAGE | station | image reply (JSON + base64) |
 | `0x0546` | 1350 | CMD_TRANSFER / SET_PAYLOAD | both | client: GCM DeviceMsgBean. Station: the 132-byte command receipt ([commands.md](commands.md#command-receipt-verified)). |
 | `0x0547` | 1351 | NOTIFY_PAYLOAD | station | command results **and** event pushes (`cmd` 2037) |
-| `0x0578` | 1400 | FLOODLIGHT_MANUAL_SWITCH (app enum SET_FLOODLIGHT_MANUAL_SWITCH) | station | a camera's light state, u32 0/1 under GCM, per channel (subheader byte 2): 1 during an alarm **[verified]**, 0 at detections and periodically |
+| `0x0578` | 1400 | FLOODLIGHT_MANUAL_SWITCH (app enum SET_FLOODLIGHT_MANUAL_SWITCH) | station | a camera's light state, u32 0/1 under GCM, per channel (subheader byte 2): 1 during an alarm **[verified]**, 0 at detections and periodically; on DRW channel 0 the frame type is the result of an ECB 1400 write instead ([session-crypto.md](session-crypto.md#legacy-ecb-scalar-frames-verified)) |
 | `0x083F` | 2111 | BATTERY_STATUS (app enum SUB1G_REP_UNPLUG_POWER_LINE) | station | seen when a session ends; body undecoded **[open]** |
 | `<cmd>` | cmd | legacy scalar | both | ECB scalar command and its same-type result ([session-crypto.md](session-crypto.md)) |

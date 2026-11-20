@@ -39,6 +39,7 @@ from ..cloud.const import CIPHER_ID_P2P
 from ..devices.recipes import MAX_PRESET_SLOTS, ConnectType, connect_type
 from ..devices.types import model_for_serial
 from ..models import STATION_CHANNEL, GuardMode
+from ..p2p.alarm import ALARM_FRAME_VALUES
 from ..p2p.crypto import (
     CONN_INIT_ECC_VERSION,
     CONN_INIT_RSA_BLOB_LEN,
@@ -571,6 +572,10 @@ class FakeStation:
     """Command → the non-zero receipt code it is answered with, and nothing else."""
     refused_scalars: dict[int, int] = field(default_factory=dict)
     """ECB scalar command → the non-zero result code it is answered with, applying nothing."""
+    scalar_state_frames: bool = False
+    """Before the result of an ECB scalar whose command is an alarm frame type (the light,
+    1400), send that frame on the notify channel under the static key, its values all 0,
+    as a HomeBase 3 does."""
     unanswered_commands: set[int] = field(default_factory=set)
     """Commands only acknowledged: no receipt, no reply, nothing applied (the transport
     ACK alone)."""
@@ -1405,6 +1410,8 @@ class FakeStation:
         elif code == 0 and self.apply_settings:
             self.params.setdefault(channel, {})[ftype] = str(value)
         result = struct.pack("<i", code) + b"\x00" * 12
+        if self.scalar_state_frames and (count := ALARM_FRAME_VALUES.get(ftype)) is not None:
+            self.send_alarm_frame(ftype, *[0] * count, channel=channel, cipher=FrameCipher.ECB)
         if self.rsa_session:  # tagged like every frame, the code in clear
             encryption = self.answer_encryption
             if encryption is None:

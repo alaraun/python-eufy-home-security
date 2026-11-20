@@ -3314,7 +3314,9 @@ class StationSession:
             _LOGGER.debug("%s: alarm-mode report %s", self._log_name, value)
             if value is not None:
                 self._note_mode_report(as_guard_mode(value))
-        elif inbound.type in ALARM_FRAME_VALUES:
+        elif inbound.type in ALARM_FRAME_VALUES and inbound.channel != 0:
+            # On the request channel a frame of this type is a command's result (an ECB
+            # light write's), not the station's state.
             self._handle_alarm(inbound.frame)
         elif inbound.type == FrameType.NOTIFY_PAYLOAD and (obj := inbound.json()) is not None:
             if _WIRE.isEnabledFor(logging.DEBUG):
@@ -4018,9 +4020,10 @@ def _command_header_channel(channel: int) -> int:
 
 def _scalar_result(inbound: Inbound, command: int) -> int | None:
     """The result code of an ECB scalar reply to ``command``, else None: frame type
-    ``command``, the code in clear at ``payload[0:4]`` on every session, as the eufy app
-    reads it."""
-    if inbound.type != command or len(inbound.frame.payload) < 4:
+    ``command`` on the request channel (0), the code in clear at ``payload[0:4]`` on every
+    session, as the eufy app reads it. A frame of the same type on the notify channel is
+    the station's state report (the light frame 1400), not the result."""
+    if inbound.channel != 0 or inbound.type != command or len(inbound.frame.payload) < 4:
         return None
     return decode_ecb_scalar_result(inbound.frame.payload)
 

@@ -241,7 +241,7 @@ Two write schemes, chosen by command id ([session-crypto.md](session-crypto.md))
 | record auto-stop | 1251 | value | camera | **0 = on**, 1 = off; applies only when power mode is custom (2) | **[wire verified]** (written with read-back), meaning **[declared]** (not proven) |
 | clock format | 1253 | station | station | 0 = 12 h, 1 = 24 h | **[verified]** (wire); meaning from the vendor corpus |
 | hub speaker volume | 1235 | station | station | 0–100 | **[app]** (not in the dump, so not written) |
-| manual light | 1400 | channel + value | camera | 0/1 (the body's `open`) | **[declared]** (eufy app), not verified on hardware |
+| manual light | 1400 | channel + value | camera | 0/1 (the body's `open`) | **[declared]** (eufy app); observed on a HomeBase 3 with an eufyCam 3: the write applies (param 1400 reads back 1, then 0), and before any result the station sends the light frame `0x0578` on DRW channel 2 (16 bytes under the static key, value 0). That frame is state ([events.md](events.md#alarm-over-p2p)), not the result: the result is read on channel 0 only, as for every scalar |
 
 **Couplings** **[verified]**: on a T8160, writing 1276 also sets 1210 and param
 6041, but writing 1210 moves only 1210. Writing 1045 also moves 1056, 1716 and 6014.
@@ -274,11 +274,11 @@ codec body's field for that command, as the eufy app reads it (`open` for 1400,
 `brightness` for 1401, `switch` for 1403; a switch field such as 1403's sends 1 for
 `true`, `1`, `"1"` or `"true"`, else 0), and the body's other fields are not sent: the
 manual light's `{value, open, type: 2}` goes out as ECB 1400 with `open` **[declared]**
-(eufy app), not verified on hardware. A body without that field (or a command with
-none) must hold one value, perhaps under several names; otherwise the codec goes out as
-a DeviceMsgBean of its own command. A codec that goes to the cloud, stays in the app or
-uses another transport is not sent: such a setting
-is not writable and says why. A rejection raises the typed error; nothing is read
+(eufy app; observed applying on a HomeBase 3 with an eufyCam 3, see the table above). A
+body without that field (or a command with none) must hold one value, perhaps under
+several names; otherwise the codec goes out as a DeviceMsgBean of its own command. A
+codec that goes to the cloud, stays in the app or uses another transport is not sent:
+such a setting is not writable and says why. A rejection raises the typed error; nothing is read
 back. After a send, the parameter values the codec's `update` names are merged into
 the cached dump, as the app does, until the next real dump replaces them. The
 mode-table settings are the exception: they go through the 1255 table write

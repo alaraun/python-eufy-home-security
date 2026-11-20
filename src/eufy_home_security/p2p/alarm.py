@@ -1,6 +1,7 @@
 """Decoding the station's alarm frames: tone, siren and light.
 
-Every session on a station receives these, whoever triggered or stopped the alarm.
+Every session on a station receives these on DRW channel 2, whoever triggered or stopped
+the alarm; a frame of these types on channel 0 is a command's result, not state.
 The frame type is the parameter id (the app's ``CommandType``), subheader byte 2 is
 the channel (255 = the station), and the decrypted body is little-endian u32 values:
 

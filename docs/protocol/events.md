@@ -237,7 +237,8 @@ The enum members carry this grading in code (`PushMessageType.evidence`,
 
 ### Alarm over P2P
 
-**[verified, fw 3.8.7.4]** Every open session receives these GCM frames. The
+**[verified, fw 3.8.7.4]** Every open session receives these GCM frames on DRW channel 2
+(a frame of these types on channel 0 is a command's result, not state). The
 subheader's byte 2 is the channel (255 = the station). Bodies are u32le values.
 
 | frame (cmd) | body | meaning |

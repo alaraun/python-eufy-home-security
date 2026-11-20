@@ -368,7 +368,12 @@ time zone (1215) takes only this form; the handler's `DeviceMsgBean` JSON for 12
 refused (−1). The app routes 1132, 1216 and 1217 the same way; the library sends
 only 1215 this way (`p2p/messages.py` `STRING_CMDS`).
 
-**Reply.** A frame of the **same type**. Its payload starts with an int32le result code.
+**Reply.** A frame of the **same type** on DRW channel 0 (the request channel). Its
+payload starts with an int32le result code. A frame of the same type on DRW channel 2 is
+the station's state, not the reply: a HomeBase 3 sends the light frame `0x0578` there
+before the result of an ECB 1400 write ([commands.md](commands.md#settings)). The eufy
+app reads results on channel 0 only, and the library does the same; a channel-0 frame of
+an alarm frame's type is not taken as state.
 
 | code | name | usual cause |
 |---|---|---|
