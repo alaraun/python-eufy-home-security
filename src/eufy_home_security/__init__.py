@@ -36,6 +36,7 @@ if TYPE_CHECKING:
         Setting,
         SettingControl,
         SettingKind,
+        SettingMeaning,
         SettingRole,
         SettingShown,
     )
@@ -232,7 +233,14 @@ _EXPORTS: dict[str, str] = {
     ),
     "DeviceAlarm": "devices.device_alarm",
     **dict.fromkeys(
-        ("Setting", "SettingControl", "SettingKind", "SettingRole", "SettingShown"),
+        (
+            "Setting",
+            "SettingControl",
+            "SettingKind",
+            "SettingMeaning",
+            "SettingRole",
+            "SettingShown",
+        ),
         "devices.model_settings",
     ),
     **dict.fromkeys(
@@ -585,6 +593,7 @@ __all__ = [
     "Setting",
     "SettingControl",
     "SettingKind",
+    "SettingMeaning",
     "SettingRole",
     "SettingSection",
     "SettingShown",

@@ -78,6 +78,7 @@ from eufy_home_security.devices.model_settings import (
 )
 from eufy_home_security.devices.param_info import STATE_PARAM_INFO
 from eufy_home_security.devices.settings import DUAL_VIEW, VIEW_MODE_PARAM
+from eufy_home_security.devices.td import UNIT_MEANINGS
 from eufy_home_security.devices.types import DeviceKind, model_for_serial
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -1098,6 +1099,9 @@ def td_fields(
         )
         if normal is not None:
             out["unit"] = normal
+        meaning = UNIT_MEANINGS.get(unit.strip())
+        if meaning is not None:
+            out["meaning"] = meaning.value
     default = codec.td_default(prop, kind)
     if default is not None:
         out["default"] = default

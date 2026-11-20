@@ -20,6 +20,7 @@ from eufy_home_security.devices.model_settings import (
     Setting,
     SettingControl,
     SettingKind,
+    SettingMeaning,
     SettingRole,
     SettingShown,
     WriteContext,
@@ -31,6 +32,7 @@ from eufy_home_security.devices.model_settings import (
     product_code_of,
     reached_on_demand,
     settings_of,
+    unit_meaning,
 )
 from eufy_home_security.devices.param_info import STATE_PARAM_INFO
 from eufy_home_security.devices.recipes import ConnectType
@@ -824,6 +826,48 @@ def test_structured_comes_from_the_file_and_defaults_to_false(data_root: Path) -
     assert (loaded["rules"].structured, loaded["mode"].structured) == (True, False)
 
 
+def test_meaning_comes_from_the_file_else_from_the_unit(data_root: Path) -> None:
+    rng = {**GOOD_ENTRY, "kind": "range", "min": 0, "max": 100, "step": 1}
+    _write_model(
+        data_root,
+        {
+            "door": {**GOOD_ENTRY, "meaning": "opening"},
+            "clip": {**rng, "unit": "s"},
+            "stamp": {**rng, "unit": "s", "meaning": "timestamp"},
+            "level": {**rng, "unit": "%"},
+            "days": {**rng, "unit": "d"},
+            "count": rng,
+        },
+    )
+    got = {k: s.meaning for k, s in settings_of("T0001").items()}
+    assert got == {
+        "door": SettingMeaning.OPENING,
+        "clip": SettingMeaning.DURATION,
+        "stamp": SettingMeaning.TIMESTAMP,
+        "level": SettingMeaning.PERCENT,
+        "days": SettingMeaning.DURATION,
+        "count": None,
+    }
+
+
+@pytest.mark.parametrize("value", ["door", 1])
+def test_a_meaning_must_be_a_setting_meaning(data_root: Path, value: object) -> None:
+    _write_model(data_root, {"mode": {**GOOD_ENTRY, "meaning": value}})
+    with pytest.raises(ModelDataError, match=r"T0001\.json"):
+        settings_of("T0001")
+
+
+def test_unit_meaning_covers_every_time_unit() -> None:
+    assert {u: unit_meaning(u) for u in SettingUnit} == {
+        SettingUnit.NONE: None,
+        SettingUnit.SECONDS: SettingMeaning.DURATION,
+        SettingUnit.MILLISECONDS: SettingMeaning.DURATION,
+        SettingUnit.DAYS: SettingMeaning.DURATION,
+        SettingUnit.PERCENT: SettingMeaning.PERCENT,
+    }
+    assert unit_meaning(None) is None
+
+
 @pytest.mark.parametrize("value", ["yes", 1, None])
 def test_structured_must_be_a_bool(data_root: Path, value: object) -> None:
     _write_model(data_root, {"mode": {**GOOD_ENTRY, "structured": value}})
@@ -1062,6 +1106,7 @@ def test_mode_table_settings_wrap_the_hand_written_entries() -> None:
     delay = camera["alarm_delay_home"]
     assert (delay.kind, delay.minimum, delay.maximum, delay.step) == (SettingKind.RANGE, 0, 300, 1)
     assert delay.unit is SettingUnit.SECONDS
+    assert delay.meaning is SettingMeaning.DURATION
     assert delay.read_param == mode_table_setting("alarm_delay_home").read_param
     action = camera["camera_action_away"]
     assert (action.minimum, action.maximum, action.unit) == (
@@ -1069,6 +1114,7 @@ def test_mode_table_settings_wrap_the_hand_written_entries() -> None:
         functools.reduce(operator.or_, ACTION_FLAGS.values()),
         None,
     )
+    assert action.meaning is None
     assert action.writable
     assert not action.labels
     assert action.validate(3) == 3

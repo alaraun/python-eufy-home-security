@@ -1052,7 +1052,7 @@ A closed session (`async_close`) never reconnects on its own — build a new
     | `role` | `shown` | entity |
     |---|---|---|
     | `SETTING` | any | the control above when `writable`; when not, the app offers it as a control the library cannot write: a disabled diagnostic `sensor` (it keeps its identity once a write lands) |
-    | `STATUS` | `CARD` | an enabled primary entity, no entity category: a `sensor`, a `binary_sensor` for a bool. An entry sensor's `sensor_door_status` (device class `door`), a tamper or low-battery flag (`tamper` / `battery`). Its value moves with the station's parameter notifies: refresh it on the `StationStateChanged` that follows them (see [Coordinator per station](#coordinator-per-station-push-for-the-rest)) |
+    | `STATUS` | `CARD` | an enabled primary entity, no entity category: a `sensor`, a `binary_sensor` for a bool. Its device class comes from `meaning` (an entry sensor's `sensor_door_status` is `OPENING`: device class `door`; a tamper or low-battery flag `TAMPER` / `LOW_BATTERY`). Its value moves with the station's parameter notifies: refresh it on the `StationStateChanged` that follows them (see [Coordinator per station](#coordinator-per-station-push-for-the-rest)) |
     | `STATUS` | `PAGE` | an enabled entity with entity category diagnostic: listed in the device page's Diagnostic section, neither hidden nor disabled |
     | `DIAGNOSTIC` | any | a disabled diagnostic entity, or none: the app shows it nowhere, or it is a value the device fields already give (battery level, online status, charging, a station's own status, counters, the active mode, a firmware update in progress), a structured value (`structured`), or a card status that is a bare code (an `OTHER` without labels or unit, which the app's card draws as an icon: a connection type, a Wi-Fi level). The device-field test ignores scope: on a camera paired to a HomeBase the storage status, and on a station that is not standalone its battery, charging and Wi-Fi values, are diagnostic though no device field carries them; none of these is readable today |
 
@@ -1382,9 +1382,12 @@ For the integration this means:
 `setting.name` is the eufy app's own title where the app has one (`Clip length`,
 `Intervals between triggers`, `Working mode` on a T8160), else a title made from the key;
 both in sentence case, as HA names entities.
-`setting.unit` is the TD's unit, or the unit the app's control shows (seconds for
-`video_clip_length` and `trigger_interval_time` on the custom-recording page); use it as
-the entity's unit of measurement. `setting.variant_of` is the key of the setting the app
+`setting.unit` is the unit the eufy app's screen shows for the value (seconds for
+`video_clip_length` and `trigger_interval_time` on the custom-recording page, none for the
+power-manager counters), else the TD's; use it as the entity's unit of measurement.
+`setting.meaning` (`SettingMeaning` or None) says what the value stands for; map device
+classes from it with one table, never from keys (see
+[Device classes from `meaning`](#device-classes-from-meaning)). `setting.variant_of` is the key of the setting the app
 uses in this one's place on the same model (`record_resolution__v1` →
 `record_resolution`, `nightvision_type` → `nightvision_type_new`), else `None`. Which
 member of a group the app uses depends on the unit (its station, firmware and reported
@@ -1431,6 +1434,31 @@ for entry in entity_registry.entries_for_config_entry(entry_id):
 
 It covers settings only: a per-(mode, flag) switch is the integration's own key and
 stays as long as `mode_action_flags` of the device names its flag.
+
+#### Device classes from `meaning`
+
+`setting.meaning` is set from the model's data where the eufy app reads the property as
+one thing (a security sensor's card status, a timestamp, a time of day, a temperature),
+else from `setting.unit` (a time unit: a duration; `%`: a percentage). One generic table
+maps it; a setting with `meaning` None keeps the platform its `kind` and `control` give,
+without a device class.
+
+| `meaning` | kind | HA platform | device class | unit |
+|---|---|---|---|---|
+| `DURATION` | `RANGE` | `number` / `sensor` | `duration` | `setting.unit` (`s`, `ms`, `d`) |
+| `PERCENT` | `RANGE` | `number` / `sensor` | none | `%` |
+| `TEMPERATURE` | `RANGE` | `number` / `sensor` | `temperature` | from the model's `device_indoor_temperature_unit` setting (`setting.unit` is None) |
+| `TIMESTAMP` | `STRING` | `sensor` | `timestamp` | value: integer milliseconds since the epoch (UTC); 0 or empty: unknown |
+| `TIME_OF_DAY` | `STRING` | `sensor` (a `time` entity once writable) | none | value `HH:MM` |
+| `OPENING` | `BOOL` | `binary_sensor` | `door` (or `opening`) | — |
+| `TAMPER` | `BOOL` | `binary_sensor` | `tamper` | — |
+| `LOW_BATTERY` | `BOOL` | `binary_sensor` | `battery` | — |
+| `MOISTURE` | `BOOL` | `binary_sensor` | `moisture` | — |
+| `COLD` | `BOOL` | `binary_sensor` | `cold` | — |
+| `SIREN_RINGING` | `BOOL` | `binary_sensor` | `sound` | — |
+
+The binary meanings (`devices.model_settings.BINARY_MEANINGS`) only sit on `BOOL`
+settings, `True` being the named state.
 
 #### One entity per writable setting: `setting.control`
 

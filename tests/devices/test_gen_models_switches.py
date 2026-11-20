@@ -274,3 +274,17 @@ def test_switch_texts_take_a_models_own_pair() -> None:
 def test_switch_with_one_text_for_both_states_raises() -> None:
     with pytest.raises(join.GeneratorError, match="two distinct"):
         join.switches(PN, {"switches": {"camera_on_off": {"on": "1", "off": "1"}}})
+
+
+@pytest.mark.parametrize(
+    ("raw", "fields"), [("degree", {"meaning": "temperature"}), ("s", {"unit": "s"})]
+)
+def test_td_fields_carry_the_meaning_of_a_unit_without_a_setting_unit(
+    raw: str, fields: dict[str, str]
+) -> None:
+    prop = {
+        "identifier": "temp_max",
+        "data_type": {"type": "int", "specs": {"min": "50", "max": "100", "unit": raw}},
+    }
+    out = gen_models.td_fields(PN, prop, "range", [])
+    assert {k: out[k] for k in ("unit", "meaning") if k in out} == fields

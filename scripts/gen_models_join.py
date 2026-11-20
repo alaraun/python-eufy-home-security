@@ -2,10 +2,11 @@
 
 Adds to each setting dict of a model: ``labels`` (enum titles keyed by public value),
 ``applies_when`` (the app's value gate), ``group``/``order``/``page`` (the app's settings
-layout), ``name`` (the app's title, in sentence case), ``unit`` (the app control's unit
-where the TD gives none), ``variant_of`` (the identifier the app uses instead), the
-hand-read app facts of the title file (``default``, read-only status, option labels,
-``advanced``, excluded actions, held flags members), and builds the file's ``source``
+layout), ``name`` (the app's title, in sentence case), ``unit`` (the unit the app's screen
+shows, over the TD's), ``meaning`` (what the app reads the value as), ``variant_of`` (the
+identifier the app uses instead), the hand-read app facts of the title file (``default``,
+read-only status, option labels, ``advanced``, excluded actions, held flags members), and
+builds the file's ``source``
 block. Stdlib plus the TD readers of ``eufy_home_security.devices.td``; no
 I/O. See docs/reference/models-schema.md.
 """
@@ -19,6 +20,7 @@ from typing import Any
 from gen_models_codec import GeneratorError, public_value, specs_of, value_key
 
 from eufy_home_security.devices.labels import sentence_case, setting_name
+from eufy_home_security.devices.model_settings import BINARY_MEANINGS, SettingMeaning
 from eufy_home_security.devices.td import enum_label
 from eufy_home_security.devices.td import normalise_unit as _td_unit
 
@@ -238,19 +240,67 @@ def _names(
         _count(counts, "name:app")
 
 
-def _units(pn: str, settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]) -> None:
-    """Set ``unit`` from the app's control for a setting on the page that shows it."""
+def _members(settings: Settings, ident: str) -> list[str]:
+    """``ident`` and its ``<ident>__v<n>`` variants present in ``settings``."""
+    return [
+        k
+        for k in settings
+        if k == ident or ((m := _VERSIONED.fullmatch(k)) is not None and m.group(1) == ident)
+    ]
+
+
+def _units(
+    pn: str, settings: Settings, titles: Mapping[str, Any], counts: dict[str, int], *, rn: bool
+) -> None:
+    """Set ``unit`` to the one the app's screen shows, over the TD's.
+
+    A rule with a ``page`` is a settings-page control: it applies on an RN-screen model
+    (``rn``) to the setting placed on that page. A rule with ``page`` None is a screen that
+    reads the property wherever it sits (a statistics block, an icon): it applies to the
+    identifier on every model. ``unit`` None is a bare number on that screen: the TD unit is
+    dropped.
+    """
     for ident, rule in (titles.get("units") or {}).items():
-        entry = settings.get(ident)
-        if entry is None or entry.get("page") != rule["page"]:
+        page = rule.get("page")
+        if page is not None and not rn:
             continue
-        unit = normalise_unit(pn, ident, rule["unit"], entry.get("min"), entry.get("max"))
-        if entry.get("unit", unit) != unit:
-            _count(counts, "unit:app differs from TD")
-            continue
-        if "unit" not in entry and unit is not None:
-            entry["unit"] = unit
-            _count(counts, "unit:app")
+        for key in _members(settings, ident):
+            entry = settings[key]
+            if page is not None and entry.get("page") != page:
+                continue
+            raw = rule["unit"]
+            unit = (
+                None
+                if raw is None
+                else normalise_unit(pn, key, raw, entry.get("min"), entry.get("max"))
+            )
+            if entry.get("unit") == unit:
+                continue
+            if unit is None:
+                del entry["unit"]
+                _count(counts, "unit:app drops TD unit")
+            else:
+                _count(counts, "unit:app replaces TD" if "unit" in entry else "unit:app")
+                entry["unit"] = unit
+
+
+def _meanings(
+    pn: str, settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]
+) -> None:
+    """Set ``meaning`` from the hand-read ``meanings`` (``{identifier: {meaning, source}}``)
+    on the identifier and its variants; a binary meaning only on a bool setting."""
+    for ident, rule in (titles.get("meanings") or {}).items():
+        try:
+            meaning = SettingMeaning(rule["meaning"])
+        except (KeyError, TypeError, ValueError) as err:
+            raise GeneratorError(f"{pn}: meaning rule of {ident} is not a meaning") from err
+        for key in _members(settings, ident):
+            entry = settings[key]
+            if meaning in BINARY_MEANINGS and entry["kind"] != "bool":
+                _count(counts, "meaning:binary on a non-bool")
+                continue
+            entry["meaning"] = meaning.value
+            _count(counts, "meaning:app")
 
 
 def _variants(
@@ -493,10 +543,12 @@ def join(
         _hand_labels(product_code, settings, titles, counts)
         _advanced(settings, titles, counts)
         _variants(product_code, settings, titles, counts)
-        if tree is not None and tree.get("settings_ui") == RN_SETTINGS:
+        rn = tree is not None and tree.get("settings_ui") == RN_SETTINGS
+        _units(product_code, settings, titles, counts, rn=rn)
+        _meanings(product_code, settings, titles, counts)
+        if rn:
             own = (titles.get("models") or {}).get(product_code) or {}
             _names(product_code, settings, own, titles.get("titles") or {}, counts)
-            _units(product_code, settings, titles, counts)
         elif tree is not None:
             own = (titles.get("native_models") or {}).get(product_code) or {}
             _names(product_code, settings, own, {}, counts)

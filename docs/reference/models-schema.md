@@ -30,7 +30,8 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `kind` | `enum`, `bool`, `range`, `string`, `other` or `flags` (an int bitmask of named members, several may be on) |
 | `values` | The enum's values (TD values, the public values the handler takes) |
 | `min`, `max`, `step`, `default` | From the TD where it gives them; `default` is the eufy app's own where the app shows another value while the device reports none (`device_cross_cam_assistance_switch` on a T8030: on) |
-| `unit` | The TD unit normalised to `s`, `ms`, `d` or `%`, else the unit the app's control shows on the page the setting is on (the custom-recording sliders: `s`); absent otherwise |
+| `unit` | The unit the app's screen shows: a settings-page control's on the page the setting is on, on a model whose settings the app's RN screens render (the custom-recording sliders: `s`), or a screen that reads the property wherever it sits (the power-manager counters show a bare number: no unit); it wins over the TD unit. Else the TD unit normalised to `s`, `ms`, `d` or `%`; absent otherwise |
+| `meaning` | What the app reads the value as, where its own code names the property: a security sensor's card status (`opening`, `tamper`, `low_battery`, `moisture`, `cold`, `siren_ringing`; bool settings only), `timestamp` (epoch milliseconds), `time_of_day` (`HH:MM`); or `temperature` from the TD unit `degree`. Absent otherwise: the loader then derives it from `unit` (a time unit: `duration`, `%`: `percent`) |
 | `access` | `rw`: the handler has a value-dependent write. `ro`: it has none, or the setting is a status the eufy app only reads (`hb_keypad_is_password_set`) |
 | `write` | Recipe template (base context, below) |
 | `write_table` | `{"<value>": recipe}` when the recipe's shape depends on the value. It replaces `write` |
@@ -258,6 +259,7 @@ product code and turns each entry into a `Setting`:
 | `kind` (`SettingKind`) | `kind` |
 | `values`, `minimum`, `maximum`, `step`, `default` | `values`, `min`, `max`, `step`, `default` |
 | `unit` (`SettingUnit` or None) | `unit` |
+| `meaning` (`SettingMeaning` or None) | `meaning`, else `unit_meaning(unit)`; a setting listed from a thing description alone takes its unit's (`degree`: `TEMPERATURE`), a mode-table delay `DURATION` |
 | `labels` | `labels`, keyed by the public value; `label(value)` looks one up |
 | `writable` | `access` is `rw` and the library sends the write (below) |
 | `readable` | `read` is not null |

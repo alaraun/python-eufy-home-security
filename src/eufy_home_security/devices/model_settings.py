@@ -54,6 +54,7 @@ from .timezones import TIMEZONE_DOMAIN, decode_zone, encode_zone, zone_ids
 from .types import DeviceKind, connects_on_demand, model_for_serial, serial_product_code
 
 __all__ = [
+    "BINARY_MEANINGS",
     "DEFAULT_BATTERY_READS",
     "IDENTIFIER",
     "PARENTLESS_ONLY",
@@ -63,6 +64,7 @@ __all__ = [
     "Setting",
     "SettingControl",
     "SettingKind",
+    "SettingMeaning",
     "SettingRole",
     "SettingShown",
     "Value",
@@ -81,6 +83,7 @@ __all__ = [
     "sd_status_groups",
     "settings_of",
     "sort_settings",
+    "unit_meaning",
 ]
 
 type Value = bool | int | float | str
@@ -186,6 +189,69 @@ class SettingShown(StrEnum):
     battery), read there by the app."""
     PAGE = "page"
     """Only on a settings page: a page reads it or the app's layout places it there."""
+
+
+class SettingMeaning(StrEnum):
+    """What a setting's value stands for, so a consumer can type it without key names.
+
+    Value meanings come from the unit (:func:`unit_meaning`: a duration, a percentage) or
+    from the eufy app's own reading of the property (a temperature, a timestamp, a time of
+    day). Binary meanings are the statuses the app's device card shows for a security
+    sensor (declared, eufy app): ``True`` is the state the name gives (open, tampered,
+    low battery, water, cold, ringing). None on a setting: no meaning the app gives.
+    """
+
+    DURATION = "duration"
+    """A length of time in :attr:`Setting.unit` (seconds, milliseconds or days)."""
+    PERCENT = "percent"
+    """A percentage (``unit`` ``%``)."""
+    TEMPERATURE = "temperature"
+    """A temperature in the device's display scale; the model's
+    ``device_indoor_temperature_unit`` setting says which scale (``unit`` stays None)."""
+    TIMESTAMP = "timestamp"
+    """A point in time as integer milliseconds since the Unix epoch (UTC), as the device
+    reports it (a ``STRING`` setting holds the digits); 0 or empty means never."""
+    TIME_OF_DAY = "time_of_day"
+    """A local time of day as ``HH:MM`` text."""
+    OPENING = "opening"
+    """A door or window contact: ``True`` is open."""
+    TAMPER = "tamper"
+    """``True``: the device was taken off its mount or opened."""
+    LOW_BATTERY = "low_battery"
+    """``True``: the battery is low."""
+    MOISTURE = "moisture"
+    """``True``: water is detected."""
+    COLD = "cold"
+    """``True``: the temperature is below the device's low-temperature threshold."""
+    SIREN_RINGING = "siren_ringing"
+    """``True``: the siren is sounding."""
+
+
+BINARY_MEANINGS: Final = frozenset(
+    {
+        SettingMeaning.OPENING,
+        SettingMeaning.TAMPER,
+        SettingMeaning.LOW_BATTERY,
+        SettingMeaning.MOISTURE,
+        SettingMeaning.COLD,
+        SettingMeaning.SIREN_RINGING,
+    }
+)
+"""The meanings of a ``BOOL`` status: ``True`` is the named state."""
+
+_UNIT_MEANINGS: Final[Mapping[SettingUnit, SettingMeaning]] = MappingProxyType(
+    {
+        SettingUnit.SECONDS: SettingMeaning.DURATION,
+        SettingUnit.MILLISECONDS: SettingMeaning.DURATION,
+        SettingUnit.DAYS: SettingMeaning.DURATION,
+        SettingUnit.PERCENT: SettingMeaning.PERCENT,
+    }
+)
+
+
+def unit_meaning(unit: SettingUnit | None) -> SettingMeaning | None:
+    """The meaning a unit gives a value (a time unit: a duration), or None."""
+    return None if unit is None else _UNIT_MEANINGS.get(unit)
 
 
 #: The controls each kind may carry (a ``STRING`` with a :attr:`Setting.domain` is a select).
@@ -295,6 +361,11 @@ class Setting:
     a ``SELECT``: ``values`` are the table's ids, a write takes an id and sends the
     device form, and a read gives the id back (None when the device holds a value the
     table does not place).
+
+    ``unit`` is the unit the eufy app's settings screen shows for the value, else the
+    thing description's. ``meaning`` says what the value stands for
+    (:class:`SettingMeaning`): from the model's data where the app gives the property one
+    (a sensor status, a timestamp, a temperature), else from ``unit``; None for none.
     """
 
     key: str
@@ -325,6 +396,7 @@ class Setting:
     flags: Mapping[str, int] = field(default_factory=lambda: MappingProxyType({}))
     bit: int | None = None
     domain: str | None = None
+    meaning: SettingMeaning | None = None
     _write: Recipe | None = field(default=None, repr=False)
     _write_table: Mapping[str, Recipe] | None = field(default=None, repr=False)
     _read_param: int | None = field(default=None, repr=False)
@@ -980,6 +1052,7 @@ def _mode_table_setting(spec: SettingDef) -> Setting:
         maximum=spec.value_range[1] if delay and spec.value_range else _ACTION_MASK_MAX,
         step=1,
         unit=SettingUnit.SECONDS if delay else None,
+        meaning=SettingMeaning.DURATION if delay else None,
         writable=True,
         readable=True,
         section=MODES_SECTION,
@@ -1599,6 +1672,9 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     if refusal is not None:
         writable, note = False, _join_note(note, refusal)
     control, flags, bit = _control_fields(kind, entry, access == "rw")
+    unit = _unit(entry.get("unit"))
+    raw_meaning = _optional_str(entry, "meaning")
+    meaning = unit_meaning(unit) if raw_meaning is None else SettingMeaning(raw_meaning)
     domain = _optional_str(entry, "domain")
     if domain is not None:
         if kind is not SettingKind.STRING or values:
@@ -1617,7 +1693,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         minimum=_optional_number(entry, "min"),
         maximum=_optional_number(entry, "max"),
         step=_optional_number(entry, "step"),
-        unit=_unit(entry.get("unit")),
+        unit=unit,
         default=None if default is None else _scalar(default, "default"),
         labels=MappingProxyType(labels),
         writable=writable,
@@ -1637,6 +1713,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         flags=flags,
         bit=bit,
         domain=domain,
+        meaning=meaning,
         _write=write,
         _write_table=table,
         _read_param=read_param,

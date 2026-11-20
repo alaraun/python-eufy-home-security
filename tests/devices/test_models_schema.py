@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 
 from eufy_home_security.devices import model_settings
+from eufy_home_security.devices.model_settings import BINARY_MEANINGS, SettingMeaning
 from eufy_home_security.devices.recipes import ConnectType
 from eufy_home_security.devices.sections import SETTING_SECTIONS
 
@@ -72,6 +73,7 @@ SETTING_KEYS = {
     "flags",
     "bit",
     "domain",
+    "meaning",
     "contexts",
     "variants",
     *WRITE_KEYS,
@@ -186,6 +188,9 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
         assert kind == "bool", ident
         assert bit > 0, ident
         assert bit & (bit - 1) == 0, ident
+    if "meaning" in s:
+        meaning = SettingMeaning(s["meaning"])
+        assert kind == "bool" or meaning not in BINARY_MEANINGS, ident
     allowed = CONTROLS[kind]
     if "domain" in s:
         assert kind == "string", ident
