@@ -116,6 +116,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "meaning": "opening",
    "read": {
     "map": {
      "": false,
@@ -133,6 +134,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "meaning": "low_battery",
    "read": {
     "map": {
      "": false,

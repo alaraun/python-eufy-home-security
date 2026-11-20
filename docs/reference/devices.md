@@ -2400,7 +2400,7 @@ rw 12 / ro 60
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
-| `4g_signal_strenght_level` | range | 10..120 step 1 | d | no | - | - |
+| `4g_signal_strenght_level` | range | 10..120 step 1 | - | no | - | - |
 | `ai_empower` | other | - | - | no | - | - |
 | `alarm_tones_mode` | enum | 1, 2 | - | yes | select | 1=Alarm Tone1, 2=Alarm Tone2 |
 | `alarm_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
@@ -3858,7 +3858,7 @@ rw 33 / ro 64
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
 | `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
@@ -3911,7 +3911,7 @@ rw 33 / ro 64
 | `power_source_mode` | enum | default:0 | - | no | - | default:0=default:0 |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `record_resolution__v1` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=0, sideNum=4, zoneHeight=1298, zoneWidth=2304 |
 | `solar_intensity` | enum | 0, 1, 2, 3 | - | no | - | 0=None, 1=Weak, 2=Good, 3=Excellent |
@@ -3929,7 +3929,7 @@ rw 33 / ro 64
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T8130 SoloCam E20
 
@@ -4058,7 +4058,7 @@ rw 28 / ro 64
 | `change_wifi_is_press_sync` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
 | `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
@@ -4109,7 +4109,7 @@ rw 28 / ro 64
 | `power_source_mode` | enum | default:0 | - | no | - | default:0=default:0 |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
 | `record_resolution__v1` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `speaker_volume` | enum | 2, 1, 0 | - | yes | select | 0=High, 1=Medium, 2=Low |
@@ -4122,7 +4122,7 @@ rw 28 / ro 64
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T8134 SoloCam C20
 
@@ -5728,7 +5728,7 @@ rw 51 / ro 116
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 1, 2, 3, 4 | - | no | - | 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
 | `device_ability_data` | other | - | - | no | - | - |
@@ -5833,7 +5833,7 @@ rw 51 / ro 116
 | `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
 | `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `record_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=4, positionNum=2, sideNum=4, zoneHeight=720, zoneWidth=1280 |
@@ -5851,9 +5851,9 @@ rw 51 / ro 116
 | `switching_notification` | flags | any of 0, 1 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..120 step 1 | d | yes | slider | - |
+| `trigger_interval_time` | range | 5..120 step 1 | s | yes | slider | - |
 | `video_camera_count` | range | 1..2 step 1 | - | no | - | - |
-| `video_clip_length` | range | 10..120 step 1 | d | yes | slider | - |
+| `video_clip_length` | range | 10..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | range | 0..100 step 1 | - | no | - | - |
 | `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
 | `video_mirror_mode_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Normal, 1=Rotated 180°, 2=Mirror, 3=Flipped vertically |
@@ -5861,7 +5861,7 @@ rw 51 / ro 116
 | `video_setting_image_effect_set` | string | - | - | no | - | - |
 | `video_watch_view_mode` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T8173 SoloCam E42
 
@@ -7256,7 +7256,7 @@ rw 50 / ro 109
 | `device_packages_uncollected_check_time` | string | - | - | no | - | - |
 | `device_power_supply_mode` | other | - | - | no | - | - |
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
-| `device_response_timeout_delay_time` | other | - | - | yes | - | - |
+| `device_response_timeout_delay_time` | other | - | s | yes | - | - |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -7374,7 +7374,7 @@ rw 54 / ro 124
 | `change_wifi_is_check_same_lan` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_range_set_installation_height` | string | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `device_ability_data` | other | - | - | no | - | - |
@@ -7421,7 +7421,7 @@ rw 54 / ro 124
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
 | `device_query_event_retry_time` | other | - | - | no | - | - |
 | `device_query_event_timeout` | other | - | - | no | - | - |
-| `device_response_timeout_delay_time` | other | - | - | yes | - | - |
+| `device_response_timeout_delay_time` | other | - | s | yes | - | - |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -7509,7 +7509,7 @@ rw 54 / ro 124
 | `record_resolution__v1` | enum | 1, 5, 12, 2, 6 | - | yes | select | 1=3K HD, 12=1.5K, 2=Full HD(1080P), 5=2K HD, 6=720P |
 | `record_resolution__v2` | enum | 0, 1, 5, 2, 6 | - | yes | select | 0=Auto, 1=3K HD, 2=Full HD(1080P), 5=2K HD, 6=HD (720P) |
 | `record_resolution__v3` | enum | 0, 1, 5, 12, 2, 6 | - | no | - | 0=Auto, 1=3K HD, 12=1.5K, 2=Full HD(1080P), 5=2K HD, 6=720P |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `remember_video_download_type` | bool | - | - | yes | switch | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
@@ -7531,7 +7531,7 @@ rw 54 / ro 124
 | `video_quality_when_recoding_clips` | enum | 0, 1 | - | no | - | 0=Recording quality, 1=Streaming quality |
 | `vr_mode_min_memory` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off, 1=Time, 2=Time and logo, 3=Logo |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T8217 Video doorbell C45
 
@@ -7560,7 +7560,7 @@ rw 47 / ro 109
 | `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_range_set_installation_height` | string | - | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_sensitivity_test_mode` | range | 1..7 step 1 | - | yes | slider | - |
@@ -7672,7 +7672,7 @@ rw 47 / ro 109
 | `power_manager_mode__v1` | enum | 1, 3 | - | yes | select | 1=Optimal surveillance, 3=Custom recording |
 | `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
 | `record_resolution` | enum | 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 5=2K HD, 6=720P(HD) |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
@@ -7694,7 +7694,7 @@ rw 47 / ro 109
 | `video_watch_view_mode` | enum | 2, 3, 4, 5, 12 | - | no | - | 12=Split view, 2=Upper left, 3=Upper right, 4=Lower left, 5=Lower right |
 | `watch_view_mode` | string | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 3 | - | yes | select | 0=Off, 1=Time, 3=Logo |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T8220 Video Doorbell 1080p slim
 
@@ -7963,7 +7963,7 @@ rw 32 / ro 92
 | `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
 | `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle Detection, 3=Pet Detection, 4=All Other Motions |
@@ -8050,7 +8050,7 @@ rw 32 / ro 92
 | `power_manager_mode` | enum | 0, 1, 2, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 2=Balanced surveillance, 3=Custom recording |
 | `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
 | `record_resolution` | enum | 2, 5 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
@@ -8064,7 +8064,7 @@ rw 32 / ro 92
 | `video_quality_streaming_smart_displays` | enum | 0, 1 | - | yes | select | 0=Smartphone first, 1=Smart display first |
 | `video_quality_when_recoding_clips` | enum | 0, 1 | - | no | - | 0=Recording quality, 1=Streaming quality |
 | `watermark_set` | bool | - | - | yes | switch | - |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T8224 Video Doorbell C30
 
@@ -8096,7 +8096,7 @@ rw 32 / ro 86
 | `change_wifi_is_pull_ble` | bool | - | - | no | - | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `charging_status` | string | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `detection_type_set` | enum | 5, 6 | - | yes | select | 5=Human Only, 6=All Motions |
 | `detection_type_set__v1` | flags | any of 0, 1, 2, 3, 4 | - | yes | toggles | 0=Human Recognition, 1=Human Detection, 2=Vehicle Detection, 3=Pet Detection, 4=All Other Motions |
@@ -8176,7 +8176,7 @@ rw 32 / ro 86
 | `quickresponse_selected_item` | other | - | - | no | - | - |
 | `quickresponse_show_config` | bool | - | - | no | - | - |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
@@ -8189,7 +8189,7 @@ rw 32 / ro 86
 | `video_clip_length` | range | 8..120 step 1 | - | yes | slider | - |
 | `video_quality_streaming_smart_displays` | enum | 0, 1 | - | yes | select | 0=Smartphone first, 1=Smart display first |
 | `watermark_set` | bool | - | - | yes | switch | - |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T8352 Babycare 8352
 
@@ -8737,7 +8737,7 @@ rw 34 / ro 105
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_sensitivity` | range | 1..5 step 1 | - | yes | slider | - |
 | `device_ability_data` | other | - | - | no | - | - |
 | `device_charging_mode` | other | - | - | no | - | - |
@@ -8818,7 +8818,7 @@ rw 34 / ro 105
 | `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
 | `player_model_config` | string | - | - | no | - | - |
 | `record_resolution` | enum | 0, 14, 2, 6 | - | yes | select | 0=Auto, 14=2.5K, 2=Full HD(1080P), 6=720P |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
@@ -8845,7 +8845,7 @@ rw 34 / ro 105
 | `video_setting_image_effect_set` | string | - | - | no | - | - |
 | `video_watch_view_mode` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T8410 Indoor Cam Pan&Tilt 2K
 
@@ -11605,7 +11605,7 @@ rw 33 / ro 129
 | `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_loitering_detection_length` | range | 15..60 step 5 | - | no | - | - |
 | `detection_loitering_detection_range` | range | 2..10 step 2 | - | no | - | - |
 | `detection_loitering_detection_switch` | bool | - | - | no | - | - |
@@ -11708,7 +11708,7 @@ rw 33 / ro 129
 | `power_source_mode` | enum | default:0 | - | no | - | default:0=default:0 |
 | `quickresponse_show_config` | bool | - | - | no | - | - |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
@@ -11744,7 +11744,7 @@ rw 33 / ro 129
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T85D0 Smart Lock C30
 
@@ -11999,7 +11999,7 @@ rw 31 / ro 128
 | `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_loitering_detection_length` | range | 15..60 step 5 | - | no | - | - |
 | `detection_loitering_detection_range` | range | 2..10 step 2 | - | no | - | - |
 | `detection_loitering_detection_switch` | bool | - | - | no | - | - |
@@ -12099,7 +12099,7 @@ rw 31 / ro 128
 | `power_source_mode` | enum | default:0 | - | no | - | default:0=default:0 |
 | `quickresponse_show_config` | bool | - | - | no | - | - |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
 | `setting_model_config` | string | - | - | no | - | - |
 | `smart_lock_auto_lock_type` | other | - | - | no | - | - |
@@ -12133,7 +12133,7 @@ rw 31 / ro 128
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T85M1 Smart Lock S4
 
@@ -12165,7 +12165,7 @@ rw 32 / ro 134
 | `camera_on_off` | bool | - | - | yes | switch | - |
 | `change_wifi_is_support` | bool | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_loitering_detection_length` | range | 15..60 step 5 | - | no | - | - |
 | `detection_loitering_detection_range` | range | 2..10 step 2 | - | no | - | - |
 | `detection_loitering_detection_switch` | bool | - | - | no | - | - |
@@ -12270,7 +12270,7 @@ rw 32 / ro 134
 | `power_source_mode` | enum | default:0 | - | no | - | default:0=default:0 |
 | `quickresponse_show_config` | bool | - | - | no | - | - |
 | `record_resolution` | enum | 5, 2 | - | yes | select | 2=Full HD(1080P), 5=2K HD |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
 | `setting_model_config` | string | - | - | no | - | - |
@@ -12306,7 +12306,7 @@ rw 32 / ro 134
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T85P0 FamiLock E34
 
@@ -12685,7 +12685,7 @@ rw 37 / ro 104
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `device_ability_data` | other | - | - | no | - | - |
 | `device_charging_mode` | other | - | - | no | - | - |
 | `device_cloud_storage_status` | other | - | - | no | - | - |
@@ -12768,7 +12768,7 @@ rw 37 / ro 104
 | `preset_positions_calibrate_time` | other | - | - | no | - | - |
 | `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
 | `record_resolution__v1` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=0, polyNum=2, positionNum=2, sideNum=4, zoneHeight=720, zoneWidth=1280 |
@@ -12795,7 +12795,7 @@ rw 37 / ro 104
 | `video_setting_image_effect_set` | string | - | - | no | - | - |
 | `video_watch_view_mode` | string | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo, 3=Logo |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 
 ### Settings of T86P2 4G&Wi-Fi Spotlight Cam
 
@@ -13649,7 +13649,7 @@ rw 46 / ro 109
 | `charging_status` | string | - | - | no | - | - |
 | `cloud_storage_support_show_device` | bool | - | - | no | - | - |
 | `cloud_storage_support_trail` | bool | - | - | no | - | - |
-| `detected_events` | range | 10..120 step 1 | d | no | - | - |
+| `detected_events` | range | 10..120 step 1 | - | no | - | - |
 | `detection_sensitivity` | range | 1..7 step 1 | - | yes | slider | - |
 | `device_ability_data` | other | - | - | no | - | - |
 | `device_charging_mode` | other | - | - | no | - | - |
@@ -13741,7 +13741,7 @@ rw 46 / ro 109
 | `radar_test_mode_on_off` | bool | - | - | yes | switch | - |
 | `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
 | `record_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
-| `recording_number` | range | 10..120 step 1 | d | no | - | - |
+| `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
@@ -13769,7 +13769,7 @@ rw 46 / ro 109
 | `video_setting_image_effect_set` | string | - | - | no | - | - |
 | `video_watch_view_mode` | string | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
-| `working_days` | range | 10..120 step 1 | d | no | - | - |
+| `working_days` | range | 10..120 step 1 | - | no | - | - |
 | `zoom_spotlight_brightness_level` | range | 0..100 step 1 | - | no | - | - |
 | `zoom_spotlight_switch` | bool | - | - | yes | switch | - |
 
@@ -14311,7 +14311,7 @@ rw 14 / ro 90
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
-| `4g_signal_strenght_level` | range | 10..120 step 1 | d | no | - | - |
+| `4g_signal_strenght_level` | range | 10..120 step 1 | - | no | - | - |
 | `4g_signal_strength` | string | - | - | no | - | - |
 | `accessory_ota_status` | other | - | - | no | - | - |
 | `ai_card_device_list` | string | - | - | no | - | - |

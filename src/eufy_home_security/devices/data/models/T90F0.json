@@ -225,6 +225,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "meaning": "low_battery",
    "read": null,
    "role": "status",
    "section": "power",
@@ -286,6 +287,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "meaning": "cold",
    "read": {
     "map": {
      "": false,
@@ -303,6 +305,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "meaning": "moisture",
    "read": {
     "map": {
      "": false,

@@ -513,8 +513,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   },
   "device_ability_data": {
    "access": "ro",
@@ -2468,8 +2467,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   },
   "reset_device_mode": {
    "access": "ro",
@@ -3030,8 +3028,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   }
  },
  "source": {

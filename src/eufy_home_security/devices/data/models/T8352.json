@@ -671,6 +671,7 @@
    "default": 83,
    "kind": "range",
    "max": 100,
+   "meaning": "temperature",
    "min": 50,
    "read": {
     "map": null,
@@ -698,6 +699,7 @@
    "default": 70,
    "kind": "range",
    "max": 100,
+   "meaning": "temperature",
    "min": 50,
    "read": {
     "map": null,

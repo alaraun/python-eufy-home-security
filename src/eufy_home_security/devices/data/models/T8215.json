@@ -379,8 +379,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   },
   "detection_range_set_installation_height": {
    "access": "ro",
@@ -1383,6 +1382,7 @@
   "device_packages_uncollected_check_time": {
    "access": "ro",
    "kind": "string",
+   "meaning": "time_of_day",
    "note": "handler ignores the value",
    "page": "UncollectedPackageAlert",
    "read": {
@@ -1464,6 +1464,7 @@
    "role": "setting",
    "section": "doorbell",
    "shown": "page",
+   "unit": "s",
    "write": {
     "cmd": 1350,
     "subCmd": 6438,
@@ -3686,8 +3687,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   },
   "remember_video_download_type": {
    "access": "rw",
@@ -4323,8 +4323,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   }
  },
  "source": {

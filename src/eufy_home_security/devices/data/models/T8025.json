@@ -46,8 +46,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "network",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   },
   "ai_empower": {
    "access": "ro",

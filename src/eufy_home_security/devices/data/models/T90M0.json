@@ -176,6 +176,7 @@
   "sensor_disassemble_status": {
    "access": "ro",
    "kind": "bool",
+   "meaning": "tamper",
    "read": {
     "map": {
      "": false,
@@ -193,6 +194,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "meaning": "low_battery",
    "read": null,
    "role": "status",
    "section": "power",
@@ -270,6 +272,7 @@
   "sensor_motion_trigger_time": {
    "access": "ro",
    "kind": "string",
+   "meaning": "timestamp",
    "read": {
     "map": null,
     "no_default": true,

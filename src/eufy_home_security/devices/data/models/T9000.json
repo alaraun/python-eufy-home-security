@@ -51,8 +51,7 @@
    "read": null,
    "role": "diagnostic",
    "section": "network",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   },
   "4g_signal_strength": {
    "access": "ro",

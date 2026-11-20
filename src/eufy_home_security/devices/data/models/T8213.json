@@ -1110,6 +1110,7 @@
    "access": "ro",
    "default": "\"20:00\"",
    "kind": "string",
+   "meaning": "time_of_day",
    "note": "handler ignores the value",
    "page": "UncollectedPackageAlert",
    "read": {

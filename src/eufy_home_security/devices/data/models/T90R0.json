@@ -257,6 +257,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "meaning": "low_battery",
    "read": null,
    "role": "status",
    "section": "power",
@@ -266,6 +267,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "meaning": "siren_ringing",
    "read": {
     "map": {
      "": false,

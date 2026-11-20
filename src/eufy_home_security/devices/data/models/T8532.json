@@ -445,8 +445,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   },
   "detection_loitering_detection_length": {
    "access": "ro",
@@ -1133,6 +1132,7 @@
   "device_packages_uncollected_check_time": {
    "access": "ro",
    "kind": "string",
+   "meaning": "time_of_day",
    "note": "handler ignores the value",
    "page": "UncollectedPackageAlert",
    "read": {
@@ -2609,8 +2609,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   },
   "sdk_model_config": {
    "access": "ro",
@@ -3256,8 +3255,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   }
  },
  "source": {

@@ -419,8 +419,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   },
   "detection_range_set_installation_height": {
    "access": "ro",
@@ -1220,6 +1219,7 @@
   "device_packages_uncollected_check_time": {
    "access": "ro",
    "kind": "string",
+   "meaning": "time_of_day",
    "note": "handler ignores the value",
    "read": {
     "map": null,
@@ -3180,8 +3180,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   },
   "reset_device_mode": {
    "access": "ro",
@@ -3782,8 +3781,7 @@
    },
    "role": "diagnostic",
    "section": "recording",
-   "step": 1,
-   "unit": "d"
+   "step": 1
   }
  },
  "source": {
