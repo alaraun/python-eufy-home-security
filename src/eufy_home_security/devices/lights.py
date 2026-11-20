@@ -248,7 +248,7 @@ def lights_from(
                 enabled_by=enabled_by,
                 config=config,
                 keys=tuple(dict.fromkeys([*covered, *variants])),
-                state_reported=switch.readable and switch.read_param == FrameType.LIGHT_NOTIFY,
+                state_reported=switch.read_param == FrameType.LIGHT_NOTIFY,
                 evidence=_DECLARED if source is None else Evidence(Support.VERIFIED, source),
             )
         )
@@ -306,8 +306,8 @@ def _enum_percents(setting: Setting) -> dict[Value, int] | None:
 
 
 def _color_temp(setting: Setting | None) -> LightColorTemperature | None:
-    """A colour temperature range; None for another kind (no scale to offer)."""
-    if setting is None or not _usable(setting) or setting.kind is not SettingKind.RANGE:
+    """A colour temperature range; None without a range's bounds (no scale to offer)."""
+    if setting is None or not _usable(setting):
         return None
     if setting.minimum is None or setting.maximum is None:
         return None

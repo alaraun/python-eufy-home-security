@@ -135,6 +135,8 @@ def test_a_range_brightness_is_the_percent() -> None:
         key="b", writable=True, readable=True, minimum=1, maximum=100, step=None
     )
     assert unstepped.value_for(42.4) == 42
+    odd = LightBrightness(key="b", writable=True, readable=True, minimum=1, maximum=100, step=2)
+    assert odd.value_for(100) == 100  # the step grid ends at 99 and 101: capped
 
 
 def test_an_enum_without_a_device_value_for_every_level_has_no_scale() -> None:
@@ -198,6 +200,61 @@ def test_the_state_is_reported_where_the_light_frame_carries_it(code: str, repor
     lights = lights_of(code, ConnectType.HB3)
     assert lights[0].state_reported is reported
     assert all(not light.state_reported for light in lights[1:])
+
+
+def test_a_switch_that_is_no_usable_bool_makes_no_lamp() -> None:
+    settings = dict(settings_of("T8160"))
+    switch = settings["spotlight_switch"]
+    settings["spotlight_switch"] = dataclasses.replace(switch, kind=SettingKind.OTHER)
+    assert lights_from(settings, "T8160", ConnectType.HB3) == ()
+    settings["spotlight_switch"] = dataclasses.replace(switch, readable=False, writable=False)
+    assert lights_from(settings, "T8160", ConnectType.HB3) == ()
+
+
+def test_a_variant_of_a_covered_setting_is_covered() -> None:
+    settings = dict(settings_of("T8214"))
+    variant = dataclasses.replace(
+        settings["light_color_temperature"],
+        key="light_color_temperature__v1",
+        variant_of="light_color_temperature",
+    )
+    settings[variant.key] = variant
+    main, bottom = lights_from(settings, "T8214", ConnectType.HB3)
+    assert "light_color_temperature__v1" in main.keys
+    assert "light_color_temperature__v1" not in bottom.keys
+
+
+def test_a_brightness_range_without_whole_bounds_has_no_scale() -> None:
+    settings = dict(settings_of("T8170"))
+    brightness = settings["spotlight_brightness_level"]
+    settings[brightness.key] = dataclasses.replace(brightness, minimum=0.5)
+    (light,) = lights_from(settings, "T8170", standalone=True)
+    assert light.brightness is None
+
+
+def test_an_enum_level_takes_its_first_numeric_device_value() -> None:
+    settings = dict(settings_of("T8160"))
+    brightness = settings["spotlight_brightness_level"]
+    read_map = {"x": 0, "": 2, "40": 0, "45": 0, "70": 1, "100": 2}
+    settings[brightness.key] = dataclasses.replace(brightness, _read_map=read_map)
+    (light,) = lights_from(settings, "T8160", ConnectType.HB3)
+    assert light.brightness is not None
+    assert dict(light.brightness.levels) == {0: 40, 1: 70, 2: 100}
+
+
+def test_a_colour_temperature_without_a_range_is_not_offered() -> None:
+    (light,) = lights_of("T8423", ConnectType.HB3)
+    assert settings_of("T8423")["light_color_temperature"].kind is SettingKind.OTHER
+    assert light.color_temp is None
+    assert "light_color_temperature" not in light.keys
+
+
+def test_a_colour_temperature_neither_readable_nor_writable_is_not_offered() -> None:
+    settings = dict(settings_of("T8214"))
+    color = settings["light_color_temperature"]
+    settings[color.key] = dataclasses.replace(color, readable=False, writable=False)
+    main, _ = lights_from(settings, "T8214", ConnectType.HB3)
+    assert main.color_temp is None
 
 
 def test_an_unknown_code_has_no_lamp() -> None:
