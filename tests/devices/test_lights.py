@@ -68,22 +68,22 @@ def test_a_lamp_read_only_behind_a_station_is_listed_unwritable() -> None:
     assert paired.on_off_readable
 
 
-def test_a_doorbell_bottom_lamp_is_on_off_only() -> None:
-    main, bottom = lights_of("T8214", ConnectType.HB3)
-    assert (main.id, bottom.id) == ("spotlight", "bottom_spotlight")
+def test_a_doorbell_bottom_fill_light_setting_is_no_lamp() -> None:
+    """The bottom fill light selects night-vision compensation: a setting, not a lamp."""
+    (main,) = lights_of("T8214", ConnectType.HB3)
+    assert main.id == "spotlight"
     assert main.brightness is not None
     assert main.brightness.key == "spotlight_brightness_level"
     assert main.color_temp is not None
     assert main.color_temp.key == "light_color_temperature"
     assert main.color_temp.kelvin is None
-    assert bottom.brightness is None
-    assert bottom.color_temp is None
-    assert bottom.name == "Bottom spotlight"
-    assert bottom.keys == ("bottom_spotlight_switch",)
+    assert settings_of("T8214", ConnectType.HB3)["bottom_spotlight_switch"].writable
+    assert "bottom_spotlight_switch" not in main.keys
 
 
 def test_a_track_light_pairs_each_lamp_with_its_own_brightness() -> None:
     main, zoom = lights_of("T8L60", ConnectType.HB3)
+    assert (main.enabled_by, zoom.enabled_by) == ("spotlight_status", None)
     assert main.brightness is not None
     assert main.brightness.key == "spotlight_brightness_level"
     assert not main.brightness.writable  # read-only on this model
@@ -114,10 +114,11 @@ def test_a_range_brightness_is_the_percent() -> None:
     brightness = LightBrightness(
         key="b", writable=True, readable=True, minimum=10, maximum=100, step=5
     )
-    assert [brightness.percent(v) for v in (9, 10, 55, 100, 101, "x")] == [
+    assert [brightness.percent(v) for v in (9, 10, 55, 55.6, 100, 101, "x")] == [
         None,
         10,
         55,
+        56,
         100,
         None,
         None,
@@ -139,6 +140,29 @@ def test_a_range_brightness_is_the_percent() -> None:
     assert odd.value_for(100) == 100  # the step grid ends at 99 and 101: capped
 
 
+@pytest.mark.parametrize(
+    ("minimum", "step", "percent", "value"),
+    [
+        (0, 1, 0, 2),
+        (0, 1, 1.4, 2),
+        (1, 1, 0.39, 2),
+        (1, 1, 2, 2),
+        (1, 1, 3, 3),
+        (0, 5, 2, 5),
+        (0, 5, 4, 5),
+        (10, 5, 0, 10),
+    ],
+)
+def test_a_range_brightness_is_never_written_below_the_app_s_lowest(
+    minimum: int, step: int, percent: float, value: int
+) -> None:
+    """The app writes a brightness of 2 or more and turns the lamp off for 1 or less."""
+    brightness = LightBrightness(
+        key="b", writable=True, readable=True, minimum=minimum, maximum=100, step=step
+    )
+    assert brightness.value_for(percent) == value
+
+
 def test_an_enum_without_a_device_value_for_every_level_has_no_scale() -> None:
     settings = dict(settings_of("T8160"))
     brightness = settings["spotlight_brightness_level"]
@@ -155,51 +179,77 @@ def test_the_master_enable_and_config_keys_belong_to_the_main_lamp() -> None:
     assert "spotlight_status" in light.config
     variants = [s.key for s in settings_of("T8422").values() if s.variant_of == "spotlight_status"]
     assert variants
-    assert set(variants) <= set(light.keys)
+    # The configuration stays its own settings: the light entity replaces none of them.
+    assert not set(light.config) & set(light.keys)
+    assert not set(variants) & set(light.keys)
     (plain,) = lights_of("T8160", ConnectType.HB3)
     assert plain.enabled_by is None
     assert plain.config == ()
     assert plain.keys == ("spotlight_switch", "spotlight_brightness_level")
 
 
+_V, _D = Support.VERIFIED, Support.DECLARED
+
+
 @pytest.mark.parametrize(
-    ("code", "connect", "standalone", "support"),
+    ("code", "connect", "standalone", "on_off", "brightness"),
     [
-        ("T8160", ConnectType.HB3, False, Support.VERIFIED),
-        ("t8160", ConnectType.HB3, False, Support.VERIFIED),
-        ("T8160", ConnectType.HB2, False, Support.DECLARED),
-        ("T8160", None, True, Support.DECLARED),
-        ("T8170", None, True, Support.VERIFIED),
-        ("T8170", ConnectType.HB3, False, Support.DECLARED),
-        ("T8423", ConnectType.HB3, False, Support.DECLARED),
+        ("T8160", ConnectType.HB3, False, _V, _D),
+        ("t8160", ConnectType.HB3, False, _V, _D),
+        ("T8160", ConnectType.HB2, False, _D, _D),
+        ("T8160", None, True, _D, _D),
+        ("T8170", None, True, _V, _D),
+        ("T8170", ConnectType.HB3, False, _D, _D),
+        ("T8423", ConnectType.HB3, False, _D, _D),
     ],
 )
-def test_only_the_hardware_proven_switches_are_verified(
-    code: str, connect: ConnectType | None, standalone: bool, support: Support
+def test_only_the_hardware_proven_lamp_writes_are_verified(
+    code: str, connect: ConnectType | None, standalone: bool, on_off: Support, brightness: Support
 ) -> None:
     (light,) = lights_of(code, connect, standalone=standalone)
-    assert light.evidence.support is support
+    assert light.evidence.support is on_off
+    assert light.brightness is not None
+    assert light.brightness.evidence.support is brightness
     assert light.product_code == code.upper()
 
 
-def test_the_verified_switches_have_their_hardware_rows() -> None:
+def test_a_range_brightness_carries_the_model_s_step() -> None:
+    (light,) = lights_of("T8170", standalone=True)
+    assert light.brightness is not None
+    assert (light.brightness.minimum, light.brightness.maximum) == (1, 100)
+    assert light.brightness.step == 1
+
+
+_ROW_CONTEXTS = {"standalone": STANDALONE_CONTEXT, "HomeBase 3": ConnectType.HB3.value}
+
+
+def _verified_rows() -> set[tuple[str, str, str]]:
+    """(product code, context, lamp key) of each ✓ row of a lamp model naming a lamp key."""
     doc = (Path(__file__).parents[2] / "docs/reference/hardware-verification.md").read_text()
-    rows = [line for line in doc.splitlines() if "| ✓ |" in line and "spotlight_switch" in line]
-    for code, context in lights._VERIFIED_SWITCHES:
-        assert context in (ConnectType.HB3.value, STANDALONE_CONTEXT)
-        assert any(code in row for row in rows), code
+    lamp_keys = {key for spec in LAMP_SPECS for key in (spec.switch, spec.brightness) if key}
+    found = set()
+    for row in doc.splitlines():
+        if "| ✓ |" not in row:
+            continue
+        contexts = {ctx for word, ctx in _ROW_CONTEXTS.items() if word in row}
+        codes = {code for code in bundled_codes() if code in row and lights_of(code)}
+        keys = {key for key in lamp_keys if f"`{key}`" in row}
+        found |= {(c, ctx, k) for c in codes for ctx in contexts for k in keys}
+    return found
 
 
-@pytest.mark.parametrize(
-    ("code", "reported"),
-    [("T8160", True), ("T8442", False), ("T870G", False), ("T8L60", False)],
-)
-def test_the_state_is_reported_where_the_light_frame_carries_it(code: str, reported: bool) -> None:
-    """The station's light frame reports param 1400; another read param (6083, 1398) is
-    refreshed only by reads, and a write-only switch has no read."""
-    lights = lights_of(code, ConnectType.HB3)
-    assert lights[0].state_reported is reported
-    assert all(not light.state_reported for light in lights[1:])
+def test_the_verified_lamp_writes_match_the_hardware_rows() -> None:
+    """Each verified write has its ✓ row naming the model, the context and the key, and
+    each such row has its entry: a row of another context does not count."""
+    assert set(lights._VERIFIED_WRITES) == _verified_rows()
+
+
+@pytest.mark.parametrize("code", ["T8160", "T8442", "T870G", "T8L60"])
+def test_no_lamp_state_is_taken_as_reported(code: str) -> None:
+    """The light frame reads 0 at detections and periodically: no switch read is proven to
+    follow a lamp switched elsewhere."""
+    assert lights_of(code, ConnectType.HB3)
+    assert not any(light.state_reported for light in lights_of(code, ConnectType.HB3))
 
 
 def test_a_switch_that_is_no_usable_bool_makes_no_lamp() -> None:
@@ -211,17 +261,18 @@ def test_a_switch_that_is_no_usable_bool_makes_no_lamp() -> None:
     assert lights_from(settings, "T8160", ConnectType.HB3) == ()
 
 
-def test_a_variant_of_a_covered_setting_is_covered() -> None:
+def test_the_keys_are_the_switch_and_brightness_with_their_variants() -> None:
     settings = dict(settings_of("T8214"))
-    variant = dataclasses.replace(
-        settings["light_color_temperature"],
-        key="light_color_temperature__v1",
-        variant_of="light_color_temperature",
+    for key in ("spotlight_brightness_level", "light_color_temperature"):
+        settings[f"{key}__v1"] = dataclasses.replace(
+            settings[key], key=f"{key}__v1", variant_of=key
+        )
+    (main,) = lights_from(settings, "T8214", ConnectType.HB3)
+    assert main.keys == (
+        "spotlight_switch",
+        "spotlight_brightness_level",
+        "spotlight_brightness_level__v1",
     )
-    settings[variant.key] = variant
-    main, bottom = lights_from(settings, "T8214", ConnectType.HB3)
-    assert "light_color_temperature__v1" in main.keys
-    assert "light_color_temperature__v1" not in bottom.keys
 
 
 def test_a_brightness_range_without_whole_bounds_has_no_scale() -> None:
@@ -253,7 +304,7 @@ def test_a_colour_temperature_neither_readable_nor_writable_is_not_offered() -> 
     settings = dict(settings_of("T8214"))
     color = settings["light_color_temperature"]
     settings[color.key] = dataclasses.replace(color, readable=False, writable=False)
-    main, _ = lights_from(settings, "T8214", ConnectType.HB3)
+    (main,) = lights_from(settings, "T8214", ConnectType.HB3)
     assert main.color_temp is None
 
 

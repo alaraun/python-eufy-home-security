@@ -20,6 +20,7 @@ from .lights import (
     Light,
     LightBrightness,
     LightColorTemperature,
+    lights_from,
     lights_of,
 )
 from .model_settings import (
@@ -145,6 +146,7 @@ __all__ = [
     "cross_camera_candidate",
     "cross_camera_eligible",
     "cross_camera_intervals",
+    "lights_from",
     "lights_of",
     "max_custom_modes",
     "mode_action_flags",
