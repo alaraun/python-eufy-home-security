@@ -369,9 +369,12 @@ handler's stop is one the library sends (1700:
 [below](#wi-fi-camera-behind-a-homebase-open-17001000-on-the-homebases-session);
 multi-camera: [below](#multi-camera-open-13501003-with-the-view)). A device the eufy app
 streams over WebRTC ([WebRTC or P2P](#webrtc-or-p2p-declared-eufy-app)) gets none,
-whatever its open. Any other open raises `UnsupportedError` before anything is sent, and
-`Station.live_support` grades it `UNKNOWN`. A product the table does not list gets the
-defaults: `single` standalone, `station` behind a station.
+whatever its open and whatever its model's grade (a T8170 verified at firmware 3.3.5.4 is
+routed over WebRTC from 3.4.0.0). Either refusal raises `UnsupportedError` before anything
+is sent, and `Station.live_support` grades the device `UNKNOWN` with the same reason:
+grade and refusal are one decision, so are `Station.image_sources` (no `LIVE`) and
+`Station.preset_image_support`. A product the table does not list gets the defaults:
+`single` standalone, `station` behind a station.
 
 ### WebRTC or P2P **[declared: eufy app]**
 
@@ -416,7 +419,16 @@ What the thing descriptions declare, read through that rule:
 A device with no thing description in the generated data reads as having no such
 property (P2P). The library has no WebRTC transport: it sends no live open where the app
 streams over WebRTC, and leaves out a station whose own value is 2 together with every
-device paired to it (`SkippedDevice` reason `webrtc_only`). A HomeBase 3 at 3.8.7.4
+device paired to it (`SkippedDevice` reason `webrtc_only`). The app sends such a device's
+pan/tilt, preset and zoom commands over WebRTC too, and none of them has been tried over
+P2P on a routed device, so `Station.ptz_support` grades each of the three it would send
+`UNKNOWN` there with the route as the reason, and the calls refuse before sending
+([commands.md](commands.md#the-1700-wrapper-a-standalone-devices-commands-verified)).
+The app's one exception, a T8223 or T8224 behind a HomeBase 3 or HomeBase mini whose own
+`is_connect_webrtc` reads 1, keeps every command but the live-stream ones on P2P;
+neither model declares pan/tilt, so no grade depends on it. The library still sends a
+routed device's other commands (settings) over P2P; whether it acts on them is not
+observed. A HomeBase 3 at 3.8.7.4
 answers a P2P open for a T8170 (verified), which the rule routes over P2P there; P2P on a
 NVR or a T9000 is not observed.
 

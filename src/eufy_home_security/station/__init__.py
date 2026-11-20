@@ -2343,8 +2343,13 @@ class Station:
         With ``preset`` (needs ``device_sn``), the camera is first turned to that stored
         slot and the stream is opened straight after, so a battery camera stays awake
         through the turn; the first frames may show it turning. Checked before anything
-        is sent, as :meth:`async_goto_preset`; a go-to the camera refuses raises and
-        opens nothing.
+        is sent, as :meth:`async_goto_preset`, and refused before the turn where the open
+        would be (below); a go-to the camera refuses raises and opens nothing.
+
+        A device the library sends no live open (where the eufy app streams it over
+        WebRTC, or opens it in a way the library does not implement; see
+        :meth:`live_support`) raises :class:`~..exceptions.UnsupportedError` before
+        anything is sent.
 
         The open offers the media key the app would (:meth:`media_key_type`); pass
         ``media_key`` to override it.
@@ -2361,6 +2366,7 @@ class Station:
                 raise ValueError("preset needs device_sn")
             slot_channel = self._ptz.stored_slot(device_sn, preset)
             self._ptz.refuse_while_capturing(device_sn)
+            self._refuse_live(device_sn)
             await self._ptz_recipe(goto_preset(preset), slot_channel)
         return await self._session_live(ch, wait=wait, lens_view=lens_view, **kwargs)
 
@@ -2370,15 +2376,14 @@ class Station:
         """The session's live open on ``channel``: the open the device's handler sends
         (:meth:`live_open`), the media key the app offers (:meth:`media_key_type`), and
         for a multi-camera open the view (``lens_view``, see :meth:`async_open_live`; its
-        lens list read as :meth:`_read_lens_params` says). A device whose handler's open
-        the library does not implement raises :class:`~..exceptions.UnsupportedError`
-        before anything is sent."""
+        lens list read as :meth:`_read_lens_params` says). A device the library sends no
+        open (:meth:`_live_refusal`) raises :class:`~..exceptions.UnsupportedError` before
+        anything is sent."""
         device = self._device_on_channel(channel)
         mode = stop = view = None
         if device is not None:
+            self._refuse_live(device.device_sn)
             mode = self._live_open_of(device.device_sn)
-            if mode is None and has_live_open(self._product_code(device.device_sn)):
-                raise UnsupportedError(self._live_unsupported_reason(device.device_sn))
             stop = live_stop(
                 self._product_code(device.device_sn), self._connect_type_of(device.device_sn)
             )
@@ -2507,28 +2512,61 @@ class Station:
             over_webrtc=self.app_uses_webrtc(device_sn),
         )
 
-    def _live_unsupported_reason(self, device_sn: str) -> str:
-        code = self._product_code(device_sn)
+    def _over_webrtc(self, device_sn: str, sends: str) -> str | None:
+        """The reason the library does not send ``device_sn`` what the eufy app ``sends``
+        (a phrase such as ``"streams"``) where the app reaches it over WebRTC
+        (:meth:`app_uses_webrtc`), every command included; None where it does not."""
+        if not self.app_uses_webrtc(device_sn):
+            return None
+        return (
+            f"the eufy app {sends} a {self._product_code(device_sn)} {self._where(device_sn)} "
+            "over WebRTC, which this library does not implement"
+        )
+
+    def _where(self, device_sn: str) -> str:
+        """How a reason names ``device_sn``'s connection: on its own or behind a station."""
         connect = self._connect_type_of(device_sn)
-        where = (
+        return (
             "on its own" if connect is ConnectType.SINGLE else f"behind a {connect.value} station"
         )
-        if self.app_uses_webrtc(device_sn):
+
+    def _live_refusal(self, device_sn: str) -> str | None:
+        """Why the library sends ``device_sn`` no live open on this station, or None when
+        it sends one: the eufy app streams the device over WebRTC, or the device's handler
+        opens it there in a way the library does not implement. The one decision behind
+        :meth:`live_support`'s ``UNKNOWN`` and every refused live open."""
+        routed = self._over_webrtc(device_sn, "streams")
+        if routed is not None:
+            return routed
+        code = self._product_code(device_sn)
+        if self._live_open_of(device_sn) is None and has_live_open(code):
             return (
-                f"the eufy app streams a {code} {where} over WebRTC, which this library "
-                "does not implement"
+                f"the eufy app opens a {code} live stream {self._where(device_sn)} in a way "
+                "this library does not implement"
             )
-        return f"the eufy app opens a {code} live stream {where} in a way this library does not implement"
+        return None
+
+    def _refuse_live(self, device_sn: str) -> None:
+        """Raise ``UnsupportedError`` with :meth:`_live_refusal`'s reason; nothing is sent."""
+        reason = self._live_refusal(device_sn)
+        if reason is not None:
+            raise UnsupportedError(reason)
 
     def live_support(self, device_sn: str) -> Evidence:
         """How well a live stream of ``device_sn`` is supported (live view, live image).
 
+        ``UNKNOWN`` with the reason wherever the library refuses the open: where the eufy
+        app streams the device over WebRTC (:meth:`app_uses_webrtc`), or the device's
+        handler opens it there in a way the library does not implement. Otherwise
         :attr:`~..devices.support.Support.VERIFIED` from the model's profile; else
-        ``DECLARED`` when the library sends the open the device's handler sends
-        under this station (:func:`~..devices.live_open.library_live_open`, generated from
-        the eufy app's handlers); else the model profile's own entry, or ``UNKNOWN`` with
-        the reason.
+        ``DECLARED`` when the library sends the open the device's handler sends under
+        this station (:func:`~..devices.live_open.library_live_open`, generated from the
+        eufy app's handlers); else the model profile's own entry, or ``UNKNOWN`` for a
+        model without a recorded open, whose open the library still tries.
         """
+        refusal = self._live_refusal(device_sn)
+        if refusal is not None:
+            return Evidence(Support.UNKNOWN, refusal)
         profile = own_profile(device_sn)
         listed = None if profile is None else profile.capabilities.get(Capability.LIVE_STREAM)
         if listed is not None and listed.support is Support.VERIFIED:
@@ -2542,10 +2580,23 @@ class Station:
                 f"the {code} handler's open_live_stream under {connect.value} is the "
                 f"library's {mode.value} open (eufy app {live_open_app_version()})",
             )
-        if has_live_open(code):
-            return Evidence(Support.UNKNOWN, self._live_unsupported_reason(device_sn))
         return listed or Evidence(
             Support.UNKNOWN, f"no live open recorded for {code or 'this model'}"
+        )
+
+    def preset_image_support(self, device_sn: str) -> Evidence:
+        """How well :meth:`async_preset_image` is supported for ``device_sn``: it turns the
+        camera to a preset and takes the picture from live video, so it needs both. The
+        weaker of :meth:`ptz_support` for
+        :attr:`~..devices.capabilities.Capability.PTZ_PRESETS` and :meth:`live_support`,
+        with that one's reason (presets first on a tie). Where this is ``UNKNOWN`` because
+        of either, the call raises ``UnsupportedError`` before the camera turns, except
+        for a model without a recorded live open, which it still tries.
+        """
+        grades = tuple(Support)
+        return max(
+            (self.ptz_support(device_sn, Capability.PTZ_PRESETS), self.live_support(device_sn)),
+            key=lambda evidence: grades.index(evidence.support),
         )
 
     def ptz_support(self, device_sn: str, capability: Capability) -> Evidence:
@@ -2553,14 +2604,17 @@ class Station:
         presets (``PTZ_PRESETS``) or picture zoom (``PTZ_ZOOM``) of ``device_sn`` is
         supported through this station.
 
-        ``UNKNOWN`` with the reason for a device not paired here, or when the device's
+        ``UNKNOWN`` with the reason for a device not paired here, when the device's
         thing description lacks an action of the capability
-        (:data:`~..devices.capabilities.PTZ_ACTIONS`) or the library does not send one as
-        the device's handler does under this station (:mod:`..devices.ptz`, generated from
-        the eufy app's handlers); else :attr:`~..devices.support.Support.VERIFIED` from
-        the model's profile; else ``DECLARED``. A model without recorded handler actions
-        keeps its profile's own entry. Raises ``ValueError`` for a capability that is not
-        one of the three.
+        (:data:`~..devices.capabilities.PTZ_ACTIONS`), where the eufy app sends the
+        device's commands over WebRTC (:meth:`app_uses_webrtc`), or where the library
+        does not send an action as the device's handler does under this station
+        (:mod:`..devices.ptz`, generated from the eufy app's handlers); else
+        :attr:`~..devices.support.Support.VERIFIED` from the model's profile; else
+        ``DECLARED``. A model without recorded handler actions keeps its profile's own
+        entry. Where this is ``UNKNOWN``, the capability's methods raise
+        ``UnsupportedError`` before sending. Raises ``ValueError`` for a capability that
+        is not one of the three.
         """
         return self._ptz.ptz_support(device_sn, capability)
 
@@ -2944,11 +2998,18 @@ class Station:
         """The :class:`~..images.ImageSource` values :meth:`async_camera_image` can serve
         for ``device_sn``: all three behind a station; on a standalone device
         ``THUMBNAIL`` and ``LIVE``, since it lists no recordings (no trigger frame).
-        Offer only these."""
+        ``LIVE`` only where the library sends the device a live open: not where the open is
+        refused (:meth:`live_support` is then ``UNKNOWN`` with the reason). Offer only
+        these."""
         self.channel_for(device_sn)  # raises for a device not paired here
-        if self.session.standalone:
-            return (ImageSource.THUMBNAIL, ImageSource.LIVE)
-        return tuple(ImageSource)
+        sources = (
+            (ImageSource.THUMBNAIL, ImageSource.LIVE)
+            if self.session.standalone
+            else tuple(ImageSource)
+        )
+        if self._live_refusal(device_sn) is not None:
+            return tuple(s for s in sources if s is not ImageSource.LIVE)
+        return sources
 
     async def async_camera_image(
         self,
@@ -3163,6 +3224,7 @@ class Station:
                 height=frame.height or None,
             )
 
+        self._refuse_live(device_sn)
         return await self._ptz.run_capture(device_sn, None, capture)
 
     # ── pan/tilt presets ─────────────────────────────────────────────────────
@@ -3415,8 +3477,10 @@ class Station:
         gets that capture's image; any other capture of the camera raises
         :class:`~..exceptions.DeviceBusyError` at once, before anything is sent
         (:class:`~..events.CameraBusyChanged` reports the state). Raises
-        ``UnsupportedError`` for a model without presets, or for a slot the last read
-        showed empty. The live open is :meth:`async_open_live`'s: past the session budget
+        ``UnsupportedError`` for a model without presets, for a slot the last read
+        showed empty, or where the library sends the camera no live open
+        (:meth:`preset_image_support`), each before the camera turns. The live open is
+        :meth:`async_open_live`'s: past the session budget
         it raises :class:`~..exceptions.LiveStreamLimitError` at once (the default), or
         with ``wait`` waits up to the first-frame timeout for a stream to end.
         """

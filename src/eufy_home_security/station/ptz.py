@@ -124,6 +124,10 @@ class PtzOwner(Protocol):
 
     def _connect_type_of(self, device_sn: str) -> ConnectType: ...
 
+    def _over_webrtc(self, device_sn: str, sends: str) -> str | None: ...
+
+    def _refuse_live(self, device_sn: str) -> None: ...
+
     async def _ptz_recipe(self, recipe: Recipe, channel: int) -> RecipeReply: ...
 
     async def _session_live(
@@ -209,6 +213,18 @@ class StationPtz:
             raise ValueError(f"{capability} is not a pan/tilt/zoom capability")
         if not self._station._is_paired(device_sn):
             return Evidence(Support.UNKNOWN, _NOT_PAIRED)
+        code = self._station._product_code(device_sn)
+        grade = self._handler_grade(device_sn, capability, actions)
+        if grade.support is Support.UNKNOWN and not set(actions) <= ptz_actions(code):
+            return grade
+        routed = self._station._over_webrtc(device_sn, f"sends {' and '.join(actions)} to")
+        return grade if routed is None else Evidence(Support.UNKNOWN, routed)
+
+    def _handler_grade(
+        self, device_sn: str, capability: Capability, actions: tuple[str, ...]
+    ) -> Evidence:
+        """:meth:`ptz_support` before the routing: from the handler's recipes under this
+        station and the model's profile."""
         code = self._station._product_code(device_sn)
         connect = self._station._connect_type_of(device_sn)
         if has_ptz_recipes(code):
@@ -535,6 +551,7 @@ class StationPtz:
     ) -> CameraImage:
         """See :meth:`Station.async_preset_image`."""
         channel = self.stored_slot(device_sn, preset)
+        self._station._refuse_live(device_sn)
 
         async def capture() -> CameraImage:
             await self._station.session.async_run_recipe(goto_preset(preset), channel=channel)

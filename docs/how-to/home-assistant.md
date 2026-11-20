@@ -1722,6 +1722,9 @@ image.
   `DeviceTimeoutError`, a reply without rows ends the listing empty; `THUMBNAIL` stays
   a standalone camera's only still until a log shows 10017 rows. Its stills come in the V1
   `eufysecurity` format, which the library decodes: the integration gets a JPEG.
+  `LIVE` is listed only where the library sends the camera a live open: not where the
+  open is refused (`live_support` is then `UNKNOWN` with the reason), such as a camera
+  the app streams over WebRTC.
 - **A standalone camera's detection** (cloud push only, no path or record):
   `async_event_image(event, THUMBNAIL)` wakes it, reads its newest still and returns it
   only when the still's time lies within `STANDALONE_STILL_WINDOW` (2 s before to 30 s
@@ -1773,15 +1776,22 @@ unusable on small hardware. Audio is passed through too; only WebRTC needs a tra
 
 Ask the station: `station.live_support(device_sn)` returns an `Evidence` whose `support`
 is `VERIFIED` (proven on hardware), `DECLARED` (the library sends the open the device's
-own handler in the eufy app sends, under this station) or `UNKNOWN` (no open recorded, or
-an open the library does not implement; `source` says which). Offer a stream entity for
-anything but `UNKNOWN`. It depends on the station as well as the model: a Wi-Fi camera
-linked to a HomeBase is opened differently from the same camera on its own, and the
-library implements only some of those opens. `profile_for_serial(...).support(
+own handler in the eufy app sends, under this station) or `UNKNOWN` (no open recorded, an
+open the library does not implement, or a device the eufy app streams over WebRTC;
+`source` says which). Offer a stream entity for anything but `UNKNOWN`. It depends on
+the station and the firmware as well as the model: a Wi-Fi camera linked to a HomeBase
+is opened differently from the same camera on its own, the library implements only some
+of those opens, and the app streams some devices over WebRTC from a firmware on (most
+T8170 units on their own from 3.4.0.0; `station.app_uses_webrtc(device_sn)` evaluates
+the rule), which the library does not implement. Grade and refusal are one decision:
+wherever an open raises
+`UnsupportedError` (before anything is sent), `live_support` is `UNKNOWN` with the same
+text as `source`, and `image_sources` leaves `LIVE` out; a model profile verified on
+hardware does not override it. Read the grade again after a device-list refresh, since a
+firmware update can move a device onto WebRTC. `profile_for_serial(...).support(
 Capability.LIVE_STREAM)` is `DECLARED` when the library sends the handler's open under
 *some* station, so it can say yes for a camera this station cannot stream; prefer
-`live_support`. Opening a stream the library cannot open raises `UnsupportedError`
-before anything is sent.
+`live_support`.
 
 A device whose handler sends the multi-camera open (the T8172 camera, the T8215
 doorbell, the T8532 and T85M1 video locks and others) streams one picture. Behind a
@@ -2355,7 +2365,14 @@ turn to one) and `Capability.PTZ_ZOOM` (picture zoom) returns an `Evidence` like
 description in the eufy app declares the actions and the library sends each as the
 device's own handler does, under this station) or `UNKNOWN` (`source` says why: no such
 action, or a recipe or route the library does not implement). Create the controls for
-anything but `UNKNOWN`. The table behind it is generated from the app's handlers for
+anything but `UNKNOWN`. Where the eufy app reaches the device over WebRTC
+(`station.app_uses_webrtc(device_sn)`), it sends these commands over WebRTC as well, and
+none has been tried over P2P on such a device: all three are `UNKNOWN` there with the
+route as `source` (a capability the thing description lacks keeps that reason), and
+every pan/tilt, preset and zoom call raises `UnsupportedError` before sending. No
+pan/tilt, preset or zoom action is known to work over P2P on such a camera, with or
+without a live session.
+The table behind it is generated from the app's handlers for
 every product (`scripts/gen_ptz.py`), so a new pan/tilt model needs a regeneration, not
 code. `profile_for_serial(...).support(...)` answers the same per model, `DECLARED` when
 the library sends the actions under *some* station; prefer `ptz_support`.
@@ -2380,7 +2397,7 @@ have, or an empty one, stays a plain `UnsupportedError`.
 |---|---|---|
 | `station.presets(device_sn)` | the slots as last read (`PresetPosition(index, enabled, zoom, is_default)`), or `None` if never read; no I/O | — |
 | `await station.async_refresh_presets(device_sn)` | reads the slots from the camera | **wakes it** |
-| `await station.async_preset_image(device_sn, preset)` | turns to `preset`, returns a `CameraImage` (`source=LIVE`, `preset=preset`) taken once the camera has settled (about 7 s after the turn, 8–10 s in all) | **wakes it**, and leaves it at the preset |
+| `await station.async_preset_image(device_sn, preset)` | turns to `preset`, returns a `CameraImage` (`source=LIVE`, `preset=preset`) taken once the camera has settled (about 7 s after the turn, 8–10 s in all); graded by `station.preset_image_support(device_sn)`, the weaker of `PTZ_PRESETS` and `live_support`: where that is `UNKNOWN` (no presets, or no live open, as for a camera the app streams over WebRTC) it raises `UnsupportedError` before the camera turns | **wakes it**, and leaves it at the preset |
 | `station.is_capturing(device_sn)` | whether a live or preset image of the camera is being taken | — |
 | `station.default_preset(device_sn)` | the slot the camera returns to on its own when idle (the `is_default` slot), from the last read; `None` if never read or none is set | — |
 | `await station.async_set_default_preset(device_sn, preset)` | make `preset` that slot and turn the camera there; returns the re-read slots | **wakes it** |

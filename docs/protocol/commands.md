@@ -1121,8 +1121,11 @@ A standalone device takes many commands inside XZYH type `0x06A4` (1700
 `DOOR_BELL_PAYLOAD`, app enum `DOORBELL_SET_PAYLOAD`), GCM, on channel 0: `{"commandType": <sub-command>, "data":
 {…}}`. It answers with a receipt of type `0x06A4` and, for a query, a 1351 notify whose
 `cmd` is the sub-command. Which command a device takes this way comes from the app's
-handler for its model ([thing-models.md](../reference/thing-models.md)). Verified on a
-T8170:
+handler for its model ([thing-models.md](../reference/thing-models.md)). Where the app
+reaches the device over WebRTC ([media.md](media.md#webrtc-or-p2p-declared-eufy-app)) it
+sends these commands over WebRTC too, and the library sends none of the live, pan/tilt,
+preset or zoom ones there (`Station.live_support` and `Station.ptz_support` grade them
+`UNKNOWN`). Verified on a T8170 (firmware 3.3.5.4, reached over P2P):
 
 | sub-command | body `data` | answer |
 |---|---|---|

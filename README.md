@@ -53,7 +53,7 @@ Node.js bridge, no add-on, no threads.
 | area | state |
 |---|---|
 | HomeBase 3 (T8030) with eufyCam 3 (T8160) | the primary target. Login, local session, status, guard mode, camera settings, live stream, recordings, stills, local and push events are verified on hardware |
-| Battery SoloCam (T8170), standalone | guard mode, status, live stream, pan/tilt presets and control, zoom, and settings (write + read-back) verified. The camera sleeps, so each call first wakes it (seconds) |
+| Battery SoloCam (T8170), standalone | guard mode, status, live stream, pan/tilt presets and control, zoom, and settings (write + read-back) verified on firmware 3.3.5.4. The camera sleeps, so each call first wakes it (seconds). From firmware 3.4.0.0 the eufy app streams most T8170 units over WebRTC (the exception: a serial whose 7th character is `2`), which the library does not implement: live view and pan/tilt are then graded unknown and refused |
 | Motion sensor (T8910) | battery and signal read through the station; of its settings, only the per-mode delays and actions were written |
 | HomeBase 2 (T8010)  | local P2P session, recording history, per-camera filtering, pagination, native playback and download verified on HomeBase 2 (firmware 3.4.2.6h) with eufyCam 2C (T8113); other eufyCam 2-series models are *declared* |
 | other HomeBases and cameras | *declared* only: known from the app, never tested. Every product the app names is in the model list; settings files for 159 products ship with the library, generated from eufy's own code; a product without one is listed read-only from the cloud |
