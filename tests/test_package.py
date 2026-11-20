@@ -11,6 +11,7 @@ import pytest
 
 import eufy_home_security
 import eufy_home_security.cloud
+import eufy_home_security.p2p.clip
 from eufy_home_security import _lazy
 
 HEAVY = ("aiohttp", "firebase_messaging", "cryptography")
@@ -173,3 +174,8 @@ def test_release_config_bumps_conservatively_before_one_point_oh() -> None:
     package = config["packages"]["."]
     assert package["bump-minor-pre-major"] is True
     assert package["bump-patch-for-minor-pre-major"] is True
+
+
+def test_the_clip_incomplete_reason_is_exported_from_the_root() -> None:
+    assert eufy_home_security.IncompleteReason is eufy_home_security.p2p.clip.IncompleteReason
+    assert "IncompleteReason" in eufy_home_security.__all__

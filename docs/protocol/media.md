@@ -885,7 +885,12 @@ Whatever the setting, a stream still starts at full sensor resolution and steps 
   station has sent the whole recording" and keeps the file once its own queue is empty;
   a download that goes 15 s without progress and without it is a failure there, and the
   file is deleted **[declared: app]**. The library ends a download on it (above);
-  `0x0517` is not read.
+  `0x0517` is not read. A HomeBase 3 sends `0x0518` 1.1-1.4 s after the last media frame
+  **[verified]**, later than the 0.5 s drain gap before the next open on the same session:
+  after a download closed early, its `0x0518` can reach the next download on that session
+  and end it at its first pause. `Station.async_download_recording` and the CLI open a
+  session per download, so only a caller that reuses one session for several
+  `async_open_recording` downloads can meet it.
 - **A download's completeness.** `Station.async_download_recording` returns a
   `MediaClip` whose `end_frame` says whether `0x0518` ended a 1024 download (None for a
   playback). `complete` is false, with `incomplete_reason`, when the clip was cut
@@ -947,7 +952,7 @@ timeout with `CommandNotAppliedError`.
 | recording download (1024), 4K trigger frame | **[verified]** |
 | recording playback (1025), identical output to 1024 | **[verified]** |
 | whole-recording receive through the library, ends on the end-of-playback frame, else on silence | **[verified]** |
-| download (1024) ends on the end-of-download frame (`0x0518`), else after 15 s of silence | **[declared: app]**; `0x0518` after a 1024 download **[observed]** (HomeBase 3, JSON command) |
+| download (1024) ends on the end-of-download frame (`0x0518`), else after 15 s of silence | **[declared: app]**; ending on `0x0518` after a 1024 download **[verified]** (HomeBase 3, JSON command); native 1024 untested |
 | stream stop (1004) | **[verified]** (sent; the stream ends) |
 | download cancel (1051), playback stop (1055), play control stop (1026) | **[verified]** not to stop a 1025 playback; 1051 is rejected (−108) |
 | stopping a playback by closing its session | **[verified]** (station silent within about 5 ms) |

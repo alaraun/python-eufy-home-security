@@ -102,7 +102,7 @@ async def test_a_download_with_no_end_frame_keeps_its_last_frame(
 ) -> None:
     """A download that ends at its idle wait with no end-of-download frame still writes
     every frame; it is complete only when the record's frame count shows it whole."""
-    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 0.3, raising=False)
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 0.3)
     native.recording_frames = 10
     native.download_end_delay = None
     session = _session(native, serial=SYNTHETIC.homebase2_station_sn)
@@ -141,7 +141,7 @@ async def test_a_download_ends_on_the_end_of_download_frame(
     native: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The station's 0x0518 ends a download without waiting out the idle wait."""
-    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 8.0, raising=False)
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 8.0)
     monkeypatch.setattr(session_module, "MEDIA_IDLE_TIMEOUT", 8.0)
     native.recording_frames = 10
     clip, took = await _download(native)
@@ -153,7 +153,7 @@ async def test_frames_still_in_flight_after_the_end_frame_are_kept(
     native: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Frames arriving just after the end-of-download frame still go into the clip."""
-    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 8.0, raising=False)
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 8.0)
     native.recording_frames = 10
     native.download_finish_early = 4
     clip, _ = await _download(native)
@@ -165,7 +165,7 @@ async def test_a_download_whose_station_pauses_past_the_live_idle_wait_gets_ever
 ) -> None:
     """A download waits out a station's pause longer than the live idle wait."""
     monkeypatch.setattr(session_module, "MEDIA_IDLE_TIMEOUT", 0.3)
-    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 3.0, raising=False)
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 3.0)
     native.recording_frames = 10
     native.recording_pause = (4, 0.8)
     clip, _ = await _download(native)
@@ -176,7 +176,7 @@ async def test_a_download_the_station_stops_early_is_incomplete(
     native: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A station that stops mid-download and sends no end frame gives an incomplete clip."""
-    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 0.3, raising=False)
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", 0.3)
     native.recording_frames = 10
     native.recording_stops_after = 4
     clip, _ = await _download(native)
@@ -192,9 +192,7 @@ async def test_a_recording_open_waits_its_own_idle_default(
 ) -> None:
     """A download (1024) idles out on the download wait, a playback (1025) on the live one."""
     short, long = 0.2, 6.0
-    monkeypatch.setattr(
-        session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", short if download else long, raising=False
-    )
+    monkeypatch.setattr(session_module, "MEDIA_DOWNLOAD_IDLE_TIMEOUT", short if download else long)
     monkeypatch.setattr(session_module, "MEDIA_IDLE_TIMEOUT", long if download else short)
     station.recording_frames = 6
     station.download_end_delay = station.playback_end_delay = None

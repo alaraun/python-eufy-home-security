@@ -160,7 +160,7 @@ if TYPE_CHECKING:
         ResizePolicy,
         StreamBroadcast,
     )
-    from .p2p.clip import CLIP_CONTENT_TYPE, ClipWriter, MediaClip
+    from .p2p.clip import CLIP_CONTENT_TYPE, ClipWriter, IncompleteReason, MediaClip
     from .p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
     from .p2p.media import MediaKeyType, Still, StillFormat, VideoCodec, picture_codec
     from .p2p.messages import SOUND_ALARM_SECONDS
@@ -264,7 +264,9 @@ _EXPORTS: dict[str, str] = {
         ),
         "p2p.broadcast",
     ),
-    **dict.fromkeys(("CLIP_CONTENT_TYPE", "ClipWriter", "MediaClip"), "p2p.clip"),
+    **dict.fromkeys(
+        ("CLIP_CONTENT_TYPE", "ClipWriter", "IncompleteReason", "MediaClip"), "p2p.clip"
+    ),
     **dict.fromkeys(("SETTLE_STANDALONE", "SETTLE_STATION"), "p2p.encoder"),
     "SOUND_ALARM_SECONDS": "p2p.messages",
     **dict.fromkeys(("MODE_DELAY_CHOICES", "ModeTable"), "p2p.mode_actions"),
@@ -519,6 +521,7 @@ __all__ = [
     "HostSource",
     "ImageSource",
     "ImageSourceInfo",
+    "IncompleteReason",
     "InstallState",
     "InviteCodeError",
     "JsonFileStore",

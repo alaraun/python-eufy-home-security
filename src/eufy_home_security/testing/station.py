@@ -1595,8 +1595,24 @@ class FakeStation:
             self.send_playback_end()
 
     def send_download_finish(self) -> None:
-        """The end-of-download frame: ``DOWNLOAD_FINISH`` (0x0518), empty, on DRW channel 2."""
-        self.send_frame(FrameType.DOWNLOAD_FINISH, b"", cipher=0, channel=2)
+        """The frames a station sends after a 1024 download, on DRW channel 2: ``0x0517``
+        (one 16-byte block under the static key, not read by the client), then the
+        end-of-download frame ``DOWNLOAD_FINISH`` (0x0518), empty, ECB-tagged with
+        encryption type 0."""
+        self.send_frame(
+            0x0517,
+            ecb_encrypt(self.static_key, bytes(16)),
+            cipher=FrameCipher.ECB,
+            channel=2,
+            subheader=bytes([FrameCipher.ECB, 0, 0xFF, FRAME_STATIC_ECB, 0, 0]),
+        )
+        self.send_frame(
+            FrameType.DOWNLOAD_FINISH,
+            b"",
+            cipher=FrameCipher.ECB,
+            channel=2,
+            subheader=bytes([FrameCipher.ECB, 0, 0xFF, FRAME_PLAIN, 0, 0]),
+        )
 
     def send_playback_end(self, value: int = PLAYBACK_ENDED, *, cipher: int | None = None) -> None:
         """Send :meth:`playback_end_frame` on DRW channel 2, as the live station."""
