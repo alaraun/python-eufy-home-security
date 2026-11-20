@@ -966,7 +966,7 @@
    "section": "recording",
    "shown": "page",
    "step": 1,
-   "unit": "d"
+   "unit": "s"
   },
   "video_camera_count": {
    "access": "ro",
@@ -993,7 +993,7 @@
    "section": "recording",
    "shown": "page",
    "step": 1,
-   "unit": "d"
+   "unit": "s"
   },
   "video_intercom_audio_type": {
    "access": "ro",

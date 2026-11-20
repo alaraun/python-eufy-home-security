@@ -2017,7 +2017,7 @@ rw 0 / ro 39
 | `smart_lock_night_vision_optimization` | bool | - | - | no | - | - |
 | `smart_lock_onoff_status` | string | - | - | no | - | - |
 | `time_format_set` | enum | 0, 1 | - | no | - | 0=12-hour, 1=24-hour |
-| `trigger_interval_time` | range | 5..60 step 1 | - | no | - | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
 ### Settings of T7401 Smart Safe 7401
@@ -2064,7 +2064,7 @@ rw 0 / ro 40
 | `smart_lock_night_vision_optimization` | bool | - | - | no | - | - |
 | `smart_lock_onoff_status` | string | - | - | no | - | - |
 | `time_format_set` | enum | 0, 1 | - | no | - | 0=12-hour, 1=24-hour |
-| `trigger_interval_time` | range | 5..60 step 1 | - | no | - | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
 ### Settings of T8001 HomeBase
@@ -3065,8 +3065,8 @@ rw 26 / ro 56
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `speaker_on_off` | bool | - | - | yes | switch | - |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 5..120 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 5..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | enum | 0, 1 | - | no | - | 0=ACC, 1=PCM |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
@@ -3517,8 +3517,8 @@ rw 39 / ro 84
 | `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 10..120 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 10..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 3 | - | yes | select | 0=Off, 1=Timestamp, 3=Logo |
@@ -4689,8 +4689,8 @@ rw 38 / ro 87
 | `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 10..120 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 10..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
@@ -4769,8 +4769,8 @@ rw 27 / ro 45
 | `switching_notification` | enum | 0, 1 | - | yes | select | 0=Switch modes by schedule, 1=Switch modes from app |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 5..60 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 5..60 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
@@ -4852,8 +4852,8 @@ rw 27 / ro 49
 | `switching_notification` | enum | 0, 1 | - | yes | select | 0=Switch modes by schedule, 1=Switch modes from app |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 5..60 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 5..60 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
@@ -4935,8 +4935,8 @@ rw 27 / ro 49
 | `switching_notification` | enum | 0, 1 | - | yes | select | 0=Switch modes by schedule, 1=Switch modes from app |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 5..60 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 5..60 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
@@ -6304,8 +6304,8 @@ rw 44 / ro 101
 | `switching_notification` | flags | any of 0, 1 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 10..120 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 10..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `view_mode` | enum | 0, 1 | - | yes | select | 0=Dual, 1=Single |
@@ -6412,8 +6412,8 @@ rw 15 / ro 83
 | `support_video_codec` | other | - | - | no | - | - |
 | `time_format_set` | enum | 0, 1 | - | no | - | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 5..60 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 5..60 step 1 | s | yes | slider | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
 
@@ -7285,7 +7285,7 @@ rw 50 / ro 109
 | `is_support_multiple_bridge__v4` | bool | - | - | no | - | - |
 | `is_support_multiple_bridge__v5` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
-| `led_color_temp` | range | 10..120 step 1 | d | no | - | - |
+| `led_color_temp` | range | 10..120 step 1 | - | no | - | - |
 | `led_on_off` | bool | - | - | yes | switch | - |
 | `light_color_temperature` | range | 0..100 step 1 | - | yes | slider | - |
 | `live_bottom_hor_toolbar_list` | enum | 0, 1, 15, 4, 13, 2 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 15=Reply, 2=Speaker, 4=Sound |
@@ -8059,8 +8059,8 @@ rw 32 / ro 92
 | `speaker_volume` | range | 0..100 step 1 | - | yes | slider | - |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 2..60 step 1 | d | yes | slider | - |
-| `video_clip_length` | range | 8..120 step 1 | d | yes | slider | - |
+| `trigger_interval_time` | range | 2..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 8..120 step 1 | s | yes | slider | - |
 | `video_quality_streaming_smart_displays` | enum | 0, 1 | - | yes | select | 0=Smartphone first, 1=Smart display first |
 | `video_quality_when_recoding_clips` | enum | 0, 1 | - | no | - | 0=Recording quality, 1=Streaming quality |
 | `watermark_set` | bool | - | - | yes | switch | - |
@@ -8185,8 +8185,8 @@ rw 32 / ro 86
 | `speaker_volume` | range | 0..100 step 1 | - | yes | slider | - |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 2..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 8..120 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 2..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 8..120 step 1 | s | yes | slider | - |
 | `video_quality_streaming_smart_displays` | enum | 0, 1 | - | yes | select | 0=Smartphone first, 1=Smart display first |
 | `watermark_set` | bool | - | - | yes | switch | - |
 | `working_days` | range | 10..120 step 1 | - | no | - | - |
@@ -8835,9 +8835,9 @@ rw 34 / ro 105
 | `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..120 step 1 | d | yes | slider | - |
+| `trigger_interval_time` | range | 5..120 step 1 | s | yes | slider | - |
 | `video_camera_count` | range | 1..2 step 1 | - | no | - | - |
-| `video_clip_length` | range | 10..120 step 1 | d | yes | slider | - |
+| `video_clip_length` | range | 10..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | range | 0..100 step 1 | - | no | - | - |
 | `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
 | `video_mirror_mode_set` | enum | 0, 1, 2, 3 | - | no | - | 0=Normal, 1=Rotated 180°, 2=Mirror, 3=Flipped vertically |
@@ -9841,8 +9841,8 @@ rw 20 / ro 54
 | `support_video_codec` | enum | 0 | - | no | - | 0=H264 |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 0..30 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 30..120 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 0..30 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 30..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `video_intercom_no_check_cmd_response` | bool | - | - | no | - | - |
@@ -9921,9 +9921,9 @@ rw 25 / ro 48
 | `support_video_codec` | enum | 0 | - | no | - | 0=H264 |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 0..30 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 0..30 step 1 | s | yes | slider | - |
 | `video_camera_count` | other | - | - | no | - | - |
-| `video_clip_length` | range | 0..30 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 0..30 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
@@ -10005,9 +10005,9 @@ rw 26 / ro 51
 | `support_video_codec` | enum | 0 | - | no | - | 0=H264 |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 0..30 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 0..30 step 1 | s | yes | slider | - |
 | `video_camera_count` | other | - | - | no | - | - |
-| `video_clip_length` | range | 30..120 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 30..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
@@ -10190,9 +10190,9 @@ rw 27 / ro 50
 | `support_video_codec` | enum | 0 | - | no | - | 0=H264 |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
 | `video_camera_count` | string | - | - | no | - | - |
-| `video_clip_length` | range | 5..120 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 5..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
@@ -11469,9 +11469,9 @@ rw 10 / ro 78
 | `smart_lock_set_setting_params` | string | - | - | no | - | - |
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
 | `video_camera_count` | other | - | - | no | - | - |
-| `video_clip_length` | range | 5..120 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 5..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | no | - | - |
@@ -11570,9 +11570,9 @@ rw 21 / ro 73
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | no | - | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | no | - | - |
 | `video_camera_count` | other | - | - | no | - | - |
-| `video_clip_length` | range | 5..120 step 1 | - | no | - | - |
+| `video_clip_length` | range | 5..120 step 1 | s | no | - | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | bool | - | - | yes | switch | - |
@@ -12526,9 +12526,9 @@ rw 25 / ro 110
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
 | `video_camera_count` | other | - | - | no | - | - |
-| `video_clip_length` | range | 5..120 step 1 | - | yes | slider | - |
+| `video_clip_length` | range | 5..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `video_quality_hdr_switch` | bool | - | - | yes | switch | - |
@@ -12642,8 +12642,8 @@ rw 37 / ro 71
 | `switching_notification` | enum | 2 | - | yes | select | 2=Switch modes by geofencing |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 5..120 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 5..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | string | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
@@ -12785,9 +12785,9 @@ rw 37 / ro 104
 | `switching_notification` | flags | any of 0, 1 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 10..120 step 1 | d | yes | slider | - |
+| `trigger_interval_time` | range | 10..120 step 1 | s | yes | slider | - |
 | `video_camera_count` | range | 1..2 step 1 | - | no | - | - |
-| `video_clip_length` | range | 10..120 step 1 | d | yes | slider | - |
+| `video_clip_length` | range | 10..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | range | 0..100 step 1 | - | no | - | - |
 | `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
 | `video_mirror_mode_set` | other | - | - | no | - | - |
@@ -12888,8 +12888,8 @@ rw 31 / ro 60
 | `switching_notification` | enum | 0, 1 | - | yes | select | 0=Switch modes by schedule, 1=Switch modes from app |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | - | yes | slider | - |
-| `video_clip_length` | range | 5..60 step 1 | - | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
+| `video_clip_length` | range | 5..60 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | yes | select | 0=Off, 1=Timestamp, 2=Timestamp and logo |
@@ -12999,9 +12999,9 @@ rw 3 / ro 58
 | `support_video_codec` | enum | 0, 1 | - | no | - | 0=H264, 1=H265 |
 | `time_format_set` | enum | 0, 1 | - | no | - | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | no | - | - |
-| `trigger_interval_time` | range | 10..120 step 1 | d | no | - | - |
+| `trigger_interval_time` | range | 10..120 step 1 | s | no | - | - |
 | `video_camera_count` | other | - | - | no | - | - |
-| `video_clip_length` | range | 10..120 step 1 | d | no | - | - |
+| `video_clip_length` | range | 10..120 step 1 | s | no | - | - |
 | `video_intercom_audio_type` | other | - | - | no | - | - |
 | `video_intercom_duplex` | other | - | - | no | - | - |
 | `watermark_set` | enum | 0, 1, 2 | - | no | - | 0=Off, 1=Timestamp, 2=Timestamp and logo |
@@ -13759,9 +13759,9 @@ rw 46 / ro 109
 | `switching_notification` | flags | any of 0, 1, 2 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
-| `trigger_interval_time` | range | 5..60 step 1 | d | yes | slider | - |
+| `trigger_interval_time` | range | 5..60 step 1 | s | yes | slider | - |
 | `video_camera_count` | range | 1..2 step 1 | - | no | - | - |
-| `video_clip_length` | range | 10..120 step 1 | d | yes | slider | - |
+| `video_clip_length` | range | 10..120 step 1 | s | yes | slider | - |
 | `video_intercom_audio_type` | range | 0..100 step 1 | - | no | - | - |
 | `video_intercom_duplex` | range | 0..2 step 1 | - | no | - | - |
 | `video_mirror_mode_set` | enum | 0, 1, 2, 3 | - | yes | select | 0=Normal, 1=Rotated 180°, 2=Mirror, 3=Flipped vertically |

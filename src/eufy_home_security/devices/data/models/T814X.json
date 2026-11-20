@@ -2738,6 +2738,7 @@
    "section": "recording",
    "shown": "page",
    "step": 1,
+   "unit": "s",
    "write": {
     "cmd": 1250,
     "params": {
@@ -2765,6 +2766,7 @@
    "section": "recording",
    "shown": "page",
    "step": 1,
+   "unit": "s",
    "write": {
     "cmd": 1249,
     "params": {

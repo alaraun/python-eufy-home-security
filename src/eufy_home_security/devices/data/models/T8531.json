@@ -1830,7 +1830,8 @@
    "role": "setting",
    "section": "recording",
    "shown": "page",
-   "step": 1
+   "step": 1,
+   "unit": "s"
   },
   "video_camera_count": {
    "access": "ro",
@@ -1860,7 +1861,8 @@
    "role": "setting",
    "section": "recording",
    "shown": "page",
-   "step": 1
+   "step": 1,
+   "unit": "s"
   },
   "video_intercom_audio_type": {
    "access": "ro",
