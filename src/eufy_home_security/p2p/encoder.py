@@ -29,11 +29,13 @@ the start and carries silent AAC frames until the camera's own audio arrives (se
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .media import MediaFrame, MediaKind, VideoCodec, ms_to_pts
+from .._logging import LogThrottle
+from .media import ANNEX_B_STARTS, MediaFrame, MediaKind, VideoCodec, ms_to_pts
 from .mpegts import TSMuxer
 
 __all__ = [
@@ -76,6 +78,8 @@ SILENT_AAC_FRAME_MS = 64
 
 _FILL_MAX_CATCH_UP_MS = 1000
 """A video gap longer than this is not back-filled with silence frame by frame."""
+
+_LOGGER = logging.getLogger(__name__)
 
 HEADER_MAX_BYTES = 8 * 1024 * 1024
 """Past this size :attr:`StreamEncoder.header` stops growing with the current picture
@@ -128,7 +132,9 @@ class StreamEncoder:
 
     A keyframe of another codec spends the encoder under either setting
     (:attr:`EncodedStream.codec_changed`); a frame of another codec before such a keyframe
-    is dropped. A frame that names no codec is taken as the stream's.
+    is dropped. A frame that names no codec is taken as the stream's. A video frame that
+    does not start with a start code is dropped and logged (throttled): the muxer carries
+    Annex-B access units only (:meth:`~.mpegts.TSMuxer.video`).
 
     ``audio=True`` carries the camera's AAC. The PMT is written when the stream starts
     and consumers pick their tracks from it once, so the track must be declared then and
@@ -156,6 +162,7 @@ class StreamEncoder:
         "_size_since",
         "_started",
         "_tables_every",
+        "_throttle",
         "_video_seen",
         "_want_audio",
         "settle",
@@ -192,6 +199,7 @@ class StreamEncoder:
         self._video_seen = 0
         self._gop: list[bytes] = []
         self._gop_bytes = 0
+        self._throttle = LogThrottle()
 
     @property
     def started(self) -> bool:
@@ -252,6 +260,14 @@ class StreamEncoder:
             if mux is None or not mux.has_audio:
                 return EncodedStream()
             return EncodedStream(data=self._note(mux.audio(frame.data, frame.pts), keyframe=False))
+
+        if not frame.data.startswith(ANNEX_B_STARTS):
+            if self._throttle.should_log("no-start-code"):
+                _LOGGER.warning(
+                    "dropping a video frame that does not start with a start code (%d bytes)",
+                    len(frame.data),
+                )
+            return EncodedStream()
 
         now = self._clock()
         size = (frame.width, frame.height)

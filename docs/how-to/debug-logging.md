@@ -15,6 +15,7 @@ Loggers follow the module path, so one subsystem can be turned up on its own:
 | `eufy_home_security.p2p.transport` | bind, LAN_SEARCH / PUNCH_PKT / P2P_RDY, the rendezvous request and each PUNCH_TO punched, every DRW chunk and ack, retransmits, keepalive (sampled), CLOSE, link down |
 | `eufy_home_security.p2p.xzyh` | duplicate and out-of-order chunks (sampled) |
 | `eufy_home_security.p2p.broadcast` | a shared live stream's subscribers falling behind, resolution changes, resize grace |
+| `eufy_home_security.p2p.encoder` | a video frame dropped before muxing because it does not start with a start code (WARNING, once per 5 minutes per stream) |
 | `eufy_home_security.p2p.session` (and its submodules) | handshake steps and keys, every request (label, resends, reply time), command-lock waits, parameter changes, guard mode, camera pushes and their record binding, still fetches, trigger frames, media streams (see [Tracing a detection](#tracing-a-detection)) |
 | `eufy_home_security.devices.td` | thing-description properties skipped or units dropped while reading a cloud TD |
 | `eufy_home_security.station` (and its submodules) | event thumbnail source and history lookup outcome |

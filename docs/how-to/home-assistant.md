@@ -2059,8 +2059,10 @@ These are handled inside `StreamBroadcast`; none need integration code:
   are not read, which would end the stream for everyone.
 - **The codec is read per stream**, not assumed: a camera that sends H.264 is declared
   as H.264.
-- **A keyframe sent in parts** (a HomeBase 2 camera splits a large one over several
-  records) is joined into one picture before it is delivered.
+- **A frame sent in parts** (a HomeBase 2 camera splits a large keyframe or P-frame over
+  several records) is joined into one picture before it is delivered, so every video
+  access unit in the TS starts with a start code; go2rtc reads an access unit without one
+  as an empty packet.
 
 ### Video codecs
 

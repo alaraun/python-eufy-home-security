@@ -71,18 +71,23 @@ class MediaStream:
     """One open camera stream: iterate it for :class:`~..media.MediaFrame`, close it to stop.
 
     Video and audio start at a keyframe, because the frames before one reference
-    pictures the reader never saw. A keyframe is held until the next video record, as
-    the app's player holds each frame: a keyframe-flagged record that does not start
-    with a start code is the rest of that picture and is joined to it (a HomeBase 2
-    camera splits a large keyframe); any other video record sends the keyframe out.
-    Audio arriving meanwhile is queued behind it, and records dropped before decoding
-    (another camera's, another stream's) leave it held. A keyframe no video record
-    follows is not delivered: the stream ends at ``idle_timeout`` without it, as the
-    app's player shows a frame only once the next one starts. When a slow reader lets
+    pictures the reader never saw. Each video frame is held until the next video record,
+    as the app's player holds it: a record that does not start with a start code is the
+    rest of that picture and is joined to it (a HomeBase 2 camera splits a large frame
+    into several records); any other video record of the stream sends the held frame
+    out. A keyframe-flagged part joins a held keyframe only; after another frame it is a
+    keyframe that did not decode. A part with no frame to join (its head was dropped) is
+    dropped and video is skipped to the next keyframe, so no delivered video frame lacks
+    a start code. Audio arriving meanwhile is queued behind the held frame, and records
+    dropped before decoding (another camera's, another stream's) leave it held. A frame
+    no video record follows is delivered when the station ends the stream (its
+    end-of-playback frame); at ``idle_timeout`` the stream ends without it, as the app's
+    player shows a frame only once the next one starts, so a frame's delivery never lags
+    its arrival by more than one video record. When a slow reader lets
     :data:`MEDIA_QUEUE_FRAMES` pile up, video is dropped until the next keyframe
-    (counted in :attr:`dropped`); after a keyframe that does not decode, or a frame with
-    no NAL unit, video is skipped to the next keyframe (counted in :attr:`skipped`), so
-    whatever is delivered still decodes.
+    (counted in :attr:`dropped`); after a keyframe that does not decode, a frame with no
+    NAL unit or a part with no frame to join, video is skipped to the next keyframe
+    (counted in :attr:`skipped`), so whatever is delivered still decodes.
     The first keyframe that decodes pins the stream's wrapped key: a later keyframe
     wrapped differently belongs to another (earlier) stream and is dropped. Before that,
     a keyframe that does not decode under this stream's RSA key is dropped at DEBUG as
@@ -112,7 +117,8 @@ class MediaStream:
         """Frames discarded because the reader fell behind."""
         self.skipped = 0
         """Video frames discarded while waiting for a keyframe after one that did not
-        decode or a frame with no NAL unit (not reader lag)."""
+        decode, a frame with no NAL unit or a part with no frame to join (not reader
+        lag)."""
         self.other_camera_frames = 0
         """Live frames discarded because they carried another camera's channel."""
         self._session = session
@@ -153,10 +159,10 @@ class MediaStream:
         self._key_header: VideoCodec | None = None
         """The codec the last keyframe's video header named."""
         self._held: MediaFrame | None = None
-        """The latest keyframe, not yet queued: a continuation record may follow."""
+        """The latest video frame, not yet queued: a continuation record may follow."""
         self._held_parts: list[bytes] = []
         self._held_audio: list[MediaFrame] = []
-        """Audio that arrived while a keyframe was held, queued after it."""
+        """Audio that arrived while a video frame was held, queued after it."""
         self._last_video_at: float | None = None
         """When the previous video record arrived (diagnostics)."""
         self._last_video_outcome: str | None = None
@@ -349,14 +355,14 @@ class MediaStream:
         outcome = "foreign_key"
         try:
             frame = self._decoder.decode(frame_type, payload, subheader)
-            if (
-                frame is not None
-                and frame.is_keyframe
-                and not frame.data.startswith(ANNEX_B_STARTS)
-            ):
-                if self._held is not None:
+            part = False
+            if frame is not None and frame.kind is MediaKind.VIDEO:
+                part = not frame.data.startswith(ANNEX_B_STARTS)
+                if part and self._joins_held(frame):
                     self._continue_held(frame)
                     return "continuation"
+                self._release_held()  # any other decoded video record ends the hold
+            if part and frame is not None and frame.is_keyframe:
                 outcome = "not_annex_b"
                 self._head = frame.data[:SHAPE_HEAD_LEN]
                 self._probe = keyframe_layout_probe(
@@ -394,10 +400,10 @@ class MediaStream:
         if frame.kind is MediaKind.VIDEO and self._need_keyframe and not frame.is_keyframe:
             self._skip_to_keyframe()
             return "waiting_keyframe"
+        if part:
+            self._drop_part()
+            return "part_dropped"
         if frame.kind is MediaKind.VIDEO:
-            if not frame.is_keyframe and not frame.data.startswith(ANNEX_B_STARTS):
-                # The app's player would append it to the frame before it.
-                self._session._media_counters.pframes_without_start_code += 1
             checked = self._checked_video(frame)
             if checked is None:
                 return "no_nal"
@@ -435,9 +441,11 @@ class MediaStream:
             self._held_audio.append(frame)  # a video record ends the hold, not audio
             return "frame"
         self._release_held()
-        if frame.kind is MediaKind.VIDEO and frame.is_keyframe:
-            self._last_key_ms = frame.timestamp_ms
+        if frame.kind is MediaKind.VIDEO:
             self._held, self._held_parts = frame, [frame.data]
+            if not frame.is_keyframe:
+                return "frame"
+            self._last_key_ms = frame.timestamp_ms
             return "keyframe"
         self._frames.append(frame)
         self._wake.set()
@@ -456,17 +464,46 @@ class MediaStream:
             self.skipped += 1
             counters.skipped_for_keyframe += 1
 
+    def _joins_held(self, part: MediaFrame) -> bool:
+        """Whether a video record that does not start with a start code is the rest of
+        the held frame: one is held, no video was lost since, and a keyframe-flagged
+        part follows a keyframe."""
+        held = self._held
+        return (
+            held is not None
+            and not self._need_keyframe
+            and (held.is_keyframe or not part.is_keyframe)
+        )
+
     def _continue_held(self, part: MediaFrame) -> None:
-        """Join a keyframe-flagged record that does not start with a start code to the
-        held keyframe: the rest of its picture."""
+        """Join a record that does not start with a start code to the held frame: the
+        rest of its picture."""
         data, empty = drop_empty_nals(part.data)
         counters = self._session._media_counters
         counters.empty_nals += empty
-        counters.keyframe_continuations += 1
+        if part.is_keyframe:
+            counters.keyframe_continuations += 1
+        else:
+            counters.pframes_without_start_code += 1
         self._held_parts.append(data)
 
+    def _drop_part(self) -> None:
+        """Drop a non-keyframe record without a start code that has no frame to join,
+        and skip video to the next keyframe: the frames after it reference its picture."""
+        self._session._media_counters.pframes_without_start_code += 1
+        self._need_keyframe = True
+        self._lagging = False
+        self._skip_to_keyframe()
+        if self._throttle.should_log("part-dropped"):
+            _LOGGER.debug(
+                "media (cmd %d ch%d): dropping a video record without a start code that "
+                "follows no frame",
+                self.command,
+                self.channel,
+            )
+
     def _release_held(self) -> None:
-        """Queue the held keyframe, joined with its continuation parts, then the audio
+        """Queue the held video frame, joined with its continuation parts, then the audio
         that arrived while it was held."""
         held = self._held
         if held is None:

@@ -6,6 +6,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from eufy_home_security.exceptions import ProtocolError
 from eufy_home_security.p2p.media import VideoCodec, ms_to_pts
 from eufy_home_security.p2p.mpegts import (
     AUDIO_PID,
@@ -29,6 +30,11 @@ def packets(data: bytes) -> list[bytes]:
 
 def pid_of(packet: bytes) -> int:
     return ((packet[1] & 0x1F) << 8) | packet[2]
+
+
+def au(body: bytes) -> bytes:
+    """An Annex-B access unit: a start code, then ``body``."""
+    return b"\x00\x00\x00\x01" + body
 
 
 def test_pat_and_pmt_are_single_well_formed_packets() -> None:
@@ -60,14 +66,14 @@ def test_continuity_counters_advance_and_wrap() -> None:
     counters = [
         packet[3] & 0x0F
         for i in range(6)
-        for packet in packets(mux.video(b"\x00" * 400, 90_000 + i * 6000, keyframe=False))
+        for packet in packets(mux.video(au(b"\x00" * 400), 90_000 + i * 6000, keyframe=False))
     ]
     assert counters == [i & 0x0F for i in range(len(counters))]
 
 
 def test_video_packets_carry_the_pid_and_start_flag() -> None:
     mux = TSMuxer()
-    got = packets(mux.video(b"\xde\xad\xbe\xef" * 100, 90_000, keyframe=True))
+    got = packets(mux.video(au(b"\xde\xad\xbe\xef" * 100), 90_000, keyframe=True))
     assert all(pid_of(p) == VIDEO_PID for p in got)
     assert got[0][1] & 0x40, "the first packet of an access unit starts a payload unit"
     assert not any(p[1] & 0x40 for p in got[1:]), "continuation packets do not"
@@ -76,12 +82,12 @@ def test_video_packets_carry_the_pid_and_start_flag() -> None:
 def test_a_keyframe_carries_a_pcr_and_the_random_access_indicator() -> None:
     """A decoder joining mid-stream needs a clock reference and a start point."""
     mux = TSMuxer()
-    first = packets(mux.video(b"\x01" * 500, 90_000, keyframe=True))[0]
+    first = packets(mux.video(au(b"\x01" * 500), 90_000, keyframe=True))[0]
     assert first[3] & 0x30 == 0x30, "adaptation field present"
     assert first[5] & 0x40, "random_access_indicator"
     assert first[5] & 0x10, "PCR_flag"
 
-    pframe = packets(mux.video(b"\x01" * 500, 96_000, keyframe=False))[0]
+    pframe = packets(mux.video(au(b"\x01" * 500), 96_000, keyframe=False))[0]
     if pframe[3] & 0x20 and pframe[4]:
         assert not pframe[5] & 0x40, "a P-frame is not a random access point"
         assert not pframe[5] & 0x10, "and carries no PCR"
@@ -98,7 +104,7 @@ def _timestamp(field: bytes) -> int:
 
 
 def _video_timestamps(mux: TSMuxer, pts: int) -> tuple[int, int]:
-    payload = packets(mux.video(b"\x00" * 100, pts, keyframe=False))[0]
+    payload = packets(mux.video(au(b"\x00" * 100), pts, keyframe=False))[0]
     start = payload.index(b"\x00\x00\x01\xe0")
     assert payload[start + 6 : start + 9] == b"\x80\xc0\x0a", "PTS+DTS flags, 10-byte header"
     pts_field = payload[start + 9 : start + 14]
@@ -150,8 +156,8 @@ def test_timestamps_are_clamped_monotonic() -> None:
 def test_muxing_never_emits_a_backwards_timestamp() -> None:
     mux = TSMuxer()
     # A backwards step of 150 ticks (under 2 ms), the size the camera's clock makes.
-    mux.video(b"\x00" * 50, 96_000, keyframe=True)
-    out = packets(mux.video(b"\x00" * 50, 95_850, keyframe=False))
+    mux.video(au(b"\x00" * 50), 96_000, keyframe=True)
+    out = packets(mux.video(au(b"\x00" * 50), 95_850, keyframe=False))
     payload = out[0]
     start = payload.index(b"\x00\x00\x01\xe0")
     assert _timestamp(payload[start + 9 : start + 14]) == 96_000
@@ -160,15 +166,25 @@ def test_muxing_never_emits_a_backwards_timestamp() -> None:
 
 def test_an_access_unit_delimiter_precedes_the_frame() -> None:
     """HEVC in TS needs an AUD; the codec decides which one."""
-    hevc = TSMuxer(VideoCodec.HEVC).video(b"\xaa" * 20, 90_000, keyframe=False)
+    hevc = TSMuxer(VideoCodec.HEVC).video(au(b"\xaa" * 20), 90_000, keyframe=False)
     assert b"\x00\x00\x00\x01\x46\x01\x50" in hevc
-    h264 = TSMuxer(VideoCodec.H264).video(b"\xaa" * 20, 90_000, keyframe=False)
+    h264 = TSMuxer(VideoCodec.H264).video(au(b"\xaa" * 20), 90_000, keyframe=False)
     assert b"\x00\x00\x00\x01\x09\xf0" in h264
+
+
+@pytest.mark.parametrize("frame", [b"", b"\x00\x00", b"P-FRAME!" * 30, b"\x00\x00\x02\x01"])
+def test_video_without_a_start_code_is_refused(frame: bytes) -> None:
+    """A consumer that reads only the NAL units after a start code would find such an
+    access unit empty; the muxer writes nothing for it."""
+    mux = TSMuxer()
+    with pytest.raises(ProtocolError, match="start code"):
+        mux.video(frame, 90_000, keyframe=False)
+    assert mux.video(au(b"\x02\x01"), 90_000, keyframe=False)
 
 
 def test_the_frame_bytes_survive_muxing() -> None:
     """Whatever the camera sent must come out again: parameter sets, IDR and all."""
-    frame = bytes((i * 31) & 0xFF for i in range(5000))
+    frame = au(bytes((i * 31) & 0xFF for i in range(5000)))
     data = TSMuxer().video(frame, 90_000, keyframe=True)
     payload = bytearray()
     for packet in packets(data):
@@ -196,7 +212,7 @@ def test_audio_packets_carry_their_own_pid_and_counter() -> None:
     assert all(pid_of(p) == AUDIO_PID for p in got)
     assert got[0][1] & 0x40, "the first packet starts a payload unit"
     # The audio counter advances independently of the video one.
-    mux.video(b"\x00" * 300, 90_000, keyframe=True)
+    mux.video(au(b"\x00" * 300), 90_000, keyframe=True)
     again = packets(mux.audio(frame, 95_760))
     assert (again[0][3] & 0x0F) == (got[-1][3] & 0x0F) + 1
 
@@ -262,7 +278,7 @@ def test_stuffing_never_looks_like_adaptation_flags() -> None:
     """
     mux = TSMuxer(audio=True)
     streams = [
-        mux.video(b"\x00" * size, 90_000 + i * 3000, keyframe=i % 3 == 0)
+        mux.video(au(b"\x00" * size), 90_000 + i * 3000, keyframe=i % 3 == 0)
         for i, size in enumerate((40, 190, 400, 1000))
     ]
     streams += [mux.audio(b"\xff\xf1" + b"\x00" * size, 95_000) for size in (30, 190, 700)]
@@ -290,12 +306,12 @@ def test_the_random_access_indicator_marks_only_keyframes() -> None:
     garbage that follows until the next IDR.
     """
     mux = TSMuxer()
-    key = packets(mux.video(b"\x00" * 300, 90_000, keyframe=True))[0]
+    key = packets(mux.video(au(b"\x00" * 300), 90_000, keyframe=True))[0]
     assert key[3] & 0x20, "adaptation field present"
     assert key[4], "and long enough to carry flags"
     assert key[5] & 0x40, "a keyframe is a random access point"
 
-    pframe = packets(mux.video(b"\x00" * 300, 96_000, keyframe=False))[0]
+    pframe = packets(mux.video(au(b"\x00" * 300), 96_000, keyframe=False))[0]
     if pframe[3] & 0x20 and pframe[4]:
         assert not pframe[5] & 0x40, "a P-frame is not a random access point"
 
@@ -330,7 +346,7 @@ def test_every_frame_size_packs_into_whole_packets(size: int, *, keyframe: bool)
     it a 189-byte packet. One oversized packet desyncs every packet after it, which a
     decoder shows as corruption at the end of the picture.
     """
-    packets(TSMuxer().video(b"\x00" * size, 90_000, keyframe=keyframe))
+    packets(TSMuxer().video(au(b"\x00" * size), 90_000, keyframe=keyframe))
 
 
 @given(size=st.integers(min_value=1, max_value=2000))

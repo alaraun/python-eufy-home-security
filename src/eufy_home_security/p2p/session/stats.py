@@ -106,7 +106,8 @@ class SessionStats:
     """Keyframes dropped because they did not decrypt to Annex-B."""
     media_keyframe_continuations: int
     """Keyframe-flagged records joined to the keyframe before them: the rest of a
-    keyframe a camera sends in several records (a HomeBase 2 camera)."""
+    keyframe a camera sends in several records (a HomeBase 2 camera). Non-keyframe parts
+    count in :attr:`media_pframes_without_start_code`."""
     media_codecs_by_channel: Mapping[str, str]
     """The codec each camera channel's latest keyframe picture showed (``{"2": "h264"}``)."""
     media_codec_overrides: Mapping[str, int]
@@ -163,12 +164,14 @@ class SessionStats:
     """Media frames dropped because a stream's reader fell behind (``MediaStream.dropped``
     summed), the video up to the next keyframe included."""
     media_frames_skipped_for_keyframe: int = 0
-    """Video frames skipped to the next keyframe after a keyframe that did not decode or
-    a frame with no NAL unit (``MediaStream.skipped`` summed): pictures the viewer lost."""
+    """Video frames skipped to the next keyframe after a keyframe that did not decode, a
+    frame with no NAL unit or a part with no frame to join (``MediaStream.skipped``
+    summed): pictures the viewer lost."""
     media_pframes_without_start_code: int = 0
-    """Non-keyframe video frames whose data does not start with an Annex-B start code.
-    The app's player appends such a record to the frame before it; the library delivers
-    it as its own frame."""
+    """Non-keyframe video records whose data does not start with an Annex-B start code:
+    the rest of a frame a camera sends in several records (a HomeBase 2 camera). Each is
+    joined to the frame before it, as the app's player does; one with no frame to join
+    is dropped and video skips to the next keyframe."""
     state_frames_by_encryption: Mapping[str, int] = field(default_factory=dict)
     """State frames (0x044F, 0x047F, the alarm frames) decoded and taken, by encryption: on
     an RSA session its type, ``"clear"``, ``"type1"`` (the fixed static key), ``"type2"``

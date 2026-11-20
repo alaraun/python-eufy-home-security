@@ -128,8 +128,9 @@ CHUNK = 180  # split outbound frames so reassembly is exercised
 
 # Clear HEVC: an Annex-B start code + VPS NAL header, > 257 bytes so it has a clear tail.
 MEDIA_KEYFRAME = b"\x00\x00\x00\x01\x40\x01" + bytes((i * 7) & 0xFF for i in range(394))
-MEDIA_PFRAME = b"P-FRAME!" * 30
-MEDIA_RECORDING_PFRAME = b"R-FRAME!" * 30
+# Clear HEVC P-frames: a start code + a TRAIL_R NAL header, then the slice.
+MEDIA_PFRAME = b"\x00\x00\x00\x01\x02\x01" + b"P-FRAME!" * 30
+MEDIA_RECORDING_PFRAME = b"\x00\x00\x00\x01\x02\x01" + b"R-FRAME!" * 30
 MEDIA_AUDIO = b"\xff\xf1AAC-FRAME"
 MEDIA_GOP = 4  # a keyframe every this many video frames
 MEDIA_INTERVAL = 0.005
@@ -162,6 +163,13 @@ def media_keyframe_parts(
         enc = Cipher(algorithms.AES(aes_key), modes.ECB()).encryptor()  # noqa: S305 (protocol)
         bodies.append(wrapped + b"\x00" + enc.update(chunk[:128]) + enc.finalize() + chunk[128:])
     return bodies
+
+
+def frame_parts(body: bytes, parts: int) -> list[bytes]:
+    """A clear frame split into ``parts`` record bodies, as a HomeBase 2 camera sends a
+    large P-frame: the first starts with the frame's start code, the rest continue it."""
+    size = -(-len(body) // parts)
+    return [body[start : start + size] for start in range(0, len(body), size)]
 
 
 def video_record(
@@ -627,10 +635,12 @@ class FakeStation:
     keyframes; ECC and E2E records are sent as their subheader names them, the body
     undecodable."""
     keyframe_flag: bool = True
-    keyframe_parts: int = 1
-    """Send each RSA keyframe in this many records (:func:`media_keyframe_parts`)."""
     """Set the keyframe flag (header byte 4) on keyframes; False leaves it 0, so only
     the first NAL unit tells a keyframe."""
+    keyframe_parts: int = 1
+    """Send each RSA keyframe in this many records (:func:`media_keyframe_parts`)."""
+    pframe_parts: int = 1
+    """Send each P-frame in this many records (:func:`frame_parts`)."""
     audio_media_version: int = _AUDIO_MEDIA_VERSION
     """Audio subheader byte 0 (0: audio the app does not play)."""
     ecc_offer_ignored: bool = False
@@ -1511,7 +1521,7 @@ class FakeStation:
             if is_key and sizes:
                 size = sizes[min(sent // MEDIA_GOP, len(sizes) - 1)]
             clock += MEDIA_FRAME_MS
-            for body in keyframes if is_key else [pframe]:
+            for body in keyframes if is_key else frame_parts(pframe, self.pframe_parts):
                 self.send_video(
                     body,
                     keyframe=is_key,

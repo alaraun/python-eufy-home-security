@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from eufy_home_security.p2p.encoder import SILENT_AAC_FRAME, SILENT_AAC_FRAME_MS, StreamEncoder
 from eufy_home_security.p2p.media import MediaFrame, MediaKind, VideoCodec
 from eufy_home_security.p2p.mpegts import AUDIO_PID, TS_PACKET_LEN
-from tests.p2p.codec_frames import SWITCHES, coded
+from tests.p2p.codec_frames import SWITCHES, coded, readable_nal_units, video_pes_payloads
 
 
 class FakeClock:
@@ -205,9 +207,30 @@ def test_output_is_always_whole_ts_packets() -> None:
     enc = StreamEncoder(clock=clock)
     _start(clock, enc)
     for i in range(20):
-        out = enc.feed(video(ms=1040 + i * 40, data=b"\x00" * (100 + i * 37)))
+        out = enc.feed(video(ms=1040 + i * 40, data=b"\x00\x00\x01" + b"\x00" * (100 + i * 37)))
         assert len(out.data) % TS_PACKET_LEN == 0
         assert out.data[0] == 0x47
+
+
+def test_video_without_a_start_code_is_dropped_and_logged_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """No access unit goes out that a consumer reading only the NAL units after a start
+    code would find empty; such a keyframe does not start the stream either."""
+    clock = FakeClock()
+    enc = StreamEncoder(clock=clock)
+    enc.feed(video(keyframe=True))
+    clock.advance(enc.settle + 0.1)
+    assert not enc.feed(video(keyframe=True, data=b"\x26\x01no-start-code")).started
+    assert enc.feed(video(keyframe=True)).started
+    tail = video(ms=1040, data=b"P-FRAME!" * 10)
+    with caplog.at_level(logging.WARNING, logger="eufy_home_security.p2p.encoder"):
+        assert [enc.feed(tail).data for _ in range(2)] == [b"", b""]
+    assert len([r for r in caplog.records if r.name == "eufy_home_security.p2p.encoder"]) == 1
+    ts = enc.header + enc.feed(video(ms=1080)).data
+    units = video_pes_payloads(ts)
+    assert len(units) == 2
+    assert all(readable_nal_units(unit, VideoCodec.HEVC) for unit in units)
 
 
 def test_audio_is_dropped_unless_the_encoder_was_built_for_it() -> None:

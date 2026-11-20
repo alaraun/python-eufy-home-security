@@ -24,7 +24,8 @@ is everything a decoder needs and a camera does not provide:
 
 from __future__ import annotations
 
-from .media import VideoCodec
+from ..exceptions import ProtocolError
+from .media import ANNEX_B_STARTS, VideoCodec
 
 __all__ = [
     "AUDIO_PID",
@@ -370,7 +371,13 @@ class TSMuxer:
         DTS from that delay itself and leaves the first frame's unset, and a consumer
         that drops a packet without one (Home Assistant's stream worker) loses the
         opening keyframe and plays the P-frames after it broken.
+
+        ``frame`` must start with a start code: a consumer that reads only the NAL units
+        after a start code would find the access unit empty. Anything else raises
+        :class:`~..exceptions.ProtocolError` and nothing is muxed.
         """
+        if not frame.startswith(ANNEX_B_STARTS):
+            raise ProtocolError("a video frame for the muxer does not start with a start code")
         pts = self.next_pts(pts)
         dts = self.next_dts(pts)
         aud = _AUD_HEVC if self._codec is VideoCodec.HEVC else _AUD_H264

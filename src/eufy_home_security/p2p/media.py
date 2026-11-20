@@ -232,8 +232,9 @@ class MediaRecordShape:
     """What the stream did with the record: ``"frame"``, ``"keyframe"``,
     ``"not_annex_b"``, ``"foreign_key"``, ``"waiting_keyframe"``, ``"queue_full"``,
     ``"undecodable"``, ``"error"``, ``"other_camera"``, ``"no_nal"`` (no NAL unit left
-    once the empty ones are removed) or ``"continuation"`` (the rest of the keyframe
-    before it, joined to it)."""
+    once the empty ones are removed), ``"continuation"`` (no start code: the rest of the
+    frame before it, joined to it) or ``"part_dropped"`` (no start code and no frame to
+    join)."""
     probe: str = ""
     """For a keyframe that did not decrypt to Annex-B: the body layouts that do start
     with a start code (:func:`keyframe_layout_probe`)."""
