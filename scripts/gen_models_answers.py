@@ -1,11 +1,12 @@
 """A content-addressed store of driver answers for ``scripts/gen_models.py``.
 
-A driver job's reply depends only on the Node runtime, the driver source, the handler
-file and the job's requests: the driver runs every job in a fresh sandbox with a seeded
-``Math.random`` and a fixed clock. The store keys each reply by the SHA-256 of exactly
-those (the runtime's ``--version``, the driver's and the handler's bytes, the requests as
-the driver receives them), so a run whose jobs were asked before replays their replies
-without Node, and a changed input asks Node again for the jobs it touches only.
+A driver job's reply depends only on the Node runtime and its environment, the driver
+source, the handler file and the job's requests: the driver runs every job in a fresh
+sandbox with a seeded ``Math.random`` and a fixed clock. The store keys each reply by the
+SHA-256 of exactly those (:func:`runtime_version`, the driver's and the handler's bytes,
+the requests as the driver receives them), so a run whose jobs were asked before replays
+their replies without Node, and a changed input asks Node again for the jobs it touches
+only.
 
 One file per product, ``<root>/<PN>.answers``: a header line, then one record per job,
 ``<key> <digest> <size>\\n`` followed by ``size`` bytes of the zlib-compressed reply JSON;
@@ -34,6 +35,8 @@ from typing import Any
 
 HEADER = b"gen_models answers 1\n"
 LEVEL = 1  # zlib level: replies are repetitive JSON, level 1 keeps writing cheap
+# Besides every LC_* variable: the environment a handler's reply can depend on.
+RUNTIME_ENV = frozenset({"TZ", "LANG", "LANGUAGE", "NODE_OPTIONS", "NODE_ICU_DATA"})
 _RECORD = re.compile(rb"([0-9a-f]{64}) ([0-9a-f]{64}) ([0-9]{1,12})")
 
 type Ask = Callable[[Mapping[str, Any]], list[Any]]
@@ -44,16 +47,28 @@ def file_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def runtime_version(node: str) -> str:
-    """The ``--version`` text of the Node binary ``node``."""
-    return subprocess.run(
-        [node, "--version"], capture_output=True, text=True, timeout=30, check=True
+def runtime_version(node: str, env: Mapping[str, str] | None = None) -> str:
+    """The runtime part of every key: the ``process.versions`` of the Node binary ``node``
+    (Node, V8, ICU, time zone data) and the variables of ``env`` (default: this process's
+    environment, which the driver's workers inherit) that can change a handler's reply:
+    time zone, locale and Node options."""
+    env = os.environ if env is None else env
+    versions = subprocess.run(
+        [node, "-p", "JSON.stringify(process.versions)"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+        env=dict(env),
     ).stdout.strip()
+    settings = sorted((k, v) for k, v in env.items() if k in RUNTIME_ENV or k.startswith("LC_"))
+    return json.dumps([versions, settings])
 
 
 @dataclass
 class Stats:
-    """Jobs per outcome: replayed from the store, asked of Node, records found damaged."""
+    """Jobs per outcome: replayed from the store, asked of Node; and damaged spots found
+    in the store (a damaged record, or a file cut short or of another format)."""
 
     replayed: int = 0
     asked: int = 0
@@ -77,9 +92,9 @@ class _Product:
 class AnswerStore:
     """Replays driver replies stored under ``root`` (None: every job goes to Node).
 
-    ``runtime`` gives the Node version text and ``driver`` is the driver source; both are
-    part of every key. Between ``open(name)`` and ``close(ok=...)`` the jobs of one
-    product go through ``run``; outside them ``run`` asks Node directly.
+    ``runtime`` gives the runtime text (:func:`runtime_version`) and ``driver`` is the
+    driver source; both are part of every key. Between ``open(name)`` and ``close(ok=...)``
+    the jobs of one product go through ``run``; outside them ``run`` asks Node directly.
     """
 
     def __init__(self, root: Path | None, *, driver: Path, runtime: Callable[[], str]) -> None:
@@ -144,13 +159,13 @@ class AnswerStore:
         return replies
 
     def _key(self, handler: Path, requests: Any) -> str | None:
-        """The job's key; None when the driver or the handler cannot be read (the job
-        then goes to Node, which reports it)."""
+        """The job's key; None when the runtime cannot be asked or the driver or the
+        handler cannot be read (the job then goes to Node, which reports it)."""
         prefix = self._prefix.get(str(handler))
         if prefix is None:
             try:
                 parts = (self._runtime(), file_digest(self._driver), file_digest(handler))
-            except OSError:
+            except (OSError, subprocess.SubprocessError):
                 return None
             prefix = "\0".join((HEADER.decode().strip(), *parts, "")).encode()
             self._prefix[str(handler)] = prefix

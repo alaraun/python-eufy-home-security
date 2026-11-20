@@ -330,12 +330,81 @@ def test_a_failed_driver_job_is_not_stored(setup: Setup) -> None:
     assert stats.asked == 1
 
 
-def test_a_job_whose_handler_cannot_be_read_goes_to_the_driver_unstored(setup: Setup) -> None:
-    """The driver reports a missing handler itself; the store keys nothing on it."""
+def _no_handler(setup: Setup) -> None:
     setup.handler.unlink()
+
+
+def _no_runtime(setup: Setup) -> None:
+    def fail() -> str:
+        raise answers.subprocess.CalledProcessError(1, ["node"])
+
+    setup.store = lambda root=None: answers.AnswerStore(  # type: ignore[method-assign]
+        root if root is not None else setup.root, driver=setup.driver, runtime=fail
+    )
+
+
+@pytest.mark.parametrize("cause", [_no_handler, _no_runtime], ids=lambda f: f.__name__)
+def test_a_job_without_a_key_goes_to_the_driver_unstored(setup: Setup, cause: Any) -> None:
+    """A missing handler or a Node that does not answer: the driver reports it itself; the
+    store keys nothing on it."""
+    cause(setup)
     for _ in range(2):
         replies, stats = setup.product(setup.job(1))
         assert replies == [[{"echo": 1, "n": len(setup.ask.jobs)}]]
         assert (stats.asked, stats.replayed) == (0, 0)
     assert len(setup.ask.jobs) == 2
     assert not setup.file.exists()
+
+
+def _fake_node(path: Path, versions: str) -> str:
+    """A ``node`` that prints ``versions`` for ``-p JSON.stringify(process.versions)``."""
+    path.write_text(
+        f"""#!/bin/sh
+[ "$1 $2" = "-p JSON.stringify(process.versions)" ] && echo '{versions}'
+""",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return str(path)
+
+
+BASE_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/home/a", "TZ": "UTC", "LC_ALL": "C.UTF-8"}
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="a shell-script node")
+@pytest.mark.parametrize(
+    ("env", "changes"),
+    [
+        ({**BASE_ENV}, False),
+        ({**BASE_ENV, "PATH": "/opt/bin", "HOME": "/home/b", "EDITOR": "vi"}, False),
+        ({**BASE_ENV, "TZ": "Pacific/Kiritimati"}, True),
+        ({**BASE_ENV, "LC_ALL": "de_DE.UTF-8"}, True),
+        ({**BASE_ENV, "LC_TIME": "et_EE.UTF-8"}, True),
+        ({**BASE_ENV, "LANG": "et_EE.UTF-8"}, True),
+        ({**BASE_ENV, "LANGUAGE": "et"}, True),
+        ({**BASE_ENV, "NODE_OPTIONS": "--require ./x.js"}, True),
+        ({**BASE_ENV, "NODE_ICU_DATA": "/opt/icu"}, True),
+    ],
+)
+def test_the_runtime_text_follows_the_environment_a_reply_can_depend_on(
+    tmp_path: Path, env: dict[str, str], changes: bool
+) -> None:
+    node = _fake_node(tmp_path / "node", '{"node":"24.0.0","icu":"77.1","tz":"2026a"}')
+    base = answers.runtime_version(node, BASE_ENV)
+    assert (answers.runtime_version(node, env) != base) is changes
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="a shell-script node")
+def test_the_runtime_text_follows_the_node_build(tmp_path: Path) -> None:
+    """Two builds of one Node version with other ICU or time zone data differ."""
+    texts = {
+        answers.runtime_version(_fake_node(tmp_path / f"node{n}", versions), BASE_ENV)
+        for n, versions in enumerate(
+            (
+                '{"node":"24.0.0","icu":"77.1","tz":"2026a"}',
+                '{"node":"24.0.0","icu":"77.1","tz":"2026b"}',
+                '{"node":"24.0.0","icu":"76.1","tz":"2026a"}',
+            )
+        )
+    }
+    assert len(texts) == 3

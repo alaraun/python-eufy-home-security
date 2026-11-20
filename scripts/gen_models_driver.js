@@ -52,12 +52,16 @@ const FIXED_CLOCK = new vm.Script(
   })();`,
 );
 
-// The last handler compiled: a worker serves one product's jobs in a row.
-let compiled = { path: null, script: null };
+// The last handler compiled: a worker serves one product's jobs in a row. The file's
+// identity and times are part of the match, so a handler rewritten in place is compiled
+// again.
+let compiled = { stamp: null, script: null };
 
 function handlerScript(path) {
-  if (compiled.path !== path) {
-    compiled = { path, script: new vm.Script(fs.readFileSync(path, "utf8")) };
+  const st = fs.statSync(path, { bigint: true });
+  const stamp = [path, st.dev, st.ino, st.size, st.mtimeNs, st.ctimeNs].join("\0");
+  if (compiled.stamp !== stamp) {
+    compiled = { stamp, script: new vm.Script(fs.readFileSync(path, "utf8")) };
   }
   return compiled.script;
 }

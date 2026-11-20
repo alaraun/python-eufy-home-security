@@ -381,6 +381,23 @@ def test_every_job_gets_a_fresh_handler_sandbox(tmp_path: Path) -> None:
 
 
 @pytest.mark.needs_node
+def test_a_handler_rewritten_in_place_is_compiled_again(tmp_path: Path) -> None:
+    """The worker's compiled handler follows the file, not only its path (same length)."""
+    handler = tmp_path / "TestHandle.mix.js"
+    handler.write_text(COUNTING_HANDLER, encoding="utf-8")
+    drivers = node.DriverPool()
+    try:
+        job = {"handler": str(handler), "requests": [_set(1)]}
+        first = drivers.run(job)
+        handler.write_text(COUNTING_HANDLER.replace("calls += 1", "calls += 7"), encoding="utf-8")
+        second = drivers.run(job)
+    finally:
+        drivers.close()
+    assert drivers.started == 1
+    assert [r["data"]["p2p"]["calls"] for r in first + second] == [1, 7]
+
+
+@pytest.mark.needs_node
 def test_an_unreadable_handler_fails_its_job_and_keeps_the_worker(tmp_path: Path) -> None:
     handler = tmp_path / "TestHandle.mix.js"
     handler.write_text(COUNTING_HANDLER, encoding="utf-8")

@@ -32,8 +32,8 @@ cache); nothing at runtime executes vendor code. See docs/reference/models-schem
 
 Driver replies are kept in a private answer store (``--answers DIR``, default
 ``.work/cache/gen_models_answers``; ``scripts/gen_models_answers.py``): a job asked
-before with the same Node version, driver, handler and requests is replayed without
-Node. ``--no-answers`` asks Node for every job.
+before with the same Node runtime and environment, driver, handler and requests is
+replayed without Node. ``--no-answers`` asks Node for every job.
 
     gen_models.py [PN ...] [--check] [--cache DIR] [--out DIR] [--jobs N]
                   [--labels FILE] [--trees FILE] [--titles FILE] [--shown FILE]
@@ -2472,7 +2472,7 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     if args.answers is not None:
         print(
             f"answers: {replies.replayed} jobs replayed, {replies.asked} asked of Node"
-            + (f", {replies.damaged} damaged records" if replies.damaged else "")
+            + (f", {replies.damaged} damaged in the store" if replies.damaged else "")
             + f" ({args.answers})",
             file=sys.stderr,
         )

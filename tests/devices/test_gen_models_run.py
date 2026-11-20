@@ -130,21 +130,33 @@ def test_one_job_builds_in_process_and_reports_each_failure(
     assert gen_models.DRIVERS._closed  # no worker outlives the run
 
 
+def _seed_answers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """A store holding, for each of PNS, one job of an earlier run that the next run does not
+    ask; the generator's driver answers ``{}`` per request. Returns the handler and store."""
+    handler = tmp_path / "Handle.mix.js"
+    handler.write_text("// handler", encoding="utf-8")
+    store = tmp_path / "answers"
+    monkeypatch.setattr(gen_models.ANSWERS, "root", store)  # restored after the test
+    monkeypatch.setattr(gen_models.ANSWERS, "_runtime", lambda: "v0")
+    monkeypatch.setattr(gen_models.DRIVERS, "run", lambda job: [{} for _ in job["requests"]])
+    for pn in PNS:
+        gen_models.ANSWERS.open(pn)
+        gen_models.run_driver(pn, handler, [{"earlier": pn}])
+        assert gen_models.ANSWERS.close(ok=True) is None
+    return handler, store
+
+
+def _kept(store: Path) -> dict[str, int]:
+    return {pn: len(gen_models.answers.read_records(store / f"{pn}.answers")[0]) for pn in PNS}
+
+
 @pytest.mark.timeout(60)
 def test_a_built_model_keeps_only_its_run_s_answers_and_a_failed_one_its_earlier_too(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    handler = tmp_path / "Handle.mix.js"
-    handler.write_text("// handler", encoding="utf-8")
-    store = tmp_path / "answers"
-    monkeypatch.setattr(gen_models.ANSWERS, "root", None)  # restored after the run sets it
-    monkeypatch.setattr(gen_models.ANSWERS, "_runtime", lambda: "v0")
-    monkeypatch.setattr(gen_models.DRIVERS, "run", lambda job: [{} for _ in job["requests"]])
-    for pn in PNS:  # an earlier run's job, which this run does not ask
-        gen_models.ANSWERS.root = store
-        gen_models.ANSWERS.open(pn)
-        gen_models.run_driver(pn, handler, [{"earlier": pn}])
-        assert gen_models.ANSWERS.close(ok=True) is None
+    handler, store = _seed_answers(tmp_path, monkeypatch)
+    with (store / "T9ZZ5.answers").open("ab") as damaged:
+        damaged.write(b"not a record\n")
 
     def asking_generate(pn: str, *args: Any, **kwargs: Any) -> Any:
         gen_models.run_driver(pn, handler, [{"now": pn}])
@@ -155,10 +167,37 @@ def test_a_built_model_keeps_only_its_run_s_answers_and_a_failed_one_its_earlier
     args.answers = store
     gen_models.DRIVERS.close()  # as an earlier run leaves it
     assert gen_models._generate_all(args, tmp_path, tmp_path / "out", quiet=True) == 1
-    assert "answers: 0 jobs replayed, 5 asked of Node" in capsys.readouterr().err
-    kept = {pn: len(gen_models.answers.read_records(store / f"{pn}.answers")[0]) for pn in PNS}
+    err = capsys.readouterr().err
+    assert f"answers: 0 jobs replayed, 5 asked of Node, 1 damaged in the store ({store})" in err
     # T9ZZ2 fails with a GeneratorError, T9ZZ4 with another exception
-    assert kept == {"T9ZZ1": 1, "T9ZZ2": 2, "T9ZZ3": 1, "T9ZZ4": 2, "T9ZZ5": 1}
+    assert _kept(store) == {"T9ZZ1": 1, "T9ZZ2": 2, "T9ZZ3": 1, "T9ZZ4": 2, "T9ZZ5": 1}
+
+
+@pytest.mark.timeout(60)
+def test_a_run_stopped_by_node_keeps_the_stopping_model_s_earlier_answers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    handler, store = _seed_answers(tmp_path, monkeypatch)
+
+    def generate(pn: str, *_: Any, **__: Any) -> Any:
+        gen_models.run_driver(pn, handler, [{"now": pn}])
+        if pn == "T9ZZ2":
+            gen_models.run_driver(pn, handler, [{"stop": pn}])
+        return {"product_code": pn}, {}
+
+    def run(job: dict[str, Any]) -> list[Any]:
+        if "stop" in job["requests"][0]:
+            raise gen_models.node.NodeError("every worker died")
+        return [{} for _ in job["requests"]]
+
+    monkeypatch.setattr(gen_models, "generate", generate)
+    monkeypatch.setattr(gen_models.DRIVERS, "run", run)
+    args = _args(tmp_path, 1)
+    args.answers = store
+    gen_models.DRIVERS.close()  # as an earlier run leaves it
+    with pytest.raises(gen_models.node.NodeError, match="T9ZZ2: every worker died"):
+        gen_models._generate_all(args, tmp_path, tmp_path / "out", quiet=True)
+    assert _kept(store) == {"T9ZZ1": 1, "T9ZZ2": 2, "T9ZZ3": 1, "T9ZZ4": 1, "T9ZZ5": 1}
 
 
 @pytest.mark.timeout(60)
