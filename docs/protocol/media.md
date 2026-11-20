@@ -382,6 +382,9 @@ The eufy app decides per device, for live view, talkback and commands alike, fro
 `is_connect_webrtc*` properties of the thing descriptions; `devices.webrtc` evaluates the
 same rule for every device (`app_uses_webrtc`, `Station.app_uses_webrtc`), from data
 `scripts/gen_webrtc_routing.py` generates (`devices/_webrtc_routing_data.py`).
+`Station.app_uses_webrtc` reads the firmware of the device list the client applied last:
+the station's own record from every list (`async_discover`, `async_refresh_cloud_state`),
+its paired devices' from `async_discover`.
 
 1. A device paired to a station on the account reads the station's `is_connect_webrtc`
    first: no such property or 0 means P2P; 2 means WebRTC; 1 means P2P unless the station
@@ -424,8 +427,8 @@ pan/tilt, preset and zoom commands over WebRTC too, and none of them has been tr
 P2P on a routed device, so `Station.ptz_support` grades each of the three it would send
 `UNKNOWN` there with the route as the reason, and the calls refuse before sending
 ([commands.md](commands.md#the-1700-wrapper-a-standalone-devices-commands-verified)).
-The app's one exception, a T8223 or T8224 behind a HomeBase 3 or HomeBase mini whose own
-`is_connect_webrtc` reads 1, keeps every command but the live-stream ones on P2P;
+The app's one exception, a T8223 or T8224 behind a HomeBase 3 or HomeBase mini, when the
+station's own `is_connect_webrtc` reads 1, keeps every command but the live-stream ones on P2P;
 neither model declares pan/tilt, so no grade depends on it. The library still sends a
 routed device's other commands (settings) over P2P; whether it acts on them is not
 observed. A HomeBase 3 at 3.8.7.4

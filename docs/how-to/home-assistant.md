@@ -301,8 +301,9 @@ the integration is the device list:
   cleanup that must also see devices eufy stopped listing waits for `"fetched"`.
   `eufy.listed_devices` maps every serial of that list to its `CloudDevice`: built
   stations, stations served elsewhere, remote stations, paired and skipped devices.
-- A refresh adds new stations and updates the paired devices of the stations already
-  built. When a station's devices change it emits `DevicesChanged(station_sn, added,
+- A refresh adds new stations and updates the stations already built: each station's
+  own record (`station.device`, firmware included) and its paired devices. When a
+  station's devices change it emits `DevicesChanged(station_sn, added,
   removed, moved)` (serials): reload the entry on it, and never diff device lists in the
   integration. A refresh that changed nothing emits nothing. A discovery after the first
   that built a station, or whose list no longer names a built one, emits
@@ -1787,8 +1788,13 @@ the rule), which the library does not implement. Grade and refusal are one decis
 wherever an open raises
 `UnsupportedError` (before anything is sent), `live_support` is `UNKNOWN` with the same
 text as `source`, and `image_sources` leaves `LIVE` out; a model profile verified on
-hardware does not override it. Read the grade again after a device-list refresh, since a
-firmware update can move a device onto WebRTC. `profile_for_serial(...).support(
+hardware does not override it. The grades read the firmware of the device list last
+applied: `async_discover()` takes the records of each built station and its paired
+devices, the cloud-state refresh (`async_refresh_cloud_state()`, also on its timer) the
+station's own record. A standalone camera's firmware, or a station's, which decides for
+its paired devices, can move a device onto WebRTC, so read the grades again after
+either; until one runs, the grade and the refusal follow the older firmware together.
+`profile_for_serial(...).support(
 Capability.LIVE_STREAM)` is `DECLARED` when the library sends the handler's open under
 *some* station, so it can say yes for a camera this station cannot stream; prefer
 `live_support`.

@@ -28,6 +28,7 @@ from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi, HttpSession, 
 from eufy_home_security.cloud.const import KEY_REFRESH_SLOW_RETRY, CloudCode
 from eufy_home_security.cloud.models import CloudDevice, CloudInvite
 from eufy_home_security.cloud.status import DeviceListSource, LoginNeed
+from eufy_home_security.devices.capabilities import Capability
 from eufy_home_security.devices.model_settings import (
     BATTERY_PROPERTY,
     PARENTLESS_ONLY,
@@ -35,6 +36,7 @@ from eufy_home_security.devices.model_settings import (
     settings_of,
 )
 from eufy_home_security.devices.recipes import connect_type
+from eufy_home_security.devices.support import Support
 from eufy_home_security.devices.timezones import encode_zone, zone_ids
 from eufy_home_security.devices.types import MODELS
 from eufy_home_security.events import (
@@ -360,6 +362,34 @@ async def test_refresh_updates_the_stations_already_built() -> None:
     assert home in again
     assert [d.device_sn for d in home.sub_devices] == [SYNTHETIC.camera_sn, NEW_CAMERA_SN]
     assert home.session.expect_channels == {0, 1}
+
+
+@pytest.mark.parametrize("refresh", ["discover", "cloud_state"])
+async def test_a_refresh_takes_the_stations_new_firmware_into_its_routing(refresh: str) -> None:
+    """A HomeBase 3 updated into the range where the eufy app routes a paired T8L60 over
+    WebRTC: after either device-list refresh the camera's pan/tilt and live are graded as
+    routed, without a reload."""
+    camera_sn = "T8L60P2000067890"
+    hub = station_device() | {"main_sw_version": "3.8.0.0"}
+    camera = camera_device(camera_sn) | {"device_new_pn": "T8L60"}
+    cloud = FakeCloud(devices=[hub, camera])
+    async with aiohttp.ClientSession() as http:
+        eufy = account(http, cloud)
+        (home,) = await eufy.async_discover()
+        assert not home.app_uses_webrtc(camera_sn)
+        assert home.ptz_support(camera_sn, Capability.PTZ_CONTROL).support is Support.DECLARED
+        hub["main_sw_version"] = "3.8.8.0"
+        if refresh == "discover":
+            await eufy.async_discover(refresh=True)
+        else:
+            await eufy.async_refresh_cloud_state()
+        await eufy.async_close()
+    assert home.device.main_sw_version == "3.8.8.0"
+    assert home.app_uses_webrtc(camera_sn)
+    control = home.ptz_support(camera_sn, Capability.PTZ_CONTROL)
+    assert control.support is Support.UNKNOWN
+    assert "over WebRTC" in control.source
+    assert home.live_support(camera_sn).support is Support.UNKNOWN
 
 
 async def test_a_discovery_names_its_list_and_the_stations_it_added_or_lost() -> None:

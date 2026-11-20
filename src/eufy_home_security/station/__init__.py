@@ -1631,19 +1631,30 @@ class Station:
         return self.connects_on_demand or bool(self._cloud) or self._cloud_time_zone is not None
 
     def apply_cloud_device(self, device: CloudDevice) -> int:
-        """Take a device-list entry's parameter snapshot and ``time_zone`` as this
-        station's cloud copy; returns how many values were news.
+        """Take a device-list entry as this station's record (:attr:`device`), and its
+        parameter snapshot and ``time_zone`` as the station's cloud copy; returns how many
+        values were news.
 
-        The copy is the second source of the station's settings
+        The record carries the firmware every firmware-dependent decision reads (WebRTC
+        routing and with it :meth:`live_support` and :meth:`ptz_support`, the storage
+        query, :meth:`config_support`), so those follow the newest list applied. The
+        copy is the second source of the station's settings
         (:attr:`StationState.setting_params`); the entry replaces the previous copy. A
         station reached on demand merges the snapshot into its session instead (see
         :meth:`~..p2p.session.StationSession.ingest_cloud_params`), where it is its state.
-        News emits :class:`~..events.StationStateChanged` once the station has a state.
-        Only this station's own entry counts (a hub's paired devices report through the
-        hub); an entry of another serial changes nothing.
+        A state the entry changed (by news, or by the record's firmware or name) emits
+        :class:`~..events.StationStateChanged` once the station has a state. Only this
+        station's own entry counts (a hub's paired devices report through the hub,
+        :meth:`update_sub_devices` takes their records); an entry of another serial
+        changes nothing.
         """
         if device.device_sn != self.serial:
             return 0
+        old, self.device = self.device, device
+        self.session.expect_channels = self.channels
+        if device.main_sw_version != old.main_sw_version:
+            # A paired device's per-mode settings follow config_support's firmware gate.
+            self._settings_memo.clear()
         now = time.time()
         params = {} if self.connects_on_demand else {p.param_id: p for p in device.cloud_params}
         cloud = {
@@ -1661,8 +1672,7 @@ class Station:
             news += self.session.ingest_cloud_params(
                 dev_type, ((p.param_id, p.value, p.updated_at) for p in device.cloud_params)
             )
-        if news:
-            self._on_dump_complete()
+        self._on_dump_complete()
         return news
 
     @property
@@ -2555,15 +2565,18 @@ class Station:
     def live_support(self, device_sn: str) -> Evidence:
         """How well a live stream of ``device_sn`` is supported (live view, live image).
 
-        ``UNKNOWN`` with the reason wherever the library refuses the open: where the eufy
-        app streams the device over WebRTC (:meth:`app_uses_webrtc`), or the device's
-        handler opens it there in a way the library does not implement. Otherwise
+        ``UNKNOWN`` with the reason for a device not paired here, and wherever the library
+        refuses the open: where the eufy app streams the device over WebRTC
+        (:meth:`app_uses_webrtc`), or the device's handler opens it there in a way the
+        library does not implement. Otherwise
         :attr:`~..devices.support.Support.VERIFIED` from the model's profile; else
         ``DECLARED`` when the library sends the open the device's handler sends under
         this station (:func:`~..devices.live_open.library_live_open`, generated from the
         eufy app's handlers); else the model profile's own entry, or ``UNKNOWN`` for a
         model without a recorded open, whose open the library still tries.
         """
+        if not self._is_paired(device_sn):
+            return Evidence(Support.UNKNOWN, _NOT_PAIRED)
         refusal = self._live_refusal(device_sn)
         if refusal is not None:
             return Evidence(Support.UNKNOWN, refusal)
