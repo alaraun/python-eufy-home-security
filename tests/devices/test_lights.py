@@ -194,8 +194,8 @@ _V, _D = Support.VERIFIED, Support.DECLARED
 @pytest.mark.parametrize(
     ("code", "connect", "standalone", "on_off", "brightness"),
     [
-        ("T8160", ConnectType.HB3, False, _V, _D),
-        ("t8160", ConnectType.HB3, False, _V, _D),
+        ("T8160", ConnectType.HB3, False, _V, _V),
+        ("t8160", ConnectType.HB3, False, _V, _V),
         ("T8160", ConnectType.HB2, False, _D, _D),
         ("T8160", None, True, _D, _D),
         ("T8170", None, True, _V, _D),

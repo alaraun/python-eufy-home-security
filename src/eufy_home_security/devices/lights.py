@@ -80,6 +80,10 @@ _VERIFIED_WRITES: Final[Mapping[tuple[str, str, str], str]] = MappingProxyType(
             "spotlight_switch (1400) written on and off and read back through the library, "
             "eufyCam 3 behind a HomeBase 3"
         ),
+        ("T8160", ConnectType.HB3.value, "spotlight_brightness_level"): (
+            "spotlight_brightness_level (1401) written and read back through the library with "
+            "the lamp off, eufyCam 3 behind a HomeBase 3; the lamp itself was not observed"
+        ),
         ("T8170", STANDALONE_CONTEXT, "spotlight_switch"): (
             "spotlight_switch (1400) written and read back through the library, standalone "
             "Battery SoloCam"

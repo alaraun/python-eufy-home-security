@@ -1685,7 +1685,7 @@ carries:
 |---|---|
 | `id`, `name` | stable id (use it with the serial for the unique id), the app's title of the switch |
 | `on_off`, `on_off_writable`, `on_off_readable` | the switch setting's key and what it allows in this context (a Wall Light Cam S100 behind a HomeBase reads its lamp but cannot switch it) |
-| `brightness` | `LightBrightness` or None: `key`, `writable`, `readable`, `evidence` (the brightness write's grade), the percent bounds `minimum`/`maximum`, and `step` for a range (its value is the percent) or `levels` (enum value → percent, Low/Medium/High = 40/70/100 on a eufyCam 3); `percent(value)` and `value_for(percent)` convert |
+| `brightness` | `LightBrightness` or None: `key`, `writable`, `readable`, `evidence` (the brightness write's grade: *verified* on a eufyCam 3 behind a HomeBase 3, else *declared (eufy app)*), the percent bounds `minimum`/`maximum`, and `step` for a range (its value is the percent) or `levels` (enum value → percent, Low/Medium/High = 40/70/100 on a eufyCam 3); `percent(value)` and `value_for(percent)` convert |
 | `color_temp` | `LightColorTemperature` or None: a 0-100 range on the app's own scale; `kelvin` is None on every model, so offer no colour temperature in Kelvin and keep the setting as its own number |
 | `enabled_by` | the master setting (`spotlight_status`); while it is off the app disables the lamp's control |
 | `config` | the settings that configure the lamp (master, automatic lighting, schedule): keep them as their own entities |
