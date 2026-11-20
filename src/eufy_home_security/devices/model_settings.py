@@ -831,10 +831,13 @@ def _classify(template: Recipe, recipe: Mapping[str, Any]) -> WireCommand:
     if _is_ecb_scalar(cmd):
         scalar: object = params
         if body is not None:
+            # The command's own field, as the eufy app reads it; the other fields are not sent.
+            scalar = _ecb_field_value(cmd, body)
+        if body is not None and scalar is None:
+            # No field known for the command, or the body lacks it: the body holds one value,
+            # maybe under several names, one of them as a bool.
             channel = _channel_fields(template)
             fields = [v for k, v in body.items() if k not in channel]
-            # Some handlers repeat the value under two names ({"duration": v, "value": v}),
-            # one of them as a bool ({"switch": false, "value": 0}).
             distinct = {json.dumps(int(v) if isinstance(v, bool) else v) for v in fields}
             scalar = fields[0] if len(distinct) == 1 else None
         # An ECB body is an int: handlers write some values as digit strings.
@@ -915,6 +918,12 @@ def _is_ecb_scalar(cmd: int) -> bool:
     from ..p2p.messages import is_ecb_scalar  # noqa: PLC0415 - the table's one definition
 
     return is_ecb_scalar(cmd)
+
+
+def _ecb_field_value(cmd: int, body: Mapping[str, Any]) -> object:
+    from ..p2p.messages import ecb_field_value  # noqa: PLC0415 - deferred, see _is_ecb_scalar
+
+    return ecb_field_value(cmd, body)
 
 
 # ── order ───────────────────────────────────────────────────────────────────

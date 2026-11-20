@@ -24,7 +24,7 @@ import json
 import struct
 from collections.abc import Mapping, Sequence
 from datetime import date
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..events import is_station_recording_path
 from ..exceptions import ProtocolError, UnsupportedError
@@ -542,6 +542,74 @@ ECB_CHANNEL_VALUE_CMDS = frozenset(
         1709,
     }
 )
+
+
+class EcbValueField(NamedTuple):
+    """The handler body field an ECB scalar command's value is read from.
+
+    ``flag``: the field is read as a switch, 1 for ``true``, the number 1 or the text
+    ``"1"``/``"true"``/``"TRUE"``, else 0. Otherwise the field's own integer is the value.
+    """
+
+    name: str
+    flag: bool = False
+
+
+#: The body field each ECB scalar command takes its value from, whatever other fields
+#: the handler's body carries (declared, eufy app). See docs/protocol/commands.md.
+ECB_VALUE_FIELDS: dict[int, EcbValueField] = {
+    1011: EcbValueField("enable", flag=True),
+    1015: EcbValueField("value"),
+    1035: EcbValueField("switch", flag=True),
+    1045: EcbValueField("ledStatus"),
+    1145: EcbValueField("value"),
+    1146: EcbValueField("value"),
+    1200: EcbValueField("languageType"),
+    1207: EcbValueField("enable"),
+    1210: EcbValueField("value"),
+    1214: EcbValueField("value"),
+    CMD_SET_ARMING: EcbValueField("mode_type"),
+    1230: EcbValueField("volume"),
+    1235: EcbValueField("volume"),
+    1240: EcbValueField("enable", flag=True),
+    1241: EcbValueField("enable", flag=True),
+    1243: EcbValueField("value"),
+    1246: EcbValueField("mode"),
+    1249: EcbValueField("duration"),
+    1250: EcbValueField("interval"),
+    1251: EcbValueField("enable", flag=True),
+    1252: EcbValueField("type"),
+    1253: EcbValueField("timeSystem"),
+    1269: EcbValueField("open"),
+    1272: EcbValueField("value"),
+    1400: EcbValueField("open"),
+    1401: EcbValueField("brightness"),
+    1403: EcbValueField("switch", flag=True),
+    1410: EcbValueField("colorTemperature"),
+    1609: EcbValueField("value"),
+    1702: EcbValueField("value"),
+    1703: EcbValueField("value"),
+    1704: EcbValueField("status"),
+    1705: EcbValueField("quality"),
+    1706: EcbValueField("voiceId"),
+    1708: EcbValueField("volume"),
+    1709: EcbValueField("value"),
+}
+
+
+def ecb_field_value(cmd: int, body: Mapping[str, object]) -> object:
+    """The value ``cmd``'s field holds in a handler body (a flag field as 1 or 0), or
+    None when ``cmd`` has no field in :data:`ECB_VALUE_FIELDS` or the body lacks it."""
+    spec = ECB_VALUE_FIELDS.get(cmd)
+    raw = None if spec is None else body.get(spec.name)
+    if spec is None or raw is None or not spec.flag:
+        return raw
+    if isinstance(raw, str):
+        return int(raw in ("1", "true", "TRUE"))
+    if isinstance(raw, int | float):  # a bool too
+        return int(int(raw) == 1)
+    return 0
+
 
 #: Fixed 128-byte account-id char field appended to every ECB scalar body.
 _ECB_ACCOUNT_LEN = 128

@@ -31,7 +31,7 @@ from eufy_home_security.devices.model_settings import (
 )
 from eufy_home_security.devices.recipes import ConnectType
 from eufy_home_security.exceptions import UnsupportedError
-from eufy_home_security.p2p.messages import is_ecb_scalar
+from eufy_home_security.p2p.messages import ecb_field_value, is_ecb_scalar
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS_DIR = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models"
@@ -198,6 +198,8 @@ def _check(setting: Setting, entry: dict[str, Any], value: Value, ctx: Any) -> N
     if wire.path is WritePath.ECB:
         scalar: Any = params
         if body is not None:
+            scalar = ecb_field_value(cmd, body)
+        if body is not None and scalar is None:
             template = codec.write_template(entry, value)["params"]
             fields = [v for k, v in body.items() if template[k] != "$channel"]
             assert len({json.dumps(v) for v in fields}) == 1
@@ -206,7 +208,9 @@ def _check(setting: Setting, entry: dict[str, Any], value: Value, ctx: Any) -> N
     else:
         assert wire.value is None
         if wire.path is WritePath.DIRECT and is_ecb_scalar(cmd) and body is not None:
-            # An ECB command id goes DIRECT only when its body is not one scalar.
+            # An ECB command id goes DIRECT only when its body lacks the command's field
+            # and is not one scalar.
+            assert ecb_field_value(cmd, body) is None
             values = {json.dumps(v) for k, v in body.items() if k != "channel"}
             assert len(values) > 1
     assert [list(u) for u in wire.updates] == [list(u) for u in _updates(want)]

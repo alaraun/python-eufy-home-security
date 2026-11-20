@@ -173,6 +173,29 @@ def test_is_ecb_scalar() -> None:
     assert not messages.is_ecb_scalar(1167)  # a delay: default handler, not a scalar
 
 
+def test_every_ecb_value_field_belongs_to_an_ecb_command() -> None:
+    assert messages.ECB_VALUE_FIELDS
+    assert all(messages.is_ecb_scalar(cmd) for cmd in messages.ECB_VALUE_FIELDS)
+    assert all(spec.name for spec in messages.ECB_VALUE_FIELDS.values())
+
+
+@pytest.mark.parametrize(
+    ("cmd", "body", "value"),
+    [
+        (1400, {"open": 1, "value": 0}, 1),
+        (1400, {"value": 1}, None),  # the body lacks the command's field
+        (1400, {"open": None}, None),
+        (1403, {"value": 1}, None),
+        (1403, {"switch": "TRUE"}, 1),
+        (1403, {"switch": 1.0}, 1),
+        (1403, {"switch": "0"}, 0),
+        (1017, {"value": 1}, None),  # an ECB command with no known field
+    ],
+)
+def test_ecb_field_value(cmd: int, body: dict[str, object], value: object) -> None:
+    assert messages.ecb_field_value(cmd, body) == value
+
+
 def test_encode_ecb_scalar_frame_value_layout() -> None:
     frame = messages.encode_ecb_scalar_frame(
         SYNTHETIC.static_key, 1250, 0, "OWNERID", channel=1, seq=3

@@ -349,6 +349,10 @@ command id maps to:
 | default | none. The app rejects the command with −103. | — | everything else, including 1157–1175, 1276, 1277, 1296, 1298 |
 
 - `account_id` is the **owner's** user id, ASCII, NUL-terminated inside the 128-byte field.
+- `value` comes from one field of the handler's body, fixed per command (`open` for
+  1400, `brightness` for 1401, `volume` for 1230; the table is `ECB_VALUE_FIELDS` in
+  `p2p/messages.py`); the body's other fields are not sent
+  ([commands.md](commands.md#settings), library write path).
 - A command on the default handler is not a scalar: send it as a GCM payload object
   ([commands.md](commands.md)) or not at all.
 - Id 1224 (arming) is in the station scalar set: the eufy app arms a model whose

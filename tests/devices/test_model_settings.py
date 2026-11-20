@@ -405,17 +405,90 @@ def test_ecb_value_repeated_under_two_names_goes_ecb() -> None:
     assert (wire.cmd, wire.value) == (1249, 30)
 
 
+def _bare_1400_lights() -> list[tuple[str, str]]:
+    """``(model, context)`` for every bundled model whose manual light (``spotlight_switch``)
+    writes the bare command 1400, behind a HomeBase 3 or on its own, read from the files."""
+    root = Path(model_settings.__file__).parent / "data" / "models"
+    cases = []
+    for code in bundled_codes():
+        entry = json.loads((root / f"{code}.json").read_text(encoding="utf-8"))["settings"]
+        light = entry.get("spotlight_switch") or {}
+        for context in ("HB3", "standalone"):
+            write = light.get("write")
+            for item in light.get("contexts", []):
+                if context in item["names"] and "write" in item["entry"]:
+                    write = item["entry"]["write"]
+            if isinstance(write, dict) and write.get("cmd") == 1400 and "subCmd" not in write:
+                cases.append((code, context))
+    return cases
+
+
+BARE_1400_LIGHTS = _bare_1400_lights()
+
+
+def test_the_bare_1400_light_cases_come_from_the_files() -> None:
+    assert {("T8160", "HB3"), ("T8162", "HB3"), ("T8160", "standalone")} <= set(BARE_1400_LIGHTS)
+
+
+@pytest.mark.parametrize(("product_code", "context"), BARE_1400_LIGHTS)
+def test_a_bare_1400_light_is_an_ecb_scalar_of_its_open_field(
+    product_code: str, context: str
+) -> None:
+    """The handler's body ``{value, open, type: 2}`` goes out as ECB 1400, value = ``open``."""
+    alone = context == "standalone"
+    settings = settings_of(product_code, None if alone else ConnectType.HB3, standalone=alone)
+    setting = settings["spotlight_switch"]
+    for on in (True, False):
+        wire = setting.encode(on, ALONE if alone else CHILD)
+        assert (wire.path, wire.cmd, wire.value) == (WritePath.ECB, 1400, int(on))
+
+
 @pytest.mark.parametrize(
-    ("switch", "value", "path"),
-    [(False, 0, WritePath.ECB), (True, 1, WritePath.ECB), (False, 1, WritePath.DIRECT)],
+    ("switch", "value", "sent"),
+    [
+        (False, 0, 0),
+        (True, 1, 1),
+        (False, 1, 0),
+        (True, 0, 1),
+        ("1", 0, 1),
+        ("true", 0, 1),
+        ("yes", 1, 0),
+        (1, 0, 1),
+        (2, 2, 0),
+        ([1], 1, 0),
+    ],
 )
-def test_ecb_value_repeated_as_a_bool_goes_ecb(switch: bool, value: int, path: WritePath) -> None:
-    """``{"switch": false, "value": 0}`` is one ECB value; two different numbers are not."""
+def test_a_flag_field_is_the_ecb_value_whatever_the_other_fields_hold(
+    switch: object, value: int, sent: int
+) -> None:
+    """1035 reads ``switch`` as a flag (true, 1, "1", "true" -> 1, else 0); ``value`` is unused."""
     recipe = {"cmd": 1035, "params": {"switch": switch, "value": value}}
     wire = model_settings._classify(recipe, recipe)
-    assert wire.path is path
-    if path is WritePath.ECB:
-        assert (wire.cmd, wire.value) == (1035, value)
+    assert (wire.path, wire.cmd, wire.value) == (WritePath.ECB, 1035, sent)
+
+
+@pytest.mark.parametrize(("open_", "sent"), [(1, 1), (0, 0), (True, 1), ("1", 1)])
+def test_the_command_s_field_wins_over_a_differing_field(open_: object, sent: int) -> None:
+    recipe = {"cmd": 1400, "params": {"value": 1 - sent, "open": open_, "type": 2}}
+    wire = model_settings._classify(recipe, recipe)
+    assert (wire.path, wire.cmd, wire.value) == (WritePath.ECB, 1400, sent)
+
+
+@pytest.mark.parametrize(
+    ("cmd", "body", "path", "value"),
+    [
+        (1230, {"value": 7}, WritePath.ECB, 7),  # the command's field (volume) is absent
+        (1230, {"value": 7, "mode": 2}, WritePath.DIRECT, None),
+        (1017, {"a": True, "b": 1}, WritePath.ECB, 1),  # an ECB command with no known field
+        (1017, {"a": 4, "b": 5}, WritePath.DIRECT, None),
+    ],
+)
+def test_a_body_without_the_command_s_field_must_hold_one_value(
+    cmd: int, body: dict[str, object], path: WritePath, value: int | None
+) -> None:
+    recipe = {"cmd": cmd, "params": body}
+    wire = model_settings._classify(recipe, recipe)
+    assert (wire.path, wire.value) == (path, value)
 
 
 def test_bool_ecb_value_is_zero_or_one() -> None:

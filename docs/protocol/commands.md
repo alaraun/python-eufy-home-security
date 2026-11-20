@@ -241,6 +241,7 @@ Two write schemes, chosen by command id ([session-crypto.md](session-crypto.md))
 | record auto-stop | 1251 | value | camera | **0 = on**, 1 = off; applies only when power mode is custom (2) | **[wire verified]** (written with read-back), meaning **[declared]** (not proven) |
 | clock format | 1253 | station | station | 0 = 12 h, 1 = 24 h | **[verified]** (wire); meaning from the vendor corpus |
 | hub speaker volume | 1235 | station | station | 0–100 | **[app]** (not in the dump, so not written) |
+| manual light | 1400 | channel + value | camera | 0/1 (the body's `open`) | **[declared]** (eufy app), not verified on hardware |
 
 **Couplings** **[verified]**: on a T8160, writing 1276 also sets 1210 and param
 6041, but writing 1210 moves only 1210. Writing 1045 also moves 1056, 1716 and 6014.
@@ -265,11 +266,18 @@ channel=…)` writes one setting of the addressed device's model file
 keyed by the vendor identifier. The value is validated against the setting's domain,
 the handler's write codec is rendered for the device (station, station child on its
 channel, or a standalone camera on its own channel) and sent on the path the codec
-names: an ECB scalar frame for an ECB command with one value field, a `0x0546`
-(1350) DeviceMsgBean whose `cmd` is the codec's `subCmd`, the 1700 wrapper with its
-`subCmd` ([below](#the-1700-wrapper-a-standalone-devices-commands-verified)), or a
-DeviceMsgBean of the codec's own command (not observed on hardware). A codec that goes
-to the cloud, stays in the app or uses another transport is not sent: such a setting
+names: an ECB scalar frame for an ECB command, a `0x0546` (1350) DeviceMsgBean whose
+`cmd` is the codec's `subCmd`, the 1700 wrapper with its `subCmd`
+([below](#the-1700-wrapper-a-standalone-devices-commands-verified)), or a DeviceMsgBean
+of the codec's own command (not observed on hardware). An ECB scalar's value is the
+codec body's field for that command, as the eufy app reads it (`open` for 1400,
+`brightness` for 1401, `switch` for 1403; a switch field such as 1403's sends 1 for
+`true`, `1`, `"1"` or `"true"`, else 0), and the body's other fields are not sent: the
+manual light's `{value, open, type: 2}` goes out as ECB 1400 with `open` **[declared]**
+(eufy app), not verified on hardware. A body without that field (or a command with
+none) must hold one value, perhaps under several names; otherwise the codec goes out as
+a DeviceMsgBean of its own command. A codec that goes to the cloud, stays in the app or
+uses another transport is not sent: such a setting
 is not writable and says why. A rejection raises the typed error; nothing is read
 back. After a send, the parameter values the codec's `update` names are merged into
 the cached dump, as the app does, until the next real dump replaces them. The
