@@ -18,6 +18,12 @@ API. From 0.1.0 on, release-please writes the entries from the conventional comm
 * the Wall Light Cam S100 (T84A1) manual light is writable when standalone by [@fuatakgun](https://github.com/fuatakgun) in [#194](https://github.com/alaraun/python-eufy-home-security/issues/194) ([46bd078](https://github.com/alaraun/python-eufy-home-security/commit/46bd0787e4a359a14080c60244f74eb2e1da7756))
 * the Wall Light Cam S100 (T84A1) microphone switch is writable ([46bd078](https://github.com/alaraun/python-eufy-home-security/commit/46bd0787e4a359a14080c60244f74eb2e1da7756))
 
+
+### New contributors
+
+* [@TheRudin](https://github.com/TheRudin) made their first contribution in [PR 190](https://github.com/alaraun/python-eufy-home-security/pull/190)
+* [@fuatakgun](https://github.com/fuatakgun) made their first contribution in [PR 194](https://github.com/alaraun/python-eufy-home-security/pull/194)
+
 ## [0.4.14](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.13...v0.4.14) (2026-11-19)
 
 
