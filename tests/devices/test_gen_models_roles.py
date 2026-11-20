@@ -211,6 +211,7 @@ def test_a_run_reads_the_shown_file_into_every_task(
         app_version="1",
         **{name: data / f"{name}.json" for name in ("labels", "trees", "titles", "released")},
         shown=data / "shown.json",
+        answers=None,
     )
     gen_models._generate_all(args, tmp_path, tmp_path / "out", quiet=True)
     expected = {"wifi_name": "page", "door": "card", "volume_card": "card", "charging": "card"}
