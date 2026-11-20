@@ -4950,11 +4950,11 @@ def _p(width: int, height: int) -> MediaFrame:
 
 
 class _EndingStream:
-    """One keyframe; ``closed`` reads ``ended`` from the moment it is delivered."""
+    """One keyframe; ``closed`` and ``ended`` take the given values once it is delivered."""
 
-    def __init__(self, *, ended: bool) -> None:
-        self.closed = False
-        self._ended = ended
+    def __init__(self, *, closed: bool, ended: bool) -> None:
+        self.closed = self.ended = False
+        self._then = (closed, ended)
         self._sent = False
 
     async def __aenter__(self) -> _EndingStream:
@@ -4969,19 +4969,27 @@ class _EndingStream:
     async def __anext__(self) -> MediaFrame:
         if self._sent:
             raise StopAsyncIteration
-        self._sent, self.closed = True, self._ended
+        self._sent = True
+        self.closed, self.ended = self._then
         return _key(b"held", 1280, 720)
 
 
-@pytest.mark.parametrize("ended", [False, True])
+@pytest.mark.parametrize(
+    ("closed", "ended"),
+    [
+        (False, False),
+        (True, False),  # queued before the stream failed: taken, as before the failure
+        (True, True),
+    ],
+)
 async def test_a_settled_keyframe_is_not_one_the_stream_end_released(
-    standalone_station: Station, monkeypatch: pytest.MonkeyPatch, *, ended: bool
+    standalone_station: Station, monkeypatch: pytest.MonkeyPatch, *, closed: bool, ended: bool
 ) -> None:
-    """A keyframe read after the stream closed was held until its idle end and may
-    predate the settle deadline: it is not taken."""
+    """A keyframe read after the stream ended by itself was held until its idle end and
+    may predate the settle deadline: it is not taken."""
 
     async def live(channel: int, **_kwargs: Any) -> _EndingStream:
-        return _EndingStream(ended=ended)
+        return _EndingStream(closed=closed, ended=ended)
 
     monkeypatch.setattr(standalone_station, "_session_live", live)
     settled = standalone_station._ptz._settled_keyframe(0, 0.0, wait=False)

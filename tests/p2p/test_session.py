@@ -82,6 +82,7 @@ from eufy_home_security.p2p.media import (
     Still,
     StillFormat,
     VideoCodec,
+    generate_media_ecc_key,
     generate_media_rsa_key,
 )
 from eufy_home_security.p2p.messages import (
@@ -116,8 +117,10 @@ from eufy_home_security.testing.station import (
     MEDIA_WIDTH,
     RSA_SESSION_KEY,
     SESSION_KEY,
+    EccMediaKey,
     FakeStation,
     audio_record,
+    ecc_video_record,
     frame_parts,
     media_keyframe,
     media_keyframe_parts,
@@ -3116,10 +3119,69 @@ async def test_the_held_frame_is_delivered_when_the_stream_goes_quiet(
     assert (await anext(stream)).data == MEDIA_KEYFRAME
     assert not stream.closed
     last = await anext(stream)
-    assert (last.data, stream.closed) == (MEDIA_PFRAME, True)
+    assert (last.data, stream.closed, stream.ended) == (MEDIA_PFRAME, True, True)
     assert (await anext(stream)).kind is MediaKind.AUDIO
     with pytest.raises(StopAsyncIteration):
         await anext(stream)
+
+
+async def test_a_consumer_close_after_the_end_discards_what_is_left(
+    station: FakeStation, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Frames the idle end left queued are not read after the client closes the stream,
+    and the end-of-stream line is logged once, at the end."""
+    _, stream, rsa_key = _rsa_stream(station, idle_timeout=0.2)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
+    for _ in range(2):
+        stream._feed(FrameType.AUDIO_FRAME, audio_record(MEDIA_AUDIO))
+    with caplog.at_level(logging.DEBUG, logger="eufy_home_security.p2p.session.media_stream"):
+        assert [(await anext(stream)).data for _ in range(2)] == [MEDIA_KEYFRAME, MEDIA_PFRAME]
+        await stream.aclose()
+        with pytest.raises(StopAsyncIteration):
+            await anext(stream)
+    summaries = [r for r in caplog.records if "closed after" in r.getMessage()]
+    assert len(summaries) == 1
+    assert "0 frame(s) dropped for a slow reader, 0 skipped" in summaries[0].getMessage()
+
+
+async def test_a_failed_or_closed_stream_has_not_ended(station: FakeStation) -> None:
+    """``ended`` names only an end the stream reached by itself."""
+    _, failed, _ = _rsa_stream(station)
+    failed._fail(ProtocolError("lost"))
+    _, closed, _ = _rsa_stream(station)
+    await closed.aclose()
+    _, ended, _ = _rsa_stream(station)
+    ended._end()
+    assert [(s.closed, s.ended) for s in (failed, closed, ended)] == [
+        (True, False),
+        (True, False),
+        (True, True),
+    ]
+
+
+async def test_a_live_stream_ended_by_its_idle_wait_stops_and_frees_the_slot(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The idle end with a held frame sends the stop and frees the media slot: the next
+    open goes through at once."""
+    monkeypatch.setattr(session_mod, "MEDIA_PING_INTERVAL", 9999)
+    monkeypatch.setattr(session_mod, "MEDIA_IDLE_TIMEOUT", 0.1)
+    station.live_ends_unpinged_after = 0.05
+    session = make_session(station, Provider(station))
+    try:
+        stream = await session.async_open_live(0)
+        frames = [frame async for frame in stream]
+        assert stream.ended
+        assert _video(frames)
+        await wait_until(lambda: station.received[-1]["cmd"] == 1004)
+        async with asyncio.timeout(2):
+            again = await session.async_open_live(0)
+            assert (await anext(again)).is_keyframe
+        await again.aclose()
+    finally:
+        await session.async_close()
 
 
 def _keyframe_in_two_parts(rsa_key: Any) -> tuple[bytes, bytes]:
@@ -3419,6 +3481,87 @@ async def test_a_held_pframe_whose_rest_is_lost_is_dropped(station: FakeStation)
         (MediaKind.VIDEO, MEDIA_KEYFRAME),
     ]
     assert (stream.dropped, stream.skipped) == (0, 2)
+
+
+@pytest.mark.parametrize("loss", ["queue_full", "undecodable"])
+async def test_lost_audio_keeps_the_held_pframe(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch, loss: str
+) -> None:
+    """Only lost video can take a held P-frame's rest: an audio record lost to a full
+    queue or that does not decode leaves the P-frame held and delivered."""
+    monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 2)
+    _, stream, rsa_key = _rsa_stream(station)
+    key = video_record(media_keyframe(rsa_key.public_key(), bytes(range(16))), keyframe=True)
+    stream._feed(FrameType.VIDEO_FRAME, key)
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
+    if loss == "queue_full":
+        # The second P-frame fills the queue (key, first P-frame) and is held.
+        stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
+        stream._feed(FrameType.AUDIO_FRAME, audio_record(MEDIA_AUDIO))
+    else:
+        stream._feed(FrameType.AUDIO_FRAME, audio_record(MEDIA_AUDIO)[:10])  # truncated
+    lost_audio = int(loss == "queue_full")
+    stream._end()
+    video = [f.data async for f in stream if f.kind is MediaKind.VIDEO]
+    assert video == [MEDIA_KEYFRAME] + [MEDIA_PFRAME] * (1 + lost_audio)
+    assert (stream.dropped, stream.skipped) == (lost_audio, 0)
+
+
+async def test_a_waiting_reader_gets_the_audio_behind_a_dropped_pframe(
+    station: FakeStation,
+) -> None:
+    """Dropping a held P-frame queues the audio held behind it and wakes the reader."""
+    _, stream, rsa_key = _rsa_stream(station, idle_timeout=5.0)
+    key = video_record(media_keyframe(rsa_key.public_key(), bytes(range(16))), keyframe=True)
+    head, tail = _in_two_records(MEDIA_PFRAME)
+    stream._feed(FrameType.VIDEO_FRAME, key)
+    stream._feed(FrameType.VIDEO_FRAME, head)
+    assert (await anext(stream)).data == MEDIA_KEYFRAME
+    stream._feed(FrameType.AUDIO_FRAME, audio_record(MEDIA_AUDIO))
+    reading = asyncio.ensure_future(anext(stream))
+    await asyncio.sleep(0.05)
+    assert not reading.done()
+    stream._feed(FrameType.VIDEO_FRAME, tail[:-10])  # truncated: does not decode
+    frame = await asyncio.wait_for(reading, 1.0)
+    assert frame.kind is MediaKind.AUDIO
+    await stream.aclose()
+
+
+async def test_another_streams_ecc_record_drops_the_held_pframe(station: FakeStation) -> None:
+    """An ECC record wrapped for another key re-arms the wait for a keyframe, so the
+    held P-frame's rest can no longer join it: the P-frame is dropped, not delivered
+    truncated."""
+    public_hex, ecc_key = generate_media_ecc_key()
+    mine = EccMediaKey.for_offer(public_hex)
+    other = EccMediaKey.for_offer(generate_media_ecc_key()[0])
+    stream = MediaStream(
+        make_session(station, Provider(station)),
+        command=1003,
+        channel=0,
+        decoder=MediaDecoder(ecc_private_key=ecc_key),
+        stop_body=lambda: (0, b""),
+        first_frame_timeout=1.0,
+        idle_timeout=1.0,
+    )
+    ecc = bytes([8, 0, 0, 1, 10, 0])  # media version 8: ECC
+
+    def record(body: bytes, wrap: EccMediaKey = mine, *, keyframe: bool = False) -> bytes:
+        return ecc_video_record(video_record(body, keyframe=keyframe), wrap)
+
+    head, tail = frame_parts(MEDIA_PFRAME, 2)
+    records = [
+        record(MEDIA_KEYFRAME, keyframe=True),
+        record(head),
+        record(MEDIA_PFRAME, other),
+        record(tail),
+        record(MEDIA_PFRAME),
+        record(MEDIA_KEYFRAME, keyframe=True),
+    ]
+    for payload in records:
+        stream._feed(FrameType.VIDEO_FRAME, payload, None, ecc)
+    stream._end()
+    assert [f.data async for f in stream] == [MEDIA_KEYFRAME] * 2
+    assert stream.skipped == 3  # the held head, its tail, the P-frame after it
 
 
 async def test_a_split_pframe_muxes_into_access_units_a_consumer_can_read(

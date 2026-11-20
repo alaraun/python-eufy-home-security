@@ -678,20 +678,23 @@ The library does the same: every video frame is held until the next decoded vide
 record, and a record that does not start with a start code while a frame is held is
 joined to it (shape outcome `continuation`; counted in `media_keyframe_continuations` for
 a keyframe-flagged part, in `media_pframes_without_start_code` for any other). Empty NAL
-units are removed from the joined frame, so a part that ends right after a start code
-keeps it. As in the app, the hold has no time limit and only a video record ends it:
+units are removed from the joined frame, so a start code at the end of a part that
+another part follows is kept; one at the end of the last part is removed. As in the app, the hold has no time limit and only a video record ends it:
 audio that arrives meanwhile is queued behind the held frame, and records dropped before
 decoding (another camera's on a HomeBase, another stream's keyframe, video skipped while
 waiting for a keyframe) leave it held. A frame no video record follows is delivered when
-the stream ends, by the station's end-of-playback frame or at the idle timeout; from
-that frame on `MediaStream.closed` is True, so a reader that times its frames (a pan/tilt
-preset image waiting for the camera to settle) can tell a frame the end released.
+the stream ends, by the station's end-of-playback frame or at the idle timeout, and
+`MediaStream.ended` is True from then on. At the idle timeout the queue is empty, so only
+the held frame and the audio behind it are read after that; at the end frame, the frames
+queued before it too. A reader that times its frames (a pan/tilt preset image waiting
+for the camera to settle) so tells a frame the idle end released.
 
 Where the library differs from the app, it does so to keep every delivered frame decodable:
 
 - A keyframe-flagged part joins a held keyframe only; after a P-frame it is a keyframe
   that did not decrypt (`media_keyframes_rejected`).
-- Once video was lost after the held frame (a record that did not decode, a full queue),
+- Once video was lost after the held frame (a record that did not decode, another
+  stream's ECC record, a full queue),
   a part may be the lost record's rest: it is not joined, and a held P-frame is dropped
   with the video up to the next keyframe rather than delivered truncated (counted in
   `media_frames_skipped_for_keyframe`, or `media_frames_dropped_for_reader` for a full

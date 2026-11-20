@@ -84,7 +84,7 @@ class MediaStream:
     decoded video record. When video is lost while a P-frame is held, the P-frame may
     miss its rest and is dropped with the video up to the next keyframe; a held keyframe
     is kept. A frame no video record follows is delivered when the stream ends, by the
-    station's end-of-playback frame or at ``idle_timeout``, after which :attr:`closed` is
+    station's end-of-playback frame or at ``idle_timeout``, after which :attr:`ended` is
     True. When a slow reader lets
     :data:`MEDIA_QUEUE_FRAMES` pile up, video is dropped until the next keyframe
     (counted in :attr:`dropped`); after a keyframe that does not decode, a frame with no
@@ -133,6 +133,7 @@ class MediaStream:
         self._wake = asyncio.Event()
         self._error: Exception | None = None
         self._closed = False
+        self._ended = False
         self._opened_at = time.monotonic()
         self._last_rx: float | None = None
         """When the last media record arrived, decodable or not (liveness)."""
@@ -175,9 +176,17 @@ class MediaStream:
 
     @property
     def closed(self) -> bool:
-        """Whether the stream has ended or was closed; after its end, the frames already
-        queued (the held last frame included) are still read."""
+        """Whether the stream has ended, failed or was closed; after its end or a failure,
+        the frames already queued (the held last frame included) are still read."""
         return self._closed
+
+    @property
+    def ended(self) -> bool:
+        """Whether the stream ended by itself: the station's end-of-playback frame or
+        ``idle_timeout`` without a record. Frames read from then on were queued or held
+        when it ended; a live stream has only its held last frame and the audio behind it
+        then. False for a stream the client closed or that failed."""
+        return self._ended
 
     def __aiter__(self) -> MediaStream:
         return self
@@ -257,9 +266,21 @@ class MediaStream:
         await self.aclose()
 
     async def aclose(self) -> None:
-        """Stop the stream at the station and release the session (idempotent)."""
-        if self._closed:
-            return
+        """Stop the stream at the station and release the session (idempotent). Frames
+        not read yet are discarded, also those its end left queued."""
+        closing = not self._closed
+        if closing:
+            self._log_summary()
+            self._closed = True
+        self._frames.clear()
+        self._held = None
+        self._held_audio = []
+        self._wake.set()
+        if closing:
+            self._session._media_slot.detach(self)
+
+    def _log_summary(self) -> None:
+        """The stream's end-of-stream line, once: how long it ran and what it lost."""
         _LOGGER.debug(
             "%s: media (cmd %d ch%d) closed after %.1fs; %d frame(s) dropped for a slow "
             "reader, %d skipped waiting for a keyframe",
@@ -270,12 +291,6 @@ class MediaStream:
             self.dropped,
             self.skipped,
         )
-        self._closed = True
-        self._frames.clear()
-        self._held = None
-        self._held_audio = []
-        self._wake.set()
-        self._session._media_slot.detach(self)
 
     def _feed(
         self,
@@ -389,6 +404,7 @@ class MediaStream:
         except _ForeignKeyframeError as err:
             self._need_keyframe = True  # the P-frames after it would not decode
             self._lagging = False
+            self._drop_held_pframe()  # nothing can join it while video waits for a keyframe
             if not self._started:
                 # Nothing pinned yet: most likely a keyframe of the previous stream. A
                 # stream that never decodes one is reported at the first-frame timeout.
@@ -561,7 +577,9 @@ class MediaStream:
 
     def _finish(self) -> None:
         """End the stream after the held frame and what is queued are delivered."""
+        self._log_summary()
         self._release_held()
+        self._ended = True
         self._closed = True
         self._wake.set()
         self._session._media_slot.detach(self)
