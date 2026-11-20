@@ -450,12 +450,15 @@ def test_the_runtime_text_does_not_depend_on_the_environment_s_order(tmp_path: P
 def test_the_runtime_probe_names_the_build_and_the_zone_and_locale_node_resolves() -> None:
     """The zone and locale as Node resolves them, so a host zone (/etc/localtime) counts."""
     env = {"PATH": os.environ["PATH"], "TZ": "Pacific/Kiritimati", "LC_ALL": "de_DE.UTF-8"}
-    probe, settings = json.loads(answers.runtime_version(shutil.which("node") or "node", env))
+    node = shutil.which("node") or "node"
+    probe, settings = json.loads(answers.runtime_version(node, env))
     versions, zone, locale, offsets, clock = json.loads(probe)
     assert {"node", "v8", "icu", "tz"} <= versions.keys()
     assert zone == "Pacific/Kiritimati"
     assert offsets == [-840] * 12
     assert clock.startswith("Wed Nov 15 2023 12:13:20 GMT+1400")
+    probe, _ = json.loads(answers.runtime_version(node, {**env, "TZ": "America/New_York"}))
+    assert json.loads(probe)[3] == [300] * 2 + [240] * 8 + [300] * 2  # a zone with summer time
     assert isinstance(locale, str)
     assert locale
     assert settings == [["LC_ALL", "de_DE.UTF-8"], ["TZ", "Pacific/Kiritimati"]]

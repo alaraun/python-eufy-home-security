@@ -226,6 +226,7 @@ def test_a_run_whose_node_runtime_cannot_be_asked_says_so_once_and_stores_nothin
     assert gen_models._generate_all(args, tmp_path, tmp_path / "out", quiet=True) == 0
     err = capsys.readouterr().err
     assert err.count("answers: cannot ask the Node runtime (") == 1
+    assert "answers: cannot ask the Node runtime (node exit 1); no job is stored\n" in err
     assert f"answers: 0 jobs replayed, 0 asked of Node, 5 asked without the store ({store})" in err
     assert {p.name: p.read_bytes() for p in store.iterdir()} == before
 
@@ -256,6 +257,12 @@ def test_the_runtime_is_asked_before_the_first_model_starts(
     gen_models.DRIVERS.close()  # as an earlier run leaves it
     assert gen_models._generate_all(args, tmp_path, tmp_path / "out", quiet=True) == 0
     assert events == ["runtime", *PNS]
+    events.clear()
+    args.answers = None  # --no-answers: Node is never asked about its runtime
+    unasked = gen_models.answers.AnswerStore(None, driver=gen_models.node.DRIVER, runtime=runtime)
+    monkeypatch.setattr(gen_models, "ANSWERS", unasked)
+    assert gen_models._generate_all(args, tmp_path, tmp_path / "out2", quiet=True) == 0
+    assert events == PNS
 
 
 @pytest.mark.timeout(60)
