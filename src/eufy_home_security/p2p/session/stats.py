@@ -165,13 +165,15 @@ class SessionStats:
     summed), the video up to the next keyframe included."""
     media_frames_skipped_for_keyframe: int = 0
     """Video frames skipped to the next keyframe after a keyframe that did not decode, a
-    frame with no NAL unit or a part with no frame to join (``MediaStream.skipped``
-    summed): pictures the viewer lost."""
+    frame with no NAL unit, a lost record (a held P-frame is dropped with it) or a part
+    whose frame already went out (``MediaStream.skipped`` summed): pictures the viewer
+    lost."""
     media_pframes_without_start_code: int = 0
-    """Non-keyframe video records whose data does not start with an Annex-B start code:
-    the rest of a frame a camera sends in several records (a HomeBase 2 camera). Each is
-    joined to the frame before it, as the app's player does; one with no frame to join
-    is dropped and video skips to the next keyframe."""
+    """Non-keyframe video records whose data does not start with an Annex-B start code,
+    an empty record included: the rest of a frame a camera sends in several records (a
+    HomeBase 2 camera). Each is joined to the frame before it, as the app's player does;
+    one whose frame already went out is dropped and video skips to the next keyframe. A
+    record skipped while video waits for a keyframe is not counted here."""
     state_frames_by_encryption: Mapping[str, int] = field(default_factory=dict)
     """State frames (0x044F, 0x047F, the alarm frames) decoded and taken, by encryption: on
     an RSA session its type, ``"clear"``, ``"type1"`` (the fixed static key), ``"type2"``

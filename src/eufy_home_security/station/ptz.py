@@ -550,7 +550,9 @@ class StationPtz:
         """The first keyframe of live video that arrives ``settle`` seconds from now.
 
         A keyframe from before then may show the camera still turning, so none is
-        returned instead: a stream that ends first raises ``DeviceTimeoutError``.
+        returned instead: a stream that ends first raises ``DeviceTimeoutError``. A
+        keyframe read after the stream closed is its held last frame, delivered at the
+        idle end, which may have arrived before the deadline: it is not taken either.
         """
         deadline = time.monotonic() + settle
         stream = await self._station._session_live(
@@ -560,7 +562,7 @@ class StationPtz:
         )
         async with stream:
             async for frame in stream:
-                if frame.is_keyframe and time.monotonic() >= deadline:
+                if frame.is_keyframe and time.monotonic() >= deadline and not stream.closed:
                     return frame.data
         raise DeviceTimeoutError(f"the stream ended before the camera settled ({settle:g}s)")
 

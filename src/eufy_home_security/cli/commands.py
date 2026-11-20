@@ -673,8 +673,8 @@ async def _save_stream(stream: MediaStream, prefix: Path, *, seconds: float | No
         print(f"Dropped {stream.dropped} frames: the writer fell behind", file=sys.stderr)
     if stream.skipped:
         print(
-            f"Skipped {stream.skipped} video frames waiting for a keyframe after one that "
-            "did not decode",
+            f"Skipped {stream.skipped} video frames waiting for a keyframe after a frame that "
+            "could not be delivered whole",
             file=sys.stderr,
         )
 

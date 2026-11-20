@@ -115,14 +115,16 @@ image = await station.async_preset_image(device_sn, preset=1)  # pan/tilt: turn,
 - A slow reader does not stall the session: past 250 buffered frames (video and
   audio together), new frames are dropped, video until the next keyframe, and
   counted in `stream.dropped` (`media_frames_dropped_for_reader`). A keyframe that
-  does not decode, a frame with no NAL unit or a part with no frame to join skips video
-  to the next keyframe, counted in `stream.skipped` (`media_frames_skipped_for_keyframe`).
+  does not decode, a frame with no NAL unit or a part whose frame already went out skips
+  video to the next keyframe, counted in `stream.skipped`
+  (`media_frames_skipped_for_keyframe`).
 - A recording ends on the station's **end-of-playback frame** (`0x0402` = 2, below):
   the frames already queued are delivered, then iteration stops. Only a recording
   that has delivered its first keyframe takes it, because the frame carries no stream
   id and an earlier playback's end can arrive just after the next open. Without one
   (a download, a lost frame) the stream ends after 3 s without a frame
-  (`idle_timeout`).
+  (`idle_timeout`); its last frame, still held ([frames in parts](#frames-in-parts-app)),
+  is delivered then. A HomeBase 3 sends no end frame after a 1024 download.
 - No frame within `first_frame_timeout` (20 s live, 10 s recording) raises
   `CommandNotAppliedError` when the station acknowledged the open, the owner-id
   case, and `DeviceTimeoutError` when it did not. Frames that arrive without a
@@ -672,26 +674,33 @@ sends the held frame to the decoder. A camera can so send one frame in several r
 a keyframe's parts each carry the keyframe flag, the same wrapped key and their own
 encrypted first 128 bytes; a P-frame's later parts are clear and carry no keyframe flag.
 
-The library does the same: every video frame is held until the next video record, and a
-record that does not start with a start code while a frame is held is joined to it
-(shape outcome `continuation`; counted in `media_keyframe_continuations` for a
-keyframe-flagged part, in `media_pframes_without_start_code` for any other). As in the
-app, the hold has no time limit and only a video record ends it: audio that arrives
-meanwhile is queued behind the held frame, and records dropped before decoding (another
-camera's on a HomeBase, another stream's keyframe) leave it held. A frame no video record
-follows is delivered when the station ends the stream (its end-of-playback frame); at
-the idle timeout the stream ends without it, so a frame's delivery never lags its arrival
-by more than one video record.
+The library does the same: every video frame is held until the next decoded video
+record, and a record that does not start with a start code while a frame is held is
+joined to it (shape outcome `continuation`; counted in `media_keyframe_continuations` for
+a keyframe-flagged part, in `media_pframes_without_start_code` for any other). Empty NAL
+units are removed from the joined frame, so a part that ends right after a start code
+keeps it. As in the app, the hold has no time limit and only a video record ends it:
+audio that arrives meanwhile is queued behind the held frame, and records dropped before
+decoding (another camera's on a HomeBase, another stream's keyframe, video skipped while
+waiting for a keyframe) leave it held. A frame no video record follows is delivered when
+the stream ends, by the station's end-of-playback frame or at the idle timeout; from
+that frame on `MediaStream.closed` is True, so a reader that times its frames (a pan/tilt
+preset image waiting for the camera to settle) can tell a frame the end released.
 
 Where the library differs from the app, it does so to keep every delivered frame decodable:
 
 - A keyframe-flagged part joins a held keyframe only; after a P-frame it is a keyframe
   that did not decrypt (`media_keyframes_rejected`).
 - Once video was lost after the held frame (a record that did not decode, a full queue),
-  a part may be the lost record's rest: it is not joined.
-- A part with no frame to join is dropped (shape outcome `part_dropped`, counted in
-  `media_pframes_without_start_code`) and video skips to the next keyframe
-  (`media_frames_skipped_for_keyframe`), so no delivered frame lacks a start code.
+  a part may be the lost record's rest: it is not joined, and a held P-frame is dropped
+  with the video up to the next keyframe rather than delivered truncated (counted in
+  `media_frames_skipped_for_keyframe`, or `media_frames_dropped_for_reader` for a full
+  queue). A held keyframe is kept.
+- A part whose frame already went out (audio records filled the hold first) is dropped
+  (shape outcome `part_dropped`, counted in `media_pframes_without_start_code`) and video
+  skips to the next keyframe (`media_frames_skipped_for_keyframe`), so no delivered frame
+  lacks a start code. A part that arrives while video waits for a keyframe is skipped
+  with it and counted only in `media_frames_skipped_for_keyframe`.
 
 Expected on HomeBase 2 cameras, whose diagnostics show keyframe-flagged records without a
 start code under the keyframe's own wrapped key and with its stream time, and non-keyframe
@@ -776,8 +785,8 @@ reads the record's XZYH subheader, byte 0 the **media version** `v` and byte 3 t
   counts the video lost to such rejections (a picture that freezes), apart from
   `media_frames_dropped_for_reader` (a slow consumer), and
   `media_pframes_without_start_code` the non-keyframe records without a start code (the
-  later parts of a frame sent in several records, joined to it; see
-  [frames in parts](#frames-in-parts-app)). No key material is kept. An extra
+  later parts of a frame sent in several records, joined to it or dropped; an empty
+  record counts too; see [frames in parts](#frames-in-parts-app)). No key material is kept. An extra
   live session's media counts into its station session's figures.
 
 ## Streaming quality **[verified]**

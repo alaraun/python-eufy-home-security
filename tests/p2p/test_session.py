@@ -2576,8 +2576,7 @@ async def test_recording_plays_to_its_end(
         started = time.monotonic()
         frames = [frame async for frame in stream]
         assert (time.monotonic() - started < 1.0) is end_frame
-        # Without the end frame, the last frame waits for a video record that never comes.
-        assert len(_video(frames)) == station.recording_frames - (not end_frame)
+        assert len(_video(frames)) == station.recording_frames
         assert stream.closed
         opened = next(o for o in station.received if o["cmd"] == command)
         assert opened["payload"]["filepath"] == "/zx/clip.zxvideo"
@@ -2632,8 +2631,7 @@ async def test_a_recording_without_an_end_frame_ends_after_the_default_idle_wait
             return [frame async for frame in stream]
 
         frames = await asyncio.wait_for(drain(), 3.0)
-        # The last frame waits for a video record that never comes.
-        assert len(_video(frames)) == station.recording_frames - 1
+        assert len(_video(frames)) == station.recording_frames
     finally:
         await session.async_close()
 
@@ -2904,8 +2902,8 @@ async def test_slow_reader_drops_video_until_the_next_keyframe(
                 frame = await anext(stream)
                 if frame.kind is MediaKind.VIDEO:
                     later.append(frame)
-            # At most the frame held when the queue filled, then the next keyframe.
-            assert len(later) <= 2
+            # A keyframe held when the queue filled (a held P-frame is dropped), then the next.
+            assert all(frame.is_keyframe for frame in later)
     finally:
         await session.async_close()
 
@@ -3104,16 +3102,22 @@ async def test_a_keyframe_sent_in_parts_is_joined_into_one_picture(
     assert outcomes[outcomes.index("keyframe") + 1] == "continuation"
 
 
-async def test_a_keyframe_no_video_record_follows_is_not_delivered(
+async def test_the_held_frame_is_delivered_when_the_stream_goes_quiet(
     station: FakeStation,
 ) -> None:
-    """The stream ends at its idle timeout without the held keyframe, as the app's
-    player shows a frame only once the next one starts; a keyframe's delivery so never
-    lags its arrival by more than one record."""
+    """At the idle timeout the held last frame and the audio behind it are delivered
+    and the stream then ends; it reads as closed from that frame on, so a reader can
+    tell a frame the end released."""
     _, stream, rsa_key = _rsa_stream(station, idle_timeout=0.3)
     body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
     stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
     stream._feed(FrameType.AUDIO_FRAME, audio_record(MEDIA_AUDIO))
+    assert (await anext(stream)).data == MEDIA_KEYFRAME
+    assert not stream.closed
+    last = await anext(stream)
+    assert (last.data, stream.closed) == (MEDIA_PFRAME, True)
+    assert (await anext(stream)).kind is MediaKind.AUDIO
     with pytest.raises(StopAsyncIteration):
         await anext(stream)
 
@@ -3182,20 +3186,21 @@ async def test_another_cameras_record_between_keyframe_parts_does_not_split_them
 async def test_video_dropped_after_a_reader_overflow_counts_as_reader_lag(
     station: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The P-frames dropped until the next keyframe after an overflow are the reader's
-    lag (``dropped``), not frames skipped after one that did not decode."""
+    """The P-frames dropped until the next keyframe after an overflow, the held one
+    included, are the reader's lag (``dropped``), not frames skipped after one that did
+    not decode."""
     monkeypatch.setattr(media_stream_module, "MEDIA_QUEUE_FRAMES", 2)
     session, stream, rsa_key = _rsa_stream(station)
     body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
     stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
-    for _ in range(3):  # the third overflows the queue (the second is held)
+    for _ in range(3):  # the third overflows the queue and drops the held second
         stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
     assert [(await anext(stream)).is_keyframe for _ in range(2)] == [True, False]
     stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
     stats = session.stats()
-    assert (stream.dropped, stream.skipped) == (2, 0)
+    assert (stream.dropped, stream.skipped) == (3, 0)
     assert (stats.media_frames_dropped_for_reader, stats.media_frames_skipped_for_keyframe) == (
-        2,
+        3,
         0,
     )
 
@@ -3358,6 +3363,62 @@ async def test_a_part_after_lost_video_is_not_joined(station: FakeStation) -> No
     assert [f.data async for f in stream] == [MEDIA_KEYFRAME]
     stats = session.stats()
     assert (stats.media_keyframe_continuations, stats.media_keyframes_rejected) == (1, 1)
+
+
+SC = b"\x00\x00\x00\x01"
+TWO_SLICES = SC + b"\x02\x01" + b"A" * 50 + SC + b"\x02\x01" + b"B" * 50
+
+
+@pytest.mark.parametrize(
+    ("frame", "cut", "joined", "empty"),
+    [
+        # Split just after the inner start code: the head ends in it, the tail continues it.
+        (TWO_SLICES, TWO_SLICES.index(SC, 4) + 4, TWO_SLICES, 0),
+        # The tail carries an empty NAL unit: removed from the joined frame.
+        (
+            SC + b"\x02\x01" + b"A" * 50 + SC + SC + b"\x02\x01" + b"B" * 50,
+            40,
+            TWO_SLICES,
+            1,
+        ),
+    ],
+)
+async def test_empty_nal_units_are_removed_from_the_joined_frame(
+    station: FakeStation, frame: bytes, cut: int, joined: bytes, empty: int
+) -> None:
+    """Empty NAL units are removed once, from the joined frame: a start code that ends a
+    part is not one."""
+    session, stream, rsa_key = _rsa_stream(station)
+    body = media_keyframe(rsa_key.public_key(), bytes(range(16)))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(body, keyframe=True))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(frame[:cut], keyframe=False))
+    stream._feed(FrameType.VIDEO_FRAME, video_record(frame[cut:], keyframe=False))
+    stream._end()
+    assert [f.data async for f in stream] == [MEDIA_KEYFRAME, joined]
+    stats = session.stats()
+    assert (stats.media_empty_nals, stats.media_pframes_without_start_code) == (empty, 1)
+
+
+async def test_a_held_pframe_whose_rest_is_lost_is_dropped(station: FakeStation) -> None:
+    """A record that does not decode after a held P-frame may be its rest: the P-frame
+    is dropped with the video up to the next keyframe, never delivered truncated."""
+    _, stream, rsa_key = _rsa_stream(station)
+    key = video_record(media_keyframe(rsa_key.public_key(), bytes(range(16))), keyframe=True)
+    head, tail = _in_two_records(MEDIA_PFRAME)
+    stream._feed(FrameType.VIDEO_FRAME, key)
+    stream._feed(FrameType.VIDEO_FRAME, head)
+    stream._feed(FrameType.AUDIO_FRAME, audio_record(MEDIA_AUDIO))
+    stream._feed(FrameType.VIDEO_FRAME, tail[:-10])  # truncated: does not decode
+    stream._feed(FrameType.VIDEO_FRAME, video_record(MEDIA_PFRAME, keyframe=False))
+    stream._feed(FrameType.VIDEO_FRAME, key)
+    stream._end()
+    frames = [(f.kind, f.data) async for f in stream]
+    assert frames == [
+        (MediaKind.VIDEO, MEDIA_KEYFRAME),
+        (MediaKind.AUDIO, MEDIA_AUDIO),
+        (MediaKind.VIDEO, MEDIA_KEYFRAME),
+    ]
+    assert (stream.dropped, stream.skipped) == (0, 2)
 
 
 async def test_a_split_pframe_muxes_into_access_units_a_consumer_can_read(

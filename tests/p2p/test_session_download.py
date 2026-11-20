@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import time
 from collections.abc import AsyncIterator
 
 import pytest
 
 from eufy_home_security.exceptions import LiveStreamLimitError, UnsupportedError
+from eufy_home_security.p2p import session as session_module
 from eufy_home_security.p2p.clip import CLIP_CONTENT_TYPE
 from eufy_home_security.p2p.mpegts import TS_PACKET_LEN
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
@@ -82,6 +84,28 @@ async def test_a_recording_downloads_whole_on_an_extra_session_closed_after(
         assert not station.live_cameras, "no camera was woken"
     finally:
         await session.async_close()
+
+
+async def test_a_download_with_no_end_frame_keeps_its_last_frame(
+    station: FakeStation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A download that ends at the idle timeout (no end-of-playback frame, as a HomeBase 3
+    sends none for 1024) still writes every frame, so the clip is complete."""
+    monkeypatch.setattr(session_module, "MEDIA_IDLE_TIMEOUT", 0.3)
+    station.recording_frames = 10
+    station.playback_end_delay = None
+    session = _session(station)
+
+    async def write(chunk: bytes) -> None:
+        pass
+
+    try:
+        await session.async_connect()
+        clip = await session.async_download_recording(CLIP, 0, write)
+    finally:
+        await session.async_close()
+    judged = dataclasses.replace(clip, expected_frames=10)  # the history row's frame_num
+    assert (judged.video_frames, judged.complete) == (10, True)
 
 
 async def test_native_local_events_download_uses_1024_and_decodes_mpegts() -> None:

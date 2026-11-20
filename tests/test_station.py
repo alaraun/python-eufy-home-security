@@ -4949,6 +4949,49 @@ def _p(width: int, height: int) -> MediaFrame:
     return MediaFrame(kind=MediaKind.VIDEO, data=b"p", width=width, height=height)
 
 
+class _EndingStream:
+    """One keyframe; ``closed`` reads ``ended`` from the moment it is delivered."""
+
+    def __init__(self, *, ended: bool) -> None:
+        self.closed = False
+        self._ended = ended
+        self._sent = False
+
+    async def __aenter__(self) -> _EndingStream:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+    def __aiter__(self) -> _EndingStream:
+        return self
+
+    async def __anext__(self) -> MediaFrame:
+        if self._sent:
+            raise StopAsyncIteration
+        self._sent, self.closed = True, self._ended
+        return _key(b"held", 1280, 720)
+
+
+@pytest.mark.parametrize("ended", [False, True])
+async def test_a_settled_keyframe_is_not_one_the_stream_end_released(
+    standalone_station: Station, monkeypatch: pytest.MonkeyPatch, *, ended: bool
+) -> None:
+    """A keyframe read after the stream closed was held until its idle end and may
+    predate the settle deadline: it is not taken."""
+
+    async def live(channel: int, **_kwargs: Any) -> _EndingStream:
+        return _EndingStream(ended=ended)
+
+    monkeypatch.setattr(standalone_station, "_session_live", live)
+    settled = standalone_station._ptz._settled_keyframe(0, 0.0, wait=False)
+    if ended:
+        with pytest.raises(DeviceTimeoutError, match="before the camera settled"):
+            await settled
+    else:
+        assert await settled == b"held"
+
+
 async def test_a_held_size_keyframe_waits_out_the_climb() -> None:
     """A woken T8170's climb: the keyframe that opened the size the stream settled on."""
     climb = [
