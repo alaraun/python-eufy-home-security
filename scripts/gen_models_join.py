@@ -286,20 +286,26 @@ def _variants(
         _count(counts, "variant_of")
 
 
-def switches(pn: str, titles: Mapping[str, Any] | None) -> dict[str, dict[bool, str]]:
-    """``{identifier: {state: text}}``: the string properties the app shows as an on/off
-    switch for model ``pn``, with the text it writes for on (True) and off (False).
+def switches(pn: str, titles: Mapping[str, Any] | None) -> dict[str, dict[bool, str | bool]]:
+    """``{identifier: {state: value}}``: the string properties the app shows as an on/off
+    switch for model ``pn``, with the value it writes for on (True) and off (False).
 
-    From the title file's ``switches`` (``on``/``off``, a per-model pair under
-    ``models``); raises GeneratorError when the two texts are equal or not strings.
+    From the title file's ``switches`` (texts ``on``/``off``, a per-model pair under
+    ``models``) and ``bool_switches`` (the identifiers whose switch writes the JSON bool
+    itself); raises GeneratorError when the two texts are equal or not strings, or when
+    both lists name one identifier.
     """
-    out: dict[str, dict[bool, str]] = {}
+    out: dict[str, dict[bool, str | bool]] = {}
     for ident, rule in ((titles or {}).get("switches") or {}).items():
         texts = {**rule, **(rule.get("models") or {}).get(pn, {})}
         on, off = texts.get("on"), texts.get("off")
         if not isinstance(on, str) or not isinstance(off, str) or on == off:
             raise GeneratorError(f"{pn}: switch {ident} needs two distinct on/off texts")
         out[ident] = {True: on, False: off}
+    for ident in (titles or {}).get("bool_switches") or {}:
+        if ident in out:
+            raise GeneratorError(f"{pn}: switch {ident} is listed with texts and as a bool")
+        out[ident] = {True: True, False: False}
     return out
 
 

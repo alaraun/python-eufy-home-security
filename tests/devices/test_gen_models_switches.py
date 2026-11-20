@@ -135,6 +135,86 @@ def test_a_bool_typed_switch_is_also_written_with_the_apps_text(tmp_path: Path) 
     assert entry["write"]["params"] == {"switch": {"$map": {"false": True, "true": False}}}
 
 
+# A handler that turns the light on only for a JSON true, as the app's switch sends it:
+# every text, an open-string probe among them, reads as off.
+BOOL_HANDLER = """
+function parse(s) { return JSON.parse(s.slice(0, s.lastIndexOf("EOF;"))); }
+module.exports.controlDevice = function (s) {
+  const m = parse(s);
+  const ident = Object.keys(m.input)[0];
+  if (m.action !== "setProperty" || ident !== "spotlight_switch") return JSON.stringify({ data: {} });
+  const on = JSON.parse(m.input[ident])["payload-value"] === true ? 1 : 0;
+  return JSON.stringify({ data: { p2p: {
+    cmd: 1700, subCmd: 1400, params: { value: on },
+    update: { needUpdate: true, cmd: 1400, paramValue: String(on) } } } });
+};
+module.exports.deviceStatus = function (s) {
+  const m = parse(s);
+  const p = (m.device.params || []).find((x) => x.param_type === 1400);
+  if (!p) return JSON.stringify({ data: { p2p: {} } });
+  return JSON.stringify({ data: { p2p: { spotlight_switch: p.param_value === "1" } } });
+};
+"""
+BOOL_TITLES = {"bool_switches": {"spotlight_switch": {"source": "-"}}}
+
+
+def _bool_cache(tmp_path: Path) -> Path:
+    folder = tmp_path / PN
+    folder.mkdir()
+    td = {
+        "large_version": 3,
+        "profile": {"plugin_path": f"https://cdn.example/p/2024/05/06/x/{PN}Handle.mix.js"},
+        "properties": [
+            {
+                "identifier": "spotlight_switch",
+                "access_mode": "RW",
+                "data_type": {"type": "string", "specs": {}},
+            }
+        ],
+    }
+    (folder / "td.json").write_text(json.dumps(td), encoding="utf-8")
+    (folder / f"{PN}Handle.mix.js").write_text(BOOL_HANDLER, encoding="utf-8")
+    return tmp_path
+
+
+@pytest.mark.timeout(120)
+def test_a_string_switch_the_app_writes_as_a_json_bool_is_writable(tmp_path: Path) -> None:
+    """A switch whose app value is the JSON bool itself is swept with true/false."""
+    doc, _ = gen_models.generate(PN, _bool_cache(tmp_path), titles=BOOL_TITLES)
+    entry = doc["settings"]["spotlight_switch"]
+    assert (entry["kind"], entry["access"], entry["control"]) == ("bool", "rw", "switch")
+    assert (entry["write"]["cmd"], entry["write"]["subCmd"]) == (1700, 1400)
+    assert entry["write"]["params"] == {"value": "$v:int"}
+    assert entry["write"]["update"]["paramValue"] == "$v:str"
+    assert entry["read"]["param"] == 1400
+    assert {k: v for k, v in entry["read"]["map"].items() if k} == {"0": False, "1": True}
+
+
+@pytest.mark.timeout(120)
+def test_a_json_bool_switch_without_the_apps_data_stays_read_only(tmp_path: Path) -> None:
+    """The open-string probes read as off both times: no write is inferred."""
+    doc, _ = gen_models.generate(PN, _bool_cache(tmp_path), titles={})
+    entry = doc["settings"]["spotlight_switch"]
+    assert (entry["kind"], entry["access"]) == ("string", "ro")
+    assert entry["note"] == "handler ignores the value"
+
+
+def test_a_bool_switch_writes_the_json_bool_for_each_state() -> None:
+    assert join.switches(PN, BOOL_TITLES) == {"spotlight_switch": {True: True, False: False}}
+
+
+@pytest.mark.parametrize(("on", "off"), [(True, False), (1, 0)], ids=str)
+def test_switch_texts_must_be_strings(on: Any, off: Any) -> None:
+    with pytest.raises(join.GeneratorError, match="two distinct"):
+        join.switches(PN, {"switches": {"spotlight_switch": {"on": on, "off": off}}})
+
+
+def test_a_switch_listed_with_texts_and_as_a_bool_raises() -> None:
+    titles = {**BOOL_TITLES, "switches": {"spotlight_switch": {"on": "1", "off": "0"}}}
+    with pytest.raises(join.GeneratorError, match="with texts and as a bool"):
+        join.switches(PN, titles)
+
+
 def test_switch_texts_take_a_models_own_pair() -> None:
     titles = {
         "switches": {

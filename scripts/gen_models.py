@@ -1999,7 +1999,7 @@ def shown_places(shown: Mapping[str, Any]) -> dict[str, str]:
 
 def app_wire_values(
     props: list[dict[str, Any]],
-    switch_texts: Mapping[str, Mapping[bool, str]],
+    switch_texts: Mapping[str, Mapping[bool, str | bool]],
     screens: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, tuple[tuple[Any, Any], ...]]:
     """The values the app writes for the model's ``props``: a switch's text per state, an

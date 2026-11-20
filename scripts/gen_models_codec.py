@@ -104,7 +104,7 @@ screen writes another value than the public one, a switch's text for its state
 (``gen_models_join.screen_values``)."""
 
 
-def as_switch(prop: Mapping[str, Any], texts: Mapping[bool, str]) -> dict[str, Any]:
+def as_switch(prop: Mapping[str, Any], texts: Mapping[bool, str | bool]) -> dict[str, Any]:
     """A string property the app shows as a switch, typed as the bool it shows; any other
     property unchanged. A TD default equal to one of ``texts`` becomes that state."""
     if kind_of(prop) != "string":
