@@ -231,6 +231,34 @@ def test_a_run_whose_node_runtime_cannot_be_asked_says_so_once_and_stores_nothin
 
 
 @pytest.mark.timeout(60)
+def test_the_runtime_is_asked_before_the_first_model_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Asked in the parent, so the generating processes inherit the answer (one query, one
+    notice per run)."""
+    events: list[str] = []
+    store = tmp_path / "answers"
+
+    def runtime() -> str:
+        events.append("runtime")
+        return "v0"
+
+    fresh = gen_models.answers.AnswerStore(store, driver=gen_models.node.DRIVER, runtime=runtime)
+    monkeypatch.setattr(gen_models, "ANSWERS", fresh)
+
+    def generate(pn: str, *_: Any, **__: Any) -> Any:
+        events.append(pn)
+        return {"product_code": pn}, {}
+
+    monkeypatch.setattr(gen_models, "generate", generate)
+    args = _args(tmp_path, 1)
+    args.answers = store
+    gen_models.DRIVERS.close()  # as an earlier run leaves it
+    assert gen_models._generate_all(args, tmp_path, tmp_path / "out", quiet=True) == 0
+    assert events == ["runtime", *PNS]
+
+
+@pytest.mark.timeout(60)
 def test_several_jobs_build_in_worker_processes_and_report_each_failure(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-c", SEVERAL_JOBS, __file__, str(tmp_path)],

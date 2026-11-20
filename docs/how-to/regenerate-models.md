@@ -191,10 +191,10 @@ requests (each job runs in a fresh sandbox with a seeded `Math.random` and a fix
 clock), so `gen_models.py` keeps every reply in a store keyed by the SHA-256 of exactly
 those: Node's `process.versions` (Node, V8, ICU, time zone data), the time zone and
 locale Node resolves (from `TZ` or the host's `/etc/localtime`, from the locale
-variables), the environment variables a reply can depend on (`TZ`, `LANG`, `LANGUAGE`,
-every `LC_*`, `NODE_OPTIONS`, `NODE_ICU_DATA`), the bytes of
-`scripts/gen_models_driver.js` and of `<PN>Handle.mix.js`, and the requests as the driver
-receives them. A run replays every job it finds and asks Node for the rest:
+variables) with the zone's UTC offsets over a year, the environment variables a reply can
+depend on (`TZ`, `LANG`, `LANGUAGE`, every `LC_*`, `NODE_OPTIONS`, `NODE_ICU_DATA`), the
+bytes of `scripts/gen_models_driver.js` and of `<PN>Handle.mix.js`, and the requests as
+the driver receives them. A run replays every job it finds and asks Node for the rest:
 
 - a change to the Python side that leaves the requests as they were (how replies are
   read, joined or written) replays every job: a fix round costs the Python work only;
@@ -211,7 +211,7 @@ after a damaged or truncated spot. After a model is generated, its file holds th
 that run asked, so replies no request names any more are dropped; a model that fails
 keeps its earlier records too. A job whose key cannot be made (Node does not answer the
 runtime query, or the driver or handler cannot be read) goes to Node and is not stored,
-and its model drops nothing; a failed runtime query is reported once per process. A file
+and its model drops nothing; a failed runtime query is reported once per run. A file
 is written to a temporary name and renamed into place, and a store that cannot be written
 is reported and the run goes on without it. A run killed while it writes a file can leave
 a hidden `.<PN>.answers.<pid>.tmp` beside it, which no run reads; delete it. Do not fetch

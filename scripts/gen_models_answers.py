@@ -14,7 +14,8 @@ One file per product, ``<root>/<PN>.answers``: a header line, then one record pe
 does not match its digest, or whose reply does not fit the job is asked again; a damaged
 or truncated file loses the records from the damage on. After a product's run its file
 holds the jobs that run asked (and, when the product failed, the earlier records as
-well), written to a temporary file and renamed into place.
+well; the same when a job went to Node without a key), written to a temporary file and
+renamed into place.
 
 The replies are derived from vendor code: the store lives in the private cache
 (``.work/cache``), never in the repository or the package.
@@ -48,11 +49,16 @@ def file_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-# Node's build (Node, V8, ICU, time zone data) and the time zone and locale it resolves,
-# wherever they come from (TZ, LANG, /etc/localtime).
+# Node's build (Node, V8, ICU, time zone data), the time zone and locale it resolves,
+# wherever they come from (TZ, LANG, /etc/localtime), and the zone's offsets and its
+# rendering of the driver's fixed clock (``__clock`` in gen_models_driver.js): a zone Node
+# has no name for (TZ as a file path) still counts.
 RUNTIME_PROBE = (
     "const o = Intl.DateTimeFormat().resolvedOptions();"
-    " JSON.stringify([process.versions, o.timeZone, o.locale])"
+    " const offsets = Array.from({length: 12}, (_, m) =>"
+    " new Date(Date.UTC(2026, m, 15)).getTimezoneOffset());"
+    " JSON.stringify([process.versions, o.timeZone, o.locale, offsets,"
+    " new Date(1700000000000).toString()])"
 )
 
 
@@ -121,6 +127,11 @@ class AnswerStore:
         self._prefix: dict[str, bytes] = {}  # handler path -> key prefix, per product
         self._product: _Product | None = None
         self.stats = Stats()
+
+    def prepare(self) -> None:
+        """Ask the runtime now: forked processes started after it inherit the answer, so
+        the query (and a failure's notice) happens once per run."""
+        self._runtime_part()
 
     def open(self, name: str) -> None:
         """Start the product ``name``: load its stored replies. The driver and handler
@@ -206,10 +217,20 @@ class AnswerStore:
             except (OSError, subprocess.SubprocessError) as err:
                 self._runtime_failed = True
                 print(
-                    f"answers: cannot ask the Node runtime ({err}); no job is stored",
+                    f"answers: cannot ask the Node runtime ({_cause(err)}); no job is stored",
                     file=sys.stderr,
                 )
         return self._runtime_text
+
+
+def _cause(err: Exception) -> str:
+    """A failed runtime query in one line: the exit code and the first line Node printed."""
+    if isinstance(err, subprocess.CalledProcessError):
+        lines = (err.stderr or "").strip().splitlines()
+        return f"node exit {err.returncode}" + (f": {lines[0]}" if lines else "")
+    if isinstance(err, subprocess.TimeoutExpired):
+        return f"node gave no answer within {err.timeout:g} s"
+    return str(err)
 
 
 def _replies(digest: str, blob: bytes, count: int) -> list[Any] | None:

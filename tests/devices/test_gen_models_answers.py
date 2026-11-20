@@ -12,8 +12,11 @@ import hashlib
 import importlib.util
 import json
 import os
+import random
 import shutil
+import string
 import sys
+import tempfile
 import zlib
 from pathlib import Path
 from types import ModuleType
@@ -448,12 +451,56 @@ def test_the_runtime_probe_names_the_build_and_the_zone_and_locale_node_resolves
     """The zone and locale as Node resolves them, so a host zone (/etc/localtime) counts."""
     env = {"PATH": os.environ["PATH"], "TZ": "Pacific/Kiritimati", "LC_ALL": "de_DE.UTF-8"}
     probe, settings = json.loads(answers.runtime_version(shutil.which("node") or "node", env))
-    versions, zone, locale = json.loads(probe)
+    versions, zone, locale, offsets, clock = json.loads(probe)
     assert {"node", "v8", "icu", "tz"} <= versions.keys()
     assert zone == "Pacific/Kiritimati"
+    assert offsets == [-840] * 12
+    assert clock.startswith("Wed Nov 15 2023 12:13:20 GMT+1400")
     assert isinstance(locale, str)
     assert locale
     assert settings == [["LC_ALL", "de_DE.UTF-8"], ["TZ", "Pacific/Kiritimati"]]
+
+
+ZONEINFO = Path("/usr/share/zoneinfo")
+
+
+@pytest.mark.needs_node
+@pytest.mark.skipif(not (ZONEINFO / "Pacific" / "Kiritimati").is_file(), reason="no zoneinfo")
+@pytest.mark.parametrize("form", [":{}", "{}"])
+def test_a_zone_file_named_by_path_counts_by_its_content(form: str) -> None:
+    """TZ as a path gives Node no zone name: the offsets still tell the zones apart. (Node
+    reads a TZ path only when it holds no digit, so the file is not under ``tmp_path``.)"""
+    base = Path(tempfile.gettempdir())
+    if any(c.isdigit() for c in str(base)):
+        pytest.skip("the temporary directory's path holds a digit")
+    folder = base / ("eufy-zone-" + "".join(random.choices(string.ascii_lowercase, k=12)))
+    folder.mkdir()
+    try:
+        zone = folder / "localtime"
+        env = {"PATH": os.environ["PATH"], "TZ": form.format(zone)}
+        texts = []
+        for name in ("Pacific/Kiritimati", "Europe/Tallinn"):
+            zone.write_bytes((ZONEINFO / name).read_bytes())
+            texts.append(answers.runtime_version(shutil.which("node") or "node", env))
+    finally:
+        shutil.rmtree(folder)
+    assert texts[0] != texts[1]
+
+
+@pytest.mark.parametrize(
+    ("err", "cause"),
+    [
+        (
+            answers.subprocess.CalledProcessError(9, ["node"], "", "node: bad option\nmore\n"),
+            "node exit 9: node: bad option",
+        ),
+        (answers.subprocess.CalledProcessError(1, ["node"], "", ""), "node exit 1"),
+        (answers.subprocess.TimeoutExpired(["node"], 30), "node gave no answer within 30 s"),
+        (FileNotFoundError(2, "No such file or directory"), "[Errno 2] No such file or directory"),
+    ],
+)
+def test_a_failed_runtime_query_is_named_in_one_line(err: Exception, cause: str) -> None:
+    assert answers._cause(err) == cause
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="a shell-script node")

@@ -2438,6 +2438,8 @@ def _generate_all(args: argparse.Namespace, cache: Path, out: Path, *, quiet: bo
     pns = args.product_codes or sorted(d.name for d in cache.iterdir() if d.is_dir())
     out.mkdir(parents=True, exist_ok=True)
     ANSWERS.root = args.answers  # before the fork: the generating processes inherit it
+    if args.answers is not None:
+        ANSWERS.prepare()  # once per run, inherited too
     tasks = [
         _Task(
             pn,
