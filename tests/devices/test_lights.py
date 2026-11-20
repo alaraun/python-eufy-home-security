@@ -213,6 +213,15 @@ def test_only_the_hardware_proven_lamp_writes_are_verified(
     assert light.product_code == code.upper()
 
 
+def test_a_range_brightness_takes_its_own_verified_grade(monkeypatch: pytest.MonkeyPatch) -> None:
+    entry = ("T8170", STANDALONE_CONTEXT, "spotlight_brightness_level")
+    monkeypatch.setattr(lights, "_VERIFIED_WRITES", {entry: "written and read back"})
+    (light,) = lights_of("T8170", standalone=True)
+    assert light.brightness is not None
+    assert light.brightness.evidence.support is Support.VERIFIED
+    assert light.evidence.support is Support.DECLARED
+
+
 def test_a_range_brightness_carries_the_model_s_step() -> None:
     (light,) = lights_of("T8170", standalone=True)
     assert light.brightness is not None
