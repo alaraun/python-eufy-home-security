@@ -4,6 +4,17 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.16](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.15...v0.4.16) (2026-11-20)
+
+
+### Bug Fixes
+
+* **p2p:** a P-frame a camera sends in several records (HomeBase 2) is joined into one picture, so go2rtc no longer gets empty video packets ([issue 183](https://github.com/alaraun/homeassistant-eufy-home-security/issues/183)) ([f8eaac7](https://github.com/alaraun/python-eufy-home-security/commit/f8eaac7ddd1240a070ad1c361d861634b6ba5974))
+* **p2p:** end a recording download on the station's end-of-download frame, wait out a station's pause, and report why a clip is incomplete (MediaClip.incomplete_reason) ([db2a907](https://github.com/alaraun/python-eufy-home-security/commit/db2a907045baed68df6fe8c0b35a215d82e7117a))
+* **p2p:** end a recording playback on the station's end frame under the static key too, not only the GCM form ([d624880](https://github.com/alaraun/python-eufy-home-security/commit/d6248803de75c63af04a77ff3e5aab8d205b50c2))
+* **station:** grade live and pan/tilt UNKNOWN where the eufy app routes a device over WebRTC, and follow the station's firmware on each device-list refresh ([e78473e](https://github.com/alaraun/python-eufy-home-security/commit/e78473e43c658530ed5592711e6a3e50896ad883))
+* the manual light (spotlight_switch) on 25 camera models is sent as the eufy app sends it and no longer fails as "not supported"; ECB setting results are read on the request channel only ([issue 190](https://github.com/alaraun/homeassistant-eufy-home-security/issues/190)) ([b780add](https://github.com/alaraun/python-eufy-home-security/commit/b780adde17aa517f10a89752e78b0df8ffdcb70f))
+
 ## [0.4.15](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.14...v0.4.15) (2026-11-20)
 
 
