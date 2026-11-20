@@ -571,8 +571,9 @@ class SessionCache:
         (:func:`~.cloud.models.device_cache_entry`): the member's e-mail and phone, MAC
         addresses and the like never reach the store. The cloud's ``params`` snapshot
         is kept for a station (its settings the P2P dump lacks are read from it) and a
-        device reached on demand (:func:`~.devices.connects_on_demand`), whose state comes
-        from it between sessions; a paired device reports its own over P2P."""
+        device on the eufy app's on-demand list (:func:`~.devices.connects_on_demand`),
+        whose state comes from it between sessions; a paired device reports its own over
+        P2P."""
         self._doc["devices"] = _device_entries(raw_devices)
 
     def station_serials(self) -> list[str]:

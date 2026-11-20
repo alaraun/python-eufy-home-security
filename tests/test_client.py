@@ -1352,23 +1352,25 @@ async def test_a_mains_station_only_its_servers_reach_is_offered_as_local(
 
 
 DECLARED_BATTERY_SN = "T81A0P2000012345"
-"""A standalone camera off the app's on-demand list whose settings declare a battery."""
-WIRED_SN = "T84A1P2000012345"
-"""A standalone wired camera: its settings declare no battery."""
+"""A standalone camera off the app's on-demand list whose settings declare the battery
+device flag."""
+HELD_SN = "T8203P2000012345"
+"""A standalone doorbell off the list whose settings do not declare the flag: held."""
 
 
 @pytest.mark.usefixtures("servers")
-async def test_a_station_whose_settings_declare_a_battery_is_not_probed_through_its_servers(
+async def test_a_station_whose_settings_declare_the_battery_flag_is_not_probed_through_its_servers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The setup probe and the choice follow the stations' on-demand rule: a camera off
-    the app's list whose settings declare a battery is not woken; a wired one is probed."""
+    the app's list whose settings declare the battery device flag is not woken; a doorbell
+    without the flag is probed."""
     _lan_answers(monkeypatch)
     punches = Punches(monkeypatch)
     cloud = FakeCloud(
         devices=[
             station_device(DECLARED_BATTERY_SN, did=BATTERY_DID, name="Wall light"),
-            station_device(WIRED_SN, did=OTHER_DID, name="Wired"),
+            station_device(HELD_SN, did=OTHER_DID, name="Doorbell"),
         ]
     )
     async with aiohttp.ClientSession() as http:
@@ -1376,11 +1378,11 @@ async def test_a_station_whose_settings_declare_a_battery_is_not_probed_through_
         choices = {c.serial: c for c in await eufy.async_station_choices()}
         await eufy.async_close()
 
-    battery, wired = choices[DECLARED_BATTERY_SN], choices[WIRED_SN]
+    battery, held = choices[DECLARED_BATTERY_SN], choices[HELD_SN]
     assert (battery.connects_on_demand, battery.rendezvous) == (True, None)
-    assert (wired.connects_on_demand, wired.rendezvous) == (False, False)
+    assert (held.connects_on_demand, held.rendezvous) == (False, False)
     assert punches.probed == [OTHER_DID]
-    assert _dsk_calls(cloud) == [f"dsk:{redact_serial(WIRED_SN)}"]
+    assert _dsk_calls(cloud) == [f"dsk:{redact_serial(HELD_SN)}"]
 
 
 @pytest.mark.usefixtures("servers")
@@ -2403,13 +2405,14 @@ async def test_on_demand_station_discover_and_start(sn: str) -> None:
     [
         ("T8170P0000000000", True, True),  # on the app's list
         ("T8153P0000000000", True, None),  # on the app's list, no settings
-        ("T81A0P0000000000", True, True),  # off the list, settings declare a battery
-        ("T84A1P0000000000", False, False),  # wired wall light: settings without one
+        ("T81A0P0000000000", True, True),  # off the list, the battery device flag
+        ("T84A1P0000000000", False, False),  # wired wall light: the flag declared False
+        ("T8203P0000000000", False, True),  # a doorbell listing a battery, without the flag
         ("T8174P0000000000", False, None),  # a camera without settings: unknown
         ("T8030P0000000000", False, None),  # a HomeBase: not a camera or doorbell
     ],
 )
-async def test_a_station_is_reached_on_demand_by_the_app_list_or_a_declared_battery(
+async def test_a_station_is_reached_on_demand_by_the_app_list_or_the_battery_device_flag(
     sn: str, on_demand: bool, battery: bool | None
 ) -> None:
     cloud = FakeCloud(devices=[standalone_device(sn)])
@@ -3364,16 +3367,19 @@ async def test_an_unbundled_model_is_listed_read_only_after_one_request() -> Non
     assert "login" not in cloud.calls
 
 
+# T81A0: a serial prefix whose bundled settings declare the flag; the cloud's code wins.
+@pytest.mark.parametrize("sn", ["T8174P0000000000", "T81A0P0000000000"])
 @pytest.mark.parametrize("listed_battery", [True, False])
 async def test_an_unbundled_station_keeps_a_held_session_whatever_its_listing(
-    listed_battery: bool,
+    sn: str, listed_battery: bool
 ) -> None:
-    """The decision reads bundled settings only: a cloud listing that may arrive on a
-    later discovery cannot change it after the station is built."""
+    """The decision reads bundled settings of the cloud's product code only: a cloud
+    listing that may arrive on a later discovery cannot change it after the station is
+    built."""
     td = unbundled_td()
     if listed_battery:
         td["properties"].append(range_property(BATTERY_PROPERTY, 0, 100, unit="%"))
-    device = standalone_device("T8174P0000000000", device_new_pn=UNBUNDLED)
+    device = standalone_device(sn, device_new_pn=UNBUNDLED)
     cloud = FakeCloud(devices=[device], things={UNBUNDLED: td})
     async with aiohttp.ClientSession() as http:
         eufy = account(http, cloud)

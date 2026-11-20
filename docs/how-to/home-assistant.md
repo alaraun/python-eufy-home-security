@@ -171,7 +171,7 @@ provides where it lives.
 | `cloud.listed.<region>` | how many devices the region's last device list held, and when | on every device-list fetch that asked the region |
 | `replaced` | when another client's login ended the session | set by a kick-out; blocks every non-forced login until `async_login(force=True)` or `async_reauthenticate(…, take_over=True)` |
 | `stations.<serial>` | the owner's account id, the ECC private key of each cipher fetched for it (`ciphers`) and its RSA private key when served (`rsa_ciphers`), `cipher_id` (the cipher the station names in its handshake: 40 on a HomeBase 3, 98 on a T8170), the key-refresh latch, a standalone camera's device session key (`dsk`, with its expiry), how its last link came up (`link_path`: `lan` / `rendezvous`, with `lan_reply_blocked: true` when that link needed a punch because its LAN reply was blocked) and each camera's preset slots (`presets`) | keys on a P2P handshake failure: one fetch, then latched until a handshake succeeds, the latch is reset, or 24 h pass. `dsk` when a wake needs it and less than 5 min of it remain; `link_path` (and `lan_reply_blocked`) when a link comes up on another path or flag than the stored one, dropped when a whole device list (fetched, or the cached one) no longer names the station, kept on a list the cloud did not answer whole (`device_list_source` `fallback` / `unsent`); a cache without it loads as before; `presets` on each preset read that differs |
-| `devices` | the `get_devs_list` entries, each reduced to the fields `CloudDevice` reads (serials, type, name, channel, DID, IP, firmware versions, `app_conn`, the product code `device_new_pn`, the member's `admin_user_id` and `member_type`, and `cloud_region`, the region that listed it); the cloud's `params` snapshot for a station and a device reached on demand, and a station's `time_zone`. The member's e-mail and phone, MAC addresses and the rest never reach the store | only on `async_discover(refresh=True)`; an entry stored with more fields is reduced on load |
+| `devices` | the `get_devs_list` entries, each reduced to the fields `CloudDevice` reads (serials, type, name, channel, DID, IP, firmware versions, `app_conn`, the product code `device_new_pn`, the member's `admin_user_id` and `member_type`, and `cloud_region`, the region that listed it); the cloud's `params` snapshot for a station and a device on the eufy app's on-demand list (`devices.connects_on_demand`), and a station's `time_zone`. The member's e-mail and phone, MAC addresses and the rest never reach the store | only on `async_discover(refresh=True)`; an entry stored with more fields is reduced on load |
 | `push` | FCM credentials, the registered token, recent push ids and guard-mode times | on push start; delivery state written at most 30 s after it changes, and on close |
 | `refresh_attempts` | when the owner id (account-wide) and each station's cipher key were last force-fetched | with those fetches |
 | `throttle` | hold-off end times (requests, logins) and recent login attempts | when the cloud throttles, and on every login |
@@ -465,7 +465,7 @@ and opens no session:
 | `reachable_via` | `ConnectPath.LAN` (`"lan"`) if the station answered LAN discovery, `ConnectPath.RENDEZVOUS` (`"rendezvous"`) if a punch through its rendezvous servers reached it (another subnet behind a stateful gateway, or another site; see the network section), None if neither did |
 | `reach` | `Reach.LOCAL` when `reachable_via` is set, else `Reach.REMOTE`. A station reached through its servers gets the same full session as one on the LAN |
 | `rendezvous` | the rendezvous probe's outcome: True (reached, or a built station whose last link came through the servers: its last link of this run, or before the first the path stored from an earlier run), False (no punch within the probe's time), None (not tried or not finished: it answered the LAN probe, it is reached on demand, it lists no servers, its DSK could not be fetched, it is built and its last link did not come through the servers, or its probe was still running when the probe budget ended) |
-| `connects_on_demand` | a battery station reached on demand, by the rule a built station follows (the eufy app's list, or a camera or doorbell whose bundled settings declare a battery); one that did not answer the LAN probe is **not** probed through its servers, since the punch would wake it |
+| `connects_on_demand` | a battery station reached on demand, by the rule a built station follows (the eufy app's list, or a camera or doorbell whose bundled settings declare it a battery device); one that did not answer the LAN probe is **not** probed through its servers, since the punch would wake it |
 | `sub_devices` | the cameras and sensors paired to it; they are included with it |
 | `supported` | whether the device catalog knows the model |
 | `enabled_by_default` | local **and** supported |
@@ -701,9 +701,11 @@ A `DataUpdateCoordinator[StationState]` per station:
 - **A battery station (`station.connects_on_demand`) must not be polled over P2P.** A
   held session keeps a battery camera awake, so the library holds none for it: the
   prefixes the eufy app does not reconnect (`ON_DEMAND_PREFIXES`, a T8170 among them)
-  and every camera or doorbell whose bundled settings declare a battery (a T81A0).
+  and every camera or doorbell whose bundled settings declare it a battery device
+  (`device_is_battery_device` with the default True: a T81A0).
   Gate polling on `station.connects_on_demand`, the decision taken, not on
-  `has_battery()`, which also reads a cloud-listed model the rule leaves held:
+  `has_battery()`, which is also True for models the rule leaves held (a T8203 doorbell,
+  a cloud-listed model):
   - `station.async_update()` returns its state **without waking it** (the cloud
     snapshot, pushes, the last session); only `async_update(wake=True)` reads it live.
     Keep the same coordinator and poll interval: the call is free.

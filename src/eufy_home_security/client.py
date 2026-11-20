@@ -341,7 +341,7 @@ class EufySecurity:
         per end, and a change of guard mode to a disarmed mode ends an alarm.
 
         A station reached on demand (a battery device: on the eufy app's list, or a
-        camera or doorbell whose bundled settings declare a battery,
+        camera or doorbell whose bundled settings declare it a battery device,
         :func:`~.devices.model_settings.reached_on_demand`) holds no session; the
         decision is taken when the station is built, and the setup probe of
         :meth:`async_station_choices` takes the same one. Its state comes from

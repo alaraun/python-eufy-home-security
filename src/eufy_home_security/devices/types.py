@@ -255,7 +255,7 @@ MODELS: Final[Mapping[str, DeviceModel]] = MappingProxyType(_models)
 #: battery doorbells, trackers, locks): it connects them when it comes to the
 #: foreground, but reconnects only the other stations when their session drops. A
 #: prefix, not a catalog model: most of them are not catalogued. The list leaves out
-#: newer battery models; the client adds those by their settings
+#: newer battery models; the client adds those by their declared battery device flag
 #: (:func:`~.model_settings.reached_on_demand`).
 ON_DEMAND_PREFIXES: Final = frozenset(
     {
