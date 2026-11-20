@@ -241,7 +241,7 @@ Two write schemes, chosen by command id ([session-crypto.md](session-crypto.md))
 | record auto-stop | 1251 | value | camera | **0 = on**, 1 = off; applies only when power mode is custom (2) | **[wire verified]** (written with read-back), meaning **[declared]** (not proven) |
 | clock format | 1253 | station | station | 0 = 12 h, 1 = 24 h | **[verified]** (wire); meaning from the vendor corpus |
 | hub speaker volume | 1235 | station | station | 0–100 | **[app]** (not in the dump, so not written) |
-| manual light | 1400 | channel + value | camera | 0/1 (the body's `open`) | **[declared]** (eufy app); observed on a HomeBase 3 with an eufyCam 3: the write applies (param 1400 reads back 1, then 0), and before any result the station sends the light frame `0x0578` on DRW channel 2 (16 bytes under the static key, value 0). That frame is state ([events.md](events.md#alarm-over-p2p)), not the result: the result is read on channel 0 only, as for every scalar |
+| manual light | 1400 | channel + value | camera | 0/1 (the body's `open`) | **[wire verified]** (written with read-back on a HomeBase 3 with an eufyCam 3: result 0 on DRW channel 0, param 1400 read back 1, then 0; the lamp itself was not observed); the value field is **[declared]** (eufy app). Before the result the station sends the light frame `0x0578` on DRW channel 2 (16 bytes under the static key, value 0 for on and off). That frame is state ([events.md](events.md#alarm-over-p2p)), not the result: the result is read on channel 0 only, as for every scalar |
 
 **Couplings** **[verified]**: on a T8160, writing 1276 also sets 1210 and param
 6041, but writing 1210 moves only 1210. Writing 1045 also moves 1056, 1716 and 6014.
@@ -270,16 +270,20 @@ names: an ECB scalar frame for an ECB command, a `0x0546` (1350) DeviceMsgBean w
 `cmd` is the codec's `subCmd`, the 1700 wrapper with its `subCmd`
 ([below](#the-1700-wrapper-a-standalone-devices-commands-verified)), or a DeviceMsgBean
 of the codec's own command (not observed on hardware). An ECB scalar's value is the
-codec body's field for that command, as the eufy app reads it (`open` for 1400,
-`brightness` for 1401, `switch` for 1403; a switch field such as 1403's sends 1 for
-`true`, `1`, `"1"` or `"true"`, else 0), and the body's other fields are not sent: the
-manual light's `{value, open, type: 2}` goes out as ECB 1400 with `open` **[declared]**
-(eufy app; observed applying on a HomeBase 3 with an eufyCam 3, see the table above). A
-body without that field (or a command with none) must hold one value, perhaps under
-several names; otherwise the codec goes out as a DeviceMsgBean of its own command. A
-codec that goes to the cloud, stays in the app or uses another transport is not sent:
-such a setting is not writable and says why. A rejection raises the typed error; nothing is read
-back. After a send, the parameter values the codec's `update` names are merged into
+codec body's field for that command, as the eufy app reads it **[declared]** (eufy app):
+`open` for 1400, `brightness` for 1401, `switch` for 1403. A switch field such as
+1403's sends 1 for `true`, `1`, `"1"`, `"true"` or `"TRUE"`, else 0; a number field sends
+its integer (a float's integer part), and a list or object there is refused before
+sending. The body's other fields are not sent: the manual light's
+`{value, open, type: 2}` goes out as ECB 1400 with `open` (wire verified on a HomeBase 3
+with an eufyCam 3, see the table above). A body without the command's field (or a
+command with none) must hold one value, perhaps under several names, and that value is
+sent; otherwise the codec goes out as a DeviceMsgBean of its own command. Sending the
+user's value there is the library's choice: the eufy app sends 0 for a body that lacks
+the field. A codec that goes to the cloud, stays in the app or uses another transport is
+not sent: such a setting is not writable and says why. A rejection raises the typed
+error; nothing is read back. After a send, the parameter values the codec's `update`
+names are merged into
 the cached dump, as the app does, until the next real dump replaces them. The
 mode-table settings are the exception: they go through the 1255 table write
 ([below](#mode-actions-delays-and-schedule-app-writes-verified)).

@@ -467,7 +467,7 @@ def test_a_flag_field_is_the_ecb_value_whatever_the_other_fields_hold(
     assert (wire.path, wire.cmd, wire.value) == (WritePath.ECB, 1035, sent)
 
 
-@pytest.mark.parametrize(("open_", "sent"), [(1, 1), (0, 0), (True, 1), ("1", 1)])
+@pytest.mark.parametrize(("open_", "sent"), [(1, 1), (0, 0), (True, 1), ("1", 1), (1.7, 1)])
 def test_the_command_s_field_wins_over_a_differing_field(open_: object, sent: int) -> None:
     recipe = {"cmd": 1400, "params": {"value": 1 - sent, "open": open_, "type": 2}}
     wire = model_settings._classify(recipe, recipe)

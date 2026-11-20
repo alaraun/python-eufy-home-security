@@ -598,11 +598,19 @@ ECB_VALUE_FIELDS: dict[int, EcbValueField] = {
 
 
 def ecb_field_value(cmd: int, body: Mapping[str, object]) -> object:
-    """The value ``cmd``'s field holds in a handler body (a flag field as 1 or 0), or
-    None when ``cmd`` has no field in :data:`ECB_VALUE_FIELDS` or the body lacks it."""
+    """The value ``cmd``'s field holds in a handler body, or None when ``cmd`` has no
+    field in :data:`ECB_VALUE_FIELDS` or the body lacks it. A flag field gives 1 or 0; a
+    number field its integer part (a float truncated, as the eufy app reads it), a str or
+    bool as is. Raises ValueError for a number field holding any other type."""
     spec = ECB_VALUE_FIELDS.get(cmd)
     raw = None if spec is None else body.get(spec.name)
-    if spec is None or raw is None or not spec.flag:
+    if spec is None or raw is None:
+        return None
+    if not spec.flag:
+        if isinstance(raw, float):
+            return int(raw)
+        if not isinstance(raw, str | int):
+            raise ValueError(f"ECB command {cmd} needs an integer {spec.name!r}, got {raw!r}")
         return raw
     if isinstance(raw, str):
         return int(raw in ("1", "true", "TRUE"))

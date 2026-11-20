@@ -238,8 +238,12 @@ The enum members carry this grading in code (`PushMessageType.evidence`,
 ### Alarm over P2P
 
 **[verified, fw 3.8.7.4]** Every open session receives these GCM frames on DRW channel 2
-(a frame of these types on channel 0 is a command's result, not state). The
-subheader's byte 2 is the channel (255 = the station). Bodies are u32le values.
+(a frame of these types on channel 0 is a command's result, not state). The light frame
+also arrives under the static key (16 bytes) right after an ECB 1400 write, reading 0
+whether the write switched the light on or off in every observed run; it is filed into
+param 1400 until the next dump replaces it, as the eufy app files it. What that 0 means
+is not established. The subheader's byte 2 is the channel (255 = the station). Bodies
+are u32le values.
 
 | frame (cmd) | body | meaning |
 |---|---|---|

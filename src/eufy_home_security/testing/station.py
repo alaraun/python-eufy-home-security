@@ -25,7 +25,7 @@ import base64
 import json
 import os
 import struct
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
@@ -576,6 +576,12 @@ class FakeStation:
     """Before the result of an ECB scalar whose command is an alarm frame type (the light,
     1400), send that frame on the notify channel under the static key, its values all 0,
     as a HomeBase 3 does."""
+    scalar_prelude: Callable[[int, int], None] | None = None
+    """Called with ``(command, channel)`` right before the station answers an ECB scalar,
+    to put other frames ahead of the result."""
+    scalar_result_live_shape: bool = False
+    """Answer an ECB scalar on a GCM session as a HomeBase 3 does: 132 bytes, encryption
+    type 0, the code in clear followed by 128 zero bytes (default: 16 bytes)."""
     unanswered_commands: set[int] = field(default_factory=set)
     """Commands only acknowledged: no receipt, no reply, nothing applied (the transport
     ACK alone)."""
@@ -1412,12 +1418,18 @@ class FakeStation:
         result = struct.pack("<i", code) + b"\x00" * 12
         if self.scalar_state_frames and (count := ALARM_FRAME_VALUES.get(ftype)) is not None:
             self.send_alarm_frame(ftype, *[0] * count, channel=channel, cipher=FrameCipher.ECB)
+        if self.scalar_prelude is not None:
+            self.scalar_prelude(ftype, channel)
         if self.rsa_session:  # tagged like every frame, the code in clear
             encryption = self.answer_encryption
             if encryption is None:
                 encryption = self._sealed_encryption
             subheader = bytes([FrameCipher.ECB, 0, 0xFF, encryption, 0, 0])
             result = self._result_body(code, len(result), encryption)
+            self.send_frame(ftype, result, cipher=FrameCipher.ECB, subheader=subheader)
+        elif self.scalar_result_live_shape:
+            subheader = bytes([FrameCipher.ECB, 0, channel, FRAME_PLAIN, 0, 0])
+            result = struct.pack("<i", code) + bytes(128)
             self.send_frame(ftype, result, cipher=FrameCipher.ECB, subheader=subheader)
         else:
             self.send_frame(ftype, result, cipher=FrameCipher.ECB)
@@ -1710,10 +1722,16 @@ class FakeStation:
         self.send_frame(FrameType.ALARM_MODE_NOTIFY, body, cipher=cipher, channel=2)
 
     def send_alarm_frame(
-        self, ftype: int, *values: int, channel: int, cipher: int = FrameCipher.GCM
+        self,
+        ftype: int,
+        *values: int,
+        channel: int,
+        cipher: int = FrameCipher.GCM,
+        drw_channel: int = 2,
     ) -> None:
         """An alarm frame (tone 0x04B1, siren 0x04B2, light 0x0578): u32-LE ``values``
-        about ``channel`` (subheader byte 2), on DRW channel 2 as the live station."""
+        about ``channel`` (subheader byte 2), on DRW channel 2 as the live station
+        (``drw_channel``: another one)."""
         plain = struct.pack(f"<{len(values)}I", *values)
         if cipher == FrameCipher.ECB:
             body = ecb_encrypt(self.static_key, plain)
@@ -1721,7 +1739,9 @@ class FakeStation:
         else:
             body = self._seal(plain)
             subheader = bytes([cipher, 0, channel, 2, 0, 0])
-        self.send_frame(ftype, body, cipher=cipher, channel=2, subheader=subheader, sealed=True)
+        self.send_frame(
+            ftype, body, cipher=cipher, channel=drw_channel, subheader=subheader, sealed=True
+        )
 
     def _seal(self, plain: bytes) -> bytes:
         """A body under the session's cipher: GCM, or an RSA session's AES-128-ECB."""

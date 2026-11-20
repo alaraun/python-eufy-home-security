@@ -835,7 +835,8 @@ def _classify(template: Recipe, recipe: Mapping[str, Any]) -> WireCommand:
             scalar = _ecb_field_value(cmd, body)
         if body is not None and scalar is None:
             # No field known for the command, or the body lacks it: the body holds one value,
-            # maybe under several names, one of them as a bool.
+            # maybe under several names, one of them as a bool. That value is sent; for a
+            # body that lacks its command's field the eufy app sends 0 (library's choice).
             channel = _channel_fields(template)
             fields = [v for k, v in body.items() if k not in channel]
             distinct = {json.dumps(int(v) if isinstance(v, bool) else v) for v in fields}

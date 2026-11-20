@@ -179,10 +179,61 @@ def test_every_ecb_value_field_belongs_to_an_ecb_command() -> None:
     assert all(spec.name for spec in messages.ECB_VALUE_FIELDS.values())
 
 
+def test_ecb_value_fields_snapshot() -> None:
+    """The app's field per ECB command and its reader (True: a flag). An edit is deliberate."""
+    table = {cmd: (spec.name, spec.flag) for cmd, spec in messages.ECB_VALUE_FIELDS.items()}
+    assert table == {
+        1011: ("enable", True),
+        1015: ("value", False),
+        1035: ("switch", True),
+        1045: ("ledStatus", False),
+        1145: ("value", False),
+        1146: ("value", False),
+        1200: ("languageType", False),
+        1207: ("enable", False),
+        1210: ("value", False),
+        1214: ("value", False),
+        1224: ("mode_type", False),
+        1230: ("volume", False),
+        1235: ("volume", False),
+        1240: ("enable", True),
+        1241: ("enable", True),
+        1243: ("value", False),
+        1246: ("mode", False),
+        1249: ("duration", False),
+        1250: ("interval", False),
+        1251: ("enable", True),
+        1252: ("type", False),
+        1253: ("timeSystem", False),
+        1269: ("open", False),
+        1272: ("value", False),
+        1400: ("open", False),
+        1401: ("brightness", False),
+        1403: ("switch", True),
+        1410: ("colorTemperature", False),
+        1609: ("value", False),
+        1702: ("value", False),
+        1703: ("value", False),
+        1704: ("status", False),
+        1705: ("quality", False),
+        1706: ("voiceId", False),
+        1708: ("volume", False),
+        1709: ("value", False),
+    }
+
+
+def test_a_number_field_holding_a_list_is_refused() -> None:
+    with pytest.raises(ValueError, match="1400 needs an integer 'open'"):
+        messages.ecb_field_value(1400, {"open": [1], "value": 1})
+
+
 @pytest.mark.parametrize(
     ("cmd", "body", "value"),
     [
         (1400, {"open": 1, "value": 0}, 1),
+        (1400, {"open": 1.7}, 1),  # a float's integer part
+        (1401, {"brightness": 50.0, "value": 3}, 50),
+        (1400, {"open": "1"}, "1"),  # a digit string is converted by the caller
         (1400, {"value": 1}, None),  # the body lacks the command's field
         (1400, {"open": None}, None),
         (1403, {"value": 1}, None),
