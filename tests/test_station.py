@@ -353,6 +353,24 @@ async def test_a_paired_device_write_goes_out_on_its_codecs_path(
     assert _cached(child, 1, cached[0]) == cached[1]
 
 
+async def test_a_lamp_reads_the_written_state_after_the_light_frame_before_the_result(
+    child: Station, fake: FakeStation
+) -> None:
+    """A HomeBase 3 sends a light frame reading 0 before an ECB 1400 write's result: the
+    lamp's read ends at the written value, the frame's 0 only in between."""
+    fake.apply_settings = False  # only the library's own cache update can show the value
+    fake.scalar_state_frames = True
+    (light,) = child.lights_for(SYNTHETIC.camera_sn)
+    seen: list[str | None] = []
+    child.session.subscribe(
+        lambda e: seen.append(e.new) if isinstance(e, ParamChanged) and e.param_id == 1400 else None
+    )
+    await child.async_set_setting(light.on_off, True, device_sn=SYNTHETIC.camera_sn)
+    assert fake.ecb_received[-1] == (1400, 1, 1)
+    assert seen[-2:] == ["0", "1"]
+    assert _cached(child, 1, 1400) == "1"
+
+
 async def test_a_shared_bit_write_keeps_the_other_bits(child: Station, fake: FakeStation) -> None:
     """notification_ignore_switch is bit 256 of 1283, whose other bits hold the
     mode-switch notifications: the write reads the mask and sends it with one bit moved."""
@@ -6352,3 +6370,23 @@ def test_setting_in_use_compares_the_station_s_firmware_for_a_paired_device() ->
         device = dataclasses.replace(base.device, main_sw_version=firmware)
         station = Station(device, base.session, sub_devices=[camera])
         assert [station.setting_in_use(k, camera.device_sn) for k in members] == expected
+
+
+def test_lights_for_resolves_the_context_as_settings_for() -> None:
+    """A paired device's lamps follow its station's kind, a standalone device's its own;
+    the station itself has none and an unpaired serial is refused."""
+    wall = dataclasses.replace(CAMERA, device_sn="T84A1P0000000001", channel=1, device_type=151)
+    unknown = dataclasses.replace(CAMERA, device_sn="T9999P0000000002", channel=3)
+    hub = _hub_with(CAMERA, wall, unknown)
+    assert hub.lights_for(unknown.device_sn) == ()
+    (camera,) = hub.lights_for(SYNTHETIC.camera_sn)
+    assert camera.on_off == "spotlight_switch"
+    assert camera.evidence.support is Support.VERIFIED  # written and read back behind a HomeBase 3
+    (paired_wall,) = hub.lights_for(wall.device_sn)
+    assert not paired_wall.on_off_writable
+    assert hub.lights_for() == ()
+    with pytest.raises(UnsupportedError):
+        hub.lights_for("T8160P0000000009")
+    (own,) = _standalone_t8170().lights_for()
+    assert own.on_off_writable
+    assert own.evidence.support is Support.VERIFIED

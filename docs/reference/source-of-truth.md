@@ -54,6 +54,7 @@ Reported parameters never create entities — they only audit the settings, thro
 | Current setting value | the P2P dump's parameter; for a station setting the dump lacks, the cloud's copy, then the setting's default ([below](#where-a-station-settings-value-comes-from)) | the cloud's copy is last-known, not live |
 | **Which entities to offer** | **the model's settings (`Station.settings_for`)** | a parameter block is a template, not a capability list |
 | Whether a setting is a control | `Setting.writable` (its `note` says why not) | a reported value says nothing about how to write it |
+| Which settings make a lamp | `Station.lights_for` (the app's lamp switches with their brightness, colour and master) | key names in the consumer |
 | What a parameter means | the eufy app's code: thing description and handler, at generate time | never a runtime source |
 | Whether a model or capability is proven | its `Support` grade | the app's code alone proves nothing on hardware |
 

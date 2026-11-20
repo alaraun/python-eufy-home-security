@@ -33,6 +33,7 @@ from ..devices.capabilities import (
 )
 from ..devices.conditions import ConditionUnit
 from ..devices.device_alarm import DeviceAlarm
+from ..devices.lights import Light, lights_from
 from ..devices.live_open import (
     NVR_OPENS,
     LiveOpen,
@@ -1155,6 +1156,23 @@ class Station:
         if serial != self.serial:
             self.sub_device(serial)
         return self._settings_of(serial)
+
+    def lights_for(self, device_sn: str | None = None) -> tuple[Light, ...]:
+        """The lamps of the station (``None``, or its own serial) or of a paired device, in
+        its context as :meth:`settings_for` resolves it (its own station, or behind this
+        station's kind): one :class:`~..devices.lights.Light` per lamp the eufy app shows,
+        with the settings it covers and their writability there. ``()`` for a device
+        without a lamp or a settings file. Sync; raises ``UnsupportedError`` as
+        :meth:`settings_for`.
+        """
+        settings = {setting.key: setting for setting in self.settings_for(device_sn)}
+        serial = self.serial if device_sn in (None, self.serial) else device_sn
+        code = self._product_code(serial)
+        if code is None or not settings:
+            return ()
+        if serial == self.serial:
+            return lights_from(settings, code, standalone=True)
+        return lights_from(settings, code, self._connect_type_of(serial))
 
     def has_setting(self, key: str, device_sn: str | None = None) -> bool | None:
         """Whether ``key`` is a setting of the station (``None``, or its own serial) or of

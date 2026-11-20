@@ -14,6 +14,14 @@ from .capabilities import (
     profile_for_serial,
 )
 from .command_types import COMMAND_NAMES, command_name
+from .lights import (
+    LAMP_SPECS,
+    LampSpec,
+    Light,
+    LightBrightness,
+    LightColorTemperature,
+    lights_of,
+)
 from .model_settings import (
     Setting,
     SettingControl,
@@ -89,6 +97,7 @@ __all__ = [
     "DOORBELL_DEFAULT_ACTIONS",
     "DOORBELL_TYPE_ACTIONS",
     "FALLBACK_PROFILES",
+    "LAMP_SPECS",
     "MODELS",
     "MODES_SECTION",
     "MODE_ACTION_ALARM_AFFECTING",
@@ -111,6 +120,10 @@ __all__ = [
     "DeviceModel",
     "DeviceProfile",
     "Evidence",
+    "LampSpec",
+    "Light",
+    "LightBrightness",
+    "LightColorTemperature",
     "ModeTableStorage",
     "PtzAction",
     "Scope",
@@ -132,6 +145,7 @@ __all__ = [
     "cross_camera_candidate",
     "cross_camera_eligible",
     "cross_camera_intervals",
+    "lights_of",
     "max_custom_modes",
     "mode_action_flags",
     "mode_action_key",

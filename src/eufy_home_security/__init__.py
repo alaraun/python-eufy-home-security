@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     )
     from .detection_delivery import DetectionDelivery, DetectionDeliveryReport
     from .devices.device_alarm import DeviceAlarm
+    from .devices.lights import Light, LightBrightness, LightColorTemperature
     from .devices.live_view import Lens, LensReport, LensSource, LensView
     from .devices.model_settings import (
         Setting,
@@ -232,6 +233,7 @@ _EXPORTS: dict[str, str] = {
         "cloud.status",
     ),
     "DeviceAlarm": "devices.device_alarm",
+    **dict.fromkeys(("Light", "LightBrightness", "LightColorTemperature"), "devices.lights"),
     **dict.fromkeys(
         (
             "Setting",
@@ -540,6 +542,9 @@ __all__ = [
     "LensReport",
     "LensSource",
     "LensView",
+    "Light",
+    "LightBrightness",
+    "LightColorTemperature",
     "LiveStreamLimitError",
     "LoginChallengeError",
     "LoginLimitedError",

@@ -1669,6 +1669,37 @@ A camera's on/off switch is the setting `camera_on_off` (bool, `True` = on) on e
 model whose handler writes it; write it with `async_set_setting("camera_on_off", on,
 device_sn=…)`. The command and its polarity come from the model's file.
 
+### Lights
+
+`station.lights_for(device_sn)` (model level: `lights_of(product_code, connect,
+standalone=…)`) gives one `Light` per lamp the eufy app shows, in the device's context
+as `settings_for` resolves it, `()` for a device without one. A lamp is one of the app's
+lamp switches present on the model as a readable or writable bool: `spotlight` (the
+main lamp of the live view and device card), `zoom_spotlight` (a track light's second
+lamp), `bottom_spotlight` (a doorbell's bottom lamp). The "Light" products whose switch
+is neither readable nor writable have none. Each `Light` carries:
+
+| field | meaning |
+|---|---|
+| `id`, `name` | stable id (use it with the serial for the unique id), the app's title of the switch |
+| `on_off`, `on_off_writable`, `on_off_readable` | the switch setting's key and what it allows in this context (a Wall Light Cam S100 behind a HomeBase reads its lamp but cannot switch it) |
+| `brightness` | `LightBrightness` or None: `key`, `writable`, `readable`, the percent bounds `minimum`/`maximum`, and `step` for a range (its value is the percent) or `levels` (enum value → percent, Low/Medium/High = 40/70/100 on a eufyCam 3); `percent(value)` and `value_for(percent)` convert |
+| `color_temp` | `LightColorTemperature` or None: a 0-100 range on the app's own scale; `kelvin` is None on every model, so offer no colour temperature in Kelvin |
+| `enabled_by` | the master setting (`spotlight_status`); while it is off the app disables the lamp's control |
+| `config` | the settings that configure the lamp (master, automatic lighting, schedule): keep them as their own entities |
+| `keys` | every setting key the lamp covers, variants included |
+| `state_reported` | True when the station reports the lamp's switching (the light frame `0x0578`, filed into param 1400 as the app files it), so the read follows a lamp switched by motion, a schedule or the app; False when only parameter reads refresh it: show an assumed state then |
+| `evidence` | the on/off write's grade: *verified* only where it was written and read back on hardware for that model and context (eufyCam 3 behind a HomeBase 3, standalone Battery SoloCam), else *declared (eufy app)* |
+
+For a `light` entity: create it where `on_off_writable`, with brightness where
+`brightness.writable` (else on/off only). `turn_off` writes `on_off` False; `turn_on`
+with a brightness writes `brightness.value_for(pct)` first and then `on_off` True when
+the lamp is off: the app writes brightness on its own and never writes a brightness
+below 1 (it turns the lamp off instead). Read `is_on` from the `on_off` setting and the
+brightness through `brightness.percent(value)`. The brightness and colour settings stay
+in `settings_for` as well; a light covering them makes their own number or select a
+duplicate. Writes go through `async_set_setting` as for any setting.
+
 ### Camera images
 
 A camera has three image sources, described as data in `IMAGE_SOURCES`
