@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Final
 
+from ..p2p.xzyh import FrameType
 from .model_settings import (
     STANDALONE_CONTEXT,
     Setting,
@@ -192,13 +193,15 @@ class Light:
     and the brightness, with their variants. The colour temperature and ``config`` (master,
     automatic, schedule: the settings that configure the lamp) stay settings of their own.
 
-    ``state_reported`` is False for every lamp: whether the read follows a lamp switched by
-    motion, a schedule or another client is not established. On a HomeBase 3 the station's
-    light frame (``0x0578``, filed into param 1400) was observed to read 0 at detections,
-    periodically and before a write's result, and 1 during an alarm; the written value is
-    filed once the write's result arrives. A consumer shows an assumed state and still takes
-    reads. ``evidence`` grades the on/off write: verified only where it was written and read
-    back on hardware for this model and context.
+    ``state_reported`` is True where the switch is read from param 1400, the param the
+    station's light frame (``0x0578``) updates, as the eufy app shows the lamp: the read then
+    follows a lamp that changes by itself. Observed on a eufyCam 3 behind a HomeBase 3: a
+    lamp switched on went dark around a detection, and the light frame and the station's
+    dump both read off; after a write, the frame's 0 is replaced by the written value once
+    the write's result arrives. Declared (eufy app) elsewhere. False for a switch read from
+    another param or not readable: a consumer then shows an assumed state. ``evidence``
+    grades the on/off write: verified only where it was written and read back on hardware
+    for this model and context.
     """
 
     id: str
@@ -263,7 +266,7 @@ def lights_from(
                 enabled_by=enabled_by,
                 config=config,
                 keys=tuple(dict.fromkeys([*replaced, *variants])),
-                state_reported=False,
+                state_reported=switch.readable and switch.read_param == FrameType.LIGHT_NOTIFY,
                 evidence=_evidence(code, context or "", spec.switch),
             )
         )

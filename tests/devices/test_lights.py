@@ -256,12 +256,25 @@ def test_the_verified_lamp_writes_match_the_hardware_rows() -> None:
     assert set(lights._VERIFIED_WRITES) == _verified_rows()
 
 
-@pytest.mark.parametrize("code", ["T8160", "T8442", "T870G", "T8L60"])
-def test_no_lamp_state_is_taken_as_reported(code: str) -> None:
-    """The light frame reads 0 at detections and periodically: no switch read is proven to
-    follow a lamp switched elsewhere."""
-    assert lights_of(code, ConnectType.HB3)
-    assert not any(light.state_reported for light in lights_of(code, ConnectType.HB3))
+@pytest.mark.parametrize(
+    ("code", "reported"),
+    [("T8160", True), ("T8170", True), ("T8442", False), ("T870G", False), ("T8L60", False)],
+)
+def test_a_lamp_state_is_reported_where_the_light_frame_updates_its_read(
+    code: str, reported: bool
+) -> None:
+    """Param 1400 (the light frame's) gives a reported state; another param (T8442 6083,
+    T8L60 1398) or a write-only switch (T870G) does not."""
+    found = lights_of(code, ConnectType.HB3)
+    assert found
+    assert all(light.state_reported is reported for light in found)
+
+
+def test_an_unreadable_switch_on_the_light_param_is_not_reported() -> None:
+    settings = dict(settings_of("T8160"))
+    settings["spotlight_switch"] = dataclasses.replace(settings["spotlight_switch"], readable=False)
+    (light,) = lights_from(settings, "T8160", ConnectType.HB3)
+    assert light.state_reported is False
 
 
 def test_a_switch_that_is_no_usable_bool_makes_no_lamp() -> None:

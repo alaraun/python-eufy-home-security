@@ -1690,7 +1690,7 @@ carries:
 | `enabled_by` | the master setting (`spotlight_status`); while it is off the app disables the lamp's control |
 | `config` | the settings that configure the lamp (master, automatic lighting, schedule): keep them as their own entities |
 | `keys` | the settings a light entity replaces: `on_off` and the brightness, variants included |
-| `state_reported` | False for every lamp: whether the read follows a lamp switched by motion, a schedule or the app is not established. On a HomeBase 3 the light frame `0x0578` (filed into param 1400) was observed to read 0 at detections, periodically and before a write's result, and 1 during an alarm; the written value is filed once the write's result arrives. Show an assumed state and keep taking reads |
+| `state_reported` | True where the switch is read from param 1400, the param the station's light frame `0x0578` updates: the read follows a lamp that changes by itself (observed on a eufyCam 3 behind a HomeBase 3: a lamp that went dark around a detection read off; after a write, the written value replaces the frame's 0 once the result arrives). False for another param or a switch that cannot be read: show an assumed state then |
 | `evidence` | the on/off write's grade: *verified* only where it was written and read back on hardware for that model and context (eufyCam 3 behind a HomeBase 3, standalone Battery SoloCam), else *declared (eufy app)* |
 
 For a `light` entity: create it where `on_off_writable`, with brightness where
