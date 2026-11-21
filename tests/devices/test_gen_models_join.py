@@ -592,3 +592,115 @@ def test_an_unmapped_unit_is_a_generator_error_from_the_librarys_value_error() -
     with pytest.raises(join.GeneratorError) as raised:
         join.normalise_unit(PN, "x", "lux", 0, 100)
     assert isinstance(raised.value.__cause__, ValueError)
+
+
+_STORAGE = {
+    "kind": "enum",
+    "labels": {"0": "Only Events", "1": "Continuous Recording and Events"},
+    "td": "replace",
+    "source": "screen",
+}
+_VOLUME = {"kind": "range", "min": 1, "max": 26, "step": 1, "td": "fill", "source": "screen"}
+
+
+def _prop(ident: str, dtype: str, specs: dict[str, Any]) -> dict[str, Any]:
+    return {"identifier": ident, "access_mode": "RW", "data_type": {"type": dtype, "specs": specs}}
+
+
+def _domain_of(td: dict[str, Any], ident: str) -> dict[str, Any]:
+    return next(p["data_type"] for p in td["properties"] if p["identifier"] == ident)
+
+
+def test_a_replace_domain_overrides_the_td_range_and_keeps_its_default() -> None:
+    td = _td(_prop("storage", "int", {"min": "0", "max": "1", "step": "1", "defaultValue": "1"}))
+    counts: dict[str, int] = {}
+    out = join.apply_domains(PN, td, {"domains": {"storage": _STORAGE}}, counts)
+    dtype = _domain_of(out, "storage")
+    assert dtype["type"] == "enum"
+    assert dtype["specs"]["defaultValue"] == "1"
+    assert [(r["value"], r["desc"]) for r in dtype["specs"]["eunmList"]] == [
+        ("0", "Only Events"),
+        ("1", "Continuous Recording and Events"),
+    ]
+    assert counts == {"domain:app replace": 1}
+    assert _domain_of(td, "storage")["type"] == "int"  # input untouched
+
+
+def test_a_replace_domain_keeps_the_td_default_marks_of_an_enum() -> None:
+    rows = [
+        {"value": "0", "desc": "x", "isDefault": 1},
+        {"value": "1", "desc": "y", "isDefault": 0},
+    ]
+    td = _td(_prop("storage", "enum", {"eunmList": rows}))
+    out = join.apply_domains(PN, td, {"domains": {"storage": _STORAGE}}, {})
+    marks = [(r["value"], r["isDefault"]) for r in _domain_of(out, "storage")["specs"]["eunmList"]]
+    assert marks == [("0", 1), ("1", 0)]
+
+
+def test_a_fill_domain_applies_only_where_the_td_declares_none() -> None:
+    td = _td(
+        _prop("vol", "int", {}),
+        _prop("vol__v2", "int", {"min": 0, "max": 26, "step": 1}),
+    )
+    counts: dict[str, int] = {}
+    out = join.apply_domains(PN, td, {"domains": {"vol": _VOLUME}}, counts)
+    assert _domain_of(out, "vol")["specs"] == {"min": 1, "max": 26, "step": 1}
+    assert _domain_of(out, "vol__v2")["specs"] == {"min": 0, "max": 26, "step": 1}
+    assert counts == {"domain:app fill": 1}
+
+
+def test_a_domain_reaches_a_versioned_identifier() -> None:
+    td = _td(_prop("storage__v1", "int", {}))
+    out = join.apply_domains(PN, td, {"domains": {"storage": _STORAGE}}, {})
+    assert _domain_of(out, "storage__v1")["type"] == "enum"
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        {**_STORAGE, "source": None},
+        {**_STORAGE, "td": "always"},
+        {**_STORAGE, "labels": {}},
+        {**_STORAGE, "labels": {"a": "x"}},
+        {**_STORAGE, "labels": {"0": " "}},
+        {**_VOLUME, "max": "26"},
+        {**_VOLUME, "min": True},
+        {**_VOLUME, "max": 1},
+        {**_VOLUME, "step": 0},
+        {**_VOLUME, "kind": "bool"},
+        "enum",
+    ],
+)
+def test_a_malformed_domain_rule_is_a_generator_error(rule: Any) -> None:
+    with pytest.raises(join.GeneratorError, match="domain"):
+        join.apply_domains(PN, _td(), {"domains": {"x": rule}}, {})
+
+
+def test_domains_must_be_a_mapping() -> None:
+    with pytest.raises(join.GeneratorError, match="domains"):
+        join.apply_domains(PN, _td(), {"domains": ["x"]}, {})
+
+
+def test_structured_marks_the_identifier_and_its_variants_and_keeps_the_control() -> None:
+    settings: dict[str, dict[str, Any]] = {
+        "sched": {"kind": "string", "control": "text", "access": "rw"},
+        "sched__v1": {"kind": "string"},
+        "sched__v2": {"kind": "string", "structured": True},
+        "other": {"kind": "string", "control": "text"},
+    }
+    counts: dict[str, int] = {}
+    join.mark_structured(PN, settings, {"structured": {"sched": {"source": "s"}}}, counts)
+    assert settings["sched"] == {
+        "kind": "string",
+        "control": "text",
+        "access": "rw",
+        "structured": True,
+    }
+    assert settings["sched__v1"]["structured"] is True
+    assert "structured" not in settings["other"]
+    assert counts == {"structured:app": 2}
+
+
+def test_a_structured_rule_without_a_source_is_a_generator_error() -> None:
+    with pytest.raises(join.GeneratorError, match="structured"):
+        join.mark_structured(PN, {}, {"structured": {"sched": {}}}, {})

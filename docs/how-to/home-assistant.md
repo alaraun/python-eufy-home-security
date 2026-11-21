@@ -1058,7 +1058,8 @@ A closed session (`async_close`) never reconnects on its own — build a new
 
     Never make a structured value an entity's state: a setting with `structured` True
     (a JSON object or array, or its text, as the device reports it, such as
-    `arming_get_alarm_*_mode`) is never a state, whatever its role. Put it into an
+    `arming_get_alarm_*_mode`) is never a state, whatever its role or control (a writable
+    light schedule keeps control `TEXT`: still no text entity). Put it into an
     attribute of a related entity, or create no entity for it; it is known before the
     first read. A state is also limited to 255 characters.
   - `applies_when`: see [`applies_when`](#applies_when).

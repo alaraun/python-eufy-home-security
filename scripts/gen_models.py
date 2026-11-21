@@ -1018,6 +1018,11 @@ def _probe_param(entry: Mapping[str, Any], located: Located | None) -> Located |
     return located
 
 
+def _add_counts(counts: dict[str, int], more: Mapping[str, int]) -> None:
+    for key, n in more.items():
+        _count(counts, key, n)
+
+
 def structured_values(
     product_code: str,
     handler: Path,
@@ -1871,7 +1876,13 @@ def generate(
     reference row.
     """
     folder = cache / product_code
-    td = json.loads((folder / "td.json").read_text(encoding="utf-8"))
+    domain_counts: dict[str, int] = {}
+    td = joiner.apply_domains(
+        product_code,
+        json.loads((folder / "td.json").read_text(encoding="utf-8")),
+        titles,
+        domain_counts,
+    )
     handler = folder / f"{product_code}Handle.mix.js"
     props = []
     skipped = 0
@@ -1961,6 +1972,8 @@ def generate(
         counts,
     )
     structured_values(product_code, handler, contexts[BASE], merged, located, counts=counts)
+    joiner.mark_structured(product_code, merged, titles, counts)
+    _add_counts(counts, domain_counts)
     model = model_for_serial(product_code)
     station = model is not None and model.kind is DeviceKind.STATION
     for key, n in sections.assign(merged, station=station).items():

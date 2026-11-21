@@ -396,9 +396,17 @@ def test_ecb_path_does_not_depend_on_the_caller_type(value: object) -> None:
     assert (wire.cmd, wire.value) == (1253, 1)
 
 
-def test_ecb_command_with_a_non_numeric_value_is_refused() -> None:
+def test_ecb_command_with_a_non_numeric_value_is_refused(data_root: Path) -> None:
+    """An open-kind setting on an ECB command takes only an integer value."""
+    write = {
+        "cmd": 1253,
+        "params": {"timeSystem": "$v"},
+        "update": {"needUpdate": True, "cmd": 1253, "paramValue": "$v:str"},
+    }
+    entry = {**GOOD_ENTRY, "access": "rw", "kind": "other", "role": "setting", "write": write}
+    _write_model(data_root, {"time_format_set": entry})
     with pytest.raises(ValueError, match="1253"):
-        _setting("T8030", "time_format_set").encode("abc", ALONE)
+        settings_of("T0001")["time_format_set"].encode("abc", ALONE)
 
 
 def test_ecb_value_repeated_under_two_names_goes_ecb() -> None:
