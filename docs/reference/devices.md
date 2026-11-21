@@ -2069,7 +2069,7 @@ rw 0 / ro 40
 
 ### Settings of T8001 HomeBase
 
-rw 6 / ro 40
+rw 7 / ro 39
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2116,13 +2116,13 @@ rw 6 / ro 40
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad |
-| `time_format_set` | string | - | - | no | - | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | string | - | - | no | - | - |
 
 ### Settings of T8002 HomeBase E
 
-rw 6 / ro 40
+rw 7 / ro 39
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2169,7 +2169,7 @@ rw 6 / ro 40
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad |
-| `time_format_set` | string | - | - | no | - | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | string | - | - | no | - | - |
 
@@ -2295,7 +2295,7 @@ rw 1 / ro 10
 
 ### Settings of T8023 MiniBase Chime
 
-rw 6 / ro 35
+rw 7 / ro 34
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2338,12 +2338,12 @@ rw 6 / ro 35
 | `notification_alarm_delay_value` | string | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad |
-| `time_format_set` | string | - | - | no | - | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
 
 ### Settings of T8024 Repeater
 
-rw 7 / ro 39
+rw 8 / ro 38
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2391,7 +2391,7 @@ rw 7 / ro 39
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `setting_model_config` | string | - | - | no | - | - |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad |
-| `time_format_set` | string | - | - | no | - | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
 
 ### Settings of T8025 HomeBase Mini
@@ -7256,7 +7256,7 @@ rw 50 / ro 109
 | `device_packages_uncollected_check_time` | string | - | - | no | - | - |
 | `device_power_supply_mode` | other | - | - | no | - | - |
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
-| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | s | yes | select | 0=0 s, 10=10 s, 15=15 s, 5=5 s |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | s | yes | select | 0=0s, 10=10s, 15=15s, 5=5s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -7421,7 +7421,7 @@ rw 54 / ro 124
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
 | `device_query_event_retry_time` | other | - | - | no | - | - |
 | `device_query_event_timeout` | other | - | - | no | - | - |
-| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | s | yes | select | 0=0 s, 10=10 s, 15=15 s, 5=5 s |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | s | yes | select | 0=0s, 10=10s, 15=15s, 5=5s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -7598,7 +7598,7 @@ rw 47 / ro 109
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
 | `device_query_event_retry_time` | other | - | - | no | - | - |
 | `device_query_event_timeout` | other | - | - | no | - | - |
-| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | - | yes | select | 0=0 s, 10=10 s, 15=15 s, 5=5 s |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | - | yes | select | 0=0s, 10=10s, 15=15s, 5=5s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -7984,7 +7984,7 @@ rw 32 / ro 92
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
 | `device_query_event_retry_time` | other | - | - | no | - | - |
 | `device_query_event_timeout` | other | - | - | no | - | - |
-| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | - | yes | select | 0=0 s, 10=10 s, 15=15 s, 5=5 s |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | - | yes | select | 0=0s, 10=10s, 15=15s, 5=5s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -8115,7 +8115,7 @@ rw 32 / ro 86
 | `device_name` | string | - | - | no | - | - |
 | `device_query_event_retry_time` | other | - | - | no | - | - |
 | `device_query_event_timeout` | other | - | - | no | - | - |
-| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | - | yes | select | 0=0 s, 10=10 s, 15=15 s, 5=5 s |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | - | yes | select | 0=0s, 10=10s, 15=15s, 5=5s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |

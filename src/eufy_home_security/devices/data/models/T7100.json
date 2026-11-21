@@ -549,13 +549,14 @@
   "device_recording_type": {
    "access": "rw",
    "control": "select",
-   "default": 0,
+   "default": 3,
    "kind": "enum",
    "labels": {
     "2": "Event-based",
     "3": "Continuous"
    },
    "read": {
+    "fallback": 3,
     "map": null,
     "param": 6010
    },
