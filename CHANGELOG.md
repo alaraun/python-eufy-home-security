@@ -4,6 +4,15 @@ All notable changes to this project. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0, a minor release may change the
 API. From 0.1.0 on, release-please writes the entries from the conventional commits.
 
+## [0.4.17](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.16...v0.4.17) (2026-11-21)
+
+
+### Features
+
+* **devices:** setting choices and ranges from the eufy app's screens (storage type, response delay, chime volume, time format, recording type; structured light schedule) ([fdabe89](https://github.com/alaraun/python-eufy-home-security/commit/fdabe89a8e5a4a20c44e37ec21543d55888b7a5e))
+* **devices:** Setting.meaning gives each setting's meaning (duration, percent, temperature, timestamp, time of day, sensor statuses), and units follow the eufy app's screens (clip length and retrigger interval in seconds, no more days) ([8f50c12](https://github.com/alaraun/python-eufy-home-security/commit/8f50c12f72266f26863bfe0affbd6d0d16e6c9ef))
+* **devices:** Station.lights_for gives one descriptor per lamp with its brightness scale, colour temperature and master setting, for a light entity ([issue 191](https://github.com/alaraun/homeassistant-eufy-home-security/issues/191)) ([4a9e948](https://github.com/alaraun/python-eufy-home-security/commit/4a9e9488ca11e518ce8e3ef97e2cfe0d0969be43))
+
 ## [0.4.16](https://github.com/alaraun/python-eufy-home-security/compare/v0.4.15...v0.4.16) (2026-11-20)
 
 
