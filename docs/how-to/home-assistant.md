@@ -1579,7 +1579,9 @@ fails discovery.
 
 When the thing description arrives, `station.settings_for(device_sn)` lists the model's
 properties with domain, labels, unit and default, all read-only: `writable` and
-`readable` are False and `note` is `"not in bundled data"`. There is no codec, so the
+`readable` are False and `note` is `"not in bundled data"`. The domains the eufy app's
+screens give some settings (a select in place of a bare number) come with the bundled model
+files: a product listed only from its thing description keeps that description's domain. There is no codec, so the
 state never reports a value and `async_set_setting` raises `UnsupportedError`. Offer
 them as disabled diagnostic entities at most, or not at all. The listing is held in
 memory only; after a restart it is back once discovery has run. A later library release

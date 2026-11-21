@@ -401,6 +401,7 @@ class Setting:
     _write_table: Mapping[str, Recipe] | None = field(default=None, repr=False)
     _read_param: int | None = field(default=None, repr=False)
     _read_map: Mapping[str, Value] | None = field(default=None, repr=False)
+    _read_fallback: Value | None = field(default=None, repr=False)
     _read_view: tuple[int | str | None, Mapping[str, Value]] | None = field(
         default=None, repr=False
     )
@@ -489,7 +490,7 @@ class Setting:
                 self.kind is not SettingKind.ENUM or self._in_values(mapped)
             ):
                 return mapped
-        return value
+        return self._read_fallback if value is None else value
 
     def _decode(self, raw: str) -> Value | None:
         if self.domain is not None:
@@ -1630,6 +1631,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     read = entry.get("read")
     read_param: int | None = None
     read_map: dict[str, Value] | None = None
+    read_fallback: Value | None = None
     read_view = None
     if read is not None:
         if not isinstance(read, dict) or not isinstance(read.get("param"), int):
@@ -1638,6 +1640,8 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         if read.get("map") is not None:
             read_map = {str(k): _scalar(v, "read value") for k, v in read["map"].items()}
         read_view = _view_spec(read.get("view"))
+        if read.get("fallback") is not None:
+            read_fallback = _scalar(read["fallback"], "read fallback")
     when = entry.get("applies_when")
     applies_when = None
     if when is not None:
@@ -1718,11 +1722,24 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         _write_table=table,
         _read_param=read_param,
         _read_map=None if read_map is None else MappingProxyType(read_map),
+        _read_fallback=_read_fallback(read_fallback, kind, values),
         _no_default=_no_default(read),
         _read_view=read_view,
         _write_params=_template_params([write, *(table or {}).values()]),
         _variants=_variant_rules(entry.get("variants")),
     )
+
+
+def _read_fallback(
+    value: Value | None, kind: SettingKind, values: tuple[Value, ...]
+) -> Value | None:
+    """A read's ``fallback``: the enum value read for any reported value outside the
+    values (the app's screen shows it so); ValueError on another kind or another value."""
+    if value is None:
+        return None
+    if kind is not SettingKind.ENUM or not any(_same(v, value) for v in values):
+        raise ValueError(f"read fallback {value!r} is not one of the enum's values")
+    return value
 
 
 def _variant_rules(raw: Any) -> tuple[VariantRule, ...]:

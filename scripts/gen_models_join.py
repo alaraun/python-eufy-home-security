@@ -28,6 +28,7 @@ __all__ = [
     "STATUS_NOTE",
     "GeneratorError",
     "apply_domains",
+    "finish_domains",
     "hold_members",
     "join",
     "mark_structured",
@@ -369,6 +370,7 @@ def switches(pn: str, titles: Mapping[str, Any] | None) -> dict[str, dict[bool, 
 
 _DOMAIN_FILL = "fill"  # only where the product's TD declares no values or range
 _DOMAIN_REPLACE = "replace"  # the app's screen ignores the TD's domain
+_NO_DOMAIN = ("other", "string")  # TD kinds that declare no values or range
 
 
 def _domain_spec(pn: str, ident: str, rule: Any) -> dict[str, Any]:
@@ -386,6 +388,9 @@ def _domain_spec(pn: str, ident: str, rule: Any) -> dict[str, Any]:
             or not all(isinstance(v, str) and v.strip() for v in labels.values())
         ):
             raise GeneratorError(f"{pn}: domain {ident} needs integer-keyed labels")
+        fallback = rule.get("fallback")
+        if fallback is not None and str(fallback) not in labels:
+            raise GeneratorError(f"{pn}: domain {ident} fallback is not one of its labels")
         rows = [{"value": str(k), "desc": v, "associatedValue": str(k)} for k, v in labels.items()]
         return {"type": "enum", "specs": {"eunmList": rows}}
     if rule.get("kind") == "range":
@@ -396,19 +401,28 @@ def _domain_spec(pn: str, ident: str, rule: Any) -> dict[str, Any]:
         lo, hi, step = ints
         if not lo < hi or step <= 0:
             raise GeneratorError(f"{pn}: domain {ident} has an empty range")
+        if rule.get("fallback") is not None:
+            raise GeneratorError(f"{pn}: domain {ident} fallback needs kind enum")
         return {"type": "int", "specs": {"min": lo, "max": hi, "step": step}}
     raise GeneratorError(f"{pn}: domain {ident} kind must be enum or range")
 
 
 def apply_domains(
-    pn: str, td: Mapping[str, Any], titles: Mapping[str, Any] | None, counts: dict[str, int]
+    pn: str,
+    td: Mapping[str, Any],
+    titles: Mapping[str, Any] | None,
+    counts: dict[str, int],
+    applied: dict[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """``td`` with each property named in the title file's ``domains`` given the domain the
     app's screen offers (enum labels or an integer range), before the handler sweep.
 
     A ``fill`` rule applies where the product's own TD declares no values or range (kind
-    ``other``), a ``replace`` rule always (the screen never reads the TD's domain). The TD
-    default is kept. Raises GeneratorError on a malformed rule.
+    ``other`` or ``string``), a ``replace`` rule always (the screen never reads the TD's
+    domain). The TD default is kept when it is one of an enum's values; else it becomes the
+    rule's ``fallback`` (the value the screen shows for any other one), or is dropped
+    without one. ``applied`` receives ``{identifier: rule}`` for each property changed
+    (:func:`finish_domains`). Raises GeneratorError on a malformed rule.
     """
     rules = (titles or {}).get("domains") or {}
     if not isinstance(rules, Mapping):
@@ -419,7 +433,7 @@ def apply_domains(
         ident = prop.get("identifier") if isinstance(prop, dict) else None
         base = _VERSIONED.sub(r"\1", ident) if isinstance(ident, str) else ""
         rule = rules.get(base)
-        if rule is None or (rule["td"] == _DOMAIN_FILL and kind_of(prop) != "other"):
+        if rule is None or (rule["td"] == _DOMAIN_FILL and kind_of(prop) not in _NO_DOMAIN):
             props.append(prop)
             continue
         dtype = dict(specs[base])
@@ -434,11 +448,42 @@ def apply_domains(
             ]
             dtype["specs"] = {**dtype["specs"], "eunmList": rows}
         default = specs_of(prop).get("defaultValue")
+        labels = rule.get("labels")
+        if default is not None and labels is not None and str(default) not in labels:
+            fallback = rule.get("fallback")
+            default = None if fallback is None else str(fallback)
+            _count(counts, "domain:default outside the labels")
         if default is not None:
             dtype["specs"] = {**dtype["specs"], "defaultValue": default}
         props.append({**prop, "data_type": dtype})
+        if applied is not None:
+            applied[ident] = rule
         _count(counts, f"domain:app {rule['td']}")
     return {**td, "properties": props}
+
+
+def finish_domains(
+    settings: Settings, applied: Mapping[str, Mapping[str, Any]], counts: dict[str, int]
+) -> None:
+    """Complete the settings :func:`apply_domains` gave an app domain: an enum's labels are
+    the screen's texts as written, and a rule's ``fallback`` goes into each read
+    (``read.fallback``: a reported value outside the values reads as it)."""
+    for key, rule in applied.items():
+        entry = settings.get(key)
+        if entry is None:
+            continue
+        parts = [entry, *((c.get("entry") or {}) for c in entry.get("contexts") or ())]
+        if rule.get("kind") == "enum" and entry.get("kind") == "enum":
+            for part in parts:
+                if "labels" in part:
+                    part["labels"] = {str(k): v for k, v in rule["labels"].items()}
+        fallback = rule.get("fallback")
+        if fallback is None:
+            continue
+        for part in parts:
+            if isinstance(part.get("read"), dict):
+                part["read"]["fallback"] = public_value(str(fallback))
+                _count(counts, "domain:read fallback")
 
 
 def mark_structured(

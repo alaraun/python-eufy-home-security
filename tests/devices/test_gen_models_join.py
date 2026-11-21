@@ -668,6 +668,9 @@ def test_a_domain_reaches_a_versioned_identifier() -> None:
         {**_VOLUME, "max": 1},
         {**_VOLUME, "step": 0},
         {**_VOLUME, "kind": "bool"},
+        {**_STORAGE, "fallback": 2},
+        {**_STORAGE, "fallback": True},
+        {**_VOLUME, "fallback": 1},
         "enum",
     ],
 )
@@ -704,3 +707,73 @@ def test_structured_marks_the_identifier_and_its_variants_and_keeps_the_control(
 def test_a_structured_rule_without_a_source_is_a_generator_error() -> None:
     with pytest.raises(join.GeneratorError, match="structured"):
         join.mark_structured(PN, {}, {"structured": {"sched": {}}}, {})
+
+
+_RECORDING = {
+    "kind": "enum",
+    "labels": {"2": "Event-based", "3": "Continuous"},
+    "td": "replace",
+    "fallback": 3,
+    "source": "screen",
+}
+
+
+@pytest.mark.parametrize(
+    ("rule", "default"),
+    [(_RECORDING, "3"), ({**_RECORDING, "fallback": None}, None), (_STORAGE, None)],
+    ids=["fallback", "none", "no-fallback"],
+)
+def test_a_td_default_outside_the_labels_becomes_the_fallback_or_is_dropped(
+    rule: dict[str, Any], default: str | None
+) -> None:
+    td = _td(_prop("rec", "int", {"defaultValue": "7"}))
+    counts: dict[str, int] = {}
+    specs = _domain_of(join.apply_domains(PN, td, {"domains": {"rec": rule}}, counts), "rec")[
+        "specs"
+    ]
+    assert specs.get("defaultValue") == default
+    assert counts["domain:default outside the labels"] == 1
+
+
+def test_a_td_default_inside_the_labels_stays_whatever_the_fallback() -> None:
+    td = _td(_prop("rec", "int", {"defaultValue": "2"}))
+    out = join.apply_domains(PN, td, {"domains": {"rec": _RECORDING}}, {})
+    assert _domain_of(out, "rec")["specs"]["defaultValue"] == "2"
+
+
+def test_a_fill_domain_applies_to_a_string_the_td_leaves_open() -> None:
+    td = _td(_prop("fmt", "string", {}), _prop("fmt__v1", "string", {"min": 0, "max": 1}))
+    applied: dict[str, Any] = {}
+    rule = {**_STORAGE, "td": "fill"}
+    out = join.apply_domains(PN, td, {"domains": {"fmt": rule}}, {}, applied)
+    assert _domain_of(out, "fmt")["type"] == "enum"
+    assert _domain_of(out, "fmt__v1")["type"] == "string"  # a numeric range is a domain
+    assert applied == {"fmt": rule}
+
+
+def test_finish_domains_writes_the_screens_labels_and_the_read_fallback() -> None:
+    settings: dict[str, dict[str, Any]] = {
+        "rec": {
+            "kind": "enum",
+            "labels": {"2": "Event based", "3": "Continuous"},
+            "read": {"param": 6010, "map": None},
+            "contexts": [
+                {"names": ["standalone"], "entry": {"read": {"param": 6011, "map": None}}},
+                {"names": ["HB3"], "entry": {"read": None}},
+            ],
+        },
+        "vol": {"kind": "range", "read": {"param": 1, "map": None}},
+        "other": {"kind": "enum", "labels": {"2": "x"}, "read": {"param": 2, "map": None}},
+    }
+    counts: dict[str, int] = {}
+    applied = {"rec": _RECORDING, "vol": _VOLUME, "gone": _RECORDING}
+    join.finish_domains(settings, applied, counts)
+    rec = settings["rec"]
+    assert rec["labels"] == {"2": "Event-based", "3": "Continuous"}
+    assert rec["read"] == {"param": 6010, "map": None, "fallback": 3}
+    assert rec["contexts"][0]["entry"]["read"]["fallback"] == 3
+    assert rec["contexts"][1]["entry"] == {"read": None}
+    assert settings["vol"] == {"kind": "range", "read": {"param": 1, "map": None}}
+    assert settings["other"]["labels"] == {"2": "x"}
+    assert "fallback" not in settings["other"]["read"]
+    assert counts == {"domain:read fallback": 2}

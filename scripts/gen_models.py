@@ -1877,11 +1877,13 @@ def generate(
     """
     folder = cache / product_code
     domain_counts: dict[str, int] = {}
+    domains: dict[str, Mapping[str, Any]] = {}
     td = joiner.apply_domains(
         product_code,
         json.loads((folder / "td.json").read_text(encoding="utf-8")),
         titles,
         domain_counts,
+        domains,
     )
     handler = folder / f"{product_code}Handle.mix.js"
     props = []
@@ -1973,6 +1975,7 @@ def generate(
     )
     structured_values(product_code, handler, contexts[BASE], merged, located, counts=counts)
     joiner.mark_structured(product_code, merged, titles, counts)
+    joiner.finish_domains(merged, domains, domain_counts)
     _add_counts(counts, domain_counts)
     model = model_for_serial(product_code)
     station = model is not None and model.kind is DeviceKind.STATION
