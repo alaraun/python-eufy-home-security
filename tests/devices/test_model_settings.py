@@ -888,6 +888,37 @@ def test_binary_meanings_are_the_sensor_card_statuses() -> None:
     } == model_settings.BINARY_MEANINGS
 
 
+def test_storage_types_carry_the_apps_two_choices_on_every_model() -> None:
+    """The app's storage-type screen offers the same two labelled choices whatever the TD."""
+    labels = {0: "Only Events", 1: "Continuous Recording and Events"}
+    seen = 0
+    for code in bundled_codes():
+        for key in ("hb_connect_storage_type", "hb_connect_nas_storage_type"):
+            setting = settings_of(code).get(key)
+            if setting is None:
+                continue
+            seen += 1
+            assert setting.kind is SettingKind.ENUM, (code, key)
+            assert dict(setting.labels) == labels, (code, key)
+    assert seen >= 70
+
+
+def test_app_domains_fill_settings_the_td_leaves_open() -> None:
+    """Ring volume, response delay, time format and recording type get the app's domain;
+    the T8110 family's light schedule is a structured value."""
+    volume = settings_of("T8220")["device_chime_hb_ring_volume"]
+    assert (volume.kind, volume.minimum, volume.maximum) == (SettingKind.RANGE, 1, 26)
+    delay = settings_of("T8217")["device_response_timeout_delay_time"]
+    assert (delay.kind, delay.values) == (SettingKind.ENUM, (0, 5, 10, 15))
+    time_format = settings_of("T8030")["time_format_set"]
+    assert dict(time_format.labels) == {0: "12-hour", 1: "24-hour"}
+    recording = settings_of("T7100")["device_recording_type"]
+    assert dict(recording.labels) == {2: "Event-based", 3: "Continuous"}
+    schedule = settings_of("T8110")["spotlight_schedule_config"]
+    assert schedule.structured
+    assert schedule.writable
+
+
 @pytest.mark.parametrize("value", ["yes", 1, None])
 def test_structured_must_be_a_bool(data_root: Path, value: object) -> None:
     _write_model(data_root, {"mode": {**GOOD_ENTRY, "structured": value}})
