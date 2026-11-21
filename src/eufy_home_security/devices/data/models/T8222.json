@@ -693,7 +693,10 @@
   },
   "device_chime_hb_ring_volume": {
    "access": "rw",
-   "kind": "other",
+   "control": "slider",
+   "kind": "range",
+   "max": 26,
+   "min": 1,
    "page": "RingtoneSettings",
    "read": {
     "map": null,
@@ -702,6 +705,7 @@
    "role": "setting",
    "section": "doorbell",
    "shown": "page",
+   "step": 1,
    "write": {
     "cmd": 1350,
     "subCmd": 1717,

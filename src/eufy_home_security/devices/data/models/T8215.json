@@ -1455,7 +1455,14 @@
   },
   "device_response_timeout_delay_time": {
    "access": "rw",
-   "kind": "other",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "0 s",
+    "10": "10 s",
+    "15": "15 s",
+    "5": "5 s"
+   },
    "page": "ResponseSettingScreen",
    "read": {
     "map": null,
@@ -1465,6 +1472,12 @@
    "section": "doorbell",
    "shown": "page",
    "unit": "s",
+   "values": [
+    0,
+    5,
+    10,
+    15
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 6438,
@@ -1849,7 +1862,12 @@
   },
   "hb_connect_storage_type": {
    "access": "rw",
-   "kind": "other",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "Only Events",
+    "1": "Continuous Recording and Events"
+   },
    "read": {
     "map": null,
     "param": 3103
@@ -1857,6 +1875,10 @@
    "role": "setting",
    "section": "storage",
    "shown": "page",
+   "values": [
+    0,
+    1
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 3103,

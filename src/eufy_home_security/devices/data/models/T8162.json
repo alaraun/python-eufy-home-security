@@ -1312,7 +1312,12 @@
   },
   "hb_connect_storage_type": {
    "access": "rw",
-   "kind": "other",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "Only Events",
+    "1": "Continuous Recording and Events"
+   },
    "read": {
     "map": null,
     "param": 3103
@@ -1320,6 +1325,10 @@
    "role": "setting",
    "section": "storage",
    "shown": "page",
+   "values": [
+    0,
+    1
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 3103,

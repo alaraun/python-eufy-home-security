@@ -1448,11 +1448,13 @@
   },
   "hb_connect_nas_storage_type": {
    "access": "rw",
-   "control": "slider",
+   "control": "select",
    "default": 0,
-   "kind": "range",
-   "max": 1,
-   "min": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Only Events",
+    "1": "Continuous Recording and Events"
+   },
    "read": {
     "map": null,
     "param": 40004
@@ -1460,7 +1462,10 @@
    "role": "setting",
    "section": "storage",
    "shown": "page",
-   "step": 1,
+   "values": [
+    0,
+    1
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 1310,
@@ -1503,11 +1508,13 @@
   },
   "hb_connect_storage_type": {
    "access": "rw",
-   "control": "slider",
+   "control": "select",
    "default": 0,
-   "kind": "range",
-   "max": 1,
-   "min": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Only Events",
+    "1": "Continuous Recording and Events"
+   },
    "read": {
     "map": null,
     "param": 3103
@@ -1515,7 +1522,10 @@
    "role": "setting",
    "section": "storage",
    "shown": "page",
-   "step": 1,
+   "values": [
+    0,
+    1
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 3103,

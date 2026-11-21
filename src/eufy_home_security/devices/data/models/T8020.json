@@ -460,7 +460,12 @@
   },
   "time_format_set": {
    "access": "rw",
-   "kind": "other",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "12-hour",
+    "1": "24-hour"
+   },
    "read": {
     "map": null,
     "param": 1253
@@ -468,6 +473,10 @@
    "role": "setting",
    "section": "system",
    "shown": "page",
+   "values": [
+    0,
+    1
+   ],
    "write": {
     "cmd": 1253,
     "params": {

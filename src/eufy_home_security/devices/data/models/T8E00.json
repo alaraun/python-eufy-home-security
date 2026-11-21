@@ -628,8 +628,13 @@
   },
   "device_recording_type": {
    "access": "rw",
-   "default": "0",
-   "kind": "other",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "2": "Event-based",
+    "3": "Continuous"
+   },
    "read": {
     "map": null,
     "param": 6010
@@ -637,6 +642,10 @@
    "role": "setting",
    "section": "recording",
    "shown": "page",
+   "values": [
+    2,
+    3
+   ],
    "write": {
     "cmd": 1700,
     "subCmd": 6010,

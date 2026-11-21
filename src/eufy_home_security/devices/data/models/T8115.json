@@ -2499,6 +2499,7 @@
    "role": "setting",
    "section": "picture",
    "shown": "page",
+   "structured": true,
    "write": {
     "cmd": 1404,
     "params": {

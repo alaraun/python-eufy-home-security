@@ -1705,9 +1705,9 @@ rw 48 / ro 75
 | `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
@@ -1833,7 +1833,7 @@ rw 17 / ro 78
 | `general_account_init_status` | other | - | - | no | - | - |
 | `general_device_plugin_type` | other | - | - | no | - | - |
 | `hb_aic_feature_available` | bool | - | - | no | - | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `inserted_ai_card_info` | string | - | - | no | - | - |
 | `ip_address` | string | - | - | no | - | - |
@@ -1901,7 +1901,7 @@ rw 32 / ro 68
 | `device_motion_detection_for_sensor` | string | - | - | no | - | - |
 | `device_name` | string | - | - | no | - | - |
 | `device_recording_stream_config` | string | - | - | no | - | - |
-| `device_recording_type` | other | - | - | yes | - | - |
+| `device_recording_type` | enum | 2, 3 | - | yes | select | 2=Event-based, 3=Continuous |
 | `device_sensor_count` | string | - | - | no | - | - |
 | `device_serial_number` | string | - | - | no | - | - |
 | `device_set_alarm_light_type` | enum | 0, 1 | - | yes | select | 0=Spotlight flashing, 1=Red and blue lights flashing |
@@ -2272,7 +2272,7 @@ rw 5 / ro 33
 | `notification_alarm_delay_value` | other | - | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad |
-| `time_format_set` | other | - | - | yes | - | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
 
 ### Settings of T8021 Wi-Fi Bridge & Doorbell Chime
@@ -2653,7 +2653,7 @@ rw 12 / ro 62
 | `sd_card_repair_status` | bool | - | - | no | - | - |
 | `setting_current_connection_type` | other | - | - | no | - | - |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by Geofencing, 3=Switch modes from Keypad |
-| `time_format_set` | other | - | - | yes | - | - |
+| `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
 | `timezone_set` | string | - | - | yes | select | - |
 | `working_mode_value` | enum | 0, 1 | - | yes | select | 0=Standard, 1=Performance (beta) |
 
@@ -2728,7 +2728,7 @@ rw 19 / ro 81
 | `firmware_main_version` | string | - | - | no | - | - |
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `hb_aic_feature_available` | bool | - | - | no | - | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `inserted_ai_card_info` | string | - | - | no | - | - |
 | `ip_address` | string | - | - | no | - | - |
@@ -2947,9 +2947,9 @@ rw 25 / ro 58
 | `firmware_sub_version` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `is_connected_solar_panel` | other | - | - | no | - | - |
 | `is_device_upgrade` | string | - | - | no | - | - |
@@ -3035,9 +3035,9 @@ rw 26 / ro 56
 | `firmware_sub_version` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `is_connected_solar_panel` | other | - | - | no | - | - |
 | `is_device_upgrade` | string | - | - | no | - | - |
@@ -3125,9 +3125,9 @@ rw 27 / ro 67
 | `firmware_sub_version` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
 | `homekit_info` | string | - | - | no | - | - |
@@ -3227,9 +3227,9 @@ rw 26 / ro 60
 | `firmware_sub_version` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
 | `is_connected_solar_panel` | other | - | - | no | - | - |
@@ -3577,7 +3577,7 @@ rw 31 / ro 62
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -3676,7 +3676,7 @@ rw 33 / ro 61
 | `firmware_main_version` | string | - | - | no | - | - |
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -3778,7 +3778,7 @@ rw 31 / ro 64
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -3880,7 +3880,7 @@ rw 33 / ro 64
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -3984,7 +3984,7 @@ rw 27 / ro 60
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -4080,7 +4080,7 @@ rw 28 / ro 64
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -4188,7 +4188,7 @@ rw 31 / ro 77
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -4296,9 +4296,9 @@ rw 29 / ro 65
 | `firmware_sub_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
 | `is_connected_solar_panel` | other | - | - | no | - | - |
@@ -4395,9 +4395,9 @@ rw 30 / ro 64
 | `firmware_sub_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
 | `is_connected_solar_panel` | other | - | - | no | - | - |
@@ -4506,7 +4506,7 @@ rw 36 / ro 80
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `homekit_info` | string | - | - | no | - | - |
@@ -5003,9 +5003,9 @@ rw 32 / ro 69
 | `firmware_sub_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `is_connected_solar_panel` | other | - | - | no | - | - |
 | `is_device_upgrade` | string | - | - | no | - | - |
@@ -5111,9 +5111,9 @@ rw 33 / ro 70
 | `firmware_sub_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `is_connected_solar_panel` | other | - | - | no | - | - |
 | `is_device_upgrade` | string | - | - | no | - | - |
@@ -5215,9 +5215,9 @@ rw 30 / ro 62
 | `firmware_sub_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `is_connected_solar_panel` | other | - | - | no | - | - |
 | `is_device_upgrade` | string | - | - | no | - | - |
@@ -5332,7 +5332,7 @@ rw 40 / ro 87
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
@@ -5468,7 +5468,7 @@ rw 41 / ro 104
 | `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `homebase_connect_support` | bool | - | - | no | - | - |
@@ -5619,7 +5619,7 @@ rw 36 / ro 102
 | `get_device_old_p2p_did` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
@@ -5938,7 +5938,7 @@ rw 38 / ro 98
 | `get_device_old_p2p_did` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
@@ -6081,7 +6081,7 @@ rw 52 / ro 95
 | `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
@@ -6240,7 +6240,7 @@ rw 44 / ro 101
 | `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `homebase_connect_support` | bool | - | - | no | - | - |
@@ -7256,7 +7256,7 @@ rw 50 / ro 109
 | `device_packages_uncollected_check_time` | string | - | - | no | - | - |
 | `device_power_supply_mode` | other | - | - | no | - | - |
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
-| `device_response_timeout_delay_time` | other | - | s | yes | - | - |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | s | yes | select | 0=0 s, 10=10 s, 15=15 s, 5=5 s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -7421,7 +7421,7 @@ rw 54 / ro 124
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
 | `device_query_event_retry_time` | other | - | - | no | - | - |
 | `device_query_event_timeout` | other | - | - | no | - | - |
-| `device_response_timeout_delay_time` | other | - | s | yes | - | - |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | s | yes | select | 0=0 s, 10=10 s, 15=15 s, 5=5 s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -7444,7 +7444,7 @@ rw 54 / ro 124
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_device_old_p2p_did` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `homebase_connect_support` | bool | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
@@ -7598,7 +7598,7 @@ rw 47 / ro 109
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
 | `device_query_event_retry_time` | other | - | - | no | - | - |
 | `device_query_event_timeout` | other | - | - | no | - | - |
-| `device_response_timeout_delay_time` | other | - | - | yes | - | - |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | - | yes | select | 0=0 s, 10=10 s, 15=15 s, 5=5 s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -7619,7 +7619,7 @@ rw 47 / ro 109
 | `firmware_main_version` | string | - | - | no | - | - |
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `homebase_connect_support` | bool | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
@@ -7722,7 +7722,7 @@ rw 23 / ro 49
 | `device_charging_mode` | other | - | - | no | - | - |
 | `device_chime_hb_alert_switch` | bool | - | - | yes | switch | - |
 | `device_chime_hb_alert_tones` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 | - | yes | select | 0=Default, 1=Silent, 2=Beacon, 3=Chord, 4=Christmas, 5=Circuit, 6=Clock, 7=Ding, 8=Hillside, 9=Presto |
-| `device_chime_hb_ring_volume` | other | - | - | yes | - | - |
+| `device_chime_hb_ring_volume` | range | 1..26 step 1 | - | yes | slider | - |
 | `device_is_battery_device` | bool | - | - | no | - | - |
 | `device_is_online` | bool | - | - | no | - | - |
 | `device_model` | string | - | - | no | - | - |
@@ -7800,7 +7800,7 @@ rw 22 / ro 49
 | `device_charging_mode` | other | - | - | no | - | - |
 | `device_chime_hb_alert_switch` | bool | - | - | yes | switch | - |
 | `device_chime_hb_alert_tones` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 | - | yes | select | 0=Default, 1=Silent, 2=Beacon, 3=Chord, 4=Christmas, 5=Circuit, 6=Clock, 7=Ding, 8=Hillside, 9=Presto |
-| `device_chime_hb_ring_volume` | other | - | - | yes | - | - |
+| `device_chime_hb_ring_volume` | range | 1..26 step 1 | - | yes | slider | - |
 | `device_is_battery_device` | bool | - | - | no | - | - |
 | `device_is_online` | bool | - | - | no | - | - |
 | `device_model` | string | - | - | no | - | - |
@@ -7881,7 +7881,7 @@ rw 23 / ro 52
 | `device_charging_mode` | other | - | - | no | - | - |
 | `device_chime_hb_alert_switch` | bool | - | - | yes | switch | - |
 | `device_chime_hb_alert_tones` | enum | 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 | - | yes | select | 0=Default, 1=Silent, 2=Beacon, 3=Chord, 4=Christmas, 5=Circuit, 6=Clock, 7=Ding, 8=Hillside, 9=Presto |
-| `device_chime_hb_ring_volume` | other | - | - | yes | - | - |
+| `device_chime_hb_ring_volume` | range | 1..26 step 1 | - | yes | slider | - |
 | `device_is_battery_device` | bool | - | - | no | - | - |
 | `device_is_online` | bool | - | - | no | - | - |
 | `device_model` | string | - | - | no | - | - |
@@ -7984,7 +7984,7 @@ rw 32 / ro 92
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
 | `device_query_event_retry_time` | other | - | - | no | - | - |
 | `device_query_event_timeout` | other | - | - | no | - | - |
-| `device_response_timeout_delay_time` | other | - | - | yes | - | - |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | - | yes | select | 0=0 s, 10=10 s, 15=15 s, 5=5 s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -8115,7 +8115,7 @@ rw 32 / ro 86
 | `device_name` | string | - | - | no | - | - |
 | `device_query_event_retry_time` | other | - | - | no | - | - |
 | `device_query_event_timeout` | other | - | - | no | - | - |
-| `device_response_timeout_delay_time` | other | - | - | yes | - | - |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | - | yes | select | 0=0 s, 10=10 s, 15=15 s, 5=5 s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -8262,9 +8262,9 @@ rw 48 / ro 76
 | `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
@@ -8393,9 +8393,9 @@ rw 48 / ro 76
 | `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
@@ -8515,9 +8515,9 @@ rw 39 / ro 78
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `homebase_connect_support` | bool | - | - | no | - | - |
 | `homekit_device_connect_homekit_status` | bool | - | - | no | - | - |
@@ -8638,9 +8638,9 @@ rw 39 / ro 78
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `homebase_connect_support` | bool | - | - | no | - | - |
@@ -8910,9 +8910,9 @@ rw 43 / ro 84
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `homebase_connect_support` | bool | - | - | no | - | - |
@@ -9046,9 +9046,9 @@ rw 46 / ro 84
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `homebase_connect_support` | bool | - | - | no | - | - |
@@ -9179,9 +9179,9 @@ rw 39 / ro 77
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `homebase_connect_support` | bool | - | - | no | - | - |
@@ -9306,9 +9306,9 @@ rw 38 / ro 72
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `ip_address` | string | - | - | no | - | - |
@@ -9435,9 +9435,9 @@ rw 48 / ro 91
 | `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
@@ -9572,9 +9572,9 @@ rw 48 / ro 85
 | `get_device_old_p2p_did` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
@@ -9707,7 +9707,7 @@ rw 39 / ro 77
 | `gesture_control_quick_focus_tap_switch` | bool | - | - | no | - | - |
 | `gesture_control_swipe_control_switch` | bool | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `ip_address` | string | - | - | no | - | - |
 | `is_device_upgrade` | string | - | - | no | - | - |
@@ -9889,7 +9889,7 @@ rw 25 / ro 48
 | `firmware_main_version` | string | - | - | no | - | - |
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -9972,7 +9972,7 @@ rw 26 / ro 51
 | `firmware_main_version` | string | - | - | no | - | - |
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -10069,7 +10069,7 @@ rw 31 / ro 63
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
@@ -10156,7 +10156,7 @@ rw 27 / ro 50
 | `firmware_main_version` | string | - | - | no | - | - |
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -10506,9 +10506,9 @@ rw 37 / ro 69
 | `firmware_main_version` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `ip_address` | string | - | - | no | - | - |
@@ -10610,9 +10610,9 @@ rw 13 / ro 43
 | `firmware_main_version` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `ip_address` | string | - | - | no | - | - |
@@ -10688,9 +10688,9 @@ rw 41 / ro 76
 | `firmware_main_version` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `ip_address` | string | - | - | no | - | - |
@@ -12589,7 +12589,7 @@ rw 37 / ro 71
 | `firmware_sub_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_support_hb_nas` | string | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
 | `home_card_show_need_check_storage_type` | other | - | - | no | - | - |
@@ -13183,7 +13183,7 @@ rw 29 / ro 66
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
 | `hb_connect_is_connected` | string | - | - | no | - | - |
-| `hb_connect_nas_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_nas_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_connect_nas_switch` | bool | - | - | yes | switch | - |
 | `hb_connect_support_hb_nas` | bool | - | - | no | - | - |
 | `hb_connect_support_version` | string | - | - | no | - | - |
@@ -13273,7 +13273,7 @@ rw 35 / ro 70
 | `device_motion_detection_for_sensor` | string | - | - | no | - | - |
 | `device_name` | string | - | - | no | - | - |
 | `device_recording_stream_config` | string | - | - | no | - | - |
-| `device_recording_type` | other | - | - | yes | - | - |
+| `device_recording_type` | enum | 2, 3 | - | yes | select | 2=Event-based, 3=Continuous |
 | `device_sensor_count` | string | - | - | no | - | - |
 | `device_serial_number` | string | - | - | no | - | - |
 | `device_set_alarm_light_type` | enum | 0, 1 | - | yes | select | 0=Spotlight flashing, 1=Red and blue lights flashing |
@@ -13853,7 +13853,7 @@ rw 17 / ro 93
 | `general_account_init_status` | other | - | - | no | - | - |
 | `general_device_plugin_type` | other | - | - | no | - | - |
 | `hb_aic_feature_available` | bool | - | - | no | - | - |
-| `hb_connect_storage_type` | other | - | - | yes | - | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `hb_set_dangerous_event_status` | string | - | - | no | - | - |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `inserted_ai_card_info` | string | - | - | no | - | - |
@@ -13917,7 +13917,7 @@ rw 30 / ro 60
 | `device_motion_detection` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
 | `device_name` | string | - | - | no | - | - |
 | `device_recording_stream_config` | string | - | - | no | - | - |
-| `device_recording_type` | other | - | - | yes | - | - |
+| `device_recording_type` | enum | 2, 3 | - | yes | select | 2=Event-based, 3=Continuous |
 | `device_serial_number` | string | - | - | no | - | - |
 | `device_set_alarm_light_type` | enum | 0, 1 | - | yes | select | 0=Spotlight flashing, 1=Red and blue lights flashing |
 | `device_silent_ota_switch` | bool | - | - | yes | switch | - |
@@ -14014,7 +14014,7 @@ rw 30 / ro 63
 | `device_motion_detection` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=Human Recognition, 1=Human Detection, 2=Vehicle, 3=Pet, 4=All Other Motions |
 | `device_name` | string | - | - | no | - | - |
 | `device_recording_stream_config` | string | - | - | no | - | - |
-| `device_recording_type` | other | - | - | yes | - | - |
+| `device_recording_type` | enum | 2, 3 | - | yes | select | 2=Event-based, 3=Continuous |
 | `device_sensor_count` | string | - | - | no | - | - |
 | `device_serial_number` | string | - | - | no | - | - |
 | `device_set_alarm_light_type` | enum | 0, 1 | - | yes | select | 0=Spotlight flashing, 1=Red and blue lights flashing |
@@ -14141,7 +14141,7 @@ rw 31 / ro 56
 | `firmware_main_version` | string | - | - | no | - | - |
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `get_storage_status` | string | - | - | no | - | - |
-| `hb_connect_storage_type` | range | 0..1 step 1 | - | yes | slider | - |
+| `hb_connect_storage_type` | enum | 0, 1 | - | yes | select | 0=Only Events, 1=Continuous Recording and Events |
 | `home_card_show_video_playback` | bool | - | - | no | - | - |
 | `ip_address` | string | - | - | no | - | - |
 | `is_device_upgrade` | string | - | - | no | - | - |

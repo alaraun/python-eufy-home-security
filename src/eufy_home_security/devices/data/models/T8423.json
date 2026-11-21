@@ -982,8 +982,13 @@
   },
   "hb_connect_nas_storage_type": {
    "access": "rw",
-   "default": "0",
-   "kind": "other",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Only Events",
+    "1": "Continuous Recording and Events"
+   },
    "read": {
     "map": null,
     "param": 40004
@@ -991,6 +996,10 @@
    "role": "setting",
    "section": "storage",
    "shown": "page",
+   "values": [
+    0,
+    1
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 1310,
