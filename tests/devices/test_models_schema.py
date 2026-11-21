@@ -234,12 +234,16 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
             else:
                 assert kind == "range"
                 assert len(arg) == 2
+    if s["kind"] == "enum" and "default" in s:
+        assert s["default"] in s["values"]  # a select shows its default
     read = s.get("read")
     if read is not None:
-        assert {"param", "map"} <= set(read) <= {"param", "map", "view", "no_default"}
+        assert {"param", "map"} <= set(read) <= {"param", "map", "view", "no_default", "fallback"}
         if "no_default" in read:
             assert read["no_default"] is True
             assert s["access"] == "ro"  # a status only the device reports
+        if "fallback" in read:
+            assert read["fallback"] in s["values"]
         assert isinstance(read["param"], int)
         assert not isinstance(read["param"], bool)
         assert read["map"] is None or isinstance(read["map"], dict)

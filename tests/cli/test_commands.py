@@ -261,7 +261,7 @@ async def test_set_without_a_target_addresses_the_station(
     for extra, target in (([], "the station"), (["--channel", "255"], "channel 255")):
         argv = ["--host", "127.0.0.1", "set", "time_format_set", "1", *extra]
         assert await run(argv, tmp_path) == 0
-        assert f"time_format_set = 1 on {target}: applied" in capsys.readouterr().out
+        assert f"time_format_set = 24-hour on {target}: applied" in capsys.readouterr().out
         assert fake.ecb_received[-1] == (1253, 255, 1)
 
 

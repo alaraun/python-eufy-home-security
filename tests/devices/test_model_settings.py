@@ -919,6 +919,63 @@ def test_app_domains_fill_settings_the_td_leaves_open() -> None:
     assert schedule.writable
 
 
+def test_the_recording_type_reads_any_other_value_as_continuous() -> None:
+    """The app's screen shows a value outside Event-based/Continuous as Continuous."""
+    for code in ("T7100", "T8E00", "T8P00", "T8P10"):
+        recording = settings_of(code)["device_recording_type"]
+        assert recording.default == 3, code
+        assert [recording.decode(raw) for raw in ("0", "2", "3", "x")] == [3, 2, 3, 3], code
+        with pytest.raises(ValueError, match="device_recording_type"):
+            recording.validate(0)
+
+
+def test_open_time_formats_get_the_twelve_or_twenty_four_hour_choice() -> None:
+    for code in ("T8001", "T8002", "T8023", "T8024"):
+        time_format = settings_of(code)["time_format_set"]
+        assert (time_format.kind, time_format.values) == (SettingKind.ENUM, (0, 1)), code
+        assert dict(time_format.labels) == {0: "12-hour", 1: "24-hour"}, code
+
+
+def test_the_response_delay_labels_are_the_screens_texts() -> None:
+    delay = settings_of("T8214")["device_response_timeout_delay_time"]
+    assert dict(delay.labels) == {0: "0s", 5: "5s", 10: "10s", 15: "15s"}
+
+
+_FALLBACK_READ: dict[str, object] = {"param": 6010, "map": None, "fallback": 3}
+_FALLBACK_ENTRY = {**GOOD_ENTRY, "kind": "enum", "values": [2, 3], "read": _FALLBACK_READ}
+
+
+def test_a_read_fallback_decodes_every_value_outside_the_values(data_root: Path) -> None:
+    _write_model(
+        data_root,
+        {
+            "rec": _FALLBACK_ENTRY,
+            "mapped": {**_FALLBACK_ENTRY, "read": {**_FALLBACK_READ, "map": {"9": 2}}},
+        },
+    )
+    rec = settings_of("T0001")["rec"]
+    assert [rec.decode(raw) for raw in ("2", "3", "0", "", "abc")] == [2, 3, 3, 3, 3]
+    assert rec.decode(None) is None  # unreported: the default path decides
+    mapped = settings_of("T0001")["mapped"]
+    assert [mapped.decode(raw) for raw in ("9", "2")] == [2, 3]
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {**_FALLBACK_ENTRY, "read": {**_FALLBACK_READ, "fallback": 4}},
+        {**_FALLBACK_ENTRY, "kind": "range", "min": 0, "max": 5, "step": 1},
+    ],
+    ids=["outside-values", "not-enum"],
+)
+def test_a_read_fallback_must_be_one_of_the_enums_values(
+    data_root: Path, entry: dict[str, object]
+) -> None:
+    _write_model(data_root, {"rec": entry})
+    with pytest.raises(ModelDataError, match=r"T0001\.json: rec: read fallback"):
+        settings_of("T0001")
+
+
 @pytest.mark.parametrize("value", ["yes", 1, None])
 def test_structured_must_be_a_bool(data_root: Path, value: object) -> None:
     _write_model(data_root, {"mode": {**GOOD_ENTRY, "structured": value}})
