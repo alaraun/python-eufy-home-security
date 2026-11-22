@@ -1422,8 +1422,9 @@
     "1": "H265"
    },
    "read": null,
-   "role": "diagnostic",
+   "role": "status",
    "section": "recording",
+   "shown": "card",
    "values": [
     0,
     1
@@ -1569,7 +1570,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8200XHandle.mix.js",
   "handler_date": "2026-04-21",
   "td_version": 77

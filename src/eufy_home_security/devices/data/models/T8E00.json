@@ -624,7 +624,7 @@
    "read": null,
    "role": "setting",
    "section": "recording",
-   "shown": "page"
+   "shown": "card"
   },
   "device_recording_type": {
    "access": "rw",
@@ -835,7 +835,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0
    ],
@@ -871,7 +871,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0,
     2
@@ -1800,7 +1800,7 @@
    "access": "ro",
    "default": "10",
    "kind": "other",
-   "page": "PanTiltSpeed",
+   "page": "PanTiltSettings",
    "read": null,
    "role": "status",
    "section": "ptz",
@@ -2387,7 +2387,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8E00Handle.mix.js",
   "handler_date": "2026-09-11",
   "td_version": 327

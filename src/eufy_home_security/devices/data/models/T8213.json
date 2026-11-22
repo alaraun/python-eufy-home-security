@@ -1602,6 +1602,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "write": {
     "cmd": 1251,
     "params": {
@@ -2151,8 +2152,9 @@
     "1": "H265"
    },
    "read": null,
-   "role": "diagnostic",
+   "role": "status",
    "section": "recording",
+   "shown": "card",
    "values": [
     0,
     1
@@ -2577,7 +2579,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8213Handle.mix.js",
   "handler_date": "2026-04-23",
   "td_version": 118

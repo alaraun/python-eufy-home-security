@@ -420,7 +420,6 @@
   "firmware_sub_version": {
    "access": "ro",
    "kind": "string",
-   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -591,7 +590,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8023Handle.mix.js",
   "handler_date": "2026-07-15",
   "td_version": 46

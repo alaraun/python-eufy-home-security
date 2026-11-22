@@ -437,7 +437,6 @@
   "firmware_sub_version": {
    "access": "ro",
    "kind": "string",
-   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -626,7 +625,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8024Handle.mix.js",
   "handler_date": "2026-04-21",
   "td_version": 76

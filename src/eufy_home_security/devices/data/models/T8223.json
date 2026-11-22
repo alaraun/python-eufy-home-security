@@ -830,8 +830,9 @@
    "default": "v3",
    "kind": "string",
    "read": null,
-   "role": "diagnostic",
-   "section": "network"
+   "role": "status",
+   "section": "network",
+   "shown": "card"
   },
   "device_name": {
    "access": "rw",
@@ -1198,7 +1199,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0
    ]
@@ -1266,7 +1267,6 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1359,7 +1359,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variants": [
     {
      "id": "is_support_multiple_bridge__v1",
@@ -1485,7 +1485,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v2": {
@@ -1495,7 +1495,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v3": {
@@ -1505,7 +1505,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v4": {
@@ -1515,7 +1515,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v5": {
@@ -1525,7 +1525,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_silent_ota_switch": {
@@ -1917,6 +1917,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "write": {
     "cmd": 1251,
     "params": {
@@ -2843,7 +2844,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8223Handle.mix.js",
   "handler_date": "2026-09-12",
   "td_version": 155

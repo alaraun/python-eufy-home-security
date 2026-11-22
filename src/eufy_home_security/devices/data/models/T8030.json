@@ -619,7 +619,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0
    ]
@@ -683,7 +683,6 @@
   "firmware_sub_version": {
    "access": "ro",
    "kind": "string",
-   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1150,7 +1149,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8030Handle.mix.js",
   "handler_date": "2026-09-04",
   "td_version": 174

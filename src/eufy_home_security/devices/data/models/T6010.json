@@ -107,7 +107,6 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
-   "page": "BottleWasherHomeScreen",
    "read": {
     "map": null,
     "no_default": true,
@@ -415,7 +414,6 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -507,7 +505,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T6010Handle.mix.js",
   "handler_date": "2026-06-25",
   "td_version": 103

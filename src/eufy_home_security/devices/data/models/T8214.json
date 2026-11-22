@@ -1321,8 +1321,9 @@
    "default": "v2",
    "kind": "string",
    "read": null,
-   "role": "diagnostic",
-   "section": "network"
+   "role": "status",
+   "section": "network",
+   "shown": "card"
   },
   "device_multiple_bridge_switch": {
    "access": "rw",
@@ -1339,7 +1340,7 @@
    },
    "role": "setting",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "write": {
     "cmd": 1350,
     "subCmd": 60011,
@@ -1978,7 +1979,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variants": [
     {
      "id": "is_support_multiple_bridge__v1",
@@ -2104,7 +2105,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v2": {
@@ -2114,7 +2115,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v3": {
@@ -2124,7 +2125,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v4": {
@@ -2134,7 +2135,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v5": {
@@ -2144,7 +2145,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_silent_ota_switch": {
@@ -2596,6 +2597,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "write": {
     "cmd": 1251,
     "params": {
@@ -3728,8 +3730,9 @@
     "1": "H265"
    },
    "read": null,
-   "role": "diagnostic",
+   "role": "status",
    "section": "recording",
+   "shown": "card",
    "values": [
     0,
     1
@@ -4133,7 +4136,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8214Handle.mix.js",
   "handler_date": "2026-09-09",
   "td_version": 196

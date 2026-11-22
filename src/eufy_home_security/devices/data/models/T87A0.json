@@ -70,7 +70,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T87A0Handle.mix.js",
   "handler_date": "2025-09-24",
   "td_version": 8

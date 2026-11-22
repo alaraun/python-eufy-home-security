@@ -281,6 +281,7 @@
    "default": true,
    "kind": "bool",
    "name": "Auto spotlight",
+   "page": "SpotlightSettings",
    "read": {
     "map": {
      "": false,
@@ -757,8 +758,9 @@
    "default": "v1",
    "kind": "string",
    "read": null,
-   "role": "diagnostic",
+   "role": "status",
    "section": "network",
+   "shown": "card",
    "variants": [
     {
      "id": "device_multiple_bridge_style__v1",
@@ -790,8 +792,9 @@
    "default": "v1",
    "kind": "string",
    "read": null,
-   "role": "diagnostic",
+   "role": "status",
    "section": "network",
+   "shown": "card",
    "variant_of": "device_multiple_bridge_style"
   },
   "device_name": {
@@ -975,7 +978,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0,
     1,
@@ -1008,7 +1011,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0,
     2
@@ -1213,7 +1216,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variants": [
     {
      "id": "is_support_multiple_bridge__v3",
@@ -1316,7 +1319,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v2": {
@@ -1326,7 +1329,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v3": {
@@ -1336,7 +1339,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v4": {
@@ -1346,7 +1349,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_silent_ota_switch": {
@@ -2444,8 +2447,9 @@
     "0": "H264"
    },
    "read": null,
-   "role": "diagnostic",
+   "role": "status",
    "section": "recording",
+   "shown": "card",
    "values": [
     0
    ]
@@ -2621,7 +2625,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8442Handle.mix.js",
   "handler_date": "2026-04-21",
   "td_version": 88

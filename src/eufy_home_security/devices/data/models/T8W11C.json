@@ -953,8 +953,9 @@
    "default": "v1",
    "kind": "string",
    "read": null,
-   "role": "diagnostic",
-   "section": "network"
+   "role": "status",
+   "section": "network",
+   "shown": "card"
   },
   "device_name": {
    "access": "rw",
@@ -1136,7 +1137,6 @@
   "firmware_sub_version": {
    "access": "ro",
    "kind": "string",
-   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1231,7 +1231,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variants": [
     {
      "id": "is_support_multiple_bridge__v3",
@@ -1407,7 +1407,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v2": {
@@ -1417,7 +1417,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v3": {
@@ -1427,7 +1427,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v4": {
@@ -1437,7 +1437,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v5": {
@@ -1447,7 +1447,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v6": {
@@ -1457,7 +1457,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_silent_ota_switch": {
@@ -2022,7 +2022,8 @@
    "note": "no handler write path",
    "read": null,
    "role": "setting",
-   "section": "recording"
+   "section": "recording",
+   "shown": "page"
   },
   "nas_select_video_type": {
    "access": "rw",
@@ -2795,7 +2796,8 @@
    "kind": "other",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "shown": "card"
   },
   "switching_notification": {
    "access": "rw",
@@ -3025,7 +3027,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8W11CHandle.mix.js",
   "handler_date": "2026-06-04",
   "td_version": 111

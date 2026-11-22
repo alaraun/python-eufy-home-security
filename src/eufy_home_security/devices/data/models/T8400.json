@@ -820,8 +820,9 @@
    "default": "v1",
    "kind": "string",
    "read": null,
-   "role": "diagnostic",
-   "section": "network"
+   "role": "status",
+   "section": "network",
+   "shown": "card"
   },
   "device_name": {
    "access": "rw",
@@ -988,7 +989,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0,
     1,
@@ -1021,7 +1022,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0,
     2
@@ -1274,7 +1275,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variants": [
     {
      "id": "is_support_multiple_bridge__v1",
@@ -1400,7 +1401,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v2": {
@@ -1410,7 +1411,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v3": {
@@ -1420,7 +1421,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v4": {
@@ -1430,7 +1431,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v5": {
@@ -1440,7 +1441,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_silent_ota_switch": {
@@ -2614,7 +2615,8 @@
    "note": "handler ignores the value",
    "read": null,
    "role": "setting",
-   "section": "doorbell"
+   "section": "doorbell",
+   "shown": "page"
   },
   "record_resolution": {
    "access": "rw",
@@ -2944,8 +2946,9 @@
    "access": "ro",
    "kind": "string",
    "read": null,
-   "role": "diagnostic",
-   "section": "recording"
+   "role": "status",
+   "section": "recording",
+   "shown": "card"
   },
   "switching_notification": {
    "access": "rw",
@@ -3115,7 +3118,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8400Handle.mix.js",
   "handler_date": "2026-09-17",
   "td_version": 131

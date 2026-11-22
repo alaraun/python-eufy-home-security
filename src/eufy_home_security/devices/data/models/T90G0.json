@@ -272,7 +272,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T90G0Handle.mix.js",
   "handler_date": "2026-03-31",
   "td_version": 54

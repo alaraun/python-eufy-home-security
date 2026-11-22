@@ -431,6 +431,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "VoiceExpulsionMonitoring",
    "read": {
     "map": {
      "": false,
@@ -441,6 +442,7 @@
    },
    "role": "setting",
    "section": "detection",
+   "shown": "page",
    "write": {
     "cmd": 1700,
     "subCmd": 6098,
@@ -870,7 +872,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0,
     1,
@@ -1863,8 +1865,9 @@
    "access": "ro",
    "kind": "bool",
    "read": null,
-   "role": "diagnostic",
-   "section": "recording"
+   "role": "status",
+   "section": "recording",
+   "shown": "card"
   },
   "time_format_set": {
    "access": "rw",
@@ -2005,7 +2008,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8423Handle.mix.js",
   "handler_date": "2026-04-21",
   "td_version": 92

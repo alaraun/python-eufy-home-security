@@ -961,7 +961,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0
    ]
@@ -1045,7 +1045,7 @@
    "read": null,
    "role": "status",
    "section": "detection",
-   "shown": "page"
+   "shown": "card"
   },
   "hb_connect_storage_type": {
    "access": "rw",
@@ -1601,7 +1601,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8N00Handle.mix.js",
   "handler_date": "2026-08-27",
   "td_version": 243

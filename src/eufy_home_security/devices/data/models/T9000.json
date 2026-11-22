@@ -915,7 +915,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0
    ]
@@ -999,7 +999,6 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
-   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1030,7 +1029,7 @@
    "read": null,
    "role": "status",
    "section": "detection",
-   "shown": "page"
+   "shown": "card"
   },
   "hb_keypad_is_password_set": {
    "access": "ro",
@@ -1569,7 +1568,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T9000Handle.mix.js",
   "handler_date": "2026-07-29",
   "td_version": 281

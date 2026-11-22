@@ -39,7 +39,7 @@ __all__ = [
     "td_conditions",
 ]
 
-THING_SDK_VERSION: Final = "2.3.1.2"
+THING_SDK_VERSION: Final = "2.3.3.1"
 """The app's thing-SDK version that ``sdk_version`` conditions compare: that of the app
 build the generated data comes from (see docs/how-to/regenerate-models.md)."""
 VARIANT_SEPARATOR: Final = "__v"

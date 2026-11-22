@@ -1618,7 +1618,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0
    ]
@@ -1837,7 +1837,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page"
+   "shown": "card"
   },
   "is_support_silent_ota_switch": {
    "access": "ro",
@@ -2246,6 +2246,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "write": {
     "cmd": 1251,
     "params": {
@@ -3807,7 +3808,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "fb6fdd8a-9734-4ba6-8a92-b43718efb720_T8217Handle.mix.js",
   "handler_date": "2026-09-24",
   "td_version": 60

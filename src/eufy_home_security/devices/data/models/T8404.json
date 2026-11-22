@@ -873,8 +873,9 @@
    "default": "v3",
    "kind": "string",
    "read": null,
-   "role": "diagnostic",
+   "role": "status",
    "section": "network",
+   "shown": "card",
    "variants": [
     {
      "id": "device_multiple_bridge_style__v1",
@@ -939,8 +940,9 @@
    "default": "v2",
    "kind": "string",
    "read": null,
-   "role": "diagnostic",
+   "role": "status",
    "section": "network",
+   "shown": "card",
    "variant_of": "device_multiple_bridge_style"
   },
   "device_multiple_bridge_style__v2": {
@@ -948,8 +950,9 @@
    "default": "v3",
    "kind": "string",
    "read": null,
-   "role": "diagnostic",
+   "role": "status",
    "section": "network",
+   "shown": "card",
    "variant_of": "device_multiple_bridge_style"
   },
   "device_multiple_bridge_switch": {
@@ -967,7 +970,7 @@
    },
    "role": "setting",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "write": {
     "cmd": 1350,
     "subCmd": 60011,
@@ -1238,7 +1241,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0
    ],
@@ -1270,7 +1273,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0,
     1,
@@ -1467,7 +1470,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variants": [
     {
      "id": "is_support_multiple_bridge__v1",
@@ -1509,7 +1512,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v2": {
@@ -1519,7 +1522,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "page",
+   "shown": "card",
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_silent_ota_switch": {
@@ -1844,6 +1847,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "write": {
     "cmd": 1251,
     "params": {
@@ -2423,8 +2427,9 @@
     "1": "H265"
    },
    "read": null,
-   "role": "diagnostic",
+   "role": "status",
    "section": "recording",
+   "shown": "card",
    "values": [
     0,
     1
@@ -2758,7 +2763,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "2b50d873-10d1-4f11-89bc-01a2ca5faa47_T8404Handle.mix.js",
   "handler_date": "2026-10-14",
   "td_version": 53

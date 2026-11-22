@@ -79,8 +79,9 @@
    "default": true,
    "kind": "bool",
    "read": null,
-   "role": "diagnostic",
-   "section": "system"
+   "role": "status",
+   "section": "system",
+   "shown": "page"
   },
   "is_support_mqtt": {
    "access": "ro",
@@ -249,7 +250,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8L04Handle.mix.js",
   "handler_date": "2026-04-08",
   "td_version": 64

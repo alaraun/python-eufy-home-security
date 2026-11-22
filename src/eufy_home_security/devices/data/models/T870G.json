@@ -727,12 +727,13 @@
    "default": false,
    "kind": "bool",
    "read": null,
-   "role": "diagnostic",
-   "section": "other"
+   "role": "status",
+   "section": "other",
+   "shown": "card"
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T870GHandle.mix.js",
   "handler_date": "2026-07-16",
   "td_version": 48

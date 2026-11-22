@@ -690,9 +690,9 @@
    "access": "ro",
    "kind": "other",
    "read": null,
-   "role": "status",
+   "role": "diagnostic",
    "section": "storage",
-   "shown": "page"
+   "shown": "card"
   },
   "device_wifi_name": {
    "access": "ro",
@@ -1168,6 +1168,7 @@
    },
    "role": "setting",
    "section": "recording",
+   "shown": "page",
    "write": {
     "cmd": 1251,
     "params": {
@@ -1630,7 +1631,8 @@
    "kind": "other",
    "read": null,
    "role": "diagnostic",
-   "section": "recording"
+   "section": "recording",
+   "shown": "card"
   },
   "time_format_set": {
    "access": "rw",
@@ -1732,7 +1734,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T84A1Handle.mix.js",
   "handler_date": "2026-09-02",
   "td_version": 81

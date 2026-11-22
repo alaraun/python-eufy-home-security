@@ -544,7 +544,7 @@
    "read": null,
    "role": "setting",
    "section": "recording",
-   "shown": "page"
+   "shown": "card"
   },
   "device_recording_type": {
    "access": "rw",
@@ -750,7 +750,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0
    ]
@@ -2110,7 +2110,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T7100Handle.mix.js",
   "handler_date": "2026-07-13",
   "td_version": 43

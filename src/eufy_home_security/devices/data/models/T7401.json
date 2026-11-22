@@ -206,7 +206,7 @@
    "read": null,
    "role": "status",
    "section": "storage",
-   "shown": "page",
+   "shown": "card",
    "values": [
     0,
     1
@@ -374,7 +374,8 @@
    "page": "CustomizeRecording",
    "read": null,
    "role": "setting",
-   "section": "recording"
+   "section": "recording",
+   "shown": "page"
   },
   "nightvision_type": {
    "access": "ro",
@@ -523,7 +524,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T7401Handle.mix.js",
   "handler_date": "2026-01-19",
   "td_version": 32

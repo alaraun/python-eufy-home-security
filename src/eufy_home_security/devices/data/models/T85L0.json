@@ -327,7 +327,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T85L0Handle.mix.js",
   "handler_date": "2026-08-19",
   "td_version": 43

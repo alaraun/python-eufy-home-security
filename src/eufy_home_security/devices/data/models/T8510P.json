@@ -339,7 +339,7 @@
   }
  },
  "source": {
-  "app_version": "6.1.10",
+  "app_version": "6.1.32",
   "handler": "T8510PHandle.mix.js",
   "handler_date": "2026-07-16",
   "td_version": 44
