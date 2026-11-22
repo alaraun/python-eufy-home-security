@@ -4569,8 +4569,8 @@ async def test_a_floodlight_pans_and_reads_presets_in_its_handlers_plain_form(
 
 
 def _without_action(monkeypatch: pytest.MonkeyPatch, code: str, action: str) -> None:
-    """``code``'s thing description as if it declared no ``action`` (no bundled model
-    declares that combination)."""
+    """``code``'s thing description as if it declared no ``action``, on a model whose
+    other preset actions the fake station answers."""
     table = dict(devices_ptz._TABLE)
     table[code] = {k: v for k, v in table[code].items() if k != action}
     monkeypatch.setattr(devices_ptz, "_TABLE", table)

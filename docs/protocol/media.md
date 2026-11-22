@@ -349,14 +349,14 @@ The open is the device's own handler's (`open_live_stream` in its `<PN>Handle.mi
 and it depends on how the device is reached. `scripts/gen_live_open.py` runs every
 cached handler standalone and behind each station kind and records which library open
 reproduces it (`devices/_live_open_data.py`, `devices.live_open`). From the eufy app's
-handlers (96 products with a live open):
+handlers (103 products with a live open):
 
 | handler's open | standalone | behind a HomeBase 2 / 3 |
 |---|---|---|
-| 1700/1000 with `extValue` (`single`) | 4 products | — / 2 |
-| 1700/1000 without `extValue` (`single_no_ext`) | 63 | 22 / 23 |
-| 1350/1003 `DeviceMsgBean`, plain payload (`station`) | 1 | 64 / 61 |
-| 1350/1003 multi-camera payload (`nvr`, `nvr_lens`) | 4 | 7 / 7 |
+| 1700/1000 with `extValue` (`single`) | 5 products | — / 2 |
+| 1700/1000 without `extValue` (`single_no_ext`) | 68 | 23 / 24 |
+| 1350/1003 `DeviceMsgBean`, plain payload (`station`) | 1 | 69 / 66 |
+| 1350/1003 multi-camera payload (`nvr`, `nvr_lens`) | 5 | 8 / 8 |
 | another open (bare 1003 `cryptoKey`, version-dependent) | 24 | 3 / 3 |
 
 Behind a NVR, a T9000, a T7000 or a HomeBase 4 most handlers send the multi-camera open

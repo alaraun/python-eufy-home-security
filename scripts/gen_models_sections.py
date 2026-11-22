@@ -138,7 +138,8 @@ KEY_RULES: tuple[tuple[str, str], ...] = (
         "picture",
     ),
     (r"light_.*|manual_light_brightness|led_.*|indicator_led_status|breathing_light_.*", "picture"),
-    (r"timer_for_lights|color_nightvision_switch", "picture"),
+    (r"timer_for_lights|color_nightvision_switch|motion_actived_light_.*", "picture"),
+    (r"ambient_light_.*", "picture"),
     (r"watermark_set|rotate_image_180_on_off|video_mirror_mode_set|video_setting_.*", "picture"),
     (r"video_settings_led_activate_time|view_mode|(video_)?watch_view_mode", "picture"),
     (r"video_quality_(hdr|wdr|distortion_correction)_switch", "picture"),
@@ -159,6 +160,7 @@ KEY_RULES: tuple[tuple[str, str], ...] = (
     (r"device_cross_cam_.*|device_linkage_mode|device_wildlife_watch_mode_switch", "detection"),
     (r"sensor_motion_.*|sensor_grass_.*|(device_)?radar_.*|device_rain_mode", "detection"),
     (r"smart_lock_rain_mode_switch|support_smart_search_switch", "detection"),
+    (r"voice_expulsion_.*", "detection"),
     # Recording.
     (r"record_.*|live_streaming_resolution.*|device_continuous_.*", "recording"),
     (r"device_pre_recording_switch|device_recording_.*|device_event_.*", "recording"),

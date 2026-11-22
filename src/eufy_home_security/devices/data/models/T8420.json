@@ -978,7 +978,7 @@
    },
    "read": null,
    "role": "status",
-   "section": "detection",
+   "section": "picture",
    "shown": "page",
    "values": [
     0,
@@ -1002,7 +1002,7 @@
     "param": 1408
    },
    "role": "status",
-   "section": "detection",
+   "section": "picture",
    "shown": "page"
   },
   "motion_detection_status": {

@@ -4,7 +4,9 @@ from typing import Final
 
 import pytest
 
+from eufy_home_security.devices import types
 from eufy_home_security.devices._live_open_data import LIVE_OPEN
+from eufy_home_security.devices._model_names_data import MODEL_NAMES
 from eufy_home_security.devices.app_models import APP_MODELS, APP_VERSION
 from eufy_home_security.devices.model_settings import bundled_codes
 from eufy_home_security.devices.support import Support
@@ -299,10 +301,6 @@ def test_a_model_the_apps_names_lack_is_named_by_its_constant_or_code(
         (_unit("T8170", c6="3", c7="0"), None, "SoloCam S340"),
         (_unit("T8170", c6="3", c7="5"), None, "Battery Solo Cam 8170"),  # all must hold
         (_unit("T8124"), None, "SoloCam S40"),
-        (_unit("T8124"), "T8124R", "SoloCam S40"),
-        (_unit("T8124"), " t8124r", "SoloCam S40"),
-        (_unit("T8124"), "T8410C", "SoloCam S40"),  # another prefix's code
-        (_unit("T8124"), "T8124X", "SoloCam S40"),  # a code without names
         (_unit("T8191"), None, "SoloCam E60"),  # named by the app, not catalogued
         (_unit("T7200"), None, "Dogcam"),
         ("T814X", None, "eufyCam C37"),  # shorter than any rule's position
@@ -315,3 +313,24 @@ def test_product_name_is_the_name_the_app_shows_for_the_unit(
     serial: str, code: str | None, name: str | None
 ) -> None:
     assert product_name(serial, code) == name
+
+
+@pytest.mark.parametrize(
+    ("code", "name"),
+    [
+        ("T8124R", "Product R"),
+        (" t8124r", "Product R"),
+        ("T8410C", "Product"),  # another prefix's code
+        ("T8124X", "Product"),  # a code without names
+        (None, "Product"),
+    ],
+)
+def test_product_name_takes_the_units_product_code_row(
+    monkeypatch: pytest.MonkeyPatch, code: str | None, name: str
+) -> None:
+    """The unit's product code, where it shares the serial's prefix, picks its own row."""
+    names = dict(MODEL_NAMES)
+    names["T8124"] = ("Product", (), "T8124")
+    names["T8124R"] = ("Product R", (), "T8124R")
+    monkeypatch.setattr(types, "MODEL_NAMES", names)
+    assert product_name(_unit("T8124"), code) == name

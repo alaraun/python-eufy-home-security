@@ -20,6 +20,8 @@ from eufy_home_security.cloud.models import (
     parse_faces,
     security_device_entry,
 )
+from eufy_home_security.devices import types
+from eufy_home_security.devices._model_names_data import MODEL_NAMES
 from eufy_home_security.exceptions import CloudApiError, EmptyResponseError, ProtocolError
 from eufy_home_security.testing import SYNTHETIC, FakeStation, security_device, security_station
 
@@ -85,7 +87,6 @@ def test_model_of_a_catalogued_camera() -> None:
     [
         ("T814XZ5ZZZZZZZZZ", None, "eufyCam C36"),
         ("T8124ZZZZZZZZZZZ", None, "SoloCam S40"),
-        ("T8124ZZZZZZZZZZZ", "T8124R", "SoloCam S40"),
     ],
 )
 def test_model_name_is_the_apps_name_for_the_unit(
@@ -95,6 +96,16 @@ def test_model_name_is_the_apps_name_for_the_unit(
     if new_pn is not None:
         entry["device_new_pn"] = new_pn
     assert CloudDevice.from_api(entry).model_name == name
+
+
+def test_model_name_takes_the_cloud_product_codes_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    names = dict(MODEL_NAMES)
+    names["T8124R"] = ("Product R", (), "T8124R")
+    monkeypatch.setattr(types, "MODEL_NAMES", names)
+    entry = {"device_sn": "T8124ZZZZZZZZZZZ", "device_type": 0, "device_new_pn": "T8124R"}
+    assert CloudDevice.from_api(entry).model_name == "Product R"
+    del entry["device_new_pn"]
+    assert CloudDevice.from_api(entry).model_name == "SoloCam S40"
 
 
 def test_model_of_an_uncatalogued_device_keeps_the_prefix() -> None:
