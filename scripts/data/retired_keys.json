@@ -1,0 +1,104 @@
+{
+ "T8110": [
+  "device_set_time_lapse_photography"
+ ],
+ "T8111": [
+  "hb_connect_nas_storage_type"
+ ],
+ "T8113": [
+  "hb_connect_nas_storage_type",
+  "homekit_info"
+ ],
+ "T8119": [
+  "device_multiple_bridge_connect_fail_flag",
+  "device_multiple_bridge_switch",
+  "device_set_time_lapse_photography",
+  "is_support_multiple_bridge__v1",
+  "is_support_multiple_bridge__v2",
+  "is_support_multiple_bridge__v3",
+  "is_support_multiple_bridge__v4",
+  "nightvision_supply_light_mode"
+ ],
+ "T8142": [
+  "hb_connect_nas_storage_type"
+ ],
+ "T8144": [
+  "device_multiple_bridge_style"
+ ],
+ "T814X": [
+  "device_set_time_lapse_photography"
+ ],
+ "T8150": [
+  "spotlight_status"
+ ],
+ "T8160C": [
+  "nas_select_video_type"
+ ],
+ "T8161": [
+  "nas_select_video_type"
+ ],
+ "T8170": [
+  "nas_select_video_type"
+ ],
+ "T8171": [
+  "is_support_multiple_bridge__v4",
+  "nas_select_video_type"
+ ],
+ "T8172": [
+  "device_set_time_lapse_photography",
+  "nas_select_video_type",
+  "nas_select_video_type__v1"
+ ],
+ "T8173": [
+  "nas_select_video_type",
+  "nas_select_video_type__v1"
+ ],
+ "T817L": [
+  "device_set_time_lapse_photography"
+ ],
+ "T8180": [
+  "daily_highlight_switch"
+ ],
+ "T81A0": [
+  "spotlight_status"
+ ],
+ "T8400": [
+  "reset_device_mode"
+ ],
+ "T8414": [
+  "hb_connect_support_hb_nas"
+ ],
+ "T8419": [
+  "gesture_control_quick_focus_tap_switch",
+  "gesture_control_swipe_control_switch",
+  "sound_detection_type"
+ ],
+ "T8420X": [
+  "record_resolution"
+ ],
+ "T8422": [
+  "record_resolution"
+ ],
+ "T8424": [
+  "record_resolution"
+ ],
+ "T8426": [
+  "notification_ai_pet_switch"
+ ],
+ "T8532": [
+  "detection_type_set"
+ ],
+ "T85M1": [
+  "detection_type_set"
+ ],
+ "T8970": [
+  "battery_value"
+ ],
+ "T8L60": [
+  "device_set_time_lapse_photography"
+ ],
+ "T8W11C": [
+  "gesture_control_quick_focus_tap_switch",
+  "gesture_control_swipe_control_switch"
+ ]
+}

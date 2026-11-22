@@ -1,7 +1,7 @@
 # Settings files (schema v3)
 
 `src/eufy_home_security/devices/data/models/<PN>.json` holds one file per product
-code (159). Each file lists the model's settings, as the vendor's thing description (TD)
+code (166). Each file lists the model's settings, as the vendor's thing description (TD)
 declares them, with the write and read codecs the vendor's handler
 (`<PN>Handle.mix.js`) gives. `scripts/gen_models.py` generates the files and
 `INDEX.json` beside them, `{"schema_version": 3, "codes": [...]}`: the sorted product
@@ -30,7 +30,7 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `kind` | `enum`, `bool`, `range`, `string`, `other` or `flags` (an int bitmask of named members, several may be on) |
 | `values` | The enum's values (TD values, the public values the handler takes) |
 | `min`, `max`, `step`, `default` | From the TD where it gives them; `default` is the eufy app's own where the app shows another value while the device reports none (`device_cross_cam_assistance_switch` on a T8030: on); an enum's `default` is always one of its `values` |
-| `unit` | The unit the app's screen shows: a settings-page control's on the page the setting is on, on a model whose settings the app's RN screens render, or a screen that reads the property wherever it sits (the clip length and retrigger interval: `s` on every model; the power-manager counters show a bare number: no unit); it wins over the TD unit. Else the TD unit normalised to `s`, `ms` or `%` (the TD's `day` is dropped: no app screen shows those values in days); absent otherwise |
+| `unit` | The unit the app's screen shows: a settings-page control's on the page the setting is on, on a model whose settings the app's RN screens render, or a screen that reads the property wherever it sits (the clip length and retrigger interval: `s` on every model; the power-manager counters show a bare number: no unit); it wins over the TD unit. Else the TD unit normalised to `s`, `ms` or `%` (the TD's `day` is dropped: no app screen shows those values in days; its volume unit is `%` on a 0..100 or 1..100 scale and dropped on any other, a bare level); absent otherwise |
 | `meaning` | What the app reads the value as, where its own code names the property: a security sensor's card status (`opening`, `tamper`, `low_battery`, `moisture`, `cold`, `siren_ringing`; bool settings only), `timestamp` (epoch milliseconds), `time_of_day` (`HH:MM`); or `temperature` from the TD unit `degree`. Absent otherwise: the loader then derives it from `unit` (a time unit: `duration`, `%`: `percent`) |
 | `access` | `rw`: the handler has a value-dependent write. `ro`: it has none, or the setting is a status the eufy app only reads (`hb_keypad_is_password_set`) |
 | `write` | Recipe template (base context, below) |
@@ -171,7 +171,9 @@ own recipes prove the new form sends the same bytes:
   and so does one an `applies_when` names. A key a release bundled is never dropped: a
   key the model lists in `scripts/data/released_keys.json` (product code → the setting
   keys a release shipped; a generator input, not package data) stays as `variant_of` its
-  primary, and a released product code stays in `INDEX.json`. The
+  primary, and a released product code stays in `INDEX.json`. A released key the
+  model's thing description no longer declares is listed in
+  `scripts/data/retired_keys.json` instead (see the regeneration how-to). The
   generator reads only that manifest, never the files in `--out`. A v1 reference row of a
   dropped key is checked through the longest remaining key it extends.
 
@@ -332,7 +334,7 @@ Run it on the full corpus after changing the generator. The handler's replies ar
 a private answer store, so a run whose driver jobs were asked before replays them
 without running the handler ([regenerate-models.md § The answer store](../how-to/regenerate-models.md#the-answer-store)).
 
-Tests that need only committed files check the schema of all 159 files and the v1
+Tests that need only committed files check the schema of all 166 files and the v1
 reference. The `--check` test runs on three models and skips without Node of the pinned
 major or the cache.
 When and how to regenerate: [how-to/regenerate-models.md](../how-to/regenerate-models.md).

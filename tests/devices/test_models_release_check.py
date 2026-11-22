@@ -180,18 +180,34 @@ def test_hardware_wire_values_are_what_the_payloads_render_to() -> None:
 
 
 def test_every_released_key_is_still_bundled() -> None:
-    """Each manifest model is indexed and its file carries every key the manifest lists;
-    the manifest is in its canonical form."""
+    """Each manifest model is indexed and its file carries every key the manifest lists,
+    except those the retired list names; the manifest is in its canonical form."""
     text = gen_models.DEFAULT_RELEASED.read_text(encoding="utf-8")
     released = json.loads(text)
     assert text == gen_models.released_text(released)
+    retired = json.loads(gen_models.DEFAULT_RETIRED.read_text(encoding="utf-8"))
     codes = json.loads((MODELS / gen_models.INDEX).read_text(encoding="utf-8"))["codes"]
     assert sorted(set(released) - set(codes)) == []
     assert {
         pn: missing
         for pn, keys in released.items()
-        if (missing := sorted(set(keys) - set(_settings(pn))))
+        if (missing := sorted(set(keys) - set(_settings(pn)) - set(retired.get(pn, ()))))
     } == {}
+
+
+def test_every_retired_key_was_released_and_is_gone() -> None:
+    """The retired list names only released keys its model no longer bundles (a key that
+    comes back leaves the list), in its canonical form."""
+    text = gen_models.DEFAULT_RETIRED.read_text(encoding="utf-8")
+    retired = json.loads(text)
+    assert text == gen_models.released_text(retired)
+    released = json.loads(gen_models.DEFAULT_RELEASED.read_text(encoding="utf-8"))
+    assert {pn: sorted(set(keys) - set(released.get(pn, ()))) for pn, keys in retired.items()} == {
+        pn: [] for pn in retired
+    }
+    assert {pn: sorted(set(keys) & set(_settings(pn))) for pn, keys in retired.items()} == {
+        pn: [] for pn in retired
+    }
 
 
 def test_merge_released_adds_new_keys_and_keeps_old_ones() -> None:

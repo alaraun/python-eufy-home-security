@@ -87,6 +87,9 @@ DEFAULT_OUT = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models
 INDEX = "INDEX.json"  # {"schema_version", "codes"}: the bundled product codes, sorted
 # {PN: sorted setting keys a release bundled}: a generator input, not package data
 DEFAULT_RELEASED = ROOT / "scripts" / "data" / "released_keys.json"
+# {PN: sorted released keys the model's thing description no longer declares}: the keys a
+# release bundled that a later regeneration drops, so the release checks expect them gone
+DEFAULT_RETIRED = ROOT / "scripts" / "data" / "retired_keys.json"
 DEFAULT_LABELS = ROOT / ".work" / "tools" / "data" / "app_choice_labels.json"
 DEFAULT_TREES = ROOT / ".work" / "tools" / "data" / "settings_trees.json"
 DEFAULT_TITLES = ROOT / ".work" / "tools" / "data" / "app_setting_titles.json"

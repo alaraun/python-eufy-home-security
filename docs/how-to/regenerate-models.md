@@ -88,6 +88,13 @@ bundled models exits 2):
 uv run python scripts/gen_models.py --update-released <tag>   # the release just tagged
 ```
 
+A released key the model's current thing description no longer declares cannot be
+generated. It goes into `scripts/data/retired_keys.json` (same form: product code ->
+sorted keys), which the release checks subtract; `released_keys.json` keeps it. A
+retired key must be in the manifest and absent from the model's file: one that comes
+back leaves the list. A retired key is a breaking change for a consumer whose entity
+ids use it: name each in the release notes.
+
 The live-open table (`devices/_live_open_data.py`: which library open reproduces each
 product handler's `open_live_stream`, per connect type) is generated from the same cache:
 
