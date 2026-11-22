@@ -77,6 +77,7 @@ PAGE_SECTIONS: dict[str, str | None] = {
     "ThingDeveloperScreen": None,
     "UncollectedPackageAlert": "detection",
     "VideoSettings": None,
+    "VoiceExpulsionMonitoring": "detection",
     "WiFiConnection": "network",
 }
 

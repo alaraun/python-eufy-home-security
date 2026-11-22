@@ -214,6 +214,12 @@ def test_a_prefix_mapped_to_two_device_types_is_refused(gen: ModuleType) -> None
         gen.device_types(twice, _TYPE_INTS)
 
 
+def test_the_device_type_map_is_read_whatever_its_variable_name(gen: ModuleType) -> None:
+    renamed = _TYPE_MAP.replace("hashMap.put(", "map.put(")
+    assert gen.device_types(renamed, _TYPE_INTS) == gen.device_types(_TYPE_MAP, _TYPE_INTS)
+    assert gen.device_types(renamed, _TYPE_INTS) == {"T9101": 7, "T9102": 7, "T9001": 10009}
+
+
 def test_the_rendered_module_holds_the_rows(gen: ModuleType, tmp_path: Path) -> None:
     rows = [
         ("T9001", "STATION_9", "station", 10009, ()),

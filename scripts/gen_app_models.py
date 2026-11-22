@@ -49,7 +49,7 @@ _CONSTANT = re.compile(r'public static final String ([A-Z0-9_]+) = "([^"]*)";')
 _ROW = re.compile(r'^    \("', re.MULTILINE)
 _TYPE_INT = re.compile(r"public static final int (TYPE_[A-Za-z0-9_]+) = (\d+);")
 _TYPE_PUT = re.compile(
-    r"hashMap\.put\((?:Integer\.valueOf\()?(?:[A-Za-z]\w*\.)?([A-Za-z0-9_]+)\)?, "
+    r"\b[A-Za-z_]\w*\.put\((?:Integer\.valueOf\()?(?:[A-Za-z]\w*\.)?([A-Za-z0-9_]+)\)?, "
     r"new String\[\]\{([^}]*)\}\);"
 )
 _TYPE_NAME_PREFIX = re.compile(r"^TYPE_(?:DEVICE_)?")

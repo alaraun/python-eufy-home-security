@@ -5,7 +5,7 @@ from typing import Final
 import pytest
 
 from eufy_home_security.devices._live_open_data import LIVE_OPEN
-from eufy_home_security.devices.app_models import APP_MODELS
+from eufy_home_security.devices.app_models import APP_MODELS, APP_VERSION
 from eufy_home_security.devices.model_settings import bundled_codes
 from eufy_home_security.devices.support import Support
 from eufy_home_security.devices.types import (
@@ -104,7 +104,7 @@ def test_the_apps_models_are_catalogued(
     found = MODELS[model]
     assert (found.kind, found.cloud_device_type, found.name) == (kind, device_type, name)
     assert found.evidence.support is Support.DECLARED
-    assert found.evidence.source.startswith("eufy app 6.1.10 model list: ")
+    assert found.evidence.source.startswith(f"eufy app {APP_VERSION} model list: ")
 
 
 def _serial(prefix: str) -> str:
@@ -138,9 +138,12 @@ def test_a_model_without_a_constant_is_sourced_by_its_device_type() -> None:
     assert MODELS["T8162"].cloud_device_type == 26
     assert (
         MODELS["T8162"].evidence.source
-        == "eufy app 6.1.10 model list: CAMERA3_PRO; device-type map (26)"
+        == f"eufy app {APP_VERSION} model list: CAMERA3_PRO; device-type map (26)"
     )
-    assert MODELS["T8452"].evidence.source == "eufy app 6.1.10 model list; device-type map (132)"
+    assert (
+        MODELS["T8452"].evidence.source
+        == f"eufy app {APP_VERSION} model list; device-type map (132)"
+    )
     assert MODELS["T87A0"].evidence.note == "no app product category or constant"
 
 
@@ -190,7 +193,8 @@ def test_a_model_has_a_camera_by_the_apps_category_or_its_kind(
 
 def test_a_hand_written_entry_carries_the_apps_categories_and_kind() -> None:
     generated = {row[0]: row for row in APP_MODELS}
-    hand = [m for m in MODELS.values() if not m.evidence.source.startswith("eufy app 6.1.10")]
+    app = f"eufy app {APP_VERSION}"
+    hand = [m for m in MODELS.values() if not m.evidence.source.startswith(app)]
     assert {m.model for m in hand} >= {"T8030", "T8160", "T8410"}
     for model in hand:
         _prefix, _constant, kind, _type, categories = generated[model.model]
