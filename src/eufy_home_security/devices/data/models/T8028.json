@@ -313,6 +313,7 @@
   "firmware_main_version_time": {
    "access": "ro",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -338,6 +339,7 @@
   "ip_address": {
    "access": "ro",
    "kind": "string",
+   "name": "IP address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -380,6 +382,7 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
+   "name": "Status LED",
    "note": "no handler write path",
    "read": {
     "map": {
@@ -397,6 +400,7 @@
   "mac_address": {
    "access": "ro",
    "kind": "string",
+   "name": "MAC address",
    "read": null,
    "role": "status",
    "section": "network",

@@ -698,6 +698,7 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
+   "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
    "section": "network",
@@ -707,6 +708,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
    "section": "network",
@@ -730,6 +732,7 @@
     "1": "HomeBase",
     "2": "Router"
    },
+   "page": "MultiBridgeSetting",
    "read": {
     "map": null,
     "param": 60013

@@ -23,6 +23,7 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
+   "page": "SLPowerDuoPowerSupplySystemScreen",
    "read": null,
    "role": "diagnostic",
    "section": "power",

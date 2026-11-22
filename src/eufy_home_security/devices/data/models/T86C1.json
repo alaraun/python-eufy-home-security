@@ -89,6 +89,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "PanTiltSettings",
    "read": {
     "map": null,
     "param": 6016
@@ -299,6 +300,8 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Audio recording",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -387,6 +390,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "PanTiltSettings",
    "read": {
     "map": {
      "": false,
@@ -590,6 +594,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "NVREventRecordingScreen",
    "read": {
     "map": {
      "": false,
@@ -618,6 +623,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
+   "page": "NVREventRecordingScreen",
    "read": {
     "map": null,
     "no_default": true,
@@ -1091,6 +1097,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1101,6 +1108,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Quick focus tap",
    "read": null,
    "role": "setting",
    "section": "ptz",
@@ -1117,6 +1125,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Swipe to control",
    "read": null,
    "role": "setting",
    "section": "ptz",
@@ -1157,6 +1166,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "WiFiConnection",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1193,6 +1203,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "name": "IP address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1413,6 +1424,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Status LED",
    "read": {
     "map": {
      "": false,
@@ -1444,6 +1456,7 @@
    "kind": "range",
    "max": 100,
    "min": 0,
+   "page": "LightSettingMain",
    "read": {
     "map": null,
     "param": 1410
@@ -1543,10 +1556,11 @@
    "labels": {
     "0": "Auto",
     "2": "Full HD(1080P)",
-    "4": "4K Ultra",
+    "4": "Ultra 4K",
     "5": "2K HD",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "name": "Streaming quality",
    "read": {
     "map": {},
     "param": 2730,
@@ -1624,10 +1638,11 @@
    "labels": {
     "0": "Auto",
     "2": "Full HD(1080P)",
-    "4": "4K Ultra",
+    "4": "Ultra 4K",
     "5": "2K HD",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "name": "Streaming quality",
    "note": "no handler write path",
    "read": null,
    "role": "setting",
@@ -1682,6 +1697,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "name": "MAC address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1692,6 +1708,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Microphone",
    "read": {
     "map": {
      "": false,
@@ -1728,6 +1745,7 @@
   "motion_activated_light_setting": {
    "access": "ro",
    "kind": "string",
+   "name": "Motion-activated light",
    "note": "handler ignores the value",
    "read": null,
    "role": "setting",
@@ -1780,6 +1798,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Motion detection",
    "read": {
     "map": {
      "": false,
@@ -1806,9 +1825,15 @@
   },
   "motion_stop_end_early": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "End clip early if motion stops",
+   "page": "CustomizeRecording",
    "read": {
     "map": {
      "": false,
@@ -1941,6 +1966,7 @@
     "10": "Infrared",
     "7": "Spotlights"
    },
+   "name": "Night vision",
    "read": {
     "map": {
      "": 7,
@@ -1991,10 +2017,11 @@
    "default": 100,
    "kind": "enum",
    "labels": {
-    "100": "Night vision off",
-    "102": "Night vision infrared",
-    "103": "Night vision spotlight"
+    "100": "Off",
+    "102": "Infrared",
+    "103": "Spotlights"
    },
+   "name": "Night vision",
    "read": {
     "map": {
      "": 100,
@@ -2110,12 +2137,15 @@
    ],
    "control": "select",
    "default": 0,
+   "group": "A",
    "kind": "enum",
    "labels": {
     "0": "Most Efficient",
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": {
      "1": 0,
@@ -2227,6 +2257,8 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
+   "name": "Working mode",
+   "page": "MotionDetection",
    "read": {
     "map": {
      "": 0,
@@ -2305,6 +2337,7 @@
    "access": "ro",
    "default": "10",
    "kind": "other",
+   "page": "PanTiltSettings",
    "read": null,
    "role": "status",
    "section": "ptz",
@@ -2317,10 +2350,11 @@
    "kind": "enum",
    "labels": {
     "2": "Full HD(1080P)",
-    "4": "4K Ultra",
+    "4": "Ultra 4K",
     "5": "2K HD",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 2,
@@ -2400,10 +2434,11 @@
    "kind": "enum",
    "labels": {
     "2": "Full HD(1080P)",
-    "4": "4K Ultra",
+    "4": "Ultra 4K",
     "5": "2K HD",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "name": "Recording quality",
    "note": "round trip does not return the written value",
    "read": null,
    "role": "setting",
@@ -2555,6 +2590,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Speaker",
    "read": {
     "map": {
      "": false,
@@ -2612,6 +2648,7 @@
    "kind": "range",
    "max": 100,
    "min": 0,
+   "name": "Brightness",
    "read": {
     "map": null,
     "param": 1401
@@ -2637,6 +2674,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Lighting",
    "read": {
     "map": {
      "": false,
@@ -2666,6 +2704,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
@@ -2732,11 +2771,14 @@
     "0": 64,
     "1": 16
    },
+   "group": "B",
    "kind": "flags",
    "labels": {
     "0": "Switch modes by schedule",
     "1": "Switch modes from app"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": null,
     "param": 1283
@@ -2816,11 +2858,17 @@
   },
   "trigger_interval_time": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 60,
    "kind": "range",
    "max": 120,
    "min": 10,
+   "name": "Intervals between triggers",
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1250
@@ -2856,11 +2904,17 @@
   },
   "video_clip_length": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 60,
    "kind": "range",
    "max": 120,
    "min": 10,
+   "name": "Clip length",
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1249
@@ -2910,6 +2964,7 @@
    "default": "0",
    "kind": "other",
    "note": "handler transforms the value",
+   "page": "IPCOrientation",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2954,6 +3009,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
+   "page": "IPCImageSetting",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2979,6 +3035,7 @@
     "2": "Timestamp and logo",
     "3": "Logo"
    },
+   "name": "Watermark",
    "note": "round trip does not return the written value",
    "read": null,
    "role": "setting",

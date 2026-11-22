@@ -85,6 +85,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "PanTiltSettings",
    "read": {
     "map": null,
     "param": 6016
@@ -118,6 +119,7 @@
     "zoneWidth": "1280"
    },
    "note": "handler rejects the probed values",
+   "page": "ThingDeveloperScreen",
    "read": null,
    "role": "setting",
    "section": "detection",
@@ -330,6 +332,8 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Audio recording",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -396,6 +400,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "PanTiltSettings",
    "read": {
     "map": {
      "": false,
@@ -534,9 +539,12 @@
    "access": "rw",
    "control": "slider",
    "default": 3,
+   "group": "D",
    "kind": "range",
    "max": 5,
    "min": 1,
+   "order": 1,
+   "page": "MotionDetection",
    "read": {
     "map": null,
     "param": 6041
@@ -592,6 +600,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Continuous recording",
    "read": {
     "map": {
      "": false,
@@ -664,6 +673,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "NVREventRecordingScreen",
    "read": {
     "map": {
      "": false,
@@ -692,6 +702,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
+   "page": "NVREventRecordingScreen",
    "read": {
     "map": null,
     "no_default": true,
@@ -811,6 +822,7 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
+   "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
    "section": "network",
@@ -820,6 +832,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
    "section": "network",
@@ -843,6 +856,7 @@
     "1": "HomeBase",
     "2": "Router"
    },
+   "page": "MultiBridgeSetting",
    "read": {
     "map": null,
     "param": 60013
@@ -1022,6 +1036,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Pre-recording",
    "read": {
     "map": {
      "": false,
@@ -1334,6 +1349,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1344,6 +1360,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Quick focus tap",
    "read": null,
    "role": "setting",
    "section": "ptz",
@@ -1360,6 +1377,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Swipe to control",
    "read": null,
    "role": "setting",
    "section": "ptz",
@@ -1408,6 +1426,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "WiFiConnection",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1417,6 +1436,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "name": "IP address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1578,6 +1598,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Status LED",
    "read": {
     "map": {
      "": false,
@@ -1665,8 +1686,9 @@
     "0": "Auto",
     "14": "2.5K",
     "2": "Full HD(1080P)",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "name": "Streaming quality",
    "read": {
     "map": {},
     "param": 2730,
@@ -1760,6 +1782,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "name": "MAC address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1770,6 +1793,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Microphone",
    "read": {
     "map": {
      "": false,
@@ -1808,6 +1832,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Motion detection",
    "read": {
     "map": {
      "": false,
@@ -1837,6 +1862,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "End clip early if motion stops",
    "read": {
     "map": {
      "": false,
@@ -1957,6 +1983,7 @@
     "3": "Infrared"
    },
    "note": "round trip does not return the written value",
+   "page": "NightVision",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2040,12 +2067,15 @@
    ],
    "control": "select",
    "default": 0,
+   "group": "A",
    "kind": "enum",
    "labels": {
     "0": "Most Efficient",
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": {
      "1": 0,
@@ -2157,8 +2187,9 @@
     "0": "Auto",
     "14": "2.5K",
     "2": "Full HD(1080P)",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 0,
@@ -2360,6 +2391,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Speaker",
    "read": {
     "map": {
      "": false,
@@ -2458,12 +2490,15 @@
     "1": 16,
     "2": 32
    },
+   "group": "B",
    "kind": "flags",
    "labels": {
     "0": "Switch modes by schedule",
     "1": "Switch modes from app",
     "2": "Switch modes by geofencing"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": null,
     "param": 1283
@@ -2548,6 +2583,7 @@
    "kind": "range",
    "max": 120,
    "min": 5,
+   "name": "Intervals between triggers",
    "read": {
     "map": null,
     "param": 1250
@@ -2588,6 +2624,7 @@
    "kind": "range",
    "max": 120,
    "min": 10,
+   "name": "Clip length",
    "read": {
     "map": null,
     "param": 1249
@@ -2643,6 +2680,7 @@
     "3": "Flipped vertically"
    },
    "note": "no handler write path",
+   "page": "IPCOrientation",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2693,6 +2731,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
+   "page": "IPCImageSetting",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2717,6 +2756,7 @@
     "1": "Timestamp",
     "2": "Timestamp and logo"
    },
+   "name": "Watermark",
    "read": {
     "map": {
      "": 1,

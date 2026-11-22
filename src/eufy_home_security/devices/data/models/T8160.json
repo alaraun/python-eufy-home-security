@@ -697,6 +697,7 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
+   "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
    "section": "network",
@@ -706,6 +707,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
    "section": "network",
@@ -729,6 +731,7 @@
     "2": "Router"
    },
    "note": "no handler write path",
+   "page": "MultiBridgeSetting",
    "read": null,
    "role": "setting",
    "section": "network",

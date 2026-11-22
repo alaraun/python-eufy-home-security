@@ -78,6 +78,7 @@
    "access": "ro",
    "default": true,
    "kind": "bool",
+   "page": "HomebaseHomeScreen",
    "read": null,
    "role": "status",
    "section": "system",

@@ -141,6 +141,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -481,6 +482,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "RingtoneSettings",
    "read": {
     "map": {
      "": false,
@@ -520,6 +522,7 @@
     "8": "Hillside",
     "9": "Presto"
    },
+   "page": "RingtoneSettings",
    "read": {
     "map": {
      "": 0,
@@ -571,6 +574,7 @@
    "kind": "range",
    "max": 26,
    "min": 1,
+   "page": "RingtoneSettings",
    "read": {
     "map": null,
     "param": 1717
@@ -1021,7 +1025,7 @@
     "0": "Auto",
     "10": "High",
     "8": "Low",
-    "9": "Middle"
+    "9": "Medium"
    },
    "read": {
     "map": {
@@ -1243,9 +1247,14 @@
   },
   "motion_stop_end_early": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "CustomizeRecording",
    "read": {
     "map": {
      "": false,
@@ -1420,6 +1429,7 @@
     "7": "Success",
     "8": "Type"
    },
+   "page": "SettingsHome",
    "read": null,
    "role": "status",
    "section": "notifications",
@@ -1441,6 +1451,7 @@
    "default": true,
    "kind": "bool",
    "note": "handler rejects the probed values",
+   "page": "SettingsHome",
    "read": null,
    "role": "setting",
    "section": "notifications",
@@ -1483,6 +1494,7 @@
    "default": true,
    "kind": "bool",
    "note": "handler rejects the probed values",
+   "page": "SettingsHome",
    "read": null,
    "role": "setting",
    "section": "notifications",
@@ -1519,6 +1531,7 @@
     "2": "Balanced surveillance",
     "3": "Custom recording"
    },
+   "page": "MotionDetection",
    "read": {
     "map": {
      "": 1,
@@ -1773,11 +1786,16 @@
   },
   "trigger_interval_time": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 5,
    "kind": "range",
    "max": 60,
    "min": 2,
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1250
@@ -1809,11 +1827,16 @@
   },
   "video_clip_length": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 60,
    "kind": "range",
    "max": 120,
    "min": 5,
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1249

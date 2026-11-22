@@ -24,6 +24,8 @@ type Settings = dict[str, dict[str, Any]]
 # sections, so the identifier decides.
 PAGE_SECTIONS: dict[str, str | None] = {
     "AboutDevice": "system",
+    "AlarmSound": "alarm",
+    "AntiTheftDetection": None,
     "AudioSettings": None,
     "BottleWasherHomeScreen": None,
     "BottleWasherSettingScreen": None,
@@ -39,12 +41,14 @@ PAGE_SECTIONS: dict[str, str | None] = {
     "FirstUseFamiliarFace": "detection",
     "GlassBreakReadyToTest": "detection",
     "HomeKitSecurityVideo": "network",
+    "HomebaseHomeScreen": None,
     "IPCImageSetting": "picture",
     "IPCOrientation": "picture",
     "IPCRecordingQualityScreen": "recording",
     "LightSettingMain": "picture",
     "MotionActivatedLight": "picture",
     "MotionDetection": None,
+    "MotionDetectionGuideScreen": "detection",
     "MotionDetectionV2": "detection",
     "MultiBridgeSetting": "network",
     "NVRAboutDevice": "system",

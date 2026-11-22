@@ -266,6 +266,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -824,6 +825,7 @@
   "firmware_main_version_time": {
    "access": "ro",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -996,7 +998,7 @@
     "0": "Auto",
     "10": "High",
     "8": "Low",
-    "9": "Middle"
+    "9": "Medium"
    },
    "read": {
     "map": {
@@ -1213,9 +1215,14 @@
   },
   "motion_stop_end_early": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "CustomizeRecording",
    "read": {
     "map": {
      "": false,
@@ -1411,6 +1418,7 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
+   "page": "MotionDetection",
    "read": {
     "map": {
      "": 0,
@@ -1791,11 +1799,16 @@
   },
   "trigger_interval_time": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 5,
    "kind": "range",
    "max": 60,
    "min": 5,
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1250
@@ -1820,11 +1833,16 @@
   },
   "video_clip_length": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 30,
    "kind": "range",
    "max": 60,
    "min": 5,
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1249

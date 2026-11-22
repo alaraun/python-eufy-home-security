@@ -112,6 +112,7 @@
    "access": "ro",
    "kind": "string",
    "note": "no handler write path",
+   "page": "CUSButton",
    "read": null,
    "role": "setting",
    "section": "modes",
@@ -256,6 +257,8 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Audio recording",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -477,9 +480,12 @@
    ],
    "control": "slider",
    "default": 4,
+   "group": "C",
    "kind": "range",
    "max": 7,
    "min": 1,
+   "order": 1,
+   "page": "MotionDetection",
    "read": {
     "map": null,
     "param": 6070
@@ -624,6 +630,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "RingtoneSettings",
    "read": {
     "map": {
      "": false,
@@ -663,6 +670,7 @@
     "8": "Hillside",
     "9": "Presto"
    },
+   "page": "RingtoneSettings",
    "read": {
     "map": {
      "": 0,
@@ -714,6 +722,8 @@
    "kind": "range",
    "max": 26,
    "min": 0,
+   "name": "Ringtone volume",
+   "page": "RingtoneSettings",
    "read": {
     "map": null,
     "param": 1717
@@ -749,6 +759,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Continuous recording",
    "read": {
     "map": {
      "": false,
@@ -1101,6 +1112,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
+   "page": "PackageGuard",
    "read": {
     "map": null,
     "no_default": true,
@@ -1148,6 +1160,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
+   "page": "DeliveryGuardGuideFourth",
    "read": null,
    "role": "setting",
    "section": "detection",
@@ -1158,6 +1171,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "PackageLiveCheckAssistance",
    "read": {
     "map": {
      "": false,
@@ -1221,6 +1235,7 @@
    "kind": "string",
    "meaning": "time_of_day",
    "note": "handler ignores the value",
+   "page": "UncollectedPackageAlert",
    "read": {
     "map": null,
     "no_default": true,
@@ -1234,6 +1249,7 @@
    "access": "rw",
    "control": "select",
    "default": 1,
+   "group": "D",
    "kind": "enum",
    "labels": {
     "1": "Value 1",
@@ -1241,6 +1257,8 @@
     "4": "Value 4",
     "5": "Value 5"
    },
+   "order": 1,
+   "page": "PowerManager",
    "read": {
     "map": {
      "{\"power_source\":1}": 1,
@@ -1284,6 +1302,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Pre-recording",
    "read": {
     "map": {
      "": false,
@@ -1334,6 +1353,7 @@
     "15": "15s",
     "5": "5s"
    },
+   "page": "ResponseSettingScreen",
    "read": {
     "map": null,
     "param": 6438
@@ -1341,6 +1361,7 @@
    "role": "setting",
    "section": "doorbell",
    "shown": "page",
+   "unit": "s",
    "values": [
     0,
     5,
@@ -1364,6 +1385,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
+   "page": "ResponseSettingScreen",
    "read": null,
    "role": "setting",
    "section": "doorbell",
@@ -1375,6 +1397,8 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Auto-response",
+   "page": "ResponseSettingScreen",
    "read": {
     "map": {
      "": false,
@@ -1690,6 +1714,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1748,6 +1773,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "WiFiConnection",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1766,6 +1792,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "name": "IP address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1852,6 +1879,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Status LED",
    "read": {
     "map": null,
     "param": 1716
@@ -1950,8 +1978,9 @@
     "0": "Auto",
     "10": "High",
     "8": "Low",
-    "9": "Middle"
+    "9": "Medium"
    },
+   "name": "Streaming quality",
    "read": {
     "map": {
      "": 0,
@@ -2092,6 +2121,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "name": "MAC address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -2102,6 +2132,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Microphone",
    "read": {
     "map": {
      "": false,
@@ -2207,6 +2238,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Motion detection",
    "read": {
     "map": {
      "": false,
@@ -2233,9 +2265,15 @@
   },
   "motion_stop_end_early": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "End clip early if motion stops",
+   "page": "CustomizeRecording",
    "read": {
     "map": {
      "": false,
@@ -2280,6 +2318,7 @@
     "5": "Optimal Infrared",
     "6": "Infrared Night Vision"
    },
+   "name": "Night vision",
    "note": "round trip does not return the written value",
    "read": null,
    "role": "setting",
@@ -2394,11 +2433,12 @@
    "default": 102,
    "kind": "enum",
    "labels": {
-    "100": "Night vision off",
-    "101": "Night vision infrared",
-    "102": "Night vision infrared",
-    "103": "Night vision spotlight"
+    "100": "Off",
+    "101": "Optimal Infrared Night Vision",
+    "102": "Infrared Night Vision",
+    "103": "Color Night Vision"
    },
+   "name": "Night vision",
    "note": "round trip does not return the written value",
    "read": null,
    "role": "setting",
@@ -2618,6 +2658,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "All other motion",
    "read": {
     "map": {
      "": false,
@@ -2659,6 +2700,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Human",
    "read": {
     "map": {
      "": false,
@@ -2738,6 +2780,7 @@
     "7": "Success",
     "8": "Type"
    },
+   "page": "SettingsHome",
    "read": null,
    "role": "status",
    "section": "notifications",
@@ -2758,7 +2801,9 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "name": "Motion detect",
    "note": "handler rejects the probed values",
+   "page": "SettingsHome",
    "read": null,
    "role": "setting",
    "section": "notifications",
@@ -2801,7 +2846,9 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "name": "Doorbell ring",
    "note": "handler rejects the probed values",
+   "page": "SettingsHome",
    "read": null,
    "role": "setting",
    "section": "notifications",
@@ -2836,11 +2883,14 @@
     }
    ],
    "control": "select",
+   "group": "D",
    "kind": "enum",
    "labels": {
     "0": "Most Efficient",
     "1": "Full Effect"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": {
      "": 0,
@@ -2952,6 +3002,8 @@
     "2": "Balanced surveillance",
     "3": "Custom recording"
    },
+   "name": "Working mode",
+   "page": "MotionDetection",
    "read": {
     "map": {
      "": 2,
@@ -3056,6 +3108,7 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
+   "name": "Working mode",
    "read": {
     "map": {
      "": 1,
@@ -3135,8 +3188,9 @@
    "labels": {
     "2": "Full HD(1080P)",
     "5": "2K HD",
-    "6": "720P(HD)"
+    "6": "HD (720P)"
    },
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 2,
@@ -3244,6 +3298,7 @@
     "zoneWidth": "1280"
    },
    "note": "handler rejects the probed values",
+   "page": "DeliveryGuard",
    "read": null,
    "role": "setting",
    "section": "detection",
@@ -3328,6 +3383,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Speaker",
    "read": {
     "map": {
      "": false,
@@ -3394,6 +3450,7 @@
    "kind": "range",
    "max": 100,
    "min": 1,
+   "name": "Brightness",
    "read": {
     "map": null,
     "param": 6082
@@ -3454,6 +3511,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
@@ -3539,11 +3597,17 @@
   },
   "trigger_interval_time": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 60,
    "kind": "range",
    "max": 60,
    "min": 2,
+   "name": "Intervals between triggers",
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1250
@@ -3567,11 +3631,17 @@
   },
   "video_clip_length": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 60,
    "kind": "range",
    "max": 120,
    "min": 8,
+   "name": "Clip length",
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1249
@@ -3651,6 +3721,7 @@
     "0": "Smartphone first",
     "1": "Smart display first"
    },
+   "name": "Streaming to Alexa/Google smart displays",
    "read": {
     "map": {
      "": 0,
@@ -3749,6 +3820,7 @@
     "1": "Time",
     "3": "Logo"
    },
+   "name": "Watermark",
    "read": {
     "map": {
      "": 0,

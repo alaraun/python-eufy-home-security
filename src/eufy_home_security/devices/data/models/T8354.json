@@ -88,7 +88,10 @@
    "access": "rw",
    "control": "switch",
    "default": true,
+   "group": "G",
    "kind": "bool",
+   "order": 1,
+   "page": "MotionDetection",
    "read": {
     "map": null,
     "param": 6016
@@ -305,7 +308,10 @@
    ],
    "control": "switch",
    "default": true,
+   "group": "C",
    "kind": "bool",
+   "order": 1,
+   "page": "AudioSettings",
    "read": {
     "map": {
      "": false,
@@ -334,7 +340,10 @@
    "access": "rw",
    "control": "switch",
    "default": false,
+   "group": "F",
    "kind": "bool",
+   "order": 1,
+   "page": "PanTiltSettings",
    "read": {
     "map": {
      "": false,
@@ -423,7 +432,10 @@
    ],
    "control": "switch",
    "default": true,
+   "group": "A",
    "kind": "bool",
+   "order": 2,
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -556,9 +568,12 @@
    ],
    "control": "slider",
    "default": 3,
+   "group": "F",
    "kind": "range",
    "max": 5,
    "min": 1,
+   "order": 1,
+   "page": "MotionDetection",
    "read": {
     "map": null,
     "param": 1276
@@ -597,7 +612,10 @@
    "access": "rw",
    "control": "switch",
    "default": false,
+   "group": "G",
    "kind": "bool",
+   "order": 1,
+   "page": "VideoSettings",
    "read": {
     "map": {
      "": false,
@@ -1099,7 +1117,10 @@
   "device_wifi_name": {
    "access": "ro",
    "default": "0",
+   "group": "E",
    "kind": "string",
+   "order": 1,
+   "page": "SettingsGeneral",
    "read": {
     "map": null,
     "no_default": true,
@@ -1112,7 +1133,10 @@
   "device_wifi_signal_strength": {
    "access": "ro",
    "default": "0",
+   "group": "A",
    "kind": "string",
+   "order": 3,
+   "page": "SettingsHome",
    "read": null,
    "role": "diagnostic",
    "section": "network",
@@ -1178,6 +1202,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1361,6 +1386,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "WiFiConnection",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1441,7 +1467,10 @@
    ],
    "control": "switch",
    "default": false,
+   "group": "C",
    "kind": "bool",
+   "order": 1,
+   "page": "SettingsGeneral",
    "read": {
     "map": {
      "": false,
@@ -1547,14 +1576,17 @@
    "access": "rw",
    "control": "select",
    "default": 0,
+   "group": "E",
    "kind": "enum",
    "labels": {
     "0": "Auto",
     "2": "Full HD(1080P)",
-    "4": "4K Ultra",
+    "4": "Ultra 4K",
     "5": "2K HD",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "order": 1,
+   "page": "VideoSettings",
    "read": {
     "map": {
      "": 0,
@@ -1659,7 +1691,10 @@
    "access": "rw",
    "control": "switch",
    "default": true,
+   "group": "B",
    "kind": "bool",
+   "order": 1,
+   "page": "AudioSettings",
    "read": {
     "map": {
      "": false,
@@ -1737,7 +1772,10 @@
    ],
    "control": "switch",
    "default": true,
+   "group": "B",
    "kind": "bool",
+   "order": 1,
+   "page": "MotionDetection",
    "read": {
     "map": {
      "": false,
@@ -1842,6 +1880,7 @@
    "access": "rw",
    "control": "select",
    "default": 3,
+   "group": "B",
    "kind": "enum",
    "labels": {
     "0": "Off",
@@ -1849,6 +1888,8 @@
     "4": "Infrared"
    },
    "note": "round trip does not return the written value",
+   "order": 1,
+   "page": "VideoSettings",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2047,6 +2088,7 @@
    "access": "rw",
    "control": "select",
    "default": 0,
+   "group": "C",
    "kind": "enum",
    "labels": {
     "0": "0 min",
@@ -2056,6 +2098,8 @@
     "4": "4 min",
     "5": "5 min"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": {
      "": 0,
@@ -2183,12 +2227,15 @@
    ],
    "control": "select",
    "default": 0,
+   "group": "E",
    "kind": "enum",
    "labels": {
     "0": "Most Efficient",
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": {
      "1": 0,
@@ -2286,9 +2333,12 @@
    "access": "rw",
    "control": "slider",
    "default": 3,
+   "group": "D",
    "kind": "range",
    "max": 5,
    "min": 1,
+   "order": 1,
+   "page": "PanTiltSettings",
    "read": {
     "map": null,
     "param": 6015
@@ -2321,13 +2371,16 @@
    "access": "rw",
    "control": "select",
    "default": 5,
+   "group": "F",
    "kind": "enum",
    "labels": {
     "2": "Full HD(1080P)",
-    "4": "4K Ultra",
+    "4": "Ultra 4K",
     "5": "2K HD",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "order": 1,
+   "page": "VideoSettings",
    "read": {
     "map": {
      "": 2,
@@ -2396,7 +2449,10 @@
    "access": "rw",
    "control": "switch",
    "default": false,
+   "group": "I",
    "kind": "bool",
+   "order": 1,
+   "page": "VideoSettings",
    "read": {
     "map": {
      "": false,
@@ -2407,6 +2463,7 @@
    },
    "role": "setting",
    "section": "picture",
+   "shown": "page",
    "write": {
     "cmd": 1207,
     "params": {
@@ -2421,6 +2478,7 @@
   },
   "set_privacy_zone": {
    "access": "ro",
+   "group": "H",
    "kind": "enum",
    "labels": {
     "normalized": "1",
@@ -2432,6 +2490,8 @@
     "zoneWidth": "1280"
    },
    "note": "handler rejects the probed values",
+   "order": 1,
+   "page": "VideoSettings",
    "read": null,
    "role": "setting",
    "section": "detection",
@@ -2459,7 +2519,10 @@
    "access": "rw",
    "control": "switch",
    "default": true,
+   "group": "F",
    "kind": "bool",
+   "order": 1,
+   "page": "SoundDetection",
    "read": {
     "map": {
      "": false,
@@ -2488,9 +2551,12 @@
    "access": "rw",
    "control": "slider",
    "default": 3,
+   "group": "E",
    "kind": "range",
    "max": 5,
    "min": 1,
+   "order": 1,
+   "page": "SoundDetection",
    "read": {
     "map": null,
     "param": 6044
@@ -2516,7 +2582,10 @@
    "access": "rw",
    "control": "switch",
    "default": false,
+   "group": "C",
    "kind": "bool",
+   "order": 1,
+   "page": "SoundDetection",
    "read": {
     "map": {
      "": false,
@@ -2545,11 +2614,14 @@
    "access": "rw",
    "control": "select",
    "default": 0,
+   "group": "D",
    "kind": "enum",
    "labels": {
     "0": "All sound",
     "1": "Crying"
    },
+   "order": 1,
+   "page": "SoundDetection",
    "read": {
     "map": {
      "": 0,
@@ -2592,7 +2664,10 @@
    "access": "rw",
    "control": "switch",
    "default": true,
+   "group": "D",
    "kind": "bool",
+   "order": 1,
+   "page": "AudioSettings",
    "read": {
     "map": {
      "": false,
@@ -2620,15 +2695,19 @@
    "access": "rw",
    "control": "slider",
    "default": 80,
+   "group": "D",
    "kind": "range",
    "max": 100,
    "min": 1,
+   "order": 2,
+   "page": "AudioSettings",
    "read": {
     "map": null,
     "param": 2003
    },
    "role": "setting",
    "section": "audio",
+   "shown": "page",
    "step": 1,
    "unit": "%",
    "write": {
@@ -2732,11 +2811,14 @@
    "access": "rw",
    "control": "select",
    "default": 0,
+   "group": "F",
    "kind": "enum",
    "labels": {
     "0": "12-hour",
     "1": "24-hour"
    },
+   "order": 1,
+   "page": "SettingsGeneral",
    "read": {
     "map": null,
     "param": 1253
@@ -2789,7 +2871,10 @@
    "access": "rw",
    "control": "switch",
    "default": false,
+   "group": "E",
    "kind": "bool",
+   "order": 1,
+   "page": "PanTiltSettings",
    "read": {
     "map": {
      "": false,
@@ -2851,6 +2936,7 @@
    "access": "rw",
    "control": "select",
    "default": 1,
+   "group": "D",
    "kind": "enum",
    "labels": {
     "": "",
@@ -2858,6 +2944,8 @@
     "1": "Single"
    },
    "note": "round trip does not return the written value",
+   "order": 1,
+   "page": "VideoSettings",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2904,12 +2992,15 @@
    "access": "rw",
    "control": "select",
    "default": 2,
+   "group": "C",
    "kind": "enum",
    "labels": {
     "0": "Off",
     "1": "Timestamp",
     "2": "Timestamp and logo"
    },
+   "order": 1,
+   "page": "VideoSettings",
    "read": {
     "map": null,
     "param": 1214

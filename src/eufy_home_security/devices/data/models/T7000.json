@@ -66,6 +66,7 @@
    "control": "text",
    "kind": "string",
    "note": "round trip does not return the written value",
+   "page": "ComputeCardAIFeatureScreen",
    "read": null,
    "role": "setting",
    "section": "detection",
@@ -165,6 +166,7 @@
   "arming_get_alarm_away_mode": {
    "access": "ro",
    "kind": "string",
+   "name": "Away mode",
    "read": {
     "map": null,
     "no_default": true,
@@ -217,6 +219,7 @@
   "arming_get_alarm_disarm_mode": {
    "access": "ro",
    "kind": "string",
+   "name": "Disarm mode",
    "read": {
     "map": null,
     "no_default": true,
@@ -230,6 +233,7 @@
   "arming_get_alarm_home_mode": {
    "access": "ro",
    "kind": "string",
+   "name": "Home mode",
    "read": {
     "map": null,
     "no_default": true,
@@ -252,6 +256,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
+   "page": "CUSButton",
    "read": null,
    "role": "setting",
    "section": "modes",
@@ -401,6 +406,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
+   "page": "NVRFirmwareUpdateScreen",
    "read": null,
    "role": "setting",
    "section": "system",
@@ -487,6 +493,7 @@
   "device_cpu_info": {
    "access": "ro",
    "kind": "string",
+   "page": "NVRAboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -639,6 +646,7 @@
   "device_current_temerature": {
    "access": "ro",
    "kind": "string",
+   "page": "NVRAboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -913,6 +921,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1004,6 +1013,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "name": "IP address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1095,6 +1105,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "name": "MAC address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1104,6 +1115,7 @@
    "access": "ro",
    "default": "{\"GoAnywhere\":1, \"SwipePanTilt\":1}",
    "kind": "string",
+   "page": "IPCRecordingQualityScreen",
    "read": null,
    "role": "diagnostic",
    "section": "recording",
@@ -1129,6 +1141,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Ignore notifications",
    "read": {
     "map": null,
     "param": 1283
@@ -1152,13 +1165,14 @@
   "nvr_get_device_volume": {
    "access": "ro",
    "kind": "string",
+   "page": "NVRPairedDevice",
    "read": {
     "map": null,
     "no_default": true,
     "param": 9231
    },
    "role": "status",
-   "section": "audio",
+   "section": "system",
    "shown": "page"
   },
   "nvr_motion_detection": {
@@ -1316,6 +1330,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "NVRSystemNotification",
    "read": {
     "map": null,
     "param": 9216
@@ -1347,6 +1362,7 @@
     "4": "User"
    },
    "note": "handler rejects some values",
+   "page": "NVRSystemNotification",
    "read": null,
    "role": "setting",
    "section": "notifications",

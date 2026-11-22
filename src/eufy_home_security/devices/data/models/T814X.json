@@ -99,6 +99,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "PanTiltSettings",
    "read": {
     "map": null,
     "param": 6016
@@ -325,6 +326,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -1166,6 +1168,7 @@
   "firmware_main_version_time": {
    "access": "ro",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1283,6 +1286,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "WiFiConnection",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1688,9 +1692,14 @@
   },
   "motion_stop_end_early": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "CustomizeRecording",
    "read": {
     "map": {
      "": false,
@@ -1855,9 +1864,9 @@
    "default": 102,
    "kind": "enum",
    "labels": {
-    "100": "Night vision off",
-    "102": "Night vision infrared",
-    "103": "Night vision spotlight"
+    "100": "Off",
+    "102": "Infrared",
+    "103": "Spotlights"
    },
    "read": {
     "map": {
@@ -2067,12 +2076,15 @@
    ],
    "control": "select",
    "default": 0,
+   "group": "B",
    "kind": "enum",
    "labels": {
     "0": "Most Efficient",
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": {
      "": 0,
@@ -2194,6 +2206,7 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
+   "page": "MotionDetection",
    "read": {
     "map": {
      "": 0,
@@ -2272,6 +2285,7 @@
    "access": "ro",
    "default": "10",
    "kind": "other",
+   "page": "PanTiltSettings",
    "read": null,
    "role": "status",
    "section": "ptz",
@@ -2534,6 +2548,7 @@
    "access": "rw",
    "control": "text",
    "kind": "string",
+   "page": "SpotlightSettings",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2585,6 +2600,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
@@ -2728,11 +2744,16 @@
   },
   "trigger_interval_time": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 5,
    "kind": "range",
    "max": 60,
    "min": 5,
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1250
@@ -2756,11 +2777,16 @@
   },
   "video_clip_length": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 60,
    "kind": "range",
    "max": 120,
    "min": 10,
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1249

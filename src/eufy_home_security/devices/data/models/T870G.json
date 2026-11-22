@@ -167,6 +167,7 @@
    "access": "rw",
    "control": "text",
    "kind": "string",
+   "page": "AlarmSound",
    "read": null,
    "role": "setting",
    "section": "alarm",
@@ -255,6 +256,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": true,
@@ -359,6 +361,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -377,6 +380,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -478,6 +482,7 @@
     "3": "Custom recording"
    },
    "note": "no handler write path",
+   "page": "MotionDetection",
    "read": null,
    "role": "setting",
    "section": "power",
@@ -698,6 +703,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "AntiTheftDetection",
    "read": {
     "map": {
      "": false,

@@ -1726,7 +1726,7 @@ rw 48 / ro 75
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 4, 2, 9, 1, 8, 7, 6, 12, 3, 16 | - | no | - | 0=Record, 1=Screenshot, 12=Calibration, 16=Positions, 2=Speaker, 3=Pantili, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
 | `live_ptz_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=Preset, 1=Control, 2=Panorama |
-| `live_streaming_resolution` | enum | 0, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 5=2K HD, 6=720P |
+| `live_streaming_resolution` | enum | 0, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 5=2K HD, 6=HD (720P) |
 | `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
 | `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
 | `mac_address` | string | - | - | no | - | - |
@@ -1748,7 +1748,7 @@ rw 48 / ro 75
 | `playback_play_speed` | enum | 0, 1, 2, 3, 2 | - | no | - | 0=2x, 1=4x, 2=2x, 3=16x |
 | `player_model_config` | string | - | - | no | - | - |
 | `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
-| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
@@ -1949,7 +1949,7 @@ rw 32 / ro 68
 | `motion_support_set_light_mode` | bool | - | - | no | - | - |
 | `motion_tracking_switch` | bool | - | - | no | - | - |
 | `nightvision_type` | enum | 7, 6, 0 | - | yes | select | 0=Disable, 6=Infrared auto, 7=Spotlight auto |
-| `nightvision_type_new` | enum | 100, 102, 103 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spotlight |
+| `nightvision_type_new` | enum | 100, 102, 103 | - | yes | select | 100=Off, 102=Infrared, 103=Spotlights |
 | `notification_interval_time` | enum | 0, 1, 2, 3, 4, 5 | - | yes | select | 0=0 min, 1=1 min, 2=2 min, 3=3 min, 4=4 min, 5=5 min |
 | `notification_interval_time_for_sensor` | string | - | - | no | - | - |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
@@ -3060,7 +3060,7 @@ rw 26 / ro 56
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `nas_stream_switch` | bool | - | - | yes | switch | - |
 | `nightvision_type` | bool | - | - | yes | switch | - |
-| `nightvision_type_new` | enum | 102, 100 | - | yes | select | 100=Night vision off, 102=Night vision infrared |
+| `nightvision_type_new` | enum | 102, 100 | - | yes | select | 100=Off, 102=Infrared |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `ordered_trigger_actions` | enum | 0, 1, 2, 3, 4, 5 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=HomeBase alarm, 4=Light alarm, 5=Monitoring alarm |
 | `player_model_config` | string | - | - | no | - | - |
@@ -3494,7 +3494,7 @@ rw 39 / ro 84
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `nightvision_supply_light_mode` | enum | 0, 1, 2, 3 | - | yes | select | 0=Off (infrared), 1=Off, 2=Spotlight, 3=Infrared |
 | `nightvision_type` | enum | 7, 10 | - | yes | select | 10=Infrared, 7=Spotlights |
-| `nightvision_type_new` | enum | 100, 103, 102 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spotlight |
+| `nightvision_type_new` | enum | 100, 103, 102 | - | yes | select | 100=Off, 102=Infrared, 103=Spotlights |
 | `notification_ai_motion_switch` | bool | - | - | yes | switch | - |
 | `notification_ai_person_switch` | bool | - | - | yes | switch | - |
 | `notification_ai_pet_switch` | bool | - | - | yes | switch | - |
@@ -4665,7 +4665,7 @@ rw 38 / ro 87
 | `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
 | `nas_stream_switch` | bool | - | - | yes | switch | - |
 | `nightvision_type` | enum | 7, 10 | - | yes | select | 10=Infrared, 7=Spotlights |
-| `nightvision_type_new` | enum | 102, 103, 100 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spotlight |
+| `nightvision_type_new` | enum | 102, 103, 100 | - | yes | select | 100=Off, 102=Infrared, 103=Spotlights |
 | `notification_ai_motion_switch` | bool | - | - | yes | switch | - |
 | `notification_ai_person_switch` | bool | - | - | yes | switch | - |
 | `notification_ai_pet_switch` | bool | - | - | yes | switch | - |
@@ -4749,7 +4749,7 @@ rw 27 / ro 45
 | `led_on_off` | bool | - | - | yes | switch | - |
 | `live_bottom_hor_toolbar_list` | enum | 0, 2, 4, 13, 14 | - | no | - | 0=Record, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 1, 2, 4, 8, 10, 13, 14 | - | no | - | 0=Record, 1=Screenshot, 10=Event, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound, 8=Auto Night Vision |
-| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Middle |
+| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Medium |
 | `live_support_full` | bool | - | - | no | - | - |
 | `live_support_mute` | bool | - | - | no | - | - |
 | `live_support_record` | bool | - | - | no | - | - |
@@ -4830,7 +4830,7 @@ rw 27 / ro 49
 | `led_on_off` | bool | - | - | yes | switch | - |
 | `live_bottom_hor_toolbar_list` | enum | 0, 2, 4, 13, 14 | - | no | - | 0=Record, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 1, 2, 4, 8, 10, 13, 14 | - | no | - | 0=Record, 1=Screenshot, 10=Event, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound, 8=Auto Night Vision |
-| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Middle |
+| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Medium |
 | `live_support_full` | bool | - | - | no | - | - |
 | `live_support_mute` | bool | - | - | no | - | - |
 | `live_support_record` | bool | - | - | no | - | - |
@@ -4913,7 +4913,7 @@ rw 27 / ro 49
 | `led_on_off` | bool | - | - | yes | switch | - |
 | `live_bottom_hor_toolbar_list` | enum | 0, 2, 4, 13, 14 | - | no | - | 0=Record, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 1, 2, 4, 8, 10, 13, 14 | - | no | - | 0=Record, 1=Screenshot, 10=Event, 13=Spotlight, 14=Light, 2=Speaker, 4=Sound, 8=Auto Night Vision |
-| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Middle |
+| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Medium |
 | `live_support_full` | bool | - | - | no | - | - |
 | `live_support_mute` | bool | - | - | no | - | - |
 | `live_support_record` | bool | - | - | no | - | - |
@@ -6262,8 +6262,8 @@ rw 44 / ro 101
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 13, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 2=Speaker, 3=Pantili, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 4, 2, 3, 13, 1, 8, 7, 16, 6 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 16=Positions, 2=Speaker, 3=Pantili, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision |
 | `live_ptz_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=Preset, 1=Control, 2=Panorama |
-| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
-| `live_streaming_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | no | - | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=360P |
+| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
+| `live_streaming_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | no | - | 0=Auto, 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `live_support_full` | string | - | - | no | - | - |
 | `live_support_long_time_watch` | bool | - | - | no | - | - |
 | `live_support_mute` | string | - | - | no | - | - |
@@ -6280,7 +6280,7 @@ rw 44 / ro 101
 | `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
 | `nas_stream_switch` | bool | - | - | yes | switch | - |
 | `nightvision_type` | enum | 2, 1, 0 | - | yes | select | 0=Off, 1=B&W Night Vision, 2=Color Night Vision |
-| `nightvision_type_new` | enum | 102, 103, 100 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spolight |
+| `nightvision_type_new` | enum | 102, 103, 100 | - | yes | select | 100=Off, 102=Infrared, 103=Spotlights |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `ordered_trigger_actions` | enum | 0, 1, 2, 3 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=Light alarm |
 | `p2p_ping_timeout` | other | - | - | no | - | - |
@@ -6292,8 +6292,8 @@ rw 44 / ro 101
 | `power_source_mode` | enum | default:0 | - | no | - | default:0=default:0 |
 | `ptz_ai_follow_status` | string | - | - | no | - | - |
 | `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
-| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
-| `record_resolution__v1` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
+| `record_resolution__v1` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `recording_number` | other | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
@@ -7045,7 +7045,7 @@ rw 28 / ro 48
 | `led_on_off` | bool | - | - | yes | switch | - |
 | `live_bottom_hor_toolbar_list` | enum | 0, 1, 2, 15, 4 | - | no | - | 0=Record, 1=Screenshot, 15=Reply, 2=Speaker, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 1, 2, 15, 4 | - | no | - | 0=Record, 1=Screenshot, 15=Reply, 2=Speaker, 4=Sound |
-| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Middle |
+| `live_streaming_resolution` | enum | 0, 8, 9, 10 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Medium |
 | `live_support_full` | bool | - | - | no | - | - |
 | `live_support_mute` | bool | - | - | no | - | - |
 | `live_support_record` | bool | - | - | no | - | - |
@@ -7604,7 +7604,7 @@ rw 47 / ro 109
 | `device_pre_recording_switch` | bool | - | - | yes | switch | - |
 | `device_query_event_retry_time` | other | - | - | no | - | - |
 | `device_query_event_timeout` | other | - | - | no | - | - |
-| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | - | yes | select | 0=0s, 10=10s, 15=15s, 5=5s |
+| `device_response_timeout_delay_time` | enum | 0, 5, 10, 15 | s | yes | select | 0=0s, 10=10s, 15=15s, 5=5s |
 | `device_response_timeout_schedule` | string | - | - | no | - | - |
 | `device_response_timeout_switch` | bool | - | - | yes | switch | - |
 | `device_response_timeout_voice` | string | - | - | no | - | - |
@@ -7642,7 +7642,7 @@ rw 47 / ro 109
 | `live_alarm_type` | enum | 0, 1, 2, 3 | - | no | - | 0=Sound only, 1=Light only, 2=Sound and light, 3=HomeBase alarm |
 | `live_bottom_hor_toolbar_list` | enum | 1, 2, 4, 15, 0 | - | no | - | 0=Record, 1=Screenshot, 15=Reply, 2=Speaker, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 4, 2, 15, 1, 11, 9, 13 | - | no | - | 0=Record, 1=Screenshot, 11=Streaming Quality, 13=Spotlight, 15=Reply, 2=Speaker, 4=Sound, 9=Playback |
-| `live_streaming_resolution` | enum | 0, 10, 9, 8 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Middle |
+| `live_streaming_resolution` | enum | 0, 10, 9, 8 | - | yes | select | 0=Auto, 10=High, 8=Low, 9=Medium |
 | `live_support_full` | bool | - | - | no | - | - |
 | `live_support_long_time_watch` | bool | - | - | no | - | - |
 | `live_support_mute` | bool | - | - | no | - | - |
@@ -7659,7 +7659,7 @@ rw 47 / ro 109
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `nightvision_type` | enum | 2, 5, 6, 0 | - | no | - | 0=Off, 2=Color, 5=Optimal Infrared, 6=Infrared Night Vision |
-| `nightvision_type_new` | enum | 103, 101, 102, 100 | - | no | - | 100=Night vision off, 101=Night vision infrared, 102=Night vision infrared, 103=Night vision spotlight |
+| `nightvision_type_new` | enum | 103, 101, 102, 100 | - | no | - | 100=Off, 101=Optimal Infrared Night Vision, 102=Infrared Night Vision, 103=Color Night Vision |
 | `notification_ai_dection_package_switch` | bool | - | - | yes | switch | - |
 | `notification_ai_doorbell_pressed_switch` | bool | - | - | yes | switch | - |
 | `notification_ai_motion_switch` | bool | - | - | yes | switch | - |
@@ -7677,7 +7677,7 @@ rw 47 / ro 109
 | `power_manager_mode` | enum | 0, 2, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 2=Balanced surveillance, 3=Custom recording |
 | `power_manager_mode__v1` | enum | 1, 3 | - | yes | select | 1=Optimal surveillance, 3=Custom recording |
 | `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
-| `record_resolution` | enum | 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 5=2K HD, 6=720P(HD) |
+| `record_resolution` | enum | 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 5=2K HD, 6=HD (720P) |
 | `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |
@@ -8283,7 +8283,7 @@ rw 48 / ro 76
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 4, 2, 9, 1, 8, 7, 6, 12, 3, 16 | - | no | - | 0=Record, 1=Screenshot, 12=Calibration, 16=Positions, 2=Speaker, 3=Pantili, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
 | `live_ptz_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=Preset, 1=Control, 2=Panorama |
-| `live_streaming_resolution` | enum | 0, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 5=2K HD, 6=720P |
+| `live_streaming_resolution` | enum | 0, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 5=2K HD, 6=HD (720P) |
 | `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
 | `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
 | `mac_address` | string | - | - | no | - | - |
@@ -8305,7 +8305,7 @@ rw 48 / ro 76
 | `playback_play_speed` | enum | 0, 1, 2, 3, 2 | - | no | - | 0=2x, 1=4x, 2=2x, 3=16x |
 | `player_model_config` | string | - | - | no | - | - |
 | `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
-| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
@@ -8414,7 +8414,7 @@ rw 48 / ro 76
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 4, 2, 9, 1, 8, 7, 6, 12, 3, 16 | - | no | - | 0=Record, 1=Screenshot, 12=Calibration, 16=Positions, 2=Speaker, 3=Pantili, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
 | `live_ptz_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=Preset, 1=Control, 2=Panorama |
-| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
 | `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
 | `mac_address` | string | - | - | no | - | - |
@@ -8436,7 +8436,7 @@ rw 48 / ro 76
 | `playback_play_speed` | enum | 0, 1, 2, 3, 2 | - | no | - | 0=2x, 1=4x, 2=2x, 3=16x |
 | `player_model_config` | string | - | - | no | - | - |
 | `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
-| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
 | `set_privacy_zone` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=1, panNum=1, polyNum=2, positionNum=4, sideNum=4, zoneHeight=720, zoneWidth=1280 |
@@ -8806,7 +8806,7 @@ rw 34 / ro 105
 | `led_on_off` | bool | - | - | yes | switch | - |
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 4, 2, 19, 13, 1, 18, 7, 8, 9, 6 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 18=PTZ Linkage, 19=PTZ Control Entrance, 2=Speaker, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
-| `live_streaming_resolution` | enum | 0, 14, 2, 6 | - | yes | select | 0=Auto, 14=2.5K, 2=Full HD(1080P), 6=720P |
+| `live_streaming_resolution` | enum | 0, 14, 2, 6 | - | yes | select | 0=Auto, 14=2.5K, 2=Full HD(1080P), 6=HD (720P) |
 | `live_support_long_time_watch` | bool | - | - | no | - | - |
 | `live_top_hor_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
 | `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
@@ -8823,7 +8823,7 @@ rw 34 / ro 105
 | `p2p_ping_interval` | other | - | ms | no | - | - |
 | `playback_play_speed` | enum | 0, 1, 2, 3 | - | no | - | 0=2x, 1=4x, 2=8x, 3=16x |
 | `player_model_config` | string | - | - | no | - | - |
-| `record_resolution` | enum | 0, 14, 2, 6 | - | yes | select | 0=Auto, 14=2.5K, 2=Full HD(1080P), 6=720P |
+| `record_resolution` | enum | 0, 14, 2, 6 | - | yes | select | 0=Auto, 14=2.5K, 2=Full HD(1080P), 6=HD (720P) |
 | `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `rotate_image_180_on_off` | bool | - | - | yes | switch | - |
@@ -12747,8 +12747,8 @@ rw 37 / ro 104
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 1, 2, 13 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 2=Speaker, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 4, 2, 13, 1, 8, 10 | - | no | - | 0=Record, 1=Screenshot, 10=Event, 13=Spotlight, 2=Speaker, 4=Sound, 8=Auto Night Vision |
 | `live_ptz_toolbar_list` | enum | 0, 1 | - | no | - | 0=Preset, 1=Control |
-| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
-| `live_streaming_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | no | - | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
+| `live_streaming_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | no | - | 0=Auto, 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `live_support_long_time_watch` | bool | - | - | no | - | - |
 | `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
 | `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
@@ -12762,7 +12762,7 @@ rw 37 / ro 104
 | `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
 | `nas_stream_switch` | bool | - | - | yes | switch | - |
 | `nightvision_type` | enum | 7, 10, 0 | - | yes | select | 0=Disable, 10=Infrared, 7=Spotlights |
-| `nightvision_type_new` | enum | 103, 102, 100 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spotlight |
+| `nightvision_type_new` | enum | 103, 102, 100 | - | yes | select | 100=Off, 102=Infrared, 103=Spotlights |
 | `notification_ai_face_recongnize_switch` | bool | - | - | yes | switch | - |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `ordered_trigger_actions` | enum | 0, 1, 2, 3 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=Light alarm |
@@ -12772,8 +12772,8 @@ rw 37 / ro 104
 | `power_manager_mode` | enum | 0, 1, 3 | - | yes | select | 0=Optimal battery life, 1=Optimal surveillance, 3=Custom recording |
 | `power_source_mode` | enum | 0, 1, 2, 3, 4, 5, 8, 12 | - | no | - | 0=Not charging, 1=USB charging, 12=External and built-in solar charging, 2=Not charging, 3=AC charging (doorbell), 4=Built-in solar charging, 5=USB and built-in solar charging, 8=External solar panel |
 | `preset_positions_calibrate_time` | other | - | - | no | - | - |
-| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
-| `record_resolution__v1` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
+| `record_resolution__v1` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sdk_model_config` | string | - | - | no | - | - |
@@ -13719,7 +13719,7 @@ rw 46 / ro 109
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 4, 2, 19, 1, 18, 7, 8, 9, 6, 17, 13 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 17=AI Box, 18=PTZ Linkage, 19=PTZ Control Entrance, 2=Speaker, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
 | `live_ptz_toolbar_list` | enum | 0, 1 | - | no | - | 0=Preset, 1=Control |
-| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `live_streaming_resolution` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `live_support_long_time_watch` | bool | - | - | no | - | - |
 | `live_top_hor_toolbar_list` | enum | 0 | - | no | - | 0=Alarm |
 | `live_top_toolbar_list` | enum | 0, 1 | - | no | - | 0=Alarm, 1=Setting |
@@ -13733,7 +13733,7 @@ rw 46 / ro 109
 | `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
 | `nas_stream_switch` | bool | - | - | yes | switch | - |
 | `nightvision_type` | enum | 7, 10, 0 | - | yes | select | 0=Disable, 10=Infrared, 7=Spotlights |
-| `nightvision_type_new` | enum | 103, 102, 100 | - | yes | select | 100=Night vision off, 102=Night vision infrared, 103=Night vision spotlight |
+| `nightvision_type_new` | enum | 103, 102, 100 | - | yes | select | 100=Off, 102=Infrared, 103=Spotlights |
 | `notification_type` | enum | 0, 1, 2 | - | yes | select | 0=Most Efficient, 1=Full Effect, 2=Include Thumbnail |
 | `ordered_trigger_actions` | enum | 0, 1, 2, 3 | - | no | - | 0=Record, 1=Push, 2=Camera alarm, 3=Light alarm |
 | `playback_play_speed` | enum | 0, 1, 2, 3, 2 | - | no | - | 0=2x, 1=4x, 2=2x, 3=16x |
@@ -13745,8 +13745,8 @@ rw 46 / ro 109
 | `preset_positions_calibrate_time` | other | - | - | no | - | - |
 | `ptz_turn_speed` | range | 1..5 step 1 | - | yes | slider | - |
 | `radar_test_mode_on_off` | bool | - | - | yes | switch | - |
-| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
-| `record_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=4K Ultra, 5=2K HD, 6=720P |
+| `record_resolution` | enum | 4, 5, 2, 6 | - | yes | select | 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
+| `record_resolution__v1` | enum | 0, 4, 5, 2, 6 | - | yes | select | 0=Auto, 2=Full HD(1080P), 4=Ultra 4K, 5=2K HD, 6=HD (720P) |
 | `recording_number` | range | 10..120 step 1 | - | no | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `sd_card_max_capacity` | other | - | - | no | - | - |

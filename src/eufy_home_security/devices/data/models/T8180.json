@@ -99,6 +99,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "PanTiltSettings",
    "read": {
     "map": null,
     "param": 6016
@@ -132,6 +133,7 @@
     "zoneWidth": "1280"
    },
    "note": "handler rejects the probed values",
+   "page": "ThingDeveloperScreen",
    "read": null,
    "role": "setting",
    "section": "detection",
@@ -344,6 +346,8 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Audio recording",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -630,6 +634,7 @@
    "access": "rw",
    "control": "select",
    "default": 3,
+   "group": "D",
    "kind": "enum",
    "labels": {
     "0": "1",
@@ -640,6 +645,8 @@
     "5": "6",
     "6": "7"
    },
+   "order": 1,
+   "page": "MotionDetection",
    "read": {
     "map": {
      "{\"list\":[{\"sensor_type\":1,\"id\":1,\"sensitivity\":1,\"switch\":1},{\"sensor_type\":1,\"id\":2,\"sensitivity\":1,\"switch\":1},{\"sensor_type\":1,\"id\":3,\"sensitivity\":1,\"switch\":1},{\"sensor_type\":1,\"id\":4,\"sensitivity\":1,\"switch\":1},{\"sensor_type\":2,\"id\":1,\"sensitivity\":1,\"model\":0,\"block_list\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]}": 0,
@@ -950,6 +957,7 @@
   "detection_type_set": {
    "access": "rw",
    "control": "select",
+   "group": "C",
    "kind": "enum",
    "labels": {
     "0": "Human Recognition",
@@ -961,6 +969,8 @@
     "6": "All Motions"
    },
    "note": "round trip does not return the written value",
+   "order": 1,
+   "page": "MotionDetection",
    "read": null,
    "role": "setting",
    "section": "detection",
@@ -1230,6 +1240,7 @@
    "access": "ro",
    "default": "0",
    "kind": "other",
+   "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1239,6 +1250,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1262,6 +1274,7 @@
     "1": "HomeBase",
     "2": "Router"
    },
+   "page": "MultiBridgeSetting",
    "read": {
     "map": null,
     "param": 60013
@@ -1636,6 +1649,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Privacy zones",
    "read": {
     "map": {
      "": false,
@@ -1680,6 +1694,7 @@
   "firmware_main_version_time": {
    "access": "ro",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1698,6 +1713,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Quick focus tap",
    "read": null,
    "role": "setting",
    "section": "ptz",
@@ -1714,6 +1730,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Swipe to control",
    "read": null,
    "role": "setting",
    "section": "ptz",
@@ -1813,6 +1830,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "WiFiConnection",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1821,6 +1839,7 @@
   "ip_address": {
    "access": "ro",
    "kind": "string",
+   "name": "IP address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1959,6 +1978,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Status LED",
    "read": {
     "map": {
      "": false,
@@ -2063,10 +2083,11 @@
    "labels": {
     "0": "Auto",
     "2": "Full HD(1080P)",
-    "4": "4K Ultra",
+    "4": "Ultra 4K",
     "5": "2K HD",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "name": "Streaming quality",
    "read": {
     "map": {
      "": 0
@@ -2154,10 +2175,11 @@
    "labels": {
     "0": "Auto",
     "2": "Full HD(1080P)",
-    "4": "4K Ultra",
+    "4": "Ultra 4K",
     "5": "2K HD",
-    "6": "360P"
+    "6": "HD (720P)"
    },
+   "name": "Streaming quality",
    "note": "no handler write path",
    "read": null,
    "role": "setting",
@@ -2241,6 +2263,7 @@
   "mac_address": {
    "access": "ro",
    "kind": "string",
+   "name": "MAC address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -2251,6 +2274,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Microphone",
    "read": {
     "map": {
      "": false,
@@ -2278,6 +2302,7 @@
    "access": "ro",
    "default": "{\"playerConfig\":{\"GoAnywhere\":1,\"SwipePanTilt\":1}}",
    "kind": "string",
+   "page": "IPCRecordingQualityScreen",
    "read": null,
    "role": "diagnostic",
    "section": "recording",
@@ -2299,6 +2324,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Motion detection",
    "read": {
     "map": {
      "": false,
@@ -2325,9 +2351,15 @@
   },
   "motion_stop_end_early": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "End clip early if motion stops",
+   "page": "CustomizeRecording",
    "read": {
     "map": {
      "": false,
@@ -2446,6 +2478,7 @@
     "1": "B&W Night Vision",
     "2": "Color Night Vision"
    },
+   "name": "Night vision",
    "read": {
     "map": {
      "": 1,
@@ -2484,10 +2517,11 @@
    "default": 102,
    "kind": "enum",
    "labels": {
-    "100": "Night vision off",
-    "102": "Night vision infrared",
-    "103": "Night vision spolight"
+    "100": "Off",
+    "102": "Infrared",
+    "103": "Spotlights"
    },
+   "name": "Night vision",
    "read": {
     "map": {
      "": 100,
@@ -2588,12 +2622,15 @@
    ],
    "control": "select",
    "default": 0,
+   "group": "A",
    "kind": "enum",
    "labels": {
     "0": "Most Efficient",
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": {
      "": 0,
@@ -2724,6 +2761,8 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
+   "name": "Working mode",
+   "page": "MotionDetection",
    "read": {
     "map": {
      "": 0,
@@ -2789,6 +2828,7 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
+   "name": "Working mode",
    "read": {
     "map": {
      "": 1,
@@ -2857,6 +2897,7 @@
    "kind": "range",
    "max": 5,
    "min": 1,
+   "name": "Rotate speed",
    "read": {
     "map": null,
     "param": 6015
@@ -2892,10 +2933,11 @@
    "kind": "enum",
    "labels": {
     "2": "Full HD(1080P)",
-    "4": "4K Ultra",
+    "4": "Ultra 4K",
     "5": "2K HD",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 2,
@@ -2982,10 +3024,11 @@
    "kind": "enum",
    "labels": {
     "2": "Full HD(1080P)",
-    "4": "4K Ultra",
+    "4": "Ultra 4K",
     "5": "2K HD",
-    "6": "720P"
+    "6": "HD (720P)"
    },
+   "name": "Recording quality",
    "note": "round trip does not return the written value",
    "read": null,
    "role": "setting",
@@ -3116,6 +3159,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Speaker",
    "read": {
     "map": {
      "": false,
@@ -3172,6 +3216,7 @@
    "kind": "range",
    "max": 100,
    "min": 1,
+   "name": "Brightness",
    "read": {
     "map": null,
     "param": 1401
@@ -3197,6 +3242,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Lighting",
    "read": {
     "map": {
      "": false,
@@ -3225,6 +3271,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
@@ -3290,11 +3337,14 @@
     "0": 64,
     "1": 16
    },
+   "group": "B",
    "kind": "flags",
    "labels": {
     "0": "Switch modes by schedule",
     "1": "Switch modes from app"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": null,
     "param": 1283
@@ -3374,11 +3424,17 @@
   },
   "trigger_interval_time": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 5,
    "kind": "range",
    "max": 60,
    "min": 5,
+   "name": "Intervals between triggers",
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1250
@@ -3402,11 +3458,17 @@
   },
   "video_clip_length": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 60,
    "kind": "range",
    "max": 120,
    "min": 10,
+   "name": "Clip length",
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1249
@@ -3503,6 +3565,7 @@
     "1": "Timestamp",
     "2": "Timestamp and logo"
    },
+   "name": "Watermark",
    "read": {
     "map": {
      "": 2,

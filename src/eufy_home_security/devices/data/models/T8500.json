@@ -368,9 +368,10 @@
    "access": "ro",
    "kind": "string",
    "note": "no handler write path",
+   "page": "PowerManager",
    "read": null,
    "role": "setting",
-   "section": "recording",
+   "section": "power",
    "shown": "page"
   },
   "smart_lock_notification_locked_switch": {

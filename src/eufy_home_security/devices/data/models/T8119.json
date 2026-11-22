@@ -299,6 +299,8 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Audio recording",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -767,6 +769,7 @@
    "access": "ro",
    "default": "C35",
    "kind": "string",
+   "page": "OnTheGo",
    "read": null,
    "role": "status",
    "section": "network",
@@ -802,6 +805,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "MultiBridgeSetting",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1083,6 +1087,7 @@
   "firmware_main_version_time": {
    "access": "ro",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -1167,6 +1172,7 @@
   "ip_address": {
    "access": "ro",
    "kind": "string",
+   "name": "IP address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1353,6 +1359,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Status LED",
    "read": {
     "map": {
      "": false,
@@ -1450,6 +1457,7 @@
     "8": "Low",
     "9": "Medium"
    },
+   "name": "Streaming quality",
    "read": {
     "map": {
      "": 0,
@@ -1548,6 +1556,7 @@
   "mac_address": {
    "access": "ro",
    "kind": "string",
+   "name": "MAC address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1558,6 +1567,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Microphone",
    "read": {
     "map": {
      "": false,
@@ -1585,6 +1595,7 @@
    "access": "ro",
    "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"}}}",
    "kind": "string",
+   "page": "IPCRecordingQualityScreen",
    "read": null,
    "role": "diagnostic",
    "section": "recording",
@@ -1604,6 +1615,7 @@
   "motion_activated_light_setting": {
    "access": "ro",
    "kind": "string",
+   "name": "Motion-activated light",
    "note": "handler ignores the value",
    "read": null,
    "role": "setting",
@@ -1615,6 +1627,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Motion detection",
    "read": {
     "map": {
      "": false,
@@ -1641,9 +1654,15 @@
   },
   "motion_stop_end_early": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "End clip early if motion stops",
+   "page": "CustomizeRecording",
    "read": {
     "map": {
      "": false,
@@ -1688,6 +1707,7 @@
     "3": "Infrared"
    },
    "note": "round trip does not return the written value",
+   "page": "NightVision",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -1734,6 +1754,7 @@
     "10": "Infrared",
     "7": "Spotlights"
    },
+   "name": "Night vision",
    "read": {
     "map": {
      "": 10,
@@ -1780,10 +1801,11 @@
    "default": 102,
    "kind": "enum",
    "labels": {
-    "100": "Night vision off",
-    "102": "Night vision infrared",
-    "103": "Night vision spotlight"
+    "100": "Off",
+    "102": "Infrared",
+    "103": "Spotlights"
    },
+   "name": "Night vision",
    "read": {
     "map": {
      "": 100,
@@ -1832,6 +1854,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "All other motion",
    "read": {
     "map": {
      "": false,
@@ -1862,6 +1885,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Human",
    "read": {
     "map": null,
     "param": 6027
@@ -1888,6 +1912,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Pet",
    "read": {
     "map": null,
     "param": 6027
@@ -1914,6 +1939,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Vehicle",
    "read": {
     "map": null,
     "param": 6027
@@ -1992,12 +2018,15 @@
    ],
    "control": "select",
    "default": 0,
+   "group": "B",
    "kind": "enum",
    "labels": {
     "0": "Most Efficient",
     "1": "Full Effect",
     "2": "Include Thumbnail"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": {
      "": 0,
@@ -2094,6 +2123,8 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
+   "name": "Working mode",
+   "page": "MotionDetection",
    "read": {
     "map": {
      "": 0,
@@ -2178,6 +2209,7 @@
     "8": "Low",
     "9": "Medium"
    },
+   "name": "Recording quality",
    "read": {
     "map": {
      "": 10,
@@ -2300,6 +2332,8 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Round-look",
+   "page": "SoundDetection",
    "read": {
     "map": {
      "": false,
@@ -2331,6 +2365,7 @@
    "kind": "range",
    "max": 5,
    "min": 1,
+   "page": "SoundDetection",
    "read": {
     "map": null,
     "param": 6044
@@ -2361,6 +2396,7 @@
     "0": "All sound",
     "1": "Crying"
    },
+   "page": "SoundDetection",
    "read": {
     "map": {
      "": 0,
@@ -2404,6 +2440,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Speaker",
    "read": {
     "map": {
      "": false,
@@ -2470,6 +2507,7 @@
    "kind": "range",
    "max": 100,
    "min": 1,
+   "name": "Brightness",
    "read": {
     "map": null,
     "param": 1401
@@ -2494,6 +2532,7 @@
    "access": "rw",
    "control": "text",
    "kind": "string",
+   "page": "SpotlightSettings",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2545,6 +2584,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
@@ -2595,12 +2635,15 @@
     "1": 16,
     "2": 32
    },
+   "group": "D",
    "kind": "flags",
    "labels": {
     "0": "Switch modes by schedule",
     "1": "Switch modes from app",
     "2": "Switch modes by geofencing"
    },
+   "order": 1,
+   "page": "SettingsNotification",
    "read": {
     "map": null,
     "param": 1283
@@ -2680,11 +2723,17 @@
   },
   "trigger_interval_time": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 5,
    "kind": "range",
    "max": 60,
    "min": 5,
+   "name": "Intervals between triggers",
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1250
@@ -2708,11 +2757,17 @@
   },
   "video_clip_length": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 60,
    "kind": "range",
    "max": 120,
    "min": 10,
+   "name": "Clip length",
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1249
@@ -2760,6 +2815,7 @@
     "1": "Timestamp",
     "3": "Logo"
    },
+   "name": "Watermark",
    "read": {
     "map": {
      "": 0,

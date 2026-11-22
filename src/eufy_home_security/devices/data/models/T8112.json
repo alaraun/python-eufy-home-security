@@ -309,6 +309,8 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Audio recording",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -1060,6 +1062,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Status LED",
    "read": {
     "map": {
      "": false,
@@ -1163,6 +1166,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Microphone",
    "read": {
     "map": {
      "": false,
@@ -1201,6 +1205,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Motion detection",
    "read": {
     "map": null,
     "param": 1011
@@ -1222,9 +1227,15 @@
   },
   "motion_stop_end_early": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "End clip early if motion stops",
+   "page": "CustomizeRecording",
    "read": {
     "map": {
      "": false,
@@ -1321,8 +1332,8 @@
    "default": 102,
    "kind": "enum",
    "labels": {
-    "100": "Night vision off",
-    "102": "Night vision infrared"
+    "100": "Off",
+    "102": "Infrared"
    },
    "read": {
     "map": {
@@ -1493,6 +1504,8 @@
     "1": "Optimal surveillance",
     "3": "Custom recording"
    },
+   "name": "Working mode",
+   "page": "MotionDetection",
    "read": {
     "map": {
      "": 0,
@@ -1591,6 +1604,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Speaker",
    "read": {
     "map": {
      "": false,
@@ -1632,11 +1646,17 @@
   },
   "trigger_interval_time": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 5,
    "kind": "range",
    "max": 60,
    "min": 5,
+   "name": "Intervals between triggers",
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1250
@@ -1660,11 +1680,17 @@
   },
   "video_clip_length": {
    "access": "rw",
+   "applies_when": [
+    "power_manager_mode",
+    3
+   ],
    "control": "slider",
    "default": 60,
    "kind": "range",
    "max": 120,
    "min": 5,
+   "name": "Clip length",
+   "page": "CustomizeRecording",
    "read": {
     "map": null,
     "param": 1249
@@ -1714,6 +1740,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Watermark",
    "read": {
     "map": {
      "1": false,

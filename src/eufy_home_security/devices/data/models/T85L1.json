@@ -163,6 +163,7 @@
     "3": "Custom recording"
    },
    "note": "no handler write path",
+   "page": "MotionDetection",
    "read": null,
    "role": "setting",
    "section": "power",

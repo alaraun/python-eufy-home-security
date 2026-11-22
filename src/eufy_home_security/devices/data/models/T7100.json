@@ -92,6 +92,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "page": "PanTiltSettings",
    "read": {
     "map": null,
     "param": 6016
@@ -125,6 +126,7 @@
     "zoneWidth": "1280"
    },
    "note": "handler rejects the probed values",
+   "page": "ThingDeveloperScreen",
    "read": null,
    "role": "setting",
    "section": "detection",
@@ -157,6 +159,8 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Audio recording",
+   "page": "SettingsHome",
    "read": {
     "map": {
      "": false,
@@ -234,6 +238,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "PanTiltSettings",
    "read": {
     "map": {
      "": false,
@@ -329,6 +334,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler rejects the probed values",
+   "page": "MotionDetectionV2",
    "read": null,
    "role": "setting",
    "section": "detection",
@@ -350,13 +356,14 @@
    "access": "ro",
    "default": "1",
    "kind": "other",
+   "page": "NVRPairedDevice",
    "read": {
     "map": null,
     "no_default": true,
     "param": 9235
    },
    "role": "diagnostic",
-   "section": "network",
+   "section": "system",
    "shown": "card"
   },
   "device_continuous_recording_time": {
@@ -410,6 +417,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "page": "NVREventRecordingScreen",
    "read": {
     "map": {
      "": false,
@@ -438,6 +446,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler transforms the value",
+   "page": "NVREventRecordingScreen",
    "read": {
     "map": null,
     "no_default": true,
@@ -759,6 +768,7 @@
    "access": "ro",
    "default": "11",
    "kind": "other",
+   "page": "NVRPairedDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -795,6 +805,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "page": "AboutDevice",
    "read": null,
    "role": "status",
    "section": "system",
@@ -805,6 +816,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Quick focus tap",
    "read": null,
    "role": "setting",
    "section": "ptz",
@@ -821,6 +833,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Swipe to control",
    "read": null,
    "role": "setting",
    "section": "ptz",
@@ -845,6 +858,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "name": "IP address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -880,6 +894,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Status LED",
    "read": {
     "map": null,
     "param": 6014
@@ -904,6 +919,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler rejects the probed values",
+   "page": "NightVisionAlwaysOn",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -1011,6 +1027,7 @@
     "10": "High",
     "8": "Low"
    },
+   "name": "Streaming quality",
    "read": {
     "map": {
      "0": 0,
@@ -1140,6 +1157,7 @@
    "access": "ro",
    "default": "0",
    "kind": "string",
+   "name": "MAC address",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1150,6 +1168,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Microphone",
    "read": {
     "map": {
      "": false,
@@ -1177,6 +1196,7 @@
    "access": "ro",
    "default": "{\"GoAnywhere\":1,\"SwipePanTilt\":1,\"style\":{\"watermark_set_multi_select\":1,\"activityZone\":2},\"streamConfig\":{\"2\":{\"fps\":[15],\"defaultFps\":15},\"4\":{\"fps\":[15],\"defaultFps\":15},\"5\":{\"fps\":[15],\"defaultFps\":15}},\"playerConfig\":{\"GoAnywhere_0\":1,\"GoAnywhere_1\":1,\"SwipePanTilt\":1}}",
    "kind": "string",
+   "page": "IPCRecordingQualityScreen",
    "read": null,
    "role": "diagnostic",
    "section": "recording",
@@ -1186,6 +1206,7 @@
   "motion_activated_light_setting": {
    "access": "ro",
    "kind": "string",
+   "name": "Motion-activated light",
    "note": "handler ignores the value",
    "read": null,
    "role": "setting",
@@ -1197,6 +1218,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "MotionDetection",
    "read": null,
    "role": "status",
    "section": "detection",
@@ -1207,6 +1229,7 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
+   "name": "Motion detection",
    "read": {
     "map": {
      "{\"ai_switch\":0,\"ai_use_global\":1,\"ai_detect_type\":\"0\",\"ai_notification\":\"0\",\"channel\":0}": false,
@@ -1243,6 +1266,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "page": "MotionActivatedLight",
    "read": null,
    "role": "status",
    "section": "picture",
@@ -1267,6 +1291,7 @@
     "6": "Infrared auto",
     "7": "Spotlight auto"
    },
+   "name": "Night vision",
    "read": {
     "map": {
      "": 6,
@@ -1317,10 +1342,11 @@
    "default": 102,
    "kind": "enum",
    "labels": {
-    "100": "Night vision off",
-    "102": "Night vision infrared",
-    "103": "Night vision spotlight"
+    "100": "Off",
+    "102": "Infrared",
+    "103": "Spotlights"
    },
+   "name": "Night vision",
    "read": {
     "map": {
      "": 100,
@@ -1534,6 +1560,7 @@
    "access": "ro",
    "default": "10",
    "kind": "other",
+   "page": "PanTiltSettings",
    "read": null,
    "role": "status",
    "section": "ptz",
@@ -1551,6 +1578,7 @@
     "3": "4",
     "4": "5"
    },
+   "name": "Rotate speed",
    "read": {
     "map": {
      "": 2,
@@ -1611,6 +1639,7 @@
   "record_resolution": {
    "access": "ro",
    "kind": "string",
+   "name": "Recording quality",
    "note": "handler ignores the value",
    "read": null,
    "role": "setting",
@@ -1667,6 +1696,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Speaker",
    "read": {
     "map": {
      "": false,
@@ -1733,6 +1763,7 @@
    "kind": "range",
    "max": 100,
    "min": 1,
+   "name": "Brightness",
    "read": {
     "map": null,
     "param": 1401
@@ -1758,6 +1789,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Lighting",
    "read": {
     "map": {
      "": false,
@@ -1787,6 +1819,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
@@ -1935,6 +1968,7 @@
     "3": "Flipped vertically"
    },
    "note": "round trip does not return the written value",
+   "page": "IPCOrientation",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2042,6 +2076,7 @@
    "access": "ro",
    "kind": "string",
    "note": "handler ignores the value",
+   "page": "IPCImageSetting",
    "read": null,
    "role": "setting",
    "section": "picture",
@@ -2066,6 +2101,7 @@
     "1": "Timestamp",
     "3": "Logo"
    },
+   "name": "Watermark",
    "read": {
     "map": {
      "": 0,
