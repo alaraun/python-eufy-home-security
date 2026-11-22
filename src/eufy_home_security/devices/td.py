@@ -69,7 +69,8 @@ UNITS: Final[Mapping[str, SettingUnit | None]] = MappingProxyType(
 UNIT_MEANINGS: Final[Mapping[str, SettingMeaning]] = MappingProxyType(
     {"degree": SettingMeaning.TEMPERATURE}
 )
-#: "音量" (volume) is a percentage only on a 0..100 or 1..100 scale.
+#: "音量" (volume) is a percentage on a 0..100 or 1..100 scale and a bare level on any
+#: other scale.
 VOLUME_UNIT: Final = "音量"
 
 _ENUM_TYPES: Final = frozenset({"enum", "ienum", "tenum"})
@@ -79,8 +80,8 @@ def normalise_unit(raw: str, minimum: float | None, maximum: float | None) -> Se
     """The setting unit of TD unit ``raw`` (None for none); ValueError when unmapped."""
     if raw in UNITS:
         return UNITS[raw]
-    if raw == VOLUME_UNIT and minimum in (0, 1) and maximum == 100:
-        return SettingUnit.PERCENT
+    if raw == VOLUME_UNIT and minimum is not None and maximum is not None:
+        return SettingUnit.PERCENT if minimum in (0, 1) and maximum == 100 else None
     raise ValueError(f"unit {raw!r} has no mapping")
 
 

@@ -563,6 +563,8 @@ def test_generated_t8160_custom_recording_settings_apply_when_mode_is_3() -> Non
         ("天", 10, 120, None),
         ("音量", 1, 100, "%"),
         ("音量", 0, 100, "%"),
+        ("音量", 1, 63, None),
+        ("音量", 0, 10, None),
         ("无", 0, 1, None),
         ("个", 1, 2, None),
         ("degree", 0, 100, None),
@@ -576,7 +578,7 @@ def test_vendor_units_normalise_to_setting_units(
 
 
 @pytest.mark.parametrize(
-    ("raw", "minimum", "maximum"), [("音量", 0, 10), ("音量", None, None), ("lux", 0, 100)]
+    ("raw", "minimum", "maximum"), [("音量", None, None), ("音量", 1, None), ("lux", 0, 100)]
 )
 def test_unmapped_vendor_unit_raises_naming_model_and_identifier(
     raw: str, minimum: int | None, maximum: int | None

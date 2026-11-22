@@ -93,6 +93,10 @@ def test_normalise_unit_raises_value_error_when_unmapped() -> None:
     assert normalise_unit("个", 0, 3) is None
     assert normalise_unit("day", None, None) is None
     assert normalise_unit("天", 10, 120) is None
+    assert normalise_unit("音量", 1, 100) is SettingUnit.PERCENT
+    assert normalise_unit("音量", 1, 63) is None
+    with pytest.raises(ValueError, match="音量"):
+        normalise_unit("音量", None, 100)
     with pytest.raises(ValueError, match="lux"):
         normalise_unit("lux", 0, 100)
 
