@@ -756,6 +756,40 @@
    "shown": "card",
    "structured": true
   },
+  "device_date_format_set": {
+   "access": "rw",
+   "control": "select",
+   "kind": "enum",
+   "labels": {
+    "0": "MM/DD/YYYY",
+    "1": "YYYY/MM/DD",
+    "2": "DD/MM/YYYY"
+   },
+   "read": {
+    "map": null,
+    "param": 6469
+   },
+   "role": "setting",
+   "section": "system",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6469,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6469,
+     "paramValue": "$v:str"
+    }
+   }
+  },
   "device_delivered_guard_switch": {
    "access": "rw",
    "control": "switch",
@@ -2264,7 +2298,47 @@
     4,
     15,
     0
+   ],
+   "variants": [
+    {
+     "id": "live_bottom_hor_toolbar_list__v1",
+     "key": "live_bottom_hor_toolbar_list__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "^(?i)OM.*"
+       },
+       {
+        "qualifier": ">=",
+        "type": "sdk_version",
+        "value": "2.3.3.0"
+       }
+      ]
+     ]
+    }
    ]
+  },
+  "live_bottom_hor_toolbar_list__v1": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Record",
+    "1": "Screenshot",
+    "15": "Reply",
+    "4": "Sound"
+   },
+   "read": null,
+   "role": "diagnostic",
+   "section": "system",
+   "values": [
+    1,
+    4,
+    15,
+    0
+   ],
+   "variant_of": "live_bottom_hor_toolbar_list"
   },
   "live_bottom_toolbar_list": {
    "access": "ro",
@@ -2289,7 +2363,51 @@
     1,
     11,
     9
+   ],
+   "variants": [
+    {
+     "id": "live_bottom_toolbar_list__v1",
+     "key": "live_bottom_toolbar_list__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "^(?i)OM.*"
+       },
+       {
+        "qualifier": ">=",
+        "type": "sdk_version",
+        "value": "2.3.3.0"
+       }
+      ]
+     ]
+    }
    ]
+  },
+  "live_bottom_toolbar_list__v1": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Record",
+    "1": "Screenshot",
+    "11": "Streaming Quality",
+    "15": "Reply",
+    "4": "Sound",
+    "9": "Playback"
+   },
+   "read": null,
+   "role": "diagnostic",
+   "section": "system",
+   "values": [
+    0,
+    4,
+    15,
+    1,
+    11,
+    9
+   ],
+   "variant_of": "live_bottom_toolbar_list"
   },
   "live_streaming_resolution": {
    "access": "rw",
@@ -4099,7 +4217,6 @@
    "contexts": [
     {
      "entry": {
-      "note": null,
       "read": {
        "map": {
         "": false,
@@ -4107,6 +4224,17 @@
         "1": true
        },
        "param": 1704
+      },
+      "write": {
+       "cmd": 1704,
+       "params": {
+        "status": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1704,
+        "paramValue": "$v:str"
+       }
       }
      },
      "names": [
@@ -4124,52 +4252,31 @@
       "T7000",
       "T9000"
      ]
-    },
-    {
-     "entry": {
-      "note": null,
-      "read": {
-       "map": {
-        "": false,
-        "0": false,
-        "1": true
-       },
-       "param": 1019
-      },
-      "write": {
-       "cmd": 1350,
-       "subCmd": 1019,
-       "params": {
-        "status": "$v:int"
-       },
-       "update": {
-        "needUpdate": true,
-        "cmd": 1019,
-        "paramValue": "$v:str"
-       }
-      }
-     },
-     "names": [
-      "standalone"
-     ]
     }
    ],
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 1019
+   },
    "role": "setting",
    "section": "picture",
    "shown": "page",
    "write": {
-    "cmd": 1704,
+    "cmd": 1350,
+    "subCmd": 1019,
     "params": {
      "status": "$v:int"
     },
     "update": {
      "needUpdate": true,
-     "cmd": 1704,
+     "cmd": 1019,
      "paramValue": "$v:str"
     }
    }
@@ -4351,8 +4458,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8215Handle.mix.js",
-  "handler_date": "2026-09-11",
-  "td_version": 244
+  "handler": "a49a9921-9e10-4387-a11f-fe5fabcfdb4a_T8215Handle.mix.js",
+  "handler_date": "2026-10-26",
+  "td_version": 258
  }
 }

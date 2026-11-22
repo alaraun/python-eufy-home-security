@@ -344,6 +344,15 @@
    ],
    "variant_of": "automation_detect_trigger_type"
   },
+  "battery_temperature_value": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "power",
+   "shown": "card"
+  },
   "battery_value": {
    "access": "ro",
    "default": "100",
@@ -970,8 +979,8 @@
    "access": "ro",
    "kind": "enum",
    "labels": {
-    "5": "Human Recognition",
-    "6": "All Other Motions"
+    "4": "All Other Motions",
+    "5": "Human Recognition"
    },
    "note": "handler rejects the probed values",
    "read": null,
@@ -980,7 +989,7 @@
    "shown": "card",
    "values": [
     5,
-    6
+    4
    ],
    "variants": [
     {
@@ -1038,6 +1047,109 @@
    "read": null,
    "role": "setting",
    "section": "detection"
+  },
+  "device_multiple_bridge_ap_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "page": "MultiBridgeSetting",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_connect_fail_flag": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "MultiBridgeSetting",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_connected_ssid": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_mode": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "1": "HomeBase",
+    "2": "Router"
+   },
+   "page": "MultiBridgeSetting",
+   "read": {
+    "map": null,
+    "param": 60013
+   },
+   "role": "setting",
+   "section": "network",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 60013,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 60013,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_multiple_bridge_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": true,
+     "0": true,
+     "1": false
+    },
+    "param": 60011
+   },
+   "role": "setting",
+   "section": "network",
+   "shown": "card",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 60011,
+    "params": {
+     "value": {
+      "$map": {
+       "false": 1,
+       "true": 0
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 60011,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
   },
   "device_name": {
    "access": "rw",
@@ -1646,6 +1758,60 @@
    "values": [
     0
    ]
+  },
+  "device_support_event_filter_detection_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "1": "Human",
+    "11": "Ring",
+    "6": "Package"
+   },
+   "read": null,
+   "role": "diagnostic",
+   "section": "detection",
+   "values": [
+    1,
+    6,
+    11
+   ],
+   "variants": [
+    {
+     "id": "device_support_event_filter_detection_type__v1",
+     "key": "device_support_event_filter_detection_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8217).*"
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "device_support_event_filter_detection_type__v1": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "1": "Human",
+    "11": "Ring",
+    "2": "Vehicle",
+    "3": "Pet",
+    "6": "Package"
+   },
+   "read": null,
+   "role": "diagnostic",
+   "section": "detection",
+   "values": [
+    1,
+    2,
+    3,
+    6,
+    11
+   ],
+   "variant_of": "device_support_event_filter_detection_type"
   },
   "device_video_visitor_count": {
    "access": "ro",
@@ -2962,6 +3128,18 @@
    "section": "recording",
    "structured": true
   },
+  "power_abnormal_status": {
+   "access": "ro",
+   "default": 0,
+   "kind": "range",
+   "max": 1,
+   "min": 0,
+   "read": null,
+   "role": "status",
+   "section": "power",
+   "shown": "card",
+   "step": 1
+  },
   "power_charge_history": {
    "access": "ro",
    "kind": "string",
@@ -2977,12 +3155,8 @@
     "0": "Battery",
     "1": "External Solar Panel"
    },
-   "note": "no handler write path",
-   "read": {
-    "map": null,
-    "no_default": true,
-    "param": 1293
-   },
+   "note": "handler ignores the value",
+   "read": null,
    "role": "setting",
    "section": "power",
    "shown": "card",
@@ -3194,9 +3368,9 @@
    "read": {
     "map": {
      "": 2,
-     "MQ==": 6,
-     "Mg==": 2,
-     "Mw==": 5
+     "1": 6,
+     "2": 2,
+     "3": 5
     },
     "param": 2731,
     "view": {
@@ -3227,18 +3401,17 @@
        "6": 1
       }
      },
-     "channel": "$channel",
-     "mode": 0,
-     "primary_view": 0
+     "mode": -1,
+     "primary_view": -1
     },
     "update": {
      "needUpdate": true,
      "cmd": 2731,
      "paramValue": {
       "$map": {
-       "5": "Mw==",
-       "2": "Mg==",
-       "6": "MQ=="
+       "5": "3",
+       "2": "2",
+       "6": "1"
       }
      }
     }
@@ -3881,8 +4054,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "fb6fdd8a-9734-4ba6-8a92-b43718efb720_T8217Handle.mix.js",
-  "handler_date": "2026-09-24",
-  "td_version": 60
+  "handler": "095a16c6-e493-4edf-bcac-b903c6ac27c0_T8217Handle.mix.js",
+  "handler_date": "2026-10-23",
+  "td_version": 80
  }
 }

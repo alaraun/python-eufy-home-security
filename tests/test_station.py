@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 
+import eufy_home_security.devices.ptz as devices_ptz
 import eufy_home_security.p2p.session as session_mod
 import eufy_home_security.station as station_mod
 import eufy_home_security.station.ptz as station_ptz
@@ -3726,7 +3727,7 @@ async def test_the_lens_view_changes_nothing_for_a_camera_with_the_station_open(
 
 
 @pytest.mark.parametrize(
-    ("serial", "bare_stop"), [("T8600P2000067890", False), ("T8442P2000067890", True)]
+    ("serial", "bare_stop"), [("T8600P2000067890", False), ("T8440P2000067890", True)]
 )
 async def test_a_wifi_camera_behind_a_homebase_3_gets_its_handlers_1700_open_and_stop(
     station: Station, fake: FakeStation, serial: str, bare_stop: bool
@@ -4567,10 +4568,19 @@ async def test_a_floodlight_pans_and_reads_presets_in_its_handlers_plain_form(
     assert queries == [{"commandType": 6034}]
 
 
+def _without_action(monkeypatch: pytest.MonkeyPatch, code: str, action: str) -> None:
+    """``code``'s thing description as if it declared no ``action`` (no bundled model
+    declares that combination)."""
+    table = dict(devices_ptz._TABLE)
+    table[code] = {k: v for k, v in table[code].items() if k != action}
+    monkeypatch.setattr(devices_ptz, "_TABLE", table)
+
+
 async def test_a_slot_store_the_thing_description_lacks_is_refused_before_sending(
-    fake: FakeStation,
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The T8173 declares delete and picture actions but no set_preset_positions."""
+    """A T8173 that declares delete and picture actions but no set_preset_positions."""
+    _without_action(monkeypatch, "T8173", "set_preset_positions")
     station = await _standalone(fake, "T8173P2000054321")
     try:
         for call in (
@@ -4590,8 +4600,9 @@ async def test_a_slot_store_the_thing_description_lacks_is_refused_before_sendin
 
 
 async def test_a_model_without_the_store_action_still_deletes_and_reads_slot_pictures(
-    fake: FakeStation,
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _without_action(monkeypatch, "T8173", "set_preset_positions")
     station = await _standalone(fake, "T8173P2000054321")
     try:
         await station.async_delete_preset(station.serial, 1)
@@ -4633,8 +4644,11 @@ def test_ptz_action_support_follows_the_data_for_every_listed_product(action: Pt
     assert grades == {Support.DECLARED, Support.UNKNOWN}
 
 
-def test_a_model_without_the_store_action_grades_only_the_store_unknown() -> None:
-    """The T8173 (in the generated data only) declares no set_preset_positions."""
+def test_a_model_without_the_store_action_grades_only_the_store_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A T8173 (in the generated data only) that declares no set_preset_positions."""
+    _without_action(monkeypatch, "T8173", "set_preset_positions")
     station = _solo("T8173P2000054321")
     store = station.ptz_action_support(station.serial, PtzAction.STORE)
     assert store.support is Support.UNKNOWN
@@ -4859,10 +4873,11 @@ async def test_without_pan_tilt_control_a_slot_edit_is_a_plain_unsupported_error
 
 
 async def test_a_default_change_the_model_lacks_is_refused_before_the_slot_check(
-    fake: FakeStation,
+    fake: FakeStation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The T8419 declares no default_preset_positions: the refusal names the action, not
-    the slot, and nothing is sent."""
+    """A T8419 that declares no default_preset_positions: the refusal names the action,
+    not the slot, and nothing is sent."""
+    _without_action(monkeypatch, "T8419", "default_preset_positions")
     station = await _standalone(fake, "T8419P2000054321")
     try:
         await station.async_refresh_presets(station.serial)

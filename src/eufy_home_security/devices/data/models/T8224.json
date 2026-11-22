@@ -359,11 +359,7 @@
    "access": "ro",
    "kind": "other",
    "page": "PowerManager",
-   "read": {
-    "map": null,
-    "no_default": true,
-    "param": 1198
-   },
+   "read": null,
    "role": "status",
    "section": "power",
    "shown": "page"
@@ -867,6 +863,15 @@
     }
    }
   },
+  "device_is_battery_device": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "role": "status",
+   "section": "power",
+   "shown": "page"
+  },
   "device_is_online": {
    "access": "ro",
    "default": false,
@@ -885,6 +890,70 @@
    "section": "system",
    "shown": "page"
   },
+  "device_multiple_bridge_ap_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "page": "MultiBridgeSetting",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_connect_fail_flag": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "MultiBridgeSetting",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_connected_ssid": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_mode": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "1": "HomeBase",
+    "2": "Router"
+   },
+   "page": "MultiBridgeSetting",
+   "read": {
+    "map": null,
+    "param": 60013
+   },
+   "role": "setting",
+   "section": "network",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 60013,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 60013,
+     "paramValue": "$v:str"
+    }
+   }
+  },
   "device_multiple_bridge_style": {
    "access": "ro",
    "default": "v3",
@@ -893,6 +962,45 @@
    "role": "status",
    "section": "network",
    "shown": "card"
+  },
+  "device_multiple_bridge_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": true,
+     "0": true,
+     "1": false
+    },
+    "param": 60011
+   },
+   "role": "setting",
+   "section": "network",
+   "shown": "card",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 60011,
+    "params": {
+     "value": {
+      "$map": {
+       "false": 1,
+       "true": 0
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 60011,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
   },
   "device_name": {
    "access": "rw",
@@ -1632,7 +1740,7 @@
     },
     "param": 2730,
     "view": {
-     "by": 6243,
+     "by": "cur_mode",
      "map": {
       "0": 0,
       "1": 8,
@@ -1662,7 +1770,7 @@
        "10": 3
       }
      },
-     "mode": 0,
+     "mode": -1,
      "primary_view": 0,
      "channel": "$channel"
     },
@@ -2762,8 +2870,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8224Handle.mix.js",
-  "handler_date": "2026-09-12",
-  "td_version": 146
+  "handler": "5ccd396e-388e-4998-a108-a20695b3319d_T8224Handle.mix.js",
+  "handler_date": "2026-11-06",
+  "td_version": 159
  }
 }

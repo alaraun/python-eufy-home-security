@@ -55,9 +55,9 @@
     }
   ],
   "handler": {
-    "large_version": 123,
-    "plugin_path_date": "2026/08/19",
-    "sha256": "fcc3edcf0d70e855b11fb67972e7adfd82303d0c3d1f9fcf5d1265d56edabaaa"
+    "large_version": 139,
+    "plugin_path_date": "2026/10/10",
+    "sha256": "7261efae6ff393375bf90144aa859a4aeadc5fda1070c79f4555cce3db72bc29"
   },
   "product_code": "T8142"
 }

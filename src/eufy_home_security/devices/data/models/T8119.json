@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -801,55 +802,6 @@
    "section": "system",
    "shown": "page"
   },
-  "device_multiple_bridge_connect_fail_flag": {
-   "access": "ro",
-   "default": false,
-   "kind": "bool",
-   "page": "MultiBridgeSetting",
-   "read": null,
-   "role": "status",
-   "section": "network",
-   "shown": "page"
-  },
-  "device_multiple_bridge_switch": {
-   "access": "rw",
-   "control": "switch",
-   "default": false,
-   "kind": "bool",
-   "read": {
-    "map": {
-     "": true,
-     "0": true,
-     "1": false
-    },
-    "param": 60011
-   },
-   "role": "setting",
-   "section": "network",
-   "shown": "card",
-   "write": {
-    "cmd": 1350,
-    "subCmd": 60011,
-    "params": {
-     "value": {
-      "$map": {
-       "false": 1,
-       "true": 0
-      }
-     }
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 60011,
-     "paramValue": {
-      "$map": {
-       "false": "1",
-       "true": "0"
-      }
-     }
-    }
-   }
-  },
   "device_name": {
    "access": "rw",
    "control": "text",
@@ -879,18 +831,6 @@
    "read": null,
    "role": "diagnostic",
    "section": "system"
-  },
-  "device_set_time_lapse_photography": {
-   "access": "ro",
-   "kind": "string",
-   "note": "handler expects a structured value",
-   "read": {
-    "map": null,
-    "no_default": true,
-    "param": 6270
-   },
-   "role": "setting",
-   "section": "recording"
   },
   "device_silent_ota_switch": {
    "access": "rw",
@@ -1203,6 +1143,14 @@
    "section": "system",
    "shown": "card"
   },
+  "is_not_need_auto_reconnect": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": null,
+   "role": "diagnostic",
+   "section": "other"
+  },
   "is_support_multiple_bridge": {
    "access": "ro",
    "default": true,
@@ -1210,101 +1158,7 @@
    "read": null,
    "role": "status",
    "section": "network",
-   "shown": "card",
-   "variants": [
-    {
-     "id": "is_support_multiple_bridge__v1",
-     "key": "is_support_multiple_bridge__v1",
-     "read_conditions": [
-      [
-       {
-        "qualifier": "RE",
-        "type": "parent_sn",
-        "value": "^(T9000).*$"
-       }
-      ]
-     ]
-    },
-    {
-     "id": "is_support_multiple_bridge__v2",
-     "key": "is_support_multiple_bridge__v2",
-     "read_conditions": [
-      [
-       {
-        "qualifier": "RE",
-        "type": "parent_sn",
-        "value": "^(T8025).*$"
-       }
-      ]
-     ]
-    },
-    {
-     "id": "is_support_multiple_bridge__v3",
-     "key": "is_support_multiple_bridge__v3",
-     "read_conditions": [
-      [
-       {
-        "qualifier": "RE",
-        "type": "parent_sn",
-        "value": "^(T8N00).*$"
-       }
-      ]
-     ]
-    },
-    {
-     "id": "is_support_multiple_bridge__v4",
-     "key": "is_support_multiple_bridge__v4",
-     "read_conditions": [
-      [
-       {
-        "qualifier": "RE",
-        "type": "parent_sn",
-        "value": "^(T8010).*$"
-       }
-      ]
-     ]
-    }
-   ]
-  },
-  "is_support_multiple_bridge__v1": {
-   "access": "ro",
-   "default": true,
-   "kind": "bool",
-   "read": null,
-   "role": "status",
-   "section": "network",
-   "shown": "card",
-   "variant_of": "is_support_multiple_bridge"
-  },
-  "is_support_multiple_bridge__v2": {
-   "access": "ro",
-   "default": true,
-   "kind": "bool",
-   "read": null,
-   "role": "status",
-   "section": "network",
-   "shown": "card",
-   "variant_of": "is_support_multiple_bridge"
-  },
-  "is_support_multiple_bridge__v3": {
-   "access": "ro",
-   "default": true,
-   "kind": "bool",
-   "read": null,
-   "role": "status",
-   "section": "network",
-   "shown": "card",
-   "variant_of": "is_support_multiple_bridge"
-  },
-  "is_support_multiple_bridge__v4": {
-   "access": "ro",
-   "default": false,
-   "kind": "bool",
-   "read": null,
-   "role": "status",
-   "section": "network",
-   "shown": "card",
-   "variant_of": "is_support_multiple_bridge"
+   "shown": "card"
   },
   "is_support_silent_ota_switch": {
    "access": "ro",
@@ -1691,55 +1545,6 @@
       "$map": {
        "false": "1",
        "true": "0"
-      }
-     }
-    }
-   }
-  },
-  "nightvision_supply_light_mode": {
-   "access": "rw",
-   "control": "select",
-   "kind": "enum",
-   "labels": {
-    "0": "Off (infrared)",
-    "1": "Off",
-    "2": "Spotlight",
-    "3": "Infrared"
-   },
-   "note": "round trip does not return the written value",
-   "page": "NightVision",
-   "read": null,
-   "role": "setting",
-   "section": "picture",
-   "shown": "page",
-   "values": [
-    0,
-    1,
-    2,
-    3
-   ],
-   "write": {
-    "cmd": 1350,
-    "subCmd": 6484,
-    "params": {
-     "mode": {
-      "$map": {
-       "0": 1,
-       "1": 0,
-       "2": 0,
-       "3": 0
-      }
-     }
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 6484,
-     "paramValue": {
-      "$map": {
-       "0": "1",
-       "1": "0",
-       "2": "0",
-       "3": "0"
       }
      }
     }
@@ -2282,6 +2087,15 @@
    "role": "diagnostic",
    "section": "system"
   },
+  "sd_card_max_capacity": {
+   "access": "ro",
+   "default": "256",
+   "kind": "other",
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "page"
+  },
   "sdk_model_config": {
    "access": "ro",
    "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"}},\"tdList\":[\"activityzone_config\",\"set_privacy_zone\",\"set_ignore_zone\",\"porch_set_ignore_zone\",\"set_ignore_object\",\"porch_activityzone_config\",\"aic_activityzone_config\"]}",
@@ -2632,15 +2446,13 @@
    "control": "toggles",
    "flags": {
     "0": 64,
-    "1": 16,
-    "2": 32
+    "1": 16
    },
    "group": "D",
    "kind": "flags",
    "labels": {
     "0": "Switch modes by schedule",
-    "1": "Switch modes from app",
-    "2": "Switch modes by geofencing"
+    "1": "Switch modes from app"
    },
    "order": 1,
    "page": "SettingsNotification",
@@ -2651,6 +2463,21 @@
    "role": "setting",
    "section": "notifications",
    "shown": "page",
+   "variants": [
+    {
+     "id": "switching_notification__v1",
+     "key": "switching_notification__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8119).*$"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 1283,
@@ -2663,6 +2490,26 @@
      "paramValue": "$v:str"
     }
    }
+  },
+  "switching_notification__v1": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Switch modes by schedule",
+    "1": "Switch modes from app",
+    "2": "Switch modes by geofencing"
+   },
+   "note": "no handler write path",
+   "read": null,
+   "role": "setting",
+   "section": "notifications",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "variant_of": "switching_notification"
   },
   "time_format_set": {
    "access": "rw",
@@ -2873,8 +2720,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8119Handle.mix.js",
-  "handler_date": "2026-07-31",
-  "td_version": 41
+  "handler": "b4550979-8fdf-4ef9-993d-1e175684639d_T8119Handle.mix.js",
+  "handler_date": "2026-10-19",
+  "td_version": 60
  }
 }

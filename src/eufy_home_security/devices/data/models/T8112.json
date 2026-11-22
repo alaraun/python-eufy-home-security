@@ -1788,8 +1788,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "913c6306-456f-4450-bab4-86402d0d50db_T8112Handle.mix.js",
-  "handler_date": "2026-09-24",
-  "td_version": 104
+  "handler": "0590b1f3-7eec-45eb-8593-9f48efdfcae0_T8112Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 110
  }
 }

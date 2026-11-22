@@ -180,6 +180,14 @@ ROUTE_PROPERTIES: Final[
             ],
         ),
     ],
+    "T8174": [
+        (
+            "is_connect_webrtc",
+            "1",
+            [],
+            [],
+        ),
+    ],
     "T8180": [
         (
             "is_connect_webrtc",

@@ -84,7 +84,7 @@ def test_model_of_a_catalogued_camera() -> None:
     ("serial", "new_pn", "name"),
     [
         ("T814XZ5ZZZZZZZZZ", None, "eufyCam C36"),
-        ("T8124ZZZZZZZZZZZ", None, "SoloCam S40 / SoloCam S230"),
+        ("T8124ZZZZZZZZZZZ", None, "SoloCam S40"),
         ("T8124ZZZZZZZZZZZ", "T8124R", "SoloCam S40"),
     ],
 )

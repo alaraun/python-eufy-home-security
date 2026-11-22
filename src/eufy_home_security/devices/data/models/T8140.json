@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -612,7 +613,7 @@
    },
    "read": {
     "map": {
-     "": 6,
+     "": 5,
      "0": 5,
      "2": 6
     },
@@ -1384,7 +1385,7 @@
    "section": "storage",
    "shown": "page",
    "write": {
-    "cmd": 1146,
+    "cmd": 1145,
     "params": {
      "value": "$v:int"
     },
@@ -1525,7 +1526,7 @@
   },
   "player_model_config": {
    "access": "ro",
-   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"nightvision_type#F#3\", \"media_screenshot#F#4\"]}, \"style\": {\"nightvision_type\": \"v2\"}}",
+   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"nightvision_type#F#3\", \"media_screenshot#F#4\", \"live_streaming_resolution#G#1\"]}, \"style\": {\"nightvision_type\": \"v2\"}}",
    "kind": "string",
    "read": null,
    "role": "diagnostic",
@@ -2111,8 +2112,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8140Handle.mix.js",
-  "handler_date": "2026-08-19",
-  "td_version": 131
+  "handler": "10222ffc-012a-47ce-8678-3e6defbe3723_T8140Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 140
  }
 }

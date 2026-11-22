@@ -83,7 +83,7 @@ def test_a_models_settings_table_names_each_control() -> None:
 def test_every_bundled_model_has_a_section_with_the_files_counts() -> None:
     text = render_support_matrix()
     codes = bundled_codes()
-    assert len(codes) == 159
+    assert len(codes) == 166
     assert text.count("\n### Settings of ") == len(codes)
     for code in codes:
         settings = settings_of(code)
@@ -97,7 +97,7 @@ def test_every_bundled_model_has_a_section_with_the_files_counts() -> None:
 def test_a_profile_links_its_models_settings_section() -> None:
     text = render_support_matrix()
     profile = text.split("\n## T8160 ", 1)[1].split("\n## ", 1)[0]
-    assert "Settings: rw 32 / ro 69, see [Settings of T8160 " in profile
+    assert "Settings: rw 33 / ro 71, see [Settings of T8160 " in profile
     assert "(#settings-of-t8160-eufycam-3)" in profile
 
 

@@ -77,9 +77,9 @@
     }
   ],
   "handler": {
-    "large_version": 159,
-    "plugin_path_date": "2026/09/07",
-    "sha256": "1da102a345d4d41fe91e49122b0cd90a653f76f132247fee031b8408f0dd5729"
+    "large_version": 169,
+    "plugin_path_date": "2026/10/16",
+    "sha256": "6aa791ea3fa1de29266caf897be2b5a08c427836c2875a5ed973d03836b09d2d"
   },
   "product_code": "T8410"
 }

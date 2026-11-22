@@ -506,8 +506,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T6010Handle.mix.js",
-  "handler_date": "2026-06-25",
-  "td_version": 103
+  "handler": "5b55759b-7f5d-4f59-9f21-29b22c983a20_T6010Handle.mix.js",
+  "handler_date": "2026-09-20",
+  "td_version": 105
  }
 }

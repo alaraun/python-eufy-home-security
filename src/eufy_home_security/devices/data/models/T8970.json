@@ -1,9 +1,4 @@
 {
- "battery": [
-  {
-   "param": 1101
-  }
- ],
  "product_code": "T8970",
  "schema_version": 3,
  "settings": {
@@ -62,18 +57,17 @@
    "role": "diagnostic",
    "section": "power"
   },
-  "battery_value": {
+  "device_ability_data": {
    "access": "ro",
-   "default": "0",
-   "kind": "string",
+   "default": " 0",
+   "kind": "other",
    "read": {
     "map": null,
     "no_default": true,
-    "param": 1101
+    "param": 1103
    },
    "role": "diagnostic",
-   "section": "power",
-   "shown": "card"
+   "section": "system"
   },
   "device_is_online": {
    "access": "ro",
@@ -88,10 +82,8 @@
    "access": "rw",
    "control": "text",
    "kind": "string",
-   "read": {
-    "map": null,
-    "param": 1217
-   },
+   "note": "round trip does not return the written value",
+   "read": null,
    "role": "setting",
    "section": "system",
    "shown": "card",
@@ -171,8 +163,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8970Handle.mix.js",
-  "handler_date": "2025-08-27",
-  "td_version": 39
+  "handler": "4fe7d96e-98be-43bb-b795-ad4a03fca866_T8970Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 48
  }
 }

@@ -26,6 +26,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -351,6 +352,35 @@
     }
    }
   },
+  "auto_calibration_status": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6099
+   },
+   "role": "setting",
+   "section": "ptz",
+   "shown": "page",
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6099,
+    "params": {
+     "onoff": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6099,
+     "paramValue": "$v:str"
+    }
+   }
+  },
   "auto_cruise_schedule_list": {
    "access": "ro",
    "kind": "string",
@@ -361,33 +391,15 @@
    "shown": "page"
   },
   "auto_spotlight_switch": {
-   "access": "rw",
-   "control": "switch",
+   "access": "ro",
    "default": false,
    "kind": "bool",
+   "note": "no handler write path",
    "page": "SpotlightSettings",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 1408
-   },
+   "read": null,
    "role": "setting",
    "section": "picture",
-   "shown": "page",
-   "write": {
-    "cmd": 1408,
-    "params": {
-     "value": "$v:int"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1408,
-     "paramValue": "$v:str"
-    }
-   }
+   "shown": "page"
   },
   "automation_config": {
    "access": "ro",
@@ -526,7 +538,8 @@
     "cmd": 1350,
     "subCmd": 6098,
     "params": {
-     "value": "$v:int"
+     "value": "$v:int",
+     "deviceSn": "$device_sn"
     },
     "update": {
      "needUpdate": true,
@@ -654,7 +667,28 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!(T8425|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+        "value": "^(?!(T8425|T8001|T8010|T8020|T8021|T8022|T8023|T8040)).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
        },
        {
         "default": "0",
@@ -699,6 +733,48 @@
     "2": "Vehicle",
     "3": "Pet",
     "4": "All Other Motions"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "detection_type_set__v2": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
    },
    "read": {
     "map": null,
@@ -863,7 +939,7 @@
   "device_multiple_bridge_mode": {
    "access": "rw",
    "control": "select",
-   "default": 0,
+   "default": 2,
    "kind": "enum",
    "labels": {
     "0": "Auto",
@@ -1089,8 +1165,125 @@
    "section": "system",
    "shown": "card"
   },
+  "device_storage_medium": {
+   "access": "ro",
+   "default": "[2]",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "storage",
+   "structured": true
+  },
   "device_storage_type": {
    "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8025).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8425).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8425).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8N00|T7000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.2.1"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8025).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "device_storage_type__v1": {
+   "access": "ro",
+   "default": 0,
    "kind": "enum",
    "labels": {
     "0": "Local",
@@ -1105,7 +1298,44 @@
     0,
     1,
     2
-   ]
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v2": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    1
+   ],
+   "variant_of": "device_storage_type"
   },
   "device_wifi_name": {
    "access": "ro",
@@ -1257,6 +1487,15 @@
    "section": "storage",
    "shown": "card"
   },
+  "hb_connect_is_connected": {
+   "access": "ro",
+   "default": "{parentSn:\"\",connected:false}",
+   "kind": "string",
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "page"
+  },
   "home_card_show_video_playback": {
    "access": "ro",
    "default": true,
@@ -1329,7 +1568,7 @@
        {
         "qualifier": ">=",
         "type": "parent_version",
-        "value": "4.0.0.0"
+        "value": "4.4.1.3"
        }
       ]
      ]
@@ -1554,6 +1793,17 @@
      "paramValue": "$v:str"
     }
    }
+  },
+  "light_ambient_lighting_setting": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler rejects the probed values",
+   "page": "NightVisionAlwaysOn",
+   "read": null,
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "structured": true
   },
   "live_bottom_hor_toolbar_list": {
    "access": "ro",
@@ -1783,6 +2033,16 @@
    "shown": "page",
    "structured": true
   },
+  "motion_activated_light_setting": {
+   "access": "ro",
+   "kind": "string",
+   "note": "handler ignores the value",
+   "read": null,
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "structured": true
+  },
   "motion_detection_status": {
    "access": "rw",
    "contexts": [
@@ -1851,6 +2111,16 @@
      "paramValue": "$v:str"
     }
    }
+  },
+  "motion_support_set_light_mode": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "MotionActivatedLight",
+   "read": null,
+   "role": "status",
+   "section": "picture",
+   "shown": "page"
   },
   "nas_select_video_type": {
    "access": "rw",
@@ -1931,7 +2201,7 @@
   "nightvision_type": {
    "access": "rw",
    "control": "select",
-   "default": 0,
+   "default": 1,
    "kind": "enum",
    "labels": {
     "0": "Off",
@@ -1973,7 +2243,7 @@
   "nightvision_type_new": {
    "access": "rw",
    "control": "select",
-   "default": 100,
+   "default": 102,
    "kind": "enum",
    "labels": {
     "100": "Off",
@@ -2043,7 +2313,7 @@
     "cmd": 1350,
     "subCmd": 6027,
     "params": {
-     "value": "$v:int"
+     "onoff": "$v:int"
     },
     "update": {
      "needUpdate": true,
@@ -2054,15 +2324,12 @@
   },
   "notification_ai_person_switch": {
    "access": "rw",
+   "bit": 2,
    "control": "switch",
    "default": true,
    "kind": "bool",
    "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
+    "map": null,
     "param": 6027
    },
    "role": "setting",
@@ -2072,7 +2339,7 @@
     "cmd": 1350,
     "subCmd": 6027,
     "params": {
-     "value": "$v:int"
+     "onoff": "$v:int"
     },
     "update": {
      "needUpdate": true,
@@ -2083,15 +2350,12 @@
   },
   "notification_ai_pet_switch": {
    "access": "rw",
+   "bit": 4,
    "control": "switch",
    "default": true,
    "kind": "bool",
    "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
+    "map": null,
     "param": 6027
    },
    "role": "setting",
@@ -2101,7 +2365,7 @@
     "cmd": 1350,
     "subCmd": 6027,
     "params": {
-     "value": "$v:int"
+     "onoff": "$v:int"
     },
     "update": {
      "needUpdate": true,
@@ -2112,15 +2376,12 @@
   },
   "notification_ai_vehicle_switch": {
    "access": "rw",
+   "bit": 512,
    "control": "switch",
    "default": true,
    "kind": "bool",
    "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
+    "map": null,
     "param": 6027
    },
    "role": "setting",
@@ -2130,7 +2391,7 @@
     "cmd": 1350,
     "subCmd": 6027,
     "params": {
-     "value": "$v:int"
+     "onoff": "$v:int"
     },
     "update": {
      "needUpdate": true,
@@ -2371,7 +2632,8 @@
    }
   },
   "record_resolution": {
-   "access": "ro",
+   "access": "rw",
+   "control": "select",
    "default": 1,
    "kind": "enum",
    "labels": {
@@ -2379,8 +2641,18 @@
     "2": "Full HD(1080P)",
     "6": "HD (720P)"
    },
-   "note": "handler rejects the probed values",
-   "read": null,
+   "read": {
+    "map": {},
+    "param": 2731,
+    "view": {
+     "by": 6243,
+     "map": {
+      "1": 6,
+      "2": 2,
+      "3": 1
+     }
+    }
+   },
    "role": "setting",
    "section": "recording",
    "shown": "page",
@@ -2388,7 +2660,22 @@
     1,
     2,
     6
-   ]
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 2731,
+    "params": {
+     "quality": {
+      "$map": {
+       "1": 3,
+       "2": 2,
+       "6": 1
+      }
+     },
+     "mode": "$param:6243:int",
+     "primary_view": 0
+    }
+   }
   },
   "rotate_image_180_on_off": {
    "access": "rw",
@@ -2419,7 +2706,7 @@
   },
   "sdk_model_config": {
    "access": "ro",
-   "default": "{\"jsTdList\":[\"activityzone_config\",\"set_privacy_zone\",\"set_ignore_zone\",\"porch_set_ignore_zone\",\"set_ignore_object\",\"porch_activityzone_config\",\"aic_activityzone_config\"]}",
+   "default": "{\"jsTdList\":[\"activityzone_config\",\"set_privacy_zone\",\"set_ignore_zone\",\"porch_set_ignore_zone\",\"set_ignore_object\",\"porch_activityzone_config\",\"aic_activityzone_config\"],\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"}}}",
    "kind": "string",
    "read": null,
    "role": "diagnostic",
@@ -2547,33 +2834,15 @@
    }
   },
   "spotlight_schedule_switch": {
-   "access": "rw",
-   "control": "switch",
+   "access": "ro",
    "default": false,
    "kind": "bool",
+   "note": "no handler write path",
    "page": "SpotlightSettings",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 1414
-   },
+   "read": null,
    "role": "setting",
    "section": "picture",
-   "shown": "page",
-   "write": {
-    "cmd": 1414,
-    "params": {
-     "value": "$v:int"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1414,
-     "paramValue": "$v:str"
-    }
-   }
+   "shown": "page"
   },
   "spotlight_status": {
    "access": "rw",
@@ -2653,6 +2922,20 @@
    "values": [
     0,
     1
+   ]
+  },
+  "supported_bands": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "2": "2.4G&5G"
+   },
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page",
+   "values": [
+    2
    ]
   },
   "switching_notification": {
@@ -2908,8 +3191,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8425Handle.mix.js",
-  "handler_date": "2026-07-02",
-  "td_version": 141
+  "handler": "7d50c477-9ad7-4573-892c-b77508a8f917_T8425Handle.mix.js",
+  "handler_date": "2026-10-16",
+  "td_version": 164
  }
 }

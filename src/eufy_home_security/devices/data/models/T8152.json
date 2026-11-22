@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -623,6 +624,7 @@
   },
   "device_is_battery_device": {
    "access": "ro",
+   "default": true,
    "kind": "bool",
    "read": null,
    "role": "status",
@@ -1006,6 +1008,62 @@
   },
   "live_streaming_resolution": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": 0,
+        "0": 0,
+        "1": 8,
+        "2": 9,
+        "3": 10
+       },
+       "param": 1705
+      },
+      "write": {
+       "cmd": 1705,
+       "params": {
+        "quality": {
+         "$map": {
+          "0": 0,
+          "8": 1,
+          "9": 2,
+          "10": 3
+         }
+        }
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1705,
+        "paramValue": {
+         "$map": {
+          "0": "0",
+          "8": "1",
+          "9": "2",
+          "10": "3"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
    "control": "select",
    "default": 0,
    "kind": "enum",
@@ -1023,7 +1081,7 @@
      "2": 9,
      "3": 10
     },
-    "param": 1020
+    "param": 1205
    },
    "role": "setting",
    "section": "recording",
@@ -1047,18 +1105,32 @@
       }
      }
     },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1020,
-     "paramValue": {
-      "$map": {
-       "0": "0",
-       "8": "1",
-       "9": "2",
-       "10": "3"
+    "extUpdates": [
+     {
+      "needUpdate": true,
+      "cmd": 1205,
+      "paramValue": {
+       "$map": {
+        "0": "0",
+        "8": "1",
+        "9": "2",
+        "10": "3"
+       }
+      }
+     },
+     {
+      "needUpdate": true,
+      "cmd": 1020,
+      "paramValue": {
+       "$map": {
+        "0": "0",
+        "8": "1",
+        "9": "2",
+        "10": "3"
+       }
       }
      }
-    }
+    ]
    }
   },
   "live_support_full": {
@@ -1298,6 +1370,7 @@
     1,
     2
    ],
+   "variant_of": "nightvision_type_new",
    "write": {
     "cmd": 1350,
     "subCmd": 1277,
@@ -1309,6 +1382,59 @@
      "needUpdate": true,
      "cmd": 1277,
      "paramValue": "$v:str"
+    }
+   }
+  },
+  "nightvision_type_new": {
+   "access": "rw",
+   "control": "select",
+   "default": 103,
+   "kind": "enum",
+   "labels": {
+    "100": "Off",
+    "102": "Infrared",
+    "103": "Spotlights"
+   },
+   "read": {
+    "map": {
+     "": 100,
+     "0": 100,
+     "1": 102,
+     "2": 103
+    },
+    "param": 1277
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    103,
+    102,
+    100
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1277,
+    "params": {
+     "night_sion": {
+      "$map": {
+       "103": 2,
+       "102": 1,
+       "100": 0
+      }
+     },
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1277,
+     "paramValue": {
+      "$map": {
+       "103": "2",
+       "102": "1",
+       "100": "0"
+      }
+     }
     }
    }
   },
@@ -1389,6 +1515,15 @@
      }
     }
    }
+  },
+  "player_model_config": {
+   "access": "ro",
+   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"media_screenshot#F#3\", \"nightvision_type#F#4\", \"live_streaming_resolution#G#1\", \"spotlight_switch#G#2\"]}, \"style\": {\"nightvision_type\": \"v3\", \"spotlight_switch\": \"v1\"}, \"config\": {}}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "recording",
+   "structured": true
   },
   "power_charge_mode": {
    "access": "rw",
@@ -1681,6 +1816,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
@@ -1946,8 +2082,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8152Handle.mix.js",
-  "handler_date": "2026-04-21",
-  "td_version": 61
+  "handler": "002468b9-5232-4b25-b05e-5d9af47718c4_T8152Handle.mix.js",
+  "handler_date": "2026-11-11",
+  "td_version": 73
  }
 }

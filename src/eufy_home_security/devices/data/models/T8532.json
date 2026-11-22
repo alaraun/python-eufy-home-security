@@ -2,8 +2,161 @@
  "battery": [
   {
    "levels": {
-    "0": null,
-    "255": null
+    "101": 100,
+    "102": 100,
+    "103": 100,
+    "104": 100,
+    "105": 100,
+    "106": 100,
+    "107": 100,
+    "108": 100,
+    "109": 100,
+    "110": 100,
+    "111": 100,
+    "112": 100,
+    "113": 100,
+    "114": 100,
+    "115": 100,
+    "116": 100,
+    "117": 100,
+    "118": 100,
+    "119": 100,
+    "120": 100,
+    "121": 100,
+    "122": 100,
+    "123": 100,
+    "124": 100,
+    "125": 100,
+    "126": 100,
+    "127": 100,
+    "128": 100,
+    "129": 100,
+    "130": 100,
+    "131": 100,
+    "132": 100,
+    "133": 100,
+    "134": 100,
+    "135": 100,
+    "136": 100,
+    "137": 100,
+    "138": 100,
+    "139": 100,
+    "140": 100,
+    "141": 100,
+    "142": 100,
+    "143": 100,
+    "144": 100,
+    "145": 100,
+    "146": 100,
+    "147": 100,
+    "148": 100,
+    "149": 100,
+    "150": 100,
+    "151": 100,
+    "152": 100,
+    "153": 100,
+    "154": 100,
+    "155": 100,
+    "156": 100,
+    "157": 100,
+    "158": 100,
+    "159": 100,
+    "160": 100,
+    "161": 100,
+    "162": 100,
+    "163": 100,
+    "164": 100,
+    "165": 100,
+    "166": 100,
+    "167": 100,
+    "168": 100,
+    "169": 100,
+    "170": 100,
+    "171": 100,
+    "172": 100,
+    "173": 100,
+    "174": 100,
+    "175": 100,
+    "176": 100,
+    "177": 100,
+    "178": 100,
+    "179": 100,
+    "180": 100,
+    "181": 100,
+    "182": 100,
+    "183": 100,
+    "184": 100,
+    "185": 100,
+    "186": 100,
+    "187": 100,
+    "188": 100,
+    "189": 100,
+    "190": 100,
+    "191": 100,
+    "192": 100,
+    "193": 100,
+    "194": 100,
+    "195": 100,
+    "196": 100,
+    "197": 100,
+    "198": 100,
+    "199": 100,
+    "200": 100,
+    "201": 100,
+    "202": 100,
+    "203": 100,
+    "204": 100,
+    "205": 100,
+    "206": 100,
+    "207": 100,
+    "208": 100,
+    "209": 100,
+    "210": 100,
+    "211": 100,
+    "212": 100,
+    "213": 100,
+    "214": 100,
+    "215": 100,
+    "216": 100,
+    "217": 100,
+    "218": 100,
+    "219": 100,
+    "220": 100,
+    "221": 100,
+    "222": 100,
+    "223": 100,
+    "224": 100,
+    "225": 100,
+    "226": 100,
+    "227": 100,
+    "228": 100,
+    "229": 100,
+    "230": 100,
+    "231": 100,
+    "232": 100,
+    "233": 100,
+    "234": 100,
+    "235": 100,
+    "236": 100,
+    "237": 100,
+    "238": 100,
+    "239": 100,
+    "240": 100,
+    "241": 100,
+    "242": 100,
+    "243": 100,
+    "244": 100,
+    "245": 100,
+    "246": 100,
+    "247": 100,
+    "248": 100,
+    "249": 100,
+    "250": 100,
+    "251": 100,
+    "252": 100,
+    "253": 100,
+    "254": 100,
+    "255": 100
    },
    "param": 1101
   }
@@ -35,6 +188,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -75,7 +229,7 @@
   },
   "add_device_model_config": {
    "access": "ro",
-   "default": "{ \t\"routeConfigForDeviceSetup\": { \t\t\"steps\": [{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLSetDeviceNameLocationScreen\" \t\t}, \t\t{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLSetCustomNameScreen\" \t\t}, \t\t{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLCalibrateLockScreen\" \t\t} \t\t] \t} }",
+   "default": "{\"routeConfigForDeviceSetup\":{\"steps\":[{\"props\":{},\"route\":\"SLSetDeviceNameLocationScreen\"},{\"props\":{},\"route\":\"SLSetCustomNameScreen\"}]},\"smartLockConfig\":{\"isShowCalibrateLock\":true,\"isShowSetPassword\":true,\"isShowAccessSetting\":false,\"isShowSDCardPage\":true,\"isShowScramblePassword\":true,\"isShowBindLockedGuide\":true,\"isShowPowerDuoBattery\":true,\"isShowMatter\":true,\"isShowHomekey\":true}}",
    "kind": "string",
    "read": null,
    "role": "diagnostic",
@@ -295,6 +449,30 @@
     }
    }
   },
+  "automation_config": {
+   "access": "ro",
+   "default": "{\"trigger\":[0,1,2,12],\"action\":[3]}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "modes",
+   "structured": true
+  },
+  "automation_detect_trigger_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Human Detection",
+    "4": "Detected motion"
+   },
+   "read": null,
+   "role": "diagnostic",
+   "section": "modes",
+   "values": [
+    0,
+    4
+   ]
+  },
   "backup_battery_level": {
    "access": "ro",
    "default": " 4",
@@ -511,54 +689,6 @@
    "read": null,
    "role": "setting",
    "section": "detection"
-  },
-  "detection_type_set": {
-   "access": "rw",
-   "control": "select",
-   "kind": "enum",
-   "labels": {
-    "5": "Human Only",
-    "6": "All Motions"
-   },
-   "page": "MotionDetection",
-   "read": {
-    "map": {
-     "3": 5,
-     "32771": 6
-    },
-    "param": 1298
-   },
-   "role": "setting",
-   "section": "detection",
-   "shown": "card",
-   "values": [
-    5,
-    6
-   ],
-   "write": {
-    "cmd": 1350,
-    "subCmd": 1298,
-    "params": {
-     "ai_detect_type": {
-      "$map": {
-       "5": 3,
-       "6": 32771
-      }
-     },
-     "channel": "$channel"
-    },
-    "extUpdates": [
-     {
-      "cmd": 1298,
-      "paramValue": {
-       "$map": {
-        "5": "3",
-        "6": "32771"
-       }
-      }
-     }
-    ]
-   }
   },
   "device_ability_data": {
    "access": "ro",
@@ -891,8 +1021,8 @@
    "access": "ro",
    "kind": "enum",
    "labels": {
-    "5": "Human Recognition",
-    "6": "All Other Motions"
+    "1": "Human Recognition",
+    "4": "All Other Motions"
    },
    "note": "handler rejects the probed values",
    "read": null,
@@ -900,8 +1030,8 @@
    "section": "detection",
    "shown": "card",
    "values": [
-    5,
-    6
+    1,
+    4
    ],
    "variants": [
     {
@@ -952,8 +1082,14 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "19": true,
+     "3": false
+    },
+    "param": 1298
+   },
    "role": "setting",
    "section": "detection",
    "write": {
@@ -963,7 +1099,7 @@
      "ai_detect_type": {
       "$map": {
        "false": 3,
-       "true": 15
+       "true": 19
       }
      },
      "channel": "$channel"
@@ -974,7 +1110,7 @@
      "paramValue": {
       "$map": {
        "false": "3",
-       "true": "15"
+       "true": "19"
       }
      }
     }
@@ -1592,6 +1728,14 @@
   "is_support_silent_ota_switch": {
    "access": "ro",
    "default": false,
+   "kind": "bool",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
+  "is_support_smart_lock_access_setting": {
+   "access": "ro",
+   "default": true,
    "kind": "bool",
    "read": null,
    "role": "diagnostic",
@@ -2290,6 +2434,38 @@
     1
    ]
   },
+  "notification_motion_alert": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Default",
+    "1": "Silent",
+    "2": "Bell",
+    "3": "Change",
+    "4": "Ding",
+    "5": "Notify",
+    "6": "Security",
+    "7": "Success",
+    "8": "Type"
+   },
+   "page": "SettingsHome",
+   "read": null,
+   "role": "status",
+   "section": "notifications",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ]
+  },
   "notification_motion_onoff": {
    "access": "ro",
    "default": false,
@@ -2611,6 +2787,15 @@
    "section": "recording",
    "step": 1
   },
+  "sd_card_max_capacity": {
+   "access": "ro",
+   "default": "256",
+   "kind": "other",
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "page"
+  },
   "sdk_model_config": {
    "access": "ro",
    "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"read\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"service\":\"8c850001-0302-41c5-b46e-cf057c562025\", \"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"syncHeartBeat\":true}}",
@@ -2656,10 +2841,26 @@
    "section": "system",
    "structured": true
   },
+  "smart_lock_auto_lock_faq_link": {
+   "access": "ro",
+   "default": "https://security-faq.eufylife.com/article/A2026102824147",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
   "smart_lock_auto_lock_type": {
    "access": "ro",
    "default": "3",
    "kind": "other",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
+  "smart_lock_bind_flow_show_fingerprint": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
    "read": null,
    "role": "diagnostic",
    "section": "system"
@@ -2976,7 +3177,7 @@
   },
   "smart_lock_setting_manage_access": {
    "access": "ro",
-   "default": false,
+   "default": true,
    "kind": "bool",
    "read": null,
    "role": "diagnostic",
@@ -3261,8 +3462,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8532Handle.mix.js",
-  "handler_date": "2026-08-13",
-  "td_version": 28
+  "handler": "bffe7f14-9419-4bc4-8b88-556b6d8442b0_T8532Handle.mix.js",
+  "handler_date": "2026-10-15",
+  "td_version": 48
  }
 }

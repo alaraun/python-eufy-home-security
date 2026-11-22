@@ -86,9 +86,9 @@
     }
   ],
   "handler": {
-    "large_version": 141,
-    "plugin_path_date": "2026/07/02",
-    "sha256": "72fb593a44197d2a231ca4cf4e0cc3ca8158ccb9c24b59a974a3030b988dc6c2"
+    "large_version": 164,
+    "plugin_path_date": "2026/10/16",
+    "sha256": "d043aa6ff85f876f5be9d61c707b1bf5253324acbd0bbbb0aad4e75ed20b8a68"
   },
   "product_code": "T8425"
 }

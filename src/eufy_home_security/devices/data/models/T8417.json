@@ -26,6 +26,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -64,6 +65,15 @@
     "zoneHeight"
    ]
   },
+  "add_device_model_config": {
+   "access": "ro",
+   "default": "{   \"routeConfigForDeviceSetup\": {     \"steps\": [       {         \"props\": {},         \"route\": \"PresentPosition\"       },       {         \"props\": {},         \"route\": \"SettingPresentPosition\"       },       {         \"props\": {},         \"route\": \"UpdateFireware\"       }     ]   } }",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system",
+   "structured": true
+  },
   "ai_empower": {
    "access": "ro",
    "default": "0",
@@ -82,7 +92,7 @@
   "ai_tracking_status": {
    "access": "rw",
    "control": "switch",
-   "default": true,
+   "default": false,
    "kind": "bool",
    "page": "PanTiltSettings",
    "read": {
@@ -300,7 +310,7 @@
     }
    ],
    "control": "switch",
-   "default": true,
+   "default": false,
    "kind": "bool",
    "page": "SettingsHome",
    "read": {
@@ -330,7 +340,7 @@
   "auto_calibration_status": {
    "access": "rw",
    "control": "switch",
-   "default": false,
+   "default": true,
    "kind": "bool",
    "read": {
     "map": {
@@ -699,7 +709,28 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!(T8417|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+        "value": "^(?!(T8417|T8001|T8010|T8020|T8021|T8022|T8023|T8040)).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
        },
        {
         "default": "0",
@@ -767,6 +798,48 @@
       "paramValue": "$v:str"
      }
     ]
+   }
+  },
+  "detection_type_set__v2": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
    }
   },
   "device_ability_data": {
@@ -1067,8 +1140,137 @@
    "section": "system",
    "shown": "card"
   },
+  "device_storage_medium": {
+   "access": "ro",
+   "default": "[2]",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "storage",
+   "structured": true
+  },
   "device_storage_type": {
    "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8025).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8417).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8N00).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.2.1"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T7000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.2.1"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8417).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8025).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "device_storage_type__v1": {
+   "access": "ro",
+   "default": 0,
    "kind": "enum",
    "labels": {
     "0": "Local",
@@ -1084,24 +1286,29 @@
     1,
     2
    ],
-   "variants": [
-    {
-     "id": "device_storage_type__v1",
-     "key": "device_storage_type__v1",
-     "read_conditions": [
-      [
-       {
-        "qualifier": "RE",
-        "type": "parent_sn",
-        "value": "T8030"
-       }
-      ]
-     ]
-    }
-   ]
+   "variant_of": "device_storage_type"
   },
-  "device_storage_type__v1": {
+  "device_storage_type__v2": {
    "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
+   "access": "ro",
+   "default": 0,
    "kind": "enum",
    "labels": {
     "0": "Local",
@@ -1241,7 +1448,7 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
-   "note": "no handler write path",
+   "note": "handler ignores the value",
    "read": null,
    "role": "setting",
    "section": "network"
@@ -1393,6 +1600,32 @@
    "default": false,
    "kind": "bool",
    "page": "WiFiConnection",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "homekit_device_connect_homekit_status": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "no_default": true,
+    "param": 6062
+   },
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "homekit_info": {
+   "access": "ro",
+   "default": "{\"model\":string,\"manufacturer\":string}",
+   "kind": "string",
    "read": null,
    "role": "status",
    "section": "network",
@@ -1936,11 +2169,12 @@
   "motion_activated_light_setting": {
    "access": "ro",
    "kind": "string",
-   "note": "no handler write path",
+   "note": "handler ignores the value",
    "read": null,
    "role": "setting",
    "section": "picture",
-   "shown": "page"
+   "shown": "page",
+   "structured": true
   },
   "motion_detection_status": {
    "access": "rw",
@@ -2573,7 +2807,7 @@
   },
   "player_model_config": {
    "access": "ro",
-   "default": "{\"config\":{\"SwipePanTilt\":1,\"GoAnywhere\":1,\"speedModel\":false},\"style\":{\"spotlight_switch\":\"v1\",\"nightvision_type\":\"v3\"},\"position\":{\"Live\":[\"set_alarm_type#C#2\",\"event_device_setting#C#1\",\"live_stream_mute#E#1\",\"media_record#F#1\",\"event_device_intercom#F#2\",\"ptz_action_control#F#3\",\"video_playback#F#4\",\"spotlight_switch#G#1\",\"media_screenshot#G#2\",\"nightvision_type#G#3\",\"ai_tracking_status#G#4\",\"set_preset_positions#G#5\",\"set_round_look_360#G#6\",\"ptz_calibrate#G#7\",\"live_streaming_resolution#G#8\",\"Panorama#G#9\"]}}",
+   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"ptz_action_control#F#3\", \"spotlight_switch#F#4\", \"media_screenshot#G#1\", \"nightvision_type#G#2\", \"ai_tracking_status#G#3\", \"set_preset_positions#G#4\", \"set_round_look_360#G#5\", \"ptz_calibrate#G#6\", \"live_streaming_resolution#G#7\", \"Panorama#G#8\", \"video_playback#G#9\"]}, \"style\": {\"spotlight_switch\": \"v1\", \"nightvision_type\": \"v3\"}, \"config\": {\"SwipePanTilt\": 1, \"GoAnywhere\": 1, \"speedModel\": false}}",
    "kind": "string",
    "read": null,
    "role": "diagnostic",
@@ -2765,6 +2999,15 @@
     }
    }
   },
+  "sdk_model_config": {
+   "access": "ro",
+   "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"read\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"service\":\"8c850001-0302-41c5-b46e-cf057c562025\", \"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"syncHeartBeat\":true}}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system",
+   "structured": true
+  },
   "set_privacy_zone": {
    "access": "ro",
    "kind": "enum",
@@ -2791,6 +3034,15 @@
     "zoneWidth",
     "zoneHeight"
    ]
+  },
+  "setting_model_config": {
+   "access": "ro",
+   "default": "{\"config\":{\"hide_timer_for_light\":true}}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system",
+   "structured": true
   },
   "sound_detection_round_look_switch": {
    "access": "rw",
@@ -3315,8 +3567,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8417Handle.mix.js",
-  "handler_date": "2026-06-05",
-  "td_version": 98
+  "handler": "80fd6d9e-f8b0-4477-b737-2e91bcad8b58_T8417Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 131
  }
 }

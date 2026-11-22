@@ -1,0 +1,77 @@
+{
+ "product_code": "T8W11P",
+ "schema_version": 3,
+ "sd_status_groups": {
+  "codes": {
+   "0": 0,
+   "1": 10,
+   "10": 10,
+   "11": 6,
+   "12": 10,
+   "13": 12,
+   "14": 9,
+   "15": 11,
+   "16": 9,
+   "17": 9,
+   "18": 12,
+   "19": 10,
+   "2": 8,
+   "20": 10,
+   "21": 12,
+   "22": 4,
+   "23": 9,
+   "25": 0,
+   "26": 10,
+   "29": 18,
+   "3": 8,
+   "30": 0,
+   "31": 2,
+   "4": 2,
+   "5": 7,
+   "6": 7,
+   "7": 9,
+   "8": 13,
+   "9": 10
+  },
+  "default": 1,
+  "from": "answer"
+ },
+ "settings": {
+  "device_ability_data": {
+   "access": "ro",
+   "default": " 0",
+   "kind": "other",
+   "read": {
+    "map": null,
+    "no_default": true,
+    "param": 1103
+   },
+   "role": "diagnostic",
+   "section": "system"
+  },
+  "device_wifi_signal_strength": {
+   "access": "ro",
+   "default": "0",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_wifi_signal_strength_level": {
+   "access": "ro",
+   "default": "4",
+   "kind": "other",
+   "read": null,
+   "role": "diagnostic",
+   "section": "network",
+   "shown": "card"
+  }
+ },
+ "source": {
+  "app_version": "6.1.32",
+  "handler": "T8W11PHandle.mix.js",
+  "handler_date": "2026-01-13",
+  "td_version": 11
+ }
+}

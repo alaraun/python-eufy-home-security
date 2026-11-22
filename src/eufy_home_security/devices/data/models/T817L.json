@@ -26,6 +26,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -935,18 +936,6 @@
    "read": null,
    "role": "diagnostic",
    "section": "system"
-  },
-  "device_set_time_lapse_photography": {
-   "access": "ro",
-   "kind": "string",
-   "note": "handler expects a structured value",
-   "read": {
-    "map": null,
-    "no_default": true,
-    "param": 6270
-   },
-   "role": "setting",
-   "section": "recording"
   },
   "device_silent_ota_switch": {
    "access": "rw",
@@ -2213,6 +2202,7 @@
     7,
     10
    ],
+   "variant_of": "nightvision_type_new",
    "write": {
     "cmd": 1350,
     "subCmd": 1277,
@@ -2234,6 +2224,60 @@
        "11": "0",
        "7": "2",
        "10": "1"
+      }
+     }
+    }
+   }
+  },
+  "nightvision_type_new": {
+   "access": "rw",
+   "control": "select",
+   "default": 102,
+   "kind": "enum",
+   "labels": {
+    "102": "Infrared",
+    "103": "Spotlights",
+    "104": "Standard"
+   },
+   "name": "Night vision",
+   "read": {
+    "map": {
+     "": 104,
+     "0": 104,
+     "1": 102,
+     "2": 103
+    },
+    "param": 1277
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    102,
+    103,
+    104
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1277,
+    "params": {
+     "night_sion": {
+      "$map": {
+       "102": 1,
+       "103": 2,
+       "104": 0
+      }
+     },
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1277,
+     "paramValue": {
+      "$map": {
+       "102": "1",
+       "103": "2",
+       "104": "0"
       }
      }
     }
@@ -3389,8 +3433,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T817LHandle.mix.js",
-  "handler_date": "2026-09-01",
-  "td_version": 154
+  "handler": "62b076d9-c081-4795-8a8a-c4b5a8bd6a3f_T817LHandle.mix.js",
+  "handler_date": "2026-10-30",
+  "td_version": 166
  }
 }

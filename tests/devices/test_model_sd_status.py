@@ -140,8 +140,8 @@ def test_a_malformed_grouping_names_the_file(data_root: Path, groups: object, ma
 @pytest.mark.parametrize(
     ("code", "status", "params", "group"),
     [
-        ("T8170", 30, None, 0),  # the table that groups 30 as normal
-        ("T8170", 33, None, 1),  # and leaves out 33
+        ("T8210", 30, None, 0),  # the table that groups 30 as normal
+        ("T8210", 33, None, 1),  # and leaves out 33
         ("T8162", 33, None, 22),  # the table that groups 33
         ("T8160", 4, None, 2),  # read from its status property: its parse reads no status
         ("T8160", 30, None, 0),

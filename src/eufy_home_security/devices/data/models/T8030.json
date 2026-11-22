@@ -1150,8 +1150,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8030Handle.mix.js",
-  "handler_date": "2026-09-04",
-  "td_version": 174
+  "handler": "1ae8def9-1584-4ede-b5c4-952740bc05df_T8030Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 176
  }
 }

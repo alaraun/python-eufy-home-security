@@ -389,11 +389,7 @@
    "access": "ro",
    "kind": "other",
    "page": "PowerManager",
-   "read": {
-    "map": null,
-    "no_default": true,
-    "param": 1198
-   },
+   "read": null,
    "role": "status",
    "section": "power",
    "shown": "page"
@@ -624,6 +620,9 @@
         "value": "^(T8040).*$"
        },
        {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
         "qualifier": "=",
         "type": "associated_field",
         "value": "1"
@@ -1179,8 +1178,94 @@
   },
   "device_storage_type": {
    "access": "ro",
+   "default": 0,
    "kind": "enum",
    "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8N00|T7000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.2.1"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "device_storage_type__v1": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud",
     "2": "NAS"
    },
    "read": null,
@@ -1188,8 +1273,47 @@
    "section": "storage",
    "shown": "card",
    "values": [
+    0,
+    1,
     2
-   ]
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v2": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    1
+   ],
+   "variant_of": "device_storage_type"
   },
   "device_wifi_name": {
    "access": "ro",
@@ -1611,7 +1735,7 @@
   "light_tap_to_focus": {
    "access": "rw",
    "control": "switch",
-   "default": false,
+   "default": true,
    "kind": "bool",
    "read": null,
    "role": "setting",
@@ -1696,7 +1820,7 @@
     },
     "param": 2730,
     "view": {
-     "by": 6243,
+     "by": "cur_mode",
      "map": {
       "0": 0,
       "1": 8,
@@ -1729,7 +1853,7 @@
        "8": 1
       }
      },
-     "mode": 0,
+     "mode": -1,
      "primary_view": 0,
      "channel": "$channel"
     },
@@ -2937,8 +3061,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8162Handle.mix.js",
-  "handler_date": "2026-09-11",
-  "td_version": 170
+  "handler": "e350ff12-8191-44f6-a89a-c3ec9464c350_T8162Handle.mix.js",
+  "handler_date": "2026-10-17",
+  "td_version": 184
  }
 }

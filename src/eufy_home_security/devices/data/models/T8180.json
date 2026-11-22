@@ -590,34 +590,6 @@
    "role": "diagnostic",
    "section": "storage"
   },
-  "daily_highlight_switch": {
-   "access": "rw",
-   "control": "switch",
-   "default": false,
-   "kind": "bool",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 1330
-   },
-   "role": "setting",
-   "section": "recording",
-   "write": {
-    "cmd": 1350,
-    "subCmd": 1330,
-    "params": {
-     "daily_highlight": "$v:int"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1330,
-     "paramValue": "$v:str"
-    }
-   }
-  },
   "detected_events": {
    "access": "ro",
    "default": "0",
@@ -1013,13 +985,13 @@
     "params": {
      "ai_detect_type": {
       "$map": {
-       "0": 3,
+       "0": null,
        "1": 3,
-       "2": 3,
-       "3": 3,
-       "4": 3,
-       "5": 3,
-       "6": 32768
+       "2": 4,
+       "3": 8,
+       "4": 32768,
+       "5": null,
+       "6": null
       }
      },
      "channel": "$channel"
@@ -1029,13 +1001,13 @@
      "cmd": 1298,
      "paramValue": {
       "$map": {
-       "0": "3",
+       "0": "NaN",
        "1": "3",
-       "2": "3",
-       "3": "3",
-       "4": "3",
-       "5": "3",
-       "6": "32768"
+       "2": "4",
+       "3": "8",
+       "4": "32768",
+       "5": "NaN",
+       "6": "NaN"
       }
      }
     }
@@ -1826,6 +1798,15 @@
    "section": "storage",
    "shown": "page"
   },
+  "home_card_show_video_playback": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "role": "status",
+   "section": "system",
+   "shown": "card"
+  },
   "homebase_connect_support": {
    "access": "ro",
    "default": false,
@@ -2572,6 +2553,7 @@
      "entry": {
       "read": {
        "map": {
+        "": 0,
         "1": 0,
         "2": 2,
         "3": 1
@@ -2973,17 +2955,9 @@
      "read_conditions": [
       [
        {
-        "default": "1",
-        "map": {
-         "": "0",
-         "0": "1",
-         "12": "0"
-        },
-        "param": 6243,
-        "prop": "view_mode",
-        "qualifier": "=",
-        "type": "associated_field",
-        "value": "12"
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8180).*$"
        }
       ]
      ]
@@ -3021,20 +2995,42 @@
   "record_resolution__v1": {
    "access": "rw",
    "control": "select",
+   "default": 0,
    "kind": "enum",
    "labels": {
+    "0": "Auto",
     "2": "Full HD(1080P)",
     "4": "Ultra 4K",
     "5": "2K HD",
     "6": "HD (720P)"
    },
    "name": "Recording quality",
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "": 2,
+     "0": 0,
+     "1": 6,
+     "2": 2,
+     "3": 5,
+     "4": 4
+    },
+    "param": 2731,
+    "view": {
+     "by": "cur_mode",
+     "map": {
+      "0": 0,
+      "1": 6,
+      "2": 2,
+      "3": 5,
+      "4": 4
+     }
+    }
+   },
    "role": "setting",
    "section": "recording",
    "shown": "page",
    "values": [
+    0,
     4,
     5,
     2,
@@ -3043,41 +3039,33 @@
    "variant_of": "record_resolution",
    "write": {
     "cmd": 1350,
-    "subCmd": 1286,
+    "subCmd": 2731,
     "params": {
-     "record_quality": {
+     "quality": {
       "$map": {
-       "4": 2,
-       "5": 1,
+       "0": 0,
+       "4": 4,
+       "5": 3,
        "2": 2,
-       "6": 2
-      }
-     }
-    },
-    "extUpdates": [
-     {
-      "cmd": 1286,
-      "paramValue": {
-       "$map": {
-        "4": "2",
-        "5": "1",
-        "2": "2",
-        "6": "2"
-       }
+       "6": 1
       }
      },
-     {
-      "cmd": 1023,
-      "paramValue": {
-       "$map": {
-        "4": "2",
-        "5": "1",
-        "2": "2",
-        "6": "2"
-       }
+     "mode": -1,
+     "primary_view": -1
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 2731,
+     "paramValue": {
+      "$map": {
+       "0": "0",
+       "4": "4",
+       "5": "3",
+       "2": "2",
+       "6": "1"
       }
      }
-    ]
+    }
    }
   },
   "recording_number": {
@@ -3610,8 +3598,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8180Handle.mix.js",
-  "handler_date": "2026-09-08",
-  "td_version": 85
+  "handler": "a4fad089-aacd-47f3-8c2b-d3171d82cc71_T8180Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 98
  }
 }

@@ -49,7 +49,7 @@ def test_every_model_with_a_lamp_switch_lists_its_lamps(
         code for code in bundled_codes() if lights_of(code, connect, standalone=standalone)
     }
     assert with_lights == _lamp_models()
-    assert len(with_lights) == 45
+    assert len(with_lights) == 52
     assert not {code for code in with_lights if code.startswith("T8L") and code != "T8L60"}
 
 
@@ -319,8 +319,14 @@ def test_an_enum_level_takes_its_first_numeric_device_value() -> None:
 
 
 def test_a_colour_temperature_without_a_range_is_not_offered() -> None:
-    (light,) = lights_of("T8423", ConnectType.HB3)
-    assert settings_of("T8423")["light_color_temperature"].kind is SettingKind.OTHER
+    settings = dict(settings_of("T8423"))
+    (offered,) = lights_from(settings, "T8423", ConnectType.HB3)
+    assert offered.color_temp is not None
+    temperature = settings["light_color_temperature"]
+    settings[temperature.key] = dataclasses.replace(
+        temperature, kind=SettingKind.OTHER, minimum=None, maximum=None
+    )
+    (light,) = lights_from(settings, "T8423", ConnectType.HB3)
     assert light.color_temp is None
     assert "light_color_temperature" not in light.keys
 

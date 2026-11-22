@@ -730,29 +730,44 @@
    }
   },
   "detection_type_set": {
-   "access": "ro",
-   "default": 1,
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768
+   },
    "group": "C",
-   "kind": "enum",
+   "kind": "flags",
    "labels": {
     "1": "Human Detection",
     "2": "Vehicle",
     "3": "Pet",
     "4": "All Other Motions"
    },
-   "note": "handler ignores the value",
    "order": 1,
    "page": "MotionDetection",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1298
+   },
    "role": "setting",
    "section": "detection",
    "shown": "card",
-   "values": [
-    1,
-    2,
-    3,
-    4
-   ]
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
+   }
   },
   "device_ability_data": {
    "access": "ro",
@@ -955,7 +970,97 @@
     2,
     3,
     4
+   ],
+   "variants": [
+    {
+     "id": "device_motion_detection__v1",
+     "key": "device_motion_detection__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_motion_detection__v2",
+     "key": "device_motion_detection__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8172).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "camera_info",
+        "value": "{\"param\":6028,\"regex\":\"^.*$\"}"
+       }
+      ]
+     ]
+    }
    ]
+  },
+  "device_motion_detection__v1": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle",
+    "3": "Pet",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
+   },
+   "note": "handler ignores the value",
+   "read": null,
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    7
+   ],
+   "variant_of": "device_motion_detection"
+  },
+  "device_motion_detection__v2": {
+   "access": "ro",
+   "default": 1,
+   "kind": "enum",
+   "labels": {
+    "1": "Human Detection",
+    "2": "Vehicle",
+    "3": "Pet",
+    "4": "All Other Motions"
+   },
+   "note": "handler ignores the value",
+   "read": null,
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "values": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "variant_of": "device_motion_detection"
   },
   "device_multiple_bridge_ap_type": {
    "access": "ro",
@@ -1202,18 +1307,6 @@
     }
    }
   },
-  "device_set_time_lapse_photography": {
-   "access": "ro",
-   "kind": "string",
-   "note": "handler expects a structured value",
-   "read": {
-    "map": null,
-    "no_default": true,
-    "param": 6270
-   },
-   "role": "setting",
-   "section": "recording"
-  },
   "device_silent_ota_switch": {
    "access": "rw",
    "control": "switch",
@@ -1353,7 +1446,12 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!T8172|T8N00).*$"
+        "value": "(T8030).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
        }
       ]
      ]
@@ -1366,12 +1464,42 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(T8N00).*$"
+        "value": "(T8N00|T7000).*$"
        },
        {
         "qualifier": ">=",
         "type": "parent_version",
-        "value": "4.4.0.2"
+        "value": "4.4.2.1"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
        }
       ]
      ]
@@ -1379,6 +1507,26 @@
    ]
   },
   "device_storage_type__v1": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v2": {
    "access": "ro",
    "default": 0,
    "kind": "enum",
@@ -1396,14 +1544,13 @@
    ],
    "variant_of": "device_storage_type"
   },
-  "device_storage_type__v2": {
+  "device_storage_type__v3": {
    "access": "ro",
    "default": 0,
    "kind": "enum",
    "labels": {
     "0": "Local",
-    "1": "Cloud",
-    "2": "NAS"
+    "1": "Cloud"
    },
    "read": null,
    "role": "status",
@@ -1411,8 +1558,7 @@
    "shown": "card",
    "values": [
     0,
-    1,
-    2
+    1
    ],
    "variant_of": "device_storage_type"
   },
@@ -2151,118 +2297,6 @@
    "section": "detection",
    "shown": "page"
   },
-  "nas_select_video_type": {
-   "access": "rw",
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Event"
-   },
-   "read": {
-    "map": null,
-    "param": 6050
-   },
-   "role": "setting",
-   "section": "storage",
-   "shown": "page",
-   "values": [
-    0
-   ],
-   "variants": [
-    {
-     "id": "nas_select_video_type__v1",
-     "key": "nas_select_video_type__v1",
-     "read_conditions": [
-      [
-       {
-        "default": "1",
-        "prop": "device_power_supply_mode",
-        "qualifier": "=",
-        "type": "associated_field",
-        "value": "2"
-       }
-      ]
-     ]
-    }
-   ],
-   "write": {
-    "cmd": 1700,
-    "subCmd": 6050,
-    "params": {
-     "value": 0
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 6050,
-     "paramValue": "0"
-    },
-    "multipleRequest": [
-     {
-      "cmd": 1700,
-      "subCmd": 6010,
-      "params": {
-       "enable": 0,
-       "index": 0,
-       "status": 0,
-       "type": 0,
-       "value": 0,
-       "voiceID": 0,
-       "zonecount": 0
-      }
-     }
-    ]
-   }
-  },
-  "nas_select_video_type__v1": {
-   "access": "rw",
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Event",
-    "1": "Continue recording"
-   },
-   "read": {
-    "map": null,
-    "param": 6050
-   },
-   "role": "setting",
-   "section": "storage",
-   "shown": "page",
-   "values": [
-    0,
-    1
-   ],
-   "variant_of": "nas_select_video_type",
-   "write": {
-    "cmd": 1700,
-    "subCmd": 6050,
-    "params": {
-     "value": "$v"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 6050,
-     "paramValue": "$v:str"
-    },
-    "multipleRequest": [
-     {
-      "cmd": 1700,
-      "subCmd": 6010,
-      "params": {
-       "enable": "$v",
-       "index": 0,
-       "status": 0,
-       "type": 0,
-       "value": 0,
-       "voiceID": 0,
-       "zonecount": 0
-      }
-     }
-    ]
-   }
-  },
   "nas_stream_switch": {
    "access": "rw",
    "control": "switch",
@@ -2771,7 +2805,32 @@
    "read": null,
    "role": "diagnostic",
    "section": "recording",
-   "structured": true
+   "structured": true,
+   "variants": [
+    {
+     "id": "player_model_config__v1",
+     "key": "player_model_config__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)(OM).*$"
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "player_model_config__v1": {
+   "access": "ro",
+   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"set_picture_zoom#E#2\", \"media_record#F#1\", \"ptz_action_control#F#2\", \"spotlight_switch#F#3\", \"nightvision_type#G#1\", \"media_screenshot#G#2\", \"set_preset_positions#G#3\", \"Panorama#G#4\", \"ai_tracking_status#G#5\", \"camera_gun_ball_linkage_switch#G#6\", \"set_round_look_360#G#7\", \"live_streaming_resolution#G#8\", \"video_playback#G#9\"]}, \"style\": {\"device_name\": \"v2\", \"ptz_action_control\": \"v2\", \"live_streaming_resolution\": \"v2\", \"nightvision_type\": \"v3\", \"spotlight_switch\": \"v1\"}, \"config\": {\"switchLandscape\": \"sdk_start_player\", \"GoAnywhere\": 1, \"SwipePanTilt\": 1, \"DoubleResolution\": \"2688:3040\", \"defalutViewModel\": 1, \"pictureInPicture\": {\"x1\": 0.69, \"y1\": 0.69, \"x2\": 0.94, \"y2\": 0.94}}}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "recording",
+   "structured": true,
+   "variant_of": "player_model_config"
   },
   "power_charge_mode": {
    "access": "rw",
@@ -3832,8 +3891,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8172Handle.mix.js",
-  "handler_date": "2026-09-10",
-  "td_version": 292
+  "handler": "df797bd5-f24b-42d9-a0ae-af32f3eba48b_T8172Handle.mix.js",
+  "handler_date": "2026-10-27",
+  "td_version": 304
  }
 }

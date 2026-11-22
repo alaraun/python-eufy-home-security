@@ -321,9 +321,9 @@
     }
   ],
   "handler": {
-    "large_version": 292,
-    "plugin_path_date": "2026/09/10",
-    "sha256": "b0191082507f1a5797e8fb1ee7bd59d06f16f5db4041c81fb161398546aad6e5"
+    "large_version": 304,
+    "plugin_path_date": "2026/10/27",
+    "sha256": "2a3e24c9a89c81060bca9970ffe5e9ab168f99ce041aa4af728090d5d5528aa3"
   },
   "product_code": "T8172"
 }

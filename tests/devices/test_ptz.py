@@ -63,7 +63,7 @@ def test_the_handlers_form(
 def test_an_action_the_thing_description_does_not_declare_has_no_form() -> None:
     assert "set_picture_zoom" not in ptz_actions("T8410")
     assert ptz_form("T8410", "set_picture_zoom", ConnectType.SINGLE) is None
-    assert "set_preset_positions" not in ptz_actions("T8173")
+    assert "set_preset_positions" not in ptz_actions("T86C1")
     assert "set_preset_positions" in ptz_actions("t8425")
 
 

@@ -26,6 +26,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -998,6 +999,31 @@
     }
    }
   },
+  "discover_third_party_device_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": null,
+    "param": 9306
+   },
+   "role": "setting",
+   "section": "network",
+   "shown": "page",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 9306,
+    "params": {
+     "enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 9306,
+     "paramValue": "$v:int"
+    }
+   }
+  },
   "firmware_main_version": {
    "access": "ro",
    "default": "0",
@@ -1602,8 +1628,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8N00Handle.mix.js",
-  "handler_date": "2026-08-27",
-  "td_version": 243
+  "handler": "91528a9a-8c4f-4fdf-afc3-a5ccc3c4e5e2_T8N00Handle.mix.js",
+  "handler_date": "2026-10-13",
+  "td_version": 251
  }
 }

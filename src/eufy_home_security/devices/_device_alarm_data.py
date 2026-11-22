@@ -537,6 +537,158 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
             },
         ),
     ],
+    "T8110E": [
+        (
+            ("SINGLE",),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+        (
+            (
+                "HB1",
+                "HB2",
+                "HB3",
+                "HB4",
+                "M8020",
+                "M8021",
+                "M8022",
+                "M8023",
+                "M8024",
+                "M8025",
+                "NVR",
+                "T7000",
+                "T9000",
+            ),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+    ],
     "T8111": [
         (
             (
@@ -2335,6 +2487,158 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
             },
         ),
     ],
+    "T814XS": [
+        (
+            ("SINGLE",),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+        (
+            (
+                "HB1",
+                "HB2",
+                "HB3",
+                "HB4",
+                "M8020",
+                "M8021",
+                "M8022",
+                "M8023",
+                "M8024",
+                "M8025",
+                "NVR",
+                "T7000",
+                "T9000",
+            ),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+    ],
     "T8150": [
         (
             (
@@ -3202,6 +3506,158 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
             },
         ),
     ],
+    "T8170E": [
+        (
+            ("SINGLE",),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+        (
+            (
+                "HB1",
+                "HB2",
+                "HB3",
+                "HB4",
+                "M8020",
+                "M8021",
+                "M8022",
+                "M8023",
+                "M8024",
+                "M8025",
+                "NVR",
+                "T7000",
+                "T9000",
+            ),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+    ],
     "T8171": [
         (
             ("SINGLE",),
@@ -3608,6 +4064,158 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
             (
                 "NVR",
                 "T7000",
+            ),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+    ],
+    "T8174": [
+        (
+            ("SINGLE",),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+        (
+            (
+                "HB1",
+                "HB2",
+                "HB3",
+                "HB4",
+                "M8020",
+                "M8021",
+                "M8022",
+                "M8023",
+                "M8024",
+                "M8025",
+                "NVR",
+                "T7000",
+                "T9000",
             ),
             {
                 "default": 0,
@@ -4209,6 +4817,227 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
             ("SINGLE",),
             {
                 "default": 1,
+                "choices": {
+                    0: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+        (
+            (
+                "HB1",
+                "HB2",
+                "HB3",
+                "HB4",
+                "M8020",
+                "M8021",
+                "M8022",
+                "M8023",
+                "M8024",
+                "M8025",
+                "T9000",
+            ),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+        (
+            (
+                "NVR",
+                "T7000",
+            ),
+            {
+                "default": 1,
+                "choices": {
+                    0: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+    ],
+    "T8223": [
+        (
+            ("SINGLE",),
+            {
+                "default": 0,
                 "choices": {
                     0: (
                         (
@@ -5013,9 +5842,78 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
                 "M8023",
                 "M8024",
                 "M8025",
+                "T9000",
+            ),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+        (
+            (
                 "NVR",
                 "T7000",
-                "T9000",
             ),
             {
                 "default": 0,
@@ -5403,7 +6301,7 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
                             1201,
                             {
                                 "channel": "$channel",
-                                "type": 2,
+                                "type": 22,
                                 "time_out": 30,
                                 "user_name": "$user_name",
                             },
@@ -5412,7 +6310,7 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
                             1201,
                             {
                                 "channel": "$channel",
-                                "type": 4,
+                                "type": 22,
                                 "time_out": 0,
                                 "user_name": "$user_name",
                             },
@@ -6039,6 +6937,78 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
         ),
     ],
     "T8440": [
+        (
+            ("SINGLE",),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    )
+                },
+            },
+        ),
+        (
+            (
+                "HB1",
+                "HB2",
+                "HB3",
+                "HB4",
+                "M8020",
+                "M8021",
+                "M8022",
+                "M8023",
+                "M8024",
+                "M8025",
+                "NVR",
+                "T7000",
+                "T9000",
+            ),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    )
+                },
+            },
+        ),
+    ],
+    "T8441": [
         (
             ("SINGLE",),
             {
@@ -7377,6 +8347,158 @@ DEVICE_ALARMS: Final[dict[str, list[tuple[tuple[str, ...], dict[str, Any]]]]] = 
         ),
     ],
     "T8E00": [
+        (
+            ("SINGLE",),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1201,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+        (
+            (
+                "HB1",
+                "HB2",
+                "HB3",
+                "HB4",
+                "M8020",
+                "M8021",
+                "M8022",
+                "M8023",
+                "M8024",
+                "M8025",
+                "NVR",
+                "T7000",
+                "T9000",
+            ),
+            {
+                "default": 0,
+                "choices": {
+                    0: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 10,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    1: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 22,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                    2: (
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 30,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                        (
+                            1202,
+                            {
+                                "channel": "$channel",
+                                "type": 23,
+                                "time_out": 0,
+                                "user_name": "$user_name",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+    ],
+    "T8E00E": [
         (
             ("SINGLE",),
             {

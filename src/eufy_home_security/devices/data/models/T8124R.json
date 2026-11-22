@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -571,7 +572,28 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!(T8124P40|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+        "value": "^(?!(T8124P40|T8001|T8010|T8020|T8021|T8022|T8023|T8040)).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
        },
        {
         "default": "0",
@@ -626,6 +648,48 @@
     "2": "Vehicle",
     "3": "Pet",
     "4": "All Other Motions"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "detection_type_set__v2": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
    },
    "read": {
     "map": null,
@@ -2419,8 +2483,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8124RHandle.mix.js",
-  "handler_date": "2026-08-13",
-  "td_version": 70
+  "handler": "ceedfce0-afd7-4f2c-9522-dc7c150d4077_T8124RHandle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 78
  }
 }

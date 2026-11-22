@@ -562,7 +562,28 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!(T8223|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+        "value": "^(?!(T8223|T8001|T8010|T8020|T8021|T8022|T8023|T8040)).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
        },
        {
         "default": "0",
@@ -640,6 +661,48 @@
       "paramValue": "$v:str"
      }
     ]
+   }
+  },
+  "detection_type_set__v2": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
    }
   },
   "device_ability_data": {
@@ -825,6 +888,70 @@
    "section": "system",
    "shown": "page"
   },
+  "device_multiple_bridge_ap_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "page": "MultiBridgeSetting",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_connect_fail_flag": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "MultiBridgeSetting",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_connected_ssid": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_mode": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "1": "HomeBase",
+    "2": "Router"
+   },
+   "page": "MultiBridgeSetting",
+   "read": {
+    "map": null,
+    "param": 60013
+   },
+   "role": "setting",
+   "section": "network",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 60013,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 60013,
+     "paramValue": "$v:str"
+    }
+   }
+  },
   "device_multiple_bridge_style": {
    "access": "ro",
    "default": "v3",
@@ -833,6 +960,45 @@
    "role": "status",
    "section": "network",
    "shown": "card"
+  },
+  "device_multiple_bridge_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": true,
+     "0": true,
+     "1": false
+    },
+    "param": 60011
+   },
+   "role": "setting",
+   "section": "network",
+   "shown": "card",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 60011,
+    "params": {
+     "value": {
+      "$map": {
+       "false": 1,
+       "true": 0
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 60011,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
   },
   "device_name": {
    "access": "rw",
@@ -1663,7 +1829,7 @@
     },
     "param": 2730,
     "view": {
-     "by": 6243,
+     "by": "cur_mode",
      "map": {
       "0": 0,
       "1": 8,
@@ -1693,7 +1859,7 @@
        "10": 3
       }
      },
-     "mode": 0,
+     "mode": -1,
      "primary_view": 0,
      "channel": "$channel"
     },
@@ -2845,8 +3011,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8223Handle.mix.js",
-  "handler_date": "2026-09-12",
-  "td_version": 155
+  "handler": "5416b5f3-a732-4882-b6b8-8ff567a31e49_T8223Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 164
  }
 }

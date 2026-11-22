@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -499,48 +500,94 @@
    "contexts": [
     {
      "entry": {
-      "read": {
-       "map": null,
-       "param": 1276
+      "control": "select",
+      "default": 3,
+      "kind": "enum",
+      "labels": {
+       "0": "1",
+       "1": "2",
+       "2": "3",
+       "3": "4",
+       "4": "5",
+       "5": "6",
+       "6": "7"
       },
+      "max": null,
+      "min": null,
+      "read": {
+       "map": {
+        "": 3,
+        "12": 6,
+        "13": 5,
+        "14": 4,
+        "20": 3,
+        "30": 2,
+        "50": 1,
+        "85": 0
+       },
+       "param": 1210
+      },
+      "step": null,
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
       "write": {
-       "cmd": 1350,
-       "subCmd": 1276,
+       "cmd": 1210,
        "params": {
-        "sensitivity": "$v",
+        "value": {
+         "$map": {
+          "0": "85",
+          "1": "50",
+          "2": "30",
+          "3": "20",
+          "4": "14",
+          "5": "13",
+          "6": "12"
+         }
+        },
         "channel": "$channel"
        },
        "update": {
         "needUpdate": true,
-        "cmd": 1276,
-        "paramValue": "$v:str"
+        "cmd": 1210,
+        "paramValue": {
+         "$map": {
+          "0": "85",
+          "1": "50",
+          "2": "30",
+          "3": "20",
+          "4": "14",
+          "5": "13",
+          "6": "12"
+         }
+        }
        },
        "extUpdates": [
         {
-         "cmd": 1210,
-         "paramValue": "$v:str"
-        },
-        {
          "cmd": 6070,
-         "paramValue": "$v:str"
+         "paramValue": {
+          "$map": {
+           "0": "85",
+           "1": "50",
+           "2": "30",
+           "3": "20",
+           "4": "14",
+           "5": "13",
+           "6": "12"
+          }
+         }
         }
        ]
       }
      },
      "names": [
-      "HB1",
-      "HB2",
-      "HB3",
-      "HB4",
-      "M8020",
-      "M8021",
-      "M8022",
-      "M8023",
-      "M8024",
-      "M8025",
-      "NVR",
-      "T7000",
-      "T9000"
+      "HB1"
      ]
     }
    ],
@@ -575,48 +622,94 @@
    "contexts": [
     {
      "entry": {
-      "read": {
-       "map": null,
-       "param": 1276
+      "control": "select",
+      "default": 3,
+      "kind": "enum",
+      "labels": {
+       "0": "1",
+       "1": "2",
+       "2": "3",
+       "3": "4",
+       "4": "5",
+       "5": "6",
+       "6": "7"
       },
+      "max": null,
+      "min": null,
+      "read": {
+       "map": {
+        "": 3,
+        "12": 6,
+        "13": 5,
+        "14": 4,
+        "20": 3,
+        "30": 2,
+        "50": 1,
+        "85": 0
+       },
+       "param": 1210
+      },
+      "step": null,
+      "values": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
       "write": {
-       "cmd": 1350,
-       "subCmd": 1276,
+       "cmd": 1210,
        "params": {
-        "sensitivity": "$v",
+        "value": {
+         "$map": {
+          "0": "85",
+          "1": "50",
+          "2": "30",
+          "3": "20",
+          "4": "14",
+          "5": "13",
+          "6": "12"
+         }
+        },
         "channel": "$channel"
        },
        "update": {
         "needUpdate": true,
-        "cmd": 1276,
-        "paramValue": "$v:str"
+        "cmd": 1210,
+        "paramValue": {
+         "$map": {
+          "0": "85",
+          "1": "50",
+          "2": "30",
+          "3": "20",
+          "4": "14",
+          "5": "13",
+          "6": "12"
+         }
+        }
        },
        "extUpdates": [
         {
-         "cmd": 1210,
-         "paramValue": "$v:str"
-        },
-        {
          "cmd": 6070,
-         "paramValue": "$v:str"
+         "paramValue": {
+          "$map": {
+           "0": "85",
+           "1": "50",
+           "2": "30",
+           "3": "20",
+           "4": "14",
+           "5": "13",
+           "6": "12"
+          }
+         }
         }
        ]
       }
      },
      "names": [
-      "HB1",
-      "HB2",
-      "HB3",
-      "HB4",
-      "M8020",
-      "M8021",
-      "M8022",
-      "M8023",
-      "M8024",
-      "M8025",
-      "NVR",
-      "T7000",
-      "T9000"
+      "HB1"
      ]
     }
    ],
@@ -672,6 +765,71 @@
    "role": "setting",
    "section": "detection",
    "shown": "card",
+   "variants": [
+    {
+     "id": "detection_type_set__v1",
+     "key": "detection_type_set__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    }
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "detection_type_set__v1": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
    "write": {
     "cmd": 1350,
     "subCmd": 1298,
@@ -866,8 +1024,94 @@
   },
   "device_storage_type": {
    "access": "ro",
+   "default": 0,
    "kind": "enum",
    "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010|T8001).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8N00|T7000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.2.1"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010|T8001).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "device_storage_type__v1": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud",
     "2": "NAS"
    },
    "read": null,
@@ -875,8 +1119,47 @@
    "section": "storage",
    "shown": "card",
    "values": [
+    0,
+    1,
     2
-   ]
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v2": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    1
+   ],
+   "variant_of": "device_storage_type"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
@@ -929,40 +1212,6 @@
    "role": "status",
    "section": "storage",
    "shown": "page"
-  },
-  "hb_connect_nas_storage_type": {
-   "access": "rw",
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Only Events",
-    "1": "Continuous Recording and Events"
-   },
-   "read": {
-    "map": null,
-    "param": 40004
-   },
-   "role": "setting",
-   "section": "storage",
-   "shown": "page",
-   "values": [
-    0,
-    1
-   ],
-   "write": {
-    "cmd": 1350,
-    "subCmd": 1310,
-    "params": {
-     "cmd": 40004,
-     "type": "$v"
-    },
-    "update": {
-     "cmd": 40004,
-     "needUpdate": true,
-     "paramValue": "$v"
-    }
-   }
   },
   "hb_connect_nas_switch": {
    "access": "rw",
@@ -1286,7 +1535,7 @@
    "section": "storage",
    "shown": "page",
    "write": {
-    "cmd": 1146,
+    "cmd": 1145,
     "params": {
      "value": "$v:int"
     },
@@ -1323,6 +1572,53 @@
      "needUpdate": true,
      "cmd": 1013,
      "paramValue": "$v:str"
+    }
+   }
+  },
+  "nightvision_type_new": {
+   "access": "rw",
+   "control": "select",
+   "default": 102,
+   "kind": "enum",
+   "labels": {
+    "100": "Off",
+    "102": "Infrared"
+   },
+   "read": {
+    "map": {
+     "": 100,
+     "0": 100,
+     "1": 102
+    },
+    "param": 1013
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    102,
+    100
+   ],
+   "write": {
+    "cmd": 1013,
+    "params": {
+     "value": {
+      "$map": {
+       "102": 1,
+       "100": 0
+      }
+     },
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1013,
+     "paramValue": {
+      "$map": {
+       "102": "1",
+       "100": "0"
+      }
+     }
     }
    }
   },
@@ -1403,7 +1699,7 @@
   },
   "player_model_config": {
    "access": "ro",
-   "default": "{\"style\":{\"nightvision_type\":\"v1\"},\"position\":{\"Live\":[\"set_alarm_type#C#2\",\"event_device_setting#C#1\",\"live_stream_mute#E#1\",\"media_record#F#1\",\"event_device_intercom#F#2\",\"nightvision_type#F#3\",\"media_screenshot#F#4\",\"live_streaming_resolution#G#1\"]}}",
+   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"nightvision_type#F#3\", \"media_screenshot#F#4\"]}, \"style\": {\"nightvision_type\": \"v1\"}}",
    "kind": "string",
    "read": null,
    "role": "diagnostic",
@@ -1741,8 +2037,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8111Handle.mix.js",
-  "handler_date": "2026-07-24",
-  "td_version": 95
+  "handler": "8983d507-a3a6-4fda-9aee-feec54626d89_T8111Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 116
  }
 }

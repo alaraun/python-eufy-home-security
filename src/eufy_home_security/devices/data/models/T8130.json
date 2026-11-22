@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -341,7 +342,7 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "(T8030).*$"
+        "value": "(T8030|T8040).*$"
        },
        {
         "default": "0",
@@ -2015,7 +2016,7 @@
    "name": "Watermark",
    "read": {
     "map": {
-     "": false,
+     "": true,
      "0": false,
      "1": true
     },
@@ -2039,8 +2040,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8130Handle.mix.js",
-  "handler_date": "2026-07-07",
-  "td_version": 105
+  "handler": "c6ddcebe-cfa0-4877-8402-5656d6c52e27_T8130Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 113
  }
 }

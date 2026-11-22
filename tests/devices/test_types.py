@@ -298,11 +298,11 @@ def test_a_model_the_apps_names_lack_is_named_by_its_constant_or_code(
         (_unit("T8134", c7="A", c8="2609"), None, "SoloCam C10"),  # first rule wins
         (_unit("T8170", c6="3", c7="0"), None, "SoloCam S340"),
         (_unit("T8170", c6="3", c7="5"), None, "Battery Solo Cam 8170"),  # all must hold
-        (_unit("T8124"), None, "SoloCam S40 / SoloCam S230"),
+        (_unit("T8124"), None, "SoloCam S40"),
         (_unit("T8124"), "T8124R", "SoloCam S40"),
         (_unit("T8124"), " t8124r", "SoloCam S40"),
-        (_unit("T8124"), "T8410C", "SoloCam S40 / SoloCam S230"),  # another prefix's code
-        (_unit("T8124"), "T8124X", "SoloCam S40 / SoloCam S230"),  # a code without names
+        (_unit("T8124"), "T8410C", "SoloCam S40"),  # another prefix's code
+        (_unit("T8124"), "T8124X", "SoloCam S40"),  # a code without names
         (_unit("T8191"), None, "SoloCam E60"),  # named by the app, not catalogued
         (_unit("T7200"), None, "Dogcam"),
         ("T814X", None, "eufyCam C37"),  # shorter than any rule's position

@@ -2646,8 +2646,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8600Handle.mix.js",
-  "handler_date": "2026-09-10",
-  "td_version": 127
+  "handler": "2fd33967-2ba6-4e48-8197-66b22e0dfdaa_T8600Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 134
  }
 }

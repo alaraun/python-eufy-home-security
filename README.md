@@ -37,7 +37,7 @@ automatically, so do not add this repository to HACS.
 - **A session cache**, so a restart needs no cloud call.
 - **Per-model settings from eufy's own code**: each product's settings (values, labels,
   units, how to write and read them) are generated from the thing description and
-  handler the eufy app downloads, and ship with the library for 159 products.
+  handler the eufy app downloads, and ship with the library for 166 products.
 - **Every product the eufy app names**: the model list (223 serial prefixes, with kind
   and cloud device type) is generated from the app's own tables, so a camera is
   recognised as a camera even when nobody has tested it.
@@ -56,7 +56,7 @@ Node.js bridge, no add-on, no threads.
 | Battery SoloCam (T8170), standalone | guard mode, status, live stream, pan/tilt presets and control, zoom, and settings (write + read-back) verified on firmware 3.3.5.4. The camera sleeps, so each call first wakes it (seconds). From firmware 3.4.0.0 the eufy app streams most T8170 units over WebRTC (the exception: a serial whose 7th character is `2`), which the library does not implement: live view and pan/tilt are then graded unknown and refused |
 | Motion sensor (T8910) | battery and signal read through the station; of its settings, only the per-mode delays and actions were written |
 | HomeBase 2 (T8010)  | local P2P session, recording history, per-camera filtering, pagination, native playback and download verified on HomeBase 2 (firmware 3.4.2.6h) with eufyCam 2C (T8113); other eufyCam 2-series models are *declared* |
-| other HomeBases and cameras | *declared* only: known from the app, never tested. Every product the app names is in the model list; settings files for 159 products ship with the library, generated from eufy's own code; a product without one is listed read-only from the cloud |
+| other HomeBases and cameras | *declared* only: known from the app, never tested. Every product the app names is in the model list; settings files for 166 products ship with the library, generated from eufy's own code; a product without one is listed read-only from the cloud |
 | per-mode actions and delays | readable and writable; the Home, Away and Custom 1 delays are verified by write + read-back, the action flags' names are not checked against the app |
 | firmware updates | reported, never installed |
 | API | not stable: names and signatures may change in any 0.x release |

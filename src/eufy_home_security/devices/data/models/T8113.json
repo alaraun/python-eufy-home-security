@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -609,7 +610,7 @@
    },
    "read": {
     "map": {
-     "": 6,
+     "": 5,
      "0": 5,
      "2": 6
     },
@@ -631,7 +632,28 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!(T8113|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+        "value": "^(?!(T8113|T8001|T8010|T8020|T8021|T8022|T8023|T8040)).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
        },
        {
         "default": "0",
@@ -684,6 +706,48 @@
     "2": "Vehicle",
     "3": "Pet",
     "4": "All Other Motions"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "detection_type_set__v2": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
    },
    "read": {
     "map": null,
@@ -887,8 +951,82 @@
   },
   "device_storage_type": {
    "access": "ro",
+   "default": 0,
    "kind": "enum",
    "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010|T8001).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8N00|T7000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.2.1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010|T8001).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "device_storage_type__v1": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud",
     "2": "NAS"
    },
    "read": null,
@@ -896,8 +1034,47 @@
    "section": "storage",
    "shown": "card",
    "values": [
+    0,
+    1,
     2
-   ]
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v2": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
@@ -950,40 +1127,6 @@
    "role": "status",
    "section": "storage",
    "shown": "page"
-  },
-  "hb_connect_nas_storage_type": {
-   "access": "rw",
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Only Events",
-    "1": "Continuous Recording and Events"
-   },
-   "read": {
-    "map": null,
-    "param": 40004
-   },
-   "role": "setting",
-   "section": "storage",
-   "shown": "page",
-   "values": [
-    0,
-    1
-   ],
-   "write": {
-    "cmd": 1350,
-    "subCmd": 1310,
-    "params": {
-     "cmd": 40004,
-     "type": "$v"
-    },
-    "update": {
-     "cmd": 40004,
-     "needUpdate": true,
-     "paramValue": "$v"
-    }
-   }
   },
   "hb_connect_nas_switch": {
    "access": "rw",
@@ -1059,16 +1202,6 @@
    "role": "status",
    "section": "network",
    "shown": "page"
-  },
-  "homekit_info": {
-   "access": "ro",
-   "default": "{\"model\":\"T8113\",\"manufacturer\":\"Anker\"}",
-   "kind": "string",
-   "read": null,
-   "role": "diagnostic",
-   "section": "network",
-   "shown": "page",
-   "structured": true
   },
   "ip_address": {
    "access": "ro",
@@ -1348,7 +1481,7 @@
    "section": "storage",
    "shown": "page",
    "write": {
-    "cmd": 1146,
+    "cmd": 1145,
     "params": {
      "value": "$v:int"
     },
@@ -1772,20 +1905,25 @@
    "default": 1,
    "kind": "enum",
    "labels": {
-    "0": "High",
+    "0": "Low",
     "1": "Medium",
-    "2": "Low"
+    "2": "High"
    },
    "read": {
-    "map": null,
+    "map": {
+     "": 1,
+     "90": 0,
+     "92": 1,
+     "93": 2
+    },
     "param": 1230
    },
    "role": "setting",
    "section": "audio",
    "values": [
-    2,
+    0,
     1,
-    0
+    2
    ],
    "variants": [
     {
@@ -1805,34 +1943,77 @@
    "write": {
     "cmd": 1230,
     "params": {
-     "volume": "$v"
+     "volume": {
+      "$map": {
+       "0": 90,
+       "1": 92,
+       "2": 93
+      }
+     }
     },
     "update": {
      "needUpdate": true,
      "cmd": 1230,
-     "paramValue": "$v:str"
+     "paramValue": {
+      "$map": {
+       "0": "90",
+       "1": "92",
+       "2": "93"
+      }
+     }
     }
    }
   },
   "speaker_volume__v1": {
-   "access": "ro",
+   "access": "rw",
+   "control": "select",
    "default": 1,
    "kind": "enum",
    "labels": {
-    "0": "High",
+    "0": "Low",
     "1": "Medium",
-    "2": "Low"
+    "2": "High"
    },
-   "note": "no handler write path",
-   "read": null,
+   "read": {
+    "map": {
+     "": 1,
+     "100": 2,
+     "90": 0,
+     "95": 1
+    },
+    "param": 1230
+   },
    "role": "setting",
    "section": "audio",
    "values": [
-    2,
+    0,
     1,
-    0
+    2
    ],
-   "variant_of": "speaker_volume"
+   "variant_of": "speaker_volume",
+   "write": {
+    "cmd": 1230,
+    "params": {
+     "volume": {
+      "$map": {
+       "0": 90,
+       "1": 95,
+       "2": 100
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1230,
+     "paramValue": {
+      "$map": {
+       "0": "90",
+       "1": "95",
+       "2": "100"
+      }
+     }
+    }
+   }
   },
   "spotlight_brightness_level": {
    "access": "rw",
@@ -2062,8 +2243,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8113Handle.mix.js",
-  "handler_date": "2026-07-24",
-  "td_version": 115
+  "handler": "ca3630dd-f4a5-4041-9c54-ddb76b791aba_T8113Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 132
  }
 }

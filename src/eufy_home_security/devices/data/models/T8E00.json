@@ -848,12 +848,48 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(T8N00).*$"
+        "value": "(T8N00|T7000).*$"
        },
        {
         "qualifier": ">=",
         "type": "parent_version",
-        "value": "4.4.0.2"
+        "value": "4.4.2.1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
        }
       ]
      ]
@@ -875,6 +911,40 @@
    "values": [
     0,
     2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v2": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    1
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0
    ],
    "variant_of": "device_storage_type"
   },
@@ -2388,8 +2458,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8E00Handle.mix.js",
-  "handler_date": "2026-09-11",
-  "td_version": 327
+  "handler": "476d68b8-ba17-495c-ba63-d4e6ee274462_T8E00Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 335
  }
 }

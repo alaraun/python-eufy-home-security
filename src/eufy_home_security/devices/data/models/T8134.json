@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -435,11 +436,7 @@
    "access": "ro",
    "kind": "other",
    "page": "PowerManager",
-   "read": {
-    "map": null,
-    "no_default": true,
-    "param": 1198
-   },
+   "read": null,
    "role": "status",
    "section": "power",
    "shown": "page"
@@ -684,7 +681,28 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!(T8134|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+        "value": "^(?!(T8134|T8001|T8010|T8020|T8021|T8022|T8023|T8040)).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
        },
        {
         "default": "0",
@@ -739,6 +757,48 @@
     "2": "Vehicle",
     "3": "Pet",
     "4": "All Other Motions"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "detection_type_set__v2": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
    },
    "read": {
     "map": null,
@@ -1882,13 +1942,13 @@
         "2": 2,
         "3": 1
        },
-       "param": 6020
+       "param": 1289
       },
       "write": {
-       "cmd": 1700,
-       "subCmd": 6020,
+       "cmd": 1350,
+       "subCmd": 1289,
        "params": {
-        "value": {
+        "notification_style": {
          "$map": {
           "0": 1,
           "1": 3,
@@ -1898,7 +1958,7 @@
        },
        "update": {
         "needUpdate": true,
-        "cmd": 6020,
+        "cmd": 1289,
         "paramValue": {
          "$map": {
           "0": "1",
@@ -1910,7 +1970,19 @@
       }
      },
      "names": [
-      "standalone"
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
      ]
     }
    ],
@@ -1924,11 +1996,12 @@
    },
    "read": {
     "map": {
+     "": 0,
      "1": 0,
      "2": 2,
      "3": 1
     },
-    "param": 1289
+    "param": 6020
    },
    "role": "setting",
    "section": "notifications",
@@ -1939,10 +2012,10 @@
     2
    ],
    "write": {
-    "cmd": 1350,
-    "subCmd": 1289,
+    "cmd": 1700,
+    "subCmd": 6020,
     "params": {
-     "notification_style": {
+     "value": {
       "$map": {
        "0": 1,
        "1": 3,
@@ -1952,7 +2025,7 @@
     },
     "update": {
      "needUpdate": true,
-     "cmd": 1289,
+     "cmd": 6020,
      "paramValue": {
       "$map": {
        "0": "1",
@@ -2152,6 +2225,24 @@
        }
       ]
      ]
+    },
+    {
+     "id": "record_resolution__v2",
+     "key": "record_resolution__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8134).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "3.3.7.6"
+       }
+      ]
+     ]
     }
    ],
    "write": {
@@ -2228,6 +2319,71 @@
       "cmd": 1023,
       "paramValue": {
        "$map": {
+        "5": "1",
+        "2": "2"
+       }
+      }
+     }
+    ]
+   }
+  },
+  "record_resolution__v2": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "2": "Full HD(1080P)",
+    "5": "2K HD"
+   },
+   "name": "Recording quality",
+   "read": {
+    "map": {
+     "": 0,
+     "0": 0,
+     "1": 5,
+     "2": 2
+    },
+    "param": 1286
+   },
+   "role": "setting",
+   "section": "recording",
+   "shown": "page",
+   "values": [
+    0,
+    5,
+    2
+   ],
+   "variant_of": "record_resolution",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1286,
+    "params": {
+     "record_quality": {
+      "$map": {
+       "0": 0,
+       "5": 1,
+       "2": 2
+      }
+     }
+    },
+    "extUpdates": [
+     {
+      "cmd": 1286,
+      "paramValue": {
+       "$map": {
+        "0": "0",
+        "5": "1",
+        "2": "2"
+       }
+      }
+     },
+     {
+      "cmd": 1023,
+      "paramValue": {
+       "$map": {
+        "0": "0",
         "5": "1",
         "2": "2"
        }
@@ -2640,8 +2796,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8134Handle.mix.js",
-  "handler_date": "2026-08-06",
-  "td_version": 122
+  "handler": "1086d129-37de-4439-8f41-14ef87e17a19_T8134Handle.mix.js",
+  "handler_date": "2026-10-22",
+  "td_version": 134
  }
 }

@@ -1360,8 +1360,8 @@ per-mode settings; a paired camera, doorbell or sensor adds 15 per-mode delays a
 | model | settings | writable | read-only |
 |---|---|---|---|
 | T8030 | 74 | 12 | 62 |
-| T8160 | 101 | 32 | 69 |
-| T8170 | 145 | 41 | 104 |
+| T8160 | 104 | 33 | 71 |
+| T8170 | 146 | 41 | 105 |
 | T8910 | 11 | 2 | 9 |
 
 Every model's keys, values, units and labels are listed in
@@ -1568,7 +1568,7 @@ for an unknown id). All are exported from the package root.
 
 ### Models without a settings file
 
-The bundled files cover 159 product codes. For any other code of the account,
+The bundled files cover 166 product codes. For any other code of the account,
 `async_discover()` asks the cloud for its thing description, once on the first discovery
 and again on every `async_discover(refresh=True)`, in the same request as every other
 code. The request uses the cached cloud session and never logs in: without one, the

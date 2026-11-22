@@ -821,6 +821,109 @@
    "section": "system",
    "shown": "page"
   },
+  "device_multiple_bridge_ap_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "page": "MultiBridgeSetting",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_connect_fail_flag": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "MultiBridgeSetting",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_connected_ssid": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_mode": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "1": "HomeBase",
+    "2": "Router"
+   },
+   "page": "MultiBridgeSetting",
+   "read": {
+    "map": null,
+    "param": 60013
+   },
+   "role": "setting",
+   "section": "network",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 60013,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 60013,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "device_multiple_bridge_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": true,
+     "0": true,
+     "1": false
+    },
+    "param": 60011
+   },
+   "role": "setting",
+   "section": "network",
+   "shown": "card",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 60011,
+    "params": {
+     "value": {
+      "$map": {
+       "false": 1,
+       "true": 0
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 60011,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
+  },
   "device_name": {
    "access": "rw",
    "control": "text",
@@ -881,18 +984,6 @@
    "read": null,
    "role": "setting",
    "section": "other"
-  },
-  "device_set_time_lapse_photography": {
-   "access": "ro",
-   "kind": "string",
-   "note": "handler expects a structured value",
-   "read": {
-    "map": null,
-    "no_default": true,
-    "param": 6270
-   },
-   "role": "setting",
-   "section": "recording"
   },
   "device_silent_ota_switch": {
    "access": "rw",
@@ -2878,8 +2969,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "97af39e1-35d2-4610-913d-aff3393fd0bb_T814XHandle.mix.js",
-  "handler_date": "2026-10-10",
-  "td_version": 83
+  "handler": "b34decc6-d359-4404-b6fa-30c7286b4511_T814XHandle.mix.js",
+  "handler_date": "2026-10-19",
+  "td_version": 88
  }
 }

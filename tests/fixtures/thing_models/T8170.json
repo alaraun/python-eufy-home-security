@@ -168,9 +168,9 @@
     }
   ],
   "handler": {
-    "large_version": 283,
-    "plugin_path_date": "2026/08/31",
-    "sha256": "fe537104b8fa74069d08da96087e58d60bfd1098a25d844c5d0417a5c335f6af"
+    "large_version": 308,
+    "plugin_path_date": "2026/11/13",
+    "sha256": "9abe916b91db57cab75d9e956eaf9252e0bac3aac20a5e0db06607b88733d195"
   },
   "product_code": "T8170"
 }

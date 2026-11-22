@@ -572,7 +572,7 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!(T8400|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+        "value": "^(?!(T8411|T8001|T8010|T8020|T8021|T8022|T8023|T8040)).*$"
        },
        {
         "default": "0",
@@ -1193,9 +1193,17 @@
   },
   "is_device_upgrade": {
    "access": "ro",
-   "default": "0",
-   "kind": "string",
-   "read": null,
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "no_default": true,
+    "param": 1134
+   },
    "role": "diagnostic",
    "section": "system",
    "shown": "card"
@@ -1838,6 +1846,7 @@
      "entry": {
       "read": {
        "map": {
+        "": 3,
         "0": 0,
         "1": 3,
         "3": 4
@@ -1897,6 +1906,7 @@
    },
    "read": {
     "map": {
+     "": 3,
      "0": 0,
      "1": 3,
      "3": 4
@@ -1937,17 +1947,30 @@
       }
      }
     },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1013,
-     "paramValue": {
-      "$map": {
-       "3": "1",
-       "4": "3",
-       "0": "0"
+    "extUpdates": [
+     {
+      "needUpdate": true,
+      "cmd": 1013,
+      "paramValue": {
+       "$map": {
+        "3": "1",
+        "4": "3",
+        "0": "0"
+       }
       }
+     },
+     {
+      "cmd": 2002,
+      "paramValue": {
+       "$map": {
+        "3": "1",
+        "4": "3",
+        "0": "0"
+       }
+      },
+      "needUpdate": true
      }
-    }
+    ]
    }
   },
   "nightvision_type__v1": {
@@ -2589,6 +2612,15 @@
     }
    }
   },
+  "quickresponse_selected_item": {
+   "access": "ro",
+   "kind": "other",
+   "note": "handler ignores the value",
+   "read": null,
+   "role": "setting",
+   "section": "doorbell",
+   "shown": "page"
+  },
   "record_resolution": {
    "access": "rw",
    "contexts": [
@@ -3077,8 +3109,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8411Handle.mix.js",
-  "handler_date": "2026-09-07",
-  "td_version": 101
+  "handler": "bf325b23-870d-40bd-a65a-5290e1f7709c_T8411Handle.mix.js",
+  "handler_date": "2026-10-16",
+  "td_version": 113
  }
 }

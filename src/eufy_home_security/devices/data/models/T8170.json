@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -154,6 +155,39 @@
     "zoneWidth",
     "zoneHeight"
    ]
+  },
+  "alexa_snapshot_sub_device_switch": {
+   "access": "rw",
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "{\"dev_enable\":0}": false,
+     "{\"dev_enable\":1}": true
+    },
+    "param": 1431
+   },
+   "role": "setting",
+   "section": "network",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1431,
+    "params": {
+     "dev_enable": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1431,
+     "paramValue": {
+      "$map": {
+       "false": "{\"dev_enable\":0}",
+       "true": "{\"dev_enable\":1}"
+      }
+     }
+    }
+   }
   },
   "arming_cust_mode_config": {
    "access": "ro",
@@ -808,7 +842,7 @@
         "param": 1299,
         "prop": "ai_empower",
         "qualifier": "=",
-        "type": "parent_associated_field",
+        "type": "associated_field",
         "value": "1"
        }
       ]
@@ -885,7 +919,7 @@
     "0": "Human Recognition",
     "1": "Human Detection",
     "2": "Vehicle Detection",
-    "3": "Vehicle Detection",
+    "3": "Pet Detection",
     "4": "All Other Motions",
     "7": "Vehicle Recognition"
    },
@@ -1222,19 +1256,14 @@
      "read_conditions": [
       [
        {
-        "qualifier": "SE",
-        "type": "device_sn",
-        "value": "^.{6}2"
-       },
-       {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "(T8030|T9000|T8025|T8010).*$"
+        "value": "(T8030|T8025|T8010).*$"
        },
        {
         "qualifier": "RE",
         "type": "user_country",
-        "value": "^(?i)(?!JP).*$"
+        "value": "(?i)^(?!(JP|OM)).*$"
        }
       ]
      ]
@@ -1247,17 +1276,42 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(T8N00).*$"
-       },
-       {
-        "qualifier": "SE",
-        "type": "device_sn",
-        "value": "^.{6}[^2]"
+        "value": "(T8N00|T7000).*$"
        },
        {
         "qualifier": ">=",
         "type": "parent_version",
-        "value": "4.4.0.2"
+        "value": "4.4.2.1"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8025|T8010).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
        }
       ]
      ]
@@ -1286,8 +1340,10 @@
   },
   "device_storage_type__v2": {
    "access": "ro",
+   "default": 0,
    "kind": "enum",
    "labels": {
+    "0": "Local",
     "2": "NAS"
    },
    "read": null,
@@ -1295,7 +1351,26 @@
    "section": "storage",
    "shown": "card",
    "values": [
+    0,
     2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    1
    ],
    "variant_of": "device_storage_type"
   },
@@ -2322,52 +2397,6 @@
     }
    }
   },
-  "nas_select_video_type": {
-   "access": "rw",
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Event"
-   },
-   "read": {
-    "map": null,
-    "param": 6050
-   },
-   "role": "setting",
-   "section": "storage",
-   "shown": "page",
-   "values": [
-    0
-   ],
-   "write": {
-    "cmd": 1700,
-    "subCmd": 6050,
-    "params": {
-     "value": 0
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 6050,
-     "paramValue": "0"
-    },
-    "multipleRequest": [
-     {
-      "cmd": 1700,
-      "subCmd": 6010,
-      "params": {
-       "enable": 0,
-       "index": 0,
-       "status": 0,
-       "type": 0,
-       "value": 0,
-       "voiceID": 0,
-       "zonecount": 0
-      }
-     }
-    ]
-   }
-  },
   "nas_stream_switch": {
    "access": "rw",
    "control": "switch",
@@ -2665,62 +2694,22 @@
    "structured": true
   },
   "power_charge_mode": {
-   "access": "rw",
-   "contexts": [
-    {
-     "entry": {
-      "write": {
-       "cmd": 1700,
-       "subCmd": 1293,
-       "params": {
-        "enable": "$v"
-       },
-       "update": {
-        "needUpdate": true,
-        "cmd": 1293,
-        "paramValue": "$v:str"
-       }
-      }
-     },
-     "names": [
-      "standalone"
-     ]
-    }
-   ],
-   "control": "select",
+   "access": "ro",
    "default": 0,
    "kind": "enum",
    "labels": {
     "0": "Battery",
     "1": "External Solar Panel"
    },
-   "read": {
-    "map": {
-     "": 0,
-     "0": 0,
-     "1": 1
-    },
-    "param": 1293
-   },
+   "note": "handler ignores the value",
+   "read": null,
    "role": "setting",
    "section": "power",
    "shown": "card",
    "values": [
     0,
     1
-   ],
-   "write": {
-    "cmd": 1350,
-    "subCmd": 1293,
-    "params": {
-     "charge_mode": "$v"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1293,
-     "paramValue": "$v:str"
-    }
-   }
+   ]
   },
   "power_manager_mode": {
    "access": "rw",
@@ -2872,7 +2861,7 @@
      "read_conditions": [
       [
        {
-        "qualifier": "SE",
+        "qualifier": "RE",
         "type": "parent_sn",
         "value": "^(?!T8170).*$"
        },
@@ -2880,6 +2869,28 @@
         "qualifier": ">=",
         "type": "device_version",
         "value": "3.3.5.1"
+       },
+       {
+        "qualifier": "SE",
+        "type": "device_sn",
+        "value": "^.{6}[^2]"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8170).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "3.2.7.3"
+       },
+       {
+        "qualifier": "SE",
+        "type": "device_sn",
+        "value": "^.{6}2.*$"
        }
       ]
      ]
@@ -3504,8 +3515,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8170Handle.mix.js",
-  "handler_date": "2026-08-31",
-  "td_version": 283
+  "handler": "6fb82a87-3d32-48c5-bf04-e026cd2dc7ef_T8170Handle.mix.js",
+  "handler_date": "2026-11-13",
+  "td_version": 308
  }
 }

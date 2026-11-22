@@ -55,9 +55,9 @@
     }
   ],
   "handler": {
-    "large_version": 115,
-    "plugin_path_date": "2026/07/24",
-    "sha256": "4f992013e8a54736fbc46ae588519de72bf8e1a0550a38980220e97ae7bbfead"
+    "large_version": 132,
+    "plugin_path_date": "2026/10/10",
+    "sha256": "c81a1dfff2fe1a34fef62dbce8cdcf4db5114de986bf4749cade417eeca79602"
   },
   "product_code": "T8113"
 }

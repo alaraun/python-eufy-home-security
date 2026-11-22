@@ -26,6 +26,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -739,7 +740,7 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!(T8416|T8001|T8010|T8020|T8021|T8022|T8023)).*$"
+        "value": "^(?!(T8416|T8001|T8010|T8020|T8021|T8022|T8023|T8040)).*$"
        },
        {
         "default": "0",
@@ -844,7 +845,7 @@
     "0": "Human Recognition",
     "1": "Human Detection",
     "2": "Vehicle Detection",
-    "3": "Vehicle Detection",
+    "3": "Pet Detection",
     "4": "All Other Motions",
     "7": "Vehicle Recognition"
    },
@@ -1043,7 +1044,8 @@
    "shown": "page"
   },
   "device_multiple_bridge_mode": {
-   "access": "ro",
+   "access": "rw",
+   "control": "select",
    "default": 0,
    "kind": "enum",
    "labels": {
@@ -1051,9 +1053,11 @@
     "1": "HomeBase",
     "2": "Router"
    },
-   "note": "no handler write path",
    "page": "MultiBridgeSetting",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 60013
+   },
    "role": "setting",
    "section": "network",
    "shown": "page",
@@ -1061,7 +1065,19 @@
     0,
     1,
     2
-   ]
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 60013,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 60013,
+     "paramValue": "$v:str"
+    }
+   }
   },
   "device_multiple_bridge_style": {
    "access": "ro",
@@ -1250,6 +1266,15 @@
    "role": "diagnostic",
    "section": "system",
    "shown": "card"
+  },
+  "device_storage_medium": {
+   "access": "ro",
+   "default": "[2]",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "storage",
+   "structured": true
   },
   "device_storage_type": {
    "access": "ro",
@@ -2044,13 +2069,24 @@
    "name": "Streaming quality",
    "read": {
     "map": {
+     "": 0,
      "MA==": 0,
      "MQ==": 6,
      "Mg==": 2,
      "Mw==": 5,
      "NA==": 4
     },
-    "param": 2730
+    "param": 2730,
+    "view": {
+     "by": 6243,
+     "map": {
+      "0": 0,
+      "1": 6,
+      "2": 2,
+      "3": 5,
+      "4": 4
+     }
+    }
    },
    "role": "setting",
    "section": "recording",
@@ -3291,6 +3327,21 @@
     1
    ]
   },
+  "supported_bands": {
+   "access": "ro",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "2": "2.4G&5G"
+   },
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page",
+   "values": [
+    2
+   ]
+  },
   "switching_notification": {
    "access": "rw",
    "control": "select",
@@ -3563,8 +3614,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8416Handle.mix.js",
-  "handler_date": "2026-08-27",
-  "td_version": 200
+  "handler": "0d48b6e0-fd0c-41e2-a4b8-a3234dfbac6b_T8416Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 213
  }
 }

@@ -47,15 +47,19 @@
         "main_sw_version": "3.8.7.4"
       },
       "p2p": {
-        "cmd": 1004,
+        "cmd": 1350,
+        "subCmd": 1004,
+        "params": {
+          "channel": 1
+        },
         "rtcSendRoute": 1
       }
     }
   ],
   "handler": {
-    "large_version": 119,
-    "plugin_path_date": "2026/07/15",
-    "sha256": "e972fb659c262be91a599401d2bd9b88b4602d27533373d927fc9655c7706041"
+    "large_version": 131,
+    "plugin_path_date": "2026/10/10",
+    "sha256": "820a1466bc4b09702ab80eee893d691e0667bf9f768a8c9a0e390e5f85d0b6d8"
   },
   "product_code": "T8160"
 }

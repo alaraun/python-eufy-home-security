@@ -393,7 +393,7 @@ def _check_battery(battery: Any, settings: dict[str, Any]) -> None:
 
 
 def test_models_holds_exactly_the_indexed_codes() -> None:
-    assert len(CODES) == 159
+    assert len(CODES) == 166
     assert sorted(set(CODES)) == CODES
     assert (INDEX["schema_version"], (MODELS / "INDEX.json").read_text("utf-8")) == (
         3,

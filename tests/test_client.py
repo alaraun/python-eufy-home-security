@@ -2438,7 +2438,7 @@ async def test_on_demand_station_discover_and_start(sn: str) -> None:
         ("T81A0P0000000000", True, True),  # off the list, the battery device flag
         ("T84A1P0000000000", False, False),  # wired wall light: the flag declared False
         ("T8203P0000000000", False, True),  # a doorbell listing a battery, without the flag
-        ("T8174P0000000000", False, None),  # a camera without settings: unknown
+        ("T8191P0000000000", False, None),  # a camera without settings: unknown
         ("T8030P0000000000", False, None),  # a HomeBase: not a camera or doorbell
     ],
 )
@@ -3398,7 +3398,7 @@ async def test_an_unbundled_model_is_listed_read_only_after_one_request() -> Non
 
 
 # T81A0: a serial prefix whose bundled settings declare the flag; the cloud's code wins.
-@pytest.mark.parametrize("sn", ["T8174P0000000000", "T81A0P0000000000"])
+@pytest.mark.parametrize("sn", ["T8191P0000000000", "T81A0P0000000000"])
 @pytest.mark.parametrize("listed_battery", [True, False])
 async def test_an_unbundled_station_keeps_a_held_session_whatever_its_listing(
     sn: str, listed_battery: bool

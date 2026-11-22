@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -1503,6 +1504,53 @@
     }
    }
   },
+  "nightvision_type_new": {
+   "access": "rw",
+   "control": "select",
+   "default": 102,
+   "kind": "enum",
+   "labels": {
+    "100": "Off",
+    "102": "Infrared"
+   },
+   "read": {
+    "map": {
+     "": 100,
+     "0": 100,
+     "1": 102
+    },
+    "param": 1013
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    102,
+    100
+   ],
+   "write": {
+    "cmd": 1013,
+    "params": {
+     "value": {
+      "$map": {
+       "102": 1,
+       "100": 0
+      }
+     },
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1013,
+     "paramValue": {
+      "$map": {
+       "102": "1",
+       "100": "0"
+      }
+     }
+    }
+   }
+  },
   "notification_type": {
    "access": "rw",
    "control": "select",
@@ -1574,7 +1622,7 @@
   },
   "player_model_config": {
    "access": "ro",
-   "default": "{\"style\":{\"nightvision_type\":\"v1\"},\"position\":{\"Live\":[\"set_alarm_type#C#2\",\"event_device_setting#C#1\",\"live_stream_mute#E#1\",\"media_record#F#1\",\"event_device_intercom#F#2\",\"nightvision_type#F#3\",\"media_screenshot#F#4\",\"live_streaming_resolution#G#1\"]}}",
+   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"nightvision_type#F#3\", \"media_screenshot#F#4\", \"live_streaming_resolution#G#1\"]}, \"style\": {\"nightvision_type\": \"v1\"}}",
    "kind": "string",
    "read": null,
    "role": "diagnostic",
@@ -2166,8 +2214,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8131Handle.mix.js",
-  "handler_date": "2026-07-28",
-  "td_version": 94
+  "handler": "af724dc7-827a-487e-b8ee-5e53a1141e9d_T8131Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 102
  }
 }

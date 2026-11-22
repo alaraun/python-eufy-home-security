@@ -223,6 +223,7 @@ def test_an_untabled_doorbell_type_has_the_whole_row_iff_it_has_its_own_alarm() 
         model.cloud_device_type
         for model in MODELS.values()
         if model.kind is DeviceKind.DOORBELL
+        and model.cloud_device_type is not None
         and device_alarms(model.model, ConnectType.HB3) is not None
     } == settings._DEVICE_ALARM_DOORBELL_TYPES
     seen = set()

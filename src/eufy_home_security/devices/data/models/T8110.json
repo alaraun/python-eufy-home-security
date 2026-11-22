@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -772,18 +773,6 @@
    "role": "diagnostic",
    "section": "system"
   },
-  "device_set_time_lapse_photography": {
-   "access": "ro",
-   "kind": "string",
-   "note": "handler expects a structured value",
-   "read": {
-    "map": null,
-    "no_default": true,
-    "param": 6270
-   },
-   "role": "setting",
-   "section": "recording"
-  },
   "device_silent_ota_switch": {
    "access": "rw",
    "control": "switch",
@@ -905,7 +894,45 @@
    "shown": "card",
    "values": [
     0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8030|T9000|T8025).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(?:JP|OM)).*$"
+       }
+      ]
+     ]
+    }
    ]
+  },
+  "device_storage_type__v1": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    1
+   ],
+   "variant_of": "device_storage_type"
   },
   "device_support_event_filter_detection_type": {
    "access": "ro",
@@ -2100,7 +2127,32 @@
    "read": null,
    "role": "diagnostic",
    "section": "recording",
-   "structured": true
+   "structured": true,
+   "variants": [
+    {
+     "id": "player_model_config__v1",
+     "key": "player_model_config__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)(OM).*$"
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "player_model_config__v1": {
+   "access": "ro",
+   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"nightvision_type#F#2\", \"spotlight_switch#F#3\", \"media_screenshot#F#4\", \"live_streaming_resolution#G#1\"]}, \"style\": {\"nightvision_type\": \"v3\", \"spotlight_switch\": \"v1\"}, \"config\": {\"SingleResolution\": \"16:9\"}}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "recording",
+   "structured": true,
+   "variant_of": "player_model_config"
   },
   "power_charge_mode": {
    "access": "ro",
@@ -2259,9 +2311,18 @@
    "role": "diagnostic",
    "section": "system"
   },
+  "sd_card_max_capacity": {
+   "access": "ro",
+   "default": "256",
+   "kind": "other",
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "page"
+  },
   "sdk_model_config": {
    "access": "ro",
-   "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"}},\"tdList\":[\"activityzone_config\",\"set_privacy_zone\",\"set_ignore_zone\",\"porch_set_ignore_zone\",\"set_ignore_object\",\"porch_activityzone_config\",\"aic_activityzone_config\"]}",
+   "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf0502-41c5-b46e-cf057c562025\",\"read\":\"\",\"service\":\"8c850001-0302-41c5-b46e-cf057c562025\",\"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"}},\"tdList\":[\"activityzone_config\",\"set_privacy_zone\",\"set_ignore_zone\",\"porch_set_ignore_zone\",\"set_ignore_object\",\"porch_activityzone_config\",\"aic_activityzone_config\"]}",
    "kind": "string",
    "read": null,
    "role": "diagnostic",
@@ -2837,8 +2898,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8110Handle.mix.js",
-  "handler_date": "2026-08-05",
-  "td_version": 249
+  "handler": "25c2ca36-2206-412c-b814-b36e52567643_T8110Handle.mix.js",
+  "handler_date": "2026-10-19",
+  "td_version": 256
  }
 }

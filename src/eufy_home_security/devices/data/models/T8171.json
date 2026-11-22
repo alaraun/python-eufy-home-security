@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -752,7 +753,28 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!T8171|T8010).*$"
+        "value": "^(?!T8171|T8010|T8040).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
        },
        {
         "default": "0",
@@ -797,6 +819,48 @@
     "2": "Vehicle",
     "3": "Pet",
     "4": "All Other Motions"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "detection_type_set__v2": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
    },
    "read": {
     "map": null,
@@ -938,6 +1002,70 @@
    "role": "status",
    "section": "system",
    "shown": "page"
+  },
+  "device_multiple_bridge_ap_type": {
+   "access": "ro",
+   "default": "0",
+   "kind": "other",
+   "page": "MultiBridgeSetting",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_connect_fail_flag": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "MultiBridgeSetting",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_connected_ssid": {
+   "access": "ro",
+   "kind": "string",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
+  "device_multiple_bridge_mode": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "1": "HomeBase",
+    "2": "Router"
+   },
+   "page": "MultiBridgeSetting",
+   "read": {
+    "map": null,
+    "param": 60013
+   },
+   "role": "setting",
+   "section": "network",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 60013,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 60013,
+     "paramValue": "$v:str"
+    }
+   }
   },
   "device_multiple_bridge_switch": {
    "access": "rw",
@@ -1154,7 +1282,7 @@
        {
         "qualifier": "RE",
         "type": "user_country",
-        "value": "^(?i)(?!JP).*$"
+        "value": "(?i)^(?!(JP|OM)).*$"
        }
       ]
      ]
@@ -1167,12 +1295,42 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(T9000).*$"
+        "value": "(T8N00|T7000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.2.1"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010).*$"
        },
        {
         "qualifier": "RE",
         "type": "user_country",
-        "value": "^(?i)(?!JP).*$"
+        "value": "(?i)^(JP|OM)"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
        }
       ]
      ]
@@ -1200,6 +1358,24 @@
    "variant_of": "device_storage_type"
   },
   "device_storage_type__v2": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
    "access": "ro",
    "default": 0,
    "kind": "enum",
@@ -1676,16 +1852,6 @@
    "variant_of": "is_support_multiple_bridge"
   },
   "is_support_multiple_bridge__v3": {
-   "access": "ro",
-   "default": true,
-   "kind": "bool",
-   "read": null,
-   "role": "status",
-   "section": "network",
-   "shown": "card",
-   "variant_of": "is_support_multiple_bridge"
-  },
-  "is_support_multiple_bridge__v4": {
    "access": "ro",
    "default": true,
    "kind": "bool",
@@ -2183,54 +2349,6 @@
     }
    }
   },
-  "nas_select_video_type": {
-   "access": "rw",
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Event",
-    "1": "Continue recording"
-   },
-   "read": {
-    "map": null,
-    "param": 6050
-   },
-   "role": "setting",
-   "section": "storage",
-   "shown": "page",
-   "values": [
-    0,
-    1
-   ],
-   "write": {
-    "cmd": 1700,
-    "subCmd": 6050,
-    "params": {
-     "value": "$v"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 6050,
-     "paramValue": "$v:str"
-    },
-    "multipleRequest": [
-     {
-      "cmd": 1700,
-      "subCmd": 6010,
-      "params": {
-       "enable": "$v",
-       "index": 0,
-       "status": 0,
-       "type": 0,
-       "value": 0,
-       "voiceID": 0,
-       "zonecount": 0
-      }
-     }
-    ]
-   }
-  },
   "nas_stream_switch": {
    "access": "rw",
    "control": "switch",
@@ -2682,9 +2800,7 @@
    },
    "name": "Recording quality",
    "read": {
-    "map": {
-     "": 5
-    },
+    "map": {},
     "param": 2731,
     "view": {
      "by": 6243,
@@ -2703,12 +2819,86 @@
     2,
     6
    ],
+   "variants": [
+    {
+     "id": "record_resolution__v1",
+     "key": "record_resolution__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "1.2.2.6"
+       },
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(?!T8171).*$"
+       }
+      ]
+     ]
+    }
+   ],
    "write": {
     "cmd": 1350,
     "subCmd": 2731,
     "params": {
      "quality": {
       "$map": {
+       "5": 3,
+       "2": 2,
+       "6": 1
+      }
+     },
+     "mode": 0,
+     "primary_view": 0
+    }
+   }
+  },
+  "record_resolution__v1": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Auto",
+    "2": "Full HD(1080P)",
+    "5": "2K HD",
+    "6": "HD (720P)"
+   },
+   "name": "Recording quality",
+   "read": {
+    "map": {
+     "": 0
+    },
+    "param": 2731,
+    "view": {
+     "by": 6243,
+     "map": {
+      "0": 0,
+      "1": 6,
+      "2": 2,
+      "3": 5
+     }
+    }
+   },
+   "role": "setting",
+   "section": "recording",
+   "shown": "page",
+   "values": [
+    0,
+    5,
+    2,
+    6
+   ],
+   "variant_of": "record_resolution",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 2731,
+    "params": {
+     "quality": {
+      "$map": {
+       "0": 0,
        "5": 3,
        "2": 2,
        "6": 1
@@ -3120,8 +3310,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8171Handle.mix.js",
-  "handler_date": "2026-08-24",
-  "td_version": 177
+  "handler": "b93a12bf-e220-493a-b59b-460daa599dd6_T8171Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 197
  }
 }

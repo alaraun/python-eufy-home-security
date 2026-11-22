@@ -26,6 +26,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -42,12 +43,12 @@
    "kind": "enum",
    "labels": {
     "normalized": "0",
-    "panNum": "0",
+    "panNum": "1",
     "polyNum": "2",
-    "positionNum": "0",
+    "positionNum": "1",
     "sideNum": "6",
-    "zoneHeight": "1080",
-    "zoneWidth": "1920"
+    "zoneHeight": "432",
+    "zoneWidth": "768"
    },
    "note": "handler rejects the probed values",
    "read": null,
@@ -1028,7 +1029,7 @@
   },
   "device_model": {
    "access": "ro",
-   "default": "0",
+   "default": "IndoorCam Mini",
    "kind": "string",
    "read": null,
    "role": "status",
@@ -1215,6 +1216,15 @@
    "section": "system",
    "shown": "card"
   },
+  "device_storage_medium": {
+   "access": "ro",
+   "default": "[2]",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "storage",
+   "structured": true
+  },
   "device_storage_type": {
    "access": "ro",
    "kind": "enum",
@@ -1392,28 +1402,22 @@
     }
    }
   },
-  "hb_connect_support_hb_nas": {
-   "access": "ro",
-   "kind": "bool",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "no_default": true,
-    "param": 40005
-   },
-   "role": "status",
-   "section": "storage",
-   "shown": "page"
-  },
   "hb_connect_support_version": {
    "access": "ro",
    "kind": "string",
    "read": null,
    "role": "status",
    "section": "storage",
+   "shown": "page"
+  },
+  "homebase_connect_support": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "WiFiConnection",
+   "read": null,
+   "role": "status",
+   "section": "network",
    "shown": "page"
   },
   "ip_address": {
@@ -1592,7 +1596,7 @@
     }
    ],
    "control": "switch",
-   "default": false,
+   "default": true,
    "kind": "bool",
    "name": "Status LED",
    "read": {
@@ -1678,13 +1682,18 @@
      "entry": {
       "read": {
        "map": {
-        "": 0,
-        "0": 0,
-        "1": 8,
-        "2": 9,
-        "3": 10
+        "": 0
        },
-       "param": 2730
+       "param": 2730,
+       "view": {
+        "by": 6243,
+        "map": {
+         "0": 0,
+         "1": 8,
+         "2": 9,
+         "3": 10
+        }
+       }
       },
       "write": {
        "cmd": 1350,
@@ -1707,10 +1716,10 @@
         "cmd": 2730,
         "paramValue": {
          "$map": {
-          "0": "0",
-          "10": "3",
-          "9": "2",
-          "8": "1"
+          "0": "MA==",
+          "10": "Mw==",
+          "9": "Mg==",
+          "8": "MQ=="
          }
         }
        }
@@ -1751,7 +1760,7 @@
      "2": 9,
      "3": 10
     },
-    "param": 1020
+    "param": 2031
    },
    "role": "setting",
    "section": "recording",
@@ -1777,7 +1786,7 @@
     },
     "update": {
      "needUpdate": true,
-     "cmd": 1020,
+     "cmd": 2031,
      "paramValue": {
       "$map": {
        "0": "0",
@@ -2082,6 +2091,53 @@
     }
    }
   },
+  "nightvision_type_new": {
+   "access": "rw",
+   "control": "select",
+   "default": 100,
+   "kind": "enum",
+   "labels": {
+    "100": "Off",
+    "102": "Infrared"
+   },
+   "read": {
+    "map": {
+     "": 100,
+     "0": 100,
+     "1": 102
+    },
+    "param": 1013
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    102,
+    100
+   ],
+   "write": {
+    "cmd": 1013,
+    "params": {
+     "value": {
+      "$map": {
+       "102": 1,
+       "100": 0
+      }
+     },
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1013,
+     "paramValue": {
+      "$map": {
+       "102": "1",
+       "100": "0"
+      }
+     }
+    }
+   }
+  },
   "notification_ai_motion_switch": {
    "access": "rw",
    "contexts": [
@@ -2221,6 +2277,74 @@
     }
    }
   },
+  "notification_ai_pet_switch": {
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "bit": 4,
+      "read": {
+       "map": null,
+       "param": 6027
+      },
+      "write": {
+       "cmd": 1350,
+       "subCmd": 6027,
+       "params": {
+        "onoff": "$v:int"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 6027,
+        "paramValue": "$v:str"
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "name": "Pet",
+   "read": {
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
+    "param": 6026
+   },
+   "role": "setting",
+   "section": "notifications",
+   "shown": "page",
+   "write": {
+    "cmd": 1700,
+    "subCmd": 6026,
+    "params": {
+     "value": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6026,
+     "paramValue": "$v:str"
+    }
+   }
+  },
   "notification_ai_sound_switch": {
    "access": "rw",
    "contexts": [
@@ -2285,6 +2409,33 @@
     "update": {
      "needUpdate": true,
      "cmd": 6025,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "notification_ai_vehicle_switch": {
+   "access": "rw",
+   "bit": 512,
+   "control": "switch",
+   "default": false,
+   "kind": "bool",
+   "name": "Vehicle",
+   "read": {
+    "map": null,
+    "param": 6027
+   },
+   "role": "setting",
+   "section": "notifications",
+   "shown": "page",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6027,
+    "params": {
+     "onoff": "$v:int"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 6027,
      "paramValue": "$v:str"
     }
    }
@@ -2894,15 +3045,16 @@
   "switching_notification": {
    "access": "rw",
    "control": "select",
+   "default": 2,
    "kind": "enum",
    "labels": {
     "2": "Switch modes by geofencing"
    },
    "read": {
     "map": {
-     "32": 2
+     "1": 2
     },
-    "param": 1283
+    "param": 7000
    },
    "role": "setting",
    "section": "notifications",
@@ -2911,15 +3063,15 @@
     2
    ],
    "write": {
-    "cmd": 1350,
-    "subCmd": 1283,
+    "cmd": 1700,
+    "subCmd": 7000,
     "params": {
-     "arm_push_mode": 32
+     "status": 1
     },
     "update": {
      "needUpdate": true,
-     "cmd": 1283,
-     "paramValue": "32"
+     "cmd": 7000,
+     "paramValue": 1
     }
    }
   },
@@ -3017,6 +3169,7 @@
    "name": "Watermark",
    "read": {
     "map": {
+     "": 1,
      "0": 1,
      "1": 2,
      "2": 0
@@ -3058,8 +3211,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8414Handle.mix.js",
-  "handler_date": "2026-06-04",
-  "td_version": 120
+  "handler": "0e5a5cfe-ef39-4cc5-822a-53e4c891538d_T8414Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 143
  }
 }

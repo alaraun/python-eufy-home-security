@@ -59,9 +59,9 @@
     }
   ],
   "handler": {
-    "large_version": 244,
-    "plugin_path_date": "2026/09/11",
-    "sha256": "92099a6e7cf3c00083af22db4cd19c5b860afee45e6cd4cd4751a4d4f92cee09"
+    "large_version": 258,
+    "plugin_path_date": "2026/10/26",
+    "sha256": "80d8d31b1f67d5599aaa56729ae976d0db3d41223eeb89b3c0c82b014bceab13"
   },
   "product_code": "T8215"
 }

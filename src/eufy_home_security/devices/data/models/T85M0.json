@@ -35,6 +35,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -75,7 +76,7 @@
   },
   "add_device_model_config": {
    "access": "ro",
-   "default": "{ \t\"routeConfigForDeviceSetup\": { \t\t\"steps\": [{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLSetDeviceNameLocationScreen\" \t\t}, \t\t{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLSetCustomNameScreen\" \t\t}, \t\t{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLCalibrateLockScreen\" \t\t} \t\t] \t} }",
+   "default": "{\"routeConfigForDeviceSetup\":{\"steps\":[{\"props\":{},\"route\":\"SLSetDeviceNameLocationScreen\"},{\"props\":{},\"route\":\"SLSetCustomNameScreen\"}]},\"smartLockConfig\":{\"isShowCalibrateLock\":true,\"isShowSetPassword\":true,\"isShowAccessSetting\":true,\"isShowScramblePassword\":true,\"isShowBindLockedGuide\":true,\"isShowPowerDuoBattery\":true,\"isShowMatter\":true}}",
    "kind": "string",
    "read": null,
    "role": "diagnostic",
@@ -96,6 +97,14 @@
    "section": "detection",
    "shown": "card",
    "structured": true
+  },
+  "ai_support_service_access_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "role": "diagnostic",
+   "section": "detection"
   },
   "arming_cust_mode_config": {
    "access": "ro",
@@ -294,6 +303,30 @@
      "paramValue": "$v:str"
     }
    }
+  },
+  "automation_config": {
+   "access": "ro",
+   "default": "{\"trigger\":[0,1,2,12],\"action\":[3]}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "modes",
+   "structured": true
+  },
+  "automation_detect_trigger_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Human Detection",
+    "4": "Detected motion"
+   },
+   "read": null,
+   "role": "diagnostic",
+   "section": "modes",
+   "values": [
+    0,
+    4
+   ]
   },
   "backup_battery_level": {
    "access": "ro",
@@ -926,8 +959,14 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "19": true,
+     "3": false
+    },
+    "param": 1298
+   },
    "role": "setting",
    "section": "detection",
    "write": {
@@ -937,7 +976,7 @@
      "ai_detect_type": {
       "$map": {
        "false": 3,
-       "true": 15
+       "true": 19
       }
      },
      "channel": "$channel"
@@ -948,7 +987,7 @@
      "paramValue": {
       "$map": {
        "false": "3",
-       "true": "15"
+       "true": "19"
       }
      }
     }
@@ -1312,7 +1351,7 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "(T8030|T8025|T8010).*$"
+        "value": "(T8030|T8025|T8010|T9000).*$"
        }
       ]
      ]
@@ -1388,6 +1427,14 @@
    "role": "diagnostic",
    "section": "network",
    "shown": "card"
+  },
+  "door_open_remind_countdown": {
+   "access": "ro",
+   "default": "2,5,10,15,20,30,60,90,120,150,180,300,600,1800,3600",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "other"
   },
   "firmware_main_version": {
    "access": "ro",
@@ -1628,6 +1675,14 @@
   "is_support_silent_ota_switch": {
    "access": "ro",
    "default": false,
+   "kind": "bool",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
+  "is_support_smart_lock_access_setting": {
+   "access": "ro",
+   "default": true,
    "kind": "bool",
    "read": null,
    "role": "diagnostic",
@@ -2665,10 +2720,34 @@
    "section": "system",
    "structured": true
   },
+  "smart_lock_auto_lock_faq_link": {
+   "access": "ro",
+   "default": "https://security-faq.eufylife.com/article/A2026102824147",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
   "smart_lock_auto_lock_type": {
    "access": "ro",
    "default": "3",
    "kind": "other",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
+  "smart_lock_bind_flow_show_face": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
+  "smart_lock_bind_flow_show_fingerprint": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
    "read": null,
    "role": "diagnostic",
    "section": "system"
@@ -3241,8 +3320,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T85M0Handle.mix.js",
-  "handler_date": "2026-06-08",
-  "td_version": 174
+  "handler": "1f7593df-3503-4e9a-a794-b77304b59c5e_T85M0Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 187
  }
 }

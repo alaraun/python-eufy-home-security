@@ -381,6 +381,44 @@
   },
   "detection_type_set": {
    "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "read": {
+       "map": {
+        "": 5,
+        "0": 5,
+        "2": 6
+       },
+       "param": 1252
+      },
+      "write": {
+       "cmd": 1252,
+       "params": {
+        "type": {
+         "$map": {
+          "5": 0,
+          "6": 2
+         }
+        }
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1252,
+        "paramValue": {
+         "$map": {
+          "5": "0",
+          "6": "2"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB2"
+     ]
+    }
+   ],
    "control": "select",
    "default": 6,
    "kind": "enum",
@@ -412,7 +450,7 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(T8030|T9000).*$"
+        "value": "^(T8030|T9000|T8025).*$"
        },
        {
         "default": "0",
@@ -437,6 +475,27 @@
        }
       ]
      ]
+    },
+    {
+     "id": "detection_type_set__v3",
+     "key": "detection_type_set__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
     }
    ],
    "write": {
@@ -451,17 +510,16 @@
      },
      "channel": "$channel"
     },
-    "extUpdates": [
-     {
-      "cmd": 1298,
-      "paramValue": {
-       "$map": {
-        "5": "3",
-        "6": "32771"
-       }
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": {
+      "$map": {
+       "5": "3",
+       "6": "32771"
       }
      }
-    ]
+    }
    }
   },
   "detection_type_set__v1": {
@@ -497,12 +555,11 @@
      "ai_detect_type": "$v:int",
      "channel": "$channel"
     },
-    "extUpdates": [
-     {
-      "cmd": 1298,
-      "paramValue": "$v:str"
-     }
-    ]
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
    }
   },
   "detection_type_set__v2": {
@@ -516,7 +573,7 @@
    },
    "read": {
     "map": {
-     "": 6,
+     "": 5,
      "0": 5,
      "2": 6
     },
@@ -549,6 +606,48 @@
        "6": "2"
       }
      }
+    }
+   }
+  },
+  "detection_type_set__v3": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle",
+    "3": "Pet",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
     }
    }
   },
@@ -1913,8 +2012,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8531Handle.mix.js",
-  "handler_date": "2026-07-15",
-  "td_version": 113
+  "handler": "8618bf20-e718-44ef-a0f1-8d1c8d6d4202_T8531Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 120
  }
 }

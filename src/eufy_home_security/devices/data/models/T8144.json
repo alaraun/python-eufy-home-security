@@ -747,15 +747,6 @@
    "section": "system",
    "shown": "page"
   },
-  "device_multiple_bridge_style": {
-   "access": "ro",
-   "default": "v3",
-   "kind": "string",
-   "read": null,
-   "role": "status",
-   "section": "network",
-   "shown": "card"
-  },
   "device_multiple_bridge_switch": {
    "access": "rw",
    "control": "switch",
@@ -969,8 +960,82 @@
   },
   "device_storage_type": {
    "access": "ro",
+   "default": 0,
    "kind": "enum",
    "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8025|T8010).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8N00|T7000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.2.1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8025|T8010).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "device_storage_type__v1": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud",
     "2": "NAS"
    },
    "read": null,
@@ -978,8 +1043,47 @@
    "section": "storage",
    "shown": "card",
    "values": [
+    0,
+    1,
     2
-   ]
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v2": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
   },
   "device_wifi_name": {
    "access": "ro",
@@ -2556,8 +2660,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "bb4adfe5-3536-4676-a553-e1e4758e2244_T8144Handle.mix.js",
-  "handler_date": "2026-09-20",
-  "td_version": 115
+  "handler": "db52e85e-6576-4bb1-82a3-761df8a41c8e_T8144Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 126
  }
 }

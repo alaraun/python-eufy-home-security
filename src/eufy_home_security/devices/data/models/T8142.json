@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -571,7 +572,7 @@
    },
    "read": {
     "map": {
-     "": 6,
+     "": 5,
      "0": 5,
      "2": 6
     },
@@ -849,8 +850,82 @@
   },
   "device_storage_type": {
    "access": "ro",
+   "default": 0,
    "kind": "enum",
    "labels": {
+    "0": "Local"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0
+   ],
+   "variants": [
+    {
+     "id": "device_storage_type__v1",
+     "key": "device_storage_type__v1",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010|T8001).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8N00|T7000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.2.1"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8010|T8001).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "device_storage_type__v1": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud",
     "2": "NAS"
    },
    "read": null,
@@ -858,8 +933,47 @@
    "section": "storage",
    "shown": "card",
    "values": [
+    0,
+    1,
     2
-   ]
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v2": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
   },
   "device_wifi_signal_strength": {
    "access": "ro",
@@ -922,40 +1036,6 @@
    "role": "status",
    "section": "storage",
    "shown": "page"
-  },
-  "hb_connect_nas_storage_type": {
-   "access": "rw",
-   "control": "select",
-   "default": 0,
-   "kind": "enum",
-   "labels": {
-    "0": "Only Events",
-    "1": "Continuous Recording and Events"
-   },
-   "read": {
-    "map": null,
-    "param": 40004
-   },
-   "role": "setting",
-   "section": "storage",
-   "shown": "page",
-   "values": [
-    0,
-    1
-   ],
-   "write": {
-    "cmd": 1350,
-    "subCmd": 1310,
-    "params": {
-     "cmd": 40004,
-     "type": "$v"
-    },
-    "update": {
-     "cmd": 40004,
-     "needUpdate": true,
-     "paramValue": "$v"
-    }
-   }
   },
   "hb_connect_nas_switch": {
    "access": "rw",
@@ -1157,9 +1237,9 @@
    "shown": "page",
    "values": [
     0,
-    8,
+    10,
     9,
-    10
+    8
    ],
    "write": {
     "cmd": 1705,
@@ -1167,9 +1247,9 @@
      "quality": {
       "$map": {
        "0": 0,
-       "8": 1,
+       "10": 3,
        "9": 2,
-       "10": 3
+       "8": 1
       }
      }
     },
@@ -1179,9 +1259,9 @@
      "paramValue": {
       "$map": {
        "0": "0",
-       "8": "1",
+       "10": "3",
        "9": "2",
-       "10": "3"
+       "8": "1"
       }
      }
     }
@@ -1347,7 +1427,7 @@
    "section": "storage",
    "shown": "page",
    "write": {
-    "cmd": 1146,
+    "cmd": 1145,
     "params": {
      "value": "$v:int"
     },
@@ -2152,8 +2232,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8142Handle.mix.js",
-  "handler_date": "2026-08-19",
-  "td_version": 123
+  "handler": "cf68eaad-4569-4391-8f7f-8c6a4d755566_T8142Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 139
  }
 }

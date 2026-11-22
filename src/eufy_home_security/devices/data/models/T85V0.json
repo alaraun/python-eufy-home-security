@@ -357,11 +357,36 @@
    "contexts": [
     {
      "entry": {
-      "access": "ro",
-      "control": null,
-      "note": "no handler write path",
-      "read": null,
-      "write": null
+      "read": {
+       "map": {
+        "": false,
+        "0": true,
+        "1": false
+       },
+       "param": 6250
+      },
+      "write": {
+       "cmd": 1350,
+       "subCmd": 6250,
+       "params": {
+        "switch": {
+         "$map": {
+          "false": 1,
+          "true": 0
+         }
+        }
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 6250,
+        "paramValue": {
+         "$map": {
+          "false": "1",
+          "true": "0"
+         }
+        }
+       }
+      }
      },
      "names": [
       "HB1",
@@ -401,6 +426,12 @@
       "$map": {
        "false": true,
        "true": false
+      }
+     },
+     "value": {
+      "$map": {
+       "false": 1,
+       "true": 0
       }
      }
     },
@@ -542,6 +573,24 @@
        }
       ]
      ]
+    },
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
     }
    ],
    "write": {
@@ -608,6 +657,48 @@
       "paramValue": "$v:str"
      }
     ]
+   }
+  },
+  "detection_type_set__v2": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
    }
   },
   "device_ability_data": {
@@ -2580,8 +2671,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T85V0Handle.mix.js",
-  "handler_date": "2026-08-06",
-  "td_version": 84
+  "handler": "186801fb-53ec-4e35-860d-819c74129e0b_T85V0Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 93
  }
 }

@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -540,6 +541,27 @@
        }
       ]
      ]
+    },
+    {
+     "id": "detection_type_set__v2",
+     "key": "detection_type_set__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8040).*$"
+       },
+       {
+        "default": "0",
+        "param": 1299,
+        "prop": "ai_empower",
+        "qualifier": "=",
+        "type": "associated_field",
+        "value": "1"
+       }
+      ]
+     ]
     }
    ],
    "write": {
@@ -624,6 +646,48 @@
       "paramValue": "$v:str"
      }
     ]
+   }
+  },
+  "detection_type_set__v2": {
+   "access": "rw",
+   "control": "toggles",
+   "flags": {
+    "0": 196608,
+    "1": 3,
+    "2": 4,
+    "3": 8,
+    "4": 32768,
+    "7": 262144
+   },
+   "kind": "flags",
+   "labels": {
+    "0": "Human Recognition",
+    "1": "Human Detection",
+    "2": "Vehicle Detection",
+    "3": "Pet Detection",
+    "4": "All Other Motions",
+    "7": "Vehicle Recognition"
+   },
+   "read": {
+    "map": null,
+    "param": 1298
+   },
+   "role": "setting",
+   "section": "detection",
+   "shown": "card",
+   "variant_of": "detection_type_set",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1298,
+    "params": {
+     "ai_detect_type": "$v:int",
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
    }
   },
   "device_ability_data": {
@@ -1309,14 +1373,8 @@
    "control": "switch",
    "default": true,
    "kind": "bool",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 1013
-   },
+   "note": "round trip does not return the written value",
+   "read": null,
    "role": "setting",
    "section": "picture",
    "write": {
@@ -1340,7 +1398,7 @@
        "cmd": 1350,
        "subCmd": 1277,
        "params": {
-        "night_sion": null,
+        "night_sion": "$v:int",
         "channel": "$channel"
        },
        "update": {
@@ -1351,6 +1409,18 @@
       }
      },
      "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
       "T9000"
      ]
     }
@@ -1377,6 +1447,95 @@
      "needUpdate": true,
      "cmd": 1277,
      "paramValue": "$v:str"
+    }
+   }
+  },
+  "nightvision_type_new": {
+   "access": "rw",
+   "contexts": [
+    {
+     "entry": {
+      "write": {
+       "cmd": 1350,
+       "subCmd": 1277,
+       "params": {
+        "night_sion": {
+         "$map": {
+          "100": 0,
+          "103": 2
+         }
+        },
+        "channel": "$channel"
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1277,
+        "paramValue": {
+         "$map": {
+          "100": "0",
+          "103": "2"
+         }
+        }
+       }
+      }
+     },
+     "names": [
+      "HB1",
+      "HB2",
+      "HB3",
+      "HB4",
+      "M8020",
+      "M8021",
+      "M8022",
+      "M8023",
+      "M8024",
+      "M8025",
+      "NVR",
+      "T7000",
+      "T9000"
+     ]
+    }
+   ],
+   "control": "select",
+   "default": 100,
+   "kind": "enum",
+   "labels": {
+    "100": "Off",
+    "103": "Spotlights"
+   },
+   "read": {
+    "map": {
+     "": 100,
+     "0": 100,
+     "2": 103
+    },
+    "param": 1277
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    100,
+    103
+   ],
+   "write": {
+    "cmd": 1700,
+    "subCmd": 1277,
+    "param_data": {
+     "$map": {
+      "100": 0,
+      "103": 2
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1277,
+     "paramValue": {
+      "$map": {
+       "100": "0",
+       "103": "2"
+      }
+     }
     }
    }
   },
@@ -1470,6 +1629,15 @@
    "read": null,
    "role": "diagnostic",
    "section": "recording"
+  },
+  "player_model_config": {
+   "access": "ro",
+   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"media_screenshot#F#3\", \"nightvision_type#F#4\", \"spotlight_switch#G#1\"]}, \"style\": {\"nightvision_type\": \"v1\", \"spotlight_switch\": \"v1\"}, \"config\": {\"GoAnywhere\": 0, \"SwipePanTilt\": 0}}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "recording",
+   "structured": true
   },
   "power_charge_history": {
    "access": "ro",
@@ -1843,36 +2011,6 @@
     }
    }
   },
-  "spotlight_status": {
-   "access": "rw",
-   "control": "switch",
-   "default": true,
-   "kind": "bool",
-   "name": "Wall light",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 1403
-   },
-   "role": "setting",
-   "section": "picture",
-   "shown": "page",
-   "write": {
-    "cmd": 1403,
-    "params": {
-     "value": "$v:int",
-     "switch": "$v"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1403,
-     "paramValue": "$v:str"
-    }
-   }
-  },
   "spotlight_switch": {
    "access": "rw",
    "contexts": [
@@ -1912,6 +2050,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
@@ -2114,8 +2253,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T81A0Handle.mix.js",
-  "handler_date": "2026-05-08",
-  "td_version": 88
+  "handler": "6a2a9127-b909-437f-83d4-e501ab2311de_T81A0Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 101
  }
 }

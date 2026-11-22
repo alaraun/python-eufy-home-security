@@ -26,6 +26,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -41,13 +42,13 @@
    "access": "ro",
    "kind": "enum",
    "labels": {
-    "normalized": "1",
+    "normalized": "0",
     "panNum": "0",
     "polyNum": "2",
     "positionNum": "0",
     "sideNum": "6",
-    "zoneHeight": "720",
-    "zoneWidth": "1280"
+    "zoneHeight": "432",
+    "zoneWidth": "768"
    },
    "note": "handler rejects the probed values",
    "read": null,
@@ -634,12 +635,11 @@
      "ai_detect_type": "$v:int",
      "channel": "$channel"
     },
-    "extUpdates": [
-     {
-      "cmd": 1298,
-      "paramValue": "$v:str"
-     }
-    ]
+    "update": {
+     "needUpdate": true,
+     "cmd": 1298,
+     "paramValue": "$v:str"
+    }
    }
   },
   "device_ability_data": {
@@ -966,6 +966,15 @@
    "role": "diagnostic",
    "section": "system",
    "shown": "card"
+  },
+  "device_storage_medium": {
+   "access": "ro",
+   "default": "[2]",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "storage",
+   "structured": true
   },
   "device_storage_type": {
    "access": "ro",
@@ -1363,7 +1372,7 @@
   "led_on_off": {
    "access": "rw",
    "control": "switch",
-   "default": false,
+   "default": true,
    "kind": "bool",
    "read": {
     "map": {
@@ -1714,7 +1723,7 @@
    "section": "storage",
    "shown": "page",
    "write": {
-    "cmd": 1146,
+    "cmd": 1145,
     "params": {
      "value": "$v:int"
     },
@@ -1731,7 +1740,11 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": null,
+    "map": {
+     "": false,
+     "0": false,
+     "1": true
+    },
     "param": 2002
    },
    "role": "setting",
@@ -2133,7 +2146,7 @@
   "sound_detection_status": {
    "access": "rw",
    "control": "switch",
-   "default": true,
+   "default": false,
    "kind": "bool",
    "page": "SoundDetection",
    "read": {
@@ -2242,7 +2255,7 @@
    "default": 80,
    "kind": "range",
    "max": 100,
-   "min": 1,
+   "min": 0,
    "read": {
     "map": null,
     "param": 1230
@@ -2266,7 +2279,7 @@
   "spotlight_brightness_level": {
    "access": "rw",
    "control": "select",
-   "default": 0,
+   "default": 4,
    "kind": "enum",
    "labels": {
     "0": "Level 1",
@@ -2457,6 +2470,7 @@
   "switching_notification": {
    "access": "rw",
    "control": "select",
+   "default": 2,
    "kind": "enum",
    "labels": {
     "2": "Switch modes by geofencing"
@@ -2585,6 +2599,7 @@
    },
    "read": {
     "map": {
+     "": 1,
      "0": 1,
      "1": 2,
      "2": 0
@@ -2626,8 +2641,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8442Handle.mix.js",
-  "handler_date": "2026-04-21",
-  "td_version": 88
+  "handler": "6bd0df1f-bee8-49e2-baa0-f1633434b470_T8442Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 99
  }
 }

@@ -35,6 +35,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -75,7 +76,7 @@
   },
   "add_device_model_config": {
    "access": "ro",
-   "default": "{ \t\"routeConfigForDeviceSetup\": { \t\t\"steps\": [{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLSetDeviceNameLocationScreen\" \t\t}, \t\t{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLSetCustomNameScreen\" \t\t}, \t\t{ \t\t\t\"props\": {}, \t\t\t\"route\": \"SLCalibrateLockScreen\" \t\t} \t\t] \t} }",
+   "default": "{\"routeConfigForDeviceSetup\":{\"steps\":[{\"props\":{},\"route\":\"SLSetDeviceNameLocationScreen\"},{\"props\":{},\"route\":\"SLSetCustomNameScreen\"}]},\"smartLockConfig\":{\"isShowCalibrateLock\":true,\"isShowSetPassword\":true,\"isShowAccessSetting\":true,\"isShowSDCardPage\":true,\"isShowScramblePassword\":true,\"isShowBindLockedGuide\":true,\"isShowPowerDuoBattery\":true,\"isShowMatter\":true,\"isShowHomekey\":true}}",
    "kind": "string",
    "read": null,
    "role": "diagnostic",
@@ -294,6 +295,30 @@
      "paramValue": "$v:str"
     }
    }
+  },
+  "automation_config": {
+   "access": "ro",
+   "default": "{\"trigger\":[0,1,2,12],\"action\":[3]}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "modes",
+   "structured": true
+  },
+  "automation_detect_trigger_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "0": "Human Detection",
+    "4": "Detected motion"
+   },
+   "read": null,
+   "role": "diagnostic",
+   "section": "modes",
+   "values": [
+    0,
+    4
+   ]
   },
   "backup_battery_level": {
    "access": "ro",
@@ -529,54 +554,6 @@
    "read": null,
    "role": "setting",
    "section": "detection"
-  },
-  "detection_type_set": {
-   "access": "rw",
-   "control": "select",
-   "kind": "enum",
-   "labels": {
-    "5": "Human Only",
-    "6": "All Motions"
-   },
-   "page": "MotionDetection",
-   "read": {
-    "map": {
-     "3": 5,
-     "32771": 6
-    },
-    "param": 1298
-   },
-   "role": "setting",
-   "section": "detection",
-   "shown": "card",
-   "values": [
-    5,
-    6
-   ],
-   "write": {
-    "cmd": 1350,
-    "subCmd": 1298,
-    "params": {
-     "ai_detect_type": {
-      "$map": {
-       "5": 3,
-       "6": 32771
-      }
-     },
-     "channel": "$channel"
-    },
-    "extUpdates": [
-     {
-      "cmd": 1298,
-      "paramValue": {
-       "$map": {
-        "5": "3",
-        "6": "32771"
-       }
-      }
-     }
-    ]
-   }
   },
   "device_ability_data": {
    "access": "ro",
@@ -909,8 +886,8 @@
    "access": "ro",
    "kind": "enum",
    "labels": {
-    "5": "Human Recognition",
-    "6": "All Other Motions"
+    "1": "Human Recognition",
+    "4": "All Other Motions"
    },
    "note": "handler rejects the probed values",
    "read": null,
@@ -918,8 +895,8 @@
    "section": "detection",
    "shown": "card",
    "values": [
-    5,
-    6
+    1,
+    4
    ],
    "variants": [
     {
@@ -970,8 +947,14 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
-   "note": "round trip does not return the written value",
-   "read": null,
+   "read": {
+    "map": {
+     "": false,
+     "19": true,
+     "3": false
+    },
+    "param": 1298
+   },
    "role": "setting",
    "section": "detection",
    "write": {
@@ -981,7 +964,7 @@
      "ai_detect_type": {
       "$map": {
        "false": 3,
-       "true": 15
+       "true": 19
       }
      },
      "channel": "$channel"
@@ -992,7 +975,7 @@
      "paramValue": {
       "$map": {
        "false": "3",
-       "true": "15"
+       "true": "19"
       }
      }
     }
@@ -1631,6 +1614,14 @@
    "role": "diagnostic",
    "section": "system"
   },
+  "is_support_smart_lock_access_setting": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
   "live_bottom_hor_toolbar_list": {
    "access": "ro",
    "kind": "enum",
@@ -2141,6 +2132,54 @@
     }
    }
   },
+  "nightvision_type_new": {
+   "access": "rw",
+   "control": "select",
+   "default": 100,
+   "kind": "enum",
+   "labels": {
+    "100": "Off",
+    "102": "Infrared"
+   },
+   "read": {
+    "map": {
+     "": 100,
+     "0": 100,
+     "1": 102
+    },
+    "param": 1277
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    100,
+    102
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1277,
+    "params": {
+     "night_sion": {
+      "$map": {
+       "100": 0,
+       "102": 1
+      }
+     },
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1277,
+     "paramValue": {
+      "$map": {
+       "100": "0",
+       "102": "1"
+      }
+     }
+    }
+   }
+  },
   "notification_ai_doorbell_pressed_switch": {
    "access": "rw",
    "bit": 256,
@@ -2283,6 +2322,38 @@
    "values": [
     0,
     1
+   ]
+  },
+  "notification_motion_alert": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Default",
+    "1": "Silent",
+    "2": "Bell",
+    "3": "Change",
+    "4": "Ding",
+    "5": "Notify",
+    "6": "Security",
+    "7": "Success",
+    "8": "Type"
+   },
+   "page": "SettingsHome",
+   "read": null,
+   "role": "status",
+   "section": "notifications",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
    ]
   },
   "notification_motion_onoff": {
@@ -2606,6 +2677,15 @@
    "section": "recording",
    "step": 1
   },
+  "sd_card_max_capacity": {
+   "access": "ro",
+   "default": "256",
+   "kind": "other",
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "page"
+  },
   "sdk_model_config": {
    "access": "ro",
    "default": "{\"ble\":{\"uuid\":{\"write\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"read\":\"8c850002-0302-41c5-b46e-cf057c562025\", \"service\":\"8c850001-0302-41c5-b46e-cf057c562025\", \"notify\":\"8c850003-0302-41c5-b46e-cf057c562025\"},\"syncHeartBeat\":true}}",
@@ -2651,10 +2731,34 @@
    "section": "system",
    "structured": true
   },
+  "smart_lock_auto_lock_faq_link": {
+   "access": "ro",
+   "default": "https://security-faq.eufylife.com/article/A2026102224015",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
   "smart_lock_auto_lock_type": {
    "access": "ro",
    "default": "3",
    "kind": "other",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
+  "smart_lock_bind_flow_show_face": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
+  "smart_lock_bind_flow_show_fingerprint": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
    "read": null,
    "role": "diagnostic",
    "section": "system"
@@ -2747,6 +2851,13 @@
    "access": "ro",
    "default": false,
    "kind": "bool",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system"
+  },
+  "smart_lock_model_config": {
+   "access": "ro",
+   "kind": "string",
    "read": null,
    "role": "diagnostic",
    "section": "system"
@@ -2971,7 +3082,7 @@
   },
   "smart_lock_setting_manage_access": {
    "access": "ro",
-   "default": false,
+   "default": true,
    "kind": "bool",
    "read": null,
    "role": "diagnostic",
@@ -3256,8 +3367,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T85M1Handle.mix.js",
-  "handler_date": "2026-08-13",
-  "td_version": 33
+  "handler": "add9a15a-4cd0-4e8e-b470-3b2a8de5a86b_T85M1Handle.mix.js",
+  "handler_date": "2026-10-15",
+  "td_version": 54
  }
 }

@@ -26,6 +26,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -37,6 +38,33 @@
   "from": "answer"
  },
  "settings": {
+  "activityzone_config": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "normalized": "0",
+    "panNum": "1",
+    "polyNum": "4",
+    "positionNum": "0",
+    "sideNum": "4",
+    "zoneHeight": "1080",
+    "zoneWidth": "1920"
+   },
+   "note": "handler rejects the probed values",
+   "read": null,
+   "role": "setting",
+   "section": "detection",
+   "shown": "page",
+   "values": [
+    "sideNum",
+    "normalized",
+    "polyNum",
+    "panNum",
+    "positionNum",
+    "zoneWidth",
+    "zoneHeight"
+   ]
+  },
   "ai_empower": {
    "access": "ro",
    "default": "0",
@@ -51,6 +79,42 @@
    "section": "detection",
    "shown": "card",
    "structured": true
+  },
+  "ambient_light_brightness": {
+   "access": "ro",
+   "default": 100,
+   "kind": "range",
+   "max": 100,
+   "min": 22,
+   "page": "AmbientLight",
+   "read": {
+    "map": null,
+    "no_default": true,
+    "param": 1413
+   },
+   "role": "status",
+   "section": "picture",
+   "shown": "page",
+   "step": 1
+  },
+  "ambient_light_schedule_config": {
+   "access": "ro",
+   "kind": "string",
+   "page": "AmbientLight",
+   "read": null,
+   "role": "diagnostic",
+   "section": "picture",
+   "shown": "page",
+   "structured": true
+  },
+  "ambient_light_schedule_sunset_to_sunrise": {
+   "access": "ro",
+   "kind": "string",
+   "page": "AmbientLight",
+   "read": null,
+   "role": "status",
+   "section": "picture",
+   "shown": "page"
   },
   "arming_cust_mode_config": {
    "access": "ro",
@@ -176,26 +240,79 @@
    "section": "modes"
   },
   "audio_recording_on_off": {
-   "access": "ro",
+   "access": "rw",
+   "control": "switch",
    "default": true,
    "kind": "bool",
-   "note": "handler ignores the value",
    "page": "SettingsHome",
-   "read": null,
+   "read": {
+    "map": {
+     "": true,
+     "0": true,
+     "1": false
+    },
+    "param": 1366
+   },
    "role": "setting",
    "section": "recording",
-   "shown": "page"
+   "shown": "page",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1366,
+    "params": {
+     "storage_audio_switch": {
+      "$map": {
+       "false": 1,
+       "true": 0
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1366,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
   },
   "camera_on_off": {
    "access": "rw",
    "contexts": [
     {
      "entry": {
-      "access": "ro",
-      "control": null,
-      "note": "no handler write path",
-      "read": null,
-      "write": null
+      "read": {
+       "map": {
+        "": false,
+        "0": true,
+        "1": false
+       },
+       "param": 1035
+      },
+      "write": {
+       "cmd": 1035,
+       "params": {
+        "switch": {
+         "$map": {
+          "false": true,
+          "true": false
+         }
+        }
+       },
+       "update": {
+        "needUpdate": true,
+        "cmd": 1035,
+        "paramValue": {
+         "$map": {
+          "false": "1",
+          "true": "0"
+         }
+        }
+       }
+      }
      },
      "names": [
       "HB1",
@@ -215,7 +332,7 @@
     }
    ],
    "control": "switch",
-   "default": false,
+   "default": true,
    "kind": "bool",
    "read": {
     "map": {
@@ -328,20 +445,21 @@
    "min": 1,
    "read": {
     "map": null,
-    "param": 1243
+    "param": 1272
    },
    "role": "setting",
    "section": "detection",
    "shown": "page",
    "step": 1,
+   "variant_of": "detection_sensitivity",
    "write": {
-    "cmd": 1243,
+    "cmd": 1272,
     "params": {
      "value": "$v"
     },
     "update": {
      "needUpdate": true,
-     "cmd": 1243,
+     "cmd": 1272,
      "paramValue": "$v:str"
     }
    }
@@ -550,16 +668,14 @@
    "access": "ro",
    "kind": "enum",
    "labels": {
-    "0": "Local",
-    "1": "Cloud"
+    "0": "Local"
    },
    "read": null,
    "role": "status",
    "section": "storage",
    "shown": "card",
    "values": [
-    0,
-    1
+    0
    ]
   },
   "device_wifi_name": {
@@ -832,6 +948,63 @@
     }
    }
   },
+  "motion_actived_light_brightness": {
+   "access": "ro",
+   "default": 100,
+   "kind": "range",
+   "max": 100,
+   "min": 22,
+   "page": "MotionActivatedLightV2",
+   "read": {
+    "map": null,
+    "no_default": true,
+    "param": 1412
+   },
+   "role": "status",
+   "section": "picture",
+   "shown": "page",
+   "step": 1
+  },
+  "motion_actived_light_distance": {
+   "access": "ro",
+   "default": 4,
+   "kind": "enum",
+   "labels": {
+    "0": "46",
+    "1": "56",
+    "2": "61",
+    "3": "66",
+    "4": "76"
+   },
+   "read": null,
+   "role": "status",
+   "section": "detection",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  "motion_actived_light_switch": {
+   "access": "ro",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": true,
+     "0": false,
+     "1": true
+    },
+    "no_default": true,
+    "param": 1408
+   },
+   "role": "status",
+   "section": "detection",
+   "shown": "page"
+  },
   "motion_detection_status": {
    "access": "rw",
    "control": "switch",
@@ -860,10 +1033,58 @@
     }
    }
   },
+  "motion_stop_end_early": {
+   "access": "rw",
+   "control": "switch",
+   "default": true,
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": false,
+     "0": true,
+     "1": false
+    },
+    "param": 1251
+   },
+   "role": "setting",
+   "section": "recording",
+   "shown": "page",
+   "write": {
+    "cmd": 1251,
+    "params": {
+     "enable": {
+      "$map": {
+       "false": 1,
+       "true": 0
+      }
+     }
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1251,
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "0"
+      }
+     }
+    }
+   }
+  },
+  "motion_support_set_light_mode": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "page": "MotionActivatedLight",
+   "read": null,
+   "role": "status",
+   "section": "picture",
+   "shown": "page"
+  },
   "nightvision_type": {
    "access": "rw",
    "control": "switch",
-   "default": false,
+   "default": true,
    "kind": "bool",
    "read": {
     "map": {
@@ -886,6 +1107,53 @@
      "needUpdate": true,
      "cmd": 1013,
      "paramValue": "$v:str"
+    }
+   }
+  },
+  "nightvision_type_new": {
+   "access": "rw",
+   "control": "select",
+   "default": 100,
+   "kind": "enum",
+   "labels": {
+    "100": "Off",
+    "102": "Infrared"
+   },
+   "read": {
+    "map": {
+     "": 100,
+     "0": 100,
+     "1": 102
+    },
+    "param": 1013
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    100,
+    102
+   ],
+   "write": {
+    "cmd": 1013,
+    "params": {
+     "value": {
+      "$map": {
+       "100": 0,
+       "102": 1
+      }
+     },
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1013,
+     "paramValue": {
+      "$map": {
+       "100": "0",
+       "102": "1"
+      }
+     }
     }
    }
   },
@@ -920,6 +1188,24 @@
     8
    ]
   },
+  "player_model_config": {
+   "access": "ro",
+   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"media_screenshot#G#1\", \"nightvision_type#G#2\", \"spotlight_switch#G#3\"]}, \"style\": {\"spotlight_switch\": \"v1\", \"nightvision_type\": \"v1\"}, \"config\": {\"switchLandscape\": \"view_mode\", \"SwipePanTilt\": 0, \"GoAnywhere\": 0, \"speedModel\": false}}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "recording",
+   "structured": true
+  },
+  "sdk_model_config": {
+   "access": "ro",
+   "default": "{\"mediaConfig\":{\"skipIntercomCmd\":true}}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
+   "section": "system",
+   "structured": true
+  },
   "speaker_on_off": {
    "access": "rw",
    "control": "switch",
@@ -951,9 +1237,9 @@
   "speaker_volume": {
    "access": "rw",
    "control": "slider",
-   "default": 80,
+   "default": 63,
    "kind": "range",
-   "max": 100,
+   "max": 63,
    "min": 1,
    "read": {
     "map": null,
@@ -962,7 +1248,6 @@
    "role": "setting",
    "section": "audio",
    "step": 1,
-   "unit": "%",
    "write": {
     "cmd": 1230,
     "params": {
@@ -991,7 +1276,7 @@
    "default": 100,
    "kind": "range",
    "max": 100,
-   "min": 22,
+   "min": 0,
    "name": "Brightness",
    "read": {
     "map": null,
@@ -1013,35 +1298,28 @@
     }
    }
   },
-  "spotlight_schedule_switch": {
-   "access": "rw",
-   "control": "switch",
-   "default": false,
-   "kind": "bool",
-   "name": "Sunset to sunrise",
+  "spotlight_schedule_config": {
+   "access": "ro",
+   "kind": "string",
+   "note": "no handler write path",
    "page": "SpotlightSettings",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 1414
-   },
+   "read": null,
    "role": "setting",
    "section": "picture",
    "shown": "page",
-   "write": {
-    "cmd": 1414,
-    "params": {
-     "value": "$v:int"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1414,
-     "paramValue": "$v:str"
-    }
-   }
+   "structured": true
+  },
+  "spotlight_schedule_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "name": "Sunset to sunrise",
+   "note": "no handler write path",
+   "page": "SpotlightSettings",
+   "read": null,
+   "role": "setting",
+   "section": "picture",
+   "shown": "page"
   },
   "spotlight_status": {
    "access": "rw",
@@ -1078,6 +1356,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
@@ -1120,6 +1399,7 @@
   "time_format_set": {
    "access": "rw",
    "control": "select",
+   "default": 0,
    "kind": "enum",
    "labels": {
     "0": "12-hour",
@@ -1144,6 +1424,44 @@
     "update": {
      "needUpdate": true,
      "cmd": 1253,
+     "paramValue": "$v:str"
+    }
+   }
+  },
+  "timer_for_lights": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "30 s",
+    "1": "60 s",
+    "2": "3 min",
+    "3": "5 min",
+    "4": "15 min"
+   },
+   "read": {
+    "map": null,
+    "param": 1409
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "write": {
+    "cmd": 1409,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1409,
      "paramValue": "$v:str"
     }
    }
@@ -1233,7 +1551,7 @@
   },
   "video_intercom_audio_type": {
    "access": "ro",
-   "default": "1",
+   "default": "2",
    "kind": "other",
    "read": null,
    "role": "diagnostic",
@@ -1262,9 +1580,9 @@
    "kind": "bool",
    "read": {
     "map": {
-     "": false,
-     "0": false,
-     "1": true
+     "": true,
+     "1": false,
+     "2": true
     },
     "param": 1214
    },
@@ -1274,20 +1592,30 @@
    "write": {
     "cmd": 1214,
     "params": {
-     "value": "$v:int"
+     "value": {
+      "$map": {
+       "false": 1,
+       "true": 2
+      }
+     }
     },
     "update": {
      "needUpdate": true,
      "cmd": 1214,
-     "paramValue": "$v:str"
+     "paramValue": {
+      "$map": {
+       "false": "1",
+       "true": "2"
+      }
+     }
     }
    }
   }
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8420Handle.mix.js",
-  "handler_date": "2026-04-21",
-  "td_version": 82
+  "handler": "3fc232c0-f412-4e23-acf4-04affaca81a4_T8420Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 111
  }
 }

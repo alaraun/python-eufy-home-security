@@ -1911,6 +1911,7 @@
      "entry": {
       "read": {
        "map": {
+        "": 3,
         "0": 0,
         "1": 3,
         "3": 4
@@ -1971,6 +1972,7 @@
    "name": "Night vision",
    "read": {
     "map": {
+     "": 3,
      "0": 0,
      "1": 3,
      "3": 4
@@ -2011,17 +2013,30 @@
       }
      }
     },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1013,
-     "paramValue": {
-      "$map": {
-       "3": "1",
-       "4": "3",
-       "0": "0"
+    "extUpdates": [
+     {
+      "needUpdate": true,
+      "cmd": 1013,
+      "paramValue": {
+       "$map": {
+        "3": "1",
+        "4": "3",
+        "0": "0"
+       }
       }
+     },
+     {
+      "cmd": 2002,
+      "paramValue": {
+       "$map": {
+        "3": "1",
+        "4": "3",
+        "0": "0"
+       }
+      },
+      "needUpdate": true
      }
-    }
+    ]
    }
   },
   "nightvision_type__v1": {
@@ -2725,13 +2740,6 @@
     }
    }
   },
-  "reset_device_mode": {
-   "access": "ro",
-   "kind": "bool",
-   "read": null,
-   "role": "diagnostic",
-   "section": "system"
-  },
   "rotate_image_180_on_off": {
    "access": "rw",
    "control": "switch",
@@ -3119,8 +3127,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8400Handle.mix.js",
-  "handler_date": "2026-09-17",
-  "td_version": 131
+  "handler": "7cc65122-4998-4460-9516-6f76af2eab2d_T8400Handle.mix.js",
+  "handler_date": "2026-10-16",
+  "td_version": 142
  }
 }

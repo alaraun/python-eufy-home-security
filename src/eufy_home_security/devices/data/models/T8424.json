@@ -26,6 +26,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -41,13 +42,13 @@
    "access": "ro",
    "kind": "enum",
    "labels": {
-    "normalized": "1",
+    "normalized": "0",
     "panNum": "1",
     "polyNum": "2",
     "positionNum": "0",
     "sideNum": "6",
-    "zoneHeight": "720",
-    "zoneWidth": "1280"
+    "zoneHeight": "432",
+    "zoneWidth": "768"
    },
    "note": "handler rejects the probed values",
    "read": null,
@@ -78,6 +79,42 @@
    "section": "detection",
    "shown": "card",
    "structured": true
+  },
+  "ambient_light_brightness": {
+   "access": "ro",
+   "default": 100,
+   "kind": "range",
+   "max": 100,
+   "min": 22,
+   "page": "AmbientLight",
+   "read": {
+    "map": null,
+    "no_default": true,
+    "param": 1413
+   },
+   "role": "status",
+   "section": "picture",
+   "shown": "page",
+   "step": 1
+  },
+  "ambient_light_schedule_config": {
+   "access": "ro",
+   "kind": "string",
+   "page": "AmbientLight",
+   "read": null,
+   "role": "diagnostic",
+   "section": "picture",
+   "shown": "page",
+   "structured": true
+  },
+  "ambient_light_schedule_sunset_to_sunrise": {
+   "access": "ro",
+   "kind": "string",
+   "page": "AmbientLight",
+   "read": null,
+   "role": "status",
+   "section": "picture",
+   "shown": "page"
   },
   "arming_cust_mode_config": {
    "access": "ro",
@@ -363,46 +400,8 @@
   },
   "detection_sensitivity": {
    "access": "rw",
-   "contexts": [
-    {
-     "entry": {
-      "read": {
-       "map": null,
-       "param": 1276
-      },
-      "write": {
-       "cmd": 1350,
-       "subCmd": 1276,
-       "params": {
-        "sensitivity": "$v",
-        "channel": "$channel"
-       },
-       "update": {
-        "needUpdate": true,
-        "cmd": 1276,
-        "paramValue": "$v:str"
-       }
-      }
-     },
-     "names": [
-      "HB1",
-      "HB2",
-      "HB3",
-      "HB4",
-      "M8020",
-      "M8021",
-      "M8022",
-      "M8023",
-      "M8024",
-      "M8025",
-      "NVR",
-      "T7000",
-      "T9000"
-     ]
-    }
-   ],
    "control": "slider",
-   "default": 4,
+   "default": 3,
    "kind": "range",
    "max": 5,
    "min": 1,
@@ -426,18 +425,13 @@
      "needUpdate": true,
      "cmd": 6041,
      "paramValue": "$v:str"
-    },
-    "extUpdates": [
-     {
-      "cmd": 1276,
-      "paramValue": "$v:str"
-     }
-    ]
+    }
    }
   },
   "detection_type_set": {
    "access": "rw",
    "control": "select",
+   "default": 5,
    "kind": "enum",
    "labels": {
     "5": "Human Only",
@@ -667,8 +661,7 @@
    "kind": "enum",
    "labels": {
     "0": "Local",
-    "1": "Cloud",
-    "2": "NAS"
+    "1": "Cloud"
    },
    "read": null,
    "role": "status",
@@ -676,8 +669,7 @@
    "shown": "card",
    "values": [
     0,
-    1,
-    2
+    1
    ]
   },
   "device_wifi_name": {
@@ -821,6 +813,15 @@
    "section": "storage",
    "shown": "page"
   },
+  "homebase_connect_support": {
+   "access": "ro",
+   "kind": "bool",
+   "page": "WiFiConnection",
+   "read": null,
+   "role": "status",
+   "section": "network",
+   "shown": "page"
+  },
   "ip_address": {
    "access": "ro",
    "default": "0",
@@ -857,34 +858,8 @@
   },
   "led_on_off": {
    "access": "rw",
-   "contexts": [
-    {
-     "entry": {
-      "access": "ro",
-      "control": null,
-      "note": "no handler write path",
-      "read": null,
-      "write": null
-     },
-     "names": [
-      "HB1",
-      "HB2",
-      "HB3",
-      "HB4",
-      "M8020",
-      "M8021",
-      "M8022",
-      "M8023",
-      "M8024",
-      "M8025",
-      "NVR",
-      "T7000",
-      "T9000"
-     ]
-    }
-   ],
    "control": "switch",
-   "default": false,
+   "default": true,
    "kind": "bool",
    "read": {
     "map": {
@@ -973,12 +948,13 @@
    },
    "read": {
     "map": {
+     "": 0,
      "0": 0,
      "1": 8,
      "2": 9,
      "3": 10
     },
-    "param": 1020
+    "param": 2031
    },
    "role": "setting",
    "section": "recording",
@@ -1004,7 +980,7 @@
     },
     "update": {
      "needUpdate": true,
-     "cmd": 1020,
+     "cmd": 2031,
      "paramValue": {
       "$map": {
        "0": "0",
@@ -1034,8 +1010,8 @@
   },
   "live_support_record": {
    "access": "ro",
-   "default": "true",
-   "kind": "other",
+   "default": true,
+   "kind": "bool",
    "read": null,
    "role": "diagnostic",
    "section": "system"
@@ -1125,6 +1101,39 @@
    "shown": "page",
    "structured": true
   },
+  "motion_actived_light_brightness": {
+   "access": "ro",
+   "default": 100,
+   "kind": "range",
+   "max": 100,
+   "min": 22,
+   "page": "MotionActivatedLightV2",
+   "read": {
+    "map": null,
+    "no_default": true,
+    "param": 1412
+   },
+   "role": "status",
+   "section": "picture",
+   "shown": "page",
+   "step": 1
+  },
+  "motion_actived_light_switch": {
+   "access": "ro",
+   "kind": "bool",
+   "read": {
+    "map": {
+     "": true,
+     "0": false,
+     "1": true
+    },
+    "no_default": true,
+    "param": 1408
+   },
+   "role": "status",
+   "section": "detection",
+   "shown": "page"
+  },
   "motion_detection_status": {
    "access": "rw",
    "control": "switch",
@@ -1198,12 +1207,8 @@
    "default": true,
    "kind": "bool",
    "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 1013
+    "map": null,
+    "param": 2002
    },
    "role": "setting",
    "section": "picture",
@@ -1216,8 +1221,54 @@
     },
     "update": {
      "needUpdate": true,
-     "cmd": 1013,
+     "cmd": 2002,
      "paramValue": "$v:str"
+    }
+   }
+  },
+  "nightvision_type_new": {
+   "access": "rw",
+   "control": "select",
+   "default": 100,
+   "kind": "enum",
+   "labels": {
+    "100": "Off",
+    "102": "Infrared"
+   },
+   "read": {
+    "map": {
+     "0": 100,
+     "1": 102
+    },
+    "param": 1013
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    100,
+    102
+   ],
+   "write": {
+    "cmd": 1013,
+    "params": {
+     "value": {
+      "$map": {
+       "100": 0,
+       "102": 1
+      }
+     },
+     "channel": "$channel"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1013,
+     "paramValue": {
+      "$map": {
+       "100": "0",
+       "102": "1"
+      }
+     }
     }
    }
   },
@@ -1299,52 +1350,14 @@
     }
    }
   },
-  "record_resolution": {
-   "access": "rw",
-   "control": "select",
-   "default": 2,
-   "kind": "enum",
-   "labels": {
-    "2": "Full HD(1080P)",
-    "5": "2K HD"
-   },
-   "read": {
-    "map": {
-     "": 2,
-     "2": 2,
-     "3": 5
-    },
-    "param": 1023
-   },
-   "role": "setting",
+  "player_model_config": {
+   "access": "ro",
+   "default": "{\"position\": {\"Live\": [\"event_device_setting#C#1\", \"set_alarm_type#C#2\", \"live_stream_mute#E#1\", \"media_record#F#1\", \"event_device_intercom#F#2\", \"media_screenshot#F#3\", \"nightvision_type#F#4\", \"spotlight_switch#G#1\"]}, \"style\": {\"nightvision_type\": \"v1\", \"spotlight_switch\": \"v1\"}, \"config\": {\"GoAnywhere\": 0, \"SwipePanTilt\": 0}}",
+   "kind": "string",
+   "read": null,
+   "role": "diagnostic",
    "section": "recording",
-   "shown": "page",
-   "values": [
-    5,
-    2
-   ],
-   "write": {
-    "cmd": 1700,
-    "subCmd": 1023,
-    "params": {
-     "quality": {
-      "$map": {
-       "5": 3,
-       "2": 2
-      }
-     }
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1023,
-     "paramValue": {
-      "$map": {
-       "5": "3",
-       "2": "2"
-      }
-     }
-    }
-   }
+   "structured": true
   },
   "speaker_on_off": {
    "access": "rw",
@@ -1413,10 +1426,10 @@
   "spotlight_brightness_level": {
    "access": "rw",
    "control": "slider",
-   "default": 50,
+   "default": 100,
    "kind": "range",
    "max": 100,
-   "min": 1,
+   "min": 22,
    "name": "Brightness",
    "read": {
     "map": null,
@@ -1439,39 +1452,21 @@
    }
   },
   "spotlight_schedule_switch": {
-   "access": "rw",
-   "control": "switch",
+   "access": "ro",
    "default": false,
    "kind": "bool",
    "name": "Sunset to sunrise",
+   "note": "no handler write path",
    "page": "SpotlightSettings",
-   "read": {
-    "map": {
-     "": false,
-     "0": false,
-     "1": true
-    },
-    "param": 1414
-   },
+   "read": null,
    "role": "setting",
    "section": "picture",
-   "shown": "page",
-   "write": {
-    "cmd": 1414,
-    "params": {
-     "value": "$v:int"
-    },
-    "update": {
-     "needUpdate": true,
-     "cmd": 1414,
-     "paramValue": "$v:str"
-    }
-   }
+   "shown": "page"
   },
   "spotlight_status": {
    "access": "rw",
    "control": "switch",
-   "default": true,
+   "default": false,
    "kind": "bool",
    "name": "Enable floodlights",
    "read": {
@@ -1503,6 +1498,7 @@
    "control": "switch",
    "default": false,
    "kind": "bool",
+   "name": "Light",
    "read": {
     "map": {
      "": false,
@@ -1575,6 +1571,44 @@
     }
    }
   },
+  "timer_for_lights": {
+   "access": "rw",
+   "control": "select",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "30 s",
+    "1": "60 s",
+    "2": "3 min",
+    "3": "5 min",
+    "4": "15 min"
+   },
+   "read": {
+    "map": null,
+    "param": 1409
+   },
+   "role": "setting",
+   "section": "picture",
+   "shown": "page",
+   "values": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "write": {
+    "cmd": 1409,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1409,
+     "paramValue": "$v:str"
+    }
+   }
+  },
   "timezone_set": {
    "access": "rw",
    "control": "select",
@@ -1603,10 +1637,10 @@
   "trigger_interval_time": {
    "access": "rw",
    "control": "slider",
-   "default": 5,
+   "default": 0,
    "kind": "range",
-   "max": 60,
-   "min": 5,
+   "max": 30,
+   "min": 0,
    "read": {
     "map": null,
     "param": 1250
@@ -1632,7 +1666,7 @@
   "video_camera_count": {
    "access": "ro",
    "default": "1",
-   "kind": "string",
+   "kind": "other",
    "read": null,
    "role": "diagnostic",
    "section": "system"
@@ -1643,7 +1677,7 @@
    "default": 60,
    "kind": "range",
    "max": 120,
-   "min": 5,
+   "min": 30,
    "read": {
     "map": null,
     "param": 1249
@@ -1685,7 +1719,7 @@
   "watermark_set": {
    "access": "rw",
    "control": "select",
-   "default": 1,
+   "default": 2,
    "kind": "enum",
    "labels": {
     "0": "Off",
@@ -1736,8 +1770,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8424Handle.mix.js",
-  "handler_date": "2026-06-10",
-  "td_version": 87
+  "handler": "a9f203a8-d7b7-447c-b018-5a1f73d35467_T8424Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 101
  }
 }

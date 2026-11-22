@@ -31,6 +31,7 @@
    "3": 8,
    "30": 0,
    "31": 2,
+   "33": 22,
    "4": 2,
    "5": 7,
    "6": 7,
@@ -566,7 +567,7 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(T8030|T9000|T8025).*$"
+        "value": "^(T8030|T9000|T8025|T8040).*$"
        },
        {
         "default": "0",
@@ -2397,8 +2398,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "T8123Handle.mix.js",
-  "handler_date": "2026-08-14",
-  "td_version": 109
+  "handler": "7d103e14-a1eb-4468-b1ef-91d8ab772c47_T8123Handle.mix.js",
+  "handler_date": "2026-10-10",
+  "td_version": 116
  }
 }

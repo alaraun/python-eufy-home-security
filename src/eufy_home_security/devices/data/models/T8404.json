@@ -520,6 +520,15 @@
    "role": "diagnostic",
    "section": "storage"
   },
+  "daily_highlight_switch": {
+   "access": "ro",
+   "default": false,
+   "kind": "bool",
+   "note": "no handler write path",
+   "read": null,
+   "role": "setting",
+   "section": "recording"
+  },
   "detected_events": {
    "access": "ro",
    "default": 60,
@@ -1124,6 +1133,56 @@
     }
    }
   },
+  "device_set_time_lapse_photography": {
+   "access": "rw",
+   "control": "select",
+   "default": 2,
+   "kind": "enum",
+   "labels": {
+    "2": "People/Traffic",
+    "3": "Sun",
+    "4": "Cloud",
+    "5": "Plant/Garden",
+    "6": "Customize"
+   },
+   "read": {
+    "map": {
+     "Mg==": 2,
+     "Mw==": 3,
+     "NA==": 4,
+     "NQ==": 5,
+     "Ng==": 6
+    },
+    "param": 6270
+   },
+   "role": "setting",
+   "section": "recording",
+   "values": [
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "write": {
+    "cmd": 1350,
+    "subCmd": 6270,
+    "params": {},
+    "update": {
+     "needUpdate": true,
+     "cmd": 6270,
+     "paramValue": {
+      "$map": {
+       "2": "Mg==",
+       "3": "Mw==",
+       "4": "NA==",
+       "5": "NQ==",
+       "6": "Ng=="
+      }
+     }
+    }
+   }
+  },
   "device_silent_ota_switch": {
    "access": "rw",
    "control": "switch",
@@ -1269,7 +1328,106 @@
        {
         "qualifier": "RE",
         "type": "parent_sn",
-        "value": "^(?!T8404).*$"
+        "value": "^(T8404).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "1.0.5.6"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8025|T8040|T8010|T8001).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v2",
+     "key": "device_storage_type__v2",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8404).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T9000).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(?!(JP|OM)).*$"
+       }
+      ]
+     ]
+    },
+    {
+     "id": "device_storage_type__v3",
+     "key": "device_storage_type__v3",
+     "read_conditions": [
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "^(T8404).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       },
+       {
+        "qualifier": ">=",
+        "type": "device_version",
+        "value": "1.0.5.6"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8030|T8025|T8040|T8010|T8001).*$"
+       },
+       {
+        "qualifier": "RE",
+        "type": "user_country",
+        "value": "(?i)^(JP|OM)"
+       }
+      ],
+      [
+       {
+        "qualifier": "RE",
+        "type": "parent_sn",
+        "value": "(T8N00|T7000).*$"
+       },
+       {
+        "qualifier": ">=",
+        "type": "parent_version",
+        "value": "4.4.2.1"
        }
       ]
      ]
@@ -1295,6 +1453,57 @@
     2
    ],
    "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v2": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "1": "Cloud"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    1
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_storage_type__v3": {
+   "access": "ro",
+   "default": 0,
+   "kind": "enum",
+   "labels": {
+    "0": "Local",
+    "2": "NAS"
+   },
+   "read": null,
+   "role": "status",
+   "section": "storage",
+   "shown": "card",
+   "values": [
+    0,
+    2
+   ],
+   "variant_of": "device_storage_type"
+  },
+  "device_support_event_filter_detection_type": {
+   "access": "ro",
+   "kind": "enum",
+   "labels": {
+    "2": "Vehicle",
+    "3": "Pet"
+   },
+   "read": null,
+   "role": "diagnostic",
+   "section": "detection",
+   "values": [
+    2,
+    3
+   ]
   },
   "device_wifi_name": {
    "access": "ro",
@@ -2343,7 +2552,7 @@
   },
   "setting_model_config": {
    "access": "ro",
-   "default": "{\"style\":{\"notification_type\":\"v3\",\"detection_type_set\":\"v2\",\"detection_sensitivity\":\"v1\",\"motion_activated_light_setting\":\"v6\"},\"position\":{\"SettingsNotification\":[\"app_alert#C#1\",\"notification_type#A#1\",\"switching_notification#B#1\"],\"MotionDetection\":[\"detection_type_set#C#1\",\"detection_sensitivity#D#1\"]},\"config\":{\"disable_preset_positions_calibrate\":true,\"detection_sensitivity_include_radar\":{\"1_1\":[1,2,3,4,5,6,7],\"1_2\":[1,2,3,4,5,6,7],\"2_1\":[2,5,7,8,9,10,12]},\"ota_time\":30}}",
+   "default": "{\"style\":{\"notification_type\":\"v3\",\"detection_type_set\":\"v2\",\"detection_sensitivity\":\"v1\",\"motion_activated_light_setting\":\"v6\"},\"position\":{\"SettingsNotification\":[\"app_alert#C#1\",\"notification_type#A#1\",\"switching_notification#B#1\"],\"MotionDetection\":[\"detection_type_set#C#1\",\"detection_sensitivity#D#1\"]},\"config\":{\"disable_preset_positions_calibrate\":true,\"detection_sensitivity_include_radar\":{\"1_1\":[1,2,3,4,5,6,7],\"1_2\":[1,2,3,4,5,6,7],\"2_1\":[2,5,7,8,9,10,12]},\"ota_time\":30,\"timelapse_duration_use_field\":true}}",
    "kind": "string",
    "read": null,
    "role": "diagnostic",
@@ -2804,8 +3013,8 @@
  },
  "source": {
   "app_version": "6.1.32",
-  "handler": "2b50d873-10d1-4f11-89bc-01a2ca5faa47_T8404Handle.mix.js",
-  "handler_date": "2026-10-14",
-  "td_version": 53
+  "handler": "9c0859e1-557d-4caf-9d5d-cfaad383702b_T8404Handle.mix.js",
+  "handler_date": "2026-10-30",
+  "td_version": 73
  }
 }
