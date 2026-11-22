@@ -38,7 +38,7 @@ automatically, so do not add this repository to HACS.
 - **Per-model settings from eufy's own code**: each product's settings (values, labels,
   units, how to write and read them) are generated from the thing description and
   handler the eufy app downloads, and ship with the library for 159 products.
-- **Every product the eufy app names**: the model list (161 serial prefixes, with kind
+- **Every product the eufy app names**: the model list (223 serial prefixes, with kind
   and cloud device type) is generated from the app's own tables, so a camera is
   recognised as a camera even when nobody has tested it.
 - **Support graded as data**: every model and capability carries *verified* (proven on

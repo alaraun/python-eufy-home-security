@@ -4,8 +4,8 @@ Four source files of the eufy Security app (build ``--app-version``) name the pr
 the device configuration (``device_configuration.json``: per product code its parent in
 a category tree, ``T8162`` → ``BatteryCamera`` → ``Camera`` → ``Base``), the model
 constants (one ``String`` constant per serial prefix, e.g. ``CAMERA2C = "T8113"``), the
-device-type map (``hashMap.put(<type>, new String[]{<prefixes>})``) and the device-type
-ints (the ``TYPE_*`` ints that map refers to by name).
+device-type map (``<map>.put(<type>, new String[]{<prefixes>})``, the type an int or a
+``TYPE_*`` name) and the device-type ints (the ``TYPE_*`` ints that map refers to by name).
 
 The output lists, per five-character prefix any of them names: a constant naming it
 (the model constant, else the ``TYPE_*`` name of its device type), its device kind,
