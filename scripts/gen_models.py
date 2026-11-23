@@ -1181,8 +1181,9 @@ def td_writable(prop: Mapping[str, Any]) -> bool:
     The handler's write is probed for every property, as the app writes a property
     without checking its ``access_mode``. The declaration decides the role rule "app
     control", the note of a write that is not proven, and whether a proven write must
-    read back: an undeclared one is written only when getProperty returns the written
-    value.
+    read back: an undeclared one is written only when its write gives a read
+    (:func:`write_read`), getProperty returning the written value or, for an enum whose
+    write stores each value as its own parameter value, the inverse of the write.
     """
     return "W" in (prop.get("access_mode") or "")
 
@@ -1585,6 +1586,28 @@ def empty_value_reads(
         _count(counts, "read:empty value")
 
 
+def written_params(
+    swept: Mapping[str, Mapping[str, Sweep]], written: Collection[str]
+) -> tuple[dict[int, Any], dict[int, list[str]]]:
+    """``(background, seen)`` of the swept writes of the identifiers ``written`` in every
+    context: each parameter they set with the first value set, and per parameter the
+    distinct text values set, in sweep order."""
+    background: dict[int, Any] = {}
+    seen: dict[int, list[str]] = {}
+    for rows in swept.values():
+        for ident, row in rows.items():
+            if ident not in written:
+                continue
+            for _, recipe in row.raw:
+                for p in _param_dump(recipe):
+                    background.setdefault(p["param_type"], p["param_value"])
+                    if isinstance(p["param_value"], str):
+                        found = seen.setdefault(p["param_type"], [])
+                        if p["param_value"] not in found:
+                            found.append(p["param_value"])
+    return background, seen
+
+
 def build_context(  # noqa: C901
     product_code: str,
     handler: Path,
@@ -1603,9 +1626,10 @@ def build_context(  # noqa: C901
     wire: codec.WireValues | None = None,
 ) -> tuple[dict[str, Any], dict[str, int]]:
     """The settings of one model in one context and its counters. ``background``: every
-    parameter the model's writes set in any context, with one value each; ``seen``: the
-    distinct values they set per parameter; ``located``: the parameter each property is
-    read from (:func:`locate_params`), for the settings without a write.
+    parameter the writes the model's file carries set in any context, with one value each;
+    ``seen``: the distinct values they set per parameter (both :func:`written_params`);
+    ``located``: the parameter each property is read from (:func:`locate_params`), for the
+    settings without a write.
 
     Raises CheckError when a codec does not reproduce a swept recipe or an unaccepted
     reference row of this context.
@@ -1660,7 +1684,8 @@ def build_context(  # noqa: C901
             read, read_note, inverse = write_read(kind, row.raw, reads.get(ident, []))
         if not td_writable(prop):
             # Not declared writable: written only when the handler's write is proven and
-            # reads back; otherwise ro without a note, read as the handler fills it.
+            # gives a read (getProperty or an enum's inverse); otherwise ro without a note,
+            # read as the handler fills it.
             if read is None:
                 continue
             _count(counts, "writable:undeclared")
@@ -1937,17 +1962,6 @@ def generate(
     wire = app_wire_values(props, switch_texts, joiner.screen_values(product_code, titles))
     contexts = contexts_of(product_code)
     swept = sweep(product_code, handler, props, contexts, wire)
-    background: dict[int, Any] = {}
-    seen: dict[int, list[str]] = {}
-    for rows in swept.values():
-        for row in rows.values():
-            for _, recipe in row.raw:
-                for p in _param_dump(recipe):
-                    background.setdefault(p["param_type"], p["param_value"])
-                    if isinstance(p["param_value"], str):
-                        found = seen.setdefault(p["param_type"], [])
-                        if p["param_value"] not in found:
-                            found.append(p["param_value"])
     rows = reference or []
     per_context: dict[str, dict[str, Any]] = {}
     references: dict[str, list[dict[str, Any]]] = {}
@@ -1957,28 +1971,47 @@ def generate(
         product_code, handler, contexts[BASE], [p["identifier"] for p in props], located_counts
     )
     kinds = {p["identifier"]: codec.kind_of(p) for p in props}
-    for name, ctx in contexts.items():
-        wanted = {BASE: "child", STANDALONE: "standalone"}.get(name)
-        references[name] = [r for r in rows if r["context"] == wanted]
-        settings, ctx_counts = build_context(
-            product_code,
-            handler,
-            td,
-            props,
-            context=ctx,
-            swept=swept[name],
-            app_labels=app_labels,
-            tree=tree,
-            titles=titles,
-            reference=references[name],
-            background=background,
-            seen=seen,
-            located=located,
-            wire=wire,
-        )
-        per_context[name] = settings
-        if name == BASE:
-            counts = ctx_counts
+    # The other parameters a read is retried with, and a template's parameter slots, come
+    # from the writes the file carries: every declared one, and the undeclared ones kept,
+    # which only a build decides. Rebuild until the kept writes are the ones used.
+    declared = {p["identifier"] for p in props if td_writable(p)}
+    written, tried = declared, [declared]
+    while True:
+        background, seen = written_params(swept, written)
+        for name, ctx in contexts.items():
+            wanted = {BASE: "child", STANDALONE: "standalone"}.get(name)
+            references[name] = [r for r in rows if r["context"] == wanted]
+            settings, ctx_counts = build_context(
+                product_code,
+                handler,
+                td,
+                props,
+                context=ctx,
+                swept=swept[name],
+                app_labels=app_labels,
+                tree=tree,
+                titles=titles,
+                reference=references[name],
+                background=background,
+                seen=seen,
+                located=located,
+                wire=wire,
+            )
+            per_context[name] = settings
+            if name == BASE:
+                counts = ctx_counts
+        kept = declared | {
+            ident
+            for settings in per_context.values()
+            for ident, entry in settings.items()
+            if entry["access"] == "rw"
+        }
+        if kept == written:
+            break
+        if kept in tried:
+            raise GeneratorError(f"{product_code}: the kept writes do not settle: {sorted(kept)}")
+        written = kept
+        tried.append(kept)
     for key, n in located_counts.items():
         _count(counts, key, n)
     drop = controls.variants_to_drop(list(per_context.values()), released)
