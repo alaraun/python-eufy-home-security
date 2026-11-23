@@ -22,6 +22,7 @@ import logging
 import math
 import operator
 import re
+import reprlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -143,6 +144,8 @@ OBJECT_SLOT: Final = re.compile(r"\$v((?:\.[A-Za-z0-9_]+)*):(json|b64json)")
 """A template leaf of an ``OBJECT`` value: the value (or a member, ``$v.<member>:...``) as a
 JSON object (``json``) or as base64 of its compact JSON text (``b64json``)."""
 _BASE64_TEXT: Final = re.compile(r"[A-Za-z0-9+/]+={0,2}")
+_OBJECT_BODY: Final = "$v:json"
+_OBJECT_DEPTH: Final = 32
 _CUR_MODE: Final = "cur_mode"
 _SECTION_ORDER: Final = MappingProxyType({s.id: s.order for s in SETTING_SECTIONS})
 _SUB_1350: Final = 1350
@@ -766,15 +769,18 @@ def _str_form(value: Value) -> str:
     return str(value)
 
 
-def _plain_json(x: object, where: str) -> Any:
-    """``x`` as plain JSON data (an integral float as an int, as ``JSON.stringify`` writes
-    it); ValueError for anything JSON cannot hold."""
+def _plain_json(x: object, where: str, depth: int = 1) -> Any:
+    """``x`` as plain JSON data (an integral float as an int); ValueError for anything
+    JSON cannot hold and for nesting deeper than :data:`_OBJECT_DEPTH` (a value that
+    contains itself included)."""
+    if isinstance(x, Mapping | list | tuple) and depth > _OBJECT_DEPTH:
+        raise ValueError(f"{where}: nested deeper than {_OBJECT_DEPTH} levels")
     if isinstance(x, Mapping):
         if not all(isinstance(k, str) for k in x):
             raise ValueError(f"{where}: an object key is not a string")
-        return {k: _plain_json(v, where) for k, v in x.items()}
+        return {k: _plain_json(v, where, depth + 1) for k, v in x.items()}
     if isinstance(x, list | tuple):
-        return [_plain_json(v, where) for v in x]
+        return [_plain_json(v, where, depth + 1) for v in x]
     if isinstance(x, float):
         if not math.isfinite(x):
             raise ValueError(f"{where}: {x!r} is not a JSON number")
@@ -785,14 +791,17 @@ def _plain_json(x: object, where: str) -> Any:
 
 
 def _object_value(key: str, value: object) -> JsonObject:
-    """``value`` (an object, or the JSON text of one) as an ``OBJECT`` setting's value."""
+    """``value`` (a non-empty object, or the JSON text of one) as an ``OBJECT`` setting's
+    value."""
     if isinstance(value, str):
         try:
             value = json.loads(value, parse_constant=_no_constant)
-        except ValueError:
-            raise ValueError(f"{key}: expected a JSON object, got {value!r}") from None
+        except (ValueError, RecursionError):
+            raise ValueError(f"{key}: expected a JSON object, got {reprlib.repr(value)}") from None
     if not isinstance(value, Mapping):
-        raise ValueError(f"{key}: expected a JSON object, got {value!r}")
+        raise ValueError(f"{key}: expected a JSON object, got {reprlib.repr(value)}")
+    if not value:
+        raise ValueError(f"{key}: an empty object sets no member")
     plain: JsonObject = _plain_json(value, key)
     return plain
 
@@ -802,7 +811,10 @@ def _no_constant(name: str) -> Any:
 
 
 def _compact_json(x: Any) -> str:
-    """``x`` as ``JSON.stringify`` writes it: no spaces, members in order, non-ASCII kept."""
+    """``x`` as compact JSON text: no spaces, members in order, non-ASCII kept. The same
+    text as ``JSON.stringify`` when no key is an integer (JavaScript lists those first),
+    every integer lies within ±2**53 and every fraction between 1e-4 and 1e16 in
+    magnitude; else the same value, spelled differently."""
     return json.dumps(x, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 
 
@@ -838,7 +850,7 @@ def decode_object(raw: str) -> JsonObject | None:
             return None
     try:
         found = json.loads(text, parse_constant=_no_constant)
-    except ValueError:
+    except (ValueError, RecursionError):
         return None
     return found if isinstance(found, dict) else None
 
@@ -998,6 +1010,8 @@ def _classify(template: Recipe, recipe: Mapping[str, Any]) -> WireCommand:
     cmd, sub, params = recipe["cmd"], recipe.get("subCmd"), recipe.get("params")
     updates = _updates(recipe)
     body = params if isinstance(params, Mapping) else None
+    if params is not None and body is None and (sub is not None or not _is_ecb_scalar(cmd)):
+        raise ValueError(f"command {cmd}: the body renders to {params!r}, not an object")
     if cmd == _SUB_1350 and isinstance(sub, int):
         return WireCommand(
             path=WritePath.SUB_1350, cmd=sub, params=body, value=None, updates=updates
@@ -1062,7 +1076,7 @@ def _refusal(template: Recipe) -> str | None:
         return "no P2P command"
     if params is None or isinstance(params, Mapping):
         return None
-    if isinstance(params, str) and (m := OBJECT_SLOT.fullmatch(params)) and m[2] == "json":
+    if params == _OBJECT_BODY:
         return None  # the body is the value's object
     if sub is None and _is_ecb_scalar(cmd):
         return None
@@ -1721,6 +1735,14 @@ def _flag(entry: dict[str, Any], name: str) -> bool:
     return value
 
 
+def _structured(entry: dict[str, Any], kind: SettingKind) -> bool:
+    """The ``structured`` flag; an ``OBJECT`` setting's file must set it."""
+    structured = _flag(entry, "structured")
+    if kind is SettingKind.OBJECT and not structured:
+        raise ValueError("an object setting without structured")
+    return structured
+
+
 def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     kind = SettingKind(entry["kind"])
     access = entry["access"]
@@ -1769,7 +1791,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     if variant_of is not None and (variant_of == key or not IDENTIFIER.fullmatch(variant_of)):
         raise ValueError(f"variant_of {variant_of!r}")
     advanced = _flag(entry, "advanced")
-    structured = _flag(entry, "structured")
+    structured = _structured(entry, kind)
     write = _recipe(entry, "write")
     table = _table(entry, "write_table")
     writable = access == "rw"

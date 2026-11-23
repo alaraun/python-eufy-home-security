@@ -219,9 +219,9 @@ Recipe templates are the handler's recipe with the value positions replaced:
 | `{"$affine": [a, b]}` | `a * value + b`, an int when integral |
 | `"$channel"` | The device's channel (3 as a station child, 0 standalone in the samples) |
 | `"$device_sn"`, `"$station_sn"` | The device's and its station's serial |
-| `"$v:json"` | An `object` value as a JSON object (a copy) |
-| `"$v.<member>:json"` | The value's member `<member>` (members chain with `.`) as JSON data |
-| `"$v:b64json"`, `"$v.<member>:b64json"` | Base64 of the value's (or member's) compact JSON text: no blanks, members in order, non-ASCII kept, an integral number without a fraction, as `JSON.stringify` writes it |
+| `"$v:json"` | An `object` value as a JSON object (a copy); the only object form that can be the whole `params` (any other is refused: `scalar body on a non-ECB command`) |
+| `"$v.<member>:json"` | The value's member `<member>` (members chain with `.`) as JSON data, inside a body |
+| `"$v:b64json"`, `"$v.<member>:b64json"` | Base64 of the value's (or member's) compact JSON text: no blanks, members in order, non-ASCII kept, an integral number without a fraction. That is `JSON.stringify`'s text when no key is an integer (JavaScript lists such keys first), every integer lies within ±2^53 and every fraction between 1e-4 and 1e16 in magnitude; other values give the same JSON value spelled differently. In the bundled files this form is only a parameter-cache `update`, so such a difference changes the local copy until the next dump, never what is sent |
 | `"$param:<id>:int"`, `"$param:<id>:str"` | The device's current value of parameter `<id>`, as an int or as the string. A leaf the handler fills from the device's parameters: null in every sweep (the parameter absent) and that value with the parameter set to two values the file's writes give it. A T8170's 2731 write sends `"mode": "$param:6243:int"` |
 
 `write_table` uses the same forms. Volatile keys (`transaction`,
@@ -298,7 +298,7 @@ product code and turns each entry into a `Setting`:
 | `readable` | `read` is not null |
 | `role` (`SettingRole`) | `role`: `SETTING`, `STATUS` or `DIAGNOSTIC`; a setting listed from a thing description alone, without a file, is `DIAGNOSTIC`, a mode-table setting a `SETTING` |
 | `shown` (`SettingShown` or None) | `shown`: `CARD`, `PAGE`, or None when absent; None for a setting listed from a thing description alone and for a mode-table setting |
-| `structured` | `structured` (False when absent, and for a setting listed from a thing description alone); always True on an `OBJECT` |
+| `structured` | `structured` (False when absent, and for a setting listed from a thing description alone); an `OBJECT` whose file does not set it is a malformed file (`ModelDataError`), so it is always True there |
 | `group`, `order`, `page`, `applies_when` | the same keys; `applies_when` as a `(key, value)` tuple |
 | `note` | `note`, plus the reason when the library refuses the write |
 | `advanced` | `advanced` (False when absent) |
@@ -319,8 +319,8 @@ for a device that is its own station, else the station kind `connect` the device
 paired to (None or `SINGLE`: the base). `Station.settings_for` passes the device's own.
 
 `Setting.validate(value)` checks a value against the domain (an enum also takes its
-label; an `OBJECT` takes a JSON object or its JSON text and gives a plain copy, an integral
-float as an int), `Setting.encode(value, ctx)` renders the write recipe for the device `ctx`
+label; an `OBJECT` takes a non-empty JSON object or its JSON text, at most 32 levels deep,
+and gives a plain copy, an integral float as an int), `Setting.encode(value, ctx)` renders the write recipe for the device `ctx`
 describes into a `WireCommand`, and `Setting.decode(raw, block)` turns a dumped
 parameter value into the public value (`block`: the device's other parameters, for a
 per-view read). `Setting.write_params` names the parameters a write's `$param` leaves

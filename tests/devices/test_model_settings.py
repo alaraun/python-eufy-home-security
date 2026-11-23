@@ -1510,11 +1510,12 @@ def test_an_int_slot_refuses_an_object() -> None:
         "control": "object",
         "section": "picture",
         "role": "setting",
+        "structured": True,
         "read": None,
         "write": {"cmd": 1350, "subCmd": 1, "params": {"v": "$v:int"}},
     }
     with pytest.raises(ValueError, match="non-number"):
-        model_settings._build("T0000", "x", entry).encode({}, CHILD)
+        model_settings._build("T0000", "x", entry).encode({"enable": 1}, CHILD)
 
 
 def test_an_rw_object_setting_needs_the_object_control() -> None:
@@ -1524,8 +1525,98 @@ def test_an_rw_object_setting_needs_the_object_control() -> None:
         "control": "text",
         "section": "picture",
         "role": "setting",
+        "structured": True,
         "read": None,
         "write": {"cmd": 1350, "subCmd": 1, "params": "$v:json"},
     }
     with pytest.raises(ValueError, match="control 'text' for kind object"):
         model_settings._build("T0000", "x", entry)
+
+
+def test_an_object_setting_file_must_mark_it_structured() -> None:
+    entry = {
+        "kind": "object",
+        "access": "ro",
+        "section": "picture",
+        "role": "setting",
+        "read": {"param": 1422, "map": None},
+    }
+    with pytest.raises(ValueError, match="object setting without structured"):
+        model_settings._build("T0000", "x", entry)
+    with pytest.raises(ValueError, match="object setting without structured"):
+        model_settings._build("T0000", "x", {**entry, "structured": False})
+    assert model_settings._build("T0000", "x", {**entry, "structured": True}).structured
+
+
+@pytest.mark.parametrize(
+    ("params", "refusal"),
+    [
+        ("$v:json", None),
+        ("$v:b64json", "scalar body on a non-ECB command"),
+        ("$v.schedule:json", "scalar body on a non-ECB command"),
+        ("$v.enable:json", "scalar body on a non-ECB command"),
+    ],
+)
+def test_only_the_whole_object_is_a_body_of_its_own(params: str, refusal: str | None) -> None:
+    """A member or the base64 form as the whole body would send no object: refused."""
+    template = {"cmd": 1350, "subCmd": 1422, "params": params}
+    assert model_settings._refusal(template) == refusal
+
+
+@pytest.mark.parametrize(
+    "recipe",
+    [
+        {"cmd": 1350, "subCmd": 1422, "params": [1]},
+        {"cmd": 1700, "subCmd": 6085, "params": "text"},
+        {"cmd": 1404, "params": 1},
+        {"cmd": 1214, "subCmd": 5, "params": 2},
+    ],
+    ids=["sub-1350-list", "recipe-1700-text", "direct-int", "ecb-with-sub"],
+)
+def test_a_body_that_renders_to_no_object_is_refused_at_encode(recipe: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="not an object"):
+        model_settings._classify({}, recipe)
+
+
+def test_an_empty_object_is_refused() -> None:
+    setting = _object_setting()
+    empty: object
+    for empty in ({}, "{}", " {} "):
+        with pytest.raises(ValueError, match="empty object"):
+            setting.validate(empty)
+
+
+def test_an_object_nested_deeper_than_the_limit_is_refused() -> None:
+    def nested(levels: int) -> dict[str, object]:
+        value: dict[str, object] = {"enable": 1}
+        for _ in range(levels - 1):
+            value = {"a": value}
+        return value
+
+    setting = _object_setting()
+    assert setting.validate(nested(32)) == nested(32)
+    assert setting.validate({"l": [nested(30)]}) == {"l": [nested(30)]}  # a list is a level
+    with pytest.raises(ValueError, match="deeper than 32"):
+        setting.validate(nested(33))
+    with pytest.raises(ValueError, match="deeper than 32"):
+        setting.validate({"l": [nested(31)]})
+
+
+def test_a_value_that_contains_itself_is_refused() -> None:
+    looped: dict[str, object] = {"enable": 1}
+    looped["self"] = looped
+    listed: list[object] = []
+    listed.append(listed)
+    for value in (looped, {"schedule": listed}):
+        with pytest.raises(ValueError, match="light_setting: nested deeper"):
+            _object_setting().validate(value)
+
+
+def test_a_very_deep_object_text_is_refused_on_write_and_unread_on_read() -> None:
+    deep = '{"a":' * 100_000 + "1" + "}" * 100_000
+    setting = _object_setting()
+    with pytest.raises(ValueError, match="light_setting: expected a JSON object"):
+        setting.validate(deep)
+    assert setting.decode(deep) is None
+    assert setting.decode(base64.b64encode(deep.encode()).decode()) is None
+    assert model_settings.decode_object(deep) is None

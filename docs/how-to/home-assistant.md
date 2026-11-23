@@ -1065,7 +1065,8 @@ A closed session (`async_close`) never reconnects on its own — build a new
     characters.
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
-    bool for a bool, str for a string. `default` is the vendor default; a station setting
+    bool for a bool, str for a string, a `dict` (the JSON object the device stores) for
+    an `OBJECT`. `default` is the vendor default; a station setting
     neither source carries reads it (see **State**).
   - Unique ids: `entity_unique_id(serial, setting.key)`; every setting key is valid for it.
   - Display text: `name` (a short English title) and `labels` (value → the app's title,
@@ -1480,7 +1481,7 @@ is the control to build, decided by the library from the vendor's codec; map it 
 | `box` | `RANGE` (more than 200 steps) | `number`, `NumberMode.BOX` | the number |
 | `toggles` | `FLAGS` | one `switch` per member in `setting.flags`, named `setting.flag_label(member)` | on = `member in setting.decode_flags(raw)[0]`; write with `station.async_set_flag(key, member, on)` |
 | `text` | `STRING` | `text` | the string |
-| `object` | `OBJECT` | none of its own (a service or a related entity's attribute) | `setting.decode(raw)` is the object the device stores (a `dict`, snake_case members, a schedule's days as a bitmask); write the whole object back with one member changed: `station.async_set_setting(key, {**current, "enable": 1})` |
+| `object` | `OBJECT` | none of its own (a service or a related entity's attribute) | `setting.decode(raw)` is the object the device stores (a `dict`, snake_case members; in the motion-light and ambient-light objects a schedule's days are a bitmask, the light schedule `spotlight_schedule_config` keeps its `week` arrays, and its shape differs per model); write the whole object back with one member changed: `station.async_set_setting(key, {**current, "enable": 1})`. An empty object, or one nested deeper than 32 levels, is refused (`ValueError`). The motion-light and ambient-light objects can carry the house's coordinates (`latitude`, `longtitude`): leave those members out of states and attributes |
 
 Follow `control` for durations too: the app draws the clip length and the retrigger
 interval as sliders; `unit` (seconds) still sets the device class. `OTHER` settings have
