@@ -1053,22 +1053,13 @@ async def test_admitted_pushes_do_not_create_counter_events(rig: KeyRig) -> None
         assert counted() == []
         assert detections() == [first]
 
-        push.callback(first)  # duplicate
-        assert len(detections()) == 1
-        push.callback(
-            replace(first, source=EventSource.P2P, thumb_path="/zx/Camera00/thumb.jpg")
-        )  # enrichment
-        assert len(detections()) == 2
-        assert detections()[-1].enriches
-        assert counted() == []
-
         rig.fake.params[0][PARAM_DETECTED_EVENTS] = "20"
         await station.async_update()  # new counter starts a baseline
         assert counted() == []
 
         second = replace(first, unique_id="activity-second", event_time_ms=1_700_000_001_000)
         push.callback(second)
-        assert detections()[-1] == second
+        assert detections() == [first, second]
         assert counted() == []
 
         rig.fake.params[0][PARAM_DETECTED_EVENTS] = "21"

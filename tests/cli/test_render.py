@@ -185,7 +185,7 @@ def test_security_event_line_with_unknown_codes(event: SecurityEvent, line: str)
     assert render.render_event(event, now=NOW, show_serials=False) == line
 
 
-def test_motion_activity_monitor_lines() -> None:
+def test_counted_activity_monitor_lines() -> None:
     detection = DetectedEventsCounted(
         station_sn=SYNTHETIC.station_sn,
         device_sn=SYNTHETIC.camera_sn,

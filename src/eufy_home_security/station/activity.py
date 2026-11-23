@@ -55,7 +55,9 @@ class StationActivity:
             if serial is None or device.online is False:
                 continue
             model = model_for_serial(serial)
-            if model is None or not model.has_camera:
+            # Known non-camera devices are excluded. An uncatalogued camera
+            # may still report 1192/1193 and should not be excluded.
+            if model is not None and not model.has_camera:
                 continue
             current = (device.detected_events, device.recorded_events)
             previous = self._previous.get(serial)

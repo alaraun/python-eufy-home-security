@@ -692,10 +692,21 @@ observations cause **no additional station requests**, cloud reads or
 recording-history queries. The two counters are independent; recordings need not
 match detections 1:1.
 
-The first usable counter value after startup, after a station link loss, after a
-device disappears or is explicitly offline, or after a counter becomes unavailable
-establishes a baseline. Only camera-capable models from the existing catalogue
-are tracked. An absent online flag (`online=None`) is unknown, not offline; an
+Counters are observed only when a parameter snapshot is processed: a consumer's
+`Station.async_update()`, the session's liveness read (every 5 minutes by
+default), a dump or notify sent by the station, or, for an on-demand station,
+a woken read or cloud device-list refresh. In hardware tests so far, no station
+sent these counters unprompted. An event therefore arrives at the first read
+after a trigger, potentially up to one polling interval later. Counter steps
+between reads merge into one observation. The counted events from a read are
+emitted before that read's `StationStateChanged`.
+
+The first usable counter value after startup, after an actual station link loss
+(not a normal on-demand idle close), after a device disappears or is explicitly
+offline, or after a counter becomes unavailable
+establishes a baseline. Known non-camera models are excluded; uncatalogued
+devices can also emit events if their activity counters increase. An absent
+online flag (`online=None`) is unknown, not offline; an
 explicit offline report (`online=False`) excludes the device. Only a **positive**
 change emits an event; a reset or decrease does not. A jump by N emits
 **one observation with `count=N`**, not N invented timestamps. `observed_at` is
@@ -712,5 +723,6 @@ proof of a completed or playable clip. Existing P2P/FCM detection pushes remain
 A rise in 1193 is evidence that the station's recording *counter* increased; it is
 **not** proof that a media file is finalised, browsable or downloadable. It carries
 no clip id or path. Counter reporting can vary by model and firmware. HomeBase 2
-counter changes with notifications disabled have been observed; do not generalise
-this to all HomeBases or standalone cameras without hardware verification.
+counter changes with notifications disabled have been observed. See the
+[hardware-verification matrix](../reference/hardware-verification.md) for
+tested models; do not assume identical reporting on other devices or firmware.

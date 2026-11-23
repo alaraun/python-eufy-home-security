@@ -10,14 +10,18 @@ from datetime import UTC
 import pytest
 
 from eufy_home_security.cloud.models import CloudDevice
+from eufy_home_security.devices.types import model_for_serial
 from eufy_home_security.events import (
     ConnectionChanged,
     DetectedEventsCounted,
+    DisconnectCause,
     Event,
     RecordedEventsCounted,
     StationStateChanged,
 )
 from eufy_home_security.models import PARAM_DETECTED_EVENTS, PARAM_RECORDED_EVENTS
+from eufy_home_security.p2p import session as session_module
+from eufy_home_security.p2p.messages import STANDALONE_RECEIPT_LEN
 from eufy_home_security.p2p.session import P2PCredentials, StationSession
 from eufy_home_security.station import Station, StationState, SubDeviceState
 from eufy_home_security.station.activity import StationActivity
@@ -97,6 +101,7 @@ def test_two_cameras_on_the_same_station_keep_independent_counter_deltas() -> No
     activity.observe(both(12, 5, 20, 10))
     activity.observe(both(12, 8, 24, 10))
     activity.observe(both(12, 8, 24, 10))  # unchanged, never emit twice
+    assert {e.station_sn for e in emitted} == {STATION}
     assert [(type(e), e.device_sn, e.count) for e in emitted] == [
         (DetectedEventsCounted, camera, 2),
         (RecordedEventsCounted, doorbell, 3),
@@ -143,7 +148,7 @@ def test_disappearing_and_unidentified_devices_do_not_create_events() -> None:
     ("prefix", "camera_capable"),
     [("T8160", True), ("T8113", True), ("T8210", True), ("T8910", False)],
 )
-def test_only_camera_capable_devices_produce_motion_activity(
+def test_only_camera_capable_devices_produce_counted_activity(
     prefix: str, camera_capable: bool
 ) -> None:
     """Existing model categories include video doorbells, but exclude PIR sensors."""
@@ -156,6 +161,22 @@ def test_only_camera_capable_devices_produce_motion_activity(
     expected = [DetectedEventsCounted, RecordedEventsCounted] if camera_capable else []
     assert [type(event) for event in emitted] == expected
     assert all(event.device_sn == serial for event in emitted)
+
+
+def test_uncatalogued_device_reporting_camera_counters_is_observed() -> None:
+    """A new camera model need not be in the bundled catalogue first."""
+    serial = "T9ZZZ" + CAMERA[5:]
+    assert model_for_serial(serial) is None
+
+    emitted: list[DetectedEventsCounted | RecordedEventsCounted] = []
+    activity = StationActivity(FakeActivityStation(), emitted.append)
+
+    activity.observe(state(10, None, serial=serial))
+    activity.observe(state(13, None, serial=serial))
+
+    assert [(type(e), e.station_sn, e.device_sn, e.count) for e in emitted] == [
+        (DetectedEventsCounted, STATION, serial, 3),
+    ]
 
 
 def test_unknown_online_status_is_eligible_but_explicit_offline_is_not() -> None:
@@ -188,6 +209,7 @@ async def test_a_closed_observer_ignores_counters_until_reopened() -> None:
     activity.observe(state(10, 10))
     await activity.close()
     activity.observe(state(12, 12))
+    activity.observe(state(14, 14))  # would emit if the closed guard were removed
     assert emitted == []
 
     activity.reopen()
@@ -200,15 +222,15 @@ async def test_a_closed_observer_ignores_counters_until_reopened() -> None:
     ]
 
 
-def test_synchronous_observation_and_restart() -> None:
+def test_synchronous_observation_needs_no_running_loop() -> None:
     emitted: list[DetectedEventsCounted | RecordedEventsCounted] = []
     activity = StationActivity(FakeActivityStation(), emitted.append)
     activity.observe(state(5, 5))  # synchronous: no running event loop needed
     activity.observe(state(6, 6))
-    assert len(emitted) == 2
-    activity.reopen()
-    activity.observe(state(100, 100))  # baseline again after restart
-    assert len(emitted) == 2
+    assert [(type(e), e.count) for e in emitted] == [
+        (DetectedEventsCounted, 1),
+        (RecordedEventsCounted, 1),
+    ]
 
 
 STATION_DEVICE = CloudDevice(
@@ -244,6 +266,52 @@ async def station_and_fake() -> AsyncIterator[tuple[Station, FakeStation]]:
     finally:
         await station.async_close()
         fake.stop()
+
+
+async def test_station_start_reopens_the_activity_observer(
+    station_and_fake: tuple[Station, FakeStation],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Station startup reopens an observer closed before startup."""
+    station, _ = station_and_fake
+    emitted: list[Event] = []
+    station.subscribe(emitted.append)
+
+    async def load_settings(self: Station) -> None:
+        pass
+
+    async def start_session(self: StationSession) -> None:
+        pass
+
+    monkeypatch.setattr(Station, "async_load_settings", load_settings)
+    monkeypatch.setattr(StationSession, "async_start", start_session)
+
+    await station._activity.close()
+    await station.async_start()
+    station._activity.observe(state(10, 5))
+    station._activity.observe(state(12, 6))
+
+    counted = [e for e in emitted if isinstance(e, (DetectedEventsCounted, RecordedEventsCounted))]
+    assert [(type(e), e.station_sn, e.device_sn, e.count) for e in counted] == [
+        (DetectedEventsCounted, station.serial, CAMERA, 2),
+        (RecordedEventsCounted, station.serial, CAMERA, 1),
+    ]
+
+
+async def test_station_close_disables_further_activity_observations(
+    station_and_fake: tuple[Station, FakeStation],
+) -> None:
+    """Station shutdown closes the observer, even if a later snapshot is processed."""
+    station, _ = station_and_fake
+    emitted: list[Event] = []
+    station.subscribe(emitted.append)
+
+    station._activity.observe(state(10, 5))
+    await station.async_close()
+    station._activity.observe(state(12, 6))
+    station._activity.observe(state(14, 7))
+
+    assert not any(isinstance(e, (DetectedEventsCounted, RecordedEventsCounted)) for e in emitted)
 
 
 async def test_station_reconnect_rebaselines_counters_even_after_an_unchanged_dump(
@@ -336,3 +404,74 @@ async def test_counter_activity_uses_existing_parameter_read_not_cloud(
     assert len([e for e in events if isinstance(e, DetectedEventsCounted)]) == 1
     assert len([e for e in events if isinstance(e, RecordedEventsCounted)]) == 1
     assert fake.history_queries == []  # no 10011/10017 history requests
+
+
+SOLO = "T8170" + CAMERA[5:]
+
+
+def solo_snapshot(detected: int, updated_at: float) -> CloudDevice:
+    """Cloud snapshot of a standalone camera with a detected-events counter."""
+    return CloudDevice(
+        device_sn=SOLO,
+        device_type=48,
+        name="Synthetic solo camera",
+        p2p_did=SYNTHETIC.did,
+        station_sn=SOLO,
+        channel=0,
+        raw={
+            "params": [
+                {
+                    "param_type": PARAM_DETECTED_EVENTS,
+                    "param_value": str(detected),
+                    "update_time": updated_at,
+                }
+            ]
+        },
+    )
+
+
+async def test_an_idle_close_of_an_on_demand_link_keeps_the_baselines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An on-demand link closing while idle must preserve the counter baseline."""
+    monkeypatch.setattr(session_module, "_IDLE_CHECK_EVERY", 0.05)
+    fake = FakeStation(
+        serial=SOLO,
+        guard_mode=1,
+        receipt_len=STANDALONE_RECEIPT_LEN,
+        params={48: {1224: "1"}},
+    )
+    await fake.start()
+
+    async def credentials(*, refresh: bool, cipher_id: int | None = None) -> P2PCredentials:
+        return P2PCredentials(SYNTHETIC.account_id, "user", fake.ecc_private_key_hex)
+
+    session = StationSession(
+        SOLO,
+        credentials,
+        host="127.0.0.1",
+        port=fake.discovery_port,
+        on_demand=True,
+        idle_close=0.1,
+        block_aliases={48: (255, 0)},
+    )
+    station = Station(solo_snapshot(0, 1.0), session, sub_devices=[])
+    events: list[Event] = []
+    station.subscribe(events.append)
+    try:
+        await station.async_start()
+        station.apply_cloud_device(solo_snapshot(10, 1_600_000_000.0))
+        await station.async_update(wake=True)
+
+        async with asyncio.timeout(5):
+            while not any(
+                isinstance(e, ConnectionChanged) and e.cause is DisconnectCause.IDLE for e in events
+            ):
+                await asyncio.sleep(0.02)
+
+        station.apply_cloud_device(solo_snapshot(13, 1_600_000_100.0))
+        counted = [e for e in events if isinstance(e, DetectedEventsCounted)]
+        assert [(e.station_sn, e.device_sn, e.count) for e in counted] == [(SOLO, SOLO, 3)]
+    finally:
+        await station.async_close()
+        fake.stop()

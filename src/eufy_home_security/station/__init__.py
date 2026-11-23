@@ -102,6 +102,7 @@ from ..events import (
     AlarmChanged,
     ConnectionChanged,
     DevicesChanged,
+    DisconnectCause,
     Event,
     EventBus,
     EventCallback,
@@ -1485,9 +1486,10 @@ class Station:
     def _on_session_event(self, event: Event) -> None:
         if isinstance(event, AlarmChanged):
             self.note_alarm(event)
-        # A camera that loses its link has gone idle, and an idle camera returns to 1x.
+        # Preserve activity baselines on idle closes; reset PTZ on any disconnect.
         if isinstance(event, ConnectionChanged) and not event.connected:
-            self._activity.reopen()
+            if event.cause is not DisconnectCause.IDLE:
+                self._activity.reopen()
             for device_sn in list(self._ptz.zooms):
                 self._ptz.keep_zoom(device_sn, MIN_ZOOM)
 

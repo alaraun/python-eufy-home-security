@@ -1315,6 +1315,10 @@ A closed session (`async_close`) never reconnects on its own — build a new
     - `battery_temperature` (°C, param 1138), and the app's power-manager figures since
       the last USB charge: `working_days`, `detected_events`, `recorded_events`
       (1191-1193). Diagnostic sensors; the counters only grow until the next USB charge.
+      Positive counter changes also produce the library events
+      `DetectedEventsCounted` (1192) and `RecordedEventsCounted` (1193); see
+      [camera activity counters](../protocol/events.md#camera-activity-counters-observed-not-individual-detections)
+      for their timing and limitations.
     - `siren_actions` (params 1509-1513): the raw per-mode siren action by `GuardMode`,
       no named bits; attributes at most.
   - Motion sensor: `low_battery` (param 1601) is the sensor's own low-battery flag, a
