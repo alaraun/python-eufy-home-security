@@ -487,7 +487,7 @@ async def cmd_set(ctx: Context) -> int:
             if ctx.args.channel is not None
             else "the station"
         )
-        shown = setting.label(value) or value
+        shown = setting.label(value) or render.setting_value(value)
         print(f"{key} = {shown} on {target}: {outcome.value}")
         return 0
 

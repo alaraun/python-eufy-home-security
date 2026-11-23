@@ -24,6 +24,7 @@ from eufy_home_security.cli.commands import Context, date_window, select_station
 from eufy_home_security.cli.config import UsageError, parse_args
 from eufy_home_security.cloud.api import CipherKeys, EufyCloudApi
 from eufy_home_security.cloud.models import CloudDevice, CloudInvite
+from eufy_home_security.devices import model_settings
 from eufy_home_security.exceptions import LoginChallengeError
 from eufy_home_security.models import GuardMode
 from eufy_home_security.network import LanPath
@@ -253,6 +254,34 @@ async def test_set_writes_a_device_setting_and_shows_its_label(
     out = capsys.readouterr().out
     assert f"watermark_set = Timestamp and logo on {shown}: applied" in out
     assert fake.ecb_received[-1] == (1214, 0, 2)
+
+
+async def test_set_shows_an_object_value_as_its_json_text(
+    fake: FakeStation,
+    tmp_path: Any,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    light = model_settings._build(
+        "T0000",
+        "light_setting",
+        {
+            "kind": "object",
+            "access": "rw",
+            "control": "object",
+            "section": "picture",
+            "role": "setting",
+            "structured": True,
+            "read": None,
+            "write": {"cmd": 1350, "subCmd": 1422, "params": "$v:json"},
+        },
+    )
+    monkeypatch.setattr(Station, "setting", lambda *_a, **_k: light)
+    value = '{"enable":1,"name":"ä"}'
+    argv = ["--host", "127.0.0.1", "set", "light_setting", value, "--channel", "0"]
+    assert await run(argv, tmp_path) == 0
+    out = capsys.readouterr().out
+    assert 'light_setting = {"enable": 1, "name": "ä"} on channel 0:' in out
 
 
 async def test_set_without_a_target_addresses_the_station(
