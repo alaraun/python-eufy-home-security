@@ -75,6 +75,7 @@ from eufy_home_security.devices.model_settings import (
     BATTERY_PROPERTY,
     SdStatusGroups,
     SdStatusSource,
+    object_slot,
 )
 from eufy_home_security.devices.param_info import STATE_PARAM_INFO
 from eufy_home_security.devices.settings import DUAL_VIEW, VIEW_MODE_PARAM
@@ -1256,6 +1257,118 @@ def sweep(
     return out
 
 
+type ObjectRows = dict[str, tuple[list[tuple[Any, Any]], list[tuple[Any, Any]]]]
+"""``{identifier: (main channel rows, second channel rows)}`` of one context: each row the
+app's object and the handler's slotted recipe for it (None: no recipe)."""
+OBJECT_ENTRY_DROPPED = ("values", "min", "max", "step", "unit", "meaning", "default", "labels")
+"""Fields of a thing-description string that an object value does not carry."""
+
+
+def object_sweep(
+    product_code: str,
+    handler: Path,
+    props: list[dict[str, Any]],
+    contexts: dict[str, codec.Context],
+    objects: Mapping[str, Sequence[dict[str, Any]]],
+) -> dict[str, ObjectRows]:
+    """setProperty of each writable property ``objects`` names with each object the app
+    writes for it, in every context on both of its channels (one driver job each)."""
+    out: dict[str, ObjectRows] = {name: {} for name in contexts}
+    idents = [
+        p["identifier"]
+        for p in props
+        if p["identifier"] in objects and "W" in (p.get("access_mode") or "")
+    ]
+    if not idents:
+        return out
+    for name, ctx in contexts.items():
+        for alt, c in ((False, ctx), (True, codec.alt_channel(ctx))):
+            index = [(ident, payload) for ident in idents for payload in objects[ident]]
+            requests = [
+                {
+                    "kind": "set",
+                    "identifier": ident,
+                    "payload": payload,
+                    "device": c.device(product_code),
+                }
+                for ident, payload in index
+            ]
+            replies = run_driver(product_code, handler, requests)
+            for (ident, payload), reply in zip(index, replies, strict=True):
+                recipe = p2p(reply)
+                slotted = codec.slot(recipe, ctx) if recipe is not None else None
+                rows = out[name].setdefault(ident, ([], []))
+                rows[1 if alt else 0].append((payload, slotted))
+    return out
+
+
+def object_reads(
+    product_code: str, handler: Path, context: codec.Context, fits: Mapping[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """The read of each object write that stores its value's base64 in a parameter, when
+    the handler fills the property from that parameter: held at each written value's
+    stored form, getProperty answers for the property every time, with as many distinct
+    answers as there are distinct values."""
+    asks: list[tuple[str, int]] = []
+    requests: list[dict[str, Any]] = []
+    for ident, fit in sorted(fits.items()):
+        if fit.write is None or fit.stored is None:
+            continue
+        where = Located(fit.stored, as_command=True)
+        for value in fit.values:
+            stored = object_slot("$v:b64json", value)
+            requests.append(where.request(product_code, context, ident, stored))
+            asks.append((ident, fit.stored))
+    replies = run_driver(product_code, handler, requests) if requests else []
+    answers: dict[str, list[Any]] = {}
+    for (ident, _), reply in zip(asks, replies, strict=True):
+        answers.setdefault(ident, []).append(_property_values(reply).get(ident, codec.MISSING))
+    out: dict[str, dict[str, Any]] = {}
+    for ident, got in answers.items():
+        fit = fits[ident]
+        if any(a is codec.MISSING or a is None for a in got):
+            continue
+        if len({_canon(a) for a in got}) != len({_canon(v) for v in fit.values}):
+            continue
+        out[ident] = {"param": fit.stored, "map": None}
+    return out
+
+
+def apply_object_writes(
+    product_code: str,
+    handler: Path,
+    settings: dict[str, Any],
+    objects: ObjectRows,
+    *,
+    context: codec.Context,
+    counts: dict[str, int],
+) -> None:
+    """Turn each setting whose app objects the handler writes in a form an object write
+    reproduces (``gen_models_codec.infer_object_write``) into an ``object`` setting with
+    that write and its read (:func:`object_reads`); a setting whose app objects get recipes
+    no object form reproduces keeps its entry, its note naming why."""
+    alt = codec.alt_channel(context)
+    fits = {
+        ident: codec.infer_object_write(main, second, context.channel, alt.channel)
+        for ident, (main, second) in sorted(objects.items())
+        if ident in settings
+    }
+    reads = object_reads(product_code, handler, context, fits)
+    for ident, fit in fits.items():
+        entry = settings[ident]
+        if fit.write is None:
+            if fit.note is not None:
+                entry["note"] = f"{entry['note']}; {fit.note}" if entry.get("note") else fit.note
+                _count(counts, f"object:{fit.note}")
+            continue
+        for key in (*OBJECT_ENTRY_DROPPED, "write_table", "note"):
+            entry.pop(key, None)
+        read = reads.get(ident)
+        entry.update(kind="object", access="rw", write=fit.write, read=read, structured=True)
+        _count(counts, "object:write")
+        _count(counts, "object:read" if read is not None else "object:no read")
+
+
 def read_samples(
     product_code: str,
     handler: Path,
@@ -1640,12 +1753,14 @@ def build_context(  # noqa: C901
     seen: Mapping[int, list[str]],
     located: Mapping[str, Located],
     wire: codec.WireValues | None = None,
+    objects: ObjectRows | None = None,
 ) -> tuple[dict[str, Any], dict[str, int]]:
     """The settings of one model in one context and its counters. ``background``: every
     parameter the writes the model's file carries set in any context, with one value each;
     ``seen``: the distinct values they set per parameter (both :func:`written_params`);
     ``located``: the parameter each property is read from (:func:`locate_params`), for the
-    settings without a write.
+    settings without a write; ``objects``: the handler's recipes for the objects the app
+    writes (:func:`object_sweep`).
 
     Raises CheckError when a codec does not reproduce a swept recipe or an unaccepted
     reference row of this context.
@@ -1748,6 +1863,9 @@ def build_context(  # noqa: C901
     _raise_unaccepted(product_code, context, found, "codec mismatches")
     if reference:
         _count(counts, "reference_rows", len(reference))
+    apply_object_writes(
+        product_code, handler, settings, objects or {}, context=context, counts=counts
+    )
     shape_controls(product_code, handler, settings, counts, context, wire=wire)
     joiner.hold_members(product_code, settings, titles, counts)
     view_reads(product_code, handler, settings, context, counts, inverted=inverted)
@@ -1980,6 +2098,9 @@ def generate(
     wire = app_wire_values(props, switch_texts, joiner.screen_values(product_code, titles))
     contexts = contexts_of(product_code)
     swept = sweep(product_code, handler, props, contexts, wire)
+    objects = object_sweep(
+        product_code, handler, props, contexts, joiner.object_writes(product_code, titles)
+    )
     rows = reference or []
     per_context: dict[str, dict[str, Any]] = {}
     references: dict[str, list[dict[str, Any]]] = {}
@@ -2014,6 +2135,7 @@ def generate(
                 seen=seen,
                 located=located,
                 wire=wire,
+                objects=objects[name],
             )
             per_context[name] = settings
             if name == BASE:

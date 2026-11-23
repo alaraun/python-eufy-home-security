@@ -226,6 +226,20 @@ Two write schemes, chosen by command id ([session-crypto.md](session-crypto.md))
 | motion sensitivity | 1276 | `{"sensitivity": <1–7>, "channel": <ch>}` | **[verified]** |
 | night vision | 1277 | `{"night_sion": <0\|1\|2\|3>, "channel": <ch>}` (the key is spelled `night_sion` on the wire) | **[verified]** for 0, 1, 2 and 3 (written with read-back; 2 and 3 by the library, and the app sends 2 too). Meanings from the vendor description: 0 off, 1 black & white, 2 color. 3's meaning is unknown: no vendor description of this model names it, and what the camera does in mode 3 was not observed. |
 
+**JSON object settings** **[declared]** (eufy app; not tested on hardware). A light's
+combined settings are one JSON object the device stores, written whole: the motion
+light (`motion_activated_light_setting`, 1350 with sub-command 1422) and the ambient
+light (`light_ambient_lighting_setting`, 1421) send the object as the payload and store
+the base64 of its compact JSON text in the parameter of the same id, which a dump
+reports. Members are snake_case (`enable`, `time`, `mode`, `sunset2rise`, `brightness`,
+`manual_switch`, `manual_brightness`) and a `schedule` entry's `week` is a day bitmask
+(bit `1 << day`). The light schedule `spotlight_schedule_config` sends its object under
+`schedules` (1404 `{"schedules": {"loop": [...]}}`, no stored copy) or, where the model's
+handler does, as the 1700 payload with its base64 stored. Which models write which form
+is per model data ([models-schema.md § Object writes](../reference/models-schema.md#object-writes),
+[devices.md](../reference/devices.md)); a write sends the object as the client gives it,
+so change members of a fresh read.
+
 **ECB scalars** (frame type = cmd, [session-crypto.md](session-crypto.md)):
 
 | setting | cmd | handler | scope | values | status |

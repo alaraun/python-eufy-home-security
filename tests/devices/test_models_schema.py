@@ -28,12 +28,13 @@ MODELS = ROOT / "src" / "eufy_home_security" / "devices" / "data" / "models"
 INDEX: dict[str, Any] = json.loads((MODELS / "INDEX.json").read_text(encoding="utf-8"))
 CODES: list[str] = INDEX["codes"]
 
-KINDS = {"enum", "bool", "range", "string", "other", "flags"}
+KINDS = {"enum", "bool", "range", "string", "other", "flags", "object"}
 WRITE_KEYS = ("write", "write_table")
 SCALAR_SLOTS = {"$v", "$v:str", "$v:int", "$channel", "$device_sn", "$station_sn"}
 PARAM_SLOT = re.compile(r"\$param:\d+:(int|str)")
 CONTEXTS = {"standalone"} | {c.value for c in ConnectType if c is not ConnectType.SINGLE}
 OBJECT_SLOTS = {"$map", "$affine"}
+VALUE_OBJECT_SLOT = re.compile(r"\$v(\.[A-Za-z0-9_]+)*:(json|b64json)")  # an object value's forms
 RO_NOTES = {
     "no handler write path",
     "handler ignores the value",
@@ -43,6 +44,11 @@ RO_NOTES = {
     "handler expects a structured value",
     "non-linear range",
     "serial embedded in a string",
+}
+# Appended to a read-only setting's note when the app's objects get no object write.
+OBJECT_NOTES = {
+    "no object form reproduces the app's object write",
+    "handler rejects some of the app's objects",
 }
 ROUND_TRIP_NOTE = "round trip does not return the written value"
 STATUS_NOTE = "status the eufy app only reads"  # ro with its read kept
@@ -87,6 +93,7 @@ CONTROLS = {
     "flags": {"toggles"},
     "string": {"text"},
     "other": set(),
+    "object": {"object"},
 }
 DOMAINS = {"timezone"}
 UNITS = {"s", "ms", "d", "%"}
@@ -204,7 +211,11 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
     present = [k for k in WRITE_KEYS if k in s]
     if "structured" in s:
         assert s["structured"] is True, ident
-        assert kind in {"string", "other"}, ident  # an open value holds the structure
+        assert kind in {"string", "other", "object"}, ident  # an open value holds the structure
+    if kind == "object":
+        assert s.get("structured") is True, ident
+        assert not {"values", "labels", "default", "min", "max", "unit"} & set(s), ident
+        assert s.get("read") is None or s["read"]["map"] is None, ident
     if "advanced" in s:
         assert s["advanced"] is True, ident
         assert s.get("note"), ident  # the app's warning
@@ -218,12 +229,15 @@ def _check_setting(ident: str, s: dict[str, Any], settings: dict[str, Any]) -> N
     else:
         assert present == [], present
         if s.get("note") != STATUS_NOTE:
-            assert len(parts) <= 1, s["note"]
-            assert all(p in RO_NOTES for p in parts), s["note"]
+            assert len([p for p in parts if p not in OBJECT_NOTES]) <= 1, s["note"]
+            assert all(p in RO_NOTES | OBJECT_NOTES for p in parts), s["note"]
     templates = [s["write"]] if "write" in s else []
     templates += list(s.get("write_table", {}).values())
     for template in templates:
         for name, arg in _slots(template):
+            if arg is None and VALUE_OBJECT_SLOT.fullmatch(name):
+                assert kind == "object", (ident, name)
+                continue
             if arg is None:
                 assert name in SCALAR_SLOTS or PARAM_SLOT.fullmatch(name), name
                 continue

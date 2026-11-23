@@ -1022,7 +1022,7 @@ A closed session (`async_close`) never reconnects on its own — build a new
   - `kind` (`SettingKind`): `BOOL` → `switch`; `ENUM` → `select` with the options in
     `values`; `RANGE` → `number` from `minimum`, `maximum` and `step`, unit from `unit`
     (`SettingUnit`: `s`, `ms`, `d`, `%`, or None); `STRING` and `OTHER` → at most a
-    diagnostic `sensor`.
+    diagnostic `sensor`; `OBJECT` → no entity of its own (a JSON object, below).
   - `writable=False` → a read-only `sensor` (`binary_sensor` for a bool). `note` says why
     a setting is not writable (on a writable one it is a caveat, such as `round trip
     does not return the written value`): the handler ignores, transforms or rejects the
@@ -1059,9 +1059,10 @@ A closed session (`async_close`) never reconnects on its own — build a new
     Never make a structured value an entity's state: a setting with `structured` True
     (a JSON object or array, or its text, as the device reports it, such as
     `arming_get_alarm_*_mode`) is never a state, whatever its role or control (a writable
-    light schedule keeps control `TEXT`: still no text entity). Put it into an
-    attribute of a related entity, or create no entity for it; it is known before the
-    first read. A state is also limited to 255 characters.
+    `OBJECT`, such as a light's combined motion-light settings, has control `OBJECT`:
+    still no entity of its own). Put it into an attribute of a related entity, or create
+    no entity for it; it is known before the first read. A state is also limited to 255
+    characters.
   - `applies_when`: see [`applies_when`](#applies_when).
   - Values are the vendor's: int for an enum or a range (a few enums have str values),
     bool for a bool, str for a string. `default` is the vendor default; a station setting
@@ -1479,6 +1480,7 @@ is the control to build, decided by the library from the vendor's codec; map it 
 | `box` | `RANGE` (more than 200 steps) | `number`, `NumberMode.BOX` | the number |
 | `toggles` | `FLAGS` | one `switch` per member in `setting.flags`, named `setting.flag_label(member)` | on = `member in setting.decode_flags(raw)[0]`; write with `station.async_set_flag(key, member, on)` |
 | `text` | `STRING` | `text` | the string |
+| `object` | `OBJECT` | none of its own (a service or a related entity's attribute) | `setting.decode(raw)` is the object the device stores (a `dict`, snake_case members, a schedule's days as a bitmask); write the whole object back with one member changed: `station.async_set_setting(key, {**current, "enable": 1})` |
 
 Follow `control` for durations too: the app draws the clip length and the retrigger
 interval as sliders; `unit` (seconds) still sets the device class. `OTHER` settings have

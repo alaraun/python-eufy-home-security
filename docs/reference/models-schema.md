@@ -27,7 +27,7 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 
 | Key | Meaning |
 |---|---|
-| `kind` | `enum`, `bool`, `range`, `string`, `other` or `flags` (an int bitmask of named members, several may be on) |
+| `kind` | `enum`, `bool`, `range`, `string`, `other`, `flags` (an int bitmask of named members, several may be on) or `object` (a JSON object, as the device stores it, written whole; see *Object writes*) |
 | `values` | The enum's values (TD values, the public values the handler takes) |
 | `min`, `max`, `step`, `default` | From the TD where it gives them; `default` is the eufy app's own where the app shows another value while the device reports none (`device_cross_cam_assistance_switch` on a T8030: on); an enum's `default` is always one of its `values` |
 | `unit` | The unit the app's screen shows: a settings-page control's on the page the setting is on, on a model whose settings the app's RN screens render, or a screen that reads the property wherever it sits (the clip length and retrigger interval: `s` on every model; the power-manager counters show a bare number: no unit); it wins over the TD unit. Else the TD unit normalised to `s`, `ms` or `%` (the TD's `day` is dropped: no app screen shows those values in days; its volume unit is `%` on a 0..100 or 1..100 scale and dropped on any other, a bare level); absent otherwise |
@@ -41,13 +41,13 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `section` | Always present: the UI section id, one of `devices/sections.py`'s `SETTING_SECTIONS`. Assigned by `scripts/gen_models_sections.py` from the app page the setting lives on, else the station rules (station models), else the identifier rules, else `other`; a variant has its primary's. Every context has the same section |
 | `role` | Always present: what the setting is to the user, from where the eufy app shows it; assigned by `scripts/gen_models_roles.py`, the first rule that applies deciding. `setting`: the handler has a write (`rw` in some context); or the thing description declares the property writable and the app does not list it as a status it only reads (the app's control, which the library cannot write: `access` `ro`). `diagnostic`: read from, or filled by the handler from, a parameter whose value the library already reports (`devices/param_info.py` `STATE_PARAM_INFO`: battery, online status, a station's own status, power source, signal, storage, counters, active mode, a firmware update being installed, a camera's media ability; the parameter is the one the read uses or, for a setting without a read, the one parameter the handler fills it from), so a consumer has the value as a device field (a camera's `charging_status` is `diagnostic`: it is filled from the power source). `diagnostic`: read-only and `structured`. `diagnostic`: read-only, on the device card, and a bare code: an `other` without `labels` or `unit` (the card turns such a code into an icon or a gate and never shows the number: a station's connection type and Wi-Fi level, a paired device's connect type). `status`: read-only and shown by the app (`shown` present). `diagnostic`: read-only and shown nowhere (capability data such as `device_ability_data`, schedules and other configuration values). Every context has the same role |
 | `shown` | Where the eufy app shows the setting, whatever its `role`; assigned by `scripts/gen_models_roles.py`. `card`: the app's device card or home page reads it (an entry sensor's door state, tamper and low-battery flag, a camera's battery and charging state), even when a settings page reads it too. `page`: a settings page reads it, the model's layout places it on a page, or the app lists it as a status it only reads. Absent: the app shows it nowhere. A `<base>__v<n>` variant also takes its base's place. Every context has the same value |
-| `structured` | `true` when the value is a JSON structure (an object or array, or its JSON text): a `string` or `other` whose handler reads its parameter as JSON (held at a JSON object, it reads back as that object parsed; held at the object's base64, as the object or its JSON text), or, unreadable, whose `default` is the JSON text of an object or array; or a value the app's screen builds and parses as JSON itself (the generator's `structured` input: the light schedule `spotlight_schedule_config`, writable on some models, keeping its control). Absent otherwise. Decided in the base context |
+| `structured` | `true` when the value is a JSON structure (an object or array, or its JSON text): a `string` or `other` whose handler reads its parameter as JSON (held at a JSON object, it reads back as that object parsed; held at the object's base64, as the object or its JSON text), or, unreadable, whose `default` is the JSON text of an object or array; an `object` setting; or a value the app's screen builds and parses as JSON itself (the generator's `structured` input: the light schedule `spotlight_schedule_config`). Absent otherwise. Decided in the base context |
 | `group`, `order` | Block and position on the app's settings page, where the app's layout names them. Always present together; they order settings within a section |
 | `page` | The app page the setting lives on; it decides `section` where the page holds one kind of setting |
 | `applies_when` | `[<enum setting>, <value>]`: the app shows the setting only while that setting has that value |
 | `note` | Why a setting is `ro`, or what is limited on an `rw` one; on an `advanced` setting it ends with the app's warning |
 | `name` | The app's title for the setting (the model's own branch title where the app has one), in sentence case: a capitalised word after the first is lower-cased unless it is a proper noun (`Wi-Fi`, `Alexa`, weekdays); acronyms and mixed case (`LED`, `HomeBase`, `2K`) stay. Models whose settings the app shows on its React Native screens take the RN titles; models on the native settings screens only the titles read from that model's own native screens |
-| `control` | On every `rw` setting except `other`: the control a UI offers. `switch` (bool), `select` (enum, or a string with a `domain`), `slider` (range of at most 200 steps), `box` (larger range), `toggles` (flags, one on/off per member), `text` (string) |
+| `control` | On every `rw` setting except `other`: the control a UI offers. `switch` (bool), `select` (enum, or a string with a `domain`), `slider` (range of at most 200 steps), `box` (larger range), `toggles` (flags, one on/off per member), `text` (string), `object` (object: the whole object, read, changed and written back) |
 | `domain` | `string` only: the library table its values come from. `timezone`: the app's device time zones (`devices/data/timezones.json`, from `scripts/gen_timezones.py`); the value is an IANA id, written as `<POSIX rule>\|1.<row>` in the app's string frame, read back to the id. Set on an `rw` string whose write is command 1215 |
 | `flags` | `flags` only: `{"<member>": <bits>}`, one or more bits per member; `labels` titles the members |
 | `bit` | A `bool` that is one bit of a parameter other settings share: the value is `raw & bit`, and a write sends the whole current mask with this bit set or cleared (`$v:int` is the mask) |
@@ -57,7 +57,11 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 
 An `rw` setting has exactly one of `write` and `write_table`. An `ro` setting has no
 write key; it is readable (`read` not null, with `no_default`) when one parameter fills it as above. A `flags` setting and a `bit` setting read the raw mask
-(`read.map` null).
+(`read.map` null). An `object` setting's read (`read.map` null) decodes the parameter's
+value to the object, as the eufy app's handler reads it: base64 of the object's JSON text
+when the value is base64 in whole groups of four characters (padding included, no
+blanks), else the JSON text itself; anything that is not a JSON object reads
+as None.
 
 ### Contexts
 
@@ -141,6 +145,27 @@ the view that rule names in each of three probes (the value's quality in one vie
 another value's in the other, with view mode 0 or 12 and `cur_mode` 0 or 2); the map
 keys that are such reports are dropped.
 
+### Object writes
+
+A property whose app screens write a JSON object (the combined light settings
+`motion_activated_light_setting` and `light_ambient_lighting_setting`, the light schedule
+`spotlight_schedule_config`) is driven, besides the domain sweep, with the objects the
+app's screens write for it (the generator's `object_writes` input: the screen's starting
+object with the switch on and off, a schedule written, dusk-to-dawn written, a
+read-modify-write of a read object), in every context on both channels. The value each
+object stands for is the object the recipe stores (the first `update` or `extUpdates`
+value that decodes to a JSON object as above), else the app's object itself. The setting
+becomes `object` when one template, built from the first recipe with the
+[object forms](#placeholders) at the positions that equal that value, a member of it or
+its base64, renders every swept value back to its recipe byte for byte (member order
+included), with at least two distinct values. It is readable from the parameter the
+write stores the value's base64 in when the handler fills the property from that
+parameter (held at each written value's stored form, the property reads back, with as
+many distinct answers as values). Otherwise the setting keeps its entry and its note
+names why (below). So a handler that reshapes the app's object (days to a bitmask,
+renamed members, defaults) and stores the result as base64 gets the stored object as
+its value; one that stores JSON text is left read-only.
+
 ### Shaping
 
 After the codecs are inferred, the generator reshapes a setting only when the handler's
@@ -194,6 +219,9 @@ Recipe templates are the handler's recipe with the value positions replaced:
 | `{"$affine": [a, b]}` | `a * value + b`, an int when integral |
 | `"$channel"` | The device's channel (3 as a station child, 0 standalone in the samples) |
 | `"$device_sn"`, `"$station_sn"` | The device's and its station's serial |
+| `"$v:json"` | An `object` value as a JSON object (a copy) |
+| `"$v.<member>:json"` | The value's member `<member>` (members chain with `.`) as JSON data |
+| `"$v:b64json"`, `"$v.<member>:b64json"` | Base64 of the value's (or member's) compact JSON text: no blanks, members in order, non-ASCII kept, an integral number without a fraction, as `JSON.stringify` writes it |
 | `"$param:<id>:int"`, `"$param:<id>:str"` | The device's current value of parameter `<id>`, as an int or as the string. A leaf the handler fills from the device's parameters: null in every sweep (the parameter absent) and that value with the parameter set to two values the file's writes give it. A T8170's 2731 write sends `"mode": "$param:6243:int"` |
 
 `write_table` uses the same forms. Volatile keys (`transaction`,
@@ -215,6 +243,8 @@ Recipe templates are the handler's recipe with the value positions replaced:
 | `serial embedded in a string` | A serial appears inside a longer string and cannot be slotted |
 | `round trip does not return the written value` | `rw` with `read: null`: getProperty does not decode the written value back, and the write is no inverse-readable enum (two values share a parameter value, or it is no enum) |
 | `status the eufy app only reads` | `ro` with its read: the app shows the value and offers no control for it |
+| `no object form reproduces the app's object write` | Appended: the handler writes the app's objects, but no template of the object forms renders its recipes (it stores the object as JSON text, or the body is no copy of the stored value) |
+| `handler rejects some of the app's objects` | Appended: the handler threw for some of the objects the app writes |
 
 A property the TD does not declare writable and that the library does not write is `ro`
 without a note, read as its handler fills it. `set_alarm_type` (and its
@@ -268,7 +298,7 @@ product code and turns each entry into a `Setting`:
 | `readable` | `read` is not null |
 | `role` (`SettingRole`) | `role`: `SETTING`, `STATUS` or `DIAGNOSTIC`; a setting listed from a thing description alone, without a file, is `DIAGNOSTIC`, a mode-table setting a `SETTING` |
 | `shown` (`SettingShown` or None) | `shown`: `CARD`, `PAGE`, or None when absent; None for a setting listed from a thing description alone and for a mode-table setting |
-| `structured` | `structured` (False when absent, and for a setting listed from a thing description alone) |
+| `structured` | `structured` (False when absent, and for a setting listed from a thing description alone); always True on an `OBJECT` |
 | `group`, `order`, `page`, `applies_when` | the same keys; `applies_when` as a `(key, value)` tuple |
 | `note` | `note`, plus the reason when the library refuses the write |
 | `advanced` | `advanced` (False when absent) |
@@ -289,7 +319,8 @@ for a device that is its own station, else the station kind `connect` the device
 paired to (None or `SINGLE`: the base). `Station.settings_for` passes the device's own.
 
 `Setting.validate(value)` checks a value against the domain (an enum also takes its
-label), `Setting.encode(value, ctx)` renders the write recipe for the device `ctx`
+label; an `OBJECT` takes a JSON object or its JSON text and gives a plain copy, an integral
+float as an int), `Setting.encode(value, ctx)` renders the write recipe for the device `ctx`
 describes into a `WireCommand`, and `Setting.decode(raw, block)` turns a dumped
 parameter value into the public value (`block`: the device's other parameters, for a
 per-view read). `Setting.write_params` names the parameters a write's `$param` leaves

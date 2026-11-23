@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import copy
 import functools
 import importlib.resources
 import json
@@ -57,8 +58,10 @@ __all__ = [
     "BINARY_MEANINGS",
     "DEFAULT_BATTERY_READS",
     "IDENTIFIER",
+    "OBJECT_SLOT",
     "PARENTLESS_ONLY",
     "BatteryRead",
+    "JsonObject",
     "SdStatusGroups",
     "SdStatusSource",
     "Setting",
@@ -77,7 +80,9 @@ __all__ = [
     "bundled_td_version",
     "canonical_code",
     "declares_battery",
+    "decode_object",
     "mode_table_settings",
+    "object_slot",
     "product_code_of",
     "reached_on_demand",
     "sd_status_groups",
@@ -86,7 +91,9 @@ __all__ = [
     "unit_meaning",
 ]
 
-type Value = bool | int | float | str
+type JsonObject = dict[str, Any]
+"""A JSON object: an ``OBJECT`` setting's value."""
+type Value = bool | int | float | str | JsonObject
 type Recipe = Mapping[str, Any]
 
 SCHEMA_VERSION: Final = 3
@@ -132,6 +139,10 @@ declares its battery differently, and a station model's battery is not this rule
 _PRODUCT_CODE: Final = re.compile(r"[A-Za-z0-9]{1,32}")
 _SN_SLOTS: Final = frozenset({"$device_sn", "$station_sn"})
 _PARAM_SLOT: Final = re.compile(r"\$param:(\d+):(int|str)")
+OBJECT_SLOT: Final = re.compile(r"\$v((?:\.[A-Za-z0-9_]+)*):(json|b64json)")
+"""A template leaf of an ``OBJECT`` value: the value (or a member, ``$v.<member>:...``) as a
+JSON object (``json``) or as base64 of its compact JSON text (``b64json``)."""
+_BASE64_TEXT: Final = re.compile(r"[A-Za-z0-9+/]+={0,2}")
 _CUR_MODE: Final = "cur_mode"
 _SECTION_ORDER: Final = MappingProxyType({s.id: s.order for s in SETTING_SECTIONS})
 _SUB_1350: Final = 1350
@@ -148,6 +159,8 @@ class SettingKind(StrEnum):
     OTHER = "other"
     FLAGS = "flags"
     """An int bitmask with named members (:attr:`Setting.flags`); several may be on."""
+    OBJECT = "object"
+    """A JSON object (:data:`JsonObject`), as the device stores it; written whole."""
 
 
 class SettingControl(StrEnum):
@@ -165,6 +178,8 @@ class SettingControl(StrEnum):
     """One on/off per member of a ``FLAGS`` mask."""
     TEXT = "text"
     """Free text (a ``STRING``)."""
+    OBJECT = "object"
+    """A whole JSON object (an ``OBJECT``): read it, change members, write it back."""
 
 
 class SettingRole(StrEnum):
@@ -263,6 +278,7 @@ CONTROLS_BY_KIND: Final[Mapping[SettingKind, frozenset[SettingControl]]] = Mappi
         SettingKind.FLAGS: frozenset({SettingControl.TOGGLES}),
         SettingKind.STRING: frozenset({SettingControl.TEXT, SettingControl.SELECT}),
         SettingKind.OTHER: frozenset(),
+        SettingKind.OBJECT: frozenset({SettingControl.OBJECT}),
     }
 )
 SLIDER_MAX_STEPS: Final = 200
@@ -326,7 +342,11 @@ class Setting:
     """One setting of a model: domain, labels, layout and the handler's codecs.
 
     Values are thing-description values: int for enum and range, bool for bool, str for
-    string (a few enums have str values). A ``RANGE`` with ``values`` takes only those
+    string (a few enums have str values). An ``OBJECT`` setting's value is the JSON object
+    the device stores (:data:`JsonObject`): :meth:`decode` reads it from the parameter
+    (base64 of its JSON text, or the text), :meth:`validate` takes an object or its JSON
+    text, and a write sends the whole object (``control`` ``OBJECT``), so change members of
+    a fresh read and write that back. A ``RANGE`` with ``values`` takes only those
     (a per-mode delay: the app's choices, ``MODE_DELAY_CHOICES``). ``writable`` is False for read-only settings
     and for writes the library does not send; ``note`` then names why.
 
@@ -453,6 +473,8 @@ class Setting:
                 if mask is None:
                     raise ValueError(f"{self.key}: expected a non-negative int mask, got {value!r}")
                 return mask
+            case SettingKind.OBJECT:
+                return _object_value(self.key, value)
             case SettingKind.STRING:
                 if not isinstance(value, str):
                     raise ValueError(f"{self.key}: expected a string, got {value!r}")
@@ -495,6 +517,8 @@ class Setting:
     def _decode(self, raw: str) -> Value | None:
         if self.domain is not None:
             return _domain_decode(self.domain, raw)
+        if self.kind is SettingKind.OBJECT:
+            return decode_object(raw)
         if self.bit is not None or self.kind is SettingKind.FLAGS:
             mask = _mask(raw)
             if mask is None:
@@ -742,6 +766,83 @@ def _str_form(value: Value) -> str:
     return str(value)
 
 
+def _plain_json(x: object, where: str) -> Any:
+    """``x`` as plain JSON data (an integral float as an int, as ``JSON.stringify`` writes
+    it); ValueError for anything JSON cannot hold."""
+    if isinstance(x, Mapping):
+        if not all(isinstance(k, str) for k in x):
+            raise ValueError(f"{where}: an object key is not a string")
+        return {k: _plain_json(v, where) for k, v in x.items()}
+    if isinstance(x, list | tuple):
+        return [_plain_json(v, where) for v in x]
+    if isinstance(x, float):
+        if not math.isfinite(x):
+            raise ValueError(f"{where}: {x!r} is not a JSON number")
+        return _intify(x)
+    if x is None or isinstance(x, bool | int | str):
+        return x
+    raise ValueError(f"{where}: {x!r} is not JSON data")
+
+
+def _object_value(key: str, value: object) -> JsonObject:
+    """``value`` (an object, or the JSON text of one) as an ``OBJECT`` setting's value."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value, parse_constant=_no_constant)
+        except ValueError:
+            raise ValueError(f"{key}: expected a JSON object, got {value!r}") from None
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{key}: expected a JSON object, got {value!r}")
+    plain: JsonObject = _plain_json(value, key)
+    return plain
+
+
+def _no_constant(name: str) -> Any:
+    raise ValueError(f"{name} is not JSON")
+
+
+def _compact_json(x: Any) -> str:
+    """``x`` as ``JSON.stringify`` writes it: no spaces, members in order, non-ASCII kept."""
+    return json.dumps(x, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
+def object_slot(slot: str, value: object) -> Any:
+    """The rendering of an :data:`OBJECT_SLOT` leaf for the object ``value``: the value or
+    its named member as JSON data (``json``), or base64 of its compact JSON text
+    (``b64json``). ValueError for another leaf, a value that is no object, or a member the
+    value lacks."""
+    m = OBJECT_SLOT.fullmatch(slot)
+    if m is None:
+        raise ValueError(f"unknown placeholder {slot!r}")
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{slot} of a non-object: {value!r}")
+    part: Any = value
+    for member in m[1].split(".")[1:]:
+        if not isinstance(part, Mapping) or member not in part:
+            raise ValueError(f"{slot}: the value has no member {member!r}")
+        part = part[member]
+    if m[2] == "json":
+        return copy.deepcopy(part)
+    return base64.b64encode(_compact_json(part).encode("utf-8")).decode("ascii")
+
+
+def decode_object(raw: str) -> JsonObject | None:
+    """A stored ``OBJECT`` value: base64 of a JSON object's text, or the JSON text itself,
+    as the eufy app's handler reads it (base64 only in whole groups of four characters,
+    padding included, no blanks). None for anything else."""
+    text = raw
+    if _BASE64_TEXT.fullmatch(text) is not None:
+        try:
+            text = base64.b64decode(text, validate=True).decode("utf-8")
+        except (binascii.Error, UnicodeDecodeError):
+            return None
+    try:
+        found = json.loads(text, parse_constant=_no_constant)
+    except ValueError:
+        return None
+    return found if isinstance(found, dict) else None
+
+
 # ── rendering ───────────────────────────────────────────────────────────────
 
 
@@ -780,7 +881,11 @@ def _render(  # noqa: C901
         if slot == "$v:int":
             if isinstance(value, float) and not value.is_integer():
                 raise ValueError(f"$v:int of a fraction: {value!r}")
+            if not isinstance(value, bool | int | float | str):
+                raise ValueError(f"$v:int of a non-number: {value!r}")
             return int(value)
+        if OBJECT_SLOT.fullmatch(slot):
+            return object_slot(slot, value)
         if slot == "$channel":
             return channel
         if slot in _SN_SLOTS:
@@ -957,6 +1062,8 @@ def _refusal(template: Recipe) -> str | None:
         return "no P2P command"
     if params is None or isinstance(params, Mapping):
         return None
+    if isinstance(params, str) and (m := OBJECT_SLOT.fullmatch(params)) and m[2] == "json":
+        return None  # the body is the value's object
     if sub is None and _is_ecb_scalar(cmd):
         return None
     return "scalar body on a non-ECB command"

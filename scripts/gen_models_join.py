@@ -13,6 +13,7 @@ I/O. See docs/reference/models-schema.md.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from typing import Any
@@ -33,6 +34,7 @@ __all__ = [
     "join",
     "mark_structured",
     "normalise_unit",
+    "object_writes",
     "screen_values",
     "source_block",
     "switches",
@@ -501,6 +503,29 @@ def mark_structured(
             if not settings[key].get("structured"):
                 settings[key]["structured"] = True
                 _count(counts, "structured:app")
+
+
+def object_writes(pn: str, titles: Mapping[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
+    """``{identifier: [object, ...]}``: the properties whose app screens write a JSON object,
+    with the objects they write (the title file's ``object_writes``,
+    ``{identifier: {"source": text, "payloads": [object, ...]}}``). Raises GeneratorError
+    for an entry without a source text or with fewer than two distinct objects."""
+    rules = (titles or {}).get("object_writes") or {}
+    if not isinstance(rules, Mapping):
+        raise GeneratorError(f"{pn}: object writes need a mapping of identifier to rule")
+    out: dict[str, list[dict[str, Any]]] = {}
+    for ident, rule in rules.items():
+        if not isinstance(rule, Mapping) or not isinstance(rule.get("source"), str):
+            raise GeneratorError(f"{pn}: object write {ident} needs a source text")
+        payloads = rule.get("payloads")
+        if (
+            not isinstance(payloads, list)
+            or not all(isinstance(p, dict) for p in payloads)
+            or len({json.dumps(p) for p in payloads}) < 2
+        ):
+            raise GeneratorError(f"{pn}: object write {ident} needs two distinct objects")
+        out[ident] = payloads
+    return out
 
 
 def screen_values(pn: str, titles: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:

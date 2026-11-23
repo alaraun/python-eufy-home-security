@@ -885,3 +885,8 @@ def test_device_alarm_changed_renders_and_serialises() -> None:
     assert render.render_event(off, now=NOW, show_serials=False).endswith("alarm off")
     data = json.loads(json.dumps(render.event_json(on), default=str))
     assert (data["type"], data["on"], data["alarm"]) == ("DeviceAlarmChanged", True, 2)
+
+
+def test_an_object_setting_value_shows_as_its_json_text() -> None:
+    assert render.setting_value({"enable": 1, "name": "ä"}) == '{"enable": 1, "name": "ä"}'
+    assert render.setting_value(True) == "true"

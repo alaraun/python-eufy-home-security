@@ -590,9 +590,12 @@ def storage_json(storage: StorageInfo, *, show_serials: bool) -> dict[str, Any]:
 
 
 def setting_value(value: Value) -> str:
-    """A setting value for display: ``true``/``false`` for a bool, else as is."""
+    """A setting value for display: ``true``/``false`` for a bool, an object as its JSON
+    text, else as is."""
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False)
     return str(value)
 
 

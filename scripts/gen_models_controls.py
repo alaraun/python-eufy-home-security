@@ -37,7 +37,13 @@ type Settings = dict[str, dict[str, Any]]
 type Recipe = dict[str, Any]
 
 SLIDER_MAX_STEPS = 200  # the library's SLIDER_MAX_STEPS
-CONTROL_BY_KIND = {"bool": "switch", "enum": "select", "flags": "toggles", "string": "text"}
+CONTROL_BY_KIND = {
+    "bool": "switch",
+    "enum": "select",
+    "flags": "toggles",
+    "string": "text",
+    "object": "object",
+}
 _OTHER_BITS = 0x5A5  # bits set in the shared parameter while probing a bit switch
 
 
@@ -551,7 +557,7 @@ def reference_value(entry: Mapping[str, Any], row: Mapping[str, Any]) -> Any:
 
 
 def control_of(entry: Mapping[str, Any]) -> str | None:
-    """The UI control of an rw setting: switch, select, toggles, text, or for a range a
+    """The UI control of an rw setting: switch, select, toggles, text, object, or for a range a
     slider of at most ``SLIDER_MAX_STEPS`` steps, else a box; None for ``other``. A string
     with a ``domain`` (a fixed list the library supplies) is a select."""
     kind = entry.get("kind")

@@ -50,7 +50,15 @@ def test_devices_exports_the_per_model_settings_api() -> None:
     assert WritePath is model_settings.WritePath
     assert SettingKind is model_settings.SettingKind
     assert SettingUnit is settings.SettingUnit
-    assert [k.name for k in SettingKind] == ["BOOL", "ENUM", "RANGE", "STRING", "OTHER", "FLAGS"]
+    assert [k.name for k in SettingKind] == [
+        "BOOL",
+        "ENUM",
+        "RANGE",
+        "STRING",
+        "OTHER",
+        "FLAGS",
+        "OBJECT",
+    ]
     for name in devices.__all__:
         assert getattr(devices, name) is not None
     removed = {"SettingDef", "Encoding", "SETTINGS", "get_setting", "Tier", "WireTemplate"}

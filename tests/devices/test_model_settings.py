@@ -1345,3 +1345,187 @@ def test_t8910_pir_sensitivity_hardware_readback() -> None:
         assert setting.decode(raw) == level
 
     assert setting.decode(None) is None
+
+
+# ── object values ───────────────────────────────────────────────────────────
+
+# Its base64 ends in padding and holds characters the URL-safe alphabet replaces.
+_LIGHT = {
+    "enable": 1,
+    "time": 60,
+    "schedule": [{"start_hour": 18, "week": 10}],
+    "note": "~~?",
+    "name": "ä",
+}
+_LIGHT_B64 = base64.b64encode(
+    json.dumps(_LIGHT, separators=(",", ":"), ensure_ascii=False).encode()
+).decode()
+
+
+def _object_setting(read: bool = True) -> Setting:
+    """A synthetic writable ``OBJECT`` setting: the object in the body, its base64 stored."""
+    entry = {
+        "kind": "object",
+        "access": "rw",
+        "control": "object",
+        "section": "picture",
+        "role": "setting",
+        "structured": True,
+        "read": {"param": 1422, "map": None} if read else None,
+        "write": {
+            "cmd": 1350,
+            "subCmd": 1422,
+            "params": "$v:json",
+            "update": {"needUpdate": True, "cmd": 1422, "paramValue": "$v:b64json"},
+        },
+    }
+    return model_settings._build("T0000", "light_setting", entry)
+
+
+def test_an_object_write_sends_the_object_and_stores_its_base64() -> None:
+    setting = _object_setting()
+    assert (setting.kind, setting.control, setting.writable) == (
+        SettingKind.OBJECT,
+        SettingControl.OBJECT,
+        True,
+    )
+    wire = setting.encode(_LIGHT, CHILD)
+    assert (wire.path, wire.cmd, wire.params) == (WritePath.SUB_1350, 1422, _LIGHT)
+    assert wire.updates == ((1422, _LIGHT_B64),)
+    assert list(cast(dict[str, object], wire.params)) == list(_LIGHT)  # member order kept
+    assert _LIGHT_B64.endswith("=")
+    assert {"+", "/"} & set(_LIGHT_B64)
+
+
+def test_an_object_read_round_trips_the_written_object() -> None:
+    setting = _object_setting()
+    stored = dict(setting.encode(_LIGHT, CHILD).updates)[1422]
+    assert setting.decode(stored) == _LIGHT
+    assert setting.decode(json.dumps(_LIGHT)) == _LIGHT
+
+
+def test_an_object_takes_its_json_text_and_writes_integral_floats_as_ints() -> None:
+    setting = _object_setting()
+    assert setting.validate(json.dumps(_LIGHT)) == _LIGHT
+    assert setting.validate({"time": 60.0, "level": 0.5}) == {"time": 60, "level": 0.5}
+    assert type(setting.validate({"time": 60.0})["time"]) is int  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [[1], "[1]", "1", "not json", 7, None, {1: 2}, {"x": float("nan")}, {"x": {1, 2}}],
+    ids=["list", "list-text", "number-text", "text", "int", "none", "int-key", "nan", "set"],
+)
+def test_an_object_setting_refuses_anything_but_a_json_object(value: object) -> None:
+    with pytest.raises(ValueError, match="light_setting"):
+        _object_setting().encode(value, CHILD)
+
+
+@pytest.mark.parametrize(
+    ("raw", "found"),
+    [
+        (_LIGHT_B64, True),
+        (json.dumps(_LIGHT), True),
+        (f"  {json.dumps(_LIGHT)}\n", True),
+        (_LIGHT_B64.rstrip("="), False),
+        (f"{_LIGHT_B64[:8]}\n{_LIGHT_B64[8:]}", False),
+        (f" {_LIGHT_B64}", False),
+        ("urlsafe", False),
+        ("", False),
+        ("1234", False),
+        (base64.b64encode(b"[1,2]").decode(), False),
+        (base64.b64encode(b'{"a":NaN}').decode(), False),
+        (base64.b64encode(b"\xff\xfe{}").decode(), False),
+        ("{", False),
+    ],
+    ids=[
+        "base64",
+        "json-text",
+        "json-text-blanks",
+        "unpadded",
+        "wrapped",
+        "leading-blank",
+        "urlsafe",
+        "empty",
+        "digits",
+        "array",
+        "nan",
+        "not-utf8",
+        "broken",
+    ],
+)
+def test_an_object_reads_as_the_apps_handler_decodes_it(raw: str, found: bool) -> None:
+    """Base64 only padded and unbroken, else JSON text; anything else is no value."""
+    if raw == "urlsafe":
+        raw = _LIGHT_B64.replace("+", "-").replace("/", "_")
+    assert model_settings.decode_object(raw) == (_LIGHT if found else None)
+    assert _object_setting().decode(raw) == (_LIGHT if found else None)
+
+
+def test_an_object_member_slot_renders_that_member() -> None:
+    value = {"account": 1, "schedules": {"loop": [], "once": []}}
+    assert model_settings.object_slot("$v.schedules:json", value) == value["schedules"]
+    assert model_settings.object_slot("$v.schedules.loop:json", value) == []
+    assert (
+        model_settings.object_slot("$v.schedules:b64json", value)
+        == base64.b64encode(b'{"loop":[],"once":[]}').decode()
+    )
+    with pytest.raises(ValueError, match="no member 'other'"):
+        model_settings.object_slot("$v.other:json", value)
+    with pytest.raises(ValueError, match="non-object"):
+        model_settings.object_slot("$v:json", "text")
+    with pytest.raises(ValueError, match="unknown placeholder"):
+        model_settings.object_slot("$v:yaml", value)
+
+
+def test_an_object_slot_renders_a_copy() -> None:
+    """Changing the rendered body leaves the caller's object as it was."""
+    value = {"schedule": [{"week": 1}]}
+    rendered = model_settings.object_slot("$v:json", value)
+    rendered["schedule"][0]["week"] = 2
+    assert value == {"schedule": [{"week": 1}]}
+
+
+def test_an_int_slot_sends_a_digit_text_as_its_number() -> None:
+    """An open value given as a digit text goes out as the int, as given as a number."""
+    entry = {
+        "kind": "other",
+        "access": "rw",
+        "section": "picture",
+        "role": "setting",
+        "read": None,
+        "write": {"cmd": 1350, "subCmd": 1, "params": {"v": "$v:int"}},
+    }
+    setting = model_settings._build("T0000", "x", entry)
+    for value in ("7", 7, 7.0):
+        assert setting.encode(value, CHILD).params == {"v": 7}
+    with pytest.raises(ValueError, match="invalid literal"):
+        setting.encode("seven", CHILD)
+
+
+def test_an_int_slot_refuses_an_object() -> None:
+    entry = {
+        "kind": "object",
+        "access": "rw",
+        "control": "object",
+        "section": "picture",
+        "role": "setting",
+        "read": None,
+        "write": {"cmd": 1350, "subCmd": 1, "params": {"v": "$v:int"}},
+    }
+    with pytest.raises(ValueError, match="non-number"):
+        model_settings._build("T0000", "x", entry).encode({}, CHILD)
+
+
+def test_an_rw_object_setting_needs_the_object_control() -> None:
+    entry = {
+        "kind": "object",
+        "access": "rw",
+        "control": "text",
+        "section": "picture",
+        "role": "setting",
+        "read": None,
+        "write": {"cmd": 1350, "subCmd": 1, "params": "$v:json"},
+    }
+    with pytest.raises(ValueError, match="control 'text' for kind object"):
+        model_settings._build("T0000", "x", entry)

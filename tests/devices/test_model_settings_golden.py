@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -188,7 +188,7 @@ def _check(setting: Setting, entry: dict[str, Any], value: Value, ctx: Any) -> N
     if setting.bit is not None:
         with pytest.raises(ValueError, match="shares its parameter"):
             setting.encode(True, wctx)
-        wire: WireCommand = setting.encode_mask(int(value), wctx)
+        wire: WireCommand = setting.encode_mask(int(cast(int, value)), wctx)
     else:
         wire = setting.encode(value, wctx)
     cmd, params = _wire_of(want)
@@ -297,3 +297,4 @@ def test_v1_reference_rows_encode_identically() -> None:
         cmd, params = _wire_of(row["recipe"])
         assert wire.cmd == cmd
         assert _canon(wire.params) == _canon(params if isinstance(params, dict) else None)
+

@@ -1950,7 +1950,7 @@ class Station:
         public = setting.validate(value)
         if setting._mode_table is not None:
             await self._configuration.async_set_mode_table_value(
-                setting._mode_table, int(public), ctx.channel
+                setting._mode_table, int(cast(int, public)), ctx.channel
             )
             return CommandOutcome.APPLIED
         ctx = await self._with_write_params(setting, ctx)

@@ -11,8 +11,9 @@ import json
 import re
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, cast
 
+from eufy_home_security.devices.model_settings import OBJECT_SLOT, decode_object, object_slot
 from eufy_home_security.devices.recipes import PARENT_CONNECT_TYPES
 
 # The TD readers live in the library; the generator reaches them through this module.
@@ -585,6 +586,21 @@ def write_template(setting: Mapping[str, Any], value: Value) -> Recipe:
     raise ValueError("setting has no write codec")
 
 
+def _value_leaf(slot_name: str, value: Value) -> Any:
+    """A ``$v`` leaf (``$v``, ``$v:str``, ``$v:int`` or an object form) for ``value``."""
+    if slot_name == "$v":
+        return value
+    if slot_name == "$v:str":
+        return str_form(value)
+    if slot_name == "$v:int":
+        if isinstance(value, float) and not value.is_integer():
+            raise ValueError(f"$v:int of a fraction: {value!r}")
+        return int(value)
+    if OBJECT_SLOT.fullmatch(slot_name):
+        return object_slot(slot_name, value)
+    raise ValueError(f"unknown placeholder {slot_name!r}")
+
+
 def render(
     setting: Mapping[str, Any],
     value: Value,
@@ -613,14 +629,8 @@ def render(
         return x
 
     def scalar(slot_name: str) -> Any:
-        if slot_name == "$v":
-            return value
-        if slot_name == "$v:str":
-            return str_form(value)
-        if slot_name == "$v:int":
-            if isinstance(value, float) and not value.is_integer():
-                raise ValueError(f"$v:int of a fraction: {value!r}")
-            return int(value)
+        if slot_name == "$v" or slot_name.startswith(("$v:", "$v.")):
+            return _value_leaf(slot_name, value)
         if slot_name == "$channel":
             return channel
         if slot_name in SN_SLOTS:
@@ -646,6 +656,123 @@ def render(
         raise ValueError(f"unknown placeholder object {name!r}")
 
     return fill(write_template(setting, value))  # type: ignore[no-any-return]
+
+
+# ── object writes ───────────────────────────────────────────────────────────
+
+OBJECT_REJECTED_NOTE = "handler rejects some of the app's objects"
+OBJECT_UNMATCHED_NOTE = "no object form reproduces the app's object write"
+
+type ObjectSamples = Sequence[tuple[Any, Recipe | None]]
+"""``[(object the app writes, slotted recipe or None)]`` of one context and channel."""
+
+
+def _ordered(x: Any) -> str:
+    """JSON text that keeps member order and tells ``1``, ``1.0`` and ``true`` apart."""
+    return json.dumps(x)
+
+
+def _stored_items(recipe: Recipe) -> list[Mapping[str, Any]]:
+    update, ext = recipe.get("update"), recipe.get("extUpdates")
+    items = [update] if isinstance(update, dict) else []
+    items += [i for i in (ext if isinstance(ext, list) else []) if isinstance(i, dict)]
+    return [i for i in items if isinstance(i.get("cmd"), int)]
+
+
+def object_value(recipe: Recipe, payload: Any) -> dict[str, Any] | None:
+    """The value an object write stands for: the object the recipe stores (the first
+    ``update``/``extUpdates`` value that decodes to a JSON object, as the library reads a
+    stored object), else the app's object itself; None when neither is an object."""
+    for item in _stored_items(recipe):
+        value = item.get("paramValue")
+        if isinstance(value, str) and (found := decode_object(value)) is not None:
+            return found
+    return payload if isinstance(payload, dict) else None
+
+
+def object_template(recipe: Recipe, value: Mapping[str, Any]) -> Any:
+    """``recipe`` with the value's positions replaced: a subtree equal to the value
+    (member order and JSON types included) by ``$v:json``, one equal to a non-empty object
+    or array member by ``$v.<member>:json``, and a text equal to the base64 of the value's
+    compact JSON by ``$v:b64json``. Nested positions inside a replaced one are not visited."""
+    whole = _ordered(value)
+    members = [(name, _ordered(v)) for name, v in value.items() if isinstance(v, dict | list) and v]
+    stored = object_slot("$v:b64json", value)
+
+    def walk(x: Any) -> Any:
+        if isinstance(x, dict | list) and x:
+            text = _ordered(x)
+            if text == whole:
+                return "$v:json"
+            name = next((n for n, t in members if t == text), None)
+            if name is not None:
+                return f"$v.{name}:json"
+        if isinstance(x, dict):
+            return {k: walk(v) for k, v in x.items()}
+        if isinstance(x, list):
+            return [walk(v) for v in x]
+        if isinstance(x, str) and x == stored:
+            return "$v:b64json"
+        return x
+
+    return walk(recipe)
+
+
+@dataclass(frozen=True)
+class ObjectFit:
+    """The object write of one setting in one context: ``write`` (None: none) with the
+    value each swept app object stands for, the parameter the write stores the value's
+    base64 in (``stored``), or why there is no write (``note``; None when the handler has
+    no write path for any app object)."""
+
+    write: Recipe | None = None
+    values: tuple[dict[str, Any], ...] = ()
+    stored: int | None = None
+    note: str | None = None
+
+
+def infer_object_write(
+    samples: ObjectSamples, alt: ObjectSamples, channel: int, alt_channel: int
+) -> ObjectFit:
+    """The object write of one context from the handler's recipes for the app's objects
+    (``samples``, and ``alt`` on the context's second channel): a template whose rendering
+    of each sample's value (:func:`object_value`) equals that sample's recipe on both
+    channels. At least two distinct values are needed, so the template has a value slot."""
+    recipes = [r for _, r in samples]
+    if not any(recipes):
+        return ObjectFit()
+    if any(r is None for r in recipes) or any(r is None for _, r in alt):
+        return ObjectFit(note=OBJECT_REJECTED_NOTE)
+    keyed = [(_ordered(p), r) for p, r in samples]
+    keyed_alt = [(_ordered(p), r) for p, r in alt]
+    paths = _channel_paths(keyed, keyed_alt, channel, alt_channel)
+    rows = [
+        (object_value(r, p), _replace(r, dict.fromkeys(paths.get(_ordered(p), ()), "$channel")))
+        for p, r in samples
+        if r is not None
+    ]
+    values = [v for v, _ in rows]
+    if any(v is None for v in values) or len({_ordered(v) for v in values}) < 2:
+        return ObjectFit(note=OBJECT_UNMATCHED_NOTE)
+    first_value, first = rows[0]
+    template = object_template(first, cast(dict[str, Any], first_value))
+    entry = {"access": "rw", "write": template}
+    for ch, group in ((channel, samples), (alt_channel, alt)):
+        for (_, recipe), value in zip(group, values, strict=True):
+            try:
+                got = render(entry, cast(Value, value), channel=ch)
+            except ValueError:
+                return ObjectFit(note=OBJECT_UNMATCHED_NOTE)
+            if _ordered(got) != _ordered(recipe):
+                return ObjectFit(note=OBJECT_UNMATCHED_NOTE)
+    stored = next(
+        (i["cmd"] for i in _stored_items(template) if i.get("paramValue") == "$v:b64json"), None
+    )
+    return ObjectFit(
+        write=template,
+        values=tuple(cast(dict[str, Any], v) for v in values),
+        stored=stored,
+    )
 
 
 def codec_fields(result: WriteCodec) -> dict[str, Any]:
