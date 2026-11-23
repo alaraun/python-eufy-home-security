@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import subprocess
 import sys
@@ -15,6 +17,8 @@ from eufy_home_security._logging import (
     LogThrottle,
     Payload,
     Secret,
+    _hidden_bytes,
+    json_in_base64,
     redact,
     redact_serial,
     scrub,
@@ -197,6 +201,66 @@ def test_payload_masks_a_numeric_location() -> None:
 
     set_secret_logging(True)
     assert "59.4372" in str(Payload(body))
+
+
+_LIGHT_AT_HOME = {
+    "enable": 1,
+    "sunset2rise": {"latitude": 59.4372, "longtitude": "24.7536", "lng": -2.25},
+}
+
+
+@pytest.mark.usefixtures("_secrets_restored")
+def test_payload_masks_a_location_in_a_nested_object() -> None:
+    """A light object's location members (``longtitude`` as eufy spells it) are redacted
+    at any depth, whether the object is sent as JSON or stored as base64 of its text."""
+    stored = base64.b64encode(json.dumps(_LIGHT_AT_HOME).encode()).decode()
+    for body in (
+        {"cmd": 1350, "payload": {"light": _LIGHT_AT_HOME}},
+        {"param_type": 1422, "param_value": stored},
+    ):
+        result = str(Payload(body))
+        for shown in ("59.4372", "24.7536", "2.25"):
+            assert shown not in result
+        assert '"enable": 1' in result
+
+    set_secret_logging(True)
+    assert "24.7536" in str(Payload({"light": _LIGHT_AT_HOME}))
+    assert stored in str(Payload({"param_value": stored}))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "e30",
+        "e30=\n",
+        "W10==",
+        base64.b64encode(b"7").decode(),
+        base64.b64encode(b"\xff{}").decode(),
+        base64.b64encode(b"[" * 100_000 + b"]" * 100_000).decode(),
+    ],
+    ids=["unpadded", "blank", "bad-padding", "not-a-container", "not-utf8", "too-deep"],
+)
+def test_only_padded_base64_of_a_json_container_is_decoded(text: str) -> None:
+    assert json_in_base64(text) is None
+    assert json_in_base64("e30=") == {}
+    assert json_in_base64(base64.b64encode(b"[1]").decode()) == [1]
+
+
+@pytest.mark.usefixtures("_secrets_restored")
+def test_hexdump_stars_identifying_json_members() -> None:
+    """A clear JSON frame keeps its offsets; identifying members' values are starred."""
+    data = json.dumps({"cmd": 1350, "payload": {"light": _LIGHT_AT_HOME}}).encode()
+    hidden = _hidden_bytes(data)
+    assert len(hidden) == len(data)
+    for shown in (b"59.4372", b"24.7536", b"2.25"):
+        assert shown not in hidden
+    assert b'"latitude": *******' in hidden
+    assert b'"longtitude": *********' in hidden
+    assert b'"enable": 1' in hidden
+    assert b'"cmd": 1350' in hidden
+
+    set_secret_logging(True)
+    assert str(HexDump(data)) != str(HexDump(hidden))
 
 
 @pytest.mark.usefixtures("_secrets_restored")

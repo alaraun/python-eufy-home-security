@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Final
 
-from .._logging import Address, Identifier, Payload
+from .._logging import Address, Identifier, Payload, json_in_base64
 from ..cloud.models import CAMERA_INFO_PARAM
 from ..models import (
     DEV_STATUS_ONLINE,
@@ -173,12 +173,15 @@ class ParamInfo:
 
     def raw(self, value: object) -> str:
         """The wire value as ``repr``, redacted when it is identifying; a value holding
-        a JSON object or list as JSON with its identifying fields masked (:class:`Payload`)."""
+        a JSON object or list, as text or as base64 of the text, as JSON with its
+        identifying fields masked (:class:`Payload`)."""
         if value is None:
             return repr(value)
         if self.identifying:
             return repr(self.value(value))
-        if isinstance(value, str) and value.lstrip()[:1] in ("{", "["):
+        if isinstance(value, str) and (
+            value.lstrip()[:1] in ("{", "[") or json_in_base64(value) is not None
+        ):
             return str(Payload(value))
         return repr(value)
 

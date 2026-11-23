@@ -1,3 +1,4 @@
+import base64
 import json
 from collections.abc import Iterator
 
@@ -200,6 +201,23 @@ def test_a_json_value_is_shown_with_its_identifying_fields_masked() -> None:
     assert info.raw("7") == "'7'"
     set_secret_logging(True)
     assert "Example-Net" in info.raw(value)
+
+
+@pytest.mark.usefixtures("_secrets_restored")
+def test_a_base64_json_value_is_shown_with_its_location_masked() -> None:
+    """A stored light object (base64 of its JSON text) is logged decoded, its location
+    members redacted; in full only with secret logging on."""
+    value = base64.b64encode(
+        json.dumps({"enable": 1, "latitude": 59.4372, "longtitude": 24.7536}).encode()
+    ).decode()
+    info = param_info(1422, 0)
+    shown = info.raw(value)
+    assert "59.4372" not in shown
+    assert "24.7536" not in shown
+    assert '"enable": 1' in shown
+    assert info.raw("QUJD") == "'QUJD'"  # base64, but of no JSON
+    set_secret_logging(True)
+    assert value in info.raw(value)
 
 
 def test_sub_device_settings_never_match_the_station_channel() -> None:

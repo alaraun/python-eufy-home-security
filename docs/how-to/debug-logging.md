@@ -66,15 +66,18 @@ The rules:
 - A logged JSON body (a cloud request or response, a P2P command or notification, a
   push) is masked by key: `SENSITIVE_KEY_PARTS` for secrets and `IDENTIFYING_KEYS`
   for identifiers (`_logging.py`), with case, `_` and `-` ignored. A string that holds
-  a JSON object is decoded and masked the same way. Any serial, 40-hex account id or
+  a JSON object, or base64 of one (a stored light setting with the house's coordinates),
+  is decoded and masked the same way. Any serial, 40-hex account id or
   e-mail address or station media path (`/zx/…`) left inside a string is redacted too.
 - The device, house and invitation lists (`get_devs_list`, `get_house_list`,
   `get_house_invite_records`, `get_invites`) are logged as entry counts
   (`<3 house_infos>`); the full answer goes to the wire logger only.
-- A hexdump stars out serials, DIDs (struct and text form) and 40-hex account ids in
-  place, so its offsets stay valid. The rest is encrypted traffic or protocol bytes.
+- A hexdump stars out serials, DIDs (struct and text form), 40-hex account ids and the
+  values of clear JSON members under an identifying key in place, so its offsets stay
+  valid. The rest is encrypted traffic or protocol bytes.
 - Parameter values that identify the house (device and station names, the paired
-  serial list, the LAN address) are redacted in the parameter lines (below).
+  serial list, the LAN address) are redacted in the parameter lines (below); a value
+  holding a JSON object, as text or base64, is shown with its identifying members masked.
 - Exception messages carry no serial, DID, record id or path.
 
 Everything above is logged in full only with the secrets switch

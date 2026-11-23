@@ -21,6 +21,7 @@ a debug log attached to an issue must not carry the account or the house.
 
 from __future__ import annotations
 
+import base64
 import ipaddress
 import json
 import logging
@@ -153,7 +154,8 @@ IDENTIFYING_KEYS: Final = frozenset(
         "houseid", "homeid", "roomid", "mac", "btmac", "wifimac", "ssid", "wifissid",
         "appconn", "p2pconn", "ip", "ipaddr", "macaddr", "bssid", "localip", "androidid", "fid", "housename",
         # the house's location
-        "address", "houseaddress", "location", "latitude", "longitude", "lat", "lng", "lon",
+        "address", "houseaddress", "location", "latitude", "longitude", "longtitude", "lat",
+        "lng", "lon",
         # media on the station's disk
         "file", "filepath", "path", "thumbpath", "storagepath", "croppath", "videopath",
         "coverpath", "cloudpath", "crophb3path", "cropcloudpath", "snapshotcloud", "mp4cloud",
@@ -271,8 +273,20 @@ def _masked(data: object, clear: bool) -> object:
                 decoded = None
             if isinstance(decoded, dict | list):
                 return _masked(decoded, clear)  # a JSON body inside a string
+        if not clear and (decoded := json_in_base64(stripped)) is not None:
+            return _masked(decoded, clear)  # a stored JSON value, as base64 of its text
         return data if clear else _hidden_text(data)
     return data
+
+
+def json_in_base64(text: str) -> dict[str, object] | list[object] | None:
+    """The JSON object or array ``text`` holds as base64 of its JSON text (standard
+    alphabet, padded, no blanks); None for any other text."""
+    try:
+        decoded = json.loads(base64.b64decode(text, validate=True).decode("utf-8"))
+    except (ValueError, RecursionError):  # bad base64, not UTF-8, not JSON, too deep
+        return None
+    return decoded if isinstance(decoded, dict | list) else None
 
 
 def _masked_item(item: object, clear: bool) -> object:
@@ -328,6 +342,8 @@ _SERIAL_BYTES = re.compile(rb"T[0-9A-Z]{4}([0-9A-Z]{7})[0-9A-Z]{4}")
 _DID_STRUCT_BYTES = re.compile(rb"[A-Z]{3,8}\x00{0,5}((?s:.{4})[A-Z]{5})")
 _DID_TEXT_BYTES = re.compile(rb"[A-Z]{3,8}-([0-9]{6}-[A-Z]{5})")
 _ACCOUNT_ID_BYTES = re.compile(rb"([0-9a-f]{36})[0-9a-f]{4}")
+# A JSON member with a string or number value: group 1 the key, group 2 the value.
+_JSON_MEMBER_BYTES = re.compile(rb'"([A-Za-z0-9_-]+)"\s*:\s*("(?:[^"\\]|\\.)*"|-?[0-9][-+.0-9eE]*)')
 
 #: Extra literal byte strings to star out of hexdumps: secrets with no fixed shape,
 #: such as a device session key (DSK). Registered at runtime, deduplicated, and never
@@ -348,9 +364,13 @@ def register_secret_bytes(*values: bytes | str) -> None:
 
 
 def _hidden_bytes(data: bytes) -> bytes:
-    """``data`` with serials, DIDs (struct and text form), 40-hex account ids and any
-    registered secret bytes starred out in place, so a hexdump keeps its offsets."""
+    """``data`` with serials, DIDs (struct and text form), 40-hex account ids, the values
+    of JSON members under an identifying key (:func:`_identifying`) and any registered
+    secret bytes starred out in place, so a hexdump keeps its offsets."""
     out = bytearray(data)
+    for match in _JSON_MEMBER_BYTES.finditer(data):
+        if _identifying(match[1].decode("ascii")):
+            out[match.start(2) : match.end(2)] = b"*" * (match.end(2) - match.start(2))
     for pattern in (_SERIAL_BYTES, _DID_STRUCT_BYTES, _DID_TEXT_BYTES, _ACCOUNT_ID_BYTES):
         for match in pattern.finditer(data):
             if pattern is _DID_STRUCT_BYTES and match.start(1) - match.start() != 8:
