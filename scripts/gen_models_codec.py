@@ -37,6 +37,9 @@ FIXED_CLOCK_MS = 1700000000000  # the driver's Date.now()
 # Two probes for open domains, so a leaf that only happens to equal one probe is no slot.
 STRING_PROBES = ("probe", "probe2")
 OTHER_PROBES = (0, 1)
+# An open number is also written as the text of each probe, apart from the sweep: a handler
+# that turns the text into its number writes the value as an int (``$v:int``).
+TYPE_PROBES = tuple(str(v) for v in OTHER_PROBES)
 
 
 @dataclass(frozen=True)
@@ -399,11 +402,40 @@ def _fit(kind: str, samples: Samples, channel: Mapping[str, set[Path]]) -> _Fit:
     return _Fit(form, write=_replace(first, subst))
 
 
+def int_slots(write: Recipe, typed: Samples) -> Recipe:
+    """``write`` with each ``$v`` leaf made ``$v:int`` where every type probe in ``typed``
+    (``[(digit string, recipe or None)]``, :data:`TYPE_PROBES`) put the string's number
+    in that leaf: the handler converts the value to a number, so the client sends one
+    whatever type it is given. A leaf any probe left otherwise (as text, as a bool, missing,
+    or the probe rejected) stays ``$v``.
+    """
+    flats = [dict(leaves(r)) for _, r in typed if r is not None]
+    if not typed or len(flats) != len(typed):
+        return write
+    subst = {
+        path: "$v:int"
+        for path, leaf in leaves(write)
+        if leaf == "$v"
+        and all(
+            not isinstance(got := flat.get(path), bool) and got == _int_form(v)
+            for flat, (v, _) in zip(flats, typed, strict=True)
+        )
+    }
+    return _replace(write, subst)
+
+
 def infer_write(
-    kind: str, samples: Samples, alt: Samples, channel: int, alt_channel: int
+    kind: str,
+    samples: Samples,
+    alt: Samples,
+    channel: int,
+    alt_channel: int,
+    *,
+    typed: Samples = (),
 ) -> WriteCodec:
     """Write codec of one context from slotted samples ``[(value, recipe or None)]``,
-    swept on ``channel`` and again on ``alt_channel`` (``alt``) to find the channel leaves.
+    swept on ``channel`` and again on ``alt_channel`` (``alt``) to find the channel leaves;
+    ``typed``: the replies to an open number's type probes (:func:`int_slots`).
 
     The codec is ``write`` (or ``write_table``). A setting without one is read-only with a
     note naming why.
@@ -413,7 +445,8 @@ def infer_write(
     fit = _fit(kind, samples, _channel_paths(samples, alt, channel, alt_channel))
     if fit.form is None:
         return WriteCodec(note=fit.note)
-    return WriteCodec(access="rw", form=fit.form, write=fit.write, write_table=fit.table)
+    write = int_slots(fit.write, typed) if fit.write is not None else None
+    return WriteCodec(access="rw", form=fit.form, write=write, write_table=fit.table)
 
 
 MISSING: Any = object()  # no getProperty reply for a written value

@@ -1167,12 +1167,14 @@ def write_read(
 class Sweep:
     """One identifier's setProperty replies in one context, on both of its channels:
     slotted ``(value, recipe or None)`` rows, plus the unslotted ``raw`` rows of the
-    main channel whose ``update`` items the read inference feeds back."""
+    main channel whose ``update`` items the read inference feeds back, and an open
+    number's slotted replies to the type probes (``typed``, main channel only)."""
 
     main: list[tuple[Any, Any]] = field(default_factory=list)
     alt: list[tuple[Any, Any]] = field(default_factory=list)
     raw: list[tuple[Any, dict[str, Any] | None]] = field(default_factory=list)
     rejected: bool = False
+    typed: list[tuple[Any, Any]] = field(default_factory=list)
 
 
 def td_writable(prop: Mapping[str, Any]) -> bool:
@@ -1205,12 +1207,15 @@ def sweep(
     wire: codec.WireValues | None = None,
 ) -> dict[str, dict[str, Sweep]]:
     """setProperty over every property's domain in every context, on both of each
-    context's channels: ``{context: {identifier: Sweep}}``.
+    context's channels, and over each open number's type probes
+    (:data:`codec.TYPE_PROBES`) on the main channel: ``{context: {identifier: Sweep}}``.
 
-    Each context and channel is its own driver job (a fresh handler sandbox): a handler
-    can keep state between requests, so one sweep must not see another's.
+    Each context and channel, and each context's type probes, is its own driver job (a
+    fresh handler sandbox): a handler can keep state between requests, so one sweep must
+    not see another's.
     """
     out: dict[str, dict[str, Sweep]] = {name: {} for name in contexts}
+    numbers = [p["identifier"] for p in props if codec.kind_of(p) == "other"]
     for name, ctx in contexts.items():
         for alt, c in ((False, ctx), (True, codec.alt_channel(ctx))):
             requests: list[dict[str, Any]] = []
@@ -1237,6 +1242,17 @@ def sweep(
                 (row.alt if alt else row.main).append((v, slotted))
                 if not alt:
                     row.raw.append((v, recipe))
+        device = ctx.device(product_code)
+        typed = [
+            {"kind": "set", "identifier": ident, "payload": text, "device": device}
+            for ident in numbers
+            for text in codec.TYPE_PROBES
+        ]
+        replies = run_driver(product_code, handler, typed, wire) if typed else []
+        for request, reply in zip(typed, replies, strict=True):
+            recipe = p2p(reply)
+            slotted = codec.slot(recipe, ctx) if recipe is not None else None
+            out[name][request["identifier"]].typed.append((request["payload"], slotted))
     return out
 
 
@@ -1678,7 +1694,9 @@ def build_context(  # noqa: C901
         }
         settings[ident] = entry
         row = swept[ident]
-        result = codec.infer_write(kind, row.main, row.alt, context.channel, alt.channel)
+        result = codec.infer_write(
+            kind, row.main, row.alt, context.channel, alt.channel, typed=row.typed
+        )
         read, read_note, inverse = None, None, False
         if result.access == "rw":
             read, read_note, inverse = write_read(kind, row.raw, reads.get(ident, []))

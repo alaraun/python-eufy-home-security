@@ -180,6 +180,53 @@ def test_single_probe_is_writable_only_when_a_leaf_carries_it() -> None:
     assert (ignored.access, ignored.note) == ("ro", "handler ignores the value")
 
 
+def _open_number(typed: list[tuple[Any, Any]]) -> Any:
+    """An open number the handler writes as the number it is given (``$v`` on 0 and 1),
+    with ``typed`` the replies to the type probes."""
+    return codec.infer_write(
+        "other",
+        _pairs(list(codec.OTHER_PROBES), lambda v, ch: _rec(v, str(v), ch)),
+        _pairs(list(codec.OTHER_PROBES), lambda v, ch: _rec(v, str(v), ch), ALT),
+        3,
+        ALT,
+        typed=typed,
+    )
+
+
+def test_the_type_probes_are_the_texts_of_the_open_number_probes() -> None:
+    assert codec.TYPE_PROBES == tuple(str(v) for v in codec.OTHER_PROBES) == ("0", "1")
+
+
+def test_an_open_number_the_handler_converts_is_written_as_an_int() -> None:
+    """A digit string comes out of the handler as its number: ``$v:int``, so a text value
+    (a read-back) goes out as the number the handler would send."""
+    result = _open_number([(t, _rec(int(t), t)) for t in codec.TYPE_PROBES])
+    assert result.access == "rw"
+    assert result.write["params"]["x"] == "$v:int"
+    assert result.write["update"]["paramValue"] == "$v:str"
+
+
+@pytest.mark.parametrize(
+    "typed",
+    [
+        pytest.param([(t, _rec(t, t)) for t in codec.TYPE_PROBES], id="passed-through"),
+        pytest.param([("0", _rec(0, "0")), ("1", _rec("1", "1"))], id="one-converted"),
+        pytest.param([("0", _rec(0, "0")), ("1", None)], id="one-rejected"),
+        pytest.param([("0", _rec(False, "0")), ("1", _rec(True, "1"))], id="as-bools"),
+        pytest.param([("0", _rec(1, "0")), ("1", _rec(1, "1"))], id="another-number"),
+        pytest.param([("0", {"cmd": 1000}), ("1", {"cmd": 1000})], id="leaf-missing"),
+        pytest.param([], id="not-probed"),
+    ],
+)
+def test_an_open_number_the_handler_does_not_convert_keeps_the_value(
+    typed: list[tuple[Any, Any]],
+) -> None:
+    """Only a digit string turned into its own number on every type probe makes the slot
+    ``$v:int``."""
+    result = _open_number(typed)
+    assert result.write["params"]["x"] == "$v"
+
+
 def test_string_property_with_numeric_bounds_is_a_range() -> None:
     prop = {"data_type": {"type": "string", "specs": {"min": "0", "max": "2", "step": "1"}}}
     assert codec.domain(prop) == ("range", [0, 1, 2])

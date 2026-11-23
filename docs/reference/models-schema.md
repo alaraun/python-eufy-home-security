@@ -189,7 +189,7 @@ Recipe templates are the handler's recipe with the value positions replaced:
 |---|---|
 | `"$v"` | The public value as is |
 | `"$v:str"` | Its string form (bools as `"0"`/`"1"`) |
-| `"$v:int"` | Its int form (bools as `0`/`1`) |
+| `"$v:int"` | Its int form (bools as `0`/`1`, a digit string as its number). An `other` setting's value is also written as the text of each of its probes (`"0"`, `"1"`): a leaf the handler fills with that text's number is `$v:int`, one it fills with the text stays `$v` |
 | `{"$map": {"<value>": x}}` | `x` for the value's key (`"3"`, `"true"`). Covers every enum value, or `false`/`true` |
 | `{"$affine": [a, b]}` | `a * value + b`, an int when integral |
 | `"$channel"` | The device's channel (3 as a station child, 0 standalone in the samples) |
