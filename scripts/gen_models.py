@@ -2,12 +2,12 @@
 
 For each model in the cache (``<cache>/<PN>/{td.json, <PN>Handle.mix.js}``), run the
 vendor handler through ``scripts/gen_models_driver.js`` with setProperty over every
-writable property's domain, in a station-child and a standalone context, infer the write
-codecs (``scripts/gen_models_codec.py``), feed each written recipe's parameter dump back
-to getProperty for the read codec (a setting without a write: the parameter getProperty
-fills it from, ``locate_params``), join the app's labels and settings layout
-(``scripts/gen_models_join.py``) with the app's setting titles, units and variant pairs,
-give each setting its role and where the app shows it (``--shown``,
+property's domain (whatever its ``access_mode``, :func:`td_writable`), in a station-child
+and a standalone context, infer the write codecs (``scripts/gen_models_codec.py``), feed
+each written recipe's parameter dump back to getProperty for the read codec (a setting
+without a write: the parameter getProperty fills it from, ``locate_params``), join the
+app's labels and settings layout (``scripts/gen_models_join.py``) with the app's setting
+titles, units and variant pairs, give each setting its role and where the app shows it (``--shown``,
 ``scripts/gen_models_roles.py``), add the battery reads and the handler's grouping of an
 ``SDINFO_EX`` status (``sd_status_groups``), and write ``<out>/<PN>.json``, then
 ``<out>/INDEX.json``, the sorted list of every ``<PN>.json`` in ``<out>``.
@@ -1149,6 +1149,20 @@ def stores_failed_conversion(rows: list[tuple[Any, dict[str, Any] | None]]) -> b
     )
 
 
+def write_read(
+    kind: str, raw: list[tuple[Any, dict[str, Any] | None]], samples: list[Any]
+) -> tuple[dict[str, Any] | None, str | None, bool]:
+    """``(read, note, inverse)`` of a written setting from the round trip of its swept
+    writes ``raw`` (``samples``: :func:`read_samples`); ``inverse`` when the read is the
+    inverse of an enum's write, taken only when no write stores a failed conversion."""
+    read, note = codec.infer_read(kind, samples)
+    if read is None and not stores_failed_conversion(raw):
+        inverse = codec.inverse_read(kind, samples)
+        if inverse is not None:
+            return inverse, None, True
+    return read, note, False
+
+
 @dataclass
 class Sweep:
     """One identifier's setProperty replies in one context, on both of its channels:
@@ -1159,6 +1173,18 @@ class Sweep:
     alt: list[tuple[Any, Any]] = field(default_factory=list)
     raw: list[tuple[Any, dict[str, Any] | None]] = field(default_factory=list)
     rejected: bool = False
+
+
+def td_writable(prop: Mapping[str, Any]) -> bool:
+    """The thing description declares ``prop`` writable (``W`` in its ``access_mode``).
+
+    The handler's write is probed for every property, as the app writes a property
+    without checking its ``access_mode``. The declaration decides the role rule "app
+    control", the note of a write that is not proven, and whether a proven write must
+    read back: an undeclared one is written only when getProperty returns the written
+    value.
+    """
+    return "W" in (prop.get("access_mode") or "")
 
 
 def contexts_of(product_code: str) -> dict[str, codec.Context]:
@@ -1177,19 +1203,18 @@ def sweep(
     contexts: dict[str, codec.Context],
     wire: codec.WireValues | None = None,
 ) -> dict[str, dict[str, Sweep]]:
-    """setProperty over every writable property's domain in every context, on both of
-    each context's channels: ``{context: {identifier: Sweep}}``.
+    """setProperty over every property's domain in every context, on both of each
+    context's channels: ``{context: {identifier: Sweep}}``.
 
     Each context and channel is its own driver job (a fresh handler sandbox): a handler
     can keep state between requests, so one sweep must not see another's.
     """
     out: dict[str, dict[str, Sweep]] = {name: {} for name in contexts}
-    writable = [p for p in props if "W" in (p.get("access_mode") or "")]
     for name, ctx in contexts.items():
         for alt, c in ((False, ctx), (True, codec.alt_channel(ctx))):
             requests: list[dict[str, Any]] = []
             index: list[tuple[str, Any]] = []
-            for prop in writable:
+            for prop in props:
                 _, values = codec.domain(prop)
                 for v in values:
                     requests.append(
@@ -1627,38 +1652,42 @@ def build_context(  # noqa: C901
             "access": "ro",
             "read": None,
         }
-        if "W" in (prop.get("access_mode") or ""):
-            _count(counts, "writable")
-            row = swept[ident]
-            result = codec.infer_write(kind, row.main, row.alt, context.channel, alt.channel)
-            if result.note == "no handler write path" and row.rejected:
-                result.note = "handler rejects the probed values"
-            entry.update(copy.deepcopy(codec.codec_fields(result)))
-            for template in [entry.get("write"), *(entry.get("write_table") or {}).values()]:
-                for path, slot_name in slots.get(ident, {}).items() if template else ():
-                    _set_leaf(template, path, slot_name)
-            read, read_note = None, None
-            if result.access == "rw":
-                read, read_note = codec.infer_read(kind, reads.get(ident, []))
-                if read is None and not stores_failed_conversion(row.raw):
-                    read = codec.inverse_read(kind, reads.get(ident, []))
-                    if read is not None:
-                        inverted.add(ident)
-                        _count(counts, "read:inverse of the write")
-                        read_note = None
-                _count(counts, "read:codec" if read else "read:null")
-                if read is not None:
-                    _count(counts, "read:identity" if read["map"] is None else "read:map")
-                elif read_note:
-                    _count(counts, f"read:{read_note}")
-            entry["read"] = read
-            if read_note:
-                entry["note"] = f"{entry['note']}; {read_note}" if "note" in entry else read_note
-            if result.access == "rw":
-                _count(counts, f"rw:{result.form}")
-            else:
-                _count(counts, f"ro:{result.note}")
         settings[ident] = entry
+        row = swept[ident]
+        result = codec.infer_write(kind, row.main, row.alt, context.channel, alt.channel)
+        read, read_note, inverse = None, None, False
+        if result.access == "rw":
+            read, read_note, inverse = write_read(kind, row.raw, reads.get(ident, []))
+        if not td_writable(prop):
+            # Not declared writable: written only when the handler's write is proven and
+            # reads back; otherwise ro without a note, read as the handler fills it.
+            if read is None:
+                continue
+            _count(counts, "writable:undeclared")
+        else:
+            _count(counts, "writable")
+        if result.note == "no handler write path" and row.rejected:
+            result.note = "handler rejects the probed values"
+        entry.update(copy.deepcopy(codec.codec_fields(result)))
+        for template in [entry.get("write"), *(entry.get("write_table") or {}).values()]:
+            for path, slot_name in slots.get(ident, {}).items() if template else ():
+                _set_leaf(template, path, slot_name)
+        if result.access == "rw":
+            if inverse:
+                inverted.add(ident)
+                _count(counts, "read:inverse of the write")
+            _count(counts, "read:codec" if read else "read:null")
+            if read is not None:
+                _count(counts, "read:identity" if read["map"] is None else "read:map")
+            elif read_note:
+                _count(counts, f"read:{read_note}")
+        entry["read"] = read
+        if read_note:
+            entry["note"] = f"{entry['note']}; {read_note}" if "note" in entry else read_note
+        if result.access == "rw":
+            _count(counts, f"rw:{result.form}")
+        else:
+            _count(counts, f"ro:{result.note}")
     # A setting without a write reads as the handler fills it from the device's parameters.
     unwritten = {p["identifier"]: p for p in props if settings[p["identifier"]]["access"] == "ro"}
     for ident, read in located_reads(
@@ -1986,7 +2015,7 @@ def generate(
         _count(counts, key, n)
     for key, n in roles.assign(
         merged,
-        td_writable={p["identifier"] for p in props if "W" in (p.get("access_mode") or "")},
+        td_writable={p["identifier"] for p in props if td_writable(p)},
         app_read_only=set((titles or {}).get("read_only") or {}),
         shown=model_shown(shown or {}, tree),
         state_params=STATE_PARAM_INFO.keys(),
