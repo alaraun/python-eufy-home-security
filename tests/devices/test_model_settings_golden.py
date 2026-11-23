@@ -298,3 +298,57 @@ def test_v1_reference_rows_encode_identically() -> None:
         assert wire.cmd == cmd
         assert _canon(wire.params) == _canon(params if isinstance(params, dict) else None)
 
+
+# T8425's handler, given the object the app's motion-light screen writes for a schedule
+# ({"enable": 1, "brightness": 80, "time": 60, "mode": 2, "sunset2rise": 0, "longitude": 0,
+# "latitude": 0, "loop": [{"cross_day": 1, "enable": 1, "start_h": 18, "start_m": 30,
+# "end_h": 6, "end_m": 0, "week": [1, 3, 5]}]}), sends this body and stores this text, in
+# every context: the value is the stored object.
+T8425_LIGHT_BODY = {
+    "enable": 1,
+    "time": 60,
+    "mode": 2,
+    "sunset2rise": 0,
+    "latitude": 0,
+    "schedule": [
+        {
+            "cross_day": 1,
+            "enable": 1,
+            "start_h": 18,
+            "start_m": 30,
+            "end_h": 6,
+            "end_m": 0,
+            "week": 42,
+        }
+    ],
+    "brightness": 80,
+}
+T8425_LIGHT_STORED = (
+    "eyJlbmFibGUiOjEsInRpbWUiOjYwLCJtb2RlIjoyLCJzdW5zZXQycmlzZSI6MCwibGF0aXR1ZGUi"
+    "OjAsInNjaGVkdWxlIjpbeyJjcm9zc19kYXkiOjEsImVuYWJsZSI6MSwic3RhcnRfaCI6MTgsInN0"
+    "YXJ0X20iOjMwLCJlbmRfaCI6NiwiZW5kX20iOjAsIndlZWsiOjQyfV0sImJyaWdodG5lc3MiOjgw"
+    "fQ=="
+)
+
+
+@pytest.mark.parametrize(
+    ("connect", "standalone"),
+    [(None, False), (None, True), (ConnectType.HB3, False), (ConnectType.NVR, False)],
+    ids=["base", "standalone", "HB3", "NVR"],
+)
+def test_t8425_motion_light_object_renders_the_handlers_recipe(
+    connect: ConnectType | None, standalone: bool
+) -> None:
+    setting = settings_of("T8425", connect, standalone=standalone)["motion_activated_light_setting"]
+    assert (setting.kind, setting.writable, setting.read_param) == (SettingKind.OBJECT, True, 1422)
+    ctx = WriteContext(
+        standalone=standalone,
+        channel=0 if standalone else 3,
+        device_sn="T0000CHILDSN0001",
+        station_sn="T0000STATION0001",
+    )
+    wire = setting.encode(T8425_LIGHT_BODY, ctx)
+    assert (wire.path, wire.cmd) == (WritePath.SUB_1350, 1422)
+    assert json.dumps(wire.params) == json.dumps(T8425_LIGHT_BODY)  # member order too
+    assert wire.updates == ((1422, T8425_LIGHT_STORED),)
+    assert setting.decode(T8425_LIGHT_STORED) == T8425_LIGHT_BODY
