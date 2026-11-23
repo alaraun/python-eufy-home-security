@@ -1676,7 +1676,7 @@
     "cmd": 1350,
     "subCmd": 6245,
     "params": {
-     "lockOpenDirection": "$v"
+     "lockOpenDirection": "$v:int"
     },
     "update": {
      "needUpdate": true,

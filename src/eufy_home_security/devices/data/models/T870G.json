@@ -192,12 +192,12 @@
     "cmd": 1350,
     "subCmd": 7023,
     "params": {
-     "type": "$v"
+     "type": "$v:int"
     },
     "update": {
      "cmd": 7023,
      "needUpdate": true,
-     "paramValue": "$v"
+     "paramValue": "$v:int"
     }
    }
   },

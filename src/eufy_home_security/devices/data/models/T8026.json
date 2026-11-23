@@ -60,7 +60,7 @@
     "cmd": 1350,
     "subCmd": 1281,
     "params": {
-     "type": "$v"
+     "type": "$v:int"
     },
     "update": {
      "cmd": 1281,

@@ -903,8 +903,8 @@
     "cmd": 1700,
     "subCmd": 6361,
     "params": {
-     "value": "$v",
-     "data": "$v"
+     "value": "$v:int",
+     "data": "$v:int"
     },
     "update": {
      "needUpdate": true,

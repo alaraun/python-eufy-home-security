@@ -74,7 +74,7 @@
     "cmd": 1350,
     "subCmd": 1281,
     "params": {
-     "type": "$v"
+     "type": "$v:int"
     },
     "update": {
      "cmd": 1281,
@@ -569,16 +569,27 @@
    "shown": "page"
   },
   "notification_alarm_delay_value": {
-   "access": "ro",
+   "access": "rw",
    "kind": "other",
    "read": {
     "map": null,
-    "no_default": true,
     "param": 1282
    },
-   "role": "status",
+   "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1282,
+    "params": {
+     "notify_alarm_delay": "$v:int"
+    },
+    "update": {
+     "cmd": 1282,
+     "needUpdate": true,
+     "paramValue": "$v:str"
+    }
+   }
   },
   "ordered_trigger_actions": {
    "access": "ro",

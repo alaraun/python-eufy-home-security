@@ -1359,7 +1359,7 @@ per-mode settings; a paired camera, doorbell or sensor adds 15 per-mode delays a
 
 | model | settings | writable | read-only |
 |---|---|---|---|
-| T8030 | 74 | 12 | 62 |
+| T8030 | 74 | 13 | 61 |
 | T8160 | 104 | 33 | 71 |
 | T8170 | 146 | 41 | 105 |
 | T8910 | 11 | 2 | 9 |

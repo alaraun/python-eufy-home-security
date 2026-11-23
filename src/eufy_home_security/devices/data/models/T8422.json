@@ -81,7 +81,8 @@
    "structured": true
   },
   "ambient_light_brightness": {
-   "access": "ro",
+   "access": "rw",
+   "control": "slider",
    "default": 100,
    "kind": "range",
    "max": 100,
@@ -89,13 +90,23 @@
    "page": "AmbientLight",
    "read": {
     "map": null,
-    "no_default": true,
     "param": 1413
    },
-   "role": "status",
+   "role": "setting",
    "section": "picture",
    "shown": "page",
-   "step": 1
+   "step": 1,
+   "write": {
+    "cmd": 1413,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1413,
+     "paramValue": "$v:str"
+    }
+   }
   },
   "ambient_light_schedule_config": {
    "access": "ro",
@@ -1092,7 +1103,8 @@
    "structured": true
   },
   "motion_actived_light_brightness": {
-   "access": "ro",
+   "access": "rw",
+   "control": "slider",
    "default": 100,
    "kind": "range",
    "max": 100,
@@ -1100,16 +1112,27 @@
    "page": "MotionActivatedLightV2",
    "read": {
     "map": null,
-    "no_default": true,
     "param": 1412
    },
-   "role": "status",
+   "role": "setting",
    "section": "picture",
    "shown": "page",
-   "step": 1
+   "step": 1,
+   "write": {
+    "cmd": 1412,
+    "params": {
+     "value": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1412,
+     "paramValue": "$v:str"
+    }
+   }
   },
   "motion_actived_light_switch": {
-   "access": "ro",
+   "access": "rw",
+   "control": "switch",
    "kind": "bool",
    "read": {
     "map": {
@@ -1117,12 +1140,22 @@
      "0": false,
      "1": true
     },
-    "no_default": true,
     "param": 1408
    },
-   "role": "status",
+   "role": "setting",
    "section": "picture",
-   "shown": "page"
+   "shown": "page",
+   "write": {
+    "cmd": 1408,
+    "params": {
+     "on": "$v"
+    },
+    "update": {
+     "needUpdate": true,
+     "cmd": 1408,
+     "paramValue": "$v:str"
+    }
+   }
   },
   "motion_detection_status": {
    "access": "rw",
@@ -1563,7 +1596,14 @@
     "4": "15 min"
    },
    "read": {
-    "map": null,
+    "map": {
+     "": 0,
+     "180": 2,
+     "30": 0,
+     "300": 3,
+     "60": 1,
+     "900": 4
+    },
     "param": 1409
    },
    "role": "setting",
@@ -1579,12 +1619,28 @@
    "write": {
     "cmd": 1409,
     "params": {
-     "value": "$v"
+     "value": {
+      "$map": {
+       "0": 30,
+       "1": 60,
+       "2": 180,
+       "3": 300,
+       "4": 900
+      }
+     }
     },
     "update": {
      "needUpdate": true,
      "cmd": 1409,
-     "paramValue": "$v:str"
+     "paramValue": {
+      "$map": {
+       "0": "30",
+       "1": "60",
+       "2": "180",
+       "3": "300",
+       "4": "900"
+      }
+     }
     }
    }
   },

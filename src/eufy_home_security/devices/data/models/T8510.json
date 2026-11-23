@@ -244,7 +244,7 @@
     "cmd": 1350,
     "subCmd": 1919,
     "params": {
-     "mode": "$v"
+     "mode": "$v:int"
     },
     "update": {
      "needUpdate": true,

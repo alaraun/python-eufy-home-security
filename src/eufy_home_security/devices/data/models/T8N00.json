@@ -1247,17 +1247,28 @@
    "structured": true
   },
   "notification_alarm_delay_value": {
-   "access": "ro",
+   "access": "rw",
    "default": "1",
    "kind": "other",
    "read": {
     "map": null,
-    "no_default": true,
     "param": 1282
    },
-   "role": "status",
+   "role": "setting",
    "section": "modes",
-   "shown": "page"
+   "shown": "page",
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1282,
+    "params": {
+     "notify_alarm_delay": "$v:int"
+    },
+    "update": {
+     "cmd": 1282,
+     "needUpdate": true,
+     "paramValue": "$v:str"
+    }
+   }
   },
   "notification_ignore_switch": {
    "access": "rw",

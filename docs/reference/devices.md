@@ -289,7 +289,7 @@ Each table below is a model's own profile. For every catalogued model, with or w
 |---|---|---|
 | local_events | unknown | no detection push over P2P observed from a T8010 HomeBase 2 (its cameras' detections arrive through cloud push) |
 
-Settings: rw 10 / ro 40, see [Settings of T8010 HomeBase 2](#settings-of-t8010-homebase-2)
+Settings: rw 11 / ro 39, see [Settings of T8010 HomeBase 2](#settings-of-t8010-homebase-2)
 
 | parameter | id |
 |---|---|
@@ -306,7 +306,7 @@ Settings: rw 10 / ro 40, see [Settings of T8010 HomeBase 2](#settings-of-t8010-h
 | event_history | verified | live CMD_DATABASE 1306 query 10000 on history_record_info, T8030 HomeBase 3 fw 3.8.7.4 (a firmware update clears the history; query 10017 answers ERROR_NO_SUPPORT) |
 | settings_write | verified | live write+read-back of time_system, T8030 HomeBase 3 fw 3.8.7.4 (the write+read-back proves the value persists; its meaning is confirmed by the eufy app showing the 24-hour clock while the station reported 1253 = 1 (seen in the eufy app)) |
 
-Settings: rw 12 / ro 62, see [Settings of T8030 HomeBase 3](#settings-of-t8030-homebase-3)
+Settings: rw 13 / ro 61, see [Settings of T8030 HomeBase 3](#settings-of-t8030-homebase-3)
 
 | parameter | id |
 |---|---|
@@ -1789,7 +1789,7 @@ rw 48 / ro 75
 
 ### Settings of T7000 Network Video Recorder E5
 
-rw 17 / ro 78
+rw 18 / ro 77
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1870,7 +1870,7 @@ rw 17 / ro 78
 | `is_support_webrtc` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
 | `model_config` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | yes | - | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `nvr_get_device_volume` | string | - | - | no | - | - |
 | `nvr_motion_detection` | string | - | - | no | - | - |
@@ -2091,7 +2091,7 @@ rw 0 / ro 40
 
 ### Settings of T8001 HomeBase
 
-rw 7 / ro 39
+rw 8 / ro 38
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2133,7 +2133,7 @@ rw 7 / ro 39
 | `is_device_upgrade` | string | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | yes | - | - |
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
@@ -2144,7 +2144,7 @@ rw 7 / ro 39
 
 ### Settings of T8002 HomeBase E
 
-rw 7 / ro 39
+rw 8 / ro 38
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2186,7 +2186,7 @@ rw 7 / ro 39
 | `is_device_upgrade` | string | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | yes | - | - |
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
@@ -2197,7 +2197,7 @@ rw 7 / ro 39
 
 ### Settings of T8010 HomeBase 2
 
-rw 10 / ro 40
+rw 11 / ro 39
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2242,7 +2242,7 @@ rw 10 / ro 40
 | `is_device_upgrade` | string | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | yes | - | - |
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `prompt_volume_value` | range | 1..26 step 1 | - | yes | slider | - |
 | `sd_card_repair_status` | bool | - | - | no | - | - |
@@ -2254,7 +2254,7 @@ rw 10 / ro 40
 
 ### Settings of T8020 Wi-Fi Doorbell Chime
 
-rw 5 / ro 33
+rw 6 / ro 32
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2291,7 +2291,7 @@ rw 5 / ro 33
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | yes | - | - |
 | `reset_device_mode` | bool | - | - | no | - | - |
 | `switching_notification` | flags | any of 0, 1, 2, 3 | - | yes | toggles | 0=Switch modes by schedule, 1=Switch modes from app, 2=Switch modes by geofencing, 3=Switch modes from Keypad |
 | `time_format_set` | enum | 0, 1 | - | yes | select | 0=12-hour, 1=24-hour |
@@ -2418,7 +2418,7 @@ rw 8 / ro 38
 
 ### Settings of T8025 HomeBase Mini
 
-rw 12 / ro 60
+rw 13 / ro 59
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2480,7 +2480,7 @@ rw 12 / ro 60
 | `is_support_familiar_face` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | yes | - | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `power_source_mode` | other | - | - | no | - | - |
@@ -2600,7 +2600,7 @@ rw 0 / ro 45
 
 ### Settings of T8030 HomeBase 3
 
-rw 12 / ro 62
+rw 13 / ro 61
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2665,7 +2665,7 @@ rw 12 / ro 62
 | `is_support_familiar_face` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | yes | - | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `ordered_trigger_actions` | other | - | - | no | - | - |
 | `p2p_encryption_type` | other | - | - | no | - | - |
@@ -2681,7 +2681,7 @@ rw 12 / ro 62
 
 ### Settings of T8040 MindBase
 
-rw 19 / ro 81
+rw 20 / ro 80
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -2765,7 +2765,7 @@ rw 19 / ro 81
 | `lcd_screen_config` | string | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
 | `model_config` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | yes | - | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `nvr_get_device_volume` | string | - | - | no | - | - |
 | `nvr_motion_detection` | string | - | - | no | - | - |
@@ -10599,13 +10599,13 @@ rw 41 / ro 80
 
 ### Settings of T8420 Floodlight Cam 1080p
 
-rw 23 / ro 65
+rw 27 / ro 61
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
 | `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=1, polyNum=4, positionNum=0, sideNum=4, zoneHeight=1080, zoneWidth=1920 |
 | `ai_empower` | other | - | - | no | - | - |
-| `ambient_light_brightness` | range | 22..100 step 1 | - | no | - | - |
+| `ambient_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
 | `ambient_light_schedule_config` | string | - | - | no | - | - |
 | `ambient_light_schedule_sunset_to_sunrise` | string | - | - | no | - | - |
 | `arming_cust_mode_config` | string | - | - | no | - | - |
@@ -10663,9 +10663,9 @@ rw 23 / ro 65
 | `live_top_toolbar_list` | other | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
-| `motion_actived_light_brightness` | range | 22..100 step 1 | - | no | - | - |
-| `motion_actived_light_distance` | enum | 0, 1, 2, 3, 4 | - | no | - | 0=46, 1=56, 2=61, 3=66, 4=76 |
-| `motion_actived_light_switch` | bool | - | - | no | - | - |
+| `motion_actived_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
+| `motion_actived_light_distance` | enum | 0, 1, 2, 3, 4 | - | yes | select | 0=46, 1=56, 2=61, 3=66, 4=76 |
+| `motion_actived_light_switch` | bool | - | - | yes | switch | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `motion_support_set_light_mode` | bool | - | - | no | - | - |
@@ -10694,13 +10694,13 @@ rw 23 / ro 65
 
 ### Settings of T8420X
 
-rw 27 / ro 55
+rw 30 / ro 52
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
 | `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=1, polyNum=2, positionNum=0, sideNum=6, zoneHeight=432, zoneWidth=768 |
 | `ai_empower` | other | - | - | no | - | - |
-| `ambient_light_brightness` | range | 22..100 step 1 | - | no | - | - |
+| `ambient_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
 | `ambient_light_schedule_config` | string | - | - | no | - | - |
 | `ambient_light_schedule_sunset_to_sunrise` | string | - | - | no | - | - |
 | `arming_cust_mode_config` | string | - | - | no | - | - |
@@ -10757,8 +10757,8 @@ rw 27 / ro 55
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
-| `motion_actived_light_brightness` | range | 22..100 step 1 | - | no | - | - |
-| `motion_actived_light_switch` | bool | - | - | no | - | - |
+| `motion_actived_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
+| `motion_actived_light_switch` | bool | - | - | yes | switch | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `nightvision_type` | bool | - | - | yes | switch | - |
@@ -10783,13 +10783,13 @@ rw 27 / ro 55
 
 ### Settings of T8422 Floodlight Cam E
 
-rw 27 / ro 58
+rw 30 / ro 55
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
 | `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=1, polyNum=2, positionNum=0, sideNum=6, zoneHeight=432, zoneWidth=768 |
 | `ai_empower` | other | - | - | no | - | - |
-| `ambient_light_brightness` | range | 22..100 step 1 | - | no | - | - |
+| `ambient_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
 | `ambient_light_schedule_config` | string | - | - | no | - | - |
 | `ambient_light_schedule_sunset_to_sunrise` | string | - | - | no | - | - |
 | `arming_cust_mode_config` | string | - | - | no | - | - |
@@ -10849,8 +10849,8 @@ rw 27 / ro 58
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
-| `motion_actived_light_brightness` | range | 22..100 step 1 | - | no | - | - |
-| `motion_actived_light_switch` | bool | - | - | no | - | - |
+| `motion_actived_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
+| `motion_actived_light_switch` | bool | - | - | yes | switch | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `nightvision_type` | bool | - | - | yes | switch | - |
@@ -10875,15 +10875,15 @@ rw 27 / ro 58
 
 ### Settings of T8423 Floodlight Cam 2 Pro
 
-rw 35 / ro 74
+rw 41 / ro 68
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
 | `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=1, polyNum=2, positionNum=0, sideNum=6, zoneHeight=432, zoneWidth=768 |
 | `ai_empower` | other | - | - | no | - | - |
 | `ai_tracking_status` | bool | - | - | yes | switch | - |
-| `ambient_light_brightness` | range | 0..100 step 1 | - | no | - | - |
-| `ambient_light_color_temperature` | range | 0..100 step 1 | - | no | - | - |
+| `ambient_light_brightness` | range | 0..100 step 1 | - | yes | slider | - |
+| `ambient_light_color_temperature` | range | 0..100 step 1 | - | yes | slider | - |
 | `ambient_light_schedule_config` | string | - | - | no | - | - |
 | `ambient_light_schedule_sunset_to_sunrise` | string | - | - | no | - | - |
 | `arming_cust_mode_config` | string | - | - | no | - | - |
@@ -10960,10 +10960,10 @@ rw 35 / ro 74
 | `manual_light_color_temperature` | range | 0..100 step 1 | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
-| `motion_actived_light_brightness` | range | 0..100 step 1 | - | no | - | - |
-| `motion_actived_light_color_temperature` | range | 0..100 step 1 | - | no | - | - |
-| `motion_actived_light_mode` | other | - | - | no | - | - |
-| `motion_actived_light_switch` | bool | - | - | no | - | - |
+| `motion_actived_light_brightness` | range | 0..100 step 1 | - | yes | slider | - |
+| `motion_actived_light_color_temperature` | range | 0..100 step 1 | - | yes | slider | - |
+| `motion_actived_light_mode` | other | - | - | yes | - | - |
+| `motion_actived_light_switch` | bool | - | - | yes | switch | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `nas_select_video_type` | other | - | - | no | - | - |
@@ -10991,13 +10991,13 @@ rw 35 / ro 74
 
 ### Settings of T8424 Floodlight Cam 2K
 
-rw 27 / ro 58
+rw 30 / ro 55
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
 | `activityzone_config` | enum | sideNum, normalized, polyNum, panNum, positionNum, zoneWidth, zoneHeight | - | no | - | normalized=0, panNum=1, polyNum=2, positionNum=0, sideNum=6, zoneHeight=432, zoneWidth=768 |
 | `ai_empower` | other | - | - | no | - | - |
-| `ambient_light_brightness` | range | 22..100 step 1 | - | no | - | - |
+| `ambient_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
 | `ambient_light_schedule_config` | string | - | - | no | - | - |
 | `ambient_light_schedule_sunset_to_sunrise` | string | - | - | no | - | - |
 | `arming_cust_mode_config` | string | - | - | no | - | - |
@@ -11056,8 +11056,8 @@ rw 27 / ro 58
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
-| `motion_actived_light_brightness` | range | 22..100 step 1 | - | no | - | - |
-| `motion_actived_light_switch` | bool | - | - | no | - | - |
+| `motion_actived_light_brightness` | range | 22..100 step 1 | - | yes | slider | - |
+| `motion_actived_light_switch` | bool | - | - | yes | switch | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `nightvision_type` | bool | - | - | yes | switch | - |
@@ -14892,7 +14892,7 @@ rw 49 / ro 108
 
 ### Settings of T8N00 Network Video Recorder S4
 
-rw 18 / ro 93
+rw 19 / ro 92
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -14987,7 +14987,7 @@ rw 18 / ro 93
 | `is_support_webrtc` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
 | `model_config` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | yes | - | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `nvr_get_device_volume` | string | - | - | no | - | - |
 | `nvr_motion_detection` | string | - | - | no | - | - |
@@ -15455,7 +15455,7 @@ rw 0 / ro 3
 
 ### Settings of T9000 HomeBase Professional S1
 
-rw 14 / ro 90
+rw 15 / ro 89
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -15544,7 +15544,7 @@ rw 14 / ro 90
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `is_support_webrtc` | bool | - | - | no | - | - |
 | `mac_address` | string | - | - | no | - | - |
-| `notification_alarm_delay_value` | other | - | - | no | - | - |
+| `notification_alarm_delay_value` | other | - | - | yes | - | - |
 | `notification_ignore_switch` | bool | - | - | yes | switch | - |
 | `nvr_get_device_volume` | string | - | - | no | - | - |
 | `power_charge_mode` | enum | 0, 1 | - | no | - | 0=Battery, 1=External Solar Panel |

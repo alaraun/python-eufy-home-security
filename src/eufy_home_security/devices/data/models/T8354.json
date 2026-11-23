@@ -764,12 +764,12 @@
     "cmd": 1350,
     "subCmd": 7003,
     "params": {
-     "value": "$v"
+     "value": "$v:int"
     },
     "update": {
      "needUpdate": true,
      "cmd": 7003,
-     "paramValue": "$v"
+     "paramValue": "$v:int"
     }
    }
   },
@@ -1078,12 +1078,12 @@
     "cmd": 1350,
     "subCmd": 6282,
     "params": {
-     "time_sec": "$v"
+     "time_sec": "$v:int"
     },
     "update": {
      "needUpdate": true,
      "cmd": 6282,
-     "paramValue": "$v"
+     "paramValue": "$v:int"
     }
    }
   },
