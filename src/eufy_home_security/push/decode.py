@@ -135,6 +135,12 @@ def _ms(value: object) -> int | None:
     return int(num * 1000) if num < _MS_THRESHOLD else int(num)
 
 
+def _pic_url(value: object) -> str | None:
+    """The picture URL of a ``pic_url`` field, a comma-separated list: its first item."""
+    text = coerce_str(value)
+    return coerce_str(text.split(",", 1)[0]) if text is not None else None
+
+
 def is_security_push(data: Mapping[str, Any]) -> bool:
     """False for a message addressed to another eufy app (``app_tab``)."""
     tab = data.get("app_tab")
@@ -184,7 +190,7 @@ def decode_push(data: Mapping[str, Any], *, now_ms: Callable[[], int] = wall_ms)
             device_sn=coerce_str(_first(data.get("device_sn"), inner.get("device_sn"))),
             event_time_ms=event_time_ms,
             guard_mode=guard_mode,
-            pic_url=coerce_str(inner.get("pic_url")),
+            pic_url=_pic_url(inner.get("pic_url")),
             video_path=video_path,
             push_id=coerce_str(_first(push_id, inner.get("span_id"))),
             rejected_fields=frozenset(reader.rejected),

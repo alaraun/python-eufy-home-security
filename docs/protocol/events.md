@@ -185,6 +185,9 @@ camera, the face first as the eufy app does **[app]**:
 | `PIC_URL` | `pic_url`, https | a GET of the URL (the app's large notification picture) |
 | `PIC_URL` | `pic_url`, a station path (`/zx/….jpg`) | a still fetch on the station's session ([media.md](media.md#stills-1308-verified)); only for a station served locally |
 
+A cloud push's `pic_url` is a comma-separated list of pictures **[app]**;
+`SecurityEvent.pic_url` is its first item.
+
 `EufySecurity.async_push_image(event, source=None)` returns a `PushImage` (`data`,
 `content_type`: JPEG, PNG or WebP, `face_id` of a face image). Without `source` it tries
 the named sources in that order and returns the first that works. A push that names

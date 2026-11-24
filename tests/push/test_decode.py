@@ -508,6 +508,22 @@ def test_a_plain_json_payload_decodes() -> None:
     assert event.device_sn == SYNTHETIC.camera_sn
 
 
+@pytest.mark.parametrize("field", ["doorbell", "payload"])
+@pytest.mark.parametrize(
+    ("pic_url", "expected"),
+    [
+        ("https://example/1.jpg,https://example/2.jpg", "https://example/1.jpg"),
+        ("https://example/1.jpg", "https://example/1.jpg"),
+        ("", None),
+    ],
+)
+def test_the_picture_url_is_the_first_item_of_the_pic_url_list(
+    field: str, pic_url: str, expected: str | None
+) -> None:
+    msg = {"type": "5", field: json.dumps(_press(pic_url=pic_url))}
+    assert decode_push(msg, now_ms=lambda: NOW_MS).pic_url == expected
+
+
 def _deep(depth: int) -> str:
     """A press whose extra field nests ``depth`` objects deep."""
     nested = '{"x":' * depth + "1" + "}" * depth
