@@ -310,6 +310,35 @@ def _meanings(
             _count(counts, "meaning:app")
 
 
+def _flag_meanings(
+    pn: str, settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]
+) -> None:
+    """Set ``flag_meanings`` from the hand-read ``flag_meanings`` (``{identifier: {members:
+    {member: meaning}, source}}``) on a ``flags`` setting of the identifier and its
+    variants: the rule's members the setting has, each with a binary meaning."""
+    for ident, rule in (titles.get("flag_meanings") or {}).items():
+        members = rule.get("members") if isinstance(rule, dict) else None
+        try:
+            if not isinstance(members, dict) or not members:
+                raise TypeError(members)
+            meanings = {str(m): SettingMeaning(v) for m, v in members.items()}
+        except (TypeError, ValueError) as err:
+            raise GeneratorError(
+                f"{pn}: flag meaning rule of {ident} is not member -> meaning"
+            ) from err
+        if not set(meanings.values()) <= BINARY_MEANINGS:
+            raise GeneratorError(f"{pn}: flag meaning rule of {ident} names no binary meaning")
+        for key in _members(settings, ident):
+            entry = settings[key]
+            if entry["kind"] != "flags":
+                _count(counts, "flag meaning:not a flags setting")
+                continue
+            own = {m: v.value for m, v in meanings.items() if m in entry["flags"]}
+            if own:
+                entry["flag_meanings"] = own
+                _count(counts, "flag meaning:app")
+
+
 def _variants(
     pn: str, settings: Settings, titles: Mapping[str, Any], counts: dict[str, int]
 ) -> None:
@@ -753,6 +782,7 @@ def join(
         rn = tree is not None and tree.get("settings_ui") == RN_SETTINGS
         _units(product_code, settings, titles, counts, rn=rn)
         _meanings(product_code, settings, titles, counts)
+        _flag_meanings(product_code, settings, titles, counts)
         if rn:
             own = (titles.get("models") or {}).get(product_code) or {}
             _names(product_code, settings, own, titles.get("titles") or {}, counts)

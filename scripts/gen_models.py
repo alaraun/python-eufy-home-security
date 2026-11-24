@@ -115,6 +115,7 @@ JS_NUMBER = re.compile(r"(?<![\w$.])(?:0[xX][0-9a-fA-F]+|\d+(?:[eE]\d{1,2})?)(?!
 # Probes of an open-kind read beyond its domain: a multi-digit number and a JSON object.
 OPEN_NUMBER_PROBE, OPEN_JSON_PROBE = "4321", '{"probe":1}'
 BOOL_EXTRA_PROBE = "2"  # a parameter value no bool form names
+FLAG_PROBE_BITS = 32  # the single bits a status of booleans is held at (an int32 mask)
 BATTERY_PROBE = "57"  # the value a candidate battery parameter is listed at
 BATTERY_SAMPLES = range(256)  # the raw levels a battery parameter is read at
 BATTERY_LEVEL_TEXT = re.compile(r"-?[0-9]+")
@@ -646,6 +647,109 @@ def located_reads(
             # A status only the device reports: nothing reported reads None, no default.
             out[ident] = {**read, "no_default": True}
             _count(counts, "read:handler parameter")
+    return out
+
+
+def _unique_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """A JSON object's members; ValueError when a name repeats."""
+    if len({name for name, _ in pairs}) != len(pairs):
+        raise ValueError("a repeated member name")
+    return dict(pairs)
+
+
+def _bool_struct(answer: Any) -> dict[str, bool] | None:
+    """A getProperty value as a non-empty object of booleans: the object, or its JSON text
+    naming each member once; None for anything else."""
+    if isinstance(answer, str):
+        try:
+            answer = json.loads(answer, object_pairs_hook=_unique_members)
+        except ValueError:
+            return None
+    if not isinstance(answer, dict) or not answer:
+        return None
+    if not all(type(v) is bool for v in answer.values()):
+        return None
+    return answer
+
+
+def _single_bit_members(answers: Mapping[int, Any]) -> dict[str, int] | None:
+    """Member -> bit from getProperty's values (``answers``: held mask -> value) at 0, every
+    member off, and at each single bit below :data:`FLAG_PROBE_BITS`: the same members, at
+    most one of them on, none on for two bits. A member no bit turns on is left out."""
+    zero = _bool_struct(answers.get(0, codec.MISSING))
+    if zero is None or any(zero.values()):
+        return None
+    members: dict[str, int] = {}
+    for bit in (1 << k for k in range(FLAG_PROBE_BITS)):
+        got = _bool_struct(answers.get(bit, codec.MISSING))
+        if got is None or got.keys() != zero.keys():
+            return None
+        on = [name for name, value in got.items() if value]
+        if len(on) > 1 or (on and on[0] in members):
+            return None
+        if on:
+            members[on[0]] = bit
+    return members
+
+
+def flag_members(answers: Mapping[int, Any]) -> dict[str, int] | None:
+    """Member -> bit of a status the handler builds as an object of booleans, one per bit
+    of its parameter (``answers``: held mask -> getProperty's value): one member per bit
+    (:func:`_single_bit_members`), and at the OR of their bits the same members, every
+    one on (no member without a bit; a mask, not a value compared with each bit); None
+    otherwise."""
+    members = _single_bit_members(answers)
+    if members is None:
+        return None
+    every = _bool_struct(answers.get(sum(members.values()), codec.MISSING))
+    if every is None or every.keys() != members.keys() or not all(every.values()):
+        return None
+    return members
+
+
+def flags_reads(
+    product_code: str,
+    handler: Path,
+    context: codec.Context,
+    idents: Iterable[str],
+    located: Mapping[str, Located],
+    *,
+    counts: dict[str, int],
+) -> dict[str, tuple[dict[str, Any], dict[str, int]]]:
+    """The read and the members (:func:`flag_members`) of each of ``idents`` (settings
+    without a read) that getProperty fills from its located parameter as an object of
+    booleans, one per bit, in ``context``. The parameter is held at 0 first; those read
+    as such an object with every member off are held at each single bit, then at the OR
+    of the members' bits."""
+
+    def ask(masks: Mapping[str, Iterable[int]]) -> dict[str, dict[int, Any]]:
+        asks = [(ident, mask) for ident, held in masks.items() for mask in held]
+        requests = [located[i].request(product_code, context, i, str(m)) for i, m in asks]
+        replies = run_driver(product_code, handler, requests) if requests else []
+        got: dict[str, dict[int, Any]] = {}
+        for (ident, mask), reply in zip(asks, replies, strict=True):
+            got.setdefault(ident, {})[mask] = _property_values(reply).get(ident, codec.MISSING)
+        return got
+
+    zero = ask({i: [0] for i in sorted(idents) if i in located})
+    off = [
+        ident
+        for ident, got in zero.items()
+        if (struct := _bool_struct(got[0])) is not None and not any(struct.values())
+    ]
+    bits = [1 << k for k in range(FLAG_PROBE_BITS)]
+    answers = {i: {**zero[i], **got} for i, got in ask(dict.fromkeys(off, bits)).items()}
+    singles = {i: m for i, a in answers.items() if (m := _single_bit_members(a)) is not None}
+    every = ask({i: [sum(m.values())] for i, m in singles.items()})
+    out: dict[str, tuple[dict[str, Any], dict[str, int]]] = {}
+    for ident in off:
+        members = flag_members({**answers[ident], **every.get(ident, {})})
+        if members is None:
+            _count(counts, "read:flags no mask")
+            continue
+        read = {"param": located[ident].param, "map": None, "no_default": True}
+        out[ident] = (read, members)
+        _count(counts, "read:flags")
     return out
 
 
@@ -2152,10 +2256,21 @@ def build_context(  # noqa: C901
             _count(counts, f"ro:{result.note}")
     # A setting without a write reads as the handler fills it from the device's parameters.
     unwritten = {p["identifier"]: p for p in props if settings[p["identifier"]]["access"] == "ro"}
-    for ident, read in located_reads(
+    found = located_reads(
         product_code, handler, context, unwritten, located, counts=counts, wire=wire
-    ).items():
+    )
+    for ident, read in found.items():
         settings[ident]["read"] = read
+    # A status the handler builds as an object of booleans, one per bit of its parameter,
+    # is that parameter's mask, whatever kind the description declares.
+    unread = [i for i in unwritten if i not in found]
+    for ident, (read, members) in flags_reads(
+        product_code, handler, context, unread, located, counts=counts
+    ).items():
+        entry = settings[ident]
+        for key in ("values", "min", "max", "step", "unit", "default", "meaning"):
+            entry.pop(key, None)
+        entry.update(kind="flags", flags=members, read=read)
     try:
         joined = joiner.join(product_code, settings, td, app_labels, tree, titles=titles)
     except GeneratorError as err:
