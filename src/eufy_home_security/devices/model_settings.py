@@ -1141,6 +1141,8 @@ def _classify(template: Recipe, recipe: Mapping[str, Any]) -> WireCommand:
         return WireCommand(
             path=WritePath.RECIPE_1700, cmd=sub, params=body, value=None, updates=updates
         )
+    if (refusal := _body_refusal(cmd, params, _channel_fields(template))) is not None:
+        raise ValueError(refusal)
     match _frame_form(cmd):
         case WritePath.ECB:
             return WireCommand(
@@ -1151,9 +1153,9 @@ def _classify(template: Recipe, recipe: Mapping[str, Any]) -> WireCommand:
                 updates=updates,
             )
         case WritePath.STRING:
-            text = None if body is None else body.get(_TEXT_FIELD)
+            text = (body or {}).get(_TEXT_FIELD)
             if not isinstance(text, str):
-                raise ValueError(f"string command {cmd} needs its text in {_TEXT_FIELD}")
+                raise ValueError(f"string command {cmd}: {_TEXT_FIELD} is {text!r}, not a text")
             number = _int_field(cmd, (body or {}).get(_INT_FIELD, 0))
             return WireCommand(
                 path=WritePath.STRING,
@@ -1180,7 +1182,7 @@ def _classify(template: Recipe, recipe: Mapping[str, Any]) -> WireCommand:
                 account_members=account,
             )
         case _:
-            raise ValueError(f"command {cmd}: no frame the eufy app sends for it with this body")
+            raise ValueError(f"no frame the eufy app sends for command {cmd}")
 
 
 # Request fields a handler's params may set directly: they replace what the app's request
@@ -1230,6 +1232,25 @@ def _frame_form(cmd: int) -> WritePath | None:
     return None
 
 
+def _body_refusal(cmd: int, params: object, channel: frozenset[str]) -> str | None:
+    """Why a bare command's body cannot go out in the command's frame form, or None.
+
+    Reads only which members the body has, which a template's params and their rendering
+    share, so a setting refused here is not writable and its encode raises the same text.
+    A scalar body is left to the caller."""
+    body = params if isinstance(params, Mapping) else None
+    match _frame_form(cmd):
+        case None:
+            return f"no frame the eufy app sends for command {cmd}"
+        case WritePath.STRING if params is None or (body is not None and _TEXT_FIELD not in body):
+            return f"string command {cmd} needs its text in {_TEXT_FIELD}"
+        case WritePath.JSON_FRAME if params is None:
+            return f"JSON-text command {cmd} has no object body to send"
+        case WritePath.ECB if body is not None and not set(body) - channel:
+            return f"ECB command {cmd}: the body holds no value to send"
+    return None
+
+
 # ── refusals ───────────────────────────────────────────────────────────────
 
 # Recipe keys of transports the library does not send, with the note a refused setting gets.
@@ -1247,8 +1268,9 @@ _GUARD_MODE_KEY: Final = "arming_selected_mode"
 _GUARD_MODE_NOTE: Final = "guard mode: use Station.async_set_guard_mode"
 
 
-def _refusal(template: Recipe) -> str | None:
-    """Why the library does not send a write template, or None when it does."""
+def _refusal(template: Recipe, *, domain: bool = False) -> str | None:
+    """Why the library does not send a write template, or None when it does. A ``domain``
+    setting's string frame carries the domain's text, whatever the template's body."""
     for key, reason in _TRANSPORTS:
         if key in template:
             return reason
@@ -1259,8 +1281,10 @@ def _refusal(template: Recipe) -> str | None:
         return "1700 data body not supported"
     if sub is not None and (isinstance(sub, bool) or not isinstance(sub, int)):
         return "no P2P command"
-    if sub is None and _frame_form(cmd) is None:
-        return f"no frame the eufy app sends for command {cmd}"
+    if sub is None and domain and _frame_form(cmd) is WritePath.STRING:
+        return None
+    if sub is None and (body := _body_refusal(cmd, params, _channel_fields(template))):
+        return body
     if params is None or isinstance(params, Mapping):
         return None
     if params == _OBJECT_BODY:
@@ -1270,8 +1294,11 @@ def _refusal(template: Recipe) -> str | None:
     return "scalar body on a non-ECB command"
 
 
-def _first_refusal(templates: list[Recipe | None]) -> str | None:
-    return next((r for t in templates if t is not None and (r := _refusal(t)) is not None), None)
+def _first_refusal(templates: list[Recipe | None], *, domain: bool = False) -> str | None:
+    return next(
+        (r for t in templates if t is not None and (r := _refusal(t, domain=domain)) is not None),
+        None,
+    )
 
 
 # ── domains ────────────────────────────────────────────────────────────────
@@ -2013,7 +2040,9 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         if key == _GUARD_MODE_KEY:
             refusal = _GUARD_MODE_NOTE
         else:
-            refusal = _first_refusal([write, *(table or {}).values()])
+            refusal = _first_refusal(
+                [write, *(table or {}).values()], domain=entry.get("domain") is not None
+            )
     if refusal is not None:
         writable, note = False, _join_note(note, refusal)
     control, flags, bit = _control_fields(kind, entry, access == "rw")

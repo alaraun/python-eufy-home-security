@@ -504,6 +504,78 @@ def test_a_command_with_no_frame_form_is_not_sent(cmd: int) -> None:
     assert model_settings._refusal(recipe) == f"no frame the eufy app sends for command {cmd}"
 
 
+@pytest.mark.parametrize(
+    ("write", "note"),
+    [
+        ({"cmd": 1414, "params": {"deviceName": "$v"}}, "string command 1414 needs its text in mValueStr"),
+        ({"cmd": 1271}, "JSON-text command 1271 has no object body to send"),
+        ({"cmd": 1246, "params": {"channel": "$channel"}}, "ECB command 1246: the body holds no value to send"),
+    ],
+)  # fmt: skip
+def test_a_body_its_frame_form_cannot_carry_is_not_writable(
+    write: dict[str, object], note: str
+) -> None:
+    """The writability note and the encode-time error come from one check."""
+    recipe = model_settings._render(
+        write, "1", channel=0, device_sn="T0000ALONESN0001", station_sn="", params={}
+    )
+    with pytest.raises(ValueError, match=note):
+        model_settings._classify(write, recipe)
+    entry = {"kind": "string", "access": "rw", "control": "text", "section": "picture",
+             "role": "setting", "read": None, "write": write}  # fmt: skip
+    setting = model_settings._build("T0000", "x", entry)
+    assert (setting.writable, setting.note) == (False, note)
+
+
+def test_a_time_zone_string_frame_takes_its_text_from_the_domain() -> None:
+    """A domain setting's string frame needs no ``mValueStr``: the domain renders the text."""
+    entry = {"kind": "string", "access": "rw", "control": "select", "section": "picture",
+             "role": "setting", "read": None, "domain": "timezone",
+             "write": {"cmd": 1215, "params": {"value": "$v"}}}  # fmt: skip
+    setting = model_settings._build("T0000", "x", entry)
+    assert setting.writable
+    assert setting.encode(setting.values[0], ALONE).path is WritePath.STRING
+
+
+class _EveryParam(dict[int, str]):
+    """Current parameters where every id reads ``"1"``."""
+
+    def get(self, key: object, default: object = None) -> str:
+        return "1"
+
+
+def _sample(setting: Setting) -> object:
+    if setting.values:
+        return setting.values[0]
+    if setting.minimum is not None:
+        return setting.minimum
+    if setting.kind is SettingKind.BOOL:
+        return True
+    if setting.kind is SettingKind.OBJECT:
+        return setting.default if isinstance(setting.default, dict) else {"enable": 1}
+    return "1"
+
+
+@pytest.mark.parametrize("standalone", [False, True], ids=["child", "alone"])
+def test_every_bundled_writable_setting_encodes_a_sample_value(standalone: bool) -> None:
+    """Writability is the twin of the encode refusal: a setting that reads writable in a
+    context renders a value there."""
+    ctx = replace(ALONE if standalone else CHILD, params=_EveryParam())
+    failed = []
+    for code in bundled_codes():
+        for key, setting in settings_of(code, standalone=standalone).items():
+            if not setting.writable:
+                continue
+            try:
+                if setting.bit is not None:
+                    setting.encode_mask(setting.bit, ctx)
+                else:
+                    setting.encode(_sample(setting), ctx)
+            except ValueError as err:
+                failed.append(f"{code}:{key}: {err}")
+    assert failed == []
+
+
 FLOODLIGHTS = ("T8420", "T8420X", "T8422", "T8423", "T8424")
 
 

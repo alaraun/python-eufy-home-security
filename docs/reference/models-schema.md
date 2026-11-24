@@ -378,8 +378,11 @@ does not report one (the handler would send null; a HomeBase 3 refuses a 2731 wr
 `"mode": null`). The library does not send a write, and the
 setting is not `writable`, when its recipe goes over another transport: the note then
 names it (`cloud request`, `multi-command write`, `app-local`, `Bluetooth`, `MQTT`,
-`no P2P command`, `1700 data body not supported`, `scalar body on a non-ECB command`), or
-when its command has no frame form (`no frame the eufy app sends for command <id>`).
+`no P2P command`, `1700 data body not supported`, `scalar body on a non-ECB command`),
+when its command has no frame form (`no frame the eufy app sends for command <id>`), or
+when its body cannot fill that form (a string frame without `mValueStr`, a JSON-text frame
+without a body, an ECB body with no value member). These body checks are the ones `encode`
+applies, so a `writable` setting never fails them at send time.
 `arming_selected_mode` is never written as a setting (`guard mode: use
 Station.async_set_guard_mode`).
 
