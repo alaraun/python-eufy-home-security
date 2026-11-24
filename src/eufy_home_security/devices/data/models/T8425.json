@@ -1795,15 +1795,28 @@
    }
   },
   "light_ambient_lighting_setting": {
-   "access": "ro",
-   "kind": "string",
-   "note": "handler rejects the probed values",
+   "access": "rw",
+   "control": "object",
+   "kind": "object",
    "page": "NightVisionAlwaysOn",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1421
+   },
    "role": "setting",
    "section": "picture",
    "shown": "page",
-   "structured": true
+   "structured": true,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1421,
+    "params": "$v:json",
+    "update": {
+     "needUpdate": true,
+     "cmd": 1421,
+     "paramValue": "$v:b64json"
+    }
+   }
   },
   "live_bottom_hor_toolbar_list": {
    "access": "ro",
@@ -2034,14 +2047,27 @@
    "structured": true
   },
   "motion_activated_light_setting": {
-   "access": "ro",
-   "kind": "string",
-   "note": "handler ignores the value",
-   "read": null,
+   "access": "rw",
+   "control": "object",
+   "kind": "object",
+   "read": {
+    "map": null,
+    "param": 1422
+   },
    "role": "setting",
    "section": "picture",
    "shown": "page",
-   "structured": true
+   "structured": true,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1422,
+    "params": "$v:json",
+    "update": {
+     "needUpdate": true,
+     "cmd": 1422,
+     "paramValue": "$v:b64json"
+    }
+   }
   },
   "motion_detection_status": {
    "access": "rw",

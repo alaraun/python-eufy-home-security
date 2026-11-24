@@ -1926,15 +1926,28 @@
    "structured": true
   },
   "motion_activated_light_setting": {
-   "access": "ro",
-   "kind": "string",
+   "access": "rw",
+   "control": "object",
+   "kind": "object",
    "name": "Motion-activated light",
-   "note": "handler ignores the value",
-   "read": null,
+   "read": {
+    "map": null,
+    "param": 1422
+   },
    "role": "setting",
    "section": "picture",
    "shown": "page",
-   "structured": true
+   "structured": true,
+   "write": {
+    "cmd": 1350,
+    "subCmd": 1422,
+    "params": "$v:json",
+    "update": {
+     "needUpdate": true,
+     "cmd": 1422,
+     "paramValue": "$v:b64json"
+    }
+   }
   },
   "motion_detection_status": {
    "access": "rw",

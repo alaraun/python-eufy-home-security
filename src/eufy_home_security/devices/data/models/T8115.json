@@ -1589,7 +1589,7 @@
    "access": "ro",
    "kind": "string",
    "name": "Motion-activated light",
-   "note": "handler ignores the value",
+   "note": "handler ignores the value; no object form reproduces the app's object write",
    "read": null,
    "role": "setting",
    "section": "picture",

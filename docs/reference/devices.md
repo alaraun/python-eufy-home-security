@@ -1891,7 +1891,7 @@ rw 18 / ro 77
 
 ### Settings of T7100 PoE Camera
 
-rw 32 / ro 68
+rw 34 / ro 66
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -1943,7 +1943,7 @@ rw 32 / ro 68
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `led_on_off` | bool | - | - | yes | switch | - |
-| `light_ambient_lighting_setting` | string | - | - | no | - | - |
+| `light_ambient_lighting_setting` | object | - | - | yes | object | - |
 | `live_ai_box_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=People, 1=Car, 2=Pet |
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 1, 2, 19, 4, 18, 7, 9, 13, 8, 6, 20 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 18=PTZ Linkage, 19=PTZ Control Entrance, 2=Speaker, 20=Single Dual Screen Switch, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
@@ -1959,7 +1959,7 @@ rw 32 / ro 68
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `model_config` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_follow_global_setting` | bool | - | - | no | - | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_support_set_light_mode` | bool | - | - | no | - | - |
@@ -6318,7 +6318,7 @@ rw 52 / ro 116
 
 ### Settings of T8173 SoloCam E42
 
-rw 42 / ro 100
+rw 43 / ro 99
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -6426,7 +6426,7 @@ rw 42 / ro 100
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `model_config` | string | - | - | no | - | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `nas_stream_switch` | bool | - | - | yes | switch | - |
@@ -10322,7 +10322,7 @@ rw 49 / ro 92
 
 ### Settings of T8417 Indoor Cam Pan&Tilt 4K
 
-rw 49 / ro 93
+rw 50 / ro 92
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -10423,7 +10423,7 @@ rw 49 / ro 93
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
 | `nas_stream_switch` | bool | - | - | yes | switch | - |
@@ -11083,7 +11083,7 @@ rw 30 / ro 55
 
 ### Settings of T8425 Floodlight Cam E340
 
-rw 44 / ro 89
+rw 46 / ro 87
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -11171,7 +11171,7 @@ rw 44 / ro 89
 | `is_support_multiple_bridge__v5` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `led_on_off` | bool | - | - | yes | switch | - |
-| `light_ambient_lighting_setting` | string | - | - | no | - | - |
+| `light_ambient_lighting_setting` | object | - | - | yes | object | - |
 | `live_bottom_hor_toolbar_list` | enum | 0, 1, 2, 3, 4, 13 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 2=Speaker, 3=Pantili, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 1, 2, 3, 4, 7, 8, 9, 12, 13, 16, 6 | - | no | - | 0=Record, 1=Screenshot, 12=Calibration, 13=Spotlight, 16=Positions, 2=Speaker, 3=Pantili, 4=Sound, 6=Roundloo, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
 | `live_ptz_toolbar_list` | enum | 0, 1 | - | no | - | 0=Preset, 1=Control |
@@ -11182,7 +11182,7 @@ rw 44 / ro 89
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_support_set_light_mode` | bool | - | - | no | - | - |
 | `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
@@ -11223,7 +11223,7 @@ rw 44 / ro 89
 
 ### Settings of T8426 Floodlight Cam E30
 
-rw 42 / ro 87
+rw 44 / ro 85
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -11306,7 +11306,7 @@ rw 42 / ro 87
 | `is_support_multiple_bridge__v4` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `led_on_off` | bool | - | - | yes | switch | - |
-| `light_ambient_lighting_setting` | string | - | - | no | - | - |
+| `light_ambient_lighting_setting` | object | - | - | yes | object | - |
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 13, 1, 2, 19 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 19=PTZ Control Entrance, 2=Speaker, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 4, 2, 13, 1, 8, 7, 9, 6, 19 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 19=PTZ Control Entrance, 2=Speaker, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
 | `live_ptz_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=Preset, 1=Control, 2=Panorama |
@@ -11319,7 +11319,7 @@ rw 42 / ro 87
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `model_config` | string | - | - | no | - | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `nas_select_video_type` | enum | 0, 1 | - | no | - | 0=Event, 1=Continue recording |
 | `nas_stream_switch` | bool | - | - | yes | switch | - |
@@ -13649,7 +13649,7 @@ rw 37 / ro 71
 
 ### Settings of T86C1 eufy Wall Light Cam S4
 
-rw 37 / ro 104
+rw 38 / ro 103
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -13747,7 +13747,7 @@ rw 37 / ro 104
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `multi_detection_sensitivity` | string | - | - | no | - | - |
@@ -14242,7 +14242,7 @@ rw 0 / ro 2
 
 ### Settings of T8E00 PoE Cam S4
 
-rw 35 / ro 72
+rw 37 / ro 70
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -14300,7 +14300,7 @@ rw 35 / ro 72
 | `is_support_dynamic_privacy_zone` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `led_on_off` | bool | - | - | yes | switch | - |
-| `light_ambient_lighting_setting` | string | - | - | no | - | - |
+| `light_ambient_lighting_setting` | object | - | - | yes | object | - |
 | `live_ai_box_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=People, 1=Car, 2=Pet |
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 1, 2, 19, 4, 18, 7, 9, 13, 8, 6, 20 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 18=PTZ Linkage, 19=PTZ Control Entrance, 2=Speaker, 20=Single Dual Screen Switch, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
@@ -14316,7 +14316,7 @@ rw 35 / ro 72
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `model_config` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_follow_global_setting` | bool | - | - | no | - | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_support_set_light_mode` | bool | - | - | no | - | - |
@@ -14356,7 +14356,7 @@ rw 35 / ro 72
 
 ### Settings of T8E00E
 
-rw 34 / ro 70
+rw 36 / ro 68
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -14412,7 +14412,7 @@ rw 34 / ro 70
 | `is_support_dynamic_privacy_zone` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `led_on_off` | bool | - | - | yes | switch | - |
-| `light_ambient_lighting_setting` | string | - | - | no | - | - |
+| `light_ambient_lighting_setting` | object | - | - | yes | object | - |
 | `live_ai_box_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=People, 1=Car, 2=Pet |
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 3, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 3=Pantili, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 1, 2, 19, 4, 18, 7, 9, 13, 8, 6, 20 | - | no | - | 0=Record, 1=Screenshot, 13=Spotlight, 18=PTZ Linkage, 19=PTZ Control Entrance, 2=Speaker, 20=Single Dual Screen Switch, 4=Sound, 6=Roundlook, 7=AI Tracking, 8=Auto Night Vision, 9=Playback |
@@ -14428,7 +14428,7 @@ rw 34 / ro 70
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `model_config` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_follow_global_setting` | bool | - | - | no | - | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_support_set_light_mode` | bool | - | - | no | - | - |
@@ -14728,7 +14728,7 @@ rw 0 / ro 26
 
 ### Settings of T8L60 eufy TrackLight Cam S1
 
-rw 49 / ro 108
+rw 50 / ro 107
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -14836,7 +14836,7 @@ rw 49 / ro 108
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `montion_detection_ui_show_type` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_stop_end_early` | bool | - | - | yes | switch | - |
 | `multi_detection_sensitivity` | string | - | - | no | - | - |
@@ -15010,7 +15010,7 @@ rw 19 / ro 92
 
 ### Settings of T8P00 PoE Cam E40
 
-rw 30 / ro 62
+rw 32 / ro 60
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -15057,7 +15057,7 @@ rw 30 / ro 62
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `led_on_off` | bool | - | - | yes | switch | - |
-| `light_ambient_lighting_setting` | string | - | - | no | - | - |
+| `light_ambient_lighting_setting` | object | - | - | yes | object | - |
 | `live_ai_box_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=People, 1=Pet, 2=Car |
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Speaker, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 1, 2, 4, 9, 11, 13, 8 | - | no | - | 0=Record, 1=Screenshot, 11=Streaming Quality, 13=Spotlight, 2=Speaker, 4=Sound, 8=Auto Night Vision, 9=Playback |
@@ -15072,7 +15072,7 @@ rw 30 / ro 62
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `model_config` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_follow_global_setting` | bool | - | - | no | - | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_support_set_light_mode` | bool | - | - | no | - | - |
@@ -15109,7 +15109,7 @@ rw 30 / ro 62
 
 ### Settings of T8P10 PoE Cam E41
 
-rw 30 / ro 65
+rw 32 / ro 63
 
 | key | kind | values or range | unit | writable | control | labels |
 |---|---|---|---|---|---|---|
@@ -15157,7 +15157,7 @@ rw 30 / ro 65
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `is_support_silent_ota_switch` | bool | - | - | no | - | - |
 | `led_on_off` | bool | - | - | yes | switch | - |
-| `light_ambient_lighting_setting` | string | - | - | no | - | - |
+| `light_ambient_lighting_setting` | object | - | - | yes | object | - |
 | `live_ai_box_toolbar_list` | enum | 0, 1, 2 | - | no | - | 0=People, 1=Pet, 2=Car |
 | `live_bottom_hor_toolbar_list` | enum | 0, 4, 1, 2 | - | no | - | 0=Record, 1=Screenshot, 2=Sound, 4=Sound |
 | `live_bottom_toolbar_list` | enum | 0, 1, 2, 4, 9, 11, 13, 8 | - | no | - | 0=Record, 1=Screenshot, 11=Streaming Quality, 13=Spotlight, 2=Speaker, 4=Sound, 8=Auto Night Vision, 9=Playback |
@@ -15172,7 +15172,7 @@ rw 30 / ro 65
 | `mac_address` | string | - | - | no | - | - |
 | `microphone_on_off` | bool | - | - | yes | switch | - |
 | `model_config` | string | - | - | no | - | - |
-| `motion_activated_light_setting` | string | - | - | no | - | - |
+| `motion_activated_light_setting` | object | - | - | yes | object | - |
 | `motion_detection_follow_global_setting` | bool | - | - | no | - | - |
 | `motion_detection_status` | bool | - | - | yes | switch | - |
 | `motion_support_set_light_mode` | bool | - | - | no | - | - |

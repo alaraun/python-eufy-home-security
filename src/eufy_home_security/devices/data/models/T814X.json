@@ -1746,7 +1746,7 @@
   "motion_activated_light_setting": {
    "access": "ro",
    "kind": "string",
-   "note": "handler ignores the value",
+   "note": "handler ignores the value; no object form reproduces the app's object write",
    "read": null,
    "role": "setting",
    "section": "picture",
