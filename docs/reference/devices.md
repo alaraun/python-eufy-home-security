@@ -14090,7 +14090,7 @@ rw 0 / ro 10
 | `firmware_main_version_time` | string | - | - | no | - | - |
 | `is_device_upgrade` | bool | - | - | no | - | - |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
-| `sensor_smoke_status` | bool | - | - | no | - | - |
+| `sensor_smoke_status` | flags | any of alarm, battery, endoflife, highAlarm, localTesting, muting, remotingTesting, trouble | - | no | - | - |
 
 ### Settings of T8960 Keypad
 
@@ -15798,4 +15798,4 @@ rw 1 / ro 16
 | `notification_jump_to_mode_page` | bool | - | - | no | - | - |
 | `sensor_alarm_timeout` | enum | 0, 1, 2, 3 | - | yes | select | 0=1 min, 1=5 min, 2=10 min, 3=15 min |
 | `sensor_is_low_power` | bool | - | - | no | - | - |
-| `sensor_smoke_status` | string | - | - | no | - | - |
+| `sensor_smoke_status` | flags | any of alarm, battery, endoflife, highAlarm, localTesting, muting, remotingTesting, trouble | - | no | - | - |

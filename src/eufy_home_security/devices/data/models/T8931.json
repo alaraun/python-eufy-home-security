@@ -116,9 +116,32 @@
   },
   "sensor_smoke_status": {
    "access": "ro",
-   "default": false,
-   "kind": "bool",
-   "read": null,
+   "flag_meanings": {
+    "alarm": "smoke",
+    "battery": "low_battery",
+    "endoflife": "end_of_life",
+    "highAlarm": "smoke",
+    "localTesting": "testing",
+    "muting": "muted",
+    "remotingTesting": "testing",
+    "trouble": "problem"
+   },
+   "flags": {
+    "alarm": 1,
+    "battery": 8,
+    "endoflife": 64,
+    "highAlarm": 128,
+    "localTesting": 2,
+    "muting": 32,
+    "remotingTesting": 4,
+    "trouble": 16
+   },
+   "kind": "flags",
+   "read": {
+    "map": null,
+    "no_default": true,
+    "param": 1823
+   },
    "role": "status",
    "section": "system",
    "shown": "card"
