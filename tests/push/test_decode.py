@@ -489,6 +489,13 @@ def test_an_empty_doorbell_field_falls_back_to_the_payload() -> None:
     assert event.device_sn == SYNTHETIC.camera_sn
 
 
+def test_a_whitespace_doorbell_field_is_still_the_body() -> None:
+    """Any non-empty ``doorbell`` text is the body, blanks too: the payload is not read."""
+    msg = {"type": "5", "doorbell": "  ", "payload": _person_payload()}
+    event = decode_push(msg, now_ms=lambda: NOW_MS)
+    assert (event.event_type, event.detection, event.device_sn) == (None, None, None)
+
+
 def test_a_base64_doorbell_body_decodes() -> None:
     event = decode_push({"type": "5", "doorbell": _b64(_press())}, now_ms=lambda: NOW_MS)
     assert event.detection is DetectionType.DOORBELL_PRESS
