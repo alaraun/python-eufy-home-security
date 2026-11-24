@@ -41,7 +41,9 @@ _JSON = json.JSONDecoder(parse_constant=_reject_constant)
 #: interpreter's own recursion limit depends on the build and the C stack, so a
 #: deeper document is refused before parsing.
 MAX_JSON_DEPTH = 64
-_NESTING = re.compile(r'"(?:[^"\\]|\\.)*"|[\[\]{}]')
+#: A string (possessive, so an unterminated one ends the scan instead of rescanning from
+#: every later quote) or a bracket.
+_NESTING = re.compile(r'"(?:[^"\\]|\\.)*+(?:"|\Z)|[\[\]{}]', re.DOTALL)
 
 
 def _too_deep(text: str) -> bool:

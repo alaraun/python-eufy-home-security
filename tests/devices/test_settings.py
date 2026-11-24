@@ -376,6 +376,13 @@ def test_report_value(raw: str | None, view_mode: str | None, value: int | None)
     assert report_value(raw, view_mode) == value
 
 
+def test_report_value_of_a_report_nested_past_the_parse_limit_is_none() -> None:
+    shallow = '{"mode_0":{"quality":3},"x":' + "[" * 63 + "]" * 63 + "}"
+    deep = '{"mode_0":{"quality":3},"x":' + "[" * 100_000 + "]" * 100_000 + "}"
+    assert report_value(base64.b64encode(shallow.encode()).decode(), None) == 3
+    assert report_value(base64.b64encode(deep.encode()).decode(), None) is None
+
+
 def test_mode_table_setting_looks_up_a_mode_table_key() -> None:
     assert mode_table_setting("camera_action_away").command_id == 1239
     with pytest.raises(UnsupportedError, match=r"known: .*alarm_delay_home"):

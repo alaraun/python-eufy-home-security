@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
@@ -21,6 +20,7 @@ from typing import Final
 
 from ..exceptions import UnsupportedError
 from ..models import STATION_CHANNEL, GuardMode
+from ..p2p._json import parse_json
 from ..p2p.mode_actions import (
     ACTION_FLAGS,
     FIELD_PARAMS,
@@ -237,7 +237,9 @@ def report_value(raw: str | None, view_mode: str | None = None) -> int | None:
         pass
     try:
         text = raw.strip()
-        report = json.loads(base64.b64decode(text + "=" * (-len(text) % 4), validate=True))
+        report = parse_json(
+            base64.b64decode(text + "=" * (-len(text) % 4), validate=True).decode("utf-8")
+        )
     except (ValueError, binascii.Error):
         return None
     try:
