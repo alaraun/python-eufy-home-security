@@ -315,7 +315,7 @@ def _cli(tmp_path: Path, node_version: str, jobs: int) -> subprocess.CompletedPr
     args = _args(tmp_path, jobs)
     inputs = [
         f"--{name}={getattr(args, name)}"
-        for name in ("labels", "trees", "titles", "shown", "released")
+        for name in ("labels", "trees", "titles", "shown", "released", "routing")
     ]
     paths = [f"--cache={cache}", f"--out={tmp_path / 'out'}", f"--jobs={jobs}"]
     paths.append(f"--answers={tmp_path / 'answers'}")
