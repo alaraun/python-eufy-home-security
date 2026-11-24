@@ -13,7 +13,13 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, cast
 
-from eufy_home_security.devices.model_settings import OBJECT_SLOT, decode_object, object_slot
+from eufy_home_security.devices.model_settings import (
+    ACCOUNT_SLOT,
+    OBJECT_SLOT,
+    decode_object,
+    derived_form,
+    object_slot,
+)
 from eufy_home_security.devices.recipes import PARENT_CONNECT_TYPES
 
 # The TD readers live in the library; the generator reaches them through this module.
@@ -196,18 +202,38 @@ def value_key(value: Value) -> str:
     return str(value)
 
 
-def slot(recipe: Any, context: Context) -> Any:
-    """Drop volatile keys at any depth and replace the context's serials by slots."""
+def slot(recipe: Any, context: Context, *, texts: bool = False) -> Any:
+    """Drop volatile keys at any depth and replace the context's serials by slots; with
+    ``texts``, also a serial that is a member's text inside a JSON object's text."""
     if isinstance(recipe, dict):
-        return {k: slot(v, context) for k, v in recipe.items() if k not in VOLATILE_KEYS}
+        return {
+            k: slot(v, context, texts=texts) for k, v in recipe.items() if k not in VOLATILE_KEYS
+        }
     if isinstance(recipe, list):
-        return [slot(v, context) for v in recipe]
+        return [slot(v, context, texts=texts) for v in recipe]
     if isinstance(recipe, str):
         if recipe == context.device_sn:
             return "$device_sn"
         if recipe == context.station_sn:
             return "$station_sn"
+        if texts and _json_object_text(recipe) is not None:
+            for serial, name in (
+                (context.device_sn, "$device_sn"),
+                (context.station_sn, "$station_sn"),
+            ):
+                recipe = recipe.replace(json.dumps(serial), json.dumps(name))
     return recipe
+
+
+def _json_object_text(text: Any) -> dict[str, Any] | None:
+    """The object a plain JSON object's text holds, else None (base64 is no such text)."""
+    if not isinstance(text, str) or not text.startswith("{"):
+        return None
+    try:
+        found = json.loads(text)
+    except ValueError:
+        return None
+    return found if isinstance(found, dict) else None
 
 
 def leaves(x: Any, path: Path = ()) -> Iterator[tuple[Path, Any]]:
@@ -637,6 +663,8 @@ def render(
             return channel
         if slot_name in SN_SLOTS:
             return serials[slot_name]
+        if slot_name == ACCOUNT_SLOT:
+            return slot_name  # the owner's id, filled when the frame is sent
         if m := PARAM_SLOT.fullmatch(slot_name):
             return param_leaf((params or {}).get(int(m[1])), m[2])
         raise ValueError(f"unknown placeholder {slot_name!r}")
@@ -655,7 +683,7 @@ def render(
                 raise ValueError(f"$affine of a non-number: {value!r}")
             a, b = arg
             return intify(round(a * value + b, 9))
-        raise ValueError(f"unknown placeholder object {name!r}")
+        return derived_form(name, arg, fill)
 
     return fill(write_template(setting, value))  # type: ignore[no-any-return]
 
@@ -674,7 +702,7 @@ def _ordered(x: Any) -> str:
     return json.dumps(x)
 
 
-def _stored_items(recipe: Recipe) -> list[Mapping[str, Any]]:
+def stored_items(recipe: Recipe) -> list[Mapping[str, Any]]:
     update, ext = recipe.get("update"), recipe.get("extUpdates")
     items = [update] if isinstance(update, dict) else []
     items += [i for i in (ext if isinstance(ext, list) else []) if isinstance(i, dict)]
@@ -684,10 +712,13 @@ def _stored_items(recipe: Recipe) -> list[Mapping[str, Any]]:
 def object_value(recipe: Recipe, payload: Any) -> dict[str, Any] | None:
     """The value an object write stands for: the object the recipe stores (the first
     ``update``/``extUpdates`` value that decodes to a JSON object, as the library reads a
-    stored object), else the app's object itself; None when neither is an object."""
-    for item in _stored_items(recipe):
+    stored object; a plain JSON text only when it holds every member of the app's object),
+    else the app's object itself; None when neither is an object."""
+    members = set(payload) if isinstance(payload, dict) else set()
+    for item in stored_items(recipe):
         value = item.get("paramValue")
-        if isinstance(value, str) and (found := decode_object(value)) is not None:
+        found = decode_object(value) if isinstance(value, str) else None
+        if found is not None and (_json_object_text(value) is None or members <= set(found)):
             return found
     return payload if isinstance(payload, dict) else None
 
@@ -718,6 +749,84 @@ def object_template(recipe: Recipe, value: Mapping[str, Any]) -> Any:
         return x
 
     return walk(recipe)
+
+
+_ABSENT: Any = object()  # a sample's recipe has no leaf at the path
+
+
+def fit_members(template: Any, recipes: Sequence[Any], values: Sequence[Mapping[str, Any]]) -> Any:
+    """``template`` (the first sample's recipe, :func:`object_template`) with each scalar
+    leaf that varies across the samples replaced by the first scalar-member slot that gives
+    every sample's leaf (:func:`member_slots`), and each JSON object's text whose members do
+    so by ``{"$jsontext": ...}`` of its fitted object. ``recipes``: the same subtree of every
+    sample, ``values``: their values."""
+    if isinstance(template, dict):
+        if any(isinstance(k, str) and k.startswith("$") for k in template):
+            return template
+        return {
+            k: fit_members(
+                t, [r.get(k, _ABSENT) if isinstance(r, dict) else _ABSENT for r in recipes], values
+            )
+            for k, t in template.items()
+        }
+    if isinstance(template, list):
+        if not all(isinstance(r, list) and len(r) == len(template) for r in recipes):
+            return template
+        return [fit_members(t, [r[i] for r in recipes], values) for i, t in enumerate(template)]
+    if isinstance(template, str) and template.startswith("$"):
+        return template
+    if any(r is _ABSENT for r in recipes) or len({_ordered(r) for r in recipes}) < 2:
+        return template
+    parsed = [_json_object_text(r) for r in recipes]
+    if all(p is not None for p in parsed):
+        inner = fit_members(parsed[0], parsed, values)
+        compact = [json.dumps(p, separators=(",", ":"), ensure_ascii=False) for p in parsed]
+        if inner != parsed[0] and compact == list(recipes):
+            return {"$jsontext": inner}
+        return template
+    for candidate in member_slots(values[0]):
+        try:
+            got = [_ordered(slot_value(candidate, v)) for v in values]
+        except ValueError:
+            continue
+        if got == [_ordered(r) for r in recipes]:
+            return candidate
+    return template
+
+
+def _slots_every_member(template: Any, value: Any) -> bool:
+    """Whether a template's slots carry every member of the value (or the whole value)."""
+    text = json.dumps(template)
+    if re.search(r'"\$v:(json|b64json)"', text):
+        return True
+    used = set(re.findall(r"\$v\.([A-Za-z0-9_]+)", text))
+    return isinstance(value, dict) and set(value) <= used
+
+
+def member_slots(value: Mapping[str, Any]) -> list[Any]:
+    """The slots of a value's scalar members, in the order they are tried: the member as
+    it is, as a switch (1 or 0), as text, and as the text of its switch."""
+    names = [n for n, v in value.items() if v is None or isinstance(v, bool | int | float | str)]
+    out: list[Any] = []
+    for form in ("json", "flag", "str"):
+        out += [f"$v.{n}:{form}" for n in names]
+    out += [{"$format": ["%s", f"$v.{n}:flag"]} for n in names]
+    return out
+
+
+def slot_value(template: Any, value: Mapping[str, Any]) -> Any:
+    """A member slot or placeholder object rendered for an object value."""
+    if isinstance(template, str) and template.startswith("$"):
+        return object_slot(template, value)
+    if isinstance(template, dict) and len(template) == 1:
+        ((name, arg),) = template.items()
+        if isinstance(name, str) and name.startswith("$"):
+            return derived_form(name, arg, lambda x: slot_value(x, value))
+    if isinstance(template, dict):
+        return {k: slot_value(v, value) for k, v in template.items()}
+    if isinstance(template, list):
+        return [slot_value(v, value) for v in template]
+    return template
 
 
 @dataclass(frozen=True)
@@ -758,6 +867,11 @@ def infer_object_write(
         return ObjectFit(note=OBJECT_UNMATCHED_NOTE)
     first_value, first = rows[0]
     template = object_template(first, cast(dict[str, Any], first_value))
+    fitted = fit_members(template, [r for _, r in rows], cast(list[dict[str, Any]], values))
+    if fitted != template and not _slots_every_member(fitted, first_value):
+        # A write that sends some members only would drop the others the value carries.
+        return ObjectFit(note=OBJECT_UNMATCHED_NOTE)
+    template = fitted
     entry = {"access": "rw", "write": template}
     for ch, group in ((channel, samples), (alt_channel, alt)):
         for (_, recipe), value in zip(group, values, strict=True):
@@ -768,7 +882,7 @@ def infer_object_write(
             if _ordered(got) != _ordered(recipe):
                 return ObjectFit(note=OBJECT_UNMATCHED_NOTE)
     stored = next(
-        (i["cmd"] for i in _stored_items(template) if i.get("paramValue") == "$v:b64json"), None
+        (i["cmd"] for i in stored_items(template) if i.get("paramValue") == "$v:b64json"), None
     )
     return ObjectFit(
         write=template,
