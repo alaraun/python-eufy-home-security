@@ -575,7 +575,7 @@ The app uses FCM as its only push transport **[app]**. A headless client registe
 | `doorbell` | a video doorbell's event body **[app]**: when non-empty it is read instead of `payload`, in the same two encodings. Its fields are strings (`"event_type": "3103"`), read like the payload's |
 | `span_id` | **redelivery key**, lifted as `SecurityEvent.push_id`. The backend redelivers on reconnect and re-registration. The app keeps a 1000-entry ring; the listener keeps its own. It never matches the P2P copy of the same event: see [De-duplication across channels](#de-duplication-across-channels). |
 | `app_tab` | `eufy_security` (`eufy_home` = robot vacuums on the same channel). The listener drops any other value; a message without `app_tab` is kept. |
-| `type` | **device** type, not event type. ≥ 10100 = account-level server push (device removed, invitation, alarm notify). These decode raw-only: no fields are lifted. |
+| `type` | **device** type, not event type. ≥ 10100 = account-level server push (device removed, invitation, alarm notify). These decode raw-only: no fields are lifted. A message with a `doorbell` body is a video doorbell's push (device type 5) whatever its `type`, never a server push **[app]**. |
 | `event_type` | detection, same 31xx enum as local |
 | `station_sn`, `device_sn` | |
 | `event_time`, `push_time`, `server_receive_time` | epoch, **seconds or milliseconds**: multiply by 1000 when < 10¹⁰. Every captured `event_time` was seconds (10 digits). The time checks above run after this conversion. |

@@ -475,6 +475,13 @@ def test_the_doorbell_body_is_read_instead_of_the_payload() -> None:
     assert event.device_sn == DOORBELL_SN
 
 
+def test_a_doorbell_body_is_never_a_server_push() -> None:
+    msg = {"type": str(SERVER_PUSH_MIN_TYPE), "doorbell": json.dumps(_press()), "span_id": "s1"}
+    event = decode_push(msg, now_ms=lambda: NOW_MS)
+    assert event.detection is DetectionType.DOORBELL_PRESS
+    assert (event.device_sn, event.push_id) == (DOORBELL_SN, "s1")
+
+
 def test_an_empty_doorbell_field_falls_back_to_the_payload() -> None:
     msg = {"type": "5", "doorbell": "", "payload": _person_payload()}
     event = decode_push(msg, now_ms=lambda: NOW_MS)

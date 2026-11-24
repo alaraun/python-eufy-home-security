@@ -17,6 +17,8 @@ Two outer fields decide what is lifted at all:
   payload has a different, undocumented shape. Those decode *raw-only*: nothing
   but ``dedupe_key`` is lifted, the message stays in ``raw``. Below it, the outer
   ``type`` is never an alarm cause: ``alarm_type`` comes from the inner payload.
+  A message with a ``doorbell`` body is a video doorbell's push (device type 5)
+  whatever its ``type``, never a server push.
 
 The inner payload is the same object the station pushes over P2P, so both
 decoders lift it through one :class:`~..events.PushFieldReader`.
@@ -153,14 +155,15 @@ def decode_push(data: Mapping[str, Any], *, now_ms: Callable[[], int] = wall_ms)
     seconds). The inner object is the body of :func:`body_field`. Everything else stays
     in ``raw`` (the message as received; :func:`decode_payload` re-derives the inner
     object). A server push (``type`` ≥ :data:`SERVER_PUSH_MIN_TYPE`) lifts only
-    ``push_id``.
+    ``push_id``; a push with a ``doorbell`` body is never one.
     """
     try:
         push_id = coerce_str(_first(data.get("span_id")))
-        device_type = coerce_int(data.get("type"))
-        if device_type is not None and device_type >= SERVER_PUSH_MIN_TYPE:
-            return SecurityEvent(source=EventSource.CLOUD, push_id=push_id, raw=data)
         field = body_field(data)
+        device_type = coerce_int(data.get("type"))
+        # A doorbell body makes the push a video doorbell's (device type 5), whatever its type.
+        if field != "doorbell" and device_type is not None and device_type >= SERVER_PUSH_MIN_TYPE:
+            return SecurityEvent(source=EventSource.CLOUD, push_id=push_id, raw=data)
         inner = decode_payload(data[field]) if field is not None else {}
         reader = PushFieldReader(EventSource.CLOUD, now_ms=now_ms)
         common = reader.common(inner)
