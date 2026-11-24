@@ -9,6 +9,8 @@ import pytest
 from eufy_home_security.devices.support import Evidence, Support
 from eufy_home_security.events import (
     ALARM_PUSH_MAX_AGE_SECONDS,
+    EVENT_TIME_MAX_MS,
+    EVENT_TIME_MIN_MS,
     GUARD_PUSH_MAX_AGE_SECONDS,
     GUARD_REPORT_SLACK_SECONDS,
     MEDIA_PATH_PREFIX,
@@ -36,6 +38,7 @@ from eufy_home_security.events import (
     SecurityEvent,
     coerce_int,
     coerce_str,
+    is_event_time_ms,
     is_station_recording_path,
 )
 from eufy_home_security.exceptions import (
@@ -304,6 +307,19 @@ def test_coerce_int(value: object, expected: int | None) -> None:
 )
 def test_coerce_str(value: object, expected: str | None) -> None:
     assert coerce_str(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value_ms", "expected"),
+    [
+        (EVENT_TIME_MIN_MS - 1, False),
+        (EVENT_TIME_MIN_MS, True),
+        (EVENT_TIME_MAX_MS - 1, True),
+        (EVENT_TIME_MAX_MS, False),
+    ],
+)
+def test_the_event_time_range_includes_its_lower_bound_only(value_ms: int, expected: bool) -> None:
+    assert is_event_time_ms(value_ms) is expected
 
 
 def test_history_record_normalises_field_types() -> None:
