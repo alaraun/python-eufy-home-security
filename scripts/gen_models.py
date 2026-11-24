@@ -2414,12 +2414,21 @@ def generate(
             skipped += 1
             continue
         props.append(prop)
-    # A string property the app shows as an on/off switch is the bool it shows.
-    switch_texts = joiner.switches(product_code, titles)
-    props = [
-        codec.as_switch(p, switch_texts[p["identifier"]]) if p["identifier"] in switch_texts else p
-        for p in props
-    ]
+    # A string property the app shows as an on/off switch is the bool it shows; so is a
+    # bare value (kind other) an app screen writes from a switch, with the screen's values.
+    switch_texts: dict[str, Mapping[bool, Any]] = dict(joiner.switches(product_code, titles))
+    screen = joiner.screen_switches(product_code, titles)
+    typed = []
+    for prop in props:
+        ident = prop["identifier"]
+        if ident in switch_texts:
+            typed.append(codec.as_switch(prop, switch_texts[ident]))
+        elif ident in screen and codec.kind_of(prop) == "other":
+            typed.append(codec.as_switch(prop, screen[ident], kind="other"))
+            switch_texts[ident] = screen[ident]
+        else:
+            typed.append(prop)
+    props = typed
     wire = app_wire_values(props, switch_texts, joiner.screen_values(product_code, titles))
     contexts = contexts_of(product_code)
     swept = sweep(product_code, handler, props, contexts, wire)
@@ -2570,7 +2579,7 @@ def shown_places(shown: Mapping[str, Any]) -> dict[str, str]:
 
 def app_wire_values(
     props: list[dict[str, Any]],
-    switch_texts: Mapping[str, Mapping[bool, str | bool]],
+    switch_texts: Mapping[str, Mapping[bool, Any]],
     screens: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, tuple[tuple[Any, Any], ...]]:
     """The values the app writes for the model's ``props``: a switch's text per state, an

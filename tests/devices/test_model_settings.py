@@ -1956,7 +1956,7 @@ def test_an_int_slot_sends_a_digit_text_as_its_number() -> None:
 @pytest.mark.parametrize(
     ("code", "key", "context"),
     [
-        ("T8030", "notification_alarm_delay_value", ALONE),
+        ("T8010", "alarm_tones_mode", ALONE),
         ("T84A1", "light_daily_lighting", ALONE),
     ],
 )

@@ -1,5 +1,6 @@
 """The settings generator types a string property the app shows as an on/off switch as a
-bool, sweeping it with the text the app writes (scripts/gen_models.py, ``switches``).
+bool, sweeping it with the text the app writes (scripts/gen_models.py, ``switches``), and a
+bare value the app's screen writes from a switch the same way (``switch_writes``).
 
 Runs a synthetic handler through the real driver, so it needs Node.
 """
@@ -274,6 +275,117 @@ def test_switch_texts_take_a_models_own_pair() -> None:
 def test_switch_with_one_text_for_both_states_raises() -> None:
     with pytest.raises(join.GeneratorError, match="two distinct"):
         join.switches(PN, {"switches": {"camera_on_off": {"on": "1", "off": "1"}}})
+
+
+# A handler that writes and reads a number, as a station's alarm-delay handler does: the
+# app's screen switch sends 1 / 0 (``switch_writes``); the TD declares a bare int.
+INT_HANDLER = """
+function parse(s) { return JSON.parse(s.slice(0, s.lastIndexOf("EOF;"))); }
+module.exports.controlDevice = function (s) {
+  const m = parse(s);
+  const ident = Object.keys(m.input)[0];
+  if (m.action !== "setProperty" || ident !== "alarm_delay") return JSON.stringify({ data: {} });
+  const v = parseInt(JSON.parse(m.input[ident])["payload-value"], 10) || 0;
+  return JSON.stringify({ data: { p2p: {
+    cmd: 1350, subCmd: 1282, params: { notify_alarm_delay: v },
+    update: { needUpdate: true, cmd: 1282, paramValue: String(v) } } } });
+};
+module.exports.deviceStatus = function (s) {
+  const m = parse(s);
+  const p = (m.device.params || []).find((x) => x.param_type === 1282);
+  if (!p) return JSON.stringify({ data: { p2p: {} } });
+  return JSON.stringify({ data: { p2p: { alarm_delay: parseInt(p.param_value, 10) } } });
+};
+"""
+INT_SWITCH = {"type": "Int", "on": 1, "off": 0, "sources": ["-"]}
+
+
+def _int_cache(tmp_path: Path, data_type: dict[str, Any], access: str = "R") -> Path:
+    folder = tmp_path / PN
+    folder.mkdir(parents=True)
+    td = {
+        "large_version": 3,
+        "profile": {"plugin_path": f"https://cdn.example/p/2024/05/06/x/{PN}Handle.mix.js"},
+        "properties": [
+            {"identifier": "alarm_delay", "access_mode": access, "data_type": data_type}
+        ],
+    }
+    (folder / "td.json").write_text(json.dumps(td), encoding="utf-8")
+    (folder / f"{PN}Handle.mix.js").write_text(INT_HANDLER, encoding="utf-8")
+    return tmp_path
+
+
+BARE_INT_TD = {"type": "int", "specs": {"defaultValue": "1"}}
+
+
+@pytest.mark.timeout(120)
+def test_a_bare_int_the_apps_screen_switches_is_a_switch(tmp_path: Path) -> None:
+    """The screen's two values drive the handler; the TD's bare int becomes the bool shown."""
+    titles = {"switch_writes": {"alarm_delay": INT_SWITCH}}
+    doc, _ = gen_models.generate(
+        PN, _int_cache(tmp_path, BARE_INT_TD), titles=titles, shown={"alarm_delay": "page"}
+    )
+    entry = doc["settings"]["alarm_delay"]
+    assert (entry["kind"], entry["access"], entry["control"]) == ("bool", "rw", "switch")
+    assert (entry["default"], entry["role"], entry["shown"]) == (True, "setting", "page")
+    assert (entry["write"]["cmd"], entry["write"]["subCmd"]) == (1350, 1282)
+    assert entry["write"]["params"] == {"notify_alarm_delay": "$v:int"}
+    assert entry["read"] == {"param": 1282, "map": None}  # "1" / "0" read as the bool
+
+
+ENUM_TD = {
+    "type": "enum",
+    "specs": {"eunmList": [{"value": "0", "desc": "Off"}, {"value": "1", "desc": "On"}]},
+}
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize(
+    "data_type", [ENUM_TD, {"type": "bool", "specs": {}}], ids=["enum", "bool"]
+)
+def test_a_screen_switch_leaves_a_domain_the_td_declares(
+    tmp_path: Path, data_type: dict[str, Any]
+) -> None:
+    """A TD that declares a domain is generated as without the rule: it fills only a bare
+    value (the bool is swept with its own true/false, which this handler ignores)."""
+    titles = {"switch_writes": {"alarm_delay": INT_SWITCH}}
+    doc, _ = gen_models.generate(PN, _int_cache(tmp_path / "a", data_type, "RW"), titles=titles)
+    plain, _ = gen_models.generate(PN, _int_cache(tmp_path / "b", data_type, "RW"), titles={})
+    assert doc["settings"]["alarm_delay"] == plain["settings"]["alarm_delay"]
+    assert doc["settings"]["alarm_delay"]["kind"] == data_type["type"]
+
+
+@pytest.mark.parametrize(
+    ("rule", "values"),
+    [
+        (INT_SWITCH, {True: 1, False: 0}),
+        ({"type": "Bool", "on": True, "off": False, "sources": ["-"]}, {True: True, False: False}),
+        ({"type": "String", "on": "0", "off": "1", "sources": ["-"]}, {True: "0", False: "1"}),
+    ],
+    ids=["int", "bool", "text"],
+)
+def test_a_screen_switch_writes_its_two_values(rule: dict[str, Any], values: Any) -> None:
+    assert join.screen_switches(PN, {"switch_writes": {"x": rule}}) == {"x": values}
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        ["x"],
+        {"x": "-"},
+        {"x": {**INT_SWITCH, "sources": []}},
+        {"x": {**INT_SWITCH, "sources": "-"}},
+        {"x": {**INT_SWITCH, "type": "Float"}},
+        {"x": {**INT_SWITCH, "on": 0}},
+        {"x": {**INT_SWITCH, "on": "1"}},
+        {"x": {**INT_SWITCH, "off": None}},
+        {"x": {**INT_SWITCH, "type": "Bool"}},
+    ],
+    ids=["list", "text", "no-source", "text-sources", "type", "same", "int-text", "none", "bool"],
+)
+def test_a_screen_switch_entry_needs_two_values_of_its_type(rules: Any) -> None:
+    with pytest.raises(join.GeneratorError, match="screen switch"):
+        join.screen_switches(PN, {"switch_writes": rules})
 
 
 @pytest.mark.parametrize(
