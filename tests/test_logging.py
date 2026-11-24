@@ -5,6 +5,7 @@ import json
 import logging
 import subprocess
 import sys
+import threading
 from collections.abc import Iterator
 
 import pytest
@@ -472,23 +473,48 @@ def _innermost(value: object) -> object:
 
 def test_redact_location_is_bounded_in_depth() -> None:
     """Containers as deep as a parsed JSON value may nest are redacted; deeper ones come
-    back empty, so a deep or cyclic value never raises."""
+    back empty."""
     assert _innermost(redact_location(_nested(MAX_JSON_DEPTH))) == {"on": 1}
     assert _innermost(redact_location(_nested(MAX_JSON_DEPTH + 1))) == {}
     assert _innermost(redact_location(_nested(MAX_JSON_DEPTH + 2))) == []
     assert _innermost(redact_location(_nested(MAX_JSON_DEPTH + 2, tuple))) == ()
     assert _innermost(redact_location(_nested(100_000))) == []
+
+
+def _finishes(value: object) -> object:
+    """redact_location(value), failing the test when it runs past 5 s."""
+    out: list[object] = []
+    worker = threading.Thread(target=lambda: out.append(redact_location(value)), daemon=True)
+    worker.start()
+    worker.join(5)
+    assert not worker.is_alive(), "redact_location ran past 5 s"
+    return out[0]
+
+
+def test_redact_location_empties_a_container_met_again_inside_itself() -> None:
+    """A cycle ends at the container that repeats, however many members lead back."""
     cycle: list[object] = []
     cycle.append(cycle)
-    assert _innermost(redact_location(cycle)) == []
-    loop: dict[str, object] = {"lat": 1.5}
+    assert _finishes(cycle) == [[]]
+    twice: list[object] = []
+    twice += [twice, twice]
+    assert _finishes(twice) == [[], []]
+    loop: dict[str, object] = {"lat": 1.5, "on": 1}
     loop["self"] = loop
-    out = redact_location(loop)
-    for _ in range(MAX_JSON_DEPTH):
-        assert isinstance(out, dict)
-        assert out.keys() == {"self"}
-        out = out["self"]
-    assert out == {}
+    assert _finishes(loop) == {"on": 1, "self": {}}
+
+
+def test_redact_location_reads_a_shared_container_once() -> None:
+    """A container referenced from many members is copied once: no blow-up on a DAG."""
+    node: object = {"lat": 1.5, "on": 1}
+    for _ in range(40):
+        node = [node, node]
+    out = _finishes(node)
+    for _ in range(40):
+        assert isinstance(out, list)
+        assert out[0] is out[1]
+        out = out[0]
+    assert out == {"on": 1}
 
 
 def test_a_floodlight_s_dusk_to_dawn_value_loses_its_location() -> None:

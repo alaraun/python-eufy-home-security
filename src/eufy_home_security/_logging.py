@@ -138,15 +138,16 @@ SENSITIVE_KEY_PARTS: Final = (
 
 
 #: Keys whose values locate the house (its address and coordinates; ``longtitude`` as
-#: eufy spells it), compared like :data:`IDENTIFYING_KEYS`, which holds them too. A key
-#: whose last word is in :data:`LOCATION_KEY_SUFFIXES` locates the house as well.
+#: eufy spells it), compared like :data:`IDENTIFYING_KEYS`, which holds them too. Not
+#: the whole rule: a key whose last word is in :data:`LOCATION_KEY_SUFFIXES` counts too.
 LOCATION_KEYS: Final = frozenset(
     {"address", "houseaddress", "location", "latitude", "longitude", "longtitude", "lat",
      "lng", "lon"}
 )  # fmt: skip
 
-#: Last words of a key that locate the house whatever the prefix (``home_address``,
-#: ``router_addr``), split as for :data:`IDENTIFYING_KEY_SUFFIXES`, which holds them too.
+#: Last words of an address key whatever the prefix (``home_address``; also a network or
+#: e-mail address: ``router_addr``, ``macAddress``), split as for
+#: :data:`IDENTIFYING_KEY_SUFFIXES`, which holds them too.
 LOCATION_KEY_SUFFIXES: Final = frozenset({"address", "addr"})
 
 #: Keys whose values identify the account, a person, a device or the house, compared
@@ -439,34 +440,51 @@ def redact(value: object, visible: int = 4) -> str:
 
 
 def redact_location(value: object) -> object:
-    """A copy of the JSON-like ``value`` without the members that locate the house.
+    """A copy of the JSON-like ``value`` without its location and address members.
 
-    Mappings, lists and tuples are copied at any depth (a mapping as a ``dict``), leaving
-    out every member whose key is a location key: one of :data:`LOCATION_KEYS`, or one
-    whose last word is in :data:`LOCATION_KEY_SUFFIXES`, matched as the logs match
-    identifying keys. A key that is no string is kept; scalars, a JSON text included,
-    come back as they are (parse a text first). Containers nested deeper than
-    :data:`~.p2p._json.MAX_JSON_DEPTH` come back empty, so a deep or cyclic value never
-    raises. ``value`` is never changed.
+    Mappings, lists and tuples are copied at any depth (a mapping as a ``dict``, a list
+    or tuple subclass as a plain ``list`` or ``tuple``), leaving out every member whose
+    key is one of :data:`LOCATION_KEYS` or has its last word in
+    :data:`LOCATION_KEY_SUFFIXES` (which also drops network and e-mail addresses),
+    matched as the logs match identifying keys. A key that is no string is kept. Any
+    other object comes back as it is, unread and not copied: a JSON text or base64 of
+    one (decode it first), a set, a dataclass. A container nested deeper than
+    :data:`~.p2p._json.MAX_JSON_DEPTH`, or met again inside itself (a cycle), comes back
+    empty; a container shared by several members is read once and its copy shared the
+    same way. So no value raises or runs long. ``value`` is never changed.
     """
-    return _without_location(value, 1)
+    return _without_location(value, 1, set(), {})
 
 
-def _without_location(value: object, depth: int) -> object:
-    if isinstance(value, Mapping):
-        if depth > MAX_JSON_DEPTH:
-            return {}
-        return {
-            key: _without_location(member, depth + 1)
-            for key, member in value.items()
-            if not (isinstance(key, str) and _key_in(key, LOCATION_KEYS, LOCATION_KEY_SUFFIXES))
-        }
-    if isinstance(value, list | tuple):
-        if depth > MAX_JSON_DEPTH:
-            return () if isinstance(value, tuple) else []
-        items = [_without_location(item, depth + 1) for item in value]
-        return tuple(items) if isinstance(value, tuple) else items
-    return value
+def _without_location(
+    value: object, depth: int, path: set[int], done: dict[tuple[int, int], object]
+) -> object:
+    """``value`` redacted at ``depth``; ``path`` holds the ids of the containers being
+    copied, ``done`` the copies made, by id and depth."""
+    if not isinstance(value, Mapping | list | tuple):
+        return value
+    if depth > MAX_JSON_DEPTH or id(value) in path:
+        return {} if isinstance(value, Mapping) else () if isinstance(value, tuple) else []
+    key = (id(value), depth)
+    if key in done:
+        return done[key]
+    path.add(id(value))
+    try:
+        if isinstance(value, Mapping):
+            copy: object = {
+                name: _without_location(member, depth + 1, path, done)
+                for name, member in value.items()
+                if not (
+                    isinstance(name, str) and _key_in(name, LOCATION_KEYS, LOCATION_KEY_SUFFIXES)
+                )
+            }
+        else:
+            items = [_without_location(item, depth + 1, path, done) for item in value]
+            copy = tuple(items) if isinstance(value, tuple) else items
+    finally:
+        path.discard(id(value))
+    done[key] = copy
+    return copy
 
 
 def redact_serial(serial: str | None) -> str:
