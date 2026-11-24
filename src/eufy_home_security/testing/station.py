@@ -67,6 +67,7 @@ from ..p2p.media import (
     v2_still_key,
 )
 from ..p2p.messages import (
+    CHANNEL_VALUE_CMDS,
     CMD_DOWNLOAD_VIDEO,
     CMD_RECORD_VIEW,
     CMD_SET_DEVS_TONE_FILE,
@@ -74,6 +75,7 @@ from ..p2p.messages import (
     ECB_CHANNEL_VALUE_CMDS,
     HISTORY_RECORD_COUNTER,
     HISTORY_RECORD_ID_MIN,
+    JSON_TEXT_CMDS,
     P2P_ERROR_CODES,
     PARAM_QUERY_ALL,
     RECEIPT_LEN,
@@ -83,6 +85,7 @@ from ..p2p.messages import (
     STRING_CMDS,
     decode_json_payload,
     decode_string_command_body,
+    string_command_number,
 )
 from ..p2p.mode_actions import CMD_SET_ALL_ACTION, applied_params
 from ..p2p.pppp import (
@@ -111,12 +114,15 @@ RSA_SESSION_KEY = SYNTHETIC.session_key[:16]
 """The 16-character AES-128 key an RSA CONN_INIT carries."""
 _CONFIG_FRAMES = (CMD_CUSTOM_MODES, CMD_SCHEDULE)
 """JSON documents written as a frame of their own type (the mode list, the schedule)."""
+_JSON_FRAMES = JSON_TEXT_CMDS - {CMD_SET_ALL_ACTION, *_CONFIG_FRAMES, FrameType.CMD_TRANSFER}
+"""Settings JSON-text frames the fake records and takes (snooze, a light schedule)."""
 _SESSION_FRAME_TYPES = frozenset(
     {
         FrameType.PARAM_NOTIFY,
         CMD_SET_ALL_ACTION,
         *_CONFIG_FRAMES,
-        *STRING_CMDS,
+        *(STRING_CMDS - {CMD_RECORD_VIEW}),
+        *_JSON_FRAMES,
         FrameType.DOORBELL_PAYLOAD,
         FrameType.STOP_REALTIME_MEDIA,
         CMD_SD_INFO,
@@ -496,6 +502,15 @@ class FakeStation:
     string_commands_received: list[tuple[int, int, str]] = field(default_factory=list)
     """Every string command (:data:`~..p2p.messages.STRING_CMDS`) as ``(command, channel,
     value)``, in arrival order; the value is stored as the param of that channel."""
+    string_numbers: list[int] = field(default_factory=list)
+    """The number (first word) of each string command, in step with the list above."""
+    string_dev_types: list[int] = field(default_factory=list)
+    """The subheader channel (byte 2) of each string command, in step."""
+    json_frames_received: list[tuple[int, int, bytes]] = field(default_factory=list)
+    """Every other JSON-text frame (:data:`~..p2p.messages.JSON_TEXT_CMDS`) as ``(command,
+    subheader channel, body)``, in arrival order; each is answered with receipt 0."""
+    ecb_bodies: list[bytes] = field(default_factory=list)
+    """The decrypted body of each scalar in :attr:`ecb_received`, in step."""
     mode_table_receipt_code: int = 0
     """The code a 1255 receipt carries; non-zero leaves the parameters untouched."""
     mode_table_store: dict[int, int] | None = None
@@ -974,7 +989,11 @@ class FakeStation:
             self.config_frames_received.append((ftype, plain))
             self._on_config_frame(ftype, obj, plain)
         elif ftype in STRING_CMDS:
+            self.string_dev_types.append(subheader[2])
             self._on_string_command(ftype, plain)
+        elif ftype in _JSON_FRAMES:
+            self.json_frames_received.append((ftype, subheader[2], plain))
+            self.send_receipt(ftype, RECEIPT_TAKEN)
         elif ftype == FrameType.DOORBELL_PAYLOAD:
             obj = decode_json_payload(plain)
             if obj is None:
@@ -1406,6 +1425,7 @@ class FakeStation:
             self.send_receipt(ftype, RESULT_INVALID_ACCOUNT)
             return
         self.string_commands_received.append((ftype, channel, value))
+        self.string_numbers.append(string_command_number(plain))
         code = 0 if account == self.account_id else RESULT_INVALID_ACCOUNT
         if code == 0 and self.apply_settings:
             self.params.setdefault(channel, {})[ftype] = value
@@ -1435,12 +1455,18 @@ class FakeStation:
             )
             return
         channel = subheader[2]
-        offset = 4 if ftype in ECB_CHANNEL_VALUE_CMDS else 0  # [channel][value][account]
+        # [channel][value][account]; a channel-value command carries no account
+        offset = 4 if ftype in ECB_CHANNEL_VALUE_CMDS or ftype in CHANNEL_VALUE_CMDS else 0
         value = struct.unpack_from("<I", body, offset)[0]
         account = body[offset + 4 : offset + 132].split(b"\x00", 1)[0].decode()
         self.ecb_received.append((ftype, channel, value))
+        self.ecb_bodies.append(bytes(body))
         self.ecb_encryptions.append(subheader[3])
-        code = 0 if account == self.account_id else RESULT_INVALID_ACCOUNT
+        code = (
+            0
+            if ftype in CHANNEL_VALUE_CMDS or account == self.account_id
+            else RESULT_INVALID_ACCOUNT
+        )
         code = self.refused_scalars.get(ftype, code)
         if self.ecb_apply_late and code == 0:
             self._late_writes.append((channel, ftype, value))

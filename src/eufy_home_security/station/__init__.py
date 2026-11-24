@@ -64,6 +64,7 @@ from ..devices.model_settings import (
     arms_by_scalar,
     battery_level,
     declares_battery,
+    json_frame_text,
     mode_table_settings,
     product_code_of,
     sd_status_groups,
@@ -169,6 +170,7 @@ from ..p2p.encoder import SETTLE_STANDALONE, SETTLE_STATION
 from ..p2p.media import MediaFrame, MediaKeyType, Still, VideoCodec, media_key_type_for
 from ..p2p.messages import (
     CMD_SET_TONE_FILE,
+    JSON_TEXT_CALLER_CHANNEL_CMDS,
     RECEIPT_NOT_HANDLED,
     SOUND_ALARM_SECONDS,
     record_id_day,
@@ -1421,14 +1423,19 @@ class Station:
                 )
             case WritePath.STRING:
                 await self.session.async_send_string_command(
-                    wire.cmd, cast(str, wire.text), channel=ctx.channel
+                    wire.cmd, cast(str, wire.text), channel=ctx.channel, number=wire.number
                 )
                 outcome = CommandOutcome.APPLIED
-            case _:
-                # A GCM DeviceMsgBean of the codec's own command: not observed on hardware.
-                outcome = await self.session.async_send_command(
-                    wire.cmd, channel=ctx.channel, payload=params
+            case WritePath.JSON_FRAME:
+                header = (
+                    ctx.channel if wire.cmd in JSON_TEXT_CALLER_CHANNEL_CMDS else STATION_CHANNEL
                 )
+                written = await self.session.async_send_json_frame(
+                    wire.cmd,
+                    lambda account: json_frame_text(wire, account),
+                    header_channel=header,
+                )
+                outcome = CommandOutcome.APPLIED if written else CommandOutcome.DELIVERED
         self.session.apply_local_params(ctx.channel, dict(wire.updates))
         return outcome
 

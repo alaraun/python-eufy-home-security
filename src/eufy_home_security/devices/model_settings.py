@@ -23,7 +23,7 @@ import math
 import operator
 import re
 import reprlib
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from importlib.resources.abc import Traversable
@@ -63,6 +63,7 @@ __all__ = [
     "PARENTLESS_ONLY",
     "BatteryRead",
     "JsonObject",
+    "MissingMemberError",
     "SdStatusGroups",
     "SdStatusSource",
     "Setting",
@@ -82,6 +83,9 @@ __all__ = [
     "canonical_code",
     "declares_battery",
     "decode_object",
+    "derived_form",
+    "json_frame_text",
+    "members_read",
     "mode_table_settings",
     "object_slot",
     "product_code_of",
@@ -140,9 +144,12 @@ declares its battery differently, and a station model's battery is not this rule
 _PRODUCT_CODE: Final = re.compile(r"[A-Za-z0-9]{1,32}")
 _SN_SLOTS: Final = frozenset({"$device_sn", "$station_sn"})
 _PARAM_SLOT: Final = re.compile(r"\$param:(\d+):(int|str)")
-OBJECT_SLOT: Final = re.compile(r"\$v((?:\.[A-Za-z0-9_]+)*):(json|b64json)")
+OBJECT_SLOT: Final = re.compile(r"\$v((?:\.[A-Za-z0-9_]+)*):(json|b64json|str|flag)")
 """A template leaf of an ``OBJECT`` value: the value (or a member, ``$v.<member>:...``) as a
-JSON object (``json``) or as base64 of its compact JSON text (``b64json``)."""
+JSON object (``json``), as base64 of its compact JSON text (``b64json``), a scalar member
+as text (``str``) or as a switch, 1 or 0 (``flag``)."""
+ACCOUNT_SLOT: Final = "$account_id"
+"""A template leaf the session fills with the owner's account id when it sends the frame."""
 _BASE64_TEXT: Final = re.compile(r"[A-Za-z0-9+/]+={0,2}")
 _OBJECT_BODY: Final = "$v:json"
 _OBJECT_DEPTH: Final = 32
@@ -288,13 +295,14 @@ SLIDER_MAX_STEPS: Final = 200
 
 
 class WritePath(StrEnum):
-    """How a rendered write reaches the device."""
+    """How a rendered write reaches the device: the frame form the eufy app's send handler
+    gives the command (docs/protocol/commands.md § Frame forms)."""
 
-    ECB = "ecb"  # legacy AES-ECB scalar frame (frame type = cmd, body = value)
-    DIRECT = "direct"  # GCM DeviceMsgBean with the command's own id
+    ECB = "ecb"  # legacy AES-ECB scalar frame (frame type = cmd, body = [channel] value)
     SUB_1350 = "1350"  # GCM command 1350 carrying ``subCmd``
     RECIPE_1700 = "1700"  # handler recipe 1700 carrying ``subCmd``
-    STRING = "string"  # GCM string frame (frame type = cmd, body = channel, value, account)
+    STRING = "string"  # string frame (frame type = cmd, body = number, channel, text, account)
+    JSON_FRAME = "json"  # JSON-text frame (frame type = cmd, body = the params as JSON)
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,10 +322,11 @@ class WireCommand:
     """A rendered write.
 
     ``cmd`` is the id the session sends (``subCmd`` for 1350/1700). ``params`` is the
-    rendered body object (None when the body is not an object). ``value`` is the ECB
-    scalar. ``text`` is a ``STRING`` write's value. ``updates`` are the
-    ``(param id, value)`` pairs the app writes to its parameter cache after a
-    successful send.
+    rendered body object (None when the body is not an object); a ``JSON_FRAME`` body's
+    ``account_members`` hold :data:`ACCOUNT_SLOT` until :func:`json_frame_text` fills them.
+    ``value`` is the ECB scalar. ``text`` and ``number`` are a ``STRING`` write's text and
+    first word. ``updates`` are the ``(param id, value)`` pairs the app writes to its
+    parameter cache after a successful send.
     """
 
     path: WritePath
@@ -326,6 +335,8 @@ class WireCommand:
     value: int | None
     updates: tuple[tuple[int, str], ...]
     text: str | None = None
+    number: int = 0
+    account_members: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -429,6 +440,9 @@ class Setting:
         default=None, repr=False
     )
     """A per-view read: which view the report's quality comes from, and quality -> value."""
+    _read_members: Mapping[str, tuple[int, str | None]] | None = field(default=None, repr=False)
+    """An object read from several parameters: member -> (parameter, its JSON member, or
+    None for the parameter itself read as a switch)."""
     _no_default: bool = field(default=False, repr=False)
     """A status only the device reports: unreported, it reads None, never ``default``."""
     _write_params: frozenset[int] = field(default=frozenset(), repr=False)
@@ -506,6 +520,8 @@ class Setting:
         """
         if raw is None or self._read_param is None:
             return None
+        if self._read_members is not None:
+            return members_read(self._read_members, {**(block or {}), self._read_param: raw})
         value = self._decode(raw)
         if value is None and self._read_view is not None:
             by, qualities = self._read_view
@@ -814,11 +830,17 @@ def _compact_json(x: Any) -> str:
     return json.dumps(x, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 
 
+class MissingMemberError(ValueError):
+    """An object slot names a member the value lacks."""
+
+
 def object_slot(slot: str, value: object) -> Any:
     """The rendering of an :data:`OBJECT_SLOT` leaf for the object ``value``: the value or
-    its named member as JSON data (``json``), or base64 of its compact JSON text
-    (``b64json``). ValueError for another leaf, a value that is no object, or a member the
-    value lacks."""
+    its named member as JSON data (``json``), base64 of its compact JSON text (``b64json``),
+    a scalar member as text (``str``: a string as is, a number or bool as its JSON text) or
+    as a switch (``flag``: 1 for true, the number 1 or the text ``"1"``/``"true"``/``"TRUE"``,
+    else 0). ValueError for another leaf, a value that is no object, a member the value
+    lacks, or a ``str``/``flag`` of a member that is no scalar."""
     m = OBJECT_SLOT.fullmatch(slot)
     if m is None:
         raise ValueError(f"unknown placeholder {slot!r}")
@@ -827,11 +849,90 @@ def object_slot(slot: str, value: object) -> Any:
     part: Any = value
     for member in m[1].split(".")[1:]:
         if not isinstance(part, Mapping) or member not in part:
-            raise ValueError(f"{slot}: the value has no member {member!r}")
+            raise MissingMemberError(f"{slot}: the value has no member {member!r}")
         part = part[member]
     if m[2] == "json":
         return copy.deepcopy(part)
-    return base64.b64encode(_compact_json(part).encode("utf-8")).decode("ascii")
+    if m[2] == "b64json":
+        return base64.b64encode(_compact_json(part).encode("utf-8")).decode("ascii")
+    if part is None or not isinstance(part, bool | int | float | str):
+        raise ValueError(f"{slot}: {part!r} is not a scalar")
+    if m[2] == "flag":
+        return _as_flag(part)
+    return part if isinstance(part, str) else _compact_json(part)
+
+
+def _as_flag(raw: bool | int | float | str) -> int:
+    """A switch as the eufy app reads one: 1 for true, the number 1 or the text
+    ``"1"``/``"true"``/``"TRUE"``, else 0."""
+    if isinstance(raw, str):
+        return int(raw in ("1", "true", "TRUE"))
+    if isinstance(raw, float) and not math.isfinite(raw):
+        return 0
+    return int(int(raw) == 1)
+
+
+def derived_form(name: str, arg: Any, fill: Callable[[Any], Any]) -> Any:
+    """A placeholder object of a write template built from rendered parts (``fill``):
+    ``{"$format": [text, part, ...]}`` puts each part's text at the next ``%s`` of ``text``;
+    ``{"$jsontext": template}`` is the compact JSON text of the rendered template;
+    ``{"$each": [list slot, item template]}`` renders the item template once per object of
+    the list, its ``$v`` slots (:data:`OBJECT_SLOT`) reading that object;
+    ``{"$or": [slot, constant]}`` is the slot's rendering, or the constant when the value
+    lacks the slot's member. ValueError for another name, a ``%s`` count that differs from
+    the parts, a part that is no text or integer, or a list slot that renders to anything
+    but a list of objects."""
+    if name == "$jsontext":
+        return _compact_json(fill(arg))
+    if name == "$format" and isinstance(arg, list) and arg and isinstance(arg[0], str):
+        pieces = arg[0].split("%s")
+        if len(pieces) != len(arg):
+            raise ValueError(
+                f"$format {arg[0]!r} takes {len(pieces) - 1} parts, got {len(arg) - 1}"
+            )
+        out = [pieces[0]]
+        for part, piece in zip(arg[1:], pieces[1:], strict=True):
+            text = fill(part)
+            if isinstance(text, bool) or not isinstance(text, str | int):
+                raise ValueError(f"$format part {part!r} renders to {text!r}, not a text")
+            out += [str(text), piece]
+        return "".join(out)
+    if name == "$each" and isinstance(arg, list) and len(arg) == 2:
+        items = fill(arg[0])
+        if not isinstance(items, list) or not all(isinstance(i, Mapping) for i in items):
+            raise ValueError(f"$each over {items!r}, not a list of objects")
+        return [_fill_item(arg[1], item) for item in items]
+    if name == "$or" and isinstance(arg, list) and len(arg) == 2:
+        try:
+            return fill(arg[0])
+        except MissingMemberError:
+            return copy.deepcopy(arg[1])
+    raise ValueError(f"unknown placeholder object {name!r}")
+
+
+def _fill_item(template: Any, item: Mapping[str, Any]) -> Any:
+    """An ``$each`` item template rendered for one list object."""
+    if isinstance(template, Mapping):
+        if any(isinstance(k, str) and k.startswith("$") for k in template):
+            if len(template) != 1:
+                raise ValueError(f"unknown placeholder object {sorted(template)}")
+            ((name, arg),) = template.items()
+            return derived_form(name, arg, lambda x: _fill_item(x, item))
+        return {k: _fill_item(v, item) for k, v in template.items()}
+    if isinstance(template, list):
+        return [_fill_item(v, item) for v in template]
+    if isinstance(template, str) and template.startswith("$"):
+        return object_slot(template, item)
+    return template
+
+
+def json_frame_text(wire: WireCommand, account_id: str) -> bytes:
+    """The body of a ``JSON_FRAME`` write: its params as compact JSON, each of its
+    ``account_members`` filled with ``account_id``."""
+    if wire.path is not WritePath.JSON_FRAME or wire.params is None:
+        raise ValueError(f"command {wire.cmd} is not a JSON-text frame")
+    body = {k: account_id if k in wire.account_members else v for k, v in wire.params.items()}
+    return _compact_json(body).encode("utf-8")
 
 
 def decode_object(raw: str) -> JsonObject | None:
@@ -896,6 +997,8 @@ def _render(  # noqa: C901
             return object_slot(slot, value)
         if slot == "$channel":
             return channel
+        if slot == ACCOUNT_SLOT:
+            return slot  # filled when the frame is sent (json_frame_text)
         if slot in _SN_SLOTS:
             return serials[slot]
         if m := _PARAM_SLOT.fullmatch(slot):
@@ -924,7 +1027,7 @@ def _render(  # noqa: C901
                 raise ValueError(f"$affine of a non-number: {value!r}")
             a, b = arg
             return _intify(round(a * value + b, 9))
-        raise ValueError(f"unknown placeholder object {name!r}")
+        return derived_form(name, arg, fill)
 
     rendered: dict[str, Any] = fill(template)
     return rendered
@@ -959,6 +1062,24 @@ def _view_quality(raw: str, by: int | str | None, block: Mapping[int, str | None
     if isinstance(quality, bool) or not isinstance(quality, int):
         return None
     return str(quality)
+
+
+def members_read(
+    members: Mapping[str, tuple[int, str | None]], block: Mapping[int, str | None]
+) -> JsonObject:
+    """An object assembled from several parameters, as the eufy app's handler reads it: a
+    switch member is 1 or 0 (unreported: 0), a member of a parameter's JSON object its value
+    there (absent, or the parameter unreported or no JSON object: ``""``)."""
+    out: JsonObject = {}
+    for name, (param, member) in members.items():
+        raw = block.get(param)
+        if member is None:
+            out[name] = 0 if raw is None else _as_flag(raw)
+            continue
+        found = decode_object(raw) if raw is not None else None
+        part = (found or {}).get(member)
+        out[name] = part if isinstance(part, str | int | float) else ""
+    return out
 
 
 def _template_params(templates: list[Recipe | None]) -> frozenset[int]:
@@ -1004,7 +1125,9 @@ def _updates(recipe: Mapping[str, Any]) -> tuple[tuple[int, str], ...]:
 
 
 def _classify(template: Recipe, recipe: Mapping[str, Any]) -> WireCommand:
-    """The send path of a rendered P2P recipe."""
+    """The send path of a rendered P2P recipe: 1350 and 1700 by their ``subCmd``, a bare
+    command by the frame form the eufy app's send handler gives it (:func:`_frame_form`).
+    Raises ValueError for a body the form cannot carry or a command with no form."""
     cmd, sub, params = recipe["cmd"], recipe.get("subCmd"), recipe.get("params")
     updates = _updates(recipe)
     body = params if isinstance(params, Mapping) else None
@@ -1018,29 +1141,93 @@ def _classify(template: Recipe, recipe: Mapping[str, Any]) -> WireCommand:
         return WireCommand(
             path=WritePath.RECIPE_1700, cmd=sub, params=body, value=None, updates=updates
         )
-    if _is_ecb_scalar(cmd):
-        scalar: object = params
-        if body is not None:
-            # The command's own field, as the eufy app reads it; the other fields are not sent.
-            scalar = _ecb_field_value(cmd, body)
-        if body is not None and scalar is None:
-            # No field known for the command, or the body lacks it: the body holds one value,
-            # maybe under several names, one of them as a bool. That value is sent; for a
-            # body that lacks its command's field the eufy app sends 0 (library's choice).
-            channel = _channel_fields(template)
-            fields = [v for k, v in body.items() if k not in channel]
-            distinct = {json.dumps(int(v) if isinstance(v, bool) else v) for v in fields}
-            scalar = fields[0] if len(distinct) == 1 else None
-        # An ECB body is an int: handlers write some values as digit strings.
-        if isinstance(scalar, str):
-            if not scalar.lstrip("-").isdigit():
-                raise ValueError(f"ECB command {cmd} needs an integer value, got {scalar!r}")
-            scalar = int(scalar)
-        if isinstance(scalar, bool | int):
+    match _frame_form(cmd):
+        case WritePath.ECB:
             return WireCommand(
-                path=WritePath.ECB, cmd=cmd, params=body, value=int(scalar), updates=updates
+                path=WritePath.ECB,
+                cmd=cmd,
+                params=body,
+                value=_ecb_scalar(cmd, template, params, body),
+                updates=updates,
             )
-    return WireCommand(path=WritePath.DIRECT, cmd=cmd, params=body, value=None, updates=updates)
+        case WritePath.STRING:
+            text = None if body is None else body.get(_TEXT_FIELD)
+            if not isinstance(text, str):
+                raise ValueError(f"string command {cmd} needs its text in {_TEXT_FIELD}")
+            number = _int_field(cmd, (body or {}).get(_INT_FIELD, 0))
+            return WireCommand(
+                path=WritePath.STRING,
+                cmd=cmd,
+                params=None,
+                value=None,
+                updates=updates,
+                text=text,
+                number=number,
+            )
+        case WritePath.JSON_FRAME if body is not None:
+            slots = template.get("params")
+            account = tuple(
+                k
+                for k, v in (slots.items() if isinstance(slots, Mapping) else ())
+                if v == ACCOUNT_SLOT
+            )
+            return WireCommand(
+                path=WritePath.JSON_FRAME,
+                cmd=cmd,
+                params=body,
+                value=None,
+                updates=updates,
+                account_members=account,
+            )
+        case _:
+            raise ValueError(f"command {cmd}: no frame the eufy app sends for it with this body")
+
+
+# Request fields a handler's params may set directly: they replace what the app's request
+# builder reads from the command's own field (declared, eufy app).
+_INT_FIELD: Final = "mValue"
+_TEXT_FIELD: Final = "mValueStr"
+
+
+def _ecb_scalar(cmd: int, template: Recipe, params: Any, body: Mapping[str, Any] | None) -> int:
+    """An ECB command's value: the params' ``mValue`` when present, else the command's own
+    field as the eufy app reads it, else the body's one value (maybe under several names, one
+    of them as a bool; for a body that lacks its command's field the eufy app sends 0:
+    library's choice). Handlers write some values as digit strings."""
+    scalar: object = params
+    if body is not None:
+        scalar = body[_INT_FIELD] if _INT_FIELD in body else _ecb_field_value(cmd, body)
+    if body is not None and scalar is None:
+        channel = _channel_fields(template)
+        fields = [v for k, v in body.items() if k not in channel]
+        distinct = {json.dumps(int(v) if isinstance(v, bool) else v) for v in fields}
+        if len(distinct) != 1:
+            raise ValueError(f"ECB command {cmd}: the body holds no one value to send: {body!r}")
+        scalar = fields[0]
+    return _int_field(cmd, scalar)
+
+
+def _int_field(cmd: int, raw: object) -> int:
+    """An integer request field: an int, a bool as 0/1, or a digit string."""
+    if isinstance(raw, str) and raw.lstrip("-").isdigit():
+        return int(raw)
+    if isinstance(raw, bool | int):
+        return int(raw)
+    raise ValueError(f"command {cmd} needs an integer value, got {raw!r}")
+
+
+def _frame_form(cmd: int) -> WritePath | None:
+    """The frame form of a bare command, or None when the eufy app sends none for it."""
+    # Deferred: p2p.messages loads cryptography, which the light CLI modules must not.
+    from ..p2p import messages  # noqa: PLC0415 - the tables' one definition
+
+    if messages.is_ecb_scalar(cmd):
+        return WritePath.ECB
+    if cmd in messages.STRING_CMDS:
+        return WritePath.STRING
+    if cmd in messages.JSON_TEXT_CMDS and cmd != _SUB_1350:  # 1350 carries a sub-command
+        return WritePath.JSON_FRAME
+    return None
 
 
 # ── refusals ───────────────────────────────────────────────────────────────
@@ -1072,6 +1259,8 @@ def _refusal(template: Recipe) -> str | None:
         return "1700 data body not supported"
     if sub is not None and (isinstance(sub, bool) or not isinstance(sub, int)):
         return "no P2P command"
+    if sub is None and _frame_form(cmd) is None:
+        return f"no frame the eufy app sends for command {cmd}"
     if params is None or isinstance(params, Mapping):
         return None
     if params == _OBJECT_BODY:
@@ -1618,6 +1807,29 @@ def _view_spec(view: Any) -> tuple[int | str | None, Mapping[str, Value]] | None
     return by, MappingProxyType(qualities)
 
 
+def _members_spec(raw: Any, kind: SettingKind) -> Mapping[str, tuple[int, str | None]] | None:
+    """A read's ``members`` (absent: None), on an ``OBJECT`` only:
+    ``{name: {"param": id, "as": "flag"}}`` or ``{name: {"param": id, "member": text}}``."""
+    if raw is None:
+        return None
+    if kind is not SettingKind.OBJECT:
+        raise ValueError("read.members on a setting that is no object")
+    if not isinstance(raw, dict) or not raw:
+        raise TypeError("read.members is not a non-empty object")
+    out: dict[str, tuple[int, str | None]] = {}
+    for name, spec in raw.items():
+        param = spec.get("param") if isinstance(spec, dict) else None
+        if isinstance(param, bool) or not isinstance(param, int):
+            raise TypeError(f"read member {name!r} has no parameter")
+        if spec.get("as") == "flag" and "member" not in spec:
+            out[str(name)] = (param, None)
+        elif isinstance(spec.get("member"), str) and "as" not in spec:
+            out[str(name)] = (param, spec["member"])
+        else:
+            raise ValueError(f"read member {name!r}: {spec!r}")
+    return MappingProxyType(out)
+
+
 def _recipe(entry: Mapping[str, Any], key: str) -> Recipe | None:
     raw = entry.get(key)
     if raw is None:
@@ -1760,6 +1972,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
     read_map: dict[str, Value] | None = None
     read_fallback: Value | None = None
     read_view = None
+    read_members = None
     if read is not None:
         if not isinstance(read, dict) or not isinstance(read.get("param"), int):
             raise TypeError("read is not {param, map}")
@@ -1767,6 +1980,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         if read.get("map") is not None:
             read_map = {str(k): _scalar(v, "read value") for k, v in read["map"].items()}
         read_view = _view_spec(read.get("view"))
+        read_members = _members_spec(read.get("members"), kind)
         if read.get("fallback") is not None:
             read_fallback = _scalar(read["fallback"], "read fallback")
     when = entry.get("applies_when")
@@ -1852,6 +2066,7 @@ def _build(code: str, key: str, entry: dict[str, Any]) -> Setting:
         _read_fallback=_read_fallback(read_fallback, kind, values),
         _no_default=_no_default(read),
         _read_view=read_view,
+        _read_members=read_members,
         _write_params=_template_params([write, *(table or {}).values()]),
         _variants=_variant_rules(entry.get("variants")),
     )

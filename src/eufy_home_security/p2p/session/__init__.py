@@ -1522,11 +1522,18 @@ class StationSession:
             await self._confirm_params(CMD_SET_ALL_ACTION, table.params())
 
     async def async_send_json_frame(
-        self, command: int, body: Callable[[str], bytes], *, timeout: float | None = None
+        self,
+        command: int,
+        body: Callable[[str], bytes],
+        *,
+        header_channel: int = 0,
+        timeout: float | None = None,
     ) -> bool:
         """Send ``body(owner account id)`` (a JSON document) as a frame whose type is
-        ``command``, the way the app sends a mode table (1255), the mode list (1256) and
-        the schedule (1254), and wait for the station's receipt of that type on channel 0.
+        ``command``, the way the app sends a mode table (1255), the mode list (1256), the
+        schedule (1254) and the JSON-text settings (1271, 1404), and wait for the station's
+        receipt of that type on channel 0. ``header_channel`` is the subheader's channel
+        byte (:data:`~..messages.JSON_TEXT_CALLER_CHANNEL_CMDS`: the device's channel).
 
         Returns True for receipt code 0 and False when the station acknowledged the
         datagram but sent no receipt within ``timeout``. Neither is a read-back: the
@@ -1544,14 +1551,23 @@ class StationSession:
 
         async with self._op(f"cmd {command} write"):
             _LOGGER.debug(
-                "%s: tx JSON frame %d (%d bytes)", self._log_name, command, len(plaintext)
+                "%s: tx JSON frame %d ch%d (%d bytes): %s",
+                self._log_name,
+                command,
+                header_channel,
+                len(plaintext),
+                Payload(decode_json_payload(plaintext)),
             )
             indices: list[int] = []
             try:
                 code = cast(
                     int,
                     await self._request(
-                        lambda: indices.append(self._send_secure(plaintext, frame_type=command)),
+                        lambda: indices.append(
+                            self._send_secure(
+                                plaintext, frame_type=command, dev_type=header_channel
+                            )
+                        ),
                         match,
                         timeout=timeout,
                         label=f"cmd {command}",
@@ -1828,13 +1844,15 @@ class StationSession:
         value: str,
         *,
         channel: int = STATION_CHANNEL,
+        number: int = 0,
         timeout: float | None = None,
     ) -> None:
-        """Send a string setting the way the app does (its set-with-string handler).
+        """Send a string setting the way the app does (its string + int handler).
 
         A GCM frame whose type is ``command``, subheader channel 255, body
         :func:`~..messages.string_command_body` (``channel`` addresses the device inside
-        it). The station answers with a receipt of the same type: a non-zero code raises
+        it, ``number`` is its first word). The station answers with a receipt of the same
+        type: a non-zero code raises
         :class:`CommandRejectedError`, no answer :class:`CommandNotAppliedError` or
         :class:`DeviceTimeoutError`. A receipt is not a read-back. A value, account id or
         ``channel`` the body cannot carry raises ``ValueError`` before anything is sent.
@@ -1842,13 +1860,20 @@ class StationSession:
         timeout = _or(timeout, COMMAND_TIMEOUT)
         await self.async_connect()
         creds = self._require_creds()
-        body = string_command_body(value, creds.account_id, channel=channel)
+        body = string_command_body(value, creds.account_id, channel=channel, number=number)
 
         def match(inbound: Inbound) -> int | None:
             return inbound.receipt() if inbound.type == command else None
 
         async with self._op("string command"):
-            _LOGGER.debug("%s: tx string cmd %d ch%d: %r", self._log_name, command, channel, value)
+            _LOGGER.debug(
+                "%s: tx string cmd %d ch%d number %d: %s",
+                self._log_name,
+                command,
+                channel,
+                number,
+                Payload(value),
+            )
             indices: list[int] = []
             try:
                 code = cast(

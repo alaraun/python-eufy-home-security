@@ -451,9 +451,10 @@ def image_request_payload(path: str) -> list[dict[str, str]]:
 
 # ── legacy ECB scalar commands ────────────────────────────────────────────────
 #
-# The app picks a body handler by command id. A command in none of these handlers
-# is not a scalar on this path: the default handler rejects it (-103), and the app
-# sends it as a GCM payload-object command instead.
+# The app's send handler picks a frame form by command id (declared, eufy app; see
+# docs/protocol/commands.md § Frame forms): the ECB scalar sets below, the channel-value
+# set, the JSON-text set and the string set. A command in none of them is not sent: the
+# handler's default case returns -103.
 
 #: Value handler: body = ``[u32 value][char[128] account]``.
 ECB_VALUE_CMDS = frozenset({1249, 1250, 1251, 1252})
@@ -544,6 +545,10 @@ ECB_CHANNEL_VALUE_CMDS = frozenset(
     }
 )
 
+#: Channel + value handler without an account: body = ``[u32 channel][u32 value]``, sent
+#: like the ECB scalars (frame type = cmd, the caller's channel in the header).
+CHANNEL_VALUE_CMDS = frozenset({1013, 1202, 1205, 1206})
+
 
 class EcbValueField(NamedTuple):
     """The handler body field an ECB scalar command's value is read from.
@@ -560,6 +565,7 @@ class EcbValueField(NamedTuple):
 #: the handler's body carries (declared, eufy app). See docs/protocol/commands.md.
 ECB_VALUE_FIELDS: dict[int, EcbValueField] = {
     1011: EcbValueField("enable", flag=True),
+    1013: EcbValueField("value"),
     1015: EcbValueField("value"),
     1035: EcbValueField("switch", flag=True),
     1045: EcbValueField("ledStatus"),
@@ -634,27 +640,45 @@ ECB_RESULT_CODES: dict[int, str] = {
 
 
 def is_ecb_scalar(cmd: int) -> bool:
-    """True if ``cmd`` is sent as a legacy AES-ECB scalar (not a GCM payload object)."""
-    return cmd in ECB_VALUE_CMDS or cmd in ECB_STATION_CMDS or cmd in ECB_CHANNEL_VALUE_CMDS
+    """True if ``cmd`` is sent as a legacy AES-ECB scalar (not a GCM payload object): one of
+    the ECB sets or :data:`CHANNEL_VALUE_CMDS`."""
+    return (
+        cmd in ECB_VALUE_CMDS
+        or cmd in ECB_STATION_CMDS
+        or cmd in ECB_CHANNEL_VALUE_CMDS
+        or cmd in CHANNEL_VALUE_CMDS
+    )
 
 
-# ── string commands ───────────────────────────────────────────────────────────
+# ── JSON-text and string commands ─────────────────────────────────────────────
 
-#: Commands the app sends as a string frame (its ``msgType 6`` set-with-string handler):
-#: frame type = the command id, body :func:`string_command_body`. 1215 is the time zone.
-STRING_CMDS = frozenset({1215})
+#: JSON-text handler: frame type = the command id, body = a JSON document under the
+#: session's cipher. The header channel byte is 255, the caller's channel for
+#: :data:`JSON_TEXT_CALLER_CHANNEL_CMDS`. 1350 is the command transfer (``0x0546``).
+JSON_TEXT_CMDS = frozenset(
+    {1060, 1204, 1254, 1255, 1256, 1258, 1259, 1260, 1261, 1262, 1264, 1271, 1350, 1404}
+)
+JSON_TEXT_CALLER_CHANNEL_CMDS = frozenset({1204, 1271})
+
+#: String + int handler: frame type = the command id, header channel 255, body
+#: :func:`string_command_body`. 1215 is the time zone, 1414 dusk-to-dawn; the library
+#: sends a 1025 playback on its media path.
+STRING_CMDS = frozenset({1025, 1132, 1215, 1216, 1217, 1414})
 _STRING_FIELD_LEN = 128
+_STRING_NUMBER_MAX = 0xFFFF
 
 
-def string_command_body(value: str, account_id: str, *, channel: int) -> bytes:
-    """The body of a string command: ``u32 0 | u8 channel | char[128] value |
+def string_command_body(value: str, account_id: str, *, channel: int, number: int = 0) -> bytes:
+    """The body of a string command: ``u16 number | 00 00 | u8 channel | char[128] value |
     char[128] account_id``, each string NUL-terminated within its field.
 
-    Raises ``ValueError`` for a channel outside 0..255, or a value or account id that
-    is not ASCII or does not fit its field (127 bytes).
+    Raises ``ValueError`` for a channel outside 0..255, a number outside 0..65535, or a
+    value or account id that is not ASCII or does not fit its field (127 bytes).
     """
     if not 0 <= channel <= STATION_CHANNEL:
         raise ValueError(f"string command channel must be 0..255, got {channel}")
+    if not 0 <= number <= _STRING_NUMBER_MAX:
+        raise ValueError(f"string command number must be 0..65535, got {number}")
     fields = []
     for name, text in (("value", value), ("account id", account_id)):
         try:
@@ -667,7 +691,13 @@ def string_command_body(value: str, account_id: str, *, channel: int) -> bytes:
                 f"{_STRING_FIELD_LEN - 1} without NUL"
             )
         fields.append(raw.ljust(_STRING_FIELD_LEN, b"\x00"))
-    return bytes(4) + bytes([channel]) + b"".join(fields)
+    return struct.pack("<HH", number, 0) + bytes([channel]) + b"".join(fields)
+
+
+def string_command_number(body: bytes) -> int:
+    """The number (the first u16) of a :func:`string_command_body`."""
+    (number,) = struct.unpack_from("<H", body, 0)
+    return int(number)
 
 
 def decode_string_command_body(body: bytes) -> tuple[int, str, str]:
@@ -696,9 +726,11 @@ def encode_ecb_scalar_frame(
     Layout: cleartext ``"XZYH" | type=cmd | len | 01 seq channel <encryption> 00 00``
     then an AES-128-ECB body of ``[u32 channel]?[u32 value][char[128] account_id\\0]``
     under ``static_key`` (``encryption`` 1), or under an RSA session's key
-    (``encryption`` 2); with ``encryption`` 0 the body goes in clear, unpadded. The channel byte routes to the sub-device (255 = station); the
-    account id in the body is what the station authorises against. A command outside
-    the scalar handlers raises :class:`UnsupportedError` (the app never sends it this way).
+    (``encryption`` 2); with ``encryption`` 0 the body goes in clear, unpadded. The
+    channel byte routes to the sub-device (255 = station); the account id in the body is
+    what the station authorises against. A :data:`CHANNEL_VALUE_CMDS` body is
+    ``[u32 channel][u32 value]`` with no account field. A command outside the scalar
+    handlers raises :class:`UnsupportedError` (the app never sends it this way).
 
     Raises :class:`ValueError` for a channel outside 0..50/255 or an account id
     that is not ASCII or does not fit the 128-byte NUL-terminated field.
@@ -716,7 +748,7 @@ def encode_ecb_scalar_frame(
     if cmd in ECB_STATION_CMDS:
         channel = STATION_CHANNEL
         prefix = b""
-    elif cmd in ECB_CHANNEL_VALUE_CMDS:
+    elif cmd in ECB_CHANNEL_VALUE_CMDS or cmd in CHANNEL_VALUE_CMDS:
         prefix = struct.pack("<I", channel)
     elif cmd in ECB_VALUE_CMDS:
         prefix = b""
@@ -725,8 +757,9 @@ def encode_ecb_scalar_frame(
             f"cmd {cmd} is not a legacy ECB scalar; the app sends it as a GCM "
             "payload-object command (or with a layout this builder does not model)"
         )
-    body = prefix + struct.pack("<I", value & 0xFFFFFFFF) + acct
-    body += b"\x00" * (_ECB_ACCOUNT_LEN - len(acct))
+    body = prefix + struct.pack("<I", value & 0xFFFFFFFF)
+    if cmd not in CHANNEL_VALUE_CMDS:
+        body += acct + b"\x00" * (_ECB_ACCOUNT_LEN - len(acct))
     body_wire = body if encryption == crypto.FRAME_PLAIN else crypto.ecb_encrypt(static_key, body)
     subheader = bytes([FrameCipher.ECB, seq & 0xFF, channel, encryption & 0xFF, 0x00, 0x00])
     return encode_frame(cmd, body_wire, subheader)
