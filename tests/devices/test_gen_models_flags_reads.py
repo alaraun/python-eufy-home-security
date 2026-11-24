@@ -90,6 +90,8 @@ def test_the_struct_may_come_as_its_json_text() -> None:
         lambda m: {**_struct(m), "idle": not m},  # on at 0
         lambda m: {**_struct(m), "test": bool(m & 2) or not m},  # on at 0 and for its bit
         lambda m: {**_struct(m), "low": bool(m & 12)},  # on with another member's bit too
+        lambda m: {**_struct(m), "alarm": bool(m & (1 | 1 << 20))},  # and for bit 20
+        lambda m: {**_struct(m), "alarm": bool(m & (1 | 1 << 31))},  # and for the sign bit
         lambda m: {"alarm": bool(m & 1), "test": bool(m & 6), "high": bool(m & 128)},  # 2 bits
         lambda m: {k: v for k, v in _struct(m).items() if (m, k) != (4, "high")},  # one gone
         lambda m: (
@@ -110,6 +112,11 @@ def test_any_other_answer_is_no_flags_read(read: Any) -> None:
     assert gen_models.flag_members(_answers(read)) is None
 
 
+def test_a_member_of_the_sign_bit_gets_that_bit() -> None:
+    top = {**BITS, "top": 1 << 31}
+    assert gen_models.flag_members(_answers(lambda m: _struct(m, top))) == top
+
+
 def test_a_missing_answer_is_no_flags_read() -> None:
     answers = {mask: _struct(mask) for mask in _answers()}  # the OR of the members not asked
     assert gen_models.flag_members(answers) is None
@@ -120,6 +127,7 @@ def test_a_missing_answer_is_no_flags_read() -> None:
 # parameter into the JSON text of an object of booleans, one per bit. smoke (TD string,
 # 1823) and listener (TD bool, 1824) are such masks; equal (1825) compares the value with
 # each bit; partial (1826) has a member no bit sets; wide (1827) carries the number too.
+# level (1828, an enum in seconds) and temp (1829, in degrees) are masks too.
 HANDLER = """
 function parse(s) { return JSON.parse(s.slice(0, s.lastIndexOf("EOF;"))); }
 function bits(v) {
@@ -140,6 +148,8 @@ module.exports.deviceStatus = function (s) {
     if (p.param_type === 1825) out.equal = JSON.stringify({ alarm: b === 1, test: b === 2 });
     if (p.param_type === 1826) out.partial = JSON.stringify({ ...bits(v), never: false });
     if (p.param_type === 1827) out.wide = JSON.stringify({ ...bits(v), level: b });
+    if (p.param_type === 1828) out.level = JSON.stringify(bits(v));
+    if (p.param_type === 1829) out.temp = JSON.stringify(bits(v));
   }
   return JSON.stringify({ data: { p2p: out } });
 };
@@ -156,6 +166,18 @@ PROPS = [
     _prop("equal", {"type": "text"}),
     _prop("partial", {"type": "text"}),
     _prop("wide", {"type": "text"}),
+    _prop(
+        "level",
+        {
+            "type": "enum",
+            "specs": {
+                "eunmList": [{"value": 0, "desc": "Low"}, {"value": 1, "desc": "High"}],
+                "unit": "s",
+                "defaultValue": "1",
+            },
+        },
+    ),
+    _prop("temp", {"type": "text", "specs": {"unit": "degree"}}),
 ]
 TITLES: dict[str, Any] = {
     "flag_meanings": {
@@ -210,6 +232,41 @@ def test_the_handlers_mask_wins_over_a_bool_the_description_declares(
 
 @needs_node
 @pytest.mark.timeout(120)
+def test_the_descriptions_domain_unit_and_meaning_are_dropped(
+    generated: dict[str, Any],
+) -> None:
+    level, temp = generated["settings"]["level"], generated["settings"]["temp"]
+    assert (level["kind"], level["flags"], temp["kind"], temp["flags"]) == (
+        "flags",
+        BITS,
+        "flags",
+        BITS,
+    )
+    assert not {"values", "labels", "unit", "default"} & set(level)
+    assert "meaning" not in temp
+
+
+def test_a_flags_status_keeps_no_field_of_the_descriptions_domain() -> None:
+    entry = {
+        "kind": "enum",
+        "values": [0, 1],
+        "labels": {"0": "Low", "1": "High"},
+        "min": 0,
+        "max": 1,
+        "step": 1,
+        "unit": "s",
+        "meaning": "duration",
+        "default": 1,
+        "access": "ro",
+        "read": None,
+    }
+    read = {"param": 1823, "map": None, "no_default": True}
+    gen_models.as_flags_status(entry, read, dict(BITS))
+    assert entry == {"kind": "flags", "flags": BITS, "access": "ro", "read": read}
+
+
+@needs_node
+@pytest.mark.timeout(120)
 @pytest.mark.parametrize("ident", ["equal", "partial", "wide"])
 def test_a_struct_that_is_no_mask_of_its_parameter_stays_unreadable(
     generated: dict[str, Any], ident: str
@@ -239,6 +296,15 @@ def test_member_meanings_skip_a_setting_that_is_no_flags_mask() -> None:
     joiner._flag_meanings(PN, settings, TITLES, counts)
     assert settings == {"equal": {"kind": "string"}}
     assert counts == {"flag meaning:not a flags setting": 1}
+
+
+def test_a_rule_naming_none_of_a_settings_members_sets_no_meanings() -> None:
+    settings: dict[str, Any] = {"smoke": {"kind": "flags", "flags": dict(BITS)}}
+    titles = {"flag_meanings": {"smoke": {"members": {"gone": "muted"}, "source": "card"}}}
+    counts: dict[str, int] = {}
+    joiner._flag_meanings(PN, settings, titles, counts)
+    assert settings == {"smoke": {"kind": "flags", "flags": BITS}}
+    assert counts == {}
 
 
 @pytest.mark.parametrize(

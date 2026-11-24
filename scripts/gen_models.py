@@ -753,6 +753,14 @@ def flags_reads(
     return out
 
 
+def as_flags_status(entry: dict[str, Any], read: dict[str, Any], members: dict[str, int]) -> None:
+    """Make ``entry`` the read-only ``flags`` status of ``members`` (member -> bit) read by
+    ``read``, without the thing description's domain."""
+    for key in TD_DOMAIN_FIELDS:
+        entry.pop(key, None)
+    entry.update(kind="flags", flags=members, read=read)
+
+
 def _level(answer: Any) -> int | None:
     """A getProperty value as a battery level: an integer, or the text of one."""
     if type(answer) is int:
@@ -1369,8 +1377,9 @@ def sweep(
 type ObjectRows = dict[str, tuple[list[tuple[Any, Any]], list[tuple[Any, Any]]]]
 """``{identifier: (main channel rows, second channel rows)}`` of one context: each row the
 app's object and the handler's slotted recipe for it (None: no recipe)."""
-OBJECT_ENTRY_DROPPED = ("values", "min", "max", "step", "unit", "meaning", "default", "labels")
-"""Fields of a thing-description string that an object value does not carry."""
+TD_DOMAIN_FIELDS = ("values", "min", "max", "step", "unit", "meaning", "default", "labels")
+"""Fields of a thing-description domain that a value of another shape (an object, a flags
+mask) does not carry."""
 
 
 def object_sweep(
@@ -1601,7 +1610,7 @@ def apply_object_writes(
                 entry["note"] = f"{entry['note']}; {fit.note}" if entry.get("note") else fit.note
                 _count(counts, f"object:{fit.note}")
             continue
-        for key in (*OBJECT_ENTRY_DROPPED, "write_table", "note"):
+        for key in (*TD_DOMAIN_FIELDS, "write_table", "note"):
             entry.pop(key, None)
         entry.update(kind="object", access="rw", write=fit.write, read=read, structured=True)
         _count(counts, "object:write")
@@ -2267,10 +2276,7 @@ def build_context(  # noqa: C901
     for ident, (read, members) in flags_reads(
         product_code, handler, context, unread, located, counts=counts
     ).items():
-        entry = settings[ident]
-        for key in ("values", "min", "max", "step", "unit", "default", "meaning"):
-            entry.pop(key, None)
-        entry.update(kind="flags", flags=members, read=read)
+        as_flags_status(settings[ident], read, members)
     try:
         joined = joiner.join(product_code, settings, td, app_labels, tree, titles=titles)
     except GeneratorError as err:
