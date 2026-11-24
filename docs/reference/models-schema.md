@@ -35,7 +35,7 @@ are 1-space-indented JSON with a trailing newline, and a re-run gives the same b
 | `access` | `rw`: the handler has a value-dependent write. `ro`: it has none, or the setting is a status the eufy app only reads (`hb_keypad_is_password_set`, `device_back_screen_connect_status`). The handler's write is probed for every property, whatever the TD's `access_mode` declares (the app does not check it before writing); a property the TD does not declare writable (no `W`) is `rw` only in a context where its write also gives a `read`: getProperty returns the written value (the motion light switch `motion_actived_light_switch` of a T8420), or the setting is an enum read by the inverse of its write (`read` below), or an `object` setting the handler reads from the value its write stores (*Object writes*). A handler write the eufy app does not send is `ro` (*Write routing*) |
 | `write` | Recipe template (base context, below) |
 | `write_table` | `{"<value>": recipe}` when the recipe's shape depends on the value. It replaces `write` |
-| `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. An `object` read may carry `members` instead (*Object writes*). `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. Either may carry `view` (below). `fallback` (an enum's value): any reported value outside the values reads as it, as the eufy app's screen shows it (the recording type `device_recording_type` reads `3`, Continuous); writing a value outside the values is still refused. `null`: not readable. The generator takes it from the handler's getProperty of each written value; for a setting without a write, from the one parameter the handler fills it from (located once, in the base context: the parameter ids the handler's code names are held at two values, in ascending and in descending order, and the property is read back by name, else by command id), held at each value's string form. Such a read carries `"no_default": true`: unreported, the setting reads None, never its `default`. It stays `null` when several parameters decide the value (in either order, or together), when a bool does not read as a boolean for every value held (`"2"` too), or when an open kind (`string`, `other`) does not read a multi-digit number and a JSON object back unchanged; an `other` is also read as a number when each integer text reads back as that integer, the JSON object does not read as another structure, no other property reads its parameter and its own write, if any, stores the number as is (a property that reads one field of a JSON value stays `null`; reading such fields is not described). An enum whose getProperty does not return the written value, but whose write stores every value as its own parameter value (no failed conversion such as `NaN`), is read by the inverse of the write unless a per-view read decodes it: the value read is the one the client wrote. The eufy app's own display of the watermark setting (T8414, T8440, T8442) differs from it |
+| `read` | `{"param": <id>, "map": null}`: the parameter's value is the public value's string form. An `object` read may carry `members` instead (*Object writes*). `{"param": <id>, "map": {"<param value>": <public value>}}`: decode through the map. Either may carry `view` or `span` (below). `fallback` (an enum's value): any reported value outside the values reads as it, as the eufy app's screen shows it (the recording type `device_recording_type` reads `3`, Continuous); writing a value outside the values is still refused. `null`: not readable. The generator takes it from the handler's getProperty of each written value; for a setting without a write, from the one parameter the handler fills it from (located once, in the base context: the parameter ids the handler's code names are held at two values, in ascending and in descending order, and the property is read back by name, else by command id), held at each value's string form. Such a read carries `"no_default": true`: unreported, the setting reads None, never its `default`. It stays `null` when several parameters decide the value (in either order, or together), when a bool does not read as a boolean for every value held (`"2"` too), or when an open kind (`string`, `other`) does not read a multi-digit number and a JSON object back unchanged; an `other` is also read as a number when each integer text reads back as that integer, the JSON object does not read as another structure, no other property reads its parameter and its own write, if any, stores the number as is (a property that reads one field of a JSON value stays `null`; reading such fields is not described). An enum whose getProperty does not return the written value, but whose write stores every value as its own parameter value (no failed conversion such as `NaN`), is read by the inverse of the write unless a per-view read decodes it: the value read is the one the client wrote. The eufy app's own display of the watermark setting (T8414, T8440, T8442) differs from it |
 | `contexts` | What other contexts change (below); absent when every context sees the base entry |
 | `labels` | `{"<value>": "<title>"}` from the app's titles, else the cleaned TD description. The app's option titles of `working_mode_value`: `Standard` (EU), `Performance (beta)` (US) |
 | `section` | Always present: the UI section id, one of `devices/sections.py`'s `SETTING_SECTIONS`. Assigned by `scripts/gen_models_sections.py` from the app page the setting lives on, else the station rules (station models), else the identifier rules, else `other`; a variant has its primary's. Every context has the same section |
@@ -145,6 +145,22 @@ the view that rule names in each of three probes (the value's quality in one vie
 another value's in the other, with view mode 0 or 12 and `cur_mode` 0 or 2); the map
 keys that are such reports are dropped.
 
+### Span reads
+
+A device can store a timed value as its end and start, base64 JSON
+`{"snooze_time": <end>, "startTime": <start>}` in Unix seconds (a HomeBase 3 stores the
+snooze `device_snooze_time`, 1271, so). `read.span` is `{"member": <end member>, "start":
+<start member>, "map": {"<seconds>": <public value>}}`: the value is the choice whose
+duration is end − start, both members integers. The library tries `read.map` first (the
+empty text reads as off there) and the span when that gives no value; any other stored
+value reads as unknown. The generator adds `span` to an enum whose write stores at least
+two values as base64 JSON with the same one integer member (`{"snooze_time": 1800}`; a
+value stored otherwise has no span), when the handler's getProperty reads `{<member>:
+start + n, "startTime": start}` as the value whose stored member is `n`, for each of
+them and two starts. Whether a device clears the
+record when the time runs out is not known; until it does, the read gives the duration
+chosen, not the time left.
+
 ### Object writes
 
 A property whose app screens write a JSON object (the combined light settings
@@ -194,13 +210,23 @@ screens the app draws natively. For each `rw` template, in each context:
 
 - A 1350 or 1700 template with a `subCmd` is sent as its wrapper.
 - A bare command is sent when it gets a request type (its `params`' `msgType`, else the
-  builder's) and has a frame form the library sends.
+  builder's) and has a frame form the library sends. A JSON-text command whose request
+  case adds the owner's id to the text gets an `account_id` member `"$account_id"`
+  (replacing one of that name in place, else appended).
 - Otherwise, on a model whose settings the app draws natively (the settings tree's
   `settings_ui` is not the React Native one), the native screen's form: its own `params`
-  where the input gives one (an object form needs an `object` setting), else the same
-  template when a screen sends the command as the same scalar frame.
+  where the input gives one, else the same template when a screen sends the command as
+  the same scalar frame. A screen form that reads members of an object needs an `object`
+  setting: any other setting is `ro` with the note `the eufy app's screen sends this write
+  as an object, which this setting is not`.
 - Otherwise the setting is `ro` with the note `the eufy app sends nothing for this
   write`, its read kept.
+
+A bare JSON-text write's body is the handler's params as JSON text. The handler fills
+some members from the account the app's message names (the snooze's `account_id`); the
+generator drives such a write once more naming an account, and each member that takes
+it becomes `"$account_id"`, in the handler's member order. The other frame forms carry
+the owner's id outside the body (or none), so their templates are left as they are.
 
 The run fails when the library's frame-form tables (`p2p.messages`) or its per-command
 value fields (`ECB_VALUE_FIELDS`) differ from the input's.
@@ -262,6 +288,7 @@ Recipe templates are the handler's recipe with the value positions replaced:
 | `"$v.<member>:json"` | The value's member `<member>` (members chain with `.`) as JSON data, inside a body |
 | `"$v.<member>:str"` | A scalar member as text: a string as is, a number or bool as its JSON text |
 | `"$v.<member>:flag"` | A member as a switch: 1 for `true`, the number 1 or the text `"1"`, `"true"`, `"TRUE"`, else 0 |
+| `"$v.<member>:int"` | A member as an integer: a whole number or its digit text; anything else (a bool, a fraction, other text) is refused |
 | `{"$format": [text, part, ...]}` | `text` with each `%s` replaced by the next part's text |
 | `{"$jsontext": template}` | The compact JSON text of the rendered template |
 | `{"$each": [list slot, item template]}` | The item template rendered once per object of the list, its `$v` slots reading that object |
@@ -291,6 +318,7 @@ Recipe templates are the handler's recipe with the value positions replaced:
 | `status the eufy app only reads` | `ro` with its read: the app shows the value and offers no control for it |
 | `no object form reproduces the app's object write` | Appended: the handler writes the app's objects, but no template of the object forms renders its recipes (it stores the object as JSON text, the body is no copy of the stored value, or it sends some members of the value only) |
 | `the eufy app sends nothing for this write` | `ro`: the handler has a write, but the eufy app sends no frame for it (*Write routing*) |
+| `the eufy app's screen sends this write as an object, which this setting is not` | `ro`: only a settings screen the eufy app draws natively sends the write, in a form that reads members of an object; the setting is no `object` (*Write routing*) |
 | `handler rejects some of the app's objects` | Appended: the handler threw for some of the objects the app writes |
 
 A property the TD does not declare writable and that the library does not write is `ro`

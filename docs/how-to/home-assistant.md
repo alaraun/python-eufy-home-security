@@ -1028,11 +1028,13 @@ A closed session (`async_close`) never reconnects on its own — build a new
     does not return the written value`): the handler ignores, transforms or rejects the
     value, it has no write path, it is the guard mode (use `async_set_guard_mode`), it goes
     over a transport the library does not send (`cloud request`, `app-local`,
-    `multi-command write`, `Bluetooth`, `MQTT`), or the eufy app sends no frame for it
-    (`the eufy app sends nothing for this write`: the light schedule
-    `spotlight_schedule_config` of T8110, T8110E, T8115, T8119, T814X, T814XS and T817L,
-    and `notification_interval_time` of T7100, T8E00, T8E00E, T8P00 and T8P10, which were
-    writable before; keep their entities as read-only sensors).
+    `multi-command write`, `Bluetooth`, `MQTT`), its body cannot fill its command's frame,
+    or the eufy app sends no frame for it (`the eufy app sends nothing for this write`:
+    the light schedule `spotlight_schedule_config` of T8110, T8110E, T8115, T8119 and
+    T817L, and `notification_interval_time` of T7100, T8E00, T8E00E, T8P00 and T8P10; on
+    T814X and T814XS the light schedule's note is `the eufy app's screen sends this write
+    as an object, which this setting is not`). These were writable before; keep their
+    entities as read-only sensors.
   - `readable=False` → the dump never reports it, so its state is always unknown. An
     enum the handler does not read back, but whose write gives every value its own
     parameter value, is readable by the inverse of that write: the value read is the one

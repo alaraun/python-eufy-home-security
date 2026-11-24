@@ -195,12 +195,14 @@ checked on its own.
 
 The generator emits a write only in the frame form the eufy app sends
 ([models-schema.md § Write routing](../reference/models-schema.md#write-routing)). Its
-input is generated from the app build by a private offline extractor, never by hand: the
-frame form per command from the app's own send handler (its command switch, each form
-named by a probe command and checked to cover the library's frame-form sets), the request
-type and the value field per command from the app's request builder (checked against
-known cases), and the native settings screens that send a command themselves, with the
-write forms the generator uses for them. Re-extract it for each app release with the other
+input is generated from the app build by a private offline extractor: the frame form per
+command from the app's own send handler (its command switch, each form named by a probe
+command and checked to cover the library's frame-form sets), the request type and the
+value field per command from the app's request builder (checked against known cases), and
+the native settings screens that send a command themselves. The write forms the generator
+uses for those screens are written from the screens' code and checked against it on every
+extraction (the calls they make, the fields and integer types of the objects they
+serialise). Re-extract it for each app release with the other
 app inputs; the extractor's check mode fails when a fresh extraction differs from the
 file. `gen_models.py` refuses to run (exit 2) when the file's frame-form sets or value
 fields differ from the library's (`p2p.messages`), so a release that moves a command

@@ -216,7 +216,7 @@ that serves reads, and do not resend into a stall — each resend queues again.
 ## Settings
 
 The frame a write goes in is chosen by its command id ([Frame forms](#frame-forms) below,
-[session-crypto.md](session-crypto.md)); the two most settings use:
+[session-crypto.md](session-crypto.md)); the two forms most settings use:
 
 **GCM payload objects.** The value **and the channel** go inside `payload`.
 `mValue3` is ignored, and a payload without `channel` is not applied **[verified]**.
@@ -326,13 +326,21 @@ form has frame type = the command id and goes under the session's cipher rules
 
 The integers are little-endian, the strings NUL-terminated within their field. The
 settings that use the forms beyond the ECB scalars (each **[declared]**, eufy app; not
-tested on hardware):
+tested on hardware unless marked):
 
 - **Night vision** (`nightvision_type`, `nightvision_type_new`, `nightvision_on_off`;
   1013): channel + value. Body for channel 3, value 1: `03 00 00 00 01 00 00 00`.
-- **Snooze** (`device_snooze_time`; 1271): JSON text of the handler's body, no owner id,
-  the device's channel in the header. Body for the 30-minute choice:
-  `{"snooze_time":1800}`.
+- **Snooze** (`device_snooze_time`; 1271): JSON text of the handler's body, the owner id
+  first, the device's channel in the header. Body for the 30-minute choice:
+  `{"account_id":"<owner id>","snooze_time":1800}`; `snooze_time` 0 ends a snooze. The
+  frame is **[verified]** on a HomeBase 3 with a T8160 and a T8170 (receipt 0, applied;
+  [hardware-verification.md](../reference/hardware-verification.md)): without the owner
+  id the station refuses it (−104), with header channel 255 too (−106). While a snooze
+  runs, the device reports 1271 as base64 JSON `{"snooze_time": <end>, "startTime":
+  <start>}` (Unix seconds; empty when off), which the setting reads as the choice whose
+  duration is end − start, as the eufy app's handler reads it
+  ([models-schema.md § Span reads](../reference/models-schema.md#span-reads)). Whether the
+  device clears the record when the snooze runs out is not known.
 - **Alarm sound** (`device_alarm_sound_type` of a T90E0; 1507): ECB channel + value with
   the value the template names in `mValue` and the owner id, as the app's sensor screen
   sends it.
@@ -341,11 +349,15 @@ tested on hardware):
   location as the app's light screen spells it, `{"lat": "<lat>","lng": "<lng>"}` (a space
   after each colon). The value is `{enable, lat, lng}`; the read assembles
   `{enable, lat, lng, sun_rise, sun_set}` from parameters 1414 (the switch) and 1415 (a
-  JSON object of the location and the sun times the device fills).
+  JSON object of the location and the sun times the device fills). A write replaces the
+  cached 1415 with `{sn, lat, lng}`, as the handler's own update does, so `sun_rise` and
+  `sun_set` read `""` until the next parameter dump.
 - **Light schedule** (`ambient_light_schedule_config` of the same five; 1404): JSON text
   `{"account_id":"<owner id>","schedules":{"loop":[…]}}`, each entry
   `{cross_day, enable, end_h, end_m, interval, start_h, start_m, week: [{day}]}` in this
-  order (`interval` 0 when the entry has none), no `once` list, header channel 255.
+  order (`interval` 0 when the entry has none), no `once` list, header channel 255. Each
+  member is an integer, as the screen sends it: a digit text or a whole float goes out as
+  its number, anything else (a bool, a fraction) is refused before sending.
 
 ## Parameter dump **[verified]**
 
