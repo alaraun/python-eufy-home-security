@@ -2397,8 +2397,8 @@ def generate(
     domain_counts: dict[str, int] = {}
     domains: dict[str, Mapping[str, Any]] = {}
     own_td = json.loads((folder / "td.json").read_text(encoding="utf-8"))
-    joiner.check_screen_switches(product_code, own_td, titles)
     td = joiner.apply_domains(product_code, own_td, titles, domain_counts, domains)
+    joiner.check_screen_switches(product_code, td, titles)
     handler = folder / f"{product_code}Handle.mix.js"
     props = []
     skipped = 0

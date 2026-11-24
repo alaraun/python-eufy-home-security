@@ -402,10 +402,10 @@ def screen_switches(pn: str, titles: Mapping[str, Any] | None) -> dict[str, dict
 
 
 def check_screen_switches(pn: str, td: Mapping[str, Any], titles: Mapping[str, Any] | None) -> None:
-    """Raise GeneratorError when a property of the product's own ``td`` that a screen switch
-    types (kind ``other``) is also an object write: two rules for one value. A property of
-    another kind keeps its own type, so it may carry both; a ``domains`` rule applies first
-    and leaves the switch nothing to type."""
+    """Raise GeneratorError when a property of the product's ``td`` (its ``domains`` rules
+    applied) that a screen switch types (kind ``other``) is also an object write: two rules
+    for one value. A property of another kind, a domain's included, keeps its own type, so
+    it may carry both."""
     screen = screen_switches(pn, titles)
     objects = (titles or {}).get("object_writes") or {}
     for prop in td.get("properties", []):

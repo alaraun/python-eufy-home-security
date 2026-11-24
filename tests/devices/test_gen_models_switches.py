@@ -419,6 +419,18 @@ def test_an_app_domain_on_a_bare_value_wins_over_its_screen_switch(tmp_path: Pat
     assert entry.get("control") != "switch"
 
 
+@pytest.mark.timeout(120)
+def test_a_domain_settles_a_bare_value_before_the_switch_and_object_check(tmp_path: Path) -> None:
+    """With a domain, the value is no longer bare: the switch and object write rules do not clash."""
+    titles = {
+        "switch_writes": {"alarm_delay": INT_SWITCH},
+        "object_writes": {"alarm_delay": OBJECT_WRITE},
+        "domains": {"alarm_delay": RANGE_DOMAIN},
+    }
+    doc, _ = gen_models.generate(PN, _int_cache(tmp_path, BARE_INT_TD), titles=titles)
+    assert doc["settings"]["alarm_delay"]["kind"] == "range"
+
+
 @pytest.mark.parametrize(
     ("ident", "data_type", "objects"),
     [
