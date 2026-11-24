@@ -29,6 +29,7 @@ __all__ = [
     "STATUS_NOTE",
     "GeneratorError",
     "apply_domains",
+    "check_screen_switches",
     "finish_domains",
     "hold_members",
     "join",
@@ -398,6 +399,19 @@ def screen_switches(pn: str, titles: Mapping[str, Any] | None) -> dict[str, dict
             raise GeneratorError(f"{pn}: screen switch {ident} needs two values of its type")
         out[ident] = {True: on, False: off}
     return out
+
+
+def check_screen_switches(pn: str, td: Mapping[str, Any], titles: Mapping[str, Any] | None) -> None:
+    """Raise GeneratorError when a property of the product's own ``td`` that a screen switch
+    types (kind ``other``) is also an object write: two rules for one value. A property of
+    another kind keeps its own type, so it may carry both; a ``domains`` rule applies first
+    and leaves the switch nothing to type."""
+    screen = screen_switches(pn, titles)
+    objects = (titles or {}).get("object_writes") or {}
+    for prop in td.get("properties", []):
+        ident = prop.get("identifier") if isinstance(prop, dict) else None
+        if ident in screen and ident in objects and kind_of(prop) == "other":
+            raise GeneratorError(f"{pn}: screen switch {ident} is also an object write")
 
 
 _DOMAIN_FILL = "fill"  # only where the product's TD declares no values or range

@@ -367,6 +367,53 @@ def test_a_screen_switch_leaves_a_domain_the_td_declares(
     assert doc["settings"]["alarm_delay"]["kind"] == data_type["type"]
 
 
+OBJECT_WRITE = {"source": "-", "payloads": [{"a": 1}, {"a": 2}]}
+RANGE_DOMAIN = {"kind": "range", "min": 0, "max": 5, "step": 1, "td": "fill", "source": "-"}
+
+
+def test_a_bare_value_named_by_a_screen_switch_and_an_object_write_raises(tmp_path: Path) -> None:
+    """Two rules would decide a bare value's type: the generator refuses the input."""
+    titles = {
+        "switch_writes": {"alarm_delay": INT_SWITCH},
+        "object_writes": {"alarm_delay": OBJECT_WRITE},
+    }
+    with pytest.raises(gen_models.GeneratorError, match="screen switch alarm_delay is also"):
+        gen_models.generate(PN, _int_cache(tmp_path, BARE_INT_TD), titles=titles)
+
+
+@pytest.mark.timeout(120)
+def test_an_app_domain_on_a_bare_value_wins_over_its_screen_switch(tmp_path: Path) -> None:
+    """The domain applies first; the switch then finds no bare value to type."""
+    titles = {
+        "switch_writes": {"alarm_delay": INT_SWITCH},
+        "domains": {"alarm_delay": RANGE_DOMAIN},
+    }
+    doc, _ = gen_models.generate(PN, _int_cache(tmp_path, BARE_INT_TD), titles=titles)
+    entry = doc["settings"]["alarm_delay"]
+    assert (entry["kind"], entry["min"], entry["max"]) == ("range", 0, 5)
+    assert entry.get("control") != "switch"
+
+
+@pytest.mark.parametrize(
+    ("ident", "data_type", "objects"),
+    [
+        ("alarm_delay", ENUM_TD, {"alarm_delay": OBJECT_WRITE}),
+        ("alarm_delay", {"type": "string"}, {"alarm_delay": OBJECT_WRITE}),
+        ("alarm_delay", BARE_INT_TD, {"other": OBJECT_WRITE}),
+        ("plain", BARE_INT_TD, {"plain": OBJECT_WRITE}),
+    ],
+    ids=["enum", "string", "object-elsewhere", "no-switch"],
+)
+def test_a_screen_switch_beside_an_object_write_is_kept_where_it_types_nothing(
+    ident: str, data_type: dict[str, Any], objects: dict[str, Any]
+) -> None:
+    """A declared kind keeps its own type (the switch rule leaves it), so an object write for
+    it, or one for another identifier, is no conflict."""
+    titles = {"switch_writes": {"alarm_delay": INT_SWITCH}, "object_writes": objects}
+    td = {"properties": [{"identifier": ident, "data_type": data_type}]}
+    join.check_screen_switches(PN, td, titles)
+
+
 @pytest.mark.parametrize(
     ("rule", "values"),
     [
