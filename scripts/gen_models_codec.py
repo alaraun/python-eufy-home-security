@@ -595,6 +595,8 @@ def _value_leaf(slot_name: str, value: Value) -> Any:
     if slot_name == "$v:int":
         if isinstance(value, float) and not value.is_integer():
             raise ValueError(f"$v:int of a fraction: {value!r}")
+        if not isinstance(value, bool | int | float | str):
+            raise ValueError(f"$v:int of a non-number: {value!r}")
         return int(value)
     if OBJECT_SLOT.fullmatch(slot_name):
         return object_slot(slot_name, value)

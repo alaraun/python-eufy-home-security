@@ -1503,6 +1503,21 @@ def test_an_int_slot_sends_a_digit_text_as_its_number() -> None:
         setting.encode("seven", CHILD)
 
 
+@pytest.mark.parametrize(
+    ("code", "key", "context"),
+    [
+        ("T8030", "notification_alarm_delay_value", ALONE),
+        ("T84A1", "light_daily_lighting", ALONE),
+    ],
+)
+def test_a_bundled_int_slot_sends_a_read_back_text_as_its_number(
+    code: str, key: str, context: WriteContext
+) -> None:
+    """A value read back as text ("1") is written as the int the handler sends."""
+    setting = settings_of(code)[key]
+    assert setting.encode("1", context) == setting.encode(1, context)
+
+
 def test_an_int_slot_refuses_an_object() -> None:
     entry = {
         "kind": "object",

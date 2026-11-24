@@ -553,3 +553,9 @@ def test_leaves_skips_empty_containers_and_keeps_a_scalar_whole() -> None:
         (("e",), "x"),
     ]
     assert list(codec.leaves(5, ("p",))) == [(("p",), 5)]
+
+
+@pytest.mark.parametrize("value", [{"a": 1}, [1], None])
+def test_an_int_leaf_refuses_a_non_number(value: Any) -> None:
+    with pytest.raises(ValueError, match="non-number"):
+        codec._value_leaf("$v:int", value)
